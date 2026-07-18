@@ -36,10 +36,7 @@ function matchesFilter(
 ): boolean {
   if (filter === "all") return true;
   if (filter === "network") {
-    return (
-      record.category === "network" &&
-      (captureNetworkInfo || record.level === "error")
-    );
+    return record.category === "network" && (captureNetworkInfo || record.level === "error");
   }
   return record.level === filter;
 }
@@ -70,11 +67,7 @@ function recordLevelClass(record: DiagnosticRecord): string {
   return "bg-muted text-muted-foreground";
 }
 
-export function DiagnosticsDialog({
-  diagnostics,
-  open,
-  onOpenChange,
-}: DiagnosticsDialogProps) {
+export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: DiagnosticsDialogProps) {
   const [copyState, setCopyState] = useState<"copied" | "idle">("idle");
   const copyResetTimerRef = useRef<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<DiagnosticFilter>("all");
@@ -91,9 +84,7 @@ export function DiagnosticsDialog({
   // The network filter's label tracks the badge: plain "network" while request
   // logging is on, "network error" while it is off.
   const filterLabel =
-    activeFilter === "network" && !diagnostics.captureNetworkInfo
-      ? "network error"
-      : activeFilter;
+    activeFilter === "network" && !diagnostics.captureNetworkInfo ? "network error" : activeFilter;
   // Derived here rather than assumed from networkCount so the badge label
   // and count cannot diverge if non-error network levels are introduced.
   const networkErrorCount = useMemo(
@@ -120,9 +111,7 @@ export function DiagnosticsDialog({
   const copyDiagnostics = async () => {
     if (!navigator.clipboard || filteredRecords.length === 0) return;
     try {
-      await navigator.clipboard.writeText(
-        JSON.stringify(filteredRecords, null, 2),
-      );
+      await navigator.clipboard.writeText(JSON.stringify(filteredRecords, null, 2));
     } catch {
       // Clipboard access denied or unavailable.
       return;
@@ -131,10 +120,7 @@ export function DiagnosticsDialog({
     if (copyResetTimerRef.current !== null) {
       window.clearTimeout(copyResetTimerRef.current);
     }
-    copyResetTimerRef.current = window.setTimeout(
-      () => setCopyState("idle"),
-      1500,
-    );
+    copyResetTimerRef.current = window.setTimeout(() => setCopyState("idle"), 1500);
   };
 
   return (
@@ -146,8 +132,7 @@ export function DiagnosticsDialog({
         <DialogHeader className="border-b px-6 py-4 pe-12">
           <DialogTitle>Diagnostics</DialogTitle>
           <DialogDescription>
-            Recent network requests, MapLibre errors, console warnings, and
-            runtime exceptions.
+            Recent network requests, MapLibre errors, console warnings, and runtime exceptions.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center justify-between gap-3 px-6">
@@ -221,9 +206,7 @@ export function DiagnosticsDialog({
                 className="h-3.5 w-3.5"
                 type="checkbox"
                 checked={diagnostics.captureNetworkInfo}
-                onChange={(event) =>
-                  setCaptureNetworkInfo(event.target.checked)
-                }
+                onChange={(event) => setCaptureNetworkInfo(event.target.checked)}
               />
               Log all network requests
             </label>
@@ -264,10 +247,7 @@ export function DiagnosticsDialog({
           ) : (
             <ol className="divide-y">
               {filteredRecords.map((record) => (
-                <li
-                  key={record.id}
-                  className={cn("border-s-2 px-6 py-3", recordAccent(record))}
-                >
+                <li key={record.id} className={cn("border-s-2 px-6 py-3", recordAccent(record))}>
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span
                       className={cn(
@@ -280,14 +260,10 @@ export function DiagnosticsDialog({
                     <span className="rounded bg-muted px-1.5 py-0.5 uppercase">
                       {record.category}
                     </span>
-                    <time dateTime={record.timestamp}>
-                      {formatTime(record.timestamp)}
-                    </time>
+                    <time dateTime={record.timestamp}>{formatTime(record.timestamp)}</time>
                     {record.method ? <span>{record.method}</span> : null}
                     {record.status ? <span>HTTP {record.status}</span> : null}
-                    {record.durationMs != null ? (
-                      <span>{record.durationMs} ms</span>
-                    ) : null}
+                    {record.durationMs != null ? <span>{record.durationMs} ms</span> : null}
                   </div>
                   <div className="break-words text-sm">{record.message}</div>
                   {record.url ? (

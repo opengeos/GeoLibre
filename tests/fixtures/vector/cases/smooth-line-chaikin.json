@@ -13,18 +13,9 @@
         "geometry": {
           "type": "LineString",
           "coordinates": [
-            [
-              0,
-              0
-            ],
-            [
-              2,
-              4
-            ],
-            [
-              4,
-              0
-            ]
+            [0, 0],
+            [2, 4],
+            [4, 0]
           ]
         }
       }
@@ -35,40 +26,20 @@
   },
   "expect": {
     "featureCount": 1,
-    "geometryTypes": [
-      "LineString"
-    ],
+    "geometryTypes": ["LineString"],
     "geometry": [
       {
         "type": "LineString",
         "coordinates": [
-          [
-            0,
-            0
-          ],
-          [
-            0.5,
-            1.0
-          ],
-          [
-            1.5,
-            3.0
-          ],
-          [
-            2.5,
-            3.0
-          ],
-          [
-            3.5,
-            1.0
-          ],
-          [
-            4,
-            0
-          ]
+          [0, 0],
+          [0.5, 1.0],
+          [1.5, 3.0],
+          [2.5, 3.0],
+          [3.5, 1.0],
+          [4, 0]
         ]
       }
     ],
-    "tolerance": 1e-09
+    "tolerance": 1e-9
   }
 }

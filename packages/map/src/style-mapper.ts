@@ -14,15 +14,9 @@ import {
   vectorStrokeWidthValue,
   type LayerStyle,
 } from "@geolibre/core";
-import type {
-  ExpressionSpecification,
-  PropertyValueSpecification,
-} from "maplibre-gl";
+import type { ExpressionSpecification, PropertyValueSpecification } from "maplibre-gl";
 
-function styleValue<K extends keyof LayerStyle>(
-  style: LayerStyle,
-  key: K,
-): LayerStyle[K] {
+function styleValue<K extends keyof LayerStyle>(style: LayerStyle, key: K): LayerStyle[K] {
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
@@ -42,40 +36,28 @@ function scaleByOpacity(
 
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
-    "fill-color": vectorFillColorValue(
-      style,
-    ) as PropertyValueSpecification<string>,
+    "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,
     "fill-opacity": scaleByOpacity(
       vectorFillOpacityValue(
         style,
-        simpleStyleNumberValue(
-          style,
-          "fill-opacity",
-          styleValue(style, "fillOpacity"),
-        ),
+        simpleStyleNumberValue(style, "fill-opacity", styleValue(style, "fillOpacity")),
       ),
       opacity,
     ),
     // vectorLineColorValue honors simpleStyle's per-feature stroke property; in
     // expression mode it also applies the user's expression to the hairline
     // outline (matching the separate line layer that draws the polygon stroke).
-    "fill-outline-color": vectorLineColorValue(
-      style,
-    ) as PropertyValueSpecification<string>,
+    "fill-outline-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
   };
 }
 
-function extrusionHeightPaintValue(
-  style: LayerStyle,
-): PropertyValueSpecification<number> {
+function extrusionHeightPaintValue(style: LayerStyle): PropertyValueSpecification<number> {
   // Shared with the Add Vector Layer control mapping (vector-layer-sync) so
   // both render-paths extrude to the same height.
   return extrusionHeightValue(style) as PropertyValueSpecification<number>;
 }
 
-function extrusionColorPaintValue(
-  style: LayerStyle,
-): PropertyValueSpecification<string> {
+function extrusionColorPaintValue(style: LayerStyle): PropertyValueSpecification<string> {
   return extrusionColorValue(style) as PropertyValueSpecification<string>;
 }
 
@@ -91,41 +73,24 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
 
 export function linePaint(style: LayerStyle, opacity: number) {
   return {
-    "line-color": vectorLineColorValue(
-      style,
-    ) as PropertyValueSpecification<string>,
-    "line-width": lineWidthValue(
-      style,
-    ) as unknown as PropertyValueSpecification<number>,
-    "line-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "stroke-opacity", 1),
-      opacity,
-    ),
+    "line-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
+    "line-width": lineWidthValue(style) as unknown as PropertyValueSpecification<number>,
+    "line-opacity": scaleByOpacity(simpleStyleNumberValue(style, "stroke-opacity", 1), opacity),
   };
 }
 
 export function circlePaint(style: LayerStyle, opacity: number) {
   return {
-    "circle-color": vectorCircleColorValue(
-      style,
-    ) as PropertyValueSpecification<string>,
-    "circle-radius": circleRadiusValue(
-      style,
-    ) as PropertyValueSpecification<number>,
+    "circle-color": vectorCircleColorValue(style) as PropertyValueSpecification<string>,
+    "circle-radius": circleRadiusValue(style) as PropertyValueSpecification<number>,
     "circle-opacity": scaleByOpacity(
       vectorFillOpacityValue(
         style,
-        simpleStyleNumberValue(
-          style,
-          "marker-opacity",
-          styleValue(style, "fillOpacity"),
-        ),
+        simpleStyleNumberValue(style, "marker-opacity", styleValue(style, "fillOpacity")),
       ),
       opacity,
     ),
-    "circle-stroke-color": vectorOutlineColorValue(
-      style,
-    ) as PropertyValueSpecification<string>,
+    "circle-stroke-color": vectorOutlineColorValue(style) as PropertyValueSpecification<string>,
     "circle-stroke-width": vectorStrokeWidthValue(
       style,
       styleValue(style, "strokeWidth"),

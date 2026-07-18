@@ -63,9 +63,7 @@ def sample_gdb(tmp_path_factory: pytest.TempPathFactory) -> Path:
     except Exception as exc:  # pragma: no cover - needs GDAL >= 3.6
         pytest.skip(f"OpenFileGDB write unavailable: {exc}")
     routes.to_file(gdb, layer="routes", driver="OpenFileGDB")
-    cities.to_crs("EPSG:3857").to_file(
-        gdb, layer="cities_mercator", driver="OpenFileGDB"
-    )
+    cities.to_crs("EPSG:3857").to_file(gdb, layer="cities_mercator", driver="OpenFileGDB")
     return gdb
 
 
@@ -84,9 +82,7 @@ def _run_script(script: str, params: dict) -> dict:
     raise AssertionError(f"no result marker in output:\n{proc.stdout}")
 
 
-def test_layers_script_lists_gdb_directory(
-    spatial_extension: None, sample_gdb: Path
-) -> None:
+def test_layers_script_lists_gdb_directory(spatial_extension: None, sample_gdb: Path) -> None:
     """Layer listing on a .gdb directory reports user layers, never GDB_* ones."""
     result = _run_script(_VECTOR_LAYERS_SCRIPT, {"input_path": str(sample_gdb)})
     by_name = {layer["name"]: layer for layer in result["layers"]}

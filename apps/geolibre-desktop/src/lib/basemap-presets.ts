@@ -1,8 +1,4 @@
-import {
-  getProtomapsStyleUrl,
-  OPENFREEMAP_BASEMAPS,
-  PROTOMAPS_BASEMAPS,
-} from "@geolibre/core";
+import { getProtomapsStyleUrl, OPENFREEMAP_BASEMAPS, PROTOMAPS_BASEMAPS } from "@geolibre/core";
 
 /**
  * Ids of the predefined basemaps that resolve to a ready-to-use style URL

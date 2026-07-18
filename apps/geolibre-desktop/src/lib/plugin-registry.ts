@@ -75,9 +75,7 @@ export async function fetchPluginRegistry(
   try {
     const response = await fetch(registryUrl, { signal: controller.signal });
     if (!response.ok) {
-      throw new Error(
-        `Could not fetch plugin registry: HTTP ${response.status}`,
-      );
+      throw new Error(`Could not fetch plugin registry: HTTP ${response.status}`);
     }
     const text = await readBodyWithCap(response, MAX_REGISTRY_BYTES);
     let payload: unknown;
@@ -86,9 +84,7 @@ export async function fetchPluginRegistry(
     } catch {
       // A captive portal or misconfigured proxy can return an HTML body with a
       // 200 status; surface a clear message instead of a raw JSON SyntaxError.
-      throw new Error(
-        "Could not fetch plugin registry: the response was not valid JSON.",
-      );
+      throw new Error("Could not fetch plugin registry: the response was not valid JSON.");
     }
     const rawEntries = extractEntries(payload);
     const entries = rawEntries
@@ -107,15 +103,10 @@ export async function fetchPluginRegistry(
  * enforcement for responses that omit it (chunked/compressed). Mirrors the
  * cap in fetchPluginText for plugin assets.
  */
-async function readBodyWithCap(
-  response: Response,
-  maxBytes: number,
-): Promise<string> {
+async function readBodyWithCap(response: Response, maxBytes: number): Promise<string> {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new Error(
-      "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
-    );
+    throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
   }
   const reader = response.body?.getReader();
   if (!reader) {
@@ -124,9 +115,7 @@ async function readBodyWithCap(
     // without first building the full string.
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength > maxBytes) {
-      throw new Error(
-        "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
-      );
+      throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
     }
     return new TextDecoder().decode(buffer);
   }
@@ -138,9 +127,7 @@ async function readBodyWithCap(
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        throw new Error(
-          "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
-        );
+        throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
       }
       chunks.push(value);
     }
@@ -172,10 +159,7 @@ function extractEntries(payload: unknown): unknown[] {
   );
 }
 
-function normalizeEntry(
-  value: unknown,
-  registryUrl: string,
-): PluginRegistryEntry | null {
+function normalizeEntry(value: unknown, registryUrl: string): PluginRegistryEntry | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   // Bound every field so a compromised or malicious registry can't distort the

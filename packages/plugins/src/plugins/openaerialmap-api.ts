@@ -135,8 +135,7 @@ export type OamFetch = (
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
 /** Default fetch, forwarding an optional abort signal. */
-const defaultFetch: OamFetch = (url, signal) =>
-  fetch(url, signal ? { signal } : undefined);
+const defaultFetch: OamFetch = (url, signal) => fetch(url, signal ? { signal } : undefined);
 
 /** Strips a single trailing slash from an endpoint base. */
 const TRAILING_SLASH_RE = /\/$/;
@@ -162,10 +161,7 @@ export function buildTitilerTemplate(cogUrl: string | null): string | null {
  * @returns The fully-formed `/meta` URL
  */
 export function buildSearchUrl(options: OpenAerialMapSearchOptions = {}): string {
-  const endpoint = (options.endpoint ?? OAM_DEFAULT_ENDPOINT).replace(
-    TRAILING_SLASH_RE,
-    "",
-  );
+  const endpoint = (options.endpoint ?? OAM_DEFAULT_ENDPOINT).replace(TRAILING_SLASH_RE, "");
   const params = new URLSearchParams({
     limit: String(options.limit ?? 20),
     page: String(options.page ?? 1),
@@ -286,8 +282,7 @@ function normalizeImage(raw: unknown): OamImage | null {
 export function footprintFeature(
   image: OamImage,
 ): Feature<Polygon | MultiPolygon, OamFootprintProps> | null {
-  const acquired =
-    (image.acquisitionEnd ?? image.acquisitionStart)?.slice(0, 10) ?? null;
+  const acquired = (image.acquisitionEnd ?? image.acquisitionStart)?.slice(0, 10) ?? null;
   const resolution =
     image.gsd == null
       ? null
@@ -339,19 +334,13 @@ export function footprintFeature(
  * @param limit - The page size used for the query
  * @returns Normalized images plus the total match count
  */
-export function parseSearchResponse(
-  body: unknown,
-  page: number,
-  limit: number,
-): OamSearchResult {
+export function parseSearchResponse(body: unknown, page: number, limit: number): OamSearchResult {
   const parsed = (body ?? {}) as {
     meta?: { found?: unknown };
     results?: unknown;
   };
   const results = Array.isArray(parsed.results) ? parsed.results : [];
-  const images = results
-    .map(normalizeImage)
-    .filter((image): image is OamImage => image !== null);
+  const images = results.map(normalizeImage).filter((image): image is OamImage => image !== null);
   return {
     images,
     found: asCount(parsed.meta?.found) ?? images.length,
@@ -374,10 +363,7 @@ export async function searchOpenAerialMap(
 ): Promise<OamSearchResult> {
   const limit = options.limit ?? 20;
   const page = options.page ?? 1;
-  const response = await fetchImpl(
-    buildSearchUrl({ ...options, limit, page }),
-    options.signal,
-  );
+  const response = await fetchImpl(buildSearchUrl({ ...options, limit, page }), options.signal);
   if (!response.ok) {
     throw new Error(`OpenAerialMap request failed (${response.status})`);
   }

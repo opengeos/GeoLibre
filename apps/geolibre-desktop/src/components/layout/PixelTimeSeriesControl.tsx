@@ -55,12 +55,7 @@ const SERIES_COLORS = [
 // Dash pattern per source index within a point: source 0 is solid, extra
 // sources (rare multi-COG stacks) get distinct dashes so they stay readable
 // while sharing the point's color. The last entry covers any further sources.
-const SOURCE_DASHES: (string | undefined)[] = [
-  undefined,
-  "4 3",
-  "2 2",
-  "8 3",
-];
+const SOURCE_DASHES: (string | undefined)[] = [undefined, "4 3", "2 2", "8 3"];
 
 interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -96,9 +91,7 @@ interface ClickedPoint {
  * The pixel reads happen client-side via HTTP range reads (the same reader as
  * the single-COG Identify tool), so no Python sidecar is required.
  */
-export function PixelTimeSeriesControl({
-  mapControllerRef,
-}: PixelTimeSeriesControlProps) {
+export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesControlProps) {
   const { t } = useTranslation();
   const { isActive } = usePluginRegistry();
   const timeSliderActive = isActive(TIME_SLIDER_PLUGIN_ID);
@@ -109,12 +102,10 @@ export function PixelTimeSeriesControl({
   // pixel-readable COG stack, since the query engine only supports COG sources.
   const hasTimeSliderRasterMirror = useAppStore((s) =>
     s.layers.some(
-      (layer) =>
-        layer.metadata.sourceKind === "time-slider" && layer.type === "raster",
+      (layer) => layer.metadata.sourceKind === "time-slider" && layer.type === "raster",
     ),
   );
-  const hasRasterStack =
-    hasTimeSliderRasterMirror && hasTimeSliderRasterStack();
+  const hasRasterStack = hasTimeSliderRasterMirror && hasTimeSliderRasterStack();
 
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState(false);
@@ -122,9 +113,9 @@ export function PixelTimeSeriesControl({
   // Per-point read progress, kept out of `points` so the many sub-second
   // onProgress ticks during a query don't change the `points` reference and
   // invalidate chartSeries/loadedResults/bandOptions memos.
-  const [progressById, setProgressById] = useState<
-    Record<number, { done: number; total: number }>
-  >({});
+  const [progressById, setProgressById] = useState<Record<number, { done: number; total: number }>>(
+    {},
+  );
   const [selectedBand, setSelectedBand] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   // Export failures are kept separate from query errors so a failed export
@@ -181,12 +172,7 @@ export function PixelTimeSeriesControl({
         // Bail if the panel unmounted mid-gesture (e.g. reset() on Time Slider
         // deactivation) so we don't setState for a panel that is gone.
         if (!panelRef.current) return;
-        onMove(
-          m.clientX - startX,
-          m.clientY - startY,
-          start,
-          parent?.getBoundingClientRect(),
-        );
+        onMove(m.clientX - startX, m.clientY - startY, start, parent?.getBoundingClientRect());
       };
       const end = () => {
         if (handle.hasPointerCapture(event.pointerId))
@@ -244,58 +230,52 @@ export function PixelTimeSeriesControl({
   // setState afterwards.
   useEffect(() => () => abortAll(), [abortAll]);
 
-  const runQueryForPoint = useCallback(
-    (id: number, lngLat: [number, number]) => {
-      abortControllers.current.get(id)?.abort();
-      const ac = new AbortController();
-      abortControllers.current.set(id, ac);
-      const clearProgress = () =>
-        setProgressById((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-      queryPixelTimeSeries(lngLat, {
-        signal: ac.signal,
-        onProgress: (done, total) => {
-          if (ac.signal.aborted) return;
-          setProgressById((prev) => ({ ...prev, [id]: { done, total } }));
-        },
+  const runQueryForPoint = useCallback((id: number, lngLat: [number, number]) => {
+    abortControllers.current.get(id)?.abort();
+    const ac = new AbortController();
+    abortControllers.current.set(id, ac);
+    const clearProgress = () =>
+      setProgressById((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    queryPixelTimeSeries(lngLat, {
+      signal: ac.signal,
+      onProgress: (done, total) => {
+        if (ac.signal.aborted) return;
+        setProgressById((prev) => ({ ...prev, [id]: { done, total } }));
+      },
+    })
+      .then((res) => {
+        if (ac.signal.aborted) return;
+        setPoints((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, result: res, loading: false } : p)),
+        );
+        clearProgress();
+        // First loaded point seeds the charted band; later points keep it.
+        setSelectedBand((prev) => (prev == null ? res.defaultBandIndex : prev));
       })
-        .then((res) => {
-          if (ac.signal.aborted) return;
-          setPoints((prev) =>
-            prev.map((p) =>
-              p.id === id ? { ...p, result: res, loading: false } : p,
-            ),
-          );
-          clearProgress();
-          // First loaded point seeds the charted band; later points keep it.
-          setSelectedBand((prev) => (prev == null ? res.defaultBandIndex : prev));
-        })
-        .catch((err) => {
-          if (ac.signal.aborted) return;
-          setPoints((prev) =>
-            prev.map((p) =>
-              p.id === id
-                ? {
-                    ...p,
-                    error: err instanceof Error ? err.message : String(err),
-                    loading: false,
-                  }
-                : p,
-            ),
-          );
-          clearProgress();
-        })
-        .finally(() => {
-          if (abortControllers.current.get(id) === ac)
-            abortControllers.current.delete(id);
-        });
-    },
-    [],
-  );
+      .catch((err) => {
+        if (ac.signal.aborted) return;
+        setPoints((prev) =>
+          prev.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  error: err instanceof Error ? err.message : String(err),
+                  loading: false,
+                }
+              : p,
+          ),
+        );
+        clearProgress();
+      })
+      .finally(() => {
+        if (abortControllers.current.get(id) === ac) abortControllers.current.delete(id);
+      });
+  }, []);
 
   // While picking, swap the cursor to a crosshair and capture each map click as
   // another point (the mode stays active so consecutive clicks accumulate).
@@ -396,16 +376,10 @@ export function PixelTimeSeriesControl({
   }, [abortAll]);
 
   const loadedResults = useMemo(
-    () =>
-      points
-        .map((p) => p.result)
-        .filter((r): r is PixelTimeSeriesResult => r != null),
+    () => points.map((p) => p.result).filter((r): r is PixelTimeSeriesResult => r != null),
     [points],
   );
-  const bandOptions = useMemo(
-    () => bandOptionsFromResults(loadedResults),
-    [loadedResults],
-  );
+  const bandOptions = useMemo(() => bandOptionsFromResults(loadedResults), [loadedResults]);
 
   // One chart line per (point, source) for the selected band. Single-source
   // stacks (the common case) show one line per point; the legend disambiguates
@@ -421,9 +395,7 @@ export function PixelTimeSeriesControl({
             const multiSource = point.result.series.length > 1;
             return point.result.series.map((series, si) => ({
               key: `${point.id}:${series.sourceId}`,
-              label: multiSource
-                ? `${point.label} · ${series.sourceName}`
-                : point.label,
+              label: multiSource ? `${point.label} · ${series.sourceName}` : point.label,
               color: SERIES_COLORS[point.colorIndex],
               // Distinct dash per extra source so 3+ sources of one point stay
               // distinguishable (they share the point's color).
@@ -517,22 +489,12 @@ export function PixelTimeSeriesControl({
             aria-label={t("map.pixelTimeSeriesMode.title")}
             data-testid="pixel-time-series-mode-banner"
           >
-            <Crosshair
-              className="h-4 w-4 shrink-0 text-primary"
-              aria-hidden="true"
-            />
+            <Crosshair className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <div className="min-w-0">
               <p className="font-medium">{t("map.pixelTimeSeriesMode.title")}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("map.pixelTimeSeriesMode.hint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("map.pixelTimeSeriesMode.hint")}</p>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => setPicking(false)}
-            >
+            <Button type="button" size="sm" variant="secondary" onClick={() => setPicking(false)}>
               <X className="h-3.5 w-3.5" aria-hidden="true" />
               {t("map.pixelTimeSeriesMode.exit")}
             </Button>
@@ -548,11 +510,7 @@ export function PixelTimeSeriesControl({
               ? "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
               : "pointer-events-auto absolute right-3 top-16 z-20 flex max-h-[calc(100%-8rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
           }
-          style={
-            rect
-              ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h }
-              : undefined
-          }
+          style={rect ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h } : undefined}
           role="region"
           aria-label={t("pixelTimeSeries.title")}
           data-testid="pixel-time-series-panel"
@@ -562,10 +520,7 @@ export function PixelTimeSeriesControl({
             onPointerDown={handleDragStart}
           >
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <GripVertical
-                className="h-4 w-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
+              <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <LineChart className="h-4 w-4 text-primary" aria-hidden="true" />
               {t("pixelTimeSeries.title")}
             </div>
@@ -582,9 +537,7 @@ export function PixelTimeSeriesControl({
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
             {bandOptions.length > 0 ? (
               <label className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">
-                  {t("pixelTimeSeries.band")}
-                </span>
+                <span className="text-muted-foreground">{t("pixelTimeSeries.band")}</span>
                 <Select
                   className="w-44"
                   value={selectedBand ?? ""}
@@ -592,8 +545,7 @@ export function PixelTimeSeriesControl({
                 >
                   {bandOptions.map((band) => (
                     <option key={band.index} value={band.index}>
-                      {band.name ??
-                        t("pixelTimeSeries.bandOption", { index: band.index })}
+                      {band.name ?? t("pixelTimeSeries.bandOption", { index: band.index })}
                     </option>
                   ))}
                 </Select>
@@ -632,52 +584,47 @@ export function PixelTimeSeriesControl({
                 {points.map((point) => {
                   const prog = progressById[point.id];
                   return (
-                  <li
-                    key={point.id}
-                    className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm"
-                  >
-                    <span
-                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                      style={{
-                        backgroundColor: SERIES_COLORS[point.colorIndex],
-                      }}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="font-medium">{point.label}</span>{" "}
-                      <span className="text-xs text-muted-foreground">
-                        {point.lngLat[1].toFixed(4)}, {point.lngLat[0].toFixed(4)}
-                      </span>
-                      {point.loading ? (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Loader2
-                            className="h-3 w-3 animate-spin"
-                            aria-hidden="true"
-                          />
-                          {prog && prog.total > 0
-                            ? t("pixelTimeSeries.progress", {
-                                done: prog.done,
-                                total: prog.total,
-                              })
-                            : t("pixelTimeSeries.querying")}
-                        </span>
-                      ) : point.error ? (
-                        <span className="block text-xs text-destructive">
-                          {point.error}
-                        </span>
-                      ) : null}
-                    </span>
-                    <button
-                      type="button"
-                      className="rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-                      onClick={() => removePoint(point.id)}
-                      aria-label={t("pixelTimeSeries.removePoint", {
-                        label: point.label,
-                      })}
+                    <li
+                      key={point.id}
+                      className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm"
                     >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  </li>
+                      <span
+                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                        style={{
+                          backgroundColor: SERIES_COLORS[point.colorIndex],
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="font-medium">{point.label}</span>{" "}
+                        <span className="text-xs text-muted-foreground">
+                          {point.lngLat[1].toFixed(4)}, {point.lngLat[0].toFixed(4)}
+                        </span>
+                        {point.loading ? (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                            {prog && prog.total > 0
+                              ? t("pixelTimeSeries.progress", {
+                                  done: prog.done,
+                                  total: prog.total,
+                                })
+                              : t("pixelTimeSeries.querying")}
+                          </span>
+                        ) : point.error ? (
+                          <span className="block text-xs text-destructive">{point.error}</span>
+                        ) : null}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+                        onClick={() => removePoint(point.id)}
+                        aria-label={t("pixelTimeSeries.removePoint", {
+                          label: point.label,
+                        })}
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </li>
                   );
                 })}
               </ul>
@@ -693,17 +640,10 @@ export function PixelTimeSeriesControl({
               aria-pressed={picking}
             >
               <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
-              {picking
-                ? t("pixelTimeSeries.stopPicking")
-                : t("pixelTimeSeries.pickPoints")}
+              {picking ? t("pixelTimeSeries.stopPicking") : t("pixelTimeSeries.pickPoints")}
             </Button>
             {points.length > 0 ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={clearAll}
-              >
+              <Button type="button" size="sm" variant="ghost" onClick={clearAll}>
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                 {t("pixelTimeSeries.clearAll")}
               </Button>
@@ -754,12 +694,7 @@ export function PixelTimeSeriesControl({
               className="h-full w-full text-muted-foreground"
               aria-hidden="true"
             >
-              <path
-                d="M9 1 L1 9 M9 5 L5 9"
-                stroke="currentColor"
-                strokeWidth={1}
-                fill="none"
-              />
+              <path d="M9 1 L1 9 M9 5 L5 9" stroke="currentColor" strokeWidth={1} fill="none" />
             </svg>
           </div>
         </div>
@@ -811,8 +746,7 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
 
   const values: number[] = [];
   for (const line of series)
-    for (const point of line.points)
-      if (point.value != null) values.push(point.value);
+    for (const point of line.points) if (point.value != null) values.push(point.value);
 
   if (values.length === 0) {
     return (
@@ -839,9 +773,7 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
   // Align every line on a shared, sorted union of dates so points queried
   // against different timelines (e.g. the user changed the step range between
   // clicks) line up by calendar date rather than by raw index.
-  const allDates = [
-    ...new Set(series.flatMap((line) => line.points.map((p) => p.date))),
-  ].sort();
+  const allDates = [...new Set(series.flatMap((line) => line.points.map((p) => p.date)))].sort();
   const length = allDates.length;
   const annual = allDates.every((date) => date.endsWith("-01-01"));
 
@@ -856,8 +788,7 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
 
   const scaleX = (index: number) =>
     MARGIN.left + (length > 1 ? index / (length - 1) : 0.5) * INNER_W;
-  const scaleY = (value: number) =>
-    MARGIN.top + INNER_H - ((value - min) / (max - min)) * INNER_H;
+  const scaleY = (value: number) => MARGIN.top + INNER_H - ((value - min) / (max - min)) * INNER_H;
 
   // First, middle, and last x-axis ticks, deduped for short series.
   const tickIndexes = Array.from(
@@ -914,9 +845,7 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
             key={index}
             x={scaleX(index)}
             y={MARGIN.top + INNER_H + 16}
-            textAnchor={
-              index === 0 ? "start" : index === length - 1 ? "end" : "middle"
-            }
+            textAnchor={index === 0 ? "start" : index === length - 1 ? "end" : "middle"}
             fontSize={10}
             fill={TICK}
           >

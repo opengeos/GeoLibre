@@ -199,17 +199,13 @@ describe("collection layer helpers", () => {
 
   it("does not treat ordinary layers as collection layers", () => {
     assert.equal(isCollectionLayer({ type: "geojson", metadata: {} }), false);
-    assert.equal(
-      isCollectionLayer({ type: "raster", metadata: { fieldCollection: true } }),
-      false,
-    );
+    assert.equal(isCollectionLayer({ type: "raster", metadata: { fieldCollection: true } }), false);
   });
 
   it("getSchema defaults to empty for a malformed schema", () => {
-    assert.deepEqual(
-      getSchema({ type: "geojson", metadata: { collectionSchema: 42 } }),
-      { fields: [] },
-    );
+    assert.deepEqual(getSchema({ type: "geojson", metadata: { collectionSchema: 42 } }), {
+      fields: [],
+    });
   });
 });
 
@@ -283,10 +279,7 @@ describe("line/polygon geometry", () => {
   });
 
   it("buildGeometryFeature dispatches on geometry type", () => {
-    assert.equal(
-      buildGeometryFeature("point", [[1, 2]], {}).geometry.type,
-      "Point",
-    );
+    assert.equal(buildGeometryFeature("point", [[1, 2]], {}).geometry.type, "Point");
     assert.equal(
       buildGeometryFeature(
         "line",
@@ -321,9 +314,7 @@ describe("line/polygon geometry", () => {
     ]);
     // two vertices + one line
     assert.equal(two.features.length, 3);
-    assert.ok(
-      two.features.some((f) => f.geometry?.type === "LineString"),
-    );
+    assert.ok(two.features.some((f) => f.geometry?.type === "LineString"));
   });
 
   it("drawPreview closes the polygon fill at >= 3 vertices", () => {

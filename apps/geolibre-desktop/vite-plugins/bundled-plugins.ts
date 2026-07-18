@@ -37,9 +37,7 @@ export function bundledPlugins(pluginsDir: string): Plugin {
     resolveId: (id) => (id === VIRTUAL_ID ? RESOLVED_ID : undefined),
     load(id) {
       if (id !== RESOLVED_ID) return;
-      return `export const bundledPluginManifestPaths = ${JSON.stringify(
-        discover(),
-      )};`;
+      return `export const bundledPluginManifestPaths = ${JSON.stringify(discover())};`;
     },
     configureServer(server) {
       server.watcher.add(pluginsDir);

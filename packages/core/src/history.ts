@@ -52,10 +52,7 @@ interface HistorySnapshot {
  * across snapshots (unchanged layers keep the same reference) are counted once.
  * Mutates `seen` with each newly counted payload.
  */
-function distinctFeatureCount(
-  snapshot: HistorySnapshot,
-  seen: Set<object>,
-): number {
+function distinctFeatureCount(snapshot: HistorySnapshot, seen: Set<object>): number {
   let count = 0;
   for (const layer of snapshot.layers ?? []) {
     const geojson = layer?.geojson;
@@ -87,9 +84,7 @@ export function trimHistoryBySize<T extends HistorySnapshot>(
   maxFeatures: number,
 ): T[] {
   if (!Number.isFinite(maxFeatures) || maxFeatures < 0) {
-    throw new RangeError(
-      `maxFeatures must be a non-negative finite number, got ${maxFeatures}`,
-    );
+    throw new RangeError(`maxFeatures must be a non-negative finite number, got ${maxFeatures}`);
   }
   if (pastStates.length <= 1) return pastStates;
   const seen = new Set<object>();

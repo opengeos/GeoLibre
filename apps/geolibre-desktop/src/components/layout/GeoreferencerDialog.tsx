@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   Button,
   cn,
@@ -114,9 +110,7 @@ export function GeoreferencerDialog({
 
   const [image, setImage] = useState<LoadedImage | null>(null);
   const [gcps, setGcps] = useState<KeyedGCP[]>([]);
-  const [pendingPixel, setPendingPixel] = useState<{ px: number; py: number } | null>(
-    null,
-  );
+  const [pendingPixel, setPendingPixel] = useState<{ px: number; py: number } | null>(null);
   const [linking, setLinking] = useState(false);
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -132,10 +126,7 @@ export function GeoreferencerDialog({
   // Monotonic id for stable GCP React keys.
   const gcpKeyRef = useRef(0);
 
-  const getMap = useCallback(
-    () => mapControllerRef.current?.getMap() ?? null,
-    [mapControllerRef],
-  );
+  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
 
   const affine = useMemo(() => solveAffine(gcps), [gcps]);
   const residuals = useMemo(
@@ -246,10 +237,7 @@ export function GeoreferencerDialog({
       const p = linkPixelRef.current;
       if (p) {
         const key = (gcpKeyRef.current += 1);
-        setGcps((gs) => [
-          ...gs,
-          { px: p.px, py: p.py, lng: e.lngLat.lng, lat: e.lngLat.lat, key },
-        ]);
+        setGcps((gs) => [...gs, { px: p.px, py: p.py, lng: e.lngLat.lng, lat: e.lngLat.lat, key }]);
         setPendingPixel(null);
       }
       setLinking(false);
@@ -305,25 +293,15 @@ export function GeoreferencerDialog({
     onOpenChange(false);
   }, [affine, image, opacity, gcps, addLayer, mapControllerRef, onOpenChange, t]);
 
-  const removeGcp = (key: number) =>
-    setGcps((gs) => gs.filter((g) => g.key !== key));
+  const removeGcp = (key: number) => setGcps((gs) => gs.filter((g) => g.key !== key));
 
   const handleExportGeoTiff = useCallback(async () => {
     if (!affine || !image || exporting) return;
     setExporting(true);
     setNotice({ msg: t("georeferencer.exporting"), kind: "info" });
     try {
-      const bytes = await exportGeoTiff(
-        image.url,
-        image.name || "georeferenced",
-        gcps,
-        transform,
-      );
-      download(
-        `${image.name || "georeferenced"}.tif`,
-        bytes as BlobPart,
-        "image/tiff",
-      );
+      const bytes = await exportGeoTiff(image.url, image.name || "georeferenced", gcps, transform);
+      download(`${image.name || "georeferenced"}.tif`, bytes as BlobPart, "image/tiff");
       setNotice({ msg: t("georeferencer.exported"), kind: "info" });
     } catch (err) {
       console.error("GeoTIFF export failed", err);
@@ -358,8 +336,7 @@ export function GeoreferencerDialog({
         // Warn if any point falls outside the loaded image (e.g. a CSV made for
         // a different-resolution version) — the markers would sit off-image.
         const outside =
-          image != null &&
-          parsed.some((g) => g.px > image.width || g.py > image.height);
+          image != null && parsed.some((g) => g.px > image.width || g.py > image.height);
         setNotice(
           outside
             ? { msg: t("georeferencer.gcpsOutsideImage"), kind: "error" }
@@ -374,10 +351,8 @@ export function GeoreferencerDialog({
     [t, image],
   );
 
-  const zoomIn = () =>
-    setZoom((z) => Math.min(MAX_ZOOM, +(z * ZOOM_STEP).toFixed(2)));
-  const zoomOut = () =>
-    setZoom((z) => Math.max(MIN_ZOOM, +(z / ZOOM_STEP).toFixed(2)));
+  const zoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, +(z * ZOOM_STEP).toFixed(2)));
+  const zoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, +(z / ZOOM_STEP).toFixed(2)));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -393,12 +368,7 @@ export function GeoreferencerDialog({
               <label className="flex cursor-pointer flex-col items-center gap-2 rounded-md border border-dashed p-6 text-sm text-muted-foreground hover:bg-accent">
                 <ImagePlus className="h-6 w-6" />
                 {t("georeferencer.loadImage")}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageFile}
-                />
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
               </label>
             ) : (
               <>
@@ -540,9 +510,7 @@ export function GeoreferencerDialog({
                       {t("georeferencer.needGcps", { min: MIN_GCPS })}
                     </p>
                   ) : !affine ? (
-                    <p className="text-sm text-destructive">
-                      {t("georeferencer.collinear")}
-                    </p>
+                    <p className="text-sm text-destructive">{t("georeferencer.collinear")}</p>
                   ) : null}
                   {gcps.length > 0 && (
                     <div className="overflow-hidden rounded-md border text-sm">
@@ -552,9 +520,7 @@ export function GeoreferencerDialog({
                             <th className="px-2 py-1 text-start">#</th>
                             <th className="px-2 py-1 text-end">px, py</th>
                             <th className="px-2 py-1 text-end">lng, lat</th>
-                            <th className="px-2 py-1 text-end">
-                              {t("georeferencer.residual")}
-                            </th>
+                            <th className="px-2 py-1 text-end">{t("georeferencer.residual")}</th>
                             <th className="px-2 py-1" />
                           </tr>
                         </thead>
@@ -569,9 +535,7 @@ export function GeoreferencerDialog({
                                 {g.lng.toFixed(4)}, {g.lat.toFixed(4)}
                               </td>
                               <td className="px-2 py-1 text-end tabular-nums">
-                                {residuals
-                                  ? `${residuals.perPoint[i].toFixed(1)} m`
-                                  : "—"}
+                                {residuals ? `${residuals.perPoint[i].toFixed(1)} m` : "—"}
                               </td>
                               <td className="px-2 py-1 text-end">
                                 <button
@@ -609,36 +573,24 @@ export function GeoreferencerDialog({
 
                 {/* GeoTIFF export (client-side, via gdal3.js) */}
                 <div className="space-y-1.5 rounded-md border p-2">
-                  <Label htmlFor="georef-transform">
-                    {t("georeferencer.exportTiff")}
-                  </Label>
+                  <Label htmlFor="georef-transform">{t("georeferencer.exportTiff")}</Label>
                   <div className="flex items-center gap-2">
                     <Select
                       id="georef-transform"
                       className="flex-1"
                       value={transform}
                       disabled={exporting}
-                      onChange={(e) =>
-                        setTransform(e.target.value as GeoTransform)
-                      }
+                      onChange={(e) => setTransform(e.target.value as GeoTransform)}
                     >
-                      <option value="affine">
-                        {t("georeferencer.transform.affine")}
-                      </option>
-                      <option value="polynomial">
-                        {t("georeferencer.transform.polynomial")}
-                      </option>
-                      <option value="tps">
-                        {t("georeferencer.transform.tps")}
-                      </option>
+                      <option value="affine">{t("georeferencer.transform.affine")}</option>
+                      <option value="polynomial">{t("georeferencer.transform.polynomial")}</option>
+                      <option value="tps">{t("georeferencer.transform.tps")}</option>
                     </Select>
                     <Button
                       variant="outline"
                       className="shrink-0"
                       disabled={
-                        !affine ||
-                        exporting ||
-                        gcps.length < minGcpsForTransform(transform)
+                        !affine || exporting || gcps.length < minGcpsForTransform(transform)
                       }
                       onClick={handleExportGeoTiff}
                     >

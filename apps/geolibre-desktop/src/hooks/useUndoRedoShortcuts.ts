@@ -21,9 +21,7 @@ export function useUndoRedoShortcuts(): void {
       if (isEditableTarget(e.target)) return;
       const key = e.key.toLowerCase();
       // Ctrl/Cmd+Shift+Z, or the Windows-style Ctrl+Y (Ctrl only, not Cmd+Y).
-      const isRedo =
-        (key === "z" && e.shiftKey) ||
-        (key === "y" && e.ctrlKey && !e.shiftKey);
+      const isRedo = (key === "z" && e.shiftKey) || (key === "y" && e.ctrlKey && !e.shiftKey);
       const isUndo = key === "z" && !e.shiftKey;
       if (!isUndo && !isRedo) return;
       // Only consume the event when there is actually something to do, so an

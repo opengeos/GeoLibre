@@ -28,8 +28,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   if (projectFiles.saveNamePrompt) {
     lastSaveNamePrompt.current = projectFiles.saveNamePrompt;
   }
-  const saveNameLabels =
-    projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
+  const saveNameLabels = projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
 
   return (
     <>
@@ -40,9 +39,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.openProjectFromUrl")}</DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.openProjectFromUrlDesc")}
-            </DialogDescription>
+            <DialogDescription>{t("toolbar.item.openProjectFromUrlDesc")}</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={projectFiles.handleOpenFromUrl}>
             <div className="space-y-2">
@@ -57,9 +54,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
                 }}
               />
               {projectFiles.projectUrlError ? (
-                <p className="text-xs text-destructive">
-                  {projectFiles.projectUrlError}
-                </p>
+                <p className="text-xs text-destructive">{projectFiles.projectUrlError}</p>
               ) : null}
             </div>
             <div className="flex justify-end gap-2">
@@ -108,10 +103,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogTitle>{saveNameLabels?.title}</DialogTitle>
             <DialogDescription>{saveNameLabels?.description}</DialogDescription>
           </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={projectFiles.submitSaveNamePrompt}
-          >
+          <form className="space-y-4" onSubmit={projectFiles.submitSaveNamePrompt}>
             <div className="space-y-2">
               <Label htmlFor="save-project-name">{saveNameLabels?.label}</Label>
               <Input
@@ -119,9 +111,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
                 autoFocus
                 placeholder={saveNameLabels?.placeholder}
                 value={projectFiles.saveNameInput}
-                onChange={(event) =>
-                  projectFiles.setSaveNameInput(event.target.value)
-                }
+                onChange={(event) => projectFiles.setSaveNameInput(event.target.value)}
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -132,10 +122,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               >
                 {t("common.cancel")}
               </Button>
-              <Button
-                type="submit"
-                disabled={!projectFiles.saveNameInput.trim()}
-              >
+              <Button type="submit" disabled={!projectFiles.saveNameInput.trim()}>
                 {t("common.save")}
               </Button>
             </div>
@@ -158,16 +145,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => projectFiles.resolveEnvStripPrompt("cancel")}
-            >
+            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("cancel")}>
               {t("common.cancel")}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => projectFiles.resolveEnvStripPrompt("keep")}
-            >
+            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("keep")}>
               {t("settings.env.keepButton")}
             </Button>
             <Button onClick={() => projectFiles.resolveEnvStripPrompt("strip")}>
@@ -192,9 +173,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
                   : "toolbar.item.embedVectorDesc",
                 {
                   count: projectFiles.embedVectorDataPrompt?.count ?? 0,
-                  size: formatByteSize(
-                    projectFiles.embedVectorDataPrompt?.bytes ?? 0,
-                  ),
+                  size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
                 },
               )}
             </DialogDescription>
@@ -202,17 +181,13 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={() =>
-                projectFiles.resolveEmbedVectorDataPrompt("cancel")
-              }
+              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("cancel")}
             >
               {t("common.cancel")}
             </Button>
             <Button
               variant="outline"
-              onClick={() =>
-                projectFiles.resolveEmbedVectorDataPrompt("noembed")
-              }
+              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("noembed")}
             >
               {t(
                 projectFiles.embedVectorDataPrompt?.desktop
@@ -220,9 +195,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
                   : "toolbar.item.embedVectorSkipButton",
               )}
             </Button>
-            <Button
-              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("embed")}
-            >
+            <Button onClick={() => projectFiles.resolveEmbedVectorDataPrompt("embed")}>
               {t("toolbar.item.embedVectorEmbedButton")}
             </Button>
           </div>

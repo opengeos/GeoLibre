@@ -72,10 +72,7 @@ async function tavilySearch(
  * reliably send CORS headers, so this may fail from a browser origin; callers
  * should treat a rejection as "search unavailable" and recommend TAVILY_API_KEY.
  */
-async function duckDuckGoSearch(
-  query: string,
-  signal?: AbortSignal,
-): Promise<WebSearchResponse> {
+async function duckDuckGoSearch(query: string, signal?: AbortSignal): Promise<WebSearchResponse> {
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(
     query,
   )}&format=json&no_html=1&skip_disambig=1&t=geolibre`;

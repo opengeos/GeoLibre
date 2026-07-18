@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 
 /**
@@ -90,22 +86,14 @@ export function geoAgentOverlayName(layer: GeoLibreLayer): string {
  * "__sky") are map state rather than layers, so both are excluded.
  */
 function isSyncableOverlay(overlay: GeoAgentOverlayRecord): boolean {
-  return (
-    overlay.kind !== "marker" &&
-    !overlay.name.startsWith("__") &&
-    overlay.layerIds.length > 0
-  );
+  return overlay.kind !== "marker" && !overlay.name.startsWith("__") && overlay.layerIds.length > 0;
 }
 
-export function createGeoAgentStoreLayer(
-  overlay: GeoAgentOverlayRecord,
-): GeoLibreLayer {
+export function createGeoAgentStoreLayer(overlay: GeoAgentOverlayRecord): GeoLibreLayer {
   // Native overlays may only reference sources that already exist on the
   // map, so sourceIds can legitimately be empty; omit sourceId rather than
   // leaking `undefined` into the layer.
-  const sourceId = overlay.sourceIds[0]
-    ? { sourceId: overlay.sourceIds[0] }
-    : {};
+  const sourceId = overlay.sourceIds[0] ? { sourceId: overlay.sourceIds[0] } : {};
   const base: GeoLibreLayer = {
     id: geoAgentStoreLayerId(overlay.name),
     name: overlay.name,
@@ -191,9 +179,7 @@ export function syncGeoAgentOverlaysToStore(
   if (!overlays) return;
 
   const syncable = Array.from(overlays.values()).filter(isSyncableOverlay);
-  const syncableIds = new Set(
-    syncable.map((overlay) => geoAgentStoreLayerId(overlay.name)),
-  );
+  const syncableIds = new Set(syncable.map((overlay) => geoAgentStoreLayerId(overlay.name)));
 
   syncingOverlaysToStore = true;
   try {
@@ -206,9 +192,7 @@ export function syncGeoAgentOverlaysToStore(
 
     for (const overlay of syncable) {
       const layer = createGeoAgentStoreLayer(overlay);
-      const existing = useAppStore
-        .getState()
-        .layers.find((current) => current.id === layer.id);
+      const existing = useAppStore.getState().layers.find((current) => current.id === layer.id);
 
       if (!existing) {
         // addLayer selects the new layer; agent-driven adds happen in the
@@ -232,8 +216,7 @@ export function syncGeoAgentOverlaysToStore(
         typeChanged ||
         JSON.stringify(existing.metadata.nativeLayerIds) !==
           JSON.stringify(layer.metadata.nativeLayerIds) ||
-        JSON.stringify(existing.metadata.sourceIds) !==
-          JSON.stringify(layer.metadata.sourceIds) ||
+        JSON.stringify(existing.metadata.sourceIds) !== JSON.stringify(layer.metadata.sourceIds) ||
         JSON.stringify(existing.source) !== JSON.stringify(layer.source) ||
         existing.metadata.tileUrl !== layer.metadata.tileUrl ||
         existing.sourcePath !== layer.sourcePath ||
@@ -294,11 +277,7 @@ export function wireGeoAgentStoreSync(tools: GeoAgentSyncableTools): void {
   syncedTools = tools;
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const activeTools = syncedTools;
-    if (
-      !activeTools ||
-      syncingOverlaysToStore ||
-      state.layers === previous.layers
-    ) {
+    if (!activeTools || syncingOverlaysToStore || state.layers === previous.layers) {
       return;
     }
 
@@ -349,11 +328,7 @@ function applyGeoAgentCustomLayerState(
 
     if (changed.visibility) {
       try {
-        map.setLayoutProperty(
-          nativeLayerId,
-          "visibility",
-          layer.visible ? "visible" : "none",
-        );
+        map.setLayoutProperty(nativeLayerId, "visibility", layer.visible ? "visible" : "none");
       } catch {
         // Custom layers from external controls may not accept layout updates.
       }
@@ -374,15 +349,10 @@ function applyGeoAgentCustomLayerState(
  * same keys and defaults as geojsonLayerPaint in maplibre-gl-geoagent, so the
  * store-driven repaint reproduces what the agent drew.
  */
-function geoJsonOverlayStyle(
-  style: Record<string, unknown>,
-): GeoLibreLayer["style"] {
-  const color =
-    stringValue(style.color) ?? stringValue(style["line-color"]) ?? "#1c7ed6";
-  const fillColor =
-    stringValue(style["fill-color"]) ?? stringValue(style.fillColor) ?? color;
-  const strokeColor =
-    stringValue(style["line-color"]) ?? stringValue(style.lineColor) ?? color;
+function geoJsonOverlayStyle(style: Record<string, unknown>): GeoLibreLayer["style"] {
+  const color = stringValue(style.color) ?? stringValue(style["line-color"]) ?? "#1c7ed6";
+  const fillColor = stringValue(style["fill-color"]) ?? stringValue(style.fillColor) ?? color;
+  const strokeColor = stringValue(style["line-color"]) ?? stringValue(style.lineColor) ?? color;
   // GeoAgent's geojsonLayerPaint uses `opacity` (not `fill-opacity`) as its
   // primary fill-opacity parameter; `fill-opacity` is an alternate key.
   const fillOpacity = clamp01(
@@ -394,10 +364,7 @@ function geoJsonOverlayStyle(
     fillColor,
     strokeColor,
     fillOpacity,
-    strokeWidth: Math.max(
-      0,
-      numberValue(style["line-width"]) ?? numberValue(style.lineWidth) ?? 2,
-    ),
+    strokeWidth: Math.max(0, numberValue(style["line-width"]) ?? numberValue(style.lineWidth) ?? 2),
     circleRadius: Math.max(
       0,
       numberValue(style["circle-radius"]) ?? numberValue(style.radius) ?? 6,
@@ -425,9 +392,7 @@ function nativeOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
   return 1;
 }
 
-function isFeatureCollection(
-  data: GeoJSON.GeoJSON | undefined,
-): data is FeatureCollection {
+function isFeatureCollection(data: GeoJSON.GeoJSON | undefined): data is FeatureCollection {
   return data?.type === "FeatureCollection";
 }
 

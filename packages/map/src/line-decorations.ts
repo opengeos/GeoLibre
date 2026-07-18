@@ -5,10 +5,7 @@ import {
   type LineDecoration,
 } from "@geolibre/core";
 import { lineDecorationColorValue } from "./derived-geometry";
-import {
-  registerGeneratedImage,
-  type GeneratedImageResult,
-} from "./generated-images";
+import { registerGeneratedImage, type GeneratedImageResult } from "./generated-images";
 
 /**
  * Lazily-generated decoration icons repeated along line features (QGIS
@@ -35,17 +32,10 @@ const DECORATION_SHAPES: ReadonlySet<LineDecoration> = new Set([
 function decorationSize(style: LayerStyle): number {
   const size = styleValue(style, "lineDecorationSize");
   if (!Number.isFinite(size)) return 12;
-  return Math.min(
-    MAX_DECORATION_SIZE,
-    Math.max(MIN_DECORATION_SIZE, Math.round(size)),
-  );
+  return Math.min(MAX_DECORATION_SIZE, Math.max(MIN_DECORATION_SIZE, Math.round(size)));
 }
 
-function drawDecoration(
-  ctx: CanvasRenderingContext2D,
-  shape: LineDecoration,
-  size: number,
-): void {
+function drawDecoration(ctx: CanvasRenderingContext2D, shape: LineDecoration, size: number): void {
   const c = size / 2;
   const r = c * 0.82;
   ctx.beginPath();
@@ -112,8 +102,7 @@ export function prepareLineDecoration(style: LayerStyle): string | null {
   const shape = styleValue(style, "lineDecoration");
   if (!DECORATION_SHAPES.has(shape)) return null;
   const size = decorationSize(style);
-  const color =
-    normalizeHexColor(lineDecorationColorValue(style)) ?? "#1e40af";
+  const color = normalizeHexColor(lineDecorationColorValue(style)) ?? "#1e40af";
   const id = `geolibre-line-decoration-${shape}-${color.replace("#", "")}-${size}`;
   registerGeneratedImage(id, () => drawDecorationImage(shape, color, size));
   return id;

@@ -7,8 +7,7 @@
  * every activation path (the toolbar toggle and restoring a project that has
  * the plugin marked active) so coordinates are never sent without consent.
  */
-export const REVERSE_GEOCODE_CONSENT_KEY =
-  "geolibre:reverse-geocode-nominatim-notice";
+export const REVERSE_GEOCODE_CONSENT_KEY = "geolibre:reverse-geocode-nominatim-notice";
 
 /** Whether the user has acknowledged the reverse-geocode privacy notice. */
 export function hasReverseGeocodeConsent(): boolean {

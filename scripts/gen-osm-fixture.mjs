@@ -49,9 +49,7 @@ untagged.buildIndexes();
 
 const untaggedBytes = await toPbfBuffer(untagged);
 writeFileSync("tests/fixtures/untagged-way.osm.pbf", untaggedBytes);
-console.log(
-  `Wrote tests/fixtures/untagged-way.osm.pbf (${untaggedBytes.length} bytes)`,
-);
+console.log(`Wrote tests/fixtures/untagged-way.osm.pbf (${untaggedBytes.length} bytes)`);
 
 // A third fixture with one tagged and one untagged relation (both over the same
 // untagged member ways), to verify untagged relations are not emitted as
@@ -78,6 +76,4 @@ relations.buildIndexes();
 
 const relationBytes = await toPbfBuffer(relations);
 writeFileSync("tests/fixtures/untagged-relation.osm.pbf", relationBytes);
-console.log(
-  `Wrote tests/fixtures/untagged-relation.osm.pbf (${relationBytes.length} bytes)`,
-);
+console.log(`Wrote tests/fixtures/untagged-relation.osm.pbf (${relationBytes.length} bytes)`);

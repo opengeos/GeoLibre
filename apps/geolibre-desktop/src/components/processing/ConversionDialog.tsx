@@ -32,15 +32,7 @@ import {
   Select,
   cn,
 } from "@geolibre/ui";
-import {
-  AlertCircle,
-  CheckCircle2,
-  FolderOpen,
-  Loader2,
-  Play,
-  Save,
-  Server,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, FolderOpen, Loader2, Play, Save, Server } from "lucide-react";
 import type { ParseKeys } from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -54,10 +46,7 @@ import {
 } from "../../lib/tauri-io";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
-import {
-  beginProcessingRun,
-  type ProcessingRunTracker,
-} from "../../lib/processing-history";
+import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import i18n from "../../i18n";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
@@ -94,10 +83,7 @@ function defaultGeoParquetName(inputName: string): string {
  * `cities.gpkg` for Vector to Vector, `cities.parquet` for the GeoParquet
  * writers).
  */
-function defaultOutputNameForKind(
-  kind: ConversionToolKind,
-  inputName: string,
-): string {
+function defaultOutputNameForKind(kind: ConversionToolKind, inputName: string): string {
   const stem = stripExtension(inputName) || "output";
   const extension = fileExtension(TOOL_CONFIGS[kind].defaultOutputName) || "parquet";
   return `${stem}.${extension}`;
@@ -145,9 +131,7 @@ function splitBrowserSelection(files: File[]): {
 } {
   const mainFile =
     files.find((file) => fileExtension(file.name) === "shp") ??
-    files.find(
-      (file) => !SHAPEFILE_SIDECAR_EXTENSIONS.has(fileExtension(file.name)),
-    ) ??
+    files.find((file) => !SHAPEFILE_SIDECAR_EXTENSIONS.has(fileExtension(file.name))) ??
     null;
   return {
     mainFile,
@@ -285,15 +269,10 @@ const WEB_RUNTIME_KINDS: ReadonlySet<ConversionToolKind> = new Set([
 
 // Raster to PMTiles has no sidecar endpoint at all — geolibre-wasm is its only
 // engine — so it runs client-side on desktop too.
-const WASM_ONLY_KINDS: ReadonlySet<ConversionToolKind> = new Set([
-  "raster-to-pmtiles",
-]);
+const WASM_ONLY_KINDS: ReadonlySet<ConversionToolKind> = new Set(["raster-to-pmtiles"]);
 
 /** Whether a tool runs client-side rather than through the Python sidecar. */
-function conversionUsesBrowserRuntime(
-  kind: ConversionToolKind,
-  desktop: boolean,
-): boolean {
+function conversionUsesBrowserRuntime(kind: ConversionToolKind, desktop: boolean): boolean {
   if (WASM_ONLY_KINDS.has(kind)) return true;
   return !desktop && WEB_RUNTIME_KINDS.has(kind);
 }
@@ -302,16 +281,11 @@ function conversionUsesBrowserRuntime(
 // `vector_convert` does, so in-browser Vector to Vector can offer them too.
 // FlatGeobuf has no registered IANA media type; octet-stream is what the
 // browser save picker needs to offer a plain binary download.
-const WASM_VECTOR_OUTPUT_FORMATS: Record<
-  string,
-  { description: string; mimeType: string }
-> = {
+const WASM_VECTOR_OUTPUT_FORMATS: Record<string, { description: string; mimeType: string }> = {
   fgb: { description: "FlatGeobuf", mimeType: "application/octet-stream" },
 };
 
-const WASM_VECTOR_OUTPUT_EXTENSIONS = new Set(
-  Object.keys(WASM_VECTOR_OUTPUT_FORMATS),
-);
+const WASM_VECTOR_OUTPUT_EXTENSIONS = new Set(Object.keys(WASM_VECTOR_OUTPUT_FORMATS));
 
 // Deepest zoom the sidecar's engines accept — freestiler's Vector to PMTiles cap
 // and, since write_pmtiles imposes none of its own, what Raster to PMTiles uses
@@ -413,13 +387,9 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     description:
       "Convert between any vector formats DuckDB's spatial extension supports. The input and output formats are detected from the file extensions. The desktop app writes any format (FlatGeobuf, GeoPackage, Shapefile, KML, GML, …); the browser writes GeoJSON, CSV, GeoParquet, GeoPackage, FlatGeobuf, and Shapefile.",
     inputLabel: "Input vector file",
-    inputFilters: [
-      { name: "Vector", extensions: VECTOR_TO_VECTOR_INPUT_EXTENSIONS },
-    ],
+    inputFilters: [{ name: "Vector", extensions: VECTOR_TO_VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output vector file",
-    outputFilters: [
-      { name: "Vector", extensions: VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS },
-    ],
+    outputFilters: [{ name: "Vector", extensions: VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS }],
     defaultOutputName: "output.gpkg",
   },
   "vector-to-geoparquet": {
@@ -493,15 +463,7 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     browserInputFilters: [
       {
         name: "Vector",
-        extensions: [
-          "parquet",
-          "geoparquet",
-          "geojson",
-          "json",
-          "shp",
-          "gpkg",
-          "fgb",
-        ],
+        extensions: ["parquet", "geoparquet", "geojson", "json", "shp", "gpkg", "fgb"],
       },
     ],
     outputLabel: "Output PMTiles file",
@@ -575,8 +537,7 @@ export function ConversionDialog() {
   // Blank means "leave it to the tool", which renders band 1.
   const [band, setBand] = useState("");
   const [colormap, setColormap] = useState<PmtilesColormap | "">("");
-  const [resampling, setResampling] =
-    useState<PmtilesResamplingMethod>("bilinear");
+  const [resampling, setResampling] = useState<PmtilesResamplingMethod>("bilinear");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [startingServer, setStartingServer] = useState(false);
@@ -609,8 +570,7 @@ export function ConversionDialog() {
   // Row group size is a Parquet concept, so it is shown only for the
   // GeoParquet writers — not for Raster to COG, which also has a compression
   // option.
-  const showRowGroup =
-    kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet";
+  const showRowGroup = kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet";
 
   const checkRuntime = useCallback(async () => {
     if (usesBrowserRuntime && kind) {
@@ -636,9 +596,7 @@ export function ConversionDialog() {
       setRuntimeMessage(status.message);
     } catch (err) {
       setRuntimeAvailable(false);
-      setRuntimeMessage(
-        err instanceof Error ? err.message : "Could not connect to sidecar.",
-      );
+      setRuntimeMessage(err instanceof Error ? err.message : "Could not connect to sidecar.");
     }
   }, [desktop, kind, usesBrowserRuntime]);
 
@@ -813,13 +771,11 @@ export function ConversionDialog() {
       ]),
     );
     try {
-      const [
-        { loadDuckDbVectorFile, VectorLoadCancelledError },
-        { exportVectorLayer },
-      ] = await Promise.all([
-        import("../../lib/duckdb-vector-loader"),
-        import("../../lib/vector-export"),
-      ]);
+      const [{ loadDuckDbVectorFile, VectorLoadCancelledError }, { exportVectorLayer }] =
+        await Promise.all([
+          import("../../lib/duckdb-vector-loader"),
+          import("../../lib/vector-export"),
+        ]);
       const toVectorFile = async (file: File) => ({
         name: file.name,
         extension: fileExtension(file.name),
@@ -935,8 +891,7 @@ export function ConversionDialog() {
   // GDAL formats (KML, GML, …) still need the desktop sidecar.
   const runBrowserVectorToVector = async (mainFile: File, siblings: File[]) => {
     if (!kind || rejectZipInput(mainFile)) return;
-    const outputName =
-      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    const outputName = outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
     const outputExtension = fileExtension(outputName);
     if (WASM_VECTOR_OUTPUT_EXTENSIONS.has(outputExtension)) {
       await runBrowserVectorViaWasm(kind, mainFile, siblings, outputName);
@@ -960,8 +915,7 @@ export function ConversionDialog() {
   const runBrowserRasterToCog = async (mainFile: File) => {
     if (!kind) return;
     const toolId = kind;
-    const outputName =
-      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    const outputName = outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
     setError(null);
     setJob(
       browserConversionJob(toolId, "running", [
@@ -969,9 +923,7 @@ export function ConversionDialog() {
       ]),
     );
     try {
-      const { convertGeoTiffToCog, readGeoTiffInfo } = await import(
-        "@geolibre/processing"
-      );
+      const { convertGeoTiffToCog, readGeoTiffInfo } = await import("@geolibre/processing");
       const bytes = new Uint8Array(await mainFile.arrayBuffer());
       // Header-only read: cheap, and it lets us report the shape and warn about
       // an already-tiled input before decoding any pixels.
@@ -1019,9 +971,7 @@ export function ConversionDialog() {
     const toolId = kind;
     const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
     if (!zooms) {
-      setError(
-        i18n.t("toolbar.conversion.zoomRangeError", { max: MAX_PMTILES_ZOOM }),
-      );
+      setError(i18n.t("toolbar.conversion.zoomRangeError", { max: MAX_PMTILES_ZOOM }));
       return;
     }
     const parsedBand = parseBand(band);
@@ -1029,8 +979,7 @@ export function ConversionDialog() {
       setError(i18n.t("toolbar.conversion.bandError"));
       return;
     }
-    const outputName =
-      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    const outputName = outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
     setError(null);
     setJob(
       browserConversionJob(toolId, "running", [
@@ -1038,9 +987,7 @@ export function ConversionDialog() {
       ]),
     );
     try {
-      const { readGeoTiffInfo, renderRasterToPmtiles } = await import(
-        "@geolibre/processing"
-      );
+      const { readGeoTiffInfo, renderRasterToPmtiles } = await import("@geolibre/processing");
       const bytes = new Uint8Array(await mainFile.arrayBuffer());
       // Header-only check, matching runBrowserRasterToCog: a non-TIFF would
       // otherwise surface write_pmtiles' raw "unknown raster format" text. The
@@ -1060,20 +1007,16 @@ export function ConversionDialog() {
           }),
         );
       }
-      const result = await renderRasterToPmtiles(
-        { name: mainFile.name, data: bytes },
-        outputName,
-        {
-          // Blank bounds are omitted so write_pmtiles picks the native zoom for
-          // the raster's resolution, rather than this dialog forcing a 0-14
-          // pyramid that a wide-extent raster would take a long time to render.
-          ...zooms,
-          band: parsedBand,
-          // Omitted when unset, so the tool applies its own default.
-          colormap: colormap || undefined,
-          method: resampling,
-        },
-      );
+      const result = await renderRasterToPmtiles({ name: mainFile.name, data: bytes }, outputName, {
+        // Blank bounds are omitted so write_pmtiles picks the native zoom for
+        // the raster's resolution, rather than this dialog forcing a 0-14
+        // pyramid that a wide-extent raster would take a long time to render.
+        ...zooms,
+        band: parsedBand,
+        // Omitted when unset, so the tool applies its own default.
+        colormap: colormap || undefined,
+        method: resampling,
+      });
       const savedName = await saveBinaryFileWithFallback(result.data, {
         defaultName: outputName,
         filters: config?.outputFilters ?? [],
@@ -1101,10 +1044,7 @@ export function ConversionDialog() {
   };
 
   /** Vector to PMTiles via geolibre-wasm's `vector_to_pmtiles`, in the browser. */
-  const runBrowserVectorToPmtiles = async (
-    mainFile: File,
-    siblings: File[],
-  ) => {
+  const runBrowserVectorToPmtiles = async (mainFile: File, siblings: File[]) => {
     if (!kind) return;
     const toolId = kind;
     // The WASM tiler stops shallower than the sidecar's freestiler, so the same
@@ -1123,8 +1063,7 @@ export function ConversionDialog() {
       );
       return;
     }
-    const outputName =
-      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    const outputName = outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
     setError(null);
     setJob(
       browserConversionJob(toolId, "running", [
@@ -1215,8 +1154,7 @@ export function ConversionDialog() {
       // silently produce a GeoPackage under the "Vector to FlatGeobuf" title.
       // The sidecar forces output_format="flatgeobuf" for the same reason, and
       // the Shapefile/GeoPackage branches below hard-code their format too.
-      const requested =
-        outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+      const requested = outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
       await runBrowserVectorViaWasm(
         kind,
         mainFile,
@@ -1247,14 +1185,10 @@ export function ConversionDialog() {
     }
     const outputName = outputPath.trim() || defaultGeoParquetName(mainFile.name);
     setJob(
-      browserConversionJob(toolId, "running", [
-        `Converting ${mainFile.name} with DuckDB-WASM`,
-      ]),
+      browserConversionJob(toolId, "running", [`Converting ${mainFile.name} with DuckDB-WASM`]),
     );
     try {
-      const { convertDuckDbVectorToGeoParquet } = await import(
-        "../../lib/duckdb-vector-loader"
-      );
+      const { convertDuckDbVectorToGeoParquet } = await import("../../lib/duckdb-vector-loader");
       const toVectorFile = async (file: File) => ({
         name: file.name,
         extension: fileExtension(file.name),
@@ -1268,25 +1202,20 @@ export function ConversionDialog() {
         {
           compression,
           rowGroupSize: parsedRowGroupSize,
-          csv: isCsv
-            ? { lonColumn: lonColumn.trim(), latColumn: latColumn.trim() }
-            : undefined,
+          csv: isCsv ? { lonColumn: lonColumn.trim(), latColumn: latColumn.trim() } : undefined,
         },
       );
-      const savedName = await saveBinaryFileWithFallback(
-        new Uint8Array(result.data),
-        {
-          defaultName: outputName,
-          filters: [{ name: "GeoParquet", extensions: ["parquet"] }],
-          browserTypes: [
-            {
-              description: "GeoParquet",
-              accept: { [GEOPARQUET_MIME_TYPE]: [".parquet"] },
-            },
-          ],
-          mimeType: GEOPARQUET_MIME_TYPE,
-        },
-      );
+      const savedName = await saveBinaryFileWithFallback(new Uint8Array(result.data), {
+        defaultName: outputName,
+        filters: [{ name: "GeoParquet", extensions: ["parquet"] }],
+        browserTypes: [
+          {
+            description: "GeoParquet",
+            accept: { [GEOPARQUET_MIME_TYPE]: [".parquet"] },
+          },
+        ],
+        mimeType: GEOPARQUET_MIME_TYPE,
+      });
       const sortedLine =
         result.featureCount === undefined
           ? `Hilbert-sorted on column ${result.geometryColumn}`
@@ -1316,9 +1245,7 @@ export function ConversionDialog() {
       await startGeoLibreSidecar();
       await checkRuntime();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start GeoLibre sidecar.",
-      );
+      setError(err instanceof Error ? err.message : "Could not start GeoLibre sidecar.");
     } finally {
       setStartingServer(false);
     }
@@ -1360,9 +1287,7 @@ export function ConversionDialog() {
               ? { rowGroupSize }
               : {}),
             ...(kind === "csv-to-geoparquet" ? { lonColumn, latColumn } : {}),
-            ...(kind === "vector-to-pmtiles"
-              ? { layerName, minZoom, maxZoom }
-              : {}),
+            ...(kind === "vector-to-pmtiles" ? { layerName, minZoom, maxZoom } : {}),
             ...(kind === "raster-to-pmtiles"
               ? {
                   ...(band ? { band } : {}),
@@ -1406,21 +1331,14 @@ export function ConversionDialog() {
     const input_path = inputPath.trim();
     const output_path = outputPath.trim();
     const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
-    const rowGroupValid =
-      Number.isFinite(parsedRowGroupSize) && parsedRowGroupSize > 0;
+    const rowGroupValid = Number.isFinite(parsedRowGroupSize) && parsedRowGroupSize > 0;
     // Per-kind parameter validation, before the tracker exists so an invalid
     // submit is not recorded and cannot strand a pending tracker.
-    if (
-      (kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet") &&
-      !rowGroupValid
-    ) {
+    if ((kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet") && !rowGroupValid) {
       setError("Row group size must be a positive integer.");
       return;
     }
-    if (
-      kind === "csv-to-geoparquet" &&
-      (!lonColumn.trim() || !latColumn.trim())
-    ) {
+    if (kind === "csv-to-geoparquet" && (!lonColumn.trim() || !latColumn.trim())) {
       setError("Longitude and latitude column names are required.");
       return;
     }
@@ -1429,11 +1347,7 @@ export function ConversionDialog() {
     let pmtilesZoomRange: { minZoom: number; maxZoom: number } | null = null;
     if (kind === "vector-to-pmtiles") {
       const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
-      if (
-        !zooms ||
-        zooms.minZoom === undefined ||
-        zooms.maxZoom === undefined
-      ) {
+      if (!zooms || zooms.minZoom === undefined || zooms.maxZoom === undefined) {
         setError(
           i18n.t("toolbar.conversion.zoomRangeError", {
             max: MAX_PMTILES_ZOOM,
@@ -1500,8 +1414,7 @@ export function ConversionDialog() {
         setError(message);
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Could not start conversion.";
+      const message = err instanceof Error ? err.message : "Could not start conversion.";
       pendingTrackerRef.current?.finish("error", message);
       setError(message);
     }
@@ -1522,17 +1435,13 @@ export function ConversionDialog() {
             {config?.titleKey ? t(config.titleKey) : (config?.title ?? "Conversion")}
           </DialogTitle>
           <DialogDescription>
-            {config?.descriptionKey
-              ? t(config.descriptionKey)
-              : (config?.description ?? "")}
+            {config?.descriptionKey ? t(config.descriptionKey) : (config?.description ?? "")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           {usesBrowserRuntime && config?.browserNoteKey && (
-            <p className="text-xs text-muted-foreground">
-              {t(config.browserNoteKey)}
-            </p>
+            <p className="text-xs text-muted-foreground">{t(config.browserNoteKey)}</p>
           )}
           {runtimeAvailable === false && (
             <div className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
@@ -1588,8 +1497,7 @@ export function ConversionDialog() {
             </div>
             {usesBrowserRuntime && !isCsv && !isRasterInput && (
               <p className="text-xs text-muted-foreground">
-                For Shapefiles, select the .shp together with its .dbf, .shx,
-                and .prj files.
+                For Shapefiles, select the .shp together with its .dbf, .shx, and .prj files.
               </p>
             )}
           </div>
@@ -1697,9 +1605,7 @@ export function ConversionDialog() {
               </div>
               {showRowGroup && (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="conversion-row-group-size">
-                    Row group size
-                  </Label>
+                  <Label htmlFor="conversion-row-group-size">Row group size</Label>
                   <Input
                     id="conversion-row-group-size"
                     inputMode="numeric"
@@ -1746,9 +1652,7 @@ export function ConversionDialog() {
           {isRasterPmtiles && (
             <div className="grid grid-cols-[5rem_minmax(0,1fr)_minmax(0,1fr)_5rem_5rem] gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-band">
-                  {t("toolbar.conversion.band")}
-                </Label>
+                <Label htmlFor="conversion-band">{t("toolbar.conversion.band")}</Label>
                 <Input
                   id="conversion-band"
                   inputMode="numeric"
@@ -1758,19 +1662,13 @@ export function ConversionDialog() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-colormap">
-                  {t("toolbar.conversion.colormap")}
-                </Label>
+                <Label htmlFor="conversion-colormap">{t("toolbar.conversion.colormap")}</Label>
                 <Select
                   id="conversion-colormap"
                   value={colormap}
-                  onChange={(event) =>
-                    setColormap(event.target.value as PmtilesColormap | "")
-                  }
+                  onChange={(event) => setColormap(event.target.value as PmtilesColormap | "")}
                 >
-                  <option value="">
-                    {t("toolbar.conversion.colormapDefault")}
-                  </option>
+                  <option value="">{t("toolbar.conversion.colormapDefault")}</option>
                   {PMTILES_COLORMAPS.map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -1779,15 +1677,11 @@ export function ConversionDialog() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-resampling">
-                  {t("toolbar.conversion.resampling")}
-                </Label>
+                <Label htmlFor="conversion-resampling">{t("toolbar.conversion.resampling")}</Label>
                 <Select
                   id="conversion-resampling"
                   value={resampling}
-                  onChange={(event) =>
-                    setResampling(event.target.value as PmtilesResamplingMethod)
-                  }
+                  onChange={(event) => setResampling(event.target.value as PmtilesResamplingMethod)}
                 >
                   {PMTILES_RESAMPLING_METHODS.map((option) => (
                     <option key={option} value={option}>
@@ -1797,7 +1691,9 @@ export function ConversionDialog() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-raster-min-zoom">{t("toolbar.conversion.minZoom")}</Label>
+                <Label htmlFor="conversion-raster-min-zoom">
+                  {t("toolbar.conversion.minZoom")}
+                </Label>
                 <Input
                   id="conversion-raster-min-zoom"
                   inputMode="numeric"
@@ -1807,7 +1703,9 @@ export function ConversionDialog() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-raster-max-zoom">{t("toolbar.conversion.maxZoom")}</Label>
+                <Label htmlFor="conversion-raster-max-zoom">
+                  {t("toolbar.conversion.maxZoom")}
+                </Label>
                 <Input
                   id="conversion-raster-max-zoom"
                   inputMode="numeric"
@@ -1843,12 +1741,7 @@ export function ConversionDialog() {
 
           {job && (
             <div className="grid gap-2">
-              <p
-                className={cn(
-                  "flex items-center gap-2 text-sm font-medium",
-                  jobStatusTone(job),
-                )}
-              >
+              <p className={cn("flex items-center gap-2 text-sm font-medium", jobStatusTone(job))}>
                 {job.status === "succeeded" ? (
                   <CheckCircle2 className="h-4 w-4" />
                 ) : job.status === "failed" ? (

@@ -55,10 +55,7 @@ type EarthEngineApi = {
       onImmediateFailed?: () => void,
       suppressDefaultScopes?: boolean,
     ) => void;
-    authenticateViaPopup?: (
-      onSuccess: () => void,
-      onFailure: (error: unknown) => void,
-    ) => void;
+    authenticateViaPopup?: (onSuccess: () => void, onFailure: (error: unknown) => void) => void;
     getAuthToken?: () => string;
   };
 };
@@ -104,9 +101,7 @@ export function clearEarthEngineFunctionInfo(): void {
   }
 }
 
-export function installEarthEngineFunctionInfoFallback(
-  functionInfo?: unknown,
-): void {
+export function installEarthEngineFunctionInfoFallback(functionInfo?: unknown): void {
   const scope = globalThis as EarthEngineExportedFunctionInfoGlobal;
   const descriptor = Object.getOwnPropertyDescriptor(scope, "EXPORTED_FN_INFO");
   if (descriptor?.configurable === false) return;
@@ -131,10 +126,12 @@ export function installEarthEngineFunctionInfoFallback(
 
 export function importMetaEnv(): EarthEngineImportMetaEnv {
   return (
-    import.meta as ImportMeta & {
-      env?: EarthEngineImportMetaEnv;
-    }
-  ).env ?? {};
+    (
+      import.meta as ImportMeta & {
+        env?: EarthEngineImportMetaEnv;
+      }
+    ).env ?? {}
+  );
 }
 
 export function envString(value: unknown): string {
@@ -223,9 +220,7 @@ export function shouldUseTauriEarthEngineOAuth(): boolean {
   return isTauriProductionOrigin();
 }
 
-async function authenticateEarthEngineViaBrowser(
-  oauthClientId: string,
-): Promise<void> {
+async function authenticateEarthEngineViaBrowser(oauthClientId: string): Promise<void> {
   const earthEngine = await loadEarthEngine();
   return new Promise((resolve, reject) => {
     const onSuccess = () => resolve();
@@ -263,10 +258,9 @@ async function authenticateEarthEngineViaBrowser(
 async function authenticateEarthEngineViaTauri(
   oauthClientId: string,
 ): Promise<TauriEarthEngineOAuthToken> {
-  const session = await invoke<TauriEarthEngineOAuthStart>(
-    "start_earth_engine_oauth",
-    { clientId: oauthClientId },
-  );
+  const session = await invoke<TauriEarthEngineOAuthStart>("start_earth_engine_oauth", {
+    clientId: oauthClientId,
+  });
 
   // Open the loopback OAuth helper page (served by the Rust
   // `start_earth_engine_oauth` command on 127.0.0.1) in the SYSTEM BROWSER, not
@@ -289,17 +283,14 @@ async function loadEarthEngine(): Promise<EarthEngineApi> {
   return (module.default ?? module) as EarthEngineApi;
 }
 
-async function waitForTauriEarthEngineToken(
-  state: string,
-): Promise<TauriEarthEngineOAuthToken> {
+async function waitForTauriEarthEngineToken(state: string): Promise<TauriEarthEngineOAuthToken> {
   // The helper page now runs in the system browser, so there is no popup window
   // handle to watch for cancellation; poll the loopback server for the token and
   // fall back to the timeout below if the user abandons the browser sign-in.
   for (let poll = 0; poll < 300; poll += 1) {
-    const token = await invoke<TauriEarthEngineOAuthToken | null>(
-      "poll_earth_engine_oauth",
-      { stateId: state },
-    );
+    const token = await invoke<TauriEarthEngineOAuthToken | null>("poll_earth_engine_oauth", {
+      stateId: state,
+    });
     if (token) return token;
     await delay(1000);
   }
@@ -320,10 +311,7 @@ export async function closeTauriOauthPopups(): Promise<void> {
 }
 
 async function closeTauriOauthPopupsOnce(): Promise<void> {
-  await Promise.allSettled([
-    closeTauriOauthPopupsByCommand(),
-    closeTauriOauthPopupsByWindowApi(),
-  ]);
+  await Promise.allSettled([closeTauriOauthPopupsByCommand(), closeTauriOauthPopupsByWindowApi()]);
 }
 
 async function closeTauriOauthPopupsByCommand(): Promise<void> {

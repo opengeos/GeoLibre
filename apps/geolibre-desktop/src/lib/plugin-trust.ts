@@ -45,9 +45,7 @@ export function partitionProjectPluginManifestUrls(
   trustedManifestUrls: readonly string[],
   bundledManifestUrls: readonly string[],
 ): PartitionedProjectPluginUrls {
-  const trustedSet = new Set(
-    normalizeStringList([...trustedManifestUrls, ...bundledManifestUrls]),
-  );
+  const trustedSet = new Set(normalizeStringList([...trustedManifestUrls, ...bundledManifestUrls]));
   const trusted: string[] = [];
   const untrusted: string[] = [];
   for (const url of normalizeStringList(projectManifestUrls)) {

@@ -208,9 +208,7 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
             """,
             (schema, table),
         )
-        column_rows = [
-            row for row in cur.fetchall() if row[0] not in all_geometry_columns
-        ]
+        column_rows = [row for row in cur.fetchall() if row[0] not in all_geometry_columns]
         columns = [name for name, _ in column_rows]
         # data_type distinguishes native arrays ('ARRAY') from json/jsonb, so
         # the write path can bind a Python list correctly for each.
@@ -357,19 +355,14 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
             # as stored (the common convention for srid 0 data is lon/lat
             # already).
             geom_expr = (
-                sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(
-                    geom=geom
-                )
+                sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(geom=geom)
                 if info["srid"] not in (0, 4326)
                 else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
             )
             column_list = sql.SQL(", ").join(
-                [geom_expr]
-                + [sql.Identifier(column) for column in info["columns"]]
+                [geom_expr] + [sql.Identifier(column) for column in info["columns"]]
             )
-            query = sql.SQL(
-                "SELECT {columns} FROM {schema}.{table} LIMIT %s"
-            ).format(
+            query = sql.SQL("SELECT {columns} FROM {schema}.{table} LIMIT %s").format(
                 columns=column_list,
                 schema=sql.Identifier(request.schema_name),
                 table=sql.Identifier(request.table),
@@ -397,18 +390,14 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
         raise HTTPException(
             status_code=413,
             detail=(
-                f"Table exceeds the {vector_ops.MAX_FEATURES}-feature limit for "
-                "editable layers"
+                f"Table exceeds the {vector_ops.MAX_FEATURES}-feature limit for editable layers"
             ),
         )
 
     pk = info["primary_key"]
     features = []
     for row in rows:
-        properties = {
-            column: _json_safe(value)
-            for column, value in zip(info["columns"], row[1:])
-        }
+        properties = {column: _json_safe(value) for column, value in zip(info["columns"], row[1:])}
         feature: dict[str, Any] = {
             "type": "Feature",
             "geometry": json.loads(row[0]) if row[0] else None,
@@ -429,9 +418,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     }
 
 
-def _geometry_param(
-    sql: Any, srid: int
-) -> Any:
+def _geometry_param(sql: Any, srid: int) -> Any:
     """Build the SQL expression that binds a GeoJSON geometry parameter.
 
     The bound value is GeoJSON text (WGS84). For a projected table the geometry
@@ -441,12 +428,10 @@ def _geometry_param(
     if srid in (0, 4326):
         # ST_GeomFromGeoJSON yields SRID 4326; an srid-0 column needs the
         # geometry re-stamped as "unknown" or the typmod check rejects it.
-        return sql.SQL("ST_SetSRID(ST_GeomFromGeoJSON(%s), {srid})").format(
-            srid=sql.Literal(srid)
-        )
-    return sql.SQL(
-        "ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), {srid})"
-    ).format(srid=sql.Literal(srid))
+        return sql.SQL("ST_SetSRID(ST_GeomFromGeoJSON(%s), {srid})").format(srid=sql.Literal(srid))
+    return sql.SQL("ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), {srid})").format(
+        srid=sql.Literal(srid)
+    )
 
 
 @router.post("/write")
@@ -531,16 +516,12 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 # normalized the same way /read serializes them, so
                 # comparisons against the client's JSON-native payload match.
                 geom_expr = (
-                    sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(
-                        geom=geom_ident
-                    )
+                    sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(geom=geom_ident)
                     if info["srid"] not in (0, 4326)
                     else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom_ident)
                 )
                 cur.execute(
-                    sql.SQL(
-                        "SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}"
-                    ).format(
+                    sql.SQL("SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}").format(
                         pk=sql.Identifier(pk),
                         geom_expr=geom_expr,
                         columns=sql.SQL(", ").join(
@@ -574,9 +555,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     for feature in features:
                         properties = feature.get("properties") or {}
                         skipped.update(
-                            key
-                            for key in properties
-                            if key not in writable_set and key != pk
+                            key for key in properties if key not in writable_set and key != pk
                         )
                         columns = [c for c in writable if c in properties]
                         # dicts and lists bind as json/jsonb — except a list
@@ -622,27 +601,20 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                                 continue
                             assignments = [
                                 sql.SQL("{col} = ").format(col=geom_ident)
-                                + (
-                                    geom_param
-                                    if geometry_value is not None
-                                    else sql.SQL("NULL")
-                                )
+                                + (geom_param if geometry_value is not None else sql.SQL("NULL"))
                             ]
                             params: list[Any] = (
                                 [geometry_value] if geometry_value is not None else []
                             )
                             for column, value in zip(columns, values):
                                 assignments.append(
-                                    sql.SQL("{col} = %s").format(
-                                        col=sql.Identifier(column)
-                                    )
+                                    sql.SQL("{col} = %s").format(col=sql.Identifier(column))
                                 )
                                 params.append(value)
                             params.append(key)
                             cur.execute(
                                 sql.SQL(
-                                    "UPDATE {schema}.{table} SET {assignments} "
-                                    "WHERE {pk} = %s"
+                                    "UPDATE {schema}.{table} SET {assignments} WHERE {pk} = %s"
                                 ).format(
                                     schema=schema_ident,
                                     table=table_ident,
@@ -671,9 +643,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                                 sql.Identifier(column) for column in insert_columns
                             ]
                             value_exprs = [
-                                geom_param
-                                if geometry_value is not None
-                                else sql.SQL("NULL")
+                                geom_param if geometry_value is not None else sql.SQL("NULL")
                             ] + [sql.SQL("%s")] * len(insert_values)
                             params = (
                                 [geometry_value] if geometry_value is not None else []
@@ -699,9 +669,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 deletable = existing_keys
                 if request.baseline_keys is not None:
                     deletable = existing_keys & set(request.baseline_keys)
-                to_delete = sorted(
-                    deletable - kept_keys, key=lambda value: str(value)
-                )
+                to_delete = sorted(deletable - kept_keys, key=lambda value: str(value))
                 deleted = 0
                 if to_delete:
                     # Compare as text so the (JSON-native) keys match uuid /
@@ -714,9 +682,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     # lower than the client expects);
                     # integer/text/uuid/numeric/date keys all round-trip.
                     cur.execute(
-                        sql.SQL(
-                            "DELETE FROM {schema}.{table} WHERE {pk}::text = ANY(%s)"
-                        ).format(
+                        sql.SQL("DELETE FROM {schema}.{table} WHERE {pk}::text = ANY(%s)").format(
                             schema=schema_ident,
                             table=table_ident,
                             pk=sql.Identifier(pk),
@@ -749,10 +715,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
         f"({inserted} inserted, {updated} updated, {deleted} deleted)"
     ]
     if skipped:
-        messages.append(
-            "Skipped fields without a matching column: "
-            + ", ".join(sorted(skipped))
-        )
+        messages.append("Skipped fields without a matching column: " + ", ".join(sorted(skipped)))
 
     return {
         "schema": request.schema_name,

@@ -9,10 +9,7 @@ import {
 describe("getPyodideIndexUrl", () => {
   it("defaults to the pinned jsDelivr CDN for the pinned version", () => {
     const url = getPyodideIndexUrl({});
-    assert.equal(
-      url,
-      `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`,
-    );
+    assert.equal(url, `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`);
     // The loader and the CDN assets must share one version; guard the pin.
     assert.ok(url.includes(`/v${PYODIDE_VERSION}/`));
     assert.ok(url.endsWith("/"));
@@ -65,9 +62,7 @@ describe("isDefaultPyodideIndexUrl", () => {
     // Guard the exact-match contract: callers must pass a resolved (normalized)
     // indexURL, as getPyodideIndexUrl always appends the trailing slash.
     assert.equal(
-      isDefaultPyodideIndexUrl(
-        `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full`,
-      ),
+      isDefaultPyodideIndexUrl(`https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full`),
       false,
     );
   });

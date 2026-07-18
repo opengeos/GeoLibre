@@ -2,9 +2,7 @@ import { expect, test } from "@playwright/test";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 const FIXTURE_TEXT = readFixture("smoke.geojson");
-const FIXTURE_FEATURE_COUNT = (
-  JSON.parse(FIXTURE_TEXT) as { features: unknown[] }
-).features.length;
+const FIXTURE_FEATURE_COUNT = (JSON.parse(FIXTURE_TEXT) as { features: unknown[] }).features.length;
 
 /**
  * Dark theme is the app's most theme-sensitive surface and ships changes
@@ -14,9 +12,7 @@ const FIXTURE_FEATURE_COUNT = (
  * attribute table — entirely in dark mode as a regression guard against dark
  * theme breaking the app shell or the data path.
  */
-test("loads a layer and opens the attribute table in dark theme", async ({
-  page,
-}) => {
+test("loads a layer and opens the attribute table in dark theme", async ({ page }) => {
   await waitForMap(page, "/?theme=dark");
 
   // The theme applies as `class="dark"` on <html> with a matching color-scheme.
@@ -31,7 +27,7 @@ test("loads a layer and opens the attribute table in dark theme", async ({
   await row.locator('button[aria-label="Layer actions"]').click();
   await page.getByRole("menuitem", { name: "Open attribute table" }).click();
   await expect(page.getByTestId("attribute-table")).toBeVisible();
-  await expect(
-    page.locator('[data-testid="attribute-table"] tbody tr'),
-  ).toHaveCount(FIXTURE_FEATURE_COUNT);
+  await expect(page.locator('[data-testid="attribute-table"] tbody tr')).toHaveCount(
+    FIXTURE_FEATURE_COUNT,
+  );
 });

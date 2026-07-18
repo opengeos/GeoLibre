@@ -10,11 +10,7 @@
 // `type:"vector"` pattern already used in `layer-sync.ts`.
 
 import { addProtocol, config, type RequestParameters } from "maplibre-gl";
-import {
-  GeoJSONVT,
-  Supercluster,
-  type GeoJSONVTTile,
-} from "@maplibre/geojson-vt";
+import { GeoJSONVT, Supercluster, type GeoJSONVTTile } from "@maplibre/geojson-vt";
 import { fromGeojsonVt } from "@maplibre/vt-pbf";
 
 /** Custom protocol scheme handled by {@link ensureGeoJsonVtProtocol}. */
@@ -137,9 +133,8 @@ export function geojsonVtTileUrl(layerId: string): string {
  * (mirrors the pmtiles protocol handling in `layer-sync.ts`).
  */
 export function ensureGeoJsonVtProtocol(): void {
-  const registered = (
-    config as { REGISTERED_PROTOCOLS?: Record<string, unknown> }
-  ).REGISTERED_PROTOCOLS?.[GEOJSONVT_PROTOCOL];
+  const registered = (config as { REGISTERED_PROTOCOLS?: Record<string, unknown> })
+    .REGISTERED_PROTOCOLS?.[GEOJSONVT_PROTOCOL];
   if (registered) return;
   addProtocol(GEOJSONVT_PROTOCOL, geojsonVtProtocolHandler);
 }
@@ -160,18 +155,13 @@ async function geojsonVtProtocolHandler(
     // vt-pbf release) — return an empty tile rather than leaving MapLibre with
     // an unhandled rejection that silently blanks the whole layer.
     const pbf = fromGeojsonVt(
-      { [TILE_SOURCE_LAYER]: tile } as unknown as Parameters<
-        typeof fromGeojsonVt
-      >[0],
+      { [TILE_SOURCE_LAYER]: tile } as unknown as Parameters<typeof fromGeojsonVt>[0],
       { version: 2, extent: TILE_EXTENT },
     );
     // Hand MapLibre an exactly-sized ArrayBuffer; `pbf` may be a view into a
     // larger backing buffer.
     return {
-      data: pbf.buffer.slice(
-        pbf.byteOffset,
-        pbf.byteOffset + pbf.byteLength,
-      ) as ArrayBuffer,
+      data: pbf.buffer.slice(pbf.byteOffset, pbf.byteOffset + pbf.byteLength) as ArrayBuffer,
     };
   } catch (err) {
     console.warn("[GeoLibre] geojson-vt tile encode failed", err);
@@ -196,12 +186,7 @@ function lookupTile(url: string): GeoJSONVTTile | null {
     .split("/")
     .map(Number);
   const entry = registry.get(layerId);
-  if (
-    !entry ||
-    !Number.isFinite(z) ||
-    !Number.isFinite(x) ||
-    !Number.isFinite(y)
-  ) {
+  if (!entry || !Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) {
     return null;
   }
   return entry.index.getTile(z, x, y);

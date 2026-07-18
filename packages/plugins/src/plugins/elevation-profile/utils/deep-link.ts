@@ -10,10 +10,10 @@
  * the logic can be unit-tested in isolation.
  */
 
-import type { LngLat } from '../elevation/geometry';
+import type { LngLat } from "../elevation/geometry";
 
 /** Query-parameter name this plugin owns. */
-export const ELEVATION_LINE_PARAM = 'elevation-line';
+export const ELEVATION_LINE_PARAM = "elevation-line";
 
 /**
  * Extract the raw elevation-line value from parsed query parameters. Returns the
@@ -38,7 +38,7 @@ export function getElevationLineValue(params: URLSearchParams): string | null {
  * @returns The encoded string (coordinates rounded to 6 decimal places)
  */
 export function encodeLine(coords: LngLat[]): string {
-  return coords.map(([lng, lat]) => `${round(lng)},${round(lat)}`).join(';');
+  return coords.map(([lng, lat]) => `${round(lng)},${round(lat)}`).join(";");
 }
 
 /**
@@ -52,8 +52,8 @@ export function encodeLine(coords: LngLat[]): string {
  */
 export function parseLine(value: string): LngLat[] | null {
   const coords: LngLat[] = [];
-  for (const pair of value.split(';')) {
-    const [lngText, latText] = pair.split(',');
+  for (const pair of value.split(";")) {
+    const [lngText, latText] = pair.split(",");
     const lng = Number(lngText);
     const lat = Number(latText);
     if (

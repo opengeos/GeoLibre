@@ -84,20 +84,17 @@ describe("PLANETARY_BASEMAP_GROUPS (picker sections)", () => {
     const other = groupsById.get("other");
     assert.ok(other, "missing 'other' section");
     const bodies = new Set(other!.basemaps.map((b) => b.ellipsoidId));
-    assert.deepEqual(
-      [...bodies].sort(),
-      [
-        "callisto",
-        "charon",
-        "europa",
-        "ganymede",
-        "io",
-        "mercury",
-        "pluto",
-        "titan",
-        "venus",
-      ],
-    );
+    assert.deepEqual([...bodies].sort(), [
+      "callisto",
+      "charon",
+      "europa",
+      "ganymede",
+      "io",
+      "mercury",
+      "pluto",
+      "titan",
+      "venus",
+    ]);
     // Earth, Moon and Mars must never leak into 'other'.
     for (const id of ["earth", "moon", "mars"]) {
       assert.ok(!bodies.has(id), `${id} should not be in 'other'`);
@@ -105,9 +102,7 @@ describe("PLANETARY_BASEMAP_GROUPS (picker sections)", () => {
   });
 
   it("orders the 'other' section alphabetically by body name", () => {
-    const names = groupsById
-      .get("other")!
-      .basemaps.map((b) => getEllipsoid(b.ellipsoidId).name);
+    const names = groupsById.get("other")!.basemaps.map((b) => getEllipsoid(b.ellipsoidId).name);
     const sorted = [...names].sort((a, b) => a.localeCompare(b));
     assert.deepEqual(names, sorted);
   });
@@ -171,9 +166,7 @@ describe("undo keeps the ellipsoid in sync with the restored basemap", () => {
       map: { ...prefs.map, ellipsoidId: "mars" },
     });
     // An unrelated undoable action that doesn't touch the basemap, then undo.
-    useAppStore
-      .getState()
-      .addGeoJsonLayer("A", { type: "FeatureCollection", features: [] });
+    useAppStore.getState().addGeoJsonLayer("A", { type: "FeatureCollection", features: [] });
     undo();
     // The basemap never changed, so the manual ellipsoid must survive.
     assert.equal(useAppStore.getState().preferences.map.ellipsoidId, "mars");

@@ -76,10 +76,7 @@ function persist(list: OfflineBasemap[], storage?: Storage): void {
 }
 
 /** Adds (or replaces by id) a basemap, newest first. */
-export function upsertOfflineBasemap(
-  entry: OfflineBasemap,
-  storage?: Storage,
-): OfflineBasemap[] {
+export function upsertOfflineBasemap(entry: OfflineBasemap, storage?: Storage): OfflineBasemap[] {
   const list = [entry, ...loadOfflineBasemaps(storage).filter((b) => b.id !== entry.id)];
   persist(list, storage);
   return list;
@@ -106,18 +103,13 @@ export function setOfflineBasemapFlavor(
   flavor: string,
   storage?: Storage,
 ): OfflineBasemap[] {
-  const list = loadOfflineBasemaps(storage).map((b) =>
-    b.id === id ? { ...b, flavor } : b,
-  );
+  const list = loadOfflineBasemaps(storage).map((b) => (b.id === id ? { ...b, flavor } : b));
   persist(list, storage);
   return list;
 }
 
 /** Removes a basemap. Returns the updated list. */
-export function deleteOfflineBasemap(
-  id: string,
-  storage?: Storage,
-): OfflineBasemap[] {
+export function deleteOfflineBasemap(id: string, storage?: Storage): OfflineBasemap[] {
   const list = loadOfflineBasemaps(storage).filter((b) => b.id !== id);
   persist(list, storage);
   return list;

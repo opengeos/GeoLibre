@@ -110,11 +110,7 @@ const RECORDING_SUPPORTED = isTourRecordingSupported();
  * recording too. Keyframe state lives on this always-mounted component, so a
  * tour survives toggling the panel.
  */
-export function RecordTourDialog({
-  open,
-  onOpenChange,
-  mapControllerRef,
-}: RecordTourDialogProps) {
+export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: RecordTourDialogProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const [keyframes, setKeyframes] = useState<TourKeyframe[]>([]);
@@ -143,15 +139,11 @@ export function RecordTourDialog({
   // native save dialog twice.
   const savingConfigRef = useRef(false);
   const [pathLayerId, setPathLayerId] = useState("");
-  const [pathKeyframeCount, setPathKeyframeCount] = useState(
-    DEFAULT_PATH_KEYFRAMES,
-  );
+  const [pathKeyframeCount, setPathKeyframeCount] = useState(DEFAULT_PATH_KEYFRAMES);
   const [pathZoom, setPathZoom] = useState(DEFAULT_PATH_ZOOM);
   const [pathPitch, setPathPitch] = useState(DEFAULT_PATH_PITCH);
   const [pathHoldSeconds, setPathHoldSeconds] = useState(DEFAULT_HOLD_SECONDS);
-  const [pathTransitionSeconds, setPathTransitionSeconds] = useState(
-    DEFAULT_SEGMENT_SECONDS,
-  );
+  const [pathTransitionSeconds, setPathTransitionSeconds] = useState(DEFAULT_SEGMENT_SECONDS);
 
   // Drag-to-reposition. `pos` is null until first dragged, when the default
   // corner placement (CSS class) applies; afterwards it pins to explicit coords.
@@ -163,9 +155,7 @@ export function RecordTourDialog({
   // default width / max-height classes apply; afterwards it pins to explicit
   // pixels. The bottom-left handle keeps the right edge fixed (so it adjusts
   // `pos.x` too); the bottom-right handle keeps the left edge fixed.
-  const [size, setSize] = useState<{ width: number; height: number } | null>(
-    null,
-  );
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const resizeRef = useRef<{
     corner: "sw" | "se";
     startX: number;
@@ -261,17 +251,11 @@ export function RecordTourDialog({
   ) => {
     // Height grows downward from a fixed top for both corners.
     const maxHeight = window.innerHeight - base.top;
-    const height = Math.max(
-      MIN_PANEL_HEIGHT,
-      Math.min(base.height + dy, maxHeight),
-    );
+    const height = Math.max(MIN_PANEL_HEIGHT, Math.min(base.height + dy, maxHeight));
     if (corner === "se") {
       // Left edge fixed; the right edge follows, capped at the viewport edge.
       const maxWidth = window.innerWidth - base.left;
-      const width = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(base.width + dx, maxWidth),
-      );
+      const width = Math.max(MIN_PANEL_WIDTH, Math.min(base.width + dx, maxWidth));
       setPos({ x: base.left, y: base.top });
       setSize({ width, height });
     } else {
@@ -280,37 +264,33 @@ export function RecordTourDialog({
       // width, since that is what keeps the left edge from crossing x = 0 when
       // we set `pos.x = right - width`.
       const maxWidthBeforeEdge = base.left + base.width;
-      const width = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(base.width + dx, maxWidthBeforeEdge),
-      );
+      const width = Math.max(MIN_PANEL_WIDTH, Math.min(base.width + dx, maxWidthBeforeEdge));
       setPos({ x: maxWidthBeforeEdge - width, y: base.top });
       setSize({ width, height });
     }
   };
 
-  const onResizeStart =
-    (corner: "sw" | "se") => (event: React.PointerEvent) => {
-      // Don't let the press also start a drag or bubble to the map underneath.
-      event.preventDefault();
-      event.stopPropagation();
-      const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      resizeRef.current = {
-        corner,
-        startX: event.clientX,
-        startY: event.clientY,
-        startWidth: rect.width,
-        startHeight: rect.height,
-        startLeft: rect.left,
-        startTop: rect.top,
-      };
-      // Pin both position and size from the live measurement so a from-the-left
-      // resize has a fixed right edge to work against even before the first drag.
-      setPos({ x: rect.left, y: rect.top });
-      setSize({ width: rect.width, height: rect.height });
-      event.currentTarget.setPointerCapture(event.pointerId);
+  const onResizeStart = (corner: "sw" | "se") => (event: React.PointerEvent) => {
+    // Don't let the press also start a drag or bubble to the map underneath.
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    resizeRef.current = {
+      corner,
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: rect.width,
+      startHeight: rect.height,
+      startLeft: rect.left,
+      startTop: rect.top,
     };
+    // Pin both position and size from the live measurement so a from-the-left
+    // resize has a fixed right edge to work against even before the first drag.
+    setPos({ x: rect.left, y: rect.top });
+    setSize({ width: rect.width, height: rect.height });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
   const onResizeMove = (event: React.PointerEvent) => {
     const start = resizeRef.current;
@@ -336,47 +316,43 @@ export function RecordTourDialog({
   // Keyboard equivalent of dragging a corner: arrow keys nudge the panel size by
   // a fixed step so the resize feature is operable without a pointer. Left/Right
   // grow the side the handle is on; Up/Down adjust the bottom edge.
-  const onResizeKey =
-    (corner: "sw" | "se") => (event: React.KeyboardEvent) => {
-      let dx = 0;
-      let dy = 0;
-      switch (event.key) {
-        case "ArrowDown":
-          dy = RESIZE_KEY_STEP;
-          break;
-        case "ArrowUp":
-          dy = -RESIZE_KEY_STEP;
-          break;
-        case "ArrowLeft":
-          // For the left handle, pressing Left extends the panel leftward.
-          dx = corner === "sw" ? RESIZE_KEY_STEP : -RESIZE_KEY_STEP;
-          break;
-        case "ArrowRight":
-          dx = corner === "sw" ? -RESIZE_KEY_STEP : RESIZE_KEY_STEP;
-          break;
-        default:
-          return;
-      }
-      event.preventDefault();
-      const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      applyResize(
-        corner,
-        { width: rect.width, height: rect.height, left: rect.left, top: rect.top },
-        dx,
-        dy,
-      );
-    };
+  const onResizeKey = (corner: "sw" | "se") => (event: React.KeyboardEvent) => {
+    let dx = 0;
+    let dy = 0;
+    switch (event.key) {
+      case "ArrowDown":
+        dy = RESIZE_KEY_STEP;
+        break;
+      case "ArrowUp":
+        dy = -RESIZE_KEY_STEP;
+        break;
+      case "ArrowLeft":
+        // For the left handle, pressing Left extends the panel leftward.
+        dx = corner === "sw" ? RESIZE_KEY_STEP : -RESIZE_KEY_STEP;
+        break;
+      case "ArrowRight":
+        dx = corner === "sw" ? -RESIZE_KEY_STEP : RESIZE_KEY_STEP;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    applyResize(
+      corner,
+      { width: rect.width, height: rect.height, left: rect.left, top: rect.top },
+      dx,
+      dy,
+    );
+  };
 
   /** Read the live map camera, rounded for compact display. */
   const captureView = () => {
     const view = mapControllerRef.current?.readView();
     if (!view) return null;
     return {
-      center: [round(view.center[0], 6), round(view.center[1], 6)] as [
-        number,
-        number,
-      ],
+      center: [round(view.center[0], 6), round(view.center[1], 6)] as [number, number],
       zoom: round(view.zoom, 3),
       pitch: round(view.pitch, 1),
       bearing: round(view.bearing, 1),
@@ -411,9 +387,7 @@ export function RecordTourDialog({
     // Recapturing changes what the tour records, like adding a view, so a stale
     // "Saved …" banner shouldn't keep implying the modified tour was saved.
     clearResultMessages();
-    setKeyframes((current) =>
-      current.map((kf) => (kf.id === id ? { ...kf, ...view } : kf)),
-    );
+    setKeyframes((current) => current.map((kf) => (kf.id === id ? { ...kf, ...view } : kf)));
   };
 
   const removeKeyframe = (id: string) => {
@@ -438,10 +412,7 @@ export function RecordTourDialog({
   const generateFromPath = () => {
     const layer = selectedPathLayer?.layer;
     if (!layer?.geojson) return;
-    if (
-      keyframes.length > 0 &&
-      !window.confirm(t("recordTour.pathConfirmReplace"))
-    ) {
+    if (keyframes.length > 0 && !window.confirm(t("recordTour.pathConfirmReplace"))) {
       return;
     }
     const generated = generateTourKeyframesFromPath(layer.geojson, {
@@ -458,9 +429,7 @@ export function RecordTourDialog({
     }
     clearResultMessages();
     setKeyframes(generated.map((kf) => ({ ...kf, id: createId() })));
-    setConfigMessage(
-      t("recordTour.pathGenerated", { count: generated.length }),
-    );
+    setConfigMessage(t("recordTour.pathGenerated", { count: generated.length }));
   };
 
   const setHoldSeconds = (id: string, seconds: number) => {
@@ -469,18 +438,14 @@ export function RecordTourDialog({
     // duration field (which re-commits the same value) doesn't wipe it.
     const current = keyframes.find((kf) => kf.id === id);
     if (current && current.holdMs !== holdMs) clearResultMessages();
-    setKeyframes((prev) =>
-      prev.map((kf) => (kf.id === id ? { ...kf, holdMs } : kf)),
-    );
+    setKeyframes((prev) => prev.map((kf) => (kf.id === id ? { ...kf, holdMs } : kf)));
   };
 
   const setTransitionSeconds = (id: string, seconds: number) => {
     const transitionMs = Math.round(seconds * 1000);
     const current = keyframes.find((kf) => kf.id === id);
     if (current && current.transitionMs !== transitionMs) clearResultMessages();
-    setKeyframes((prev) =>
-      prev.map((kf) => (kf.id === id ? { ...kf, transitionMs } : kf)),
-    );
+    setKeyframes((prev) => prev.map((kf) => (kf.id === id ? { ...kf, transitionMs } : kf)));
   };
 
   const previewKeyframe = (kf: TourKeyframe) =>
@@ -566,9 +531,7 @@ export function RecordTourDialog({
       const name = await saveBinaryFileWithFallback(pendingBlob, {
         defaultName: `${base}.webm`,
         filters: [{ name: fileType, extensions: ["webm"] }],
-        browserTypes: [
-          { description: fileType, accept: { "video/webm": [".webm"] } },
-        ],
+        browserTypes: [{ description: fileType, accept: { "video/webm": [".webm"] } }],
         mimeType: "video/webm",
       });
       if (name) {
@@ -640,9 +603,7 @@ export function RecordTourDialog({
       const name = await saveTextFileWithFallback(content, {
         defaultName,
         filters: [{ name: fileType, extensions: ["json"] }],
-        browserTypes: [
-          { description: fileType, accept: { "application/json": [".json"] } },
-        ],
+        browserTypes: [{ description: fileType, accept: { "application/json": [".json"] } }],
         mimeType: "application/json",
       });
       // Cancelling the dialog returns null and is a no-op, so only clear a prior
@@ -685,9 +646,7 @@ export function RecordTourDialog({
       setKeyframes(config.keyframes.map((kf) => ({ ...kf, id: createId() })));
       setFps(config.fps);
       setFpsText(String(config.fps));
-      setConfigMessage(
-        t("recordTour.configLoaded", { count: config.keyframes.length }),
-      );
+      setConfigMessage(t("recordTour.configLoaded", { count: config.keyframes.length }));
     } catch (err) {
       console.warn("Tour configuration load failed", err);
       clearResultMessages();
@@ -696,8 +655,7 @@ export function RecordTourDialog({
   };
 
   const totalSeconds = estimateTourDurationMs(keyframes) / 1000;
-  const canRecord =
-    keyframes.length >= 2 && RECORDING_SUPPORTED && status === "idle";
+  const canRecord = keyframes.length >= 2 && RECORDING_SUPPORTED && status === "idle";
 
   if (!open) return null;
 
@@ -727,9 +685,7 @@ export function RecordTourDialog({
         className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2"
       >
         <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-sm font-semibold">
-          {t("recordTour.title")}
-        </span>
+        <span className="flex-1 text-sm font-semibold">{t("recordTour.title")}</span>
         <button
           type="button"
           aria-label={t("common.close")}
@@ -804,15 +760,11 @@ export function RecordTourDialog({
             {t("recordTour.pathTitle")}
           </div>
           {pathLayers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {t("recordTour.pathNoLayers")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("recordTour.pathNoLayers")}</p>
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label htmlFor="record-tour-path-layer">
-                  {t("recordTour.pathLayer")}
-                </Label>
+                <Label htmlFor="record-tour-path-layer">{t("recordTour.pathLayer")}</Label>
                 <Select
                   id="record-tour-path-layer"
                   disabled={editingFrozen}
@@ -921,9 +873,7 @@ export function RecordTourDialog({
                   onMove={(delta) => move(index, delta)}
                   onRemove={() => removeKeyframe(kf.id)}
                   onHoldSeconds={(seconds) => setHoldSeconds(kf.id, seconds)}
-                  onTransitionSeconds={(seconds) =>
-                    setTransitionSeconds(kf.id, seconds)
-                  }
+                  onTransitionSeconds={(seconds) => setTransitionSeconds(kf.id, seconds)}
                 />
               ))}
             </ol>
@@ -978,23 +928,15 @@ export function RecordTourDialog({
           </p>
         )}
         {saveCancelled && (
-          <p className="text-sm text-muted-foreground">
-            {t("recordTour.saveCancelled")}
-          </p>
+          <p className="text-sm text-muted-foreground">{t("recordTour.saveCancelled")}</p>
         )}
         {configMessage && (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-            {configMessage}
-          </p>
+          <p className="text-sm text-emerald-600 dark:text-emerald-400">{configMessage}</p>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {busy ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="flex items-center gap-3"
-          >
+          <div role="status" aria-live="polite" className="flex items-center gap-3">
             {status === "recording" ? (
               <Circle className="h-3 w-3 shrink-0 animate-pulse fill-red-500 text-red-500" />
             ) : (
@@ -1008,12 +950,7 @@ export function RecordTourDialog({
                   })}
             </span>
             {status === "recording" && (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={stopRecording}
-              >
+              <Button type="button" variant="destructive" size="sm" onClick={stopRecording}>
                 {t("recordTour.stop")}
               </Button>
             )}
@@ -1022,13 +959,9 @@ export function RecordTourDialog({
           // Second step: the take is captured; let the user name it and save (or
           // discard and re-record) instead of an automatic download.
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
-              {t("recordTour.recordingReady")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("recordTour.recordingReady")}</p>
             <div className="space-y-1.5">
-              <Label htmlFor="record-tour-filename">
-                {t("recordTour.fileNameLabel")}
-              </Label>
+              <Label htmlFor="record-tour-filename">{t("recordTour.fileNameLabel")}</Label>
               <div className="flex items-center gap-1">
                 <Input
                   id="record-tour-filename"
@@ -1044,36 +977,21 @@ export function RecordTourDialog({
                     if (event.key === "Enter" && !event.repeat) handleSave();
                   }}
                 />
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  .webm
-                </span>
+                <span className="shrink-0 text-sm text-muted-foreground">.webm</span>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                type="button"
-                className="flex-1"
-                onClick={handleSave}
-              >
+              <Button type="button" className="flex-1" onClick={handleSave}>
                 <Save className="me-1.5 h-4 w-4" />
                 {t("recordTour.saveVideo")}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={discardRecording}
-              >
+              <Button type="button" variant="outline" onClick={discardRecording}>
                 {t("recordTour.discard")}
               </Button>
             </div>
           </div>
         ) : (
-          <Button
-            type="button"
-            className="w-full"
-            disabled={!canRecord}
-            onClick={handleRecord}
-          >
+          <Button type="button" className="w-full" disabled={!canRecord} onClick={handleRecord}>
             <Video className="me-1.5 h-4 w-4" />
             {t("recordTour.record")}
           </Button>
@@ -1152,23 +1070,12 @@ interface NumberFieldProps {
   onCommit: (value: number) => void;
 }
 
-function NumberField({
-  id,
-  label,
-  value,
-  min,
-  max,
-  step,
-  disabled,
-  onCommit,
-}: NumberFieldProps) {
+function NumberField({ id, label, value, min, max, step, disabled, onCommit }: NumberFieldProps) {
   const [text, setText] = useState(String(value));
 
   return (
     <label htmlFor={id} className="min-w-0 space-y-1">
-      <span className="block truncate text-xs text-muted-foreground">
-        {label}
-      </span>
+      <span className="block truncate text-xs text-muted-foreground">{label}</span>
       <Input
         id={id}
         type="number"
@@ -1305,9 +1212,7 @@ function KeyframeRow({
           onClick={onPreview}
         >
           <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate tabular-nums text-muted-foreground">
-            {coords}
-          </span>
+          <span className="truncate tabular-nums text-muted-foreground">{coords}</span>
         </button>
         <div className="flex shrink-0 items-center">
           <Button
@@ -1382,9 +1287,7 @@ function KeyframeRow({
           disabled={disabled || isLast}
           onCommit={onTransitionSeconds}
         />
-        <span className="text-muted-foreground">
-          {t("recordTour.secondsShort")}
-        </span>
+        <span className="text-muted-foreground">{t("recordTour.secondsShort")}</span>
       </div>
     </li>
   );

@@ -155,33 +155,25 @@ def test_spatial_join_attaches_join_attributes() -> None:
 
 @requires_geopandas
 def test_spatial_join_left_keeps_unmatched_input() -> None:
-    geojson, _ = run_vector_tool(
-        "spatial-join", SQUARE, DISJOINT, parameters={"how": "left"}
-    )
+    geojson, _ = run_vector_tool("spatial-join", SQUARE, DISJOINT, parameters={"how": "left"})
     assert len(geojson["features"]) == 1
 
 
 @requires_geopandas
 def test_spatial_join_inner_drops_unmatched_input() -> None:
-    geojson, _ = run_vector_tool(
-        "spatial-join", SQUARE, DISJOINT, parameters={"how": "inner"}
-    )
+    geojson, _ = run_vector_tool("spatial-join", SQUARE, DISJOINT, parameters={"how": "inner"})
     assert geojson["features"] == []
 
 
 @requires_geopandas
 def test_spatial_join_empty_join_layer_left_keeps_input() -> None:
-    geojson, _ = run_vector_tool(
-        "spatial-join", SQUARE, EMPTY, parameters={"how": "left"}
-    )
+    geojson, _ = run_vector_tool("spatial-join", SQUARE, EMPTY, parameters={"how": "left"})
     assert len(geojson["features"]) == 1
 
 
 @requires_geopandas
 def test_spatial_join_empty_join_layer_inner_is_empty() -> None:
-    geojson, _ = run_vector_tool(
-        "spatial-join", SQUARE, EMPTY, parameters={"how": "inner"}
-    )
+    geojson, _ = run_vector_tool("spatial-join", SQUARE, EMPTY, parameters={"how": "inner"})
     assert geojson["features"] == []
 
 
@@ -208,9 +200,7 @@ def test_spatial_join_contains_predicate_matches() -> None:
 @requires_geopandas
 def test_spatial_join_invalid_predicate_raises_value_error() -> None:
     with pytest.raises(ValueError, match="predicate"):
-        run_vector_tool(
-            "spatial-join", SQUARE, OVERLAP, parameters={"predicate": "bogus"}
-        )
+        run_vector_tool("spatial-join", SQUARE, OVERLAP, parameters={"predicate": "bogus"})
 
 
 @requires_geopandas
@@ -548,9 +538,7 @@ def test_select_by_location_within_and_contains() -> None:
         "select-by-location", SQUARE, big, parameters={"predicate": "within"}
     )
     assert len(within["features"]) == 1
-    none, _ = run_vector_tool(
-        "select-by-location", big, SQUARE, parameters={"predicate": "within"}
-    )
+    none, _ = run_vector_tool("select-by-location", big, SQUARE, parameters={"predicate": "within"})
     assert none["features"] == []
     # big contains SQUARE.
     contains, _ = run_vector_tool(
@@ -594,9 +582,7 @@ def test_select_by_location_empty_filter_disjoint_keeps_all() -> None:
 @requires_geopandas
 def test_select_by_location_unknown_predicate_raises() -> None:
     with pytest.raises(ValueError, match="predicate"):
-        run_vector_tool(
-            "select-by-location", SQUARE, OVERLAP, parameters={"predicate": "bogus"}
-        )
+        run_vector_tool("select-by-location", SQUARE, OVERLAP, parameters={"predicate": "bogus"})
 
 
 @requires_geopandas
@@ -702,9 +688,7 @@ def test_aggregate_count_per_group() -> None:
         _parcels(),
         parameters={"group_field": "region", "statistic": "count"},
     )
-    by_region = {
-        f["properties"]["region"]: f["properties"] for f in geojson["features"]
-    }
+    by_region = {f["properties"]["region"]: f["properties"] for f in geojson["features"]}
     assert by_region["north"]["count"] == 2
     assert by_region["south"]["count"] == 1
     assert messages and "Aggregated" in messages[0]
@@ -717,9 +701,7 @@ def test_aggregate_sum_names_column_field_stat() -> None:
         _parcels(),
         parameters={"group_field": "region", "statistic": "sum", "stat_field": "pop"},
     )
-    by_region = {
-        f["properties"]["region"]: f["properties"] for f in geojson["features"]
-    }
+    by_region = {f["properties"]["region"]: f["properties"] for f in geojson["features"]}
     assert by_region["north"]["pop_sum"] == 40
     assert by_region["south"]["pop_sum"] == 5
 
@@ -964,9 +946,7 @@ def test_smooth_missing_coordinates_does_not_crash() -> None:
     # 500); the coordinate list is treated as empty.
     malformed = {
         "type": "FeatureCollection",
-        "features": [
-            {"type": "Feature", "properties": {}, "geometry": {"type": "LineString"}}
-        ],
+        "features": [{"type": "Feature", "properties": {}, "geometry": {"type": "LineString"}}],
     }
     geojson, _ = run_vector_tool("smooth", malformed, parameters={"iterations": 2})
     assert geojson["features"][0]["geometry"]["coordinates"] == []
@@ -1072,10 +1052,7 @@ def test_voronoi_produces_polygon_cells() -> None:
         parameters={"type": "voronoi"},
     )
     assert len(geojson["features"]) > 0
-    assert all(
-        f["geometry"]["type"] in ("Polygon", "MultiPolygon")
-        for f in geojson["features"]
-    )
+    assert all(f["geometry"]["type"] in ("Polygon", "MultiPolygon") for f in geojson["features"])
     assert messages and "Voronoi" in messages[0]
 
 
@@ -1169,9 +1146,7 @@ BOWTIE = {
             "properties": {"name": "ok"},
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [
-                    [[10, 0], [14, 0], [14, 4], [10, 4], [10, 0]]
-                ],
+                "coordinates": [[[10, 0], [14, 0], [14, 4], [10, 4], [10, 0]]],
             },
         },
     ],
@@ -1223,9 +1198,7 @@ def test_fix_geometries_no_op_on_valid_layer() -> None:
 
 @requires_geopandas
 def test_validity_anchor_parses_scientific_notation() -> None:
-    anchor = vector_ops._validity_anchor(
-        "Self-intersection[1.5e-10 -2.3e-05]", None
-    )
+    anchor = vector_ops._validity_anchor("Self-intersection[1.5e-10 -2.3e-05]", None)
     assert anchor == (1.5e-10, -2.3e-05)
 
 

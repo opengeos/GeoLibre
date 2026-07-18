@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  googleEarthUrl,
-  googleMapsUrl,
-} from "../apps/geolibre-desktop/src/lib/external-map-links";
+import { googleEarthUrl, googleMapsUrl } from "../apps/geolibre-desktop/src/lib/external-map-links";
 
 describe("googleMapsUrl", () => {
   it("builds a centered camera URL", () => {
@@ -33,10 +30,7 @@ describe("googleMapsUrl", () => {
   });
 
   it("wraps longitudes past the antimeridian and clamps latitude", () => {
-    assert.equal(
-      googleMapsUrl(0, 190, 5),
-      "https://www.google.com/maps/@0.000000,-170.000000,5z",
-    );
+    assert.equal(googleMapsUrl(0, 190, 5), "https://www.google.com/maps/@0.000000,-170.000000,5z");
     assert.equal(
       googleMapsUrl(95, -540, 5),
       "https://www.google.com/maps/@90.000000,-180.000000,5z",
@@ -44,10 +38,7 @@ describe("googleMapsUrl", () => {
   });
 
   it("never emits a negative zero longitude", () => {
-    assert.equal(
-      googleMapsUrl(0, 360, 5),
-      "https://www.google.com/maps/@0.000000,0.000000,5z",
-    );
+    assert.equal(googleMapsUrl(0, 360, 5), "https://www.google.com/maps/@0.000000,0.000000,5z");
   });
 });
 
@@ -60,10 +51,7 @@ describe("googleEarthUrl", () => {
 
   it("builds a top-down camera URL at the coordinate", () => {
     const url = googleEarthUrl(40.7128, -74.006, 12);
-    assert.ok(
-      url.startsWith("https://earth.google.com/web/@40.712800,-74.006000,0a,"),
-      url,
-    );
+    assert.ok(url.startsWith("https://earth.google.com/web/@40.712800,-74.006000,0a,"), url);
     assert.ok(url.endsWith("d,35y,0h,0t,0r"), url);
   });
 

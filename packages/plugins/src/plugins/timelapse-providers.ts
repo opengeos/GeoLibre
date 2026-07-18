@@ -138,9 +138,7 @@ export const NASA_GIBS_WELD_PROVIDER_ID = "nasa-gibs-landsat-weld";
  * flashing blank years. The underlying science product (GWELDYR v3.1) is a
  * fixed set of epochs, so this list is static rather than remotely discovered.
  */
-const GIBS_WELD_YEARS = [
-  1983, 1984, 1985, 1988, 1989, 1990, 1998, 1999, 2000,
-] as const;
+const GIBS_WELD_YEARS = [1983, 1984, 1985, 1988, 1989, 1990, 1998, 1999, 2000] as const;
 
 /** Native depth of the layer's GoogleMapsCompatible_Level12 matrix set. */
 const GIBS_WELD_MAXZOOM = 12;
@@ -301,11 +299,7 @@ export const modisLandCoverProvider: TimelapseProvider = {
     'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>',
   listFrames: () => {
     const frames: TimelapseFrame[] = [];
-    for (
-      let year = MODIS_LANDCOVER_FIRST_YEAR;
-      year <= MODIS_LANDCOVER_LAST_YEAR;
-      year += 1
-    ) {
+    for (let year = MODIS_LANDCOVER_FIRST_YEAR; year <= MODIS_LANDCOVER_LAST_YEAR; year += 1) {
       frames.push({
         id: `modis-landcover-${year}`,
         label: String(year),

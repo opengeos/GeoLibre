@@ -1,7 +1,6 @@
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-const OSM_STYLE =
-  "https://tiles.openfreemap.org/styles/liberty";
+const OSM_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 export const osmBasemapPlugin: GeoLibrePlugin = {
   id: "osm-basemap",

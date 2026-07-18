@@ -124,9 +124,7 @@ const nonTextMarkerPointFilter: maplibregl.FilterSpecification = [
  * without a `point_count`, excluding text markers when present so they render
  * only through the symbol layer rather than also as plain circles.
  */
-function unclusteredPointFilter(
-  hasTextMarkers: boolean,
-): maplibregl.FilterSpecification {
+function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpecification {
   if (!hasTextMarkers) return ["!", ["has", "point_count"]];
   return [
     "all",
@@ -166,11 +164,7 @@ function withFeatureFilters(
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
   if (filters.length === 0) return geometryFilter;
-  return [
-    "all",
-    geometryFilter,
-    ...filters,
-  ] as unknown as maplibregl.FilterSpecification;
+  return ["all", geometryFilter, ...filters] as unknown as maplibregl.FilterSpecification;
 }
 
 // Tracked filter state for external-native vector layers whose per-feature
@@ -187,14 +181,9 @@ interface NativeFilterState {
   base: maplibregl.FilterSpecification | null;
   appliedKey: string;
 }
-const externalNativeBaseFilters = new WeakMap<
-  maplibregl.Map,
-  Map<string, NativeFilterState>
->();
+const externalNativeBaseFilters = new WeakMap<maplibregl.Map, Map<string, NativeFilterState>>();
 
-function nativeFilterStatesFor(
-  map: maplibregl.Map,
-): Map<string, NativeFilterState> {
+function nativeFilterStatesFor(map: maplibregl.Map): Map<string, NativeFilterState> {
   let perLayer = externalNativeBaseFilters.get(map);
   if (!perLayer) {
     perLayer = new Map();
@@ -245,13 +234,11 @@ function combineExternalFilters(
   extras: unknown[],
 ): maplibregl.FilterSpecification | null {
   if (extras.length === 0) return base;
-  return (
-    base
-      ? ["all", base, ...extras]
-      : extras.length === 1
-        ? extras[0]
-        : ["all", ...extras]
-  ) as unknown as maplibregl.FilterSpecification;
+  return (base
+    ? ["all", base, ...extras]
+    : extras.length === 1
+      ? extras[0]
+      : ["all", ...extras]) as unknown as maplibregl.FilterSpecification;
 }
 
 /**
@@ -293,8 +280,7 @@ function applyExternalNativeFeatureFilters(
   // keep reusing it so repeated ticks combine rather than nest.
   let state = states.get(nativeLayerId);
   if (!state) {
-    const base =
-      (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
+    const base = (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
     state = { base, appliedKey: "" };
     states.set(nativeLayerId, state);
   }
@@ -341,25 +327,15 @@ function intersectZoomRange(
   style: LayerStyle,
 ): { minzoom: number; maxzoom: number } {
   const styleRange = styleLayerZoomRange(style);
-  const minzoom = Math.max(
-    nativeSpec.minzoom ?? MIN_LAYER_ZOOM,
-    styleRange.minzoom,
-  );
-  const maxzoom = Math.min(
-    nativeSpec.maxzoom ?? MAX_LAYER_ZOOM,
-    styleRange.maxzoom,
-  );
+  const minzoom = Math.max(nativeSpec.minzoom ?? MIN_LAYER_ZOOM, styleRange.minzoom);
+  const maxzoom = Math.min(nativeSpec.maxzoom ?? MAX_LAYER_ZOOM, styleRange.maxzoom);
   return {
     minzoom: Math.min(minzoom, maxzoom),
     maxzoom: Math.max(minzoom, maxzoom),
   };
 }
 
-export function syncLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   if (isExternalNativeLayer(layer)) {
     syncExternalNativeLayer(map, layer, beforeId);
     return;
@@ -497,11 +473,7 @@ function syncExternalNativeLayer(
     .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
     .filter(isFillStyleLayerSpec);
 
-  if (
-    layer.style.extrusionEnabled &&
-    nativeFillLayerSpecs.length > 0 &&
-    !controlOwnsPaint(layer)
-  ) {
+  if (layer.style.extrusionEnabled && nativeFillLayerSpecs.length > 0 && !controlOwnsPaint(layer)) {
     for (const nativeLayerId of nativeLayerIds) {
       setNativeLayerVisibility(map, nativeLayerId, "none");
     }
@@ -518,10 +490,7 @@ function syncExternalNativeLayer(
       const baseFilter = tracked
         ? tracked.base
         : ((fillLayerSpec.filter as maplibregl.FilterSpecification) ?? null);
-      const filter = combineExternalFilters(
-        baseFilter,
-        externalFeatureFilterExtras(layer),
-      );
+      const filter = combineExternalFilters(baseFilter, externalFeatureFilterExtras(layer));
       ensureLayer(
         map,
         extrusionLayerId,
@@ -549,11 +518,7 @@ function syncExternalNativeLayer(
     const nativeLayer = map.getLayer(nativeLayerId);
     if (!nativeLayer) continue;
 
-    setNativeLayerVisibility(
-      map,
-      nativeLayerId,
-      layer.visible ? "visible" : "none",
-    );
+    setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
 
     // Narrow the control-painted features to the Time Slider window (if the
     // layer is bound) and to the rule-based hide-unmatched filter (if the else
@@ -573,8 +538,7 @@ function syncExternalNativeLayer(
     // effect rather than stranding the layer at the narrowed range.
     const zoomRange = styleLayerZoomRange(layer.style);
     const isDefaultRange =
-      zoomRange.minzoom === MIN_LAYER_ZOOM &&
-      zoomRange.maxzoom === MAX_LAYER_ZOOM;
+      zoomRange.minzoom === MIN_LAYER_ZOOM && zoomRange.maxzoom === MAX_LAYER_ZOOM;
     if (!isDefaultRange) {
       managedZoomRangeLayerIds.add(nativeLayerId);
     }
@@ -616,9 +580,7 @@ function ensureExternalGeoJsonNativeLayer(
       data: layer.geojson,
     });
   } else {
-    (map.getSource(nativeSourceId) as maplibregl.GeoJSONSource).setData(
-      layer.geojson,
-    );
+    (map.getSource(nativeSourceId) as maplibregl.GeoJSONSource).setData(layer.geojson);
   }
 
   if (nativeLayerIds.every((id) => map.getLayer(id))) return;
@@ -780,11 +742,7 @@ function ensurePMTilesExternalLayer(
     return;
   }
 
-  const sourceLayers = getPMTilesRenderableSourceLayers(
-    layer,
-    sourceId,
-    nativeLayerIds,
-  );
+  const sourceLayers = getPMTilesRenderableSourceLayers(layer, sourceId, nativeLayerIds);
 
   if (sourceLayers.length === 0) {
     // Vector tile sources require a `source-layer` on every layer. With no
@@ -816,11 +774,7 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: withFeatureFilters(layer, [
-          "==",
-          ["geometry-type"],
-          "Polygon",
-        ]),
+        filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Polygon"]),
         paint: fillPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -900,9 +854,7 @@ export function pmtilesNativeLayerIds(
     return [`${sourceId}-raster`];
   }
   return sourceLayers.flatMap((sourceLayer) =>
-    ["fill", "line", "circle"].map((kind) =>
-      pmtilesVectorLayerId(sourceId, sourceLayer, kind),
-    ),
+    ["fill", "line", "circle"].map((kind) => pmtilesVectorLayerId(sourceId, sourceLayer, kind)),
   );
 }
 
@@ -922,9 +874,7 @@ export interface PMTilesArchiveInfo {
  * of an in-memory PMTiles archive, so callers can construct a properly-shaped
  * `pmtiles` store layer for it.
  */
-export async function readPMTilesArchiveInfo(
-  bytes: Uint8Array,
-): Promise<PMTilesArchiveInfo> {
+export async function readPMTilesArchiveInfo(bytes: Uint8Array): Promise<PMTilesArchiveInfo> {
   const file = new File([bytes as BlobPart], "archive.pmtiles", {
     type: "application/octet-stream",
   });
@@ -1051,9 +1001,7 @@ function isMapLibreProtocolRegistered(): boolean {
 }
 
 function normalizePMTilesUrl(url: string): string {
-  return url.startsWith(`${PMTILES_PROTOCOL}://`)
-    ? url
-    : `${PMTILES_PROTOCOL}://${url}`;
+  return url.startsWith(`${PMTILES_PROTOCOL}://`) ? url : `${PMTILES_PROTOCOL}://${url}`;
 }
 
 function stripPMTilesProtocol(url: string): string {
@@ -1063,11 +1011,7 @@ function stripPMTilesProtocol(url: string): string {
 }
 
 function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
-  return (
-    stringMetadata(layer.metadata.sourceId) ??
-    stringSource(layer.source.sourceId) ??
-    layer.id
-  );
+  return stringMetadata(layer.metadata.sourceId) ?? stringSource(layer.source.sourceId) ?? layer.id;
 }
 
 function getPMTilesTileType(layer: GeoLibreLayer): "raster" | "vector" {
@@ -1099,11 +1043,7 @@ function hasPMTilesNativeSourceLayer(
   );
 }
 
-function pmtilesVectorLayerId(
-  sourceId: string,
-  sourceLayer: string,
-  kind: string,
-): string {
+function pmtilesVectorLayerId(sourceId: string, sourceLayer: string, kind: string): string {
   return `${sourceId}-${encodeVectorTileLayerPart(sourceLayer)}-${kind}`;
 }
 
@@ -1117,14 +1057,8 @@ function getPMTilesSourceLayers(layer: GeoLibreLayer): string[] {
     : [];
 }
 
-function getPMTilesNativeLayerId(
-  nativeLayerIds: string[],
-  fallbackId: string,
-): string {
-  return (
-    nativeLayerIds.find((nativeLayerId) => nativeLayerId === fallbackId) ??
-    fallbackId
-  );
+function getPMTilesNativeLayerId(nativeLayerIds: string[], fallbackId: string): string {
+  return nativeLayerIds.find((nativeLayerId) => nativeLayerId === fallbackId) ?? fallbackId;
 }
 
 function isWaybackExternalRasterLayer(layer: GeoLibreLayer): boolean {
@@ -1382,9 +1316,7 @@ function getWebServiceTiles(layer: GeoLibreLayer): string[] {
   );
 }
 
-function boundsSource(
-  value: unknown,
-): [number, number, number, number] | undefined {
+function boundsSource(value: unknown): [number, number, number, number] | undefined {
   return Array.isArray(value) &&
     value.length === 4 &&
     value.every((item) => typeof item === "number" && Number.isFinite(item))
@@ -1399,9 +1331,7 @@ function boundsSource(
 function getSourceTiles(layer: GeoLibreLayer): string[] {
   const tiles = layer.source.tiles;
   if (!Array.isArray(tiles)) return [];
-  return tiles.filter(
-    (tile): tile is string => typeof tile === "string" && tile.length > 0,
-  );
+  return tiles.filter((tile): tile is string => typeof tile === "string" && tile.length > 0);
 }
 
 function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
@@ -1520,15 +1450,10 @@ function syncVectorControlPointSymbology(
     const tracked = nativeFilterStatesFor(map).get(circleNativeId);
     const base = tracked
       ? tracked.base
-      : (("filter" in circleSpec
-          ? (circleSpec.filter as maplibregl.FilterSpecification)
-          : null) ?? null);
-    const filter = combineExternalFilters(
-      base,
-      externalFeatureFilterExtras(layer),
-    );
-    const sourceLayer =
-      "source-layer" in circleSpec ? circleSpec["source-layer"] : undefined;
+      : (("filter" in circleSpec ? (circleSpec.filter as maplibregl.FilterSpecification) : null) ??
+        null);
+    const filter = combineExternalFilters(base, externalFeatureFilterExtras(layer));
+    const sourceLayer = "source-layer" in circleSpec ? circleSpec["source-layer"] : undefined;
     ensureLayer(
       map,
       syntheticMarkerId,
@@ -1543,9 +1468,7 @@ function syncVectorControlPointSymbology(
         filter: filter ?? undefined,
         layout: {
           "icon-image": markerImageId,
-          "icon-size": markerIconSizeValue(
-            layer.style,
-          ) as PropertyValueSpecification<number>,
+          "icon-size": markerIconSizeValue(layer.style) as PropertyValueSpecification<number>,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           visibility: layer.visible ? "visible" : "none",
@@ -1564,11 +1487,7 @@ function syncVectorControlPointSymbology(
   // No marker: drop the overlay and hand the point render back to the control.
   if (map.getLayer(syntheticMarkerId)) {
     removeIfExists(map, syntheticMarkerId);
-    setNativeLayerVisibility(
-      map,
-      circleNativeId,
-      layer.visible ? "visible" : "none",
-    );
+    setNativeLayerVisibility(map, circleNativeId, layer.visible ? "visible" : "none");
   }
 
   // Proportional size on the control's flat circle: hold the override while
@@ -1591,10 +1510,7 @@ function syncVectorControlPointSymbology(
 // so the restore only ever touches a layer this module actually overrode —
 // never a control-authored expression such as the cluster renderer's stepped
 // radius.
-const overriddenRadiusNativeLayerIds = new WeakMap<
-  maplibregl.Map,
-  Set<string>
->();
+const overriddenRadiusNativeLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
 
 function overriddenRadiusIdsFor(map: maplibregl.Map): Set<string> {
   let ids = overriddenRadiusNativeLayerIds.get(map);
@@ -1612,11 +1528,7 @@ function restoreOverriddenCircleRadius(
   layer: GeoLibreLayer,
 ): void {
   if (!overriddenRadiusIdsFor(map).delete(circleNativeId)) return;
-  map.setPaintProperty(
-    circleNativeId,
-    "circle-radius",
-    styleValue(layer.style, "circleRadius"),
-  );
+  map.setPaintProperty(circleNativeId, "circle-radius", styleValue(layer.style, "circleRadius"));
 }
 
 function setExternalNativeLayerPaint(
@@ -1661,11 +1573,8 @@ function resolveVectorRenderMode(
   clusterRadius: number;
   clusterMaxZoom: number;
 } {
-  const pointOnly =
-    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
-  const renderer = pointOnly
-    ? styleValue(layer.style, "pointRenderer")
-    : "single";
+  const pointOnly = profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+  const renderer = pointOnly ? styleValue(layer.style, "pointRenderer") : "single";
   return {
     renderer,
     wantCluster: renderer === "cluster",
@@ -1674,15 +1583,13 @@ function resolveVectorRenderMode(
   };
 }
 
-function syncGeoJsonLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const profile = detectGeometryProfile(layer.geojson!);
-  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } =
-    resolveVectorRenderMode(layer, profile);
+  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } = resolveVectorRenderMode(
+    layer,
+    profile,
+  );
 
   // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
   // it), or some other code may have left a non-geojson source under this id.
@@ -1704,8 +1611,7 @@ function syncGeoJsonLayer(
     existingCluster !== null &&
     (existingCluster.cluster !== wantCluster ||
       (wantCluster &&
-        (existingCluster.radius !== clusterRadius ||
-          existingCluster.maxZoom !== clusterMaxZoom)));
+        (existingCluster.radius !== clusterRadius || existingCluster.maxZoom !== clusterMaxZoom)));
   if (needsSourceRecreate) {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
@@ -1746,15 +1652,13 @@ function syncGeoJsonLayer(
  * {@link syncGeoJsonLayer}; only the source becomes `type:"vector"` (its tiles
  * served by the geojson-vt protocol) and render layers carry a `source-layer`.
  */
-function syncGeoJsonVtLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const profile = detectGeometryProfile(layer.geojson!);
-  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } =
-    resolveVectorRenderMode(layer, profile);
+  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } = resolveVectorRenderMode(
+    layer,
+    profile,
+  );
 
   ensureGeoJsonVtProtocol();
 
@@ -1784,15 +1688,7 @@ function syncGeoJsonVtLayer(
     });
   }
 
-  applyVectorDataRenderLayers(
-    map,
-    layer,
-    src,
-    profile,
-    renderer,
-    beforeId,
-    TILE_SOURCE_LAYER,
-  );
+  applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId, TILE_SOURCE_LAYER);
 }
 
 /**
@@ -1879,18 +1775,14 @@ function applyVectorDataRenderLayers(
       // falls back to the normal filtered fill rather than disagreeing with
       // the visible data or rendering nothing.
       const invertedMask =
-        styleValue(layer.style, "invertedFillEnabled") &&
-        !hasFeatureFilter &&
-        layer.geojson
+        styleValue(layer.style, "invertedFillEnabled") && !hasFeatureFilter && layer.geojson
           ? buildInvertedMask(layer.geojson)
           : null;
       if (invertedMask) {
         removeIfExists(map, fillLayerId(layer.id));
         const maskSrc = invertedSourceId(layer.id);
         if (map.getSource(maskSrc)) {
-          (map.getSource(maskSrc) as maplibregl.GeoJSONSource).setData(
-            invertedMask,
-          );
+          (map.getSource(maskSrc) as maplibregl.GeoJSONSource).setData(invertedMask);
         } else {
           map.addSource(maskSrc, { type: "geojson", data: invertedMask });
         }
@@ -1952,10 +1844,7 @@ function applyVectorDataRenderLayers(
     removeSourceIfExists(map, invertedSourceId(layer.id));
   }
 
-  if (
-    !layer.style.extrusionEnabled &&
-    (profile.hasLine || profile.hasPolygon)
-  ) {
+  if (!layer.style.extrusionEnabled && (profile.hasLine || profile.hasPolygon)) {
     ensureLayer(
       map,
       lineLayerId(layer.id),
@@ -2011,10 +1900,7 @@ function applyVectorDataRenderLayers(
           // The sprite is baked at its display size, matching the marker path.
           "icon-size": 1,
           "symbol-placement": "line",
-          "symbol-spacing": Math.max(
-            1,
-            styleValue(layer.style, "lineDecorationSpacing"),
-          ),
+          "symbol-spacing": Math.max(1, styleValue(layer.style, "lineDecorationSpacing")),
           // Decorations are deliberate symbology, so they must not thin out
           // under MapLibre's collision placement.
           "icon-allow-overlap": true,
@@ -2055,11 +1941,7 @@ function applyVectorDataRenderLayers(
       },
       beforeId,
     );
-  } else if (
-    !layer.style.extrusionEnabled &&
-    profile.hasPoint &&
-    renderer === "cluster"
-  ) {
+  } else if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "cluster") {
     // Cluster renderer: a bubble + count for aggregated clusters, plus a circle
     // for the individual (unclustered) points. The source carries clusters
     // (geojson source-level clustering, or supercluster tiles on the tiled path).
@@ -2144,9 +2026,7 @@ function applyVectorDataRenderLayers(
             "icon-image": markerImageId,
             // The sprite is baked at its display size, so icon-size stays 1
             // unless proportional sizing scales it per feature.
-            "icon-size": markerIconSizeValue(
-              layer.style,
-            ) as PropertyValueSpecification<number>,
+            "icon-size": markerIconSizeValue(layer.style) as PropertyValueSpecification<number>,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             visibility,
@@ -2195,12 +2075,7 @@ function applyVectorDataRenderLayers(
           "text-font": textFontForMapStyle(map),
           "text-field": [
             "to-string",
-            [
-              "coalesce",
-              ["get", GEOMAN_TEXT_PROPERTY],
-              ["get", "text"],
-              "",
-            ],
+            ["coalesce", ["get", GEOMAN_TEXT_PROPERTY], ["get", "text"], ""],
           ],
           "text-ignore-placement": true,
           "text-size": Math.max(1, styleValue(layer.style, "textSize")),
@@ -2210,16 +2085,9 @@ function applyVectorDataRenderLayers(
           // Honor an optional per-feature `text-color` (used by annotation text
           // labels so each can keep its own color); text markers without it fall
           // back to the layer's text color.
-          "text-color": [
-            "coalesce",
-            ["get", "text-color"],
-            styleValue(layer.style, "textColor"),
-          ],
+          "text-color": ["coalesce", ["get", "text-color"], styleValue(layer.style, "textColor")],
           "text-halo-color": styleValue(layer.style, "textHaloColor"),
-          "text-halo-width": Math.max(
-            0,
-            styleValue(layer.style, "textHaloWidth"),
-          ),
+          "text-halo-width": Math.max(0, styleValue(layer.style, "textHaloWidth")),
           "text-opacity": opacity,
         },
       },
@@ -2264,18 +2132,13 @@ function applyVectorDataRenderLayers(
     labels.enabled &&
     (dedupedLabelFc || labels.expression.trim() || labels.field)
   ) {
-    const fieldTextField = (
-      labels.field
-        ? ["to-string", ["coalesce", ["get", labels.field], ""]]
-        : ""
-    ) as unknown as maplibregl.ExpressionSpecification | string;
+    const fieldTextField = (labels.field
+      ? ["to-string", ["coalesce", ["get", labels.field], ""]]
+      : "") as unknown as maplibregl.ExpressionSpecification | string;
     let textField: maplibregl.ExpressionSpecification | string;
     if (dedupedLabelFc) {
       // The aggregated source carries the resolved label in `__geolibre_label`.
-      textField = [
-        "get",
-        "__geolibre_label",
-      ] as unknown as maplibregl.ExpressionSpecification;
+      textField = ["get", "__geolibre_label"] as unknown as maplibregl.ExpressionSpecification;
     } else {
       try {
         if (labels.expression.trim()) {
@@ -2313,9 +2176,7 @@ function applyVectorDataRenderLayers(
       // other render layers draw.
       if (dedupedLabelFc) {
         if (map.getSource(dedupSourceId)) {
-          (map.getSource(dedupSourceId) as maplibregl.GeoJSONSource).setData(
-            dedupedLabelFc,
-          );
+          (map.getSource(dedupSourceId) as maplibregl.GeoJSONSource).setData(dedupedLabelFc);
         } else {
           map.addSource(dedupSourceId, {
             type: "geojson",
@@ -2326,9 +2187,7 @@ function applyVectorDataRenderLayers(
       // A layer's source is immutable, so when the label source switches between
       // the shared source and the dedup source the layer must be recreated.
       const targetSource = dedupedLabelFc ? dedupSourceId : src;
-      const existingLabel = map.getLayer(labelLayerId(layer.id)) as
-        | { source?: string }
-        | undefined;
+      const existingLabel = map.getLayer(labelLayerId(layer.id)) as { source?: string } | undefined;
       if (existingLabel && existingLabel.source !== targetSource) {
         removeIfExists(map, labelLayerId(layer.id));
       }
@@ -2350,22 +2209,13 @@ function applyVectorDataRenderLayers(
       // style-spec check matters because addLayer validates the whole layer
       // spec, so an unchecked type-mismatched value would reject the entire
       // label layer on first add rather than just that property.
-      const labelOverride = (
-        source: string,
-        expectedType: "number" | "color" | "boolean",
-      ) =>
+      const labelOverride = (source: string, expectedType: "number" | "color" | "boolean") =>
         dedupedLabelFc ? null : parseLabelOverride(source, expectedType);
       const sizeOverride = labelOverride(labels.sizeExpression, "number");
       const colorOverride = labelOverride(labels.colorExpression, "color");
       const opacityOverride = labelOverride(labels.opacityExpression, "number");
-      const priorityOverride = labelOverride(
-        labels.priorityExpression,
-        "number",
-      );
-      const visibilityOverride = labelOverride(
-        labels.visibilityExpression,
-        "boolean",
-      );
+      const priorityOverride = labelOverride(labels.priorityExpression, "number");
+      const visibilityOverride = labelOverride(labels.visibilityExpression, "boolean");
       // The visibility expression joins the marker exclusion before the
       // layer-wide feature filters, so a feature evaluating false simply gets
       // no label.
@@ -2376,9 +2226,7 @@ function applyVectorDataRenderLayers(
             visibilityOverride,
           ] as unknown as maplibregl.FilterSpecification)
         : nonMarkerFilter;
-      const sourceRef = dedupedLabelFc
-        ? { source: dedupSourceId }
-        : sourceSpec;
+      const sourceRef = dedupedLabelFc ? { source: dedupSourceId } : sourceSpec;
       ensureLayer(
         map,
         labelLayerId(layer.id),
@@ -2387,18 +2235,13 @@ function applyVectorDataRenderLayers(
           type: "symbol",
           ...sourceRef,
           ...labelZoom,
-          ...(dedupedLabelFc
-            ? {}
-            : { filter: withFeatureFilters(layer, labelBaseFilter) }),
+          ...(dedupedLabelFc ? {} : { filter: withFeatureFilters(layer, labelBaseFilter) }),
           layout: {
             "text-field": textField,
             "text-font": textFontForMapStyle(map),
             "text-size": sizeOverride ?? Math.max(1, labels.size),
             // The dedup source is points, so it cannot use line placement.
-            "symbol-placement":
-              !dedupedLabelFc && labels.placement === "line"
-                ? "line"
-                : "point",
+            "symbol-placement": !dedupedLabelFc && labels.placement === "line" ? "line" : "point",
             "text-allow-overlap": labels.allowOverlap,
             "text-ignore-placement": labels.allowOverlap,
             "text-anchor": labels.anchor,
@@ -2409,8 +2252,7 @@ function applyVectorDataRenderLayers(
             // Lower sort keys place first, so they win when space is tight.
             // `null` resets a previously applied priority (stripped on first
             // add by ensureLayer).
-            "symbol-sort-key":
-              priorityOverride as unknown as PropertyValueSpecification<number>,
+            "symbol-sort-key": priorityOverride as unknown as PropertyValueSpecification<number>,
             visibility,
           },
           paint: {
@@ -2436,14 +2278,7 @@ function applyVectorDataRenderLayers(
     removeSourceIfExists(map, labelSourceId(layer.id));
   }
 
-  applyGeometryGeneratorLayers(
-    map,
-    layer,
-    visibility,
-    opacity,
-    hasFeatureFilter,
-    beforeId,
-  );
+  applyGeometryGeneratorLayers(map, layer, visibility, opacity, hasFeatureFilter, beforeId);
 }
 
 /**
@@ -2496,13 +2331,9 @@ function applyGeometryGeneratorLayers(
   const kinds = generatedGeometryKinds(generated);
   const fillColor = styleValue(layer.style, "geometryGeneratorFillColor");
   const strokeColor = styleValue(layer.style, "geometryGeneratorStrokeColor");
-  const strokeWidth = Math.max(
-    0,
-    styleValue(layer.style, "geometryGeneratorStrokeWidth"),
-  );
+  const strokeWidth = Math.max(0, styleValue(layer.style, "geometryGeneratorStrokeWidth"));
   const genOpacity =
-    Math.min(1, Math.max(0, styleValue(layer.style, "geometryGeneratorOpacity"))) *
-    opacity;
+    Math.min(1, Math.max(0, styleValue(layer.style, "geometryGeneratorOpacity"))) * opacity;
 
   if (kinds.hasPolygon) {
     ensureLayer(
@@ -2514,13 +2345,7 @@ function applyGeometryGeneratorLayers(
         source: genSrc,
         ...styleLayerZoomRange(layer.style),
         metadata: { "geolibre:internal": true },
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Polygon", "MultiPolygon"],
-          true,
-          false,
-        ],
+        filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
         paint: { "fill-color": fillColor, "fill-opacity": genOpacity },
         layout: { visibility },
       },
@@ -2535,13 +2360,7 @@ function applyGeometryGeneratorLayers(
         source: genSrc,
         ...styleLayerZoomRange(layer.style),
         metadata: { "geolibre:internal": true },
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Polygon", "MultiPolygon"],
-          true,
-          false,
-        ],
+        filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
         paint: {
           "line-color": strokeColor,
           "line-width": strokeWidth,
@@ -2566,19 +2385,10 @@ function applyGeometryGeneratorLayers(
         source: genSrc,
         ...styleLayerZoomRange(layer.style),
         metadata: { "geolibre:internal": true },
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Point", "MultiPoint"],
-          true,
-          false,
-        ],
+        filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
         paint: {
           "circle-color": fillColor,
-          "circle-radius": Math.max(
-            1,
-            styleValue(layer.style, "geometryGeneratorCircleRadius"),
-          ),
+          "circle-radius": Math.max(1, styleValue(layer.style, "geometryGeneratorCircleRadius")),
           "circle-opacity": genOpacity,
           "circle-stroke-color": strokeColor,
           "circle-stroke-width": strokeWidth,
@@ -2632,10 +2442,7 @@ function removeSourceIfExists(map: maplibregl.Map, id: string): void {
 // style spec is far more expensive than the reads, so results are memoized by
 // expected type + source. Bounded so a pathological stream of distinct
 // expressions cannot grow it without limit.
-const labelOverrideCache = new Map<
-  string,
-  maplibregl.ExpressionSpecification | null
->();
+const labelOverrideCache = new Map<string, maplibregl.ExpressionSpecification | null>();
 const LABEL_OVERRIDE_CACHE_MAX = 256;
 
 /**
@@ -2671,9 +2478,7 @@ function parseLabelOverride(
 // Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
 // point routes to the symbol layer, even with empty text, so features are
 // never excluded from the circle layer without a matching symbol entry.
-function hasTextMarkerFeatures(
-  collection: GeoJSON.FeatureCollection,
-): boolean {
+function hasTextMarkerFeatures(collection: GeoJSON.FeatureCollection): boolean {
   const cached = textMarkerCache.get(collection);
   if (cached !== undefined) return cached;
   const result = computeHasTextMarkerFeatures(collection);
@@ -2681,14 +2486,9 @@ function hasTextMarkerFeatures(
   return result;
 }
 
-function computeHasTextMarkerFeatures(
-  collection: GeoJSON.FeatureCollection,
-): boolean {
+function computeHasTextMarkerFeatures(collection: GeoJSON.FeatureCollection): boolean {
   return collection.features.some((feature) => {
-    if (
-      feature.geometry?.type !== "Point" &&
-      feature.geometry?.type !== "MultiPoint"
-    ) {
+    if (feature.geometry?.type !== "Point" && feature.geometry?.type !== "MultiPoint") {
       return false;
     }
     const properties = feature.properties;
@@ -2761,11 +2561,7 @@ function resolveTextFontFromStyle(map: maplibregl.Map): string[] {
   return ["Noto Sans Regular"];
 }
 
-function syncRasterTileLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-raster`;
   const tiles = getRenderableRasterTiles(layer);
@@ -2802,12 +2598,7 @@ function syncRasterTileLayer(
   );
 }
 
-type CornerCoordinates = [
-  [number, number],
-  [number, number],
-  [number, number],
-  [number, number],
-];
+type CornerCoordinates = [[number, number], [number, number], [number, number], [number, number]];
 
 /** Validate persisted overlay corners (video/image): four in-range [lng, lat] pairs. */
 function isCornerCoordinates(value: unknown): value is CornerCoordinates {
@@ -2835,19 +2626,14 @@ function isCornerCoordinates(value: unknown): value is CornerCoordinates {
  * bottom-right, bottom-left. The video host must send CORS headers so MapLibre
  * can read its frames into the map texture.
  */
-function syncVideoLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncVideoLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-video`;
   // Validate the persisted source payload — a malformed project must not make
   // map.addSource throw and abort the rest of the layer-sync pass.
   const urls = Array.isArray(layer.source.urls)
     ? layer.source.urls.filter(
-        (value): value is string =>
-          typeof value === "string" && value.trim().length > 0,
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
       )
     : [];
   const coordinates = isCornerCoordinates(layer.source.coordinates)
@@ -2880,11 +2666,7 @@ function syncVideoLayer(
  * single image `url` (an http(s) or data URL) and the four corner `coordinates`
  * in [lng, lat] order: top-left, top-right, bottom-right, bottom-left.
  */
-function syncImageLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncImageLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-image`;
   const url =
@@ -2943,11 +2725,7 @@ function proxyWmsTileUrl(tileUrl: string): string {
   return `${WMS_PROXY_PATH}?url=${encodedUrl}`;
 }
 
-function syncVectorTileLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const url = layer.source.url as string | undefined;
   // OGC API tilesets (and any raw tile template) are added from `tiles` when no
@@ -2967,12 +2745,8 @@ function syncVectorTileLayer(
       map.addSource(src, {
         type: "vector",
         tiles: tiles as string[],
-        ...(typeof layer.source.minzoom === "number"
-          ? { minzoom: layer.source.minzoom }
-          : {}),
-        ...(typeof layer.source.maxzoom === "number"
-          ? { maxzoom: layer.source.maxzoom }
-          : {}),
+        ...(typeof layer.source.minzoom === "number" ? { minzoom: layer.source.minzoom } : {}),
+        ...(typeof layer.source.maxzoom === "number" ? { maxzoom: layer.source.maxzoom } : {}),
         ...(Array.isArray(bounds) && bounds.length === 4
           ? { bounds: bounds as [number, number, number, number] }
           : {}),
@@ -2998,13 +2772,7 @@ function syncVectorTileLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
-            "match",
-            ["geometry-type"],
-            ["Polygon", "MultiPolygon"],
-            true,
-            false,
-          ],
+          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -3021,13 +2789,7 @@ function syncVectorTileLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
-            "match",
-            ["geometry-type"],
-            ["Polygon", "MultiPolygon"],
-            true,
-            false,
-          ],
+          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
           paint: fillPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -3063,13 +2825,7 @@ function syncVectorTileLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
-            "match",
-            ["geometry-type"],
-            ["Point", "MultiPoint"],
-            true,
-            false,
-          ],
+          filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
           paint: circlePaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -3081,11 +2837,7 @@ function syncVectorTileLayer(
   removeStaleVectorTileLayers(map, layer.id, currentLayerIds);
 }
 
-function syncMbtilesLayer(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-  beforeId?: string,
-): void {
+function syncMbtilesLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   if (layer.metadata.tileType === "raster" || layer.source.type === "raster") {
     syncRasterTileLayer(map, layer, beforeId);
     return;
@@ -3107,9 +2859,7 @@ function syncMbtilesVectorLayer(
     map.addSource(src, {
       type: "vector",
       tiles,
-      bounds: layer.source.bounds as
-        | [number, number, number, number]
-        | undefined,
+      bounds: layer.source.bounds as [number, number, number, number] | undefined,
       maxzoom: layer.source.maxzoom as number | undefined,
       minzoom: layer.source.minzoom as number | undefined,
     });
@@ -3134,13 +2884,7 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
-            "match",
-            ["geometry-type"],
-            ["Polygon", "MultiPolygon"],
-            true,
-            false,
-          ],
+          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -3157,13 +2901,7 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
-            "match",
-            ["geometry-type"],
-            ["Polygon", "MultiPolygon"],
-            true,
-            false,
-          ],
+          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
           paint: fillPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -3204,13 +2942,7 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
-            "match",
-            ["geometry-type"],
-            ["Point", "MultiPoint"],
-            true,
-            false,
-          ],
+          filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
           paint: circlePaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -3239,10 +2971,7 @@ function removeStaleMbtilesLayers(
 ): void {
   const prefix = `layer-${layerId}-mbtiles-`;
   for (const styleLayer of map.getStyle().layers ?? []) {
-    if (
-      styleLayer.id.startsWith(prefix) &&
-      !currentLayerIds.has(styleLayer.id)
-    ) {
+    if (styleLayer.id.startsWith(prefix) && !currentLayerIds.has(styleLayer.id)) {
       removeIfExists(map, styleLayer.id);
     }
   }
@@ -3256,31 +2985,19 @@ function encodeVectorTileLayerPart(value: string): string {
   return encodeURIComponent(value).replaceAll("%", "_");
 }
 
-export function mbtilesFillLayerId(
-  layerId: string,
-  sourceLayer: string,
-): string {
+export function mbtilesFillLayerId(layerId: string, sourceLayer: string): string {
   return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-fill`;
 }
 
-export function mbtilesExtrusionLayerId(
-  layerId: string,
-  sourceLayer: string,
-): string {
+export function mbtilesExtrusionLayerId(layerId: string, sourceLayer: string): string {
   return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-extrusion`;
 }
 
-export function mbtilesLineLayerId(
-  layerId: string,
-  sourceLayer: string,
-): string {
+export function mbtilesLineLayerId(layerId: string, sourceLayer: string): string {
   return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-line`;
 }
 
-export function mbtilesCircleLayerId(
-  layerId: string,
-  sourceLayer: string,
-): string {
+export function mbtilesCircleLayerId(layerId: string, sourceLayer: string): string {
   return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-circle`;
 }
 
@@ -3324,20 +3041,14 @@ export function vectorTileLayerId(
   return `layer-${layerId}-${extrusionEnabled ? "vector-extrusion" : "vector"}`;
 }
 
-export function vectorTileLineLayerId(
-  layerId: string,
-  sourceLayer?: string,
-): string {
+export function vectorTileLineLayerId(layerId: string, sourceLayer?: string): string {
   if (sourceLayer) {
     return `layer-${layerId}-vector-${encodeVectorTileLayerPart(sourceLayer)}-line`;
   }
   return `layer-${layerId}-vector-line`;
 }
 
-export function vectorTileCircleLayerId(
-  layerId: string,
-  sourceLayer?: string,
-): string {
+export function vectorTileCircleLayerId(layerId: string, sourceLayer?: string): string {
   if (sourceLayer) {
     return `layer-${layerId}-vector-${encodeVectorTileLayerPart(sourceLayer)}-circle`;
   }
@@ -3382,9 +3093,7 @@ function getVectorTileSourceLayers(layer: GeoLibreLayer): string[] {
   }
 
   const sourceLayer = layer.source.sourceLayer;
-  return typeof sourceLayer === "string" && sourceLayer.length > 0
-    ? [sourceLayer]
-    : [];
+  return typeof sourceLayer === "string" && sourceLayer.length > 0 ? [sourceLayer] : [];
 }
 
 function vectorTileScopedSourceLayer(
@@ -3401,10 +3110,7 @@ function removeStaleVectorTileLayers(
 ): void {
   const prefix = `layer-${layerId}-vector`;
   for (const styleLayer of map.getStyle().layers ?? []) {
-    if (
-      styleLayer.id.startsWith(prefix) &&
-      !currentLayerIds.has(styleLayer.id)
-    ) {
+    if (styleLayer.id.startsWith(prefix) && !currentLayerIds.has(styleLayer.id)) {
       removeIfExists(map, styleLayer.id);
     }
   }
@@ -3449,8 +3155,7 @@ function ensureLayer(
     moveLayer(map, id, beforeId);
     return;
   }
-  const validBeforeId =
-    beforeId && map.getLayer(beforeId) ? beforeId : undefined;
+  const validBeforeId = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   // MapLibre's addLayer rejects (and silently drops, without throwing) a layer
   // whose paint or layout carries an explicit `null`. `null` is only valid as
   // a set*Property reset, which the update branch above uses (`fill-pattern`
@@ -3461,9 +3166,7 @@ function ensureLayer(
     record: Record<string, unknown> | undefined,
   ): Record<string, unknown> | undefined =>
     record && Object.values(record).some((value) => value === null)
-      ? Object.fromEntries(
-          Object.entries(record).filter(([, value]) => value !== null),
-        )
+      ? Object.fromEntries(Object.entries(record).filter(([, value]) => value !== null))
       : record;
   const strippedPaint = stripNulls(spec.paint);
   const strippedLayout = stripNulls(spec.layout);
@@ -3485,9 +3188,7 @@ function setLayerZoomRange(
 ): void {
   const minzoom = range.minzoom ?? MIN_LAYER_ZOOM;
   const maxzoom = range.maxzoom ?? MAX_LAYER_ZOOM;
-  const current = map.getLayer(id) as
-    | { minzoom?: number; maxzoom?: number }
-    | undefined;
+  const current = map.getLayer(id) as { minzoom?: number; maxzoom?: number } | undefined;
   // setLayerZoomRange invalidates MapLibre's style internally, so skip no-op
   // calls. syncLayer runs this for every layer on every pass.
   if (current?.minzoom === minzoom && current?.maxzoom === maxzoom) {
@@ -3646,7 +3347,5 @@ function getExternalSourceIds(layer?: GeoLibreLayer): string[] {
     return sourceIds.filter((id): id is string => typeof id === "string");
   }
 
-  return typeof layer?.metadata.sourceId === "string"
-    ? [layer.metadata.sourceId]
-    : [];
+  return typeof layer?.metadata.sourceId === "string" ? [layer.metadata.sourceId] : [];
 }

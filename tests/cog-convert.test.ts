@@ -15,21 +15,14 @@ import {
 // of file desktop GIS tools export and that the raster panel cannot render
 // until it is converted to a tiled COG. See opengeos/GeoLibre#789.
 const stripedTiff = new Uint8Array(
-  readFileSync(
-    fileURLToPath(new URL("./fixtures/striped.tif", import.meta.url)),
-  ),
+  readFileSync(fileURLToPath(new URL("./fixtures/striped.tif", import.meta.url))),
 );
 
 // In the browser wasm-bindgen fetches the bundled asset; under node:test we feed
 // it the wasm bytes directly so the same converter code runs headless.
 const wasmBytes = new Uint8Array(
   readFileSync(
-    fileURLToPath(
-      new URL(
-        "../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm",
-        import.meta.url,
-      ),
-    ),
+    fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url)),
   ),
 );
 

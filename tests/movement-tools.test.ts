@@ -61,10 +61,7 @@ describe("cell-site coverage", () => {
     assert.ok(result);
     assert.equal(result!.features.length, 1);
     const sector = result!.features[0];
-    assert.ok(
-      sector.geometry?.type === "Polygon" ||
-        sector.geometry?.type === "MultiPolygon",
-    );
+    assert.ok(sector.geometry?.type === "Polygon" || sector.geometry?.type === "MultiPolygon");
     // Original property is preserved and the computed inputs are recorded.
     assert.equal(sector.properties?.name, "tower");
     assert.equal(sector.properties?.azimuth, 90);
@@ -102,10 +99,7 @@ describe("cell-site coverage", () => {
     assert.equal(result!.features.length, 1);
     const sector = result!.features[0];
     assert.equal(sector.geometry?.type, "Polygon");
-    assert.ok(
-      (sector.geometry as { coordinates: number[][][] }).coordinates[0].length >
-        3,
-    );
+    assert.ok((sector.geometry as { coordinates: number[][][] }).coordinates[0].length > 3);
     assert.equal(sector.properties?.beamwidth, 30);
   });
 
@@ -120,10 +114,7 @@ describe("cell-site coverage", () => {
     });
     assert.equal(result!.features.length, 1);
     const sector = result!.features[0];
-    assert.ok(
-      sector.geometry?.type === "Polygon" ||
-        sector.geometry?.type === "MultiPolygon",
-    );
+    assert.ok(sector.geometry?.type === "Polygon" || sector.geometry?.type === "MultiPolygon");
     assert.equal(sector.properties?.beamwidth, 360);
   });
 });
@@ -201,8 +192,7 @@ describe("detect stops", () => {
       minDuration: 60,
     });
     assert.equal(result!.features.length, 1);
-    const lon = (result!.features[0].geometry as { coordinates: number[] })
-      .coordinates[0];
+    const lon = (result!.features[0].geometry as { coordinates: number[] }).coordinates[0];
     assert.ok(Math.abs(lon) > 179, `centroid lon ${lon} should be near ±180`);
   });
 

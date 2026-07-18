@@ -44,31 +44,11 @@ const GROUPS = [
   ["hydrology", "toolbar.item.hydrology", (c) => c.startsWith("Hydrology")],
   ["lidar", "toolbar.item.lidar", (c) => c.startsWith("LiDAR")],
   ["network", "toolbar.item.network", (c) => c === "Vector - Network Analysis"],
-  [
-    "projection",
-    "toolbar.item.projection",
-    (c) => c.startsWith("Projection"),
-  ],
-  [
-    "raster",
-    "toolbar.item.raster",
-    (c) => c === "Raster" || c.startsWith("Raster -"),
-  ],
-  [
-    "remoteSensing",
-    "toolbar.item.remoteSensing",
-    (c) => c.startsWith("Remote Sensing"),
-  ],
-  [
-    "terrain",
-    "toolbar.item.terrain",
-    (c) => c === "Terrain" || c.startsWith("Terrain -"),
-  ],
-  [
-    "vector",
-    "toolbar.item.vector",
-    (c) => c.startsWith("Vector") && !c.includes("Network"),
-  ],
+  ["projection", "toolbar.item.projection", (c) => c.startsWith("Projection")],
+  ["raster", "toolbar.item.raster", (c) => c === "Raster" || c.startsWith("Raster -")],
+  ["remoteSensing", "toolbar.item.remoteSensing", (c) => c.startsWith("Remote Sensing")],
+  ["terrain", "toolbar.item.terrain", (c) => c === "Terrain" || c.startsWith("Terrain -")],
+  ["vector", "toolbar.item.vector", (c) => c.startsWith("Vector") && !c.includes("Network")],
 ];
 
 const subcatLabel = (cat) =>
@@ -83,10 +63,7 @@ async function loadGeolibreWasmTools() {
   try {
     const { initTools, listManifests } = await import("geolibre-wasm/tools");
     const toolsUrl = import.meta.resolve("geolibre-wasm/tools");
-    const wasmPath = join(
-      dirname(fileURLToPath(toolsUrl)),
-      "geolibre-cli.wasm",
-    );
+    const wasmPath = join(dirname(fileURLToPath(toolsUrl)), "geolibre-cli.wasm");
     await initTools(readFileSync(wasmPath));
     const manifests = await listManifests();
     return manifests
@@ -125,9 +102,7 @@ async function main() {
       Array.isArray(t.params)
         ? {
             ...t,
-            params: t.params.filter(
-              (p) => !String(p?.name ?? "").startsWith("*"),
-            ),
+            params: t.params.filter((p) => !String(p?.name ?? "").startsWith("*")),
           }
         : t,
     ),
@@ -168,8 +143,7 @@ async function main() {
     }
     // GeoLibre first, then "General" (bare category), then named subcategories
     // alphabetically.
-    const rank = (s) =>
-      s === GEOLIBRE_SUBCATEGORY ? 0 : s === "General" ? 1 : 2;
+    const rank = (s) => (s === GEOLIBRE_SUBCATEGORY ? 0 : s === "General" ? 1 : 2);
     const subLabels = [...bySub.keys()].sort((a, b) => {
       const ra = rank(a);
       const rb = rank(b);
@@ -181,9 +155,7 @@ async function main() {
         label,
         tools: bySub
           .get(label)
-          .sort((a, b) =>
-            a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-          ),
+          .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())),
       }))
       .filter((s) => s.tools.length > 0);
     if (subcategories.length === 0) continue;
@@ -196,7 +168,7 @@ async function main() {
   L.push("// Whitebox tools come from the Whitebox Next Gen catalog snapshot");
   L.push("// (opengeos/Whitebox-Next-Gen-ArcGIS WNG/data/catalog_snapshot.json);");
   L.push("// GeoLibre-authored WASM tools come from the geolibre-wasm manifests and");
-  L.push("// are grouped under a \"GeoLibre\" subheading. Tool ids match the");
+  L.push('// are grouped under a "GeoLibre" subheading. Tool ids match the');
   L.push("// runtime/sidecar/WASM catalog used by ProcessingDialog.");
   L.push("// Regenerate with scripts/gen-whitebox-menu-catalog.mjs; do not hand-edit.");
   L.push("// Tool/subcategory names are catalog data and are intentionally not");

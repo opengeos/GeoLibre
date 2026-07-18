@@ -12,9 +12,8 @@
 // This module must be imported before any @osmix module, so it is the first
 // import in osm-pbf.ts.
 if (typeof globalThis.SharedArrayBuffer === "undefined") {
-  (
-    globalThis as unknown as { SharedArrayBuffer: ArrayBufferConstructor }
-  ).SharedArrayBuffer = ArrayBuffer;
+  (globalThis as unknown as { SharedArrayBuffer: ArrayBufferConstructor }).SharedArrayBuffer =
+    ArrayBuffer;
 }
 
 export {};

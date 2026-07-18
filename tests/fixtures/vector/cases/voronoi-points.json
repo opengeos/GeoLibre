@@ -10,10 +10,7 @@
         "properties": {},
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            0,
-            0
-          ]
+          "coordinates": [0, 0]
         }
       },
       {
@@ -21,10 +18,7 @@
         "properties": {},
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            2,
-            0
-          ]
+          "coordinates": [2, 0]
         }
       },
       {
@@ -32,10 +26,7 @@
         "properties": {},
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            1,
-            2
-          ]
+          "coordinates": [1, 2]
         }
       },
       {
@@ -43,10 +34,7 @@
         "properties": {},
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            -1,
-            1
-          ]
+          "coordinates": [-1, 1]
         }
       }
     ]
@@ -56,11 +44,6 @@
   },
   "expect": {
     "featureCount": 4,
-    "geometryTypes": [
-      "Polygon",
-      "Polygon",
-      "Polygon",
-      "Polygon"
-    ]
+    "geometryTypes": ["Polygon", "Polygon", "Polygon", "Polygon"]
   }
 }

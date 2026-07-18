@@ -6,26 +6,91 @@ import type { SqlWorkspaceTableColumns } from "./sql-workspace";
 // multi-word candidate like "GROUP BY" would splice a space mid-token and could
 // corrupt an identifier the user was typing. Users compose phrases word by word.
 export const SQL_KEYWORDS: readonly string[] = [
-  "SELECT", "FROM", "WHERE", "GROUP", "ORDER", "BY", "LIMIT", "OFFSET",
-  "JOIN", "LEFT", "RIGHT", "INNER", "FULL", "ON",
-  "AS", "AND", "OR", "NOT", "IN", "IS", "NULL", "LIKE", "ILIKE", "BETWEEN",
-  "DISTINCT", "COUNT", "SUM", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN",
-  "ELSE", "END", "HAVING", "UNION", "ALL", "WITH", "DESC", "ASC",
+  "SELECT",
+  "FROM",
+  "WHERE",
+  "GROUP",
+  "ORDER",
+  "BY",
+  "LIMIT",
+  "OFFSET",
+  "JOIN",
+  "LEFT",
+  "RIGHT",
+  "INNER",
+  "FULL",
+  "ON",
+  "AS",
+  "AND",
+  "OR",
+  "NOT",
+  "IN",
+  "IS",
+  "NULL",
+  "LIKE",
+  "ILIKE",
+  "BETWEEN",
+  "DISTINCT",
+  "COUNT",
+  "SUM",
+  "AVG",
+  "MIN",
+  "MAX",
+  "CASE",
+  "WHEN",
+  "THEN",
+  "ELSE",
+  "END",
+  "HAVING",
+  "UNION",
+  "ALL",
+  "WITH",
+  "DESC",
+  "ASC",
 ];
 
 // DuckDB scalar/aggregate and spatial (ST_*) functions plus the file readers the
 // workspace exposes. Offered as completion candidates after a prefix match.
 export const SQL_FUNCTIONS: readonly string[] = [
   // File / URL readers the workspace supports directly.
-  "read_parquet", "read_csv_auto", "read_json_auto", "parquet_scan",
+  "read_parquet",
+  "read_csv_auto",
+  "read_json_auto",
+  "parquet_scan",
   // Common DuckDB spatial functions.
-  "ST_Read", "ST_AsGeoJSON", "ST_AsText", "ST_GeomFromText", "ST_Point",
-  "ST_MakePoint", "ST_Centroid", "ST_Area", "ST_Length", "ST_Buffer",
-  "ST_Intersection", "ST_Intersects", "ST_Contains", "ST_Within",
-  "ST_Distance", "ST_Envelope", "ST_Collect", "ST_Union", "ST_X", "ST_Y",
-  "ST_Transform", "ST_SetSRID", "ST_GeometryType", "ST_IsValid",
+  "ST_Read",
+  "ST_AsGeoJSON",
+  "ST_AsText",
+  "ST_GeomFromText",
+  "ST_Point",
+  "ST_MakePoint",
+  "ST_Centroid",
+  "ST_Area",
+  "ST_Length",
+  "ST_Buffer",
+  "ST_Intersection",
+  "ST_Intersects",
+  "ST_Contains",
+  "ST_Within",
+  "ST_Distance",
+  "ST_Envelope",
+  "ST_Collect",
+  "ST_Union",
+  "ST_X",
+  "ST_Y",
+  "ST_Transform",
+  "ST_SetSRID",
+  "ST_GeometryType",
+  "ST_IsValid",
   // Frequently used scalar functions.
-  "COALESCE", "CAST", "ROUND", "ABS", "LOWER", "UPPER", "LENGTH", "CONCAT",
+  "COALESCE",
+  "CAST",
+  "ROUND",
+  "ABS",
+  "LOWER",
+  "UPPER",
+  "LENGTH",
+  "CONCAT",
 ];
 
 // Identifier characters that make up a completable SQL word. Unicode letters and
@@ -43,10 +108,7 @@ const MAX_CANDIDATES = 40;
  * @param cursor The caret offset to scan back from.
  * @returns The word prefix and the offset where it starts.
  */
-export function wordPrefixAt(
-  text: string,
-  cursor: number,
-): { prefix: string; start: number } {
+export function wordPrefixAt(text: string, cursor: number): { prefix: string; start: number } {
   let start = cursor;
   while (start > 0 && WORD_CHAR.test(text[start - 1])) start -= 1;
   return { prefix: text.slice(start, cursor), start };

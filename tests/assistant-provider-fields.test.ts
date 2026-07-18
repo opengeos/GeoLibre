@@ -15,10 +15,7 @@ import {
 // URL-shaped value satisfies every field the resolver inspects (API keys,
 // models, regions, and the base-URL fields it actually parses), so use one
 // dummy value rather than guessing which keys must look like URLs.
-function envFrom(
-  provider: AssistantProviderId,
-  envKeys: readonly string[],
-): RuntimeEnv {
+function envFrom(provider: AssistantProviderId, envKeys: readonly string[]): RuntimeEnv {
   const env: Record<string, string> = {};
   for (const field of PROVIDER_FIELDS[provider]) {
     if (!envKeys.includes(field.envKey)) continue;
@@ -30,10 +27,7 @@ function envFrom(
 describe("PROVIDER_FIELDS", () => {
   it("defines at least one field for every provider", () => {
     for (const provider of ASSISTANT_PROVIDER_IDS) {
-      assert.ok(
-        PROVIDER_FIELDS[provider].length > 0,
-        `${provider} has no fields`,
-      );
+      assert.ok(PROVIDER_FIELDS[provider].length > 0, `${provider} has no fields`);
     }
   });
 
@@ -43,11 +37,7 @@ describe("PROVIDER_FIELDS", () => {
       for (const key of keys) {
         assert.ok(key.trim().length > 0, `${provider} has a blank env key`);
       }
-      assert.equal(
-        new Set(keys).size,
-        keys.length,
-        `${provider} repeats an env key`,
-      );
+      assert.equal(new Set(keys).size, keys.length, `${provider} repeats an env key`);
     }
   });
 
@@ -101,9 +91,7 @@ describe("PROVIDER_FIELDS", () => {
   it("declares only aliases the resolver actually accepts", () => {
     for (const provider of ASSISTANT_PROVIDER_IDS) {
       for (const field of PROVIDER_FIELDS[provider]) {
-        const required = PROVIDER_FIELDS[provider]
-          .filter((f) => f.required)
-          .map((f) => f.envKey);
+        const required = PROVIDER_FIELDS[provider].filter((f) => f.required).map((f) => f.envKey);
         for (const alias of field.aliases ?? []) {
           // Fill the required fields but swap this field's canonical key for the
           // alias; the provider must still resolve, proving the alias is a real

@@ -55,14 +55,7 @@ const GPX_POINT_PROPERTY_NAMES = [
   "dgpsid",
 ];
 
-const GPX_CONTAINER_PROPERTY_NAMES = [
-  "name",
-  "cmt",
-  "desc",
-  "src",
-  "number",
-  "type",
-];
+const GPX_CONTAINER_PROPERTY_NAMES = ["name", "cmt", "desc", "src", "number", "type"];
 
 // GPX fields defined as numeric types in the schema. Every other tag (name,
 // cmt, desc, src, sym, type, fix, time, ...) is textual and must stay a string
@@ -93,10 +86,7 @@ export interface GpxParseOptions {
   includeTrackPoints?: boolean;
 }
 
-export function parseGpxLayer(
-  text: string,
-  options: GpxParseOptions = {},
-): GpxLayerResult {
+export function parseGpxLayer(text: string, options: GpxParseOptions = {}): GpxLayerResult {
   const { includeRoutePoints = false, includeTrackPoints = false } = options;
   const document = new DOMParser().parseFromString(text, "application/xml");
   const parserError = document.querySelector("parsererror");
@@ -214,9 +204,7 @@ export function parseGpxLayer(
     validRoutePointCount === 0 &&
     validTrackPointCount === 0
   ) {
-    throw new Error(
-      "No valid GPX waypoints, routes, tracks, or track/route points were found.",
-    );
+    throw new Error("No valid GPX waypoints, routes, tracks, or track/route points were found.");
   }
 
   return {
@@ -249,9 +237,7 @@ export function parseGpxLayer(
 }
 
 function directChildren(parent: Element, localName: string): Element[] {
-  return Array.from(parent.children).filter(
-    (child) => child.localName.toLowerCase() === localName,
-  );
+  return Array.from(parent.children).filter((child) => child.localName.toLowerCase() === localName);
 }
 
 function childText(parent: Element, localName: string): string | undefined {

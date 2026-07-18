@@ -15,9 +15,7 @@ import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
 export function ensureProjectFileName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return `${DEFAULT_PROJECT_NAME}.geolibre.json`;
-  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed)
-    ? trimmed
-    : `${trimmed}.geolibre.json`;
+  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed) ? trimmed : `${trimmed}.geolibre.json`;
 }
 
 /**

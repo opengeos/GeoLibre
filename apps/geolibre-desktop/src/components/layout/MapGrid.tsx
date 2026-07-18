@@ -1,9 +1,5 @@
 import { getCesiumIonToken, useAppStore } from "@geolibre/core";
-import {
-  CesiumCanvas,
-  isCesiumSupportedLayerType,
-  SecondaryMapCanvas,
-} from "@geolibre/map";
+import { CesiumCanvas, isCesiumSupportedLayerType, SecondaryMapCanvas } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -26,15 +22,12 @@ import { useTranslation } from "react-i18next";
  * (the per-pane toggle is hidden).
  */
 function useCesiumIonToken(): string | undefined {
-  const [token, setToken] = useState<string | undefined>(() =>
-    getCesiumIonToken(),
-  );
+  const [token, setToken] = useState<string | undefined>(() => getCesiumIonToken());
   useEffect(() => {
     const refresh = () => setToken(getCesiumIonToken());
     refresh();
     window.addEventListener("geolibre:runtime-env-change", refresh);
-    return () =>
-      window.removeEventListener("geolibre:runtime-env-change", refresh);
+    return () => window.removeEventListener("geolibre:runtime-env-change", refresh);
   }, []);
   return token;
 }
@@ -118,12 +111,7 @@ export function MapGrid({ children }: MapGridProps) {
         />
       </div>
       {secondaryMapViews.map((pane, index) => (
-        <SecondaryMapPane
-          key={pane.id}
-          viewId={pane.id}
-          index={index}
-          cesiumToken={cesiumToken}
-        />
+        <SecondaryMapPane key={pane.id} viewId={pane.id} index={index} cesiumToken={cesiumToken} />
       ))}
     </div>
   );
@@ -143,9 +131,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
   const setSecondaryMapLabel = useAppStore((s) => s.setSecondaryMapLabel);
   const setSecondaryViewKind = useAppStore((s) => s.setSecondaryViewKind);
-  const label = useAppStore(
-    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.label ?? "",
-  );
+  const label = useAppStore((s) => s.secondaryMapViews.find((p) => p.id === viewId)?.label ?? "");
   // Absent viewKind means the default 2D map (back-compat with older panes).
   // Only honor a 3D pane when Cesium is actually available (a token is present);
   // otherwise a project saved with a globe pane silently opens as the 2D map.
@@ -186,15 +172,9 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
                 : t("mapGrid.show3d", { number: index + 2 })
             }
             aria-pressed={is3d}
-            onClick={() =>
-              setSecondaryViewKind(viewId, is3d ? "maplibre" : "cesium")
-            }
+            onClick={() => setSecondaryViewKind(viewId, is3d ? "maplibre" : "cesium")}
           >
-            {is3d ? (
-              <MapIcon className="h-4 w-4" />
-            ) : (
-              <Globe className="h-4 w-4" />
-            )}
+            {is3d ? <MapIcon className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
           </button>
         ) : null}
         <button
@@ -229,9 +209,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
   const layerVisibility = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
   );
-  const setSecondaryLayerVisibility = useAppStore(
-    (s) => s.setSecondaryLayerVisibility,
-  );
+  const setSecondaryLayerVisibility = useAppStore((s) => s.setSecondaryLayerVisibility);
 
   return (
     <DropdownMenu>
@@ -250,9 +228,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
         <DropdownMenuLabel>{t("mapGrid.layers")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {layers.length === 0 ? (
-          <div className="px-2 py-1.5 text-sm text-muted-foreground">
-            {t("mapGrid.noLayers")}
-          </div>
+          <div className="px-2 py-1.5 text-sm text-muted-foreground">{t("mapGrid.noLayers")}</div>
         ) : (
           layers.map((layer) => {
             const override = layerVisibility?.[layer.id];

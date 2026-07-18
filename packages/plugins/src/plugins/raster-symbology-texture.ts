@@ -1,10 +1,6 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import { createColormapTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
-import {
-  type AutoStats,
-  computeAutoStats,
-  loadGeoTIFF,
-} from "maplibre-gl-raster";
+import { type AutoStats, computeAutoStats, loadGeoTIFF } from "maplibre-gl-raster";
 import {
   COLORMAP_TEXTURE_WIDTH,
   RASTER_MIN_CUSTOM_COLORS,
@@ -49,9 +45,7 @@ type ControlWithManager = {
   getRaster?: (id: string) => RasterInfoLike | undefined;
 };
 type RasterInfoLike = {
-  source?:
-    | { kind: "url"; url: string }
-    | { kind: "file"; fileName: string; objectUrl: string };
+  source?: { kind: "url"; url: string } | { kind: "file"; fileName: string; objectUrl: string };
 };
 
 type ClassificationEntry = {
@@ -187,10 +181,7 @@ export function installRasterClassification(control: unknown): void {
   subscribeToStore();
 }
 
-function ensureTexture(
-  manager: RasterLayerManager,
-  entry: ClassificationEntry,
-): GpuTexture | null {
+function ensureTexture(manager: RasterLayerManager, entry: ClassificationEntry): GpuTexture | null {
   const key = symbologyKey(entry.symbology, entry.reversed);
   if (entry.texture && entry.key === key) return entry.texture;
   entry.texture?.destroy?.();
@@ -203,9 +194,7 @@ function ensureTexture(
     // colors come from the warmed cache; until it resolves, colormapColors is
     // null and buildSteppedColormapRgba falls back (reconcile rebuilds on warm).
     const custom =
-      customColors && customColors.length >= RASTER_MIN_CUSTOM_COLORS
-        ? customColors
-        : undefined;
+      customColors && customColors.length >= RASTER_MIN_CUSTOM_COLORS ? customColors : undefined;
     // The continuous branch only runs for a custom ramp (needsTexture), so
     // `custom` is set; the grayscale fallback just keeps the contract explicit
     // rather than producing a silent all-black gradient.
@@ -225,10 +214,7 @@ function ensureTexture(
       COLORMAP_TEXTURE_WIDTH,
       1,
     );
-    entry.texture = createColormapTexture(
-      manager._device as never,
-      imageData,
-    ) as GpuTexture;
+    entry.texture = createColormapTexture(manager._device as never, imageData) as GpuTexture;
     entry.key = key;
     return entry.texture;
   } catch (error) {
@@ -393,9 +379,7 @@ function bandStatsFromAuto(stats: AutoStats, band: number): RasterBandStats | nu
   // Only fall back to the averaged global block when per-band stats are
   // unavailable entirely; if the per-band map exists but lacks this band,
   // the global average would be wrong for it, so report unknown instead.
-  const perBand = stats.perBand
-    ? (stats.perBand.get(band) ?? null)
-    : stats.global;
+  const perBand = stats.perBand ? (stats.perBand.get(band) ?? null) : stats.global;
   if (!perBand) return null;
   return {
     min: perBand.min,
@@ -426,9 +410,7 @@ export async function getRasterBandStats(
   const cached = statsCache.get(layerId);
   if (cached) return bandStatsFromAuto(cached, band);
 
-  const info = (currentControl as ControlWithManager | null)?.getRaster?.(
-    layerId,
-  );
+  const info = (currentControl as ControlWithManager | null)?.getRaster?.(layerId);
   const url = sourceUrl(info) ?? fallbackUrl ?? null;
   if (!url) return null;
 
@@ -442,10 +424,7 @@ export async function getRasterBandStats(
     return bandStatsFromAuto(auto, band);
   } catch (error) {
     if (!controller.signal.aborted) {
-      console.warn(
-        `[GeoLibre] Failed to compute raster statistics for layer "${layerId}"`,
-        error,
-      );
+      console.warn(`[GeoLibre] Failed to compute raster statistics for layer "${layerId}"`, error);
     }
     return null;
   } finally {

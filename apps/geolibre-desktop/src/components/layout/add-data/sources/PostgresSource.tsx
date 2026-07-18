@@ -15,10 +15,7 @@ import {
   startMartinServer,
   stopMartinServer,
 } from "../../../../lib/martin";
-import {
-  postgisFeatureKeys,
-  registerPostgisConnection,
-} from "../../../../lib/postgis-connections";
+import { postgisFeatureKeys, registerPostgisConnection } from "../../../../lib/postgis-connections";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { isTauri } from "../../../../lib/tauri-io";
 import {
@@ -260,9 +257,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       // published it; otherwise fall back to the first source.
       const desired = desiredTableRef.current;
       const match = desired
-        ? sources.find((s) =>
-            martinSourceMatchesTable(s.id, desired.schema, desired.table),
-          )
+        ? sources.find((s) => martinSourceMatchesTable(s.id, desired.schema, desired.table))
         : undefined;
       martin.setSelectedSourceId(match?.id ?? sources[0]?.id ?? "");
       // Consumed once: a later reconnect on the same connection must not undo a
@@ -315,17 +310,12 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       throw new Error(t("addData.postgres.errorNoVectorLayers"));
     }
 
-    const summary = martin.sources.find(
-      (candidate) => candidate.id === sourceId,
-    );
+    const summary = martin.sources.find((candidate) => candidate.id === sourceId);
     const tilejsonUrl = martinTileJsonUrl(server, sourceId);
     martin.markLayerAdded();
     source.addAndClose(
       createBaseLayer(
-        source.layerName.trim() ||
-          tilejson.name ||
-          summary?.name ||
-          sourceId,
+        source.layerName.trim() || tilejson.name || summary?.name || sourceId,
         "vector-tiles",
         {
           type: "vector",
@@ -357,9 +347,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   // the layer metadata) so "Save edits to PostGIS table" can commit changes
   // back without persisting credentials in the project file.
   const addEditableTable = async (tableKey: string) => {
-    const table = postgisTables.find(
-      (candidate) => postgisTableKey(candidate) === tableKey,
-    );
+    const table = postgisTables.find((candidate) => postgisTableKey(candidate) === tableKey);
     if (!table) {
       throw new Error(t("addData.postgres.errorSelectTable"));
     }
@@ -433,9 +421,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       error={source.error}
       submitDisabled={
         source.isSubmitting ||
-        (loadMode === "editable"
-          ? !selectedTableKey
-          : !martin.server || !martin.selectedSourceId)
+        (loadMode === "editable" ? !selectedTableKey : !martin.server || !martin.selectedSourceId)
       }
     >
       <div className="space-y-3">
@@ -445,25 +431,17 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
           </p>
         ) : null}
         <div className="space-y-1.5">
-          <Label htmlFor="postgres-load-mode">
-            {t("addData.postgres.loadMode")}
-          </Label>
+          <Label htmlFor="postgres-load-mode">{t("addData.postgres.loadMode")}</Label>
           <Select
             id="postgres-load-mode"
             value={loadMode}
-            onChange={(event) =>
-              setLoadMode(event.target.value as PostgresLoadMode)
-            }
+            onChange={(event) => setLoadMode(event.target.value as PostgresLoadMode)}
           >
             <option value="tiles">{t("addData.postgres.loadModeTiles")}</option>
-            <option value="editable">
-              {t("addData.postgres.loadModeEditable")}
-            </option>
+            <option value="editable">{t("addData.postgres.loadModeEditable")}</option>
           </Select>
           {loadMode === "editable" ? (
-            <p className="text-xs text-muted-foreground">
-              {t("addData.postgres.editableNotice")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("addData.postgres.editableNotice")}</p>
           ) : null}
         </div>
         {savedPostgresConnections.length > 0 ? (
@@ -497,9 +475,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                 }
               }}
             >
-              <option value="">
-                {t("addData.postgres.selectSavedConnection")}
-              </option>
+              <option value="">{t("addData.postgres.selectSavedConnection")}</option>
               {savedPostgresConnections.map((connection) => (
                 <option key={connection} value={connection}>
                   {savedPostgresConnectionLabel(connection)}
@@ -509,9 +485,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
           </div>
         ) : null}
         <div className="space-y-1.5">
-          <Label htmlFor="postgres-connection">
-            {t("addData.postgres.connectionString")}
-          </Label>
+          <Label htmlFor="postgres-connection">{t("addData.postgres.connectionString")}</Label>
           <Input
             id="postgres-connection"
             type="password"
@@ -541,17 +515,13 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
           <div className="space-y-1.5">
             {loadMode === "tiles" ? (
               <>
-                <Label htmlFor="postgres-default-srid">
-                  {t("addData.postgres.defaultSrid")}
-                </Label>
+                <Label htmlFor="postgres-default-srid">{t("addData.postgres.defaultSrid")}</Label>
                 <Input
                   id="postgres-default-srid"
                   inputMode="numeric"
                   placeholder={t("addData.common.optional")}
                   value={postgresDefaultSrid}
-                  onChange={(event) =>
-                    setPostgresDefaultSrid(event.target.value)
-                  }
+                  onChange={(event) => setPostgresDefaultSrid(event.target.value)}
                 />
               </>
             ) : null}
@@ -561,11 +531,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={
-                  loadMode === "editable"
-                    ? handleConnectEditable
-                    : handleConnectPostgres
-                }
+                onClick={loadMode === "editable" ? handleConnectEditable : handleConnectPostgres}
                 disabled={source.isSubmitting || !isTauri()}
               >
                 {t("addData.postgres.connect")}
@@ -591,9 +557,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         ) : null}
         {loadMode === "editable" && postgisTables.length > 0 ? (
           <div className="space-y-1.5">
-            <Label htmlFor="postgis-table">
-              {t("addData.postgres.editableTable")}
-            </Label>
+            <Label htmlFor="postgis-table">{t("addData.postgres.editableTable")}</Label>
             <Select
               id="postgis-table"
               value={selectedTableKey}
@@ -606,9 +570,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                 // to save edits back, which needs a primary key.
                 return (
                   <option key={key} value={key} disabled={!table.primary_key}>
-                    {table.primary_key
-                      ? key
-                      : t("addData.postgres.tableReadOnly", { table: key })}
+                    {table.primary_key ? key : t("addData.postgres.tableReadOnly", { table: key })}
                   </option>
                 );
               })}
@@ -617,15 +579,11 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         ) : null}
         {loadMode === "tiles" && martin.sources.length > 0 ? (
           <div className="space-y-1.5">
-            <Label htmlFor="martin-source">
-              {t("addData.postgres.martinSource")}
-            </Label>
+            <Label htmlFor="martin-source">{t("addData.postgres.martinSource")}</Label>
             <Select
               id="martin-source"
               value={martin.selectedSourceId}
-              onChange={(event) =>
-                martin.setSelectedSourceId(event.target.value)
-              }
+              onChange={(event) => martin.setSelectedSourceId(event.target.value)}
             >
               {martin.sources.map((martinSource) => (
                 <option key={martinSource.id} value={martinSource.id}>

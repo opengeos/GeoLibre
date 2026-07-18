@@ -8,12 +8,7 @@ import type { Feature } from "geojson";
 export type SelectionMode = "new" | "add" | "remove" | "intersect";
 
 /** Selection modes in display order. */
-export const SELECTION_MODES: readonly SelectionMode[] = [
-  "new",
-  "add",
-  "remove",
-  "intersect",
-];
+export const SELECTION_MODES: readonly SelectionMode[] = ["new", "add", "remove", "intersect"];
 
 /**
  * The id under which a feature participates in the selection model. Mirrors
@@ -57,10 +52,7 @@ export function applySelectionMode(
  * every feature id not currently selected, in layer order. With an empty
  * selection this selects everything.
  */
-export function invertSelection(
-  allIds: readonly string[],
-  current: readonly string[],
-): string[] {
+export function invertSelection(allIds: readonly string[], current: readonly string[]): string[] {
   const selected = new Set(current);
   return allIds.filter((id) => !selected.has(id));
 }

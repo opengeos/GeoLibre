@@ -60,8 +60,7 @@ function makeMap() {
     removeSource: (id: string) => {
       sources.delete(id);
     },
-    getLayer: (id: string) =>
-      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
     addLayer: (spec: Record<string, unknown>) => {
       layers.set(spec.id as string, spec);
     },
@@ -141,10 +140,7 @@ describe("geojsonHasZCoordinates", () => {
   });
 
   it("detects Z on a bare Point geometry and inside GeometryCollections", () => {
-    assert.equal(
-      geojsonHasZCoordinates({ type: "Point", coordinates: [1, 2, 3] }),
-      true,
-    );
+    assert.equal(geojsonHasZCoordinates({ type: "Point", coordinates: [1, 2, 3] }), true);
     assert.equal(
       geojsonHasZCoordinates({
         type: "GeometryCollection",
@@ -188,15 +184,9 @@ describe("geojsonHasZCoordinates", () => {
       ),
       false,
     );
-    assert.equal(
-      geojsonHasZCoordinates(track([[6.86, 45.83, Number.NaN]])),
-      false,
-    );
+    assert.equal(geojsonHasZCoordinates(track([[6.86, 45.83, Number.NaN]])), false);
     assert.equal(geojsonHasZCoordinates(null), false);
-    assert.equal(
-      geojsonHasZCoordinates({ type: "FeatureCollection", features: [] }),
-      false,
-    );
+    assert.equal(geojsonHasZCoordinates({ type: "FeatureCollection", features: [] }), false);
   });
 });
 
@@ -207,9 +197,7 @@ describe("transformGeojsonElevation", () => {
       [6.87, 45.84, Number.NaN],
     ]);
     const result = transformGeojsonElevation(data, 1, 0);
-    const coordinates = (
-      result.features[0].geometry as { coordinates: number[][] }
-    ).coordinates;
+    const coordinates = (result.features[0].geometry as { coordinates: number[][] }).coordinates;
     assert.deepEqual(coordinates[0], [6.86, 45.83, 1000]);
     assert.deepEqual(coordinates[1], [6.87, 45.84, 0]);
   });
@@ -220,15 +208,11 @@ describe("transformGeojsonElevation", () => {
       [6.87, 45.84],
     ]);
     const result = transformGeojsonElevation(data, 2, 50);
-    const coordinates = (
-      result.features[0].geometry as { coordinates: number[][] }
-    ).coordinates;
+    const coordinates = (result.features[0].geometry as { coordinates: number[][] }).coordinates;
     assert.deepEqual(coordinates[0], [6.86, 45.83, 2050]);
     // A missing Z is treated as 0 so the offset still lifts the vertex.
     assert.deepEqual(coordinates[1], [6.87, 45.84, 50]);
-    const original = (
-      data.features[0].geometry as { coordinates: number[][] }
-    ).coordinates;
+    const original = (data.features[0].geometry as { coordinates: number[][] }).coordinates;
     assert.deepEqual(original[0], [6.86, 45.83, 1000]);
   });
 });
@@ -312,10 +296,7 @@ describe("buildElevation3dLayers", () => {
         fillOpacity: 0.5,
       },
     });
-    const [built] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeGeoJsonLayer[];
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     assert.equal(built.props.id, "layer-1");
     assert.equal(built.props.opacity, 0.5);
     assert.equal(built.props.lineBillboard, true);
@@ -331,10 +312,7 @@ describe("buildElevation3dLayers", () => {
       }
     ).coordinates;
     assert.deepEqual(coordinates[0], [6.86, 45.83, 1035]);
-    const [rebuilt] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeGeoJsonLayer[];
+    const [rebuilt] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     assert.equal(rebuilt.props.data, built.props.data);
   });
 
@@ -347,10 +325,7 @@ describe("buildElevation3dLayers", () => {
         strokeColor: "transparent",
       },
     });
-    const [built] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeGeoJsonLayer[];
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     assert.deepEqual(built.props.getFillColor, [0, 0, 0, 0]);
     assert.deepEqual(built.props.getLineColor, [0, 0, 0, 0]);
   });
@@ -363,10 +338,7 @@ describe("buildElevation3dLayers", () => {
         strokeWidthUnit: "meters",
       },
     });
-    const [built] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeGeoJsonLayer[];
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     assert.equal(built.props.lineWidthUnits, "meters");
   });
 
@@ -388,10 +360,7 @@ describe("buildElevation3dLayers", () => {
         ],
       },
     });
-    const [built] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeIconLayer[];
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeIconLayer[];
     assert.equal(built.props.id, "layer-1-points");
     assert.equal(built.props.sizeUnits, "pixels");
     assert.equal(built.props.billboard, true);
@@ -425,19 +394,20 @@ describe("buildElevation3dLayers", () => {
       },
     });
 
-    const built = buildElevation3dLayers(fakeDeckGL, layer) as unknown as [
-      FakeIconLayer,
-    ];
+    const built = buildElevation3dLayers(fakeDeckGL, layer) as unknown as [FakeIconLayer];
     assert.equal(built.length, 1);
     assert.equal(built[0].props.id, "layer-1-points");
     assert.equal(built[0].props.getSize, 16);
     assert.deepEqual(built[0].props.getColor, [51, 102, 153, 128]);
     assert.equal(built[0].props.opacity, 0.75);
     const data = built[0].props.data as Array<{ position: number[] }>;
-    assert.deepEqual(data.map((datum) => datum.position), [
-      [6.86, 45.83, 3150],
-      [6.87, 45.84, 3627],
-    ]);
+    assert.deepEqual(
+      data.map((datum) => datum.position),
+      [
+        [6.86, 45.83, 3150],
+        [6.87, 45.84, 3627],
+      ],
+    );
   });
 
   it("splits mixed geometry so GeoJsonLayer never owns the point sublayer", () => {
@@ -473,9 +443,11 @@ describe("buildElevation3dLayers", () => {
     assert.equal(built.length, 2);
     assert.equal(built[0].props.id, "layer-1");
     assert.equal(
-      ((built[0].props.data as FeatureCollection).features[0].geometry as {
-        type: string;
-      }).type,
+      (
+        (built[0].props.data as FeatureCollection).features[0].geometry as {
+          type: string;
+        }
+      ).type,
       "LineString",
     );
     assert.equal(built[1].props.id, "layer-1-points");
@@ -490,22 +462,14 @@ describe("buildElevation3dLayers", () => {
         elevation3dOffset: 100,
       },
     });
-    const [built] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeGeoJsonLayer[];
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     const data = built.props.data as FeatureCollection;
-    const coordinates = (
-      data.features[0].geometry as { coordinates: number[][] }
-    ).coordinates;
+    const coordinates = (data.features[0].geometry as { coordinates: number[][] }).coordinates;
     assert.deepEqual(coordinates[0], [6.86, 45.83, 3205]);
     assert.deepEqual(coordinates[1], [6.87, 45.84, 4360]);
 
     // The rescan is cached per source collection and transform.
-    const [rebuilt] = buildElevation3dLayers(
-      fakeDeckGL,
-      layer,
-    ) as unknown as FakeGeoJsonLayer[];
+    const [rebuilt] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     assert.equal(rebuilt.props.data, data);
   });
 });

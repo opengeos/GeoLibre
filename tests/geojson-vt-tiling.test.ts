@@ -22,9 +22,8 @@ type ProtocolHandler = (
 
 function protocolHandler(): ProtocolHandler {
   ensureGeoJsonVtProtocol();
-  const handler = (
-    config as { REGISTERED_PROTOCOLS?: Record<string, ProtocolHandler> }
-  ).REGISTERED_PROTOCOLS?.[GEOJSONVT_PROTOCOL];
+  const handler = (config as { REGISTERED_PROTOCOLS?: Record<string, ProtocolHandler> })
+    .REGISTERED_PROTOCOLS?.[GEOJSONVT_PROTOCOL];
   assert.ok(handler, "geojson-vt protocol should be registered");
   return handler;
 }
@@ -86,8 +85,7 @@ function makeMap() {
       sources.delete(id);
       calls.push({ method: "removeSource", args: [id] });
     },
-    getLayer: (id: string) =>
-      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       calls.push({ method: "addLayer", args: [spec, beforeId] });
@@ -115,14 +113,8 @@ describe("shouldUseTiledRendering", () => {
   it("switches at the threshold", () => {
     assert.equal(LARGE_VECTOR_FEATURE_THRESHOLD, 50_000);
     assert.equal(shouldUseTiledRendering(undefined), false);
-    assert.equal(
-      shouldUseTiledRendering(pointGrid(LARGE_VECTOR_FEATURE_THRESHOLD)),
-      false,
-    );
-    assert.equal(
-      shouldUseTiledRendering(pointGrid(LARGE_VECTOR_FEATURE_THRESHOLD + 1)),
-      true,
-    );
+    assert.equal(shouldUseTiledRendering(pointGrid(LARGE_VECTOR_FEATURE_THRESHOLD)), false);
+    assert.equal(shouldUseTiledRendering(pointGrid(LARGE_VECTOR_FEATURE_THRESHOLD + 1)), true);
   });
 });
 
@@ -211,10 +203,7 @@ describe("geojson-vt protocol", () => {
       clusterRadius: 50,
       clusterMaxZoom: 14,
     });
-    const tile = await handler(
-      { url: `${GEOJSONVT_PROTOCOL}://LC/0/0/0` },
-      new AbortController(),
-    );
+    const tile = await handler({ url: `${GEOJSONVT_PROTOCOL}://LC/0/0/0` }, new AbortController());
     assert.ok(tile.data.byteLength > 0);
     unregisterGeoJsonVtSource("LC");
   });
@@ -244,22 +233,14 @@ describe("syncLayer tiled path", () => {
     const id = "big-switch";
     try {
       syncLayer(map as never, largeLayer(LARGE_VECTOR_FEATURE_THRESHOLD + 1, id));
-      assert.equal(
-        (sources.get(`source-${id}`) as Record<string, unknown>).type,
-        "vector",
-      );
+      assert.equal((sources.get(`source-${id}`) as Record<string, unknown>).type, "vector");
 
       syncLayer(map as never, largeLayer(10, id));
       assert.ok(
-        calls.some(
-          (c) => c.method === "removeSource" && c.args[0] === `source-${id}`,
-        ),
+        calls.some((c) => c.method === "removeSource" && c.args[0] === `source-${id}`),
         "the vector source should be torn down",
       );
-      assert.equal(
-        (sources.get(`source-${id}`) as Record<string, unknown>).type,
-        "geojson",
-      );
+      assert.equal((sources.get(`source-${id}`) as Record<string, unknown>).type, "geojson");
     } finally {
       unregisterGeoJsonVtSource(id);
     }

@@ -42,9 +42,7 @@ export function useUiProfileBootstrap(): {
 } {
   const { plugins } = usePluginRegistry();
   const adminChecked = useBootstrapStore((state) => state.adminChecked);
-  const uiProfile = useDesktopSettingsStore(
-    (state) => state.desktopSettings.uiProfile,
-  );
+  const uiProfile = useDesktopSettingsStore((state) => state.desktopSettings.uiProfile);
 
   // Suppress the first-launch onboarding wizard when the app is opened as an
   // embed/deep link (see `shouldSuppressOnboarding`). Computed once: the
@@ -95,17 +93,11 @@ export function useUiProfileBootstrap(): {
   // explicit entries, and a custom selection (level === null) is left untouched.
   useEffect(() => {
     if (!adminChecked) return;
-    const { uiProfile: profile } =
-      useDesktopSettingsStore.getState().desktopSettings;
+    const { uiProfile: profile } = useDesktopSettingsStore.getState().desktopSettings;
     if (!profile.enabled || profile.level === null) return;
 
-    const { hiddenPlugins } = presetHiddenSets(
-      profile.level,
-      toggleablePluginIds(plugins),
-    );
-    const missing = hiddenPlugins.filter(
-      (id) => !profile.hiddenPlugins.includes(id),
-    );
+    const { hiddenPlugins } = presetHiddenSets(profile.level, toggleablePluginIds(plugins));
+    const missing = hiddenPlugins.filter((id) => !profile.hiddenPlugins.includes(id));
     if (missing.length === 0) return;
 
     const current = useDesktopSettingsStore.getState().desktopSettings;
@@ -121,10 +113,7 @@ export function useUiProfileBootstrap(): {
   // Derived from store state so completing/dismissing onboarding (which sets
   // `onboarded`) hides the wizard without extra local state.
   const showOnboarding =
-    adminChecked &&
-    !uiProfile.onboarded &&
-    !uiProfile.locked &&
-    !suppressOnboarding;
+    adminChecked && !uiProfile.onboarded && !uiProfile.locked && !suppressOnboarding;
 
   // Marks onboarding complete when the wizard is dismissed without a choice
   // (Escape/overlay). The wizard's own buttons set `onboarded` first, so this is

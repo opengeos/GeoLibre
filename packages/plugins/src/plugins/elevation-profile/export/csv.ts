@@ -4,8 +4,8 @@
  * into a downloadable Blob.
  */
 
-import type { LngLat } from '../elevation/geometry';
-import type { ProfilePoint } from '../chart/profileChart';
+import type { LngLat } from "../elevation/geometry";
+import type { ProfilePoint } from "../chart/profileChart";
 
 const round = (value: number): number => Math.round(value * 100) / 100;
 
@@ -21,12 +21,12 @@ const round = (value: number): number => Math.round(value * 100) / 100;
  * @returns The CSV document as a single string
  */
 export function profileToCsv(points: ProfilePoint[], coords: LngLat[]): string {
-  const header = 'index,longitude,latitude,distance_m,elevation_m';
+  const header = "index,longitude,latitude,distance_m,elevation_m";
   const rows = points.map((point, i) => {
     const coord = coords[i];
-    const longitude = coord ? round(coord[0]) : '';
-    const latitude = coord ? round(coord[1]) : '';
+    const longitude = coord ? round(coord[0]) : "";
+    const latitude = coord ? round(coord[1]) : "";
     return `${i},${longitude},${latitude},${round(point.distance)},${round(point.elevation)}`;
   });
-  return [header, ...rows].join('\n');
+  return [header, ...rows].join("\n");
 }

@@ -68,9 +68,7 @@ export default {
       for (let attempt = 0; attempt < 5; attempt++) {
         const sessionId = randomCode();
         const hostToken = randomToken();
-        const stub = env.COLLAB_SESSION.get(
-          env.COLLAB_SESSION.idFromName(sessionId),
-        );
+        const stub = env.COLLAB_SESSION.get(env.COLLAB_SESSION.idFromName(sessionId));
         const initRes = await stub.fetch("https://collab/init", {
           method: "POST",
           body: JSON.stringify({ mode, hostToken }),
@@ -82,19 +80,14 @@ export default {
           return json({ sessionId, hostToken, mode });
         }
       }
-      return json(
-        { error: "Could not allocate a session code. Please try again." },
-        503,
-      );
+      return json({ error: "Could not allocate a session code. Please try again." }, 503);
     }
 
     // Join a session over WebSocket: /sessions/:id/ws
     const wsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/ws$/);
     if (wsMatch && request.method === "GET") {
       const sessionId = wsMatch[1];
-      const stub = env.COLLAB_SESSION.get(
-        env.COLLAB_SESSION.idFromName(sessionId),
-      );
+      const stub = env.COLLAB_SESSION.get(env.COLLAB_SESSION.idFromName(sessionId));
       // Rewrite to the actor's internal /ws path, preserving the upgrade
       // headers and method by copying them from the incoming request.
       return stub.fetch(new Request("https://collab/ws", request));

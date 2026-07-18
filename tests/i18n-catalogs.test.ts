@@ -66,11 +66,7 @@ describe("i18n catalogs", () => {
       const extra = leafKeys(loadCatalog(code)).filter(
         (k) => !enBaseKeys.has(normalizePluralKey(k)),
       );
-      assert.deepEqual(
-        extra,
-        [],
-        `${code}.json has keys absent from en.json: ${extra.join(", ")}`,
-      );
+      assert.deepEqual(extra, [], `${code}.json has keys absent from en.json: ${extra.join(", ")}`);
     });
   }
 

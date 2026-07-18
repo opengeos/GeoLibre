@@ -1,12 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@geolibre/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { Database } from "lucide-react";
 import { useCallback, useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -118,12 +112,8 @@ export function AddDataDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const martin = useMartinConnection();
 
-  const title = kind
-    ? t(`addData.kind.${KIND_I18N_KEY[kind]}.label`)
-    : t("addData.title");
-  const description = kind
-    ? t(`addData.kind.${KIND_I18N_KEY[kind]}.description`)
-    : "";
+  const title = kind ? t(`addData.kind.${KIND_I18N_KEY[kind]}.label`) : t("addData.title");
+  const description = kind ? t(`addData.kind.${KIND_I18N_KEY[kind]}.description`) : "";
 
   const closeDialog = useCallback(() => {
     martin.stopTransient();

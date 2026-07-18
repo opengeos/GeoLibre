@@ -42,10 +42,7 @@ describe("htmlToPlainText", () => {
   });
 
   it("turns block tags and <br> into line breaks", () => {
-    assert.equal(
-      htmlToPlainText("<p>One</p><p>Two</p>line<br>break"),
-      "One\nTwo\nline\nbreak",
-    );
+    assert.equal(htmlToPlainText("<p>One</p><p>Two</p>line<br>break"), "One\nTwo\nline\nbreak");
   });
 
   it("collapses runs of whitespace", () => {
@@ -99,10 +96,7 @@ describe("buildStoryMapHandoutPdf", () => {
   });
 
   it("emits one page per chapter", () => {
-    const one = buildStoryMapHandoutPdf(
-      [chapter()],
-      opts({ orientation: "portrait" }),
-    );
+    const one = buildStoryMapHandoutPdf([chapter()], opts({ orientation: "portrait" }));
     const three = buildStoryMapHandoutPdf(
       [chapter(), chapter(), chapter()],
       opts({ paperSize: "letter", title: "T", footer: "F" }),
@@ -137,10 +131,7 @@ describe("buildStoryMapHandoutPdf", () => {
       [chapter({ photo: { data: PNG_2X2, width: 400, height: 300 } })],
       opts({ title: "T", footer: "F" }),
     );
-    const withoutPhoto = buildStoryMapHandoutPdf(
-      [chapter()],
-      opts({ title: "T", footer: "F" }),
-    );
+    const withoutPhoto = buildStoryMapHandoutPdf([chapter()], opts({ title: "T", footer: "F" }));
     // The photo page embeds a second image, so its byte stream is larger.
     assert.ok(withPhoto.length > withoutPhoto.length);
   });

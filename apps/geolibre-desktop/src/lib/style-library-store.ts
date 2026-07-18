@@ -26,17 +26,14 @@ function openDatabase(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
-      reject(
-        request.error ?? new Error("Could not open the style library database."),
-      );
+      reject(request.error ?? new Error("Could not open the style library database."));
   });
 }
 
 function promisifyRequest<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(request.error ?? new Error("Style library request failed."));
+    request.onerror = () => reject(request.error ?? new Error("Style library request failed."));
   });
 }
 
@@ -53,9 +50,7 @@ export async function loadStyleLibraryEntries(): Promise<StyleLibraryEntry[]> {
   try {
     const transaction = db.transaction(STORE_NAME, "readonly");
     return await promisifyRequest(
-      transaction.objectStore(STORE_NAME).getAll() as IDBRequest<
-        StyleLibraryEntry[]
-      >,
+      transaction.objectStore(STORE_NAME).getAll() as IDBRequest<StyleLibraryEntry[]>,
     );
   } finally {
     db.close();
@@ -77,18 +72,14 @@ let writeQueue: Promise<void> = Promise.resolve();
  *
  * @param entries - The complete app-level library to persist.
  */
-export function persistStyleLibraryEntries(
-  entries: StyleLibraryEntry[],
-): Promise<void> {
+export function persistStyleLibraryEntries(entries: StyleLibraryEntry[]): Promise<void> {
   const run = () => writeStyleLibraryEntries(entries);
   const result = writeQueue.then(run, run);
   writeQueue = result.catch(() => {});
   return result;
 }
 
-async function writeStyleLibraryEntries(
-  entries: StyleLibraryEntry[],
-): Promise<void> {
+async function writeStyleLibraryEntries(entries: StyleLibraryEntry[]): Promise<void> {
   if (!styleLibraryStorageAvailable()) return;
   const db = await openDatabase();
   try {
@@ -101,13 +92,9 @@ async function writeStyleLibraryEntries(
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () =>
-        reject(
-          transaction.error ?? new Error("Style library request failed."),
-        );
+        reject(transaction.error ?? new Error("Style library request failed."));
       transaction.onabort = () =>
-        reject(
-          transaction.error ?? new Error("Style library write was aborted."),
-        );
+        reject(transaction.error ?? new Error("Style library write was aborted."));
     });
   } finally {
     db.close();

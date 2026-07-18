@@ -75,11 +75,7 @@ function almostEqual(a: unknown, b: unknown, tol: number): boolean {
     const bk = Object.keys(b as object);
     if (ak.length !== bk.length || !ak.every((k) => bk.includes(k))) return false;
     return ak.every((k) =>
-      almostEqual(
-        (a as Record<string, unknown>)[k],
-        (b as Record<string, unknown>)[k],
-        tol,
-      ),
+      almostEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], tol),
     );
   }
   return a === b;
@@ -149,11 +145,7 @@ function assertMatch(name: string, result: FeatureCollection, expect: Expectatio
 
   if (expect.geometryTypes != null) {
     const actual = features.map((f) => f.geometry?.type ?? "null").sort();
-    assert.deepEqual(
-      actual,
-      [...expect.geometryTypes].sort(),
-      `${name}: geometryTypes mismatch`,
-    );
+    assert.deepEqual(actual, [...expect.geometryTypes].sort(), `${name}: geometryTypes mismatch`);
   }
 
   if (expect.properties != null) {
@@ -165,11 +157,7 @@ function assertMatch(name: string, result: FeatureCollection, expect: Expectatio
   }
 
   if (expect.geometry != null) {
-    assert.equal(
-      features.length,
-      expect.geometry.length,
-      `${name}: geometry length mismatch`,
-    );
+    assert.equal(features.length, expect.geometry.length, `${name}: geometry length mismatch`);
     expect.geometry.forEach((geom, i) => {
       assert.ok(
         geometriesEqual(features[i].geometry, geom, tol),

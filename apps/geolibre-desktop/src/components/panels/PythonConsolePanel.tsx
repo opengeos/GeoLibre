@@ -30,10 +30,7 @@ import {
   runConsoleCode,
 } from "../../lib/pyodide/pyodide-console";
 import { usePyCompletion } from "../../lib/pyodide/usePyCompletion";
-import {
-  PANEL_RESIZE_END_EVENT,
-  PANEL_RESIZE_START_EVENT,
-} from "../../lib/panel-resize";
+import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 import { PythonEditorPane } from "./PythonEditorPane";
 
 const DEFAULT_CONSOLE_HEIGHT = 240;
@@ -64,9 +61,7 @@ interface PythonConsolePanelProps {
  * @param mapControllerRef - Ref to the live map controller, read lazily by the
  *   Pyodide `geolibre` facade so Python can drive the current map.
  */
-export function PythonConsolePanel({
-  mapControllerRef,
-}: PythonConsolePanelProps) {
+export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps) {
   const { t } = useTranslation();
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
 
@@ -100,10 +95,7 @@ export function PythonConsolePanel({
   const [status, setStatus] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const deps = useMemo(
-    () => consoleDeps(() => mapControllerRef.current),
-    [mapControllerRef],
-  );
+  const deps = useMemo(() => consoleDeps(() => mapControllerRef.current), [mapControllerRef]);
 
   const completion = usePyCompletion({
     textareaRef: consoleInputRef,
@@ -129,11 +121,7 @@ export function PythonConsolePanel({
       .catch((error: unknown) => {
         if (cancelled) return;
         setStatus(null);
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : t("pythonConsole.loadFailed"),
-        );
+        setLoadError(error instanceof Error ? error.message : t("pythonConsole.loadFailed"));
       });
     return () => {
       cancelled = true;
@@ -231,9 +219,7 @@ export function PythonConsolePanel({
       }
     }
     const text =
-      historyIndexRef.current === null
-        ? historyDraftRef.current
-        : cmds[historyIndexRef.current];
+      historyIndexRef.current === null ? historyDraftRef.current : cmds[historyIndexRef.current];
     historyCaretRef.current = text.length;
     setCode(text);
     return true;
@@ -256,9 +242,7 @@ export function PythonConsolePanel({
     }
   };
 
-  const onConsoleChange = (
-    event: ReactChangeEvent<HTMLTextAreaElement>,
-  ) => {
+  const onConsoleChange = (event: ReactChangeEvent<HTMLTextAreaElement>) => {
     setCode(event.target.value);
     historyIndexRef.current = null;
     completion.close();
@@ -345,10 +329,7 @@ export function PythonConsolePanel({
       const raw = isRtl
         ? (moveEvent.clientX - rect.left) / rect.width
         : (rect.right - moveEvent.clientX) / rect.width;
-      nextFraction = Math.min(
-        MAX_EDITOR_FRACTION,
-        Math.max(MIN_EDITOR_FRACTION, raw),
-      );
+      nextFraction = Math.min(MAX_EDITOR_FRACTION, Math.max(MIN_EDITOR_FRACTION, raw));
       // Throttle to one DOM write per frame; commit to state only on mouseup.
       if (frame !== null) return;
       frame = window.requestAnimationFrame(() => {
@@ -420,11 +401,7 @@ export function PythonConsolePanel({
             variant={editorVisible ? "secondary" : "ghost"}
             size="icon"
             className="h-8 w-8"
-            title={
-              editorVisible
-                ? t("pythonConsole.hideEditor")
-                : t("pythonConsole.showEditor")
-            }
+            title={editorVisible ? t("pythonConsole.hideEditor") : t("pythonConsole.showEditor")}
             aria-pressed={editorVisible}
             onClick={() => setEditorVisible((v) => !v)}
           >
@@ -447,20 +424,12 @@ export function PythonConsolePanel({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            title={
-              collapsed
-                ? t("pythonConsole.expand")
-                : t("pythonConsole.collapse")
-            }
+            title={collapsed ? t("pythonConsole.expand") : t("pythonConsole.collapse")}
             aria-expanded={!collapsed}
             aria-controls="python-console-body"
             onClick={() => setCollapsed((v) => !v)}
           >
-            {collapsed ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
+            {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
           <Button
             variant="ghost"

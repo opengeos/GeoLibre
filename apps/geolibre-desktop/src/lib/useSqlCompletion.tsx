@@ -8,10 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  sqlCompletionCandidates,
-  wordPrefixAt,
-} from "./sql-completion";
+import { sqlCompletionCandidates, wordPrefixAt } from "./sql-completion";
 import type { SqlWorkspaceTableColumns } from "./sql-workspace";
 
 interface CompletionState {
@@ -93,8 +90,7 @@ export function useSqlCompletion({
     if (ta) ta.setSelectionRange(pos, pos);
   }, [sql, textareaRef]);
 
-  const close = () =>
-    setCompletion((c) => (c.open ? { ...c, open: false } : c));
+  const close = () => setCompletion((c) => (c.open ? { ...c, open: false } : c));
 
   const applyCompletion = (candidate: string, start: number, end: number) => {
     // Clamp against the current `sql` in case it changed since the candidates
@@ -121,9 +117,7 @@ export function useSqlCompletion({
     }
   };
 
-  const tryKey = (
-    event: ReactKeyboardEvent<HTMLTextAreaElement>,
-  ): boolean => {
+  const tryKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (completion.open) {
       const n = completion.candidates.length;
       if (event.key === "ArrowDown") {
@@ -142,20 +136,13 @@ export function useSqlCompletion({
       // left alone so it inserts a newline, and Shift+Tab so a keyboard user can
       // still tab backward out of the editor.
       if (
-        (event.key === "Enter" &&
-          !event.ctrlKey &&
-          !event.metaKey &&
-          !event.shiftKey) ||
+        (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey) ||
         (event.key === "Tab" && !event.shiftKey)
       ) {
         event.preventDefault();
         const ta = textareaRef.current;
         const cursor = ta?.selectionStart ?? completion.start;
-        applyCompletion(
-          completion.candidates[completion.index]!,
-          completion.start,
-          cursor,
-        );
+        applyCompletion(completion.candidates[completion.index]!, completion.start, cursor);
         return true;
       }
       if (event.key === "Escape") {
@@ -205,9 +192,7 @@ export function useSqlCompletion({
           role="option"
           aria-selected={i === completion.index}
           className={`block w-full cursor-pointer px-3 py-1 text-start font-mono text-xs ${
-            i === completion.index
-              ? "bg-accent text-accent-foreground"
-              : "hover:bg-accent/50"
+            i === completion.index ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
           }`}
           // Keep focus in the textarea so the caret update applies.
           onMouseDown={(event) => {
@@ -230,9 +215,7 @@ export function useSqlCompletion({
     "aria-haspopup": "listbox",
     "aria-expanded": completion.open,
     "aria-controls": completion.open ? listboxId : undefined,
-    "aria-activedescendant": completion.open
-      ? optionId(completion.index)
-      : undefined,
+    "aria-activedescendant": completion.open ? optionId(completion.index) : undefined,
   };
 
   return { tryKey, dropdown, isOpen: completion.open, close, inputProps };

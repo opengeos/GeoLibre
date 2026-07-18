@@ -55,9 +55,7 @@ export function HelpMenu({
   // The Microsoft Store build strips the "Check for updates" item entirely so the
   // app only updates through the Store (policy 10.2.5); other builds keep it.
   const show = (id: string) =>
-    id === "help.checkForUpdates" && IS_STORE_BUILD
-      ? false
-      : isMenuItemVisible(uiProfile, id);
+    id === "help.checkForUpdates" && IS_STORE_BUILD ? false : isMenuItemVisible(uiProfile, id);
 
   return (
     <DropdownMenu>

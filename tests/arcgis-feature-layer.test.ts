@@ -198,8 +198,7 @@ describe("addArcGISLayer (feature layer)", () => {
   });
 
   it("resolves a portal-item feature layer through the portal item URL", async () => {
-    const serviceUrl =
-      "https://example.com/arcgis/rest/services/Cities/FeatureServer/0";
+    const serviceUrl = "https://example.com/arcgis/rest/services/Cities/FeatureServer/0";
     const fetchUrls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();

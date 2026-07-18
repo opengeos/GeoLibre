@@ -34,11 +34,7 @@ const WEB_MERCATOR_WORLD_SIZE = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS;
 const MAPLIBRE_TILE_SIZE = 512;
 const WMS_IDENTIFY_QUERY_SIZE = 101;
 const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
-const WMS_IDENTIFY_INFO_FORMATS = [
-  "application/json",
-  "text/html",
-  "text/plain",
-];
+const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -98,8 +94,7 @@ function createIdentifyPopupElement(
 
   const appendRow = (key: string, value: unknown) => {
     const row = document.createElement("div");
-    row.className =
-      "grid grid-cols-[minmax(5rem,0.45fr)_1fr] gap-2 border-t py-1";
+    row.className = "grid grid-cols-[minmax(5rem,0.45fr)_1fr] gap-2 border-t py-1";
 
     const keyCell = document.createElement("div");
     keyCell.className = "break-words font-medium text-muted-foreground";
@@ -111,10 +106,7 @@ function createIdentifyPopupElement(
     // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
     // Match base64 raster images only, excluding SVG (which can carry scripts)
     // so an untrusted GeoJSON value can't smuggle one in.
-    if (
-      typeof value === "string" &&
-      /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)
-    ) {
+    if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
       const image = document.createElement("img");
       image.src = value;
       image.alt = key;
@@ -136,9 +128,7 @@ function createIdentifyPopupElement(
   // show a second copy of the same photo in the same small box. Filter before
   // the empty-state check so a feature whose only property is `photo_full` still
   // reports "No attributes" rather than rendering an empty panel.
-  const entries = Object.entries(properties).filter(
-    ([key]) => key !== PHOTO_FULL_KEY,
-  );
+  const entries = Object.entries(properties).filter(([key]) => key !== PHOTO_FULL_KEY);
   if (entries.length === 0 && featureId == null) {
     const empty = document.createElement("div");
     empty.className = "text-muted-foreground";
@@ -151,10 +141,7 @@ function createIdentifyPopupElement(
   return root;
 }
 
-function createIdentifyMessagePopupElement(
-  layerName: string,
-  message: string,
-): HTMLElement {
+function createIdentifyMessagePopupElement(layerName: string, message: string): HTMLElement {
   return createIdentifyPopupElement(layerName, { status: message });
 }
 
@@ -168,14 +155,9 @@ const PHOTO_THUMBNAIL_KEY = PHOTO_PROPERTY;
 const PHOTO_FULL_KEY = PHOTO_FULL_PROPERTY;
 
 /** Return the value at `key` when it is an inline raster image data URL. */
-function imageDataUrlAt(
-  properties: Record<string, unknown>,
-  key: string,
-): string | null {
+function imageDataUrlAt(properties: Record<string, unknown>, key: string): string | null {
   const value = properties[key];
-  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)
-    ? value
-    : null;
+  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value) ? value : null;
 }
 
 /**
@@ -187,11 +169,7 @@ function imageDataUrlAt(
  */
 function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
   for (const [key, value] of Object.entries(properties)) {
-    if (
-      key !== PHOTO_FULL_KEY &&
-      typeof value === "string" &&
-      INLINE_IMAGE_DATA_URL.test(value)
-    ) {
+    if (key !== PHOTO_FULL_KEY && typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
       return value;
     }
   }
@@ -256,8 +234,7 @@ function openPhotoFullscreen(src: string, alt: string): void {
   let fitToNative = 1;
   let maxZoom = PHOTO_MAX_ZOOM_FRACTION;
 
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, value));
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
   const applyTransform = () => {
     // Bound the pan so the image can't be dragged fully off-screen: the image is
@@ -281,9 +258,7 @@ function openPhotoFullscreen(src: string, alt: string): void {
     // clientWidth is the fit-rendered width (max-width/height:100%, aspect kept);
     // dividing by naturalWidth gives how much of native the fit view shows.
     fitToNative =
-      image.naturalWidth > 0 && image.clientWidth > 0
-        ? image.clientWidth / image.naturalWidth
-        : 1;
+      image.naturalWidth > 0 && image.clientWidth > 0 ? image.clientWidth / image.naturalWidth : 1;
     // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native. The floor of 1
     // only guards the degenerate case where the image is somehow larger than the
     // fit (fitToNative > cap) so zoom never drops below the fit; in the normal
@@ -463,18 +438,14 @@ function openPhotoFullscreen(src: string, alt: string): void {
  * @param properties - The clicked feature's properties.
  * @returns The popup's DOM content element.
  */
-function createPhotoPopupElement(
-  properties: Record<string, unknown>,
-): HTMLElement {
+function createPhotoPopupElement(properties: Record<string, unknown>): HTMLElement {
   const root = document.createElement("div");
   root.className = "geolibre-photo-popup";
 
   // The popup shows the light thumbnail; the fullscreen viewer prefers the
   // embedded full-resolution image (falling back to the thumbnail when no
   // original was embedded, e.g. a format that can't be shown at full size).
-  const thumbnail =
-    imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ??
-    findPhotoDataUrl(properties);
+  const thumbnail = imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ?? findPhotoDataUrl(properties);
   if (thumbnail) {
     // Prefer the embedded full-resolution image, falling back to the thumbnail
     // when no original was embedded (TIFF/HEIC, mislabeled bytes, or an original
@@ -540,10 +511,7 @@ function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
   ];
 }
 
-function findFeatureId(
-  layer: GeoLibreLayer,
-  feature: maplibregl.MapGeoJSONFeature,
-): string | null {
+function findFeatureId(layer: GeoLibreLayer, feature: maplibregl.MapGeoJSONFeature): string | null {
   if (feature.id != null) return String(feature.id);
   if (!layer.geojson) return null;
 
@@ -551,9 +519,7 @@ function findFeatureId(
   const propertyKeys = Object.keys(properties);
   const index = layer.geojson.features.findIndex((candidate) => {
     const candidateProperties = candidate.properties ?? {};
-    return propertyKeys.every(
-      (key) => candidateProperties[key] === properties[key],
-    );
+    return propertyKeys.every((key) => candidateProperties[key] === properties[key]);
   });
 
   return index >= 0 ? String(layer.geojson.features[index].id ?? index) : null;
@@ -580,18 +546,14 @@ function resolveHighlightIds(state: {
 function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
   return typeof window === "undefined"
     ? undefined
-    : (window as Window & { __GEOLIBRE_DUCKDB__?: GeoLibreDuckDBBridge })
-        .__GEOLIBRE_DUCKDB__;
+    : (window as Window & { __GEOLIBRE_DUCKDB__?: GeoLibreDuckDBBridge }).__GEOLIBRE_DUCKDB__;
 }
 
 function stringSource(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function appendWmsQuery(
-  endpoint: string,
-  params: Array<[string, string]>,
-): string {
+function appendWmsQuery(endpoint: string, params: Array<[string, string]>): string {
   // Prefer URL parsing so our control parameters override any duplicates the
   // endpoint already carries (e.g. a pasted GetMap URL) and land before any
   // fragment, which the browser would otherwise strip along with the query.
@@ -617,24 +579,17 @@ function appendWmsQuery(
         : "&"
       : "?";
     const query = params
-      .map(
-        ([key, value]) =>
-          `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
-      )
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
       .join("&");
     return `${base}${separator}${query}`;
   }
 }
 
 function lngLatToWebMercator(lng: number, lat: number): [number, number] {
-  const clampedLat = Math.max(
-    -WEB_MERCATOR_MAX_LATITUDE,
-    Math.min(WEB_MERCATOR_MAX_LATITUDE, lat),
-  );
-  const x = WEB_MERCATOR_EARTH_RADIUS * (lng * Math.PI) / 180;
+  const clampedLat = Math.max(-WEB_MERCATOR_MAX_LATITUDE, Math.min(WEB_MERCATOR_MAX_LATITUDE, lat));
+  const x = (WEB_MERCATOR_EARTH_RADIUS * (lng * Math.PI)) / 180;
   const y =
-    WEB_MERCATOR_EARTH_RADIUS *
-    Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI) / 360));
+    WEB_MERCATOR_EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI) / 360));
   return [x, y];
 }
 
@@ -643,19 +598,10 @@ function wmsIdentifyResolution(zoom: number): number {
   return WEB_MERCATOR_WORLD_SIZE / (MAPLIBRE_TILE_SIZE * 2 ** normalizedZoom);
 }
 
-function wmsIdentifyBbox3857(
-  map: maplibregl.Map,
-  lngLat: maplibregl.LngLat,
-): string {
+function wmsIdentifyBbox3857(map: maplibregl.Map, lngLat: maplibregl.LngLat): string {
   const [centerX, centerY] = lngLatToWebMercator(lngLat.lng, lngLat.lat);
-  const halfSpan =
-    (WMS_IDENTIFY_QUERY_SIZE * wmsIdentifyResolution(map.getZoom())) / 2;
-  return [
-    centerX - halfSpan,
-    centerY - halfSpan,
-    centerX + halfSpan,
-    centerY + halfSpan,
-  ].join(",");
+  const halfSpan = (WMS_IDENTIFY_QUERY_SIZE * wmsIdentifyResolution(map.getZoom())) / 2;
+  return [centerX - halfSpan, centerY - halfSpan, centerX + halfSpan, centerY + halfSpan].join(",");
 }
 
 function isViteDevServer(): boolean {
@@ -674,9 +620,7 @@ function isViteDevServer(): boolean {
 // server lacking CORS headers would fail if this app were ever hosted as a
 // plain web page; such a deployment would need its own proxy.
 function proxyWmsRequestUrl(url: string): string {
-  return isViteDevServer()
-    ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+  return isViteDevServer() ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
 }
 
 function createWmsGetFeatureInfoUrl(
@@ -756,10 +700,7 @@ function parseWmsJsonProperties(value: unknown): {
       typeof first === "object" &&
       !Array.isArray(first) &&
       !("properties" in first) &&
-      !(
-        "features" in first &&
-        Array.isArray((first as Record<string, unknown>).features)
-      )
+      !("features" in first && Array.isArray((first as Record<string, unknown>).features))
     ) {
       return parseWmsJsonProperties(first);
     }
@@ -783,8 +724,7 @@ function parseWmsJsonProperties(value: unknown): {
         ? (feature.properties as Record<string, unknown>)
         : {};
     const featureId =
-      "id" in feature &&
-      (typeof feature.id === "string" || typeof feature.id === "number")
+      "id" in feature && (typeof feature.id === "string" || typeof feature.id === "number")
         ? feature.id
         : undefined;
     return { featureId, properties };
@@ -807,17 +747,14 @@ async function fetchWmsIdentifyProperties(
   // Honor an explicitly configured INFO_FORMAT so we issue a single request
   // instead of probing JSON/HTML/plain-text in sequence.
   const configuredFormat = stringSource(layer.source.infoFormat);
-  const infoFormats = configuredFormat
-    ? [configuredFormat]
-    : WMS_IDENTIFY_INFO_FORMATS;
+  const infoFormats = configuredFormat ? [configuredFormat] : WMS_IDENTIFY_INFO_FORMATS;
 
   for (const infoFormat of infoFormats) {
     const targetUrl = createWmsGetFeatureInfoUrl(layer, map, event, infoFormat);
     if (!targetUrl) return null;
 
     const response = await fetch(proxyWmsRequestUrl(targetUrl), { signal });
-    const contentType =
-      response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
     // Response.text() cannot take a signal, so bail out as soon as the read
     // resolves if the request was aborted meanwhile, skipping parsing.
     const text = await response.text();
@@ -825,8 +762,7 @@ async function fetchWmsIdentifyProperties(
     if (!response.ok) {
       // HTTP/2 drops the reason phrase, so statusText is often "". Fall back to
       // the status code so a failed request never surfaces as "No attributes".
-      fallbackText =
-        normalizeText(text) || response.statusText || `HTTP ${response.status}`;
+      fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
       continue;
     }
 
@@ -876,34 +812,21 @@ async function fetchWmsIdentifyProperties(
 }
 
 function isAbortError(error: unknown): boolean {
-  return (
-    (error instanceof DOMException || error instanceof Error) &&
-    error.name === "AbortError"
-  );
+  return (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
-function stringProperty(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
+function stringProperty(record: Record<string, unknown> | null, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function numberProperty(
-  record: Record<string, unknown> | null,
-  key: string,
-): number | undefined {
+function numberProperty(record: Record<string, unknown> | null, key: string): number | undefined {
   const value = record?.[key];
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function errorMessage(error: unknown): string {
@@ -920,11 +843,7 @@ function stringifyDiagnosticDetail(value: unknown): string | undefined {
       (key, nestedValue: unknown) => {
         // Only clamp object-valued targets (Map, XHR, DOM nodes) that risk
         // circular or huge output; keep string targets such as tile URLs.
-        if (
-          key === "target" &&
-          typeof nestedValue === "object" &&
-          nestedValue !== null
-        ) {
+        if (key === "target" && typeof nestedValue === "object" && nestedValue !== null) {
           return "[Map]";
         }
         if (typeof nestedValue !== "object" || nestedValue === null) {
@@ -944,15 +863,12 @@ function stringifyDiagnosticDetail(value: unknown): string | undefined {
 function mapErrorDiagnosticEvent(event: maplibregl.ErrorEvent): MapDiagnosticEvent {
   const eventRecord = recordFromUnknown(event);
   const errorRecord = recordFromUnknown(event.error);
-  const source =
-    stringProperty(eventRecord, "sourceId") ??
-    stringProperty(errorRecord, "sourceId");
+  const source = stringProperty(eventRecord, "sourceId") ?? stringProperty(errorRecord, "sourceId");
   const url =
     stringProperty(eventRecord, "url") ??
     stringProperty(errorRecord, "url") ??
     stringProperty(errorRecord, "resource");
-  const status =
-    numberProperty(eventRecord, "status") ?? numberProperty(errorRecord, "status");
+  const status = numberProperty(eventRecord, "status") ?? numberProperty(errorRecord, "status");
 
   return {
     message: errorMessage(event.error),
@@ -1137,9 +1053,7 @@ export const MapCanvas = memo(function MapCanvas({
     prevBasemap.current = basemapStyleUrl;
     map.once("style.load", () => {
       const state = useAppStore.getState();
-      controller.current?.waitAndSyncLayers(
-        applyGroupEffects(state.layers, state.layerGroups),
-      );
+      controller.current?.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       controller.current?.setBasemapVisible(state.basemapVisible);
       controller.current?.setBasemapOpacity(state.basemapOpacity);
       controller.current?.highlightFeature(
@@ -1167,10 +1081,7 @@ export const MapCanvas = memo(function MapCanvas({
   // map sync keeps treating every layer independently. This also re-runs when
   // only a group's visibility/opacity changes (the raw `layers` array is then
   // unchanged), because `renderLayers` depends on `layerGroups`.
-  const renderLayers = useMemo(
-    () => applyGroupEffects(layers, layerGroups),
-    [layers, layerGroups],
-  );
+  const renderLayers = useMemo(() => applyGroupEffects(layers, layerGroups), [layers, layerGroups]);
 
   useEffect(() => {
     controller.current?.waitAndSyncLayers(renderLayers);
@@ -1205,9 +1116,7 @@ export const MapCanvas = memo(function MapCanvas({
         ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
         : null;
     const shouldFit = Boolean(
-      zoomToSelectedFeature &&
-      nextKey &&
-      nextKey !== previousSelectedFeatureKey.current,
+      zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey.current,
     );
     previousSelectedFeatureKey.current = nextKey;
     controller.current?.highlightFeature(layer, highlightIds, {
@@ -1216,27 +1125,15 @@ export const MapCanvas = memo(function MapCanvas({
     if (layer && isDuckDBQueryLayer(layer)) {
       duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);
       if (shouldFit && selectedFeatureId) {
-        const bounds = duckDBBridge()?.getFeatureBounds?.(
-          layer.id,
-          selectedFeatureId,
-        );
+        const bounds = duckDBBridge()?.getFeatureBounds?.(layer.id, selectedFeatureId);
         if (bounds) controller.current?.fitBounds(bounds);
       }
       previousDuckDBSelectionLayerId.current = layer.id;
     } else if (previousDuckDBSelectionLayerId.current) {
-      duckDBBridge()?.setSelectedFeature?.(
-        previousDuckDBSelectionLayerId.current,
-        null,
-      );
+      duckDBBridge()?.setSelectedFeature?.(previousDuckDBSelectionLayerId.current, null);
       previousDuckDBSelectionLayerId.current = null;
     }
-  }, [
-    layers,
-    selectedLayerId,
-    selectedFeatureId,
-    selectedFeatureIds,
-    zoomToSelectedFeature,
-  ]);
+  }, [layers, selectedLayerId, selectedFeatureId, selectedFeatureIds, zoomToSelectedFeature]);
 
   useEffect(() => {
     const map = controller.current?.getMap();
@@ -1284,9 +1181,7 @@ export const MapCanvas = memo(function MapCanvas({
         const abortController = new AbortController();
         wmsIdentifyAbortController = abortController;
         selectFeature(null);
-        showIdentifyPopup(
-          createIdentifyMessagePopupElement(layer.name, "Loading..."),
-        );
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
         // Closing the loading popup (the × button) must cancel the in-flight
         // request so its result does not reopen a popup the user dismissed.
         // Track user dismissal with a flag rather than the abort signal: the
@@ -1305,12 +1200,7 @@ export const MapCanvas = memo(function MapCanvas({
         // showIdentifyPopup just assigned identifyPopup.current, so it is set.
         loadingPopup!.once("close", onLoadingClose);
 
-        void fetchWmsIdentifyProperties(
-          layer,
-          map,
-          event,
-          abortController.signal,
-        )
+        void fetchWmsIdentifyProperties(layer, map, event, abortController.signal)
           .then((result) => {
             if (userDismissed || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
@@ -1318,25 +1208,16 @@ export const MapCanvas = memo(function MapCanvas({
             // spuriously abort the request that just succeeded.
             loadingPopup?.off("close", onLoadingClose);
             showIdentifyPopup(
-              createIdentifyPopupElement(
-                layer.name,
-                result?.properties ?? {},
-                result?.featureId,
-              ),
+              createIdentifyPopupElement(layer.name, result?.properties ?? {}, result?.featureId),
             );
           })
           .catch((error: unknown) => {
-            if (userDismissed || isAbortError(error) || abortController.signal.aborted)
-              return;
+            if (userDismissed || isAbortError(error) || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
             loadingPopup?.off("close", onLoadingClose);
             const message =
-              error instanceof Error
-                ? error.message
-                : "The WMS GetFeatureInfo request failed.";
-            showIdentifyPopup(
-              createIdentifyMessagePopupElement(layer.name, message),
-            );
+              error instanceof Error ? error.message : "The WMS GetFeatureInfo request failed.";
+            showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
           });
         return;
       }
@@ -1353,18 +1234,12 @@ export const MapCanvas = memo(function MapCanvas({
 
         selectFeature(result.featureId);
         showIdentifyPopup(
-          createIdentifyPopupElement(
-            layer.name,
-            result.properties,
-            result.featureId,
-          ),
+          createIdentifyPopupElement(layer.name, result.properties, result.featureId),
         );
         return;
       }
 
-      const queryLayerIds = identifyStyleLayerIds(layer).filter((id) =>
-        map.getLayer(id),
-      );
+      const queryLayerIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
       if (queryLayerIds.length === 0) {
         clearIdentifyResult();
         return;
@@ -1382,11 +1257,7 @@ export const MapCanvas = memo(function MapCanvas({
       selectFeature(featureId);
 
       showIdentifyPopup(
-        createIdentifyPopupElement(
-          layer.name,
-          feature.properties ?? {},
-          featureId ?? feature.id,
-        ),
+        createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id),
       );
     };
 
@@ -1426,9 +1297,7 @@ export const MapCanvas = memo(function MapCanvas({
       // a large marker.
       const geometry = feature.geometry;
       const anchor =
-        geometry.type === "Point"
-          ? (geometry.coordinates as [number, number])
-          : event.lngLat;
+        geometry.type === "Point" ? (geometry.coordinates as [number, number]) : event.lngLat;
       removePhotoPopup();
       photoPopup.current = new maplibregl.Popup({
         className: "geolibre-photo-popup-root",
@@ -1502,19 +1371,7 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     controller.current?.applyView(mapView);
-  }, [
-    mapView.center[0],
-    mapView.center[1],
-    mapView.zoom,
-    mapView.bearing,
-    mapView.pitch,
-  ]);
+  }, [mapView.center[0], mapView.center[1], mapView.zoom, mapView.bearing, mapView.pitch]);
 
-  return (
-    <div
-      ref={containerRef}
-      className="h-full w-full"
-      data-testid="map-canvas"
-    />
-  );
+  return <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />;
 });

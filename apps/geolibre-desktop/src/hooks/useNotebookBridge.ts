@@ -65,16 +65,12 @@ export function useNotebookBridge(
     // Whether the notebook client has announced itself; gates outbound events.
     let connected = false;
 
-    const frameWindow = (): Window | null =>
-      iframeRef.current?.contentWindow ?? null;
+    const frameWindow = (): Window | null => iframeRef.current?.contentWindow ?? null;
 
     const reply = (requestId: string, ok: boolean, extra: object) => {
       const win = frameWindow();
       if (!win) return;
-      win.postMessage(
-        { type: "geolibre:result", requestId, ok, ...extra },
-        frameOrigin,
-      );
+      win.postMessage({ type: "geolibre:result", requestId, ok, ...extra }, frameOrigin);
     };
 
     const handleCommand = async (message: CommandMessage) => {
@@ -107,18 +103,13 @@ export function useNotebookBridge(
       const allowed = expectedOrigin();
       if (allowed && event.origin !== allowed) return;
       if (event.origin && event.origin !== "null") frameOrigin = event.origin;
-      const data = event.data as
-        | { type?: string; requestId?: unknown }
-        | null;
+      const data = event.data as { type?: string; requestId?: unknown } | null;
       if (!data || typeof data !== "object") return;
       if (data.type === "geolibre:notebook-ready") {
         connected = true;
         return;
       }
-      if (
-        data.type === "geolibre:command" &&
-        typeof data.requestId === "string"
-      ) {
+      if (data.type === "geolibre:command" && typeof data.requestId === "string") {
         void handleCommand(data as CommandMessage);
       }
     };
@@ -127,10 +118,7 @@ export function useNotebookBridge(
       if (!connected) return;
       const win = frameWindow();
       if (!win) return;
-      win.postMessage(
-        { type: "geolibre:event", event: eventName, payload },
-        frameOrigin,
-      );
+      win.postMessage({ type: "geolibre:event", event: eventName, payload }, frameOrigin);
     };
 
     window.addEventListener("message", handleMessage);

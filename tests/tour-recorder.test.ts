@@ -56,10 +56,7 @@ describe("estimateTourDurationMs", () => {
   it("counts only the hold for a single keyframe (no transition yet)", () => {
     // One keyframe has no successor to transition to, so its transition is
     // ignored, but its hold is still meaningful.
-    assert.equal(
-      estimateTourDurationMs([{ holdMs: 1000, transitionMs: 4000 }]),
-      1000,
-    );
+    assert.equal(estimateTourDurationMs([{ holdMs: 1000, transitionMs: 4000 }]), 1000);
   });
 
   it("sums every hold plus the transition out of all but the last keyframe", () => {
@@ -110,12 +107,18 @@ describe("generateTourKeyframesFromPath", () => {
     });
 
     assert.equal(keyframes.length, 3);
-    assert.deepEqual(keyframes.map((kf) => kf.center), [
-      [0, 0],
-      [5, 0],
-      [10, 0],
-    ]);
-    assert.deepEqual(keyframes.map((kf) => kf.bearing), [90, 90, 90]);
+    assert.deepEqual(
+      keyframes.map((kf) => kf.center),
+      [
+        [0, 0],
+        [5, 0],
+        [10, 0],
+      ],
+    );
+    assert.deepEqual(
+      keyframes.map((kf) => kf.bearing),
+      [90, 90, 90],
+    );
     assert.equal(keyframes[0].zoom, 12);
     assert.equal(keyframes[0].pitch, 45);
     assert.equal(keyframes[0].holdMs, 1000);
@@ -169,12 +172,18 @@ describe("generateTourKeyframesFromPath", () => {
     });
 
     assert.equal(keyframes.length, 3);
-    assert.deepEqual(keyframes.map((kf) => kf.center), [
-      [0, 0],
-      [0, 1],
-      [0, 2],
-    ]);
-    assert.deepEqual(keyframes.map((kf) => kf.bearing), [0, 0, 0]);
+    assert.deepEqual(
+      keyframes.map((kf) => kf.center),
+      [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ],
+    );
+    assert.deepEqual(
+      keyframes.map((kf) => kf.bearing),
+      [0, 0, 0],
+    );
     assert.equal(keyframes[0].zoom, 24);
     assert.equal(keyframes[0].pitch, 85);
     assert.equal(keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
@@ -248,10 +257,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
       }),
     );
     assert.equal(config.keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
-    assert.equal(
-      config.keyframes[0].transitionMs,
-      DEFAULT_SEGMENT_SECONDS * 1000,
-    );
+    assert.equal(config.keyframes[0].transitionMs, DEFAULT_SEGMENT_SECONDS * 1000);
   });
 
   it("clamps zoom/pitch and wraps bearing into MapLibre's supported ranges", () => {
@@ -332,19 +338,14 @@ describe("serializeTourConfig / parseTourConfig", () => {
         type: TOUR_CONFIG_TYPE,
         version: 1,
         fps: 30,
-        keyframes: [
-          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 9999 },
-        ],
+        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 9999 }],
       }),
     );
     assert.equal(config.keyframes.length, 1);
     // A lone keyframe is both first and last, so it inherits both implicit holds.
     assert.equal(config.keyframes[0].holdMs, START_HOLD_MS + END_HOLD_MS);
     // It has no successor, so the last-keyframe default transition is used.
-    assert.equal(
-      config.keyframes[0].transitionMs,
-      DEFAULT_SEGMENT_SECONDS * 1000,
-    );
+    assert.equal(config.keyframes[0].transitionMs, DEFAULT_SEGMENT_SECONDS * 1000);
   });
 
   it("reads a versionless file with mixed legacy/v2 fields as v2", () => {
@@ -368,10 +369,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
       }),
     );
     assert.equal(config.keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
-    assert.equal(
-      config.keyframes[0].transitionMs,
-      DEFAULT_SEGMENT_SECONDS * 1000,
-    );
+    assert.equal(config.keyframes[0].transitionMs, DEFAULT_SEGMENT_SECONDS * 1000);
     assert.equal(config.keyframes[1].holdMs, 3000);
     assert.equal(config.keyframes[1].transitionMs, 7000);
   });
@@ -422,9 +420,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
       transitionMs: 2000,
     }));
     assert.throws(() =>
-      parseTourConfig(
-        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 2, keyframes }),
-      ),
+      parseTourConfig(JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 2, keyframes })),
     );
   });
 
@@ -434,9 +430,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: 999,
-          keyframes: [
-            { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
-          ],
+          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 }],
         }),
       ),
     );
@@ -448,9 +442,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: "2",
-          keyframes: [
-            { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
-          ],
+          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 }],
         }),
       ),
     );
@@ -462,9 +454,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: 0,
-          keyframes: [
-            { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
-          ],
+          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 }],
         }),
       ),
     );
@@ -476,9 +466,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
         type: TOUR_CONFIG_TYPE,
         version: 2,
         fps: 1,
-        keyframes: [
-          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
-        ],
+        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 }],
       }),
     );
     assert.equal(config.fps, MIN_FPS);
@@ -493,16 +481,12 @@ describe("serializeTourConfig / parseTourConfig", () => {
   });
 
   it("rejects a file without the tour marker", () => {
-    assert.throws(() =>
-      parseTourConfig(JSON.stringify({ keyframes: [], fps: 30 })),
-    );
+    assert.throws(() => parseTourConfig(JSON.stringify({ keyframes: [], fps: 30 })));
   });
 
   it("rejects a tour with no keyframes", () => {
     assert.throws(() =>
-      parseTourConfig(
-        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 2, keyframes: [] }),
-      ),
+      parseTourConfig(JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 2, keyframes: [] })),
     );
   });
 
@@ -512,9 +496,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: 2,
-          keyframes: [
-            { center: [0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
-          ],
+          keyframes: [{ center: [0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 }],
         }),
       ),
     );

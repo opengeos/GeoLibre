@@ -32,9 +32,7 @@ router = APIRouter(prefix="/conversion", tags=["conversion"])
 logger = logging.getLogger(__name__)
 
 CONVERSION_RUN_TIMEOUT_SECS = 3600
-CONVERSION_PYTHON_VERSION = os.environ.get(
-    "GEOLIBRE_CONVERSION_PYTHON_VERSION", "3.12"
-)
+CONVERSION_PYTHON_VERSION = os.environ.get("GEOLIBRE_CONVERSION_PYTHON_VERSION", "3.12")
 # Whitespace-separated so a single requirement may carry a comma-joined version
 # range (e.g. "duckdb>=1.1.0,<2.0.0") without being split into two tokens.
 # rasterio + numpy already arrive transitively via rio-cogeo; they are listed
@@ -42,8 +40,7 @@ CONVERSION_PYTHON_VERSION = os.environ.get(
 # contourpy is added for the Contour tool.
 CONVERSION_RUNTIME_PACKAGES = os.environ.get(
     "GEOLIBRE_CONVERSION_PACKAGES",
-    "duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0 "
-    "rasterio>=1.3.0 numpy>=1.24 contourpy>=1.2.0",
+    "duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0 rasterio>=1.3.0 numpy>=1.24 contourpy>=1.2.0",
 ).split()
 
 VECTOR_COMPRESSIONS = {"zstd", "snappy", "gzip", "lz4", "uncompressed"}
@@ -93,6 +90,7 @@ def _output_extension(path: str) -> str:
     index = name.rfind(".")
     return name[index + 1 :].lower() if index >= 0 else ""
 
+
 COG_COMPRESSIONS = {"deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"}
 DEFAULT_COG_COMPRESSION = "deflate"
 
@@ -103,7 +101,7 @@ _RESULT_MARKER = "__GEOLIBRE_CONVERSION_RESULT__"
 # module, so this definition is interpolated into both _VECTOR_SCRIPT and
 # _VECTOR_TO_VECTOR_SCRIPT via the `{shapefile_field_warnings}` token (the
 # scripts use `.replace`, not f-strings, so the literal `{}` inside are safe).
-_SHAPEFILE_FIELD_WARNINGS_FN = '''
+_SHAPEFILE_FIELD_WARNINGS_FN = """
 def shapefile_field_warnings(column_names):
     # The Shapefile format caps field names at 10 characters and silently
     # truncates longer ones, which can also collapse distinct fields into one
@@ -125,7 +123,7 @@ def shapefile_field_warnings(column_names):
             + "; ".join(", ".join(group) for group in collisions)
         )
     return messages
-'''
+"""
 
 # Optional allowlist of directories that conversion inputs/outputs must live
 # under, set via GEOLIBRE_CONVERSION_ROOTS (os.pathsep-separated). Unset means
@@ -844,8 +842,7 @@ def _check_runtime_import(python_executable: str) -> None:
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeBootstrapError(
-            f"{python_executable}: import timed out after "
-            f"{RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
+            f"{python_executable}: import timed out after {RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
         ) from exc
     if completed.returncode != 0:
         detail = (
@@ -957,8 +954,7 @@ def _is_within_roots(path: Path) -> bool:
         return True
     resolved = path.resolve()
     return any(
-        resolved == Path(root) or resolved.is_relative_to(root)
-        for root in _CONVERSION_ROOTS
+        resolved == Path(root) or resolved.is_relative_to(root) for root in _CONVERSION_ROOTS
     )
 
 
@@ -983,9 +979,7 @@ def _validate_input_path(input_path: str) -> str:
         )
     is_gdb_directory = source.is_dir() and source.suffix.lower() == ".gdb"
     if not source.is_file() and not is_gdb_directory:
-        raise HTTPException(
-            status_code=400, detail=f"Input file not found: {input_path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Input file not found: {input_path}")
     return str(source.resolve())
 
 
@@ -1114,15 +1108,11 @@ def _run_conversion_job(
         finally:
             watchdog.cancel()
         if timed_out.is_set():
-            raise RuntimeError(
-                f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds"
-            )
+            raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
         if returncode != 0:
             with _JOBS_LOCK:
                 messages = list(_JOBS[job_id].messages)
-            raise RuntimeError(
-                messages[-1] if messages else f"Conversion exited with {returncode}"
-            )
+            raise RuntimeError(messages[-1] if messages else f"Conversion exited with {returncode}")
         # Metadata-only jobs (layer listing) have no output file to report.
         output_path = params.get("output_path")
         _job_update(
@@ -1221,9 +1211,7 @@ def vector_layers(request: VectorLayersRequest):
     produce it, making this probe slower than "metadata-only" suggests.
     """
     input_path = _validate_input_path(request.input_path)
-    return _start_job(
-        "vector-layers", _VECTOR_LAYERS_SCRIPT, {"input_path": input_path}, "layers"
-    )
+    return _start_job("vector-layers", _VECTOR_LAYERS_SCRIPT, {"input_path": input_path}, "layers")
 
 
 @router.post("/vector-to-vector")
@@ -1259,9 +1247,7 @@ def vector_to_vector(request: VectorToVectorRequest):
     else:
         driver = VECTOR_OUTPUT_DRIVERS.get(extension)
         if not driver:
-            supported = ", ".join(
-                sorted(set(VECTOR_OUTPUT_DRIVERS) | PARQUET_OUTPUT_EXTENSIONS)
-            )
+            supported = ", ".join(sorted(set(VECTOR_OUTPUT_DRIVERS) | PARQUET_OUTPUT_EXTENSIONS))
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -1283,9 +1269,7 @@ def vector_to_vector(request: VectorToVectorRequest):
         }
         output_name = extension
 
-    return _start_job(
-        "vector-to-vector", _VECTOR_TO_VECTOR_SCRIPT, params, output_name
-    )
+    return _start_job("vector-to-vector", _VECTOR_TO_VECTOR_SCRIPT, params, output_name)
 
 
 @router.post("/vector-to-geoparquet")
@@ -1298,9 +1282,7 @@ def vector_to_geoparquet(request: VectorToGeoParquetRequest):
             detail=f"Unsupported Parquet compression: {request.compression}",
         )
     if request.row_group_size <= 0:
-        raise HTTPException(
-            status_code=400, detail="row_group_size must be a positive integer"
-        )
+        raise HTTPException(status_code=400, detail="row_group_size must be a positive integer")
     input_path, output_path = _validate_paths(request.input_path, request.output_path)
     return _start_job(
         "vector-to-geoparquet",
@@ -1378,13 +1360,9 @@ def csv_to_geoparquet(request: CsvToGeoParquetRequest):
             detail=f"Unsupported Parquet compression: {request.compression}",
         )
     if request.row_group_size <= 0:
-        raise HTTPException(
-            status_code=400, detail="row_group_size must be a positive integer"
-        )
+        raise HTTPException(status_code=400, detail="row_group_size must be a positive integer")
     if not request.lon_column.strip() or not request.lat_column.strip():
-        raise HTTPException(
-            status_code=400, detail="lon_column and lat_column are required"
-        )
+        raise HTTPException(status_code=400, detail="lon_column and lat_column are required")
     input_path, output_path = _validate_paths(request.input_path, request.output_path)
     return _start_job(
         "csv-to-geoparquet",

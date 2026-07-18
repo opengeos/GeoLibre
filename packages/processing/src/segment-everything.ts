@@ -156,11 +156,7 @@ function preprocess(raster: RasterData): Preprocessed {
 
 /** Trace the exterior boundary of the mask's first component (Moore-neighbour,
  * 8-connected). Returns a pixel ring in mask (256) coordinates, or null. */
-function traceContour(
-  mask: Uint8Array,
-  w: number,
-  h: number,
-): [number, number][] | null {
+function traceContour(mask: Uint8Array, w: number, h: number): [number, number][] | null {
   const at = (x: number, y: number): number =>
     x < 0 || y < 0 || x >= w || y >= h ? 0 : mask[y * w + x];
   let sx = -1;
@@ -215,11 +211,7 @@ function traceContour(
 }
 
 /** Perpendicular distance of point p from the line a→b. */
-function perpDist(
-  p: [number, number],
-  a: [number, number],
-  b: [number, number],
-): number {
+function perpDist(p: [number, number], a: [number, number], b: [number, number]): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.hypot(dx, dy);
@@ -228,10 +220,7 @@ function perpDist(
 }
 
 /** Douglas–Peucker ring simplification (open polyline; caller re-closes). */
-function simplifyRing(
-  ring: [number, number][],
-  epsilon: number,
-): [number, number][] {
+function simplifyRing(ring: [number, number][], epsilon: number): [number, number][] {
   if (ring.length < 3) return ring;
   let maxDist = 0;
   let index = 0;
@@ -266,10 +255,7 @@ function polygonArea(ring: [number, number][]): number {
 }
 
 /** IoU of two `[minX, minY, maxX, maxY]` boxes. */
-function boxIou(
-  a: [number, number, number, number],
-  b: [number, number, number, number],
-): number {
+function boxIou(a: [number, number, number, number], b: [number, number, number, number]): number {
   const ix1 = Math.max(a[0], b[0]);
   const iy1 = Math.max(a[1], b[1]);
   const ix2 = Math.min(a[2], b[2]);
@@ -333,9 +319,7 @@ export async function segmentEverything(
     pointsPerSide < 2 ||
     pointsPerSide > MAX_POINTS_PER_SIDE
   ) {
-    throw new Error(
-      `pointsPerSide must be an integer between 2 and ${MAX_POINTS_PER_SIDE}.`,
-    );
+    throw new Error(`pointsPerSide must be an integer between 2 and ${MAX_POINTS_PER_SIDE}.`);
   }
 
   const ort = await loadOrt();

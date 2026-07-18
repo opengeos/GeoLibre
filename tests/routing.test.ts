@@ -60,12 +60,28 @@ describe("isochroneResponseToFeatures", () => {
       {
         type: "Feature",
         properties: { contour: 5, metric: "time" },
-        geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
+        },
       },
       {
         type: "Feature",
         properties: { contour: 10 },
-        geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
       },
     ],
   };
@@ -87,11 +103,14 @@ describe("isochroneResponseToFeatures", () => {
   });
 
   it("returns an empty array for a malformed response", () => {
-    assert.deepEqual(isochroneResponseToFeatures(null, {
-      sourceId: 0,
-      mode: "auto",
-      metric: "time",
-    }), []);
+    assert.deepEqual(
+      isochroneResponseToFeatures(null, {
+        sourceId: 0,
+        mode: "auto",
+        metric: "time",
+      }),
+      [],
+    );
   });
 });
 
@@ -136,7 +155,10 @@ describe("matrixResponseToFeatures", () => {
     assert.equal(features.length, 1);
     const [feature] = features;
     assert.equal(feature.geometry.type, "LineString");
-    assert.deepEqual(feature.geometry.coordinates, [[0, 0], [1, 1]]);
+    assert.deepEqual(feature.geometry.coordinates, [
+      [0, 0],
+      [1, 1],
+    ]);
     assert.deepEqual(feature.properties, {
       origin_id: "o1",
       dest_id: "t1",
@@ -147,10 +169,7 @@ describe("matrixResponseToFeatures", () => {
   });
 
   it("returns an empty array for a malformed response", () => {
-    assert.deepEqual(
-      matrixResponseToFeatures({}, origins, targets, { mode: "auto" }),
-      [],
-    );
+    assert.deepEqual(matrixResponseToFeatures({}, origins, targets, { mode: "auto" }), []);
   });
 });
 
@@ -256,9 +275,7 @@ describe("compareSequenceValues", () => {
   });
 
   it("orders ISO timestamps chronologically", () => {
-    assert.ok(
-      compareSequenceValues("2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z") > 0,
-    );
+    assert.ok(compareSequenceValues("2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z") > 0);
   });
 
   it("sorts parseable values before free-form text and empties last", () => {

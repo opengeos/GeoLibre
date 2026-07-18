@@ -17,17 +17,11 @@ async function waitForMap(page: Page): Promise<void> {
 }
 
 /** Drops a GeoJSON file onto the map, exercising the real drag-and-drop path. */
-async function dropGeoJson(
-  page: Page,
-  name: string,
-  text: string,
-): Promise<void> {
+async function dropGeoJson(page: Page, name: string, text: string): Promise<void> {
   const dataTransfer = await page.evaluateHandle(
     ({ contents, fileName }) => {
       const dt = new DataTransfer();
-      dt.items.add(
-        new File([contents], fileName, { type: "application/geo+json" }),
-      );
+      dt.items.add(new File([contents], fileName, { type: "application/geo+json" }));
       return dt;
     },
     { contents: text, fileName: `${name}.geojson` },
@@ -38,9 +32,7 @@ async function dropGeoJson(
     });
   }
   await dataTransfer.dispose();
-  await expect(
-    page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`),
-  ).toBeVisible();
+  await expect(page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`)).toBeVisible();
 }
 
 /**
@@ -49,9 +41,7 @@ async function dropGeoJson(
  * save -> reload -> reopen round trip (group + each child's `groupId` are
  * serialized into the `.geolibre.json` project).
  */
-test("groups a layer and persists the folder across save and reopen", async ({
-  page,
-}) => {
+test("groups a layer and persists the folder across save and reopen", async ({ page }) => {
   await page.addInitScript(() => {
     delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
     delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
@@ -61,9 +51,7 @@ test("groups a layer and persists the folder across save and reopen", async ({
 
   // 1. Add a layer, then group it from the layer's actions menu.
   await dropGeoJson(page, "smoke", FIXTURE_TEXT);
-  const row = page.locator(
-    '[data-testid="layer-row"][data-layer-name="smoke"]',
-  );
+  const row = page.locator('[data-testid="layer-row"][data-layer-name="smoke"]');
   await row.locator('button[aria-label="Layer actions"]').click();
   await page.getByRole("menuitem", { name: "New group from layer" }).click();
   await page.keyboard.press("Escape"); // close the actions menu
@@ -83,10 +71,7 @@ test("groups a layer and persists the folder across save and reopen", async ({
   await page.getByRole("menuitem", { name: "Save", exact: true }).click();
   // Browsers without the File System Access picker (deleted above) prompt for a
   // file name before downloading; accept the pre-filled default and confirm.
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Save", exact: true })
-    .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click();
   const download = await downloadPromise;
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
@@ -116,9 +101,7 @@ test("groups a layer and persists the folder across save and reopen", async ({
     await chooser.setFiles(savedPath);
 
     await expect(page.getByTestId("layer-group-header").first()).toBeVisible();
-    await expect(
-      page.locator('[data-testid="layer-row"][data-layer-name="smoke"]'),
-    ).toBeVisible();
+    await expect(page.locator('[data-testid="layer-row"][data-layer-name="smoke"]')).toBeVisible();
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

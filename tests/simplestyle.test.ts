@@ -9,11 +9,7 @@ import {
   vectorLineColorValue,
   type LayerStyle,
 } from "@geolibre/core";
-import {
-  circlePaint,
-  fillPaint,
-  linePaint,
-} from "../packages/map/src/style-mapper";
+import { circlePaint, fillPaint, linePaint } from "../packages/map/src/style-mapper";
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
   return { ...DEFAULT_LAYER_STYLE, ...patch };
@@ -76,20 +72,14 @@ describe("hasSimpleStyleProperties", () => {
 
   it("returns false for an empty or undefined collection", () => {
     assert.equal(hasSimpleStyleProperties(undefined), false);
-    assert.equal(
-      hasSimpleStyleProperties({ type: "FeatureCollection", features: [] }),
-      false,
-    );
+    assert.equal(hasSimpleStyleProperties({ type: "FeatureCollection", features: [] }), false);
   });
 });
 
 describe("simplestyle color values", () => {
   it("falls back to the flat layer color when disabled", () => {
     assert.equal(vectorFillColorValue(style()), DEFAULT_LAYER_STYLE.fillColor);
-    assert.equal(
-      vectorLineColorValue(style()),
-      DEFAULT_LAYER_STYLE.strokeColor,
-    );
+    assert.equal(vectorLineColorValue(style()), DEFAULT_LAYER_STYLE.strokeColor);
   });
 
   it("coalesces the per-feature property over the fallback when enabled", () => {
@@ -103,10 +93,11 @@ describe("simplestyle color values", () => {
       ["get", "stroke"],
       DEFAULT_LAYER_STYLE.strokeColor,
     ]);
-    assert.deepEqual(
-      vectorCircleColorValue(style({ simpleStyleEnabled: true })),
-      ["coalesce", ["get", "marker-color"], DEFAULT_LAYER_STYLE.fillColor],
-    );
+    assert.deepEqual(vectorCircleColorValue(style({ simpleStyleEnabled: true })), [
+      "coalesce",
+      ["get", "marker-color"],
+      DEFAULT_LAYER_STYLE.fillColor,
+    ]);
   });
 });
 
@@ -168,10 +159,7 @@ describe("paint with simplestyle enabled", () => {
 
   it("keeps flat numeric paint when disabled", () => {
     const paint = fillPaint(style(), 0.5);
-    assert.equal(
-      paint["fill-opacity"],
-      DEFAULT_LAYER_STYLE.fillOpacity * 0.5,
-    );
+    assert.equal(paint["fill-opacity"], DEFAULT_LAYER_STYLE.fillOpacity * 0.5);
     assert.equal(linePaint(style(), 1)["line-width"], DEFAULT_LAYER_STYLE.strokeWidth);
     assert.equal(
       circlePaint(style(), 0.5)["circle-opacity"],

@@ -6,11 +6,7 @@ import {
   type LayerStyle,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
-import type {
-  ExpressionSpecification,
-  LayerSpecification,
-  StyleSpecification,
-} from "maplibre-gl";
+import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
 import { detectGeometryProfile } from "./geojson-loader";
 import {
   circlePaint,
@@ -26,8 +22,7 @@ import {
  * meant to be dropped into a MapLibre/Mapbox map, so it points at MapLibre's
  * demo font server rather than embedding fonts.
  */
-const DEFAULT_GLYPHS_URL =
-  "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
+const DEFAULT_GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
 /** Font stack used for exported label layers (a widely available default). */
 const DEFAULT_TEXT_FONT = ["Open Sans Regular", "Arial Unicode MS Regular"];
@@ -132,10 +127,7 @@ const POINT_FILTER = [
 ] as unknown as ExpressionSpecification;
 
 /** Build the label text-field expression from the layer's label config. */
-function labelTextField(
-  style: LayerStyle,
-  warnings: string[],
-): ExpressionSpecification | null {
+function labelTextField(style: LayerStyle, warnings: string[]): ExpressionSpecification | null {
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
   const expression = labels.expression.trim();
   if (expression) {
@@ -144,13 +136,9 @@ function labelTextField(
       // JSON.parse accepts non-expressions (numbers, objects); only an array is
       // a usable MapLibre expression. Fall back to the field otherwise.
       if (Array.isArray(parsed)) return parsed as ExpressionSpecification;
-      warnings.push(
-        "Label expression is not a MapLibre expression; used the label field instead.",
-      );
+      warnings.push("Label expression is not a MapLibre expression; used the label field instead.");
     } catch {
-      warnings.push(
-        "Label expression could not be parsed; used the label field instead.",
-      );
+      warnings.push("Label expression could not be parsed; used the label field instead.");
     }
   }
   if (labels.field) {
@@ -215,9 +203,7 @@ function buildLabelLayer(
     type: "symbol",
     source: sourceKey,
     ...range,
-    ...(ruleFilter
-      ? { filter: ruleFilter as unknown as ExpressionSpecification }
-      : {}),
+    ...(ruleFilter ? { filter: ruleFilter as unknown as ExpressionSpecification } : {}),
     layout: {
       "text-field": textField,
       "text-font": DEFAULT_TEXT_FONT,
@@ -268,8 +254,7 @@ export function buildMapboxStyle(
   const sourceKey = `${idBase}-source`;
 
   const featureCount = geojson?.features.length ?? 0;
-  const largeThreshold =
-    options.largeFeatureCount ?? LARGE_EMBED_FEATURE_COUNT;
+  const largeThreshold = options.largeFeatureCount ?? LARGE_EMBED_FEATURE_COUNT;
   if (!geojson) {
     warnings.push(
       "This layer's features are not embedded; point the style's source at " +
@@ -290,11 +275,8 @@ export function buildMapboxStyle(
 
   // heatmap/cluster and label dedup only apply to point-only layers, matching
   // the live map.
-  const pointOnly =
-    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
-  const effectiveRenderer = pointOnly
-    ? styleValue(style, "pointRenderer")
-    : "single";
+  const pointOnly = profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+  const effectiveRenderer = pointOnly ? styleValue(style, "pointRenderer") : "single";
 
   const layers: LayerSpecification[] = [];
   const zoom = zoomRange(style);
@@ -304,15 +286,9 @@ export function buildMapboxStyle(
   // filter into every exported render layer or the exported style would draw
   // features GeoLibre hides.
   const ruleFilter = ruleBasedVisibilityFilter(style);
-  const withRuleVisibility = (
-    geometryFilter: ExpressionSpecification,
-  ): ExpressionSpecification =>
+  const withRuleVisibility = (geometryFilter: ExpressionSpecification): ExpressionSpecification =>
     ruleFilter
-      ? ([
-          "all",
-          geometryFilter,
-          ruleFilter,
-        ] as unknown as ExpressionSpecification)
+      ? (["all", geometryFilter, ruleFilter] as unknown as ExpressionSpecification)
       : geometryFilter;
 
   // Only warn about a dropped fill pattern when the layer actually has polygons
@@ -420,24 +396,14 @@ export function buildMapboxStyle(
   const labelLayer =
     style.extrusionEnabled || effectiveRenderer === "heatmap"
       ? null
-      : buildLabelLayer(
-          layer,
-          sourceKey,
-          idBase,
-          visibility,
-          pointOnly,
-          warnings,
-          ruleFilter,
-        );
+      : buildLabelLayer(layer, sourceKey, idBase, visibility, pointOnly, warnings, ruleFilter);
   if (labelLayer) layers.push(labelLayer);
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a
   // label layer is emitted. Treat a blank glyphsUrl as "not provided" so a
   // caller cannot write an invalid empty `glyphs: ""`.
   const customGlyphs = options.glyphsUrl?.trim();
-  const glyphs = labelLayer
-    ? customGlyphs || DEFAULT_GLYPHS_URL
-    : undefined;
+  const glyphs = labelLayer ? customGlyphs || DEFAULT_GLYPHS_URL : undefined;
   // Flag the default third-party dependency so the user can point `glyphs` at
   // their own font server for a production style.
   if (labelLayer && !customGlyphs) {

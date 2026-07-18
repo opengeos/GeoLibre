@@ -6,15 +6,11 @@ import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 export function useRuntimeEnvironmentVariables() {
-  const environmentVariables = useAppStore(
-    (s) => s.preferences.environmentVariables,
-  );
+  const environmentVariables = useAppStore((s) => s.preferences.environmentVariables);
   const geocoding = useAppStore((s) => s.preferences.geocoding);
   // Device-local Cesium Ion token (Settings → Environment). Projected below so
   // getCesiumIonToken() picks it up as a runtime override without a rebuild.
-  const cesiumIonToken = useDesktopSettingsStore(
-    (s) => s.desktopSettings.cesiumIonToken,
-  );
+  const cesiumIonToken = useDesktopSettingsStore((s) => s.desktopSettings.cesiumIonToken);
   // Device-local AI Assistant provider credentials (Settings → AI Providers).
   // Projected below so the assistant picks them up after a restart without the
   // keys ever living in the shared project file. See useDesktopSettings.ts.
@@ -22,9 +18,7 @@ export function useRuntimeEnvironmentVariables() {
   // updates (e.g. dragging the accent-color picker), which normalizeDesktopSettings
   // would otherwise churn into a fresh object every time — needlessly re-running
   // this effect and re-rendering the host.
-  const aiProviderEnv = useDesktopSettingsStore(
-    useShallow((s) => s.desktopSettings.aiProviderEnv),
-  );
+  const aiProviderEnv = useDesktopSettingsStore(useShallow((s) => s.desktopSettings.aiProviderEnv));
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
 
@@ -58,10 +52,8 @@ export function useRuntimeEnvironmentVariables() {
     if (geocoding.forwardEndpoint?.trim())
       geocoderEnv.VITE_GEOCODER_ENDPOINT = geocoding.forwardEndpoint.trim();
     if (geocoding.reverseEndpoint?.trim())
-      geocoderEnv.VITE_GEOCODER_REVERSE_ENDPOINT =
-        geocoding.reverseEndpoint.trim();
-    if (geocoding.email?.trim())
-      geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
+      geocoderEnv.VITE_GEOCODER_REVERSE_ENDPOINT = geocoding.reverseEndpoint.trim();
+    if (geocoding.email?.trim()) geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
 
     const projectEnv = Object.fromEntries(
       environmentVariables
@@ -115,8 +107,6 @@ export function useRuntimeEnvironmentVariables() {
     if (serializedEnv === lastSerializedEnv.current) return;
     lastSerializedEnv.current = serializedEnv;
 
-    window.dispatchEvent(
-      new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }),
-    );
+    window.dispatchEvent(new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }));
   }, [environmentVariables, geocoding, cesiumIonToken, aiProviderEnv, osEnv]);
 }

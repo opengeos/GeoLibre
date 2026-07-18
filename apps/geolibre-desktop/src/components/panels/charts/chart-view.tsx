@@ -20,12 +20,7 @@ import {
 import { type ChartResult } from "./chart-spec";
 import { categoryColors, isHexColor } from "./chart-colors";
 
-export {
-  chartResultHasData,
-  computeChart,
-  type ChartResult,
-  type ChartSpec,
-} from "./chart-spec";
+export { chartResultHasData, computeChart, type ChartResult, type ChartSpec } from "./chart-spec";
 
 /**
  * Render a computed {@link ChartResult} as an inline SVG with a caption.
@@ -35,20 +30,12 @@ export {
  * charts use the theme primary and categorical charts use the multi-color
  * palette.
  */
-export function ChartView({
-  result,
-  color,
-}: {
-  result: ChartResult;
-  color?: string;
-}) {
+export function ChartView({ result, color }: { result: ChartResult; color?: string }) {
   // Effective single-series color: the chosen hex, else the theme primary.
   const series = isHexColor(color) ? color : SERIES;
   switch (result.type) {
     case "histogram":
-      return (
-        <HistogramChart result={result.result} field={result.field} color={series} />
-      );
+      return <HistogramChart result={result.result} field={result.field} color={series} />;
     case "scatter":
       return (
         <ScatterChart
@@ -68,9 +55,7 @@ export function ChartView({
         />
       );
     case "line":
-      return (
-        <LineChart result={result.result} field={result.field} color={series} />
-      );
+      return <LineChart result={result.result} field={result.field} color={series} />;
     case "box":
       return <BoxChart result={result.result} field={result.field} color={series} />;
     case "pie":
@@ -106,13 +91,7 @@ function truncateLabel(label: string, max = 14): string {
   return label.length > max ? `${label.slice(0, max - 1)}…` : label;
 }
 
-function ChartFrame({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function ChartFrame({ label, children }: { label: string; children: ReactNode }) {
   return (
     <svg
       viewBox={`0 0 ${CHART_W} ${CHART_H}`}
@@ -149,14 +128,7 @@ function tickText(
   baseline: "middle" | "auto" = "auto",
 ) {
   return (
-    <text
-      x={x}
-      y={y}
-      textAnchor={anchor}
-      dominantBaseline={baseline}
-      fontSize={10}
-      fill={TICK}
-    >
+    <text x={x} y={y} textAnchor={anchor} dominantBaseline={baseline} fontSize={10} fill={TICK}>
       {text}
     </text>
   );
@@ -206,11 +178,7 @@ function EmptyChart({ message }: { message: string }) {
 function Caption({ children }: { children: ReactNode }) {
   // shrink-0 keeps the caption legible when the Dashboard flexes the chart SVG
   // to fill a short panel; it is a no-op in the non-flex Charts dialog.
-  return (
-    <p className="mt-1 shrink-0 text-center text-xs text-muted-foreground">
-      {children}
-    </p>
-  );
+  return <p className="mt-1 shrink-0 text-center text-xs text-muted-foreground">{children}</p>;
 }
 
 function HistogramChart({
@@ -223,8 +191,7 @@ function HistogramChart({
   color: string;
 }) {
   const { t } = useTranslation();
-  if (!result)
-    return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
+  if (!result) return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
   const { bins, maxCount, min, max, total } = result;
   const slot = INNER_W / bins.length;
@@ -256,11 +223,21 @@ function HistogramChart({
         {/* A collapsed (min === max) histogram spans the full width, so show a
             single centered label instead of identical min/max labels. */}
         {min === max ? (
-          tickText(MARGIN.left + INNER_W / 2, MARGIN.top + INNER_H + 14, formatAxisValue(min), "middle")
+          tickText(
+            MARGIN.left + INNER_W / 2,
+            MARGIN.top + INNER_H + 14,
+            formatAxisValue(min),
+            "middle",
+          )
         ) : (
           <>
             {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(min), "start")}
-            {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(max), "end")}
+            {tickText(
+              MARGIN.left + INNER_W,
+              MARGIN.top + INNER_H + 14,
+              formatAxisValue(max),
+              "end",
+            )}
           </>
         )}
         {axisTitle(field)}
@@ -297,17 +274,28 @@ function ScatterChart({
         {/* Single centered tick when an axis is flat (all values identical),
             mirroring the histogram, rather than the same value at both ends. */}
         {yMin === yMax ? (
-          tickText(MARGIN.left - 6, MARGIN.top + INNER_H / 2, formatAxisValue(yMin), "end", "middle")
+          tickText(
+            MARGIN.left - 6,
+            MARGIN.top + INNER_H / 2,
+            formatAxisValue(yMin),
+            "end",
+            "middle",
+          )
         ) : (
           <>
             {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(yMax), "end", "middle")}
-            {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(yMin), "end", "middle")}
+            {tickText(
+              MARGIN.left - 6,
+              MARGIN.top + INNER_H,
+              formatAxisValue(yMin),
+              "end",
+              "middle",
+            )}
           </>
         )}
         {points.map((point, index) => {
           const cx = MARGIN.left + fraction(point.x, xMin, xMax) * INNER_W;
-          const cy =
-            MARGIN.top + INNER_H - fraction(point.y, yMin, yMax) * INNER_H;
+          const cy = MARGIN.top + INNER_H - fraction(point.y, yMin, yMax) * INNER_H;
           return (
             <circle key={index} cx={cx} cy={cy} r={3} fill={color} opacity={0.6}>
               <title>{`${xField}: ${formatAxisValue(point.x)}, ${yField}: ${formatAxisValue(point.y)}`}</title>
@@ -315,19 +303,28 @@ function ScatterChart({
           );
         })}
         {xMin === xMax ? (
-          tickText(MARGIN.left + INNER_W / 2, MARGIN.top + INNER_H + 14, formatAxisValue(xMin), "middle")
+          tickText(
+            MARGIN.left + INNER_W / 2,
+            MARGIN.top + INNER_H + 14,
+            formatAxisValue(xMin),
+            "middle",
+          )
         ) : (
           <>
             {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(xMin), "start")}
-            {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(xMax), "end")}
+            {tickText(
+              MARGIN.left + INNER_W,
+              MARGIN.top + INNER_H + 14,
+              formatAxisValue(xMax),
+              "end",
+            )}
           </>
         )}
         {axisTitle(xField)}
         {yAxisTitle(yField)}
       </ChartFrame>
       <Caption>
-        {total.toLocaleString()} point{total === 1 ? "" : "s"} · {yField} vs{" "}
-        {xField}
+        {total.toLocaleString()} point{total === 1 ? "" : "s"} · {yField} vs {xField}
         {sampled ? ` · showing ${points.length.toLocaleString()} sampled` : ""}
       </Caption>
     </>
@@ -373,7 +370,13 @@ function BarChart({
         {tickText(MARGIN.left - 6, baselineY, "0", "end", "middle")}
         {/* Lower-bound tick when bars go negative (sum/mean of negative values). */}
         {minValue < 0
-          ? tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(domainMin), "end", "middle")
+          ? tickText(
+              MARGIN.left - 6,
+              MARGIN.top + INNER_H,
+              formatAxisValue(domainMin),
+              "end",
+              "middle",
+            )
           : null}
         {bars.map((datum, index) => {
           const top = Math.min(baselineY, scaleY(datum.value));
@@ -427,21 +430,18 @@ function LineChart({
   color: string;
 }) {
   const { t } = useTranslation();
-  if (!result)
-    return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
+  if (!result) return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
   const { points, min, max, length } = result;
   const scaleX = (index: number) =>
     MARGIN.left + (length > 1 ? index / (length - 1) : 0.5) * INNER_W;
-  const scaleY = (value: number) =>
-    MARGIN.top + INNER_H - fraction(value, min, max) * INNER_H;
+  const scaleY = (value: number) => MARGIN.top + INNER_H - fraction(value, min, max) * INNER_H;
   const path = points
     .map((p, i) => {
       // Break the line (start a new subpath) when rows are non-consecutive, so
       // a gap from skipped (non-numeric) rows shows as a gap rather than a
       // straight segment across it.
-      const command =
-        i === 0 || p.index !== points[i - 1].index + 1 ? "M" : "L";
+      const command = i === 0 || p.index !== points[i - 1].index + 1 ? "M" : "L";
       return `${command}${scaleX(p.index)} ${scaleY(p.value)}`;
     })
     .join(" ");
@@ -454,13 +454,7 @@ function LineChart({
         <path d={path} fill="none" stroke={color} strokeWidth={1.5} />
         {points.length <= 80
           ? points.map((p) => (
-              <circle
-                key={p.index}
-                cx={scaleX(p.index)}
-                cy={scaleY(p.value)}
-                r={2}
-                fill={color}
-              >
+              <circle key={p.index} cx={scaleX(p.index)} cy={scaleY(p.value)} r={2} fill={color}>
                 <title>{`#${p.index}: ${formatAxisValue(p.value)}`}</title>
               </circle>
             ))
@@ -478,8 +472,8 @@ function LineChart({
         {axisTitle("feature order")}
       </ChartFrame>
       <Caption>
-        {points.length.toLocaleString()} value{points.length === 1 ? "" : "s"} ·{" "}
-        {field} by feature order
+        {points.length.toLocaleString()} value{points.length === 1 ? "" : "s"} · {field} by feature
+        order
       </Caption>
     </>
   );
@@ -495,14 +489,12 @@ function BoxChart({
   color: string;
 }) {
   const { t } = useTranslation();
-  if (!result)
-    return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
+  if (!result) return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
   const { min, q1, median, q3, max, count } = result;
   const centerX = MARGIN.left + INNER_W / 2;
   const boxWidth = 96;
-  const scaleY = (value: number) =>
-    MARGIN.top + INNER_H - fraction(value, min, max) * INNER_H;
+  const scaleY = (value: number) => MARGIN.top + INNER_H - fraction(value, min, max) * INNER_H;
 
   const stats: [string, number][] = [
     ["max", max],
@@ -539,34 +531,31 @@ function BoxChart({
         />
         {/* When every value is identical the five stats share one y position;
             show a single label instead of five overlapping ones. */}
-        {min === max ? (
-          tickText(
-            centerX + boxWidth / 2 + 8,
-            scaleY(median),
-            `all = ${formatAxisValue(median)}`,
-            "start",
-            "middle",
-          )
-        ) : (
-          stats.map(([label, value]) => (
-            <text
-              key={label}
-              x={centerX + boxWidth / 2 + 8}
-              y={scaleY(value)}
-              textAnchor="start"
-              dominantBaseline="middle"
-              fontSize={10}
-              fill={TICK}
-            >
-              {`${label} ${formatAxisValue(value)}`}
-            </text>
-          ))
-        )}
+        {min === max
+          ? tickText(
+              centerX + boxWidth / 2 + 8,
+              scaleY(median),
+              `all = ${formatAxisValue(median)}`,
+              "start",
+              "middle",
+            )
+          : stats.map(([label, value]) => (
+              <text
+                key={label}
+                x={centerX + boxWidth / 2 + 8}
+                y={scaleY(value)}
+                textAnchor="start"
+                dominantBaseline="middle"
+                fontSize={10}
+                fill={TICK}
+              >
+                {`${label} ${formatAxisValue(value)}`}
+              </text>
+            ))}
         {axisTitle(field)}
       </ChartFrame>
       <Caption>
-        {count.toLocaleString()} value{count === 1 ? "" : "s"} · five-number
-        summary
+        {count.toLocaleString()} value{count === 1 ? "" : "s"} · five-number summary
       </Caption>
     </>
   );
@@ -601,9 +590,7 @@ function PieChart({
   const arcs = slices.map((slice, index) => {
     // `share` (not `fraction`) so it doesn't shadow the module-level helper.
     const share = slice.value / total;
-    const prior = slices
-      .slice(0, index)
-      .reduce((sum, s) => sum + s.value, 0);
+    const prior = slices.slice(0, index).reduce((sum, s) => sum + s.value, 0);
     const start = START + (prior / total) * Math.PI * 2;
     const end = start + share * Math.PI * 2;
     const x0 = cx + radius * Math.cos(start);
@@ -642,13 +629,7 @@ function PieChart({
           return (
             <g key={`legend-${slice.label}`}>
               <rect x={legendX} y={y} width={10} height={10} rx={2} fill={fill} />
-              <text
-                x={legendX + 16}
-                y={y + 5}
-                dominantBaseline="middle"
-                fontSize={11}
-                fill={TICK}
-              >
+              <text x={legendX + 16} y={y + 5} dominantBaseline="middle" fontSize={11} fill={TICK}>
                 {`${truncateLabel(slice.label, 18)} · ${Math.round(share * 100)}%`}
               </text>
             </g>

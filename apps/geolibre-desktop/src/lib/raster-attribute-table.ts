@@ -132,16 +132,12 @@ function decodeXml(text: string): string {
 
 /** All `<tag …>…</tag>` blocks of a fragment (attributes allowed). */
 function xmlBlocks(xml: string, tag: string): string[] {
-  return (
-    xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`, "g")) ?? []
-  );
+  return xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`, "g")) ?? [];
 }
 
 /** The first `<tag>` text node of a fragment, or "" when absent. */
 function xmlTag(fragment: string, tag: string): string {
-  const match = new RegExp(
-    `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`,
-  ).exec(fragment);
+  const match = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`).exec(fragment);
   return match ? decodeXml(match[1]).trim() : "";
 }
 
@@ -183,9 +179,7 @@ const LABEL_FIELD_NAMES = new Set(["label", "name", "class_name", "classname"]);
  */
 export function parseGdalRat(xml: string, band = 1): GdalRatEntry[] | null {
   const bandBlock =
-    xmlBlocks(xml, "PAMRasterBand").find(
-      (block) => (xmlAttr(block, "band") ?? 1) === band,
-    ) ?? null;
+    xmlBlocks(xml, "PAMRasterBand").find((block) => (xmlAttr(block, "band") ?? 1) === band) ?? null;
   if (!bandBlock) return null;
   const rat = xmlBlocks(bandBlock, "GDALRasterAttributeTable")[0];
   if (!rat) return null;
@@ -225,17 +219,15 @@ export function parseGdalRat(xml: string, band = 1): GdalRatEntry[] | null {
   const channel = (fields: string[], index: number | null): number | null => {
     if (index === null) return null;
     const value = Number(fields[index]);
-    return Number.isFinite(value)
-      ? Math.max(0, Math.min(255, Math.round(value)))
-      : null;
+    return Number.isFinite(value) ? Math.max(0, Math.min(255, Math.round(value))) : null;
   };
 
   // Row cells: paired <F>…</F> blocks and self-closing <F/> (an empty cell,
   // which GDAL writes for blank strings) — skipping the latter would shift
   // every later column of the row one place left.
   const rowCells = (row: string): string[] =>
-    (row.match(/<F(?:\s[^>]*)?\/>|<F(?:\s[^>]*)?>[\s\S]*?<\/F>/g) ?? []).map(
-      (cell) => (cell.endsWith("/>") ? "" : xmlTag(cell, "F")),
+    (row.match(/<F(?:\s[^>]*)?\/>|<F(?:\s[^>]*)?>[\s\S]*?<\/F>/g) ?? []).map((cell) =>
+      cell.endsWith("/>") ? "" : xmlTag(cell, "F"),
     );
 
   const entries: GdalRatEntry[] = [];
@@ -305,12 +297,9 @@ export function pixelAreaSquareMeters(info: {
   }
   if (model === GT_MODEL_TYPE_GEOGRAPHIC) {
     const halfSpan = (info.height * info.resY) / 2;
-    const centerLat = info.flipY
-      ? info.originY + halfSpan
-      : info.originY - halfSpan;
+    const centerLat = info.flipY ? info.originY + halfSpan : info.originY - halfSpan;
     if (!Number.isFinite(centerLat) || Math.abs(centerLat) > 90) return null;
-    const metersPerDegLon =
-      METERS_PER_DEG_LON * Math.cos((centerLat * Math.PI) / 180);
+    const metersPerDegLon = METERS_PER_DEG_LON * Math.cos((centerLat * Math.PI) / 180);
     return Math.abs(info.resX * metersPerDegLon * info.resY * METERS_PER_DEG_LAT);
   }
   return null;
@@ -338,24 +327,15 @@ export function seedRatRows(
   } = {},
 ): RasterAttributeTableRow[] {
   const values = [...counts.keys()].sort((a, b) => a - b);
-  const ratByValue = new Map(
-    (options.rat ?? []).map((entry) => [entry.value, entry]),
-  );
-  const rampColors = interpolateColors(
-    getVectorColorRamp(DEFAULT_RAT_RAMP).colors,
-    values.length,
-  );
+  const ratByValue = new Map((options.rat ?? []).map((entry) => [entry.value, entry]));
+  const rampColors = interpolateColors(getVectorColorRamp(DEFAULT_RAT_RAMP).colors, values.length);
   return values.map((value, index) => {
     const rat = ratByValue.get(value);
     return {
       value,
       count: counts.get(value) ?? 0,
       label: rat?.label ?? String(value),
-      color:
-        rat?.color ??
-        options.palette?.get(value) ??
-        rampColors[index] ??
-        "#808080",
+      color: rat?.color ?? options.palette?.get(value) ?? rampColors[index] ?? "#808080",
     };
   });
 }
@@ -370,16 +350,12 @@ export function seedRatRows(
  * @param layer - A raster store layer.
  * @returns The validated record, or null when absent / malformed.
  */
-export function savedRasterAttributeTable(
-  layer: GeoLibreLayer,
-): RasterAttributeTableRecord | null {
+export function savedRasterAttributeTable(layer: GeoLibreLayer): RasterAttributeTableRecord | null {
   const raw = layer.metadata.rasterAttributeTable;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const candidate = raw as Record<string, unknown>;
   const band =
-    typeof candidate.band === "number" &&
-    Number.isInteger(candidate.band) &&
-    candidate.band >= 1
+    typeof candidate.band === "number" && Number.isInteger(candidate.band) && candidate.band >= 1
       ? candidate.band
       : null;
   if (band === null || !Array.isArray(candidate.rows)) return null;
@@ -389,15 +365,10 @@ export function savedRasterAttributeTable(
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
     const row = entry as Record<string, unknown>;
     if (typeof row.value !== "number" || !Number.isFinite(row.value)) continue;
-    if (
-      typeof row.count !== "number" ||
-      !Number.isFinite(row.count) ||
-      row.count < 0
-    ) {
+    if (typeof row.count !== "number" || !Number.isFinite(row.count) || row.count < 0) {
       continue;
     }
-    const color =
-      typeof row.color === "string" ? normalizeHexColor(row.color) : null;
+    const color = typeof row.color === "string" ? normalizeHexColor(row.color) : null;
     if (!color) continue;
     rows.push({
       value: row.value,

@@ -17,15 +17,7 @@ import {
   ScrollArea,
   cn,
 } from "@geolibre/ui";
-import {
-  Braces,
-  CheckCircle2,
-  FileCode2,
-  Pencil,
-  Play,
-  Trash2,
-  XCircle,
-} from "lucide-react";
+import { Braces, CheckCircle2, FileCode2, Pencil, Play, Trash2, XCircle } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -44,13 +36,7 @@ const PYTHON_ELIGIBLE_KINDS = new Set(["vector", "statistics", "algorithm"]);
 /** Dialog families whose History "Re-run" can auto-start the run. */
 const AUTO_RERUN_KINDS = new Set(["vector", "statistics", "network"]);
 /** Dialog families that support "Edit & re-run" (pre-filled dialog). */
-const EDIT_RERUN_KINDS = new Set([
-  "vector",
-  "statistics",
-  "network",
-  "whitebox",
-  "raster",
-]);
+const EDIT_RERUN_KINDS = new Set(["vector", "statistics", "network", "whitebox", "raster"]);
 
 /**
  * Render a value as a Python literal (`true` → `True`, `null` → `None`), for
@@ -59,11 +45,9 @@ const EDIT_RERUN_KINDS = new Set([
 function toPythonLiteral(value: unknown): string {
   if (value === null || value === undefined) return "None";
   if (typeof value === "boolean") return value ? "True" : "False";
-  if (typeof value === "number")
-    return Number.isFinite(value) ? String(value) : "None";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "None";
   if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value))
-    return `[${value.map((item) => toPythonLiteral(item)).join(", ")}]`;
+  if (Array.isArray(value)) return `[${value.map((item) => toPythonLiteral(item)).join(", ")}]`;
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([, item]) => item !== undefined)
@@ -75,9 +59,7 @@ function toPythonLiteral(value: unknown): string {
 
 /** The `m.run_algorithm(...)` call equivalent to a recorded run. */
 function pythonSnippet(run: ProcessingRun): string {
-  return `m.run_algorithm(${JSON.stringify(run.toolId)}, ${toPythonLiteral(
-    run.parameters,
-  )})`;
+  return `m.run_algorithm(${JSON.stringify(run.toolId)}, ${toPythonLiteral(run.parameters)})`;
 }
 
 /** Compact duration label: sub-second in ms, else one-decimal seconds. */
@@ -96,9 +78,7 @@ function formatDuration(ms: number): string {
 export function ProcessingHistoryDialog(): ReactElement {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.processingHistoryOpen);
-  const setProcessingHistoryOpen = useAppStore(
-    (s) => s.setProcessingHistoryOpen,
-  );
+  const setProcessingHistoryOpen = useAppStore((s) => s.setProcessingHistoryOpen);
   const history = useAppStore((s) => s.processingHistory);
   const clearProcessingHistory = useAppStore((s) => s.clearProcessingHistory);
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
@@ -107,9 +87,7 @@ export function ProcessingHistoryDialog(): ReactElement {
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
-  const setProcessingInitialTool = useAppStore(
-    (s) => s.setProcessingInitialTool,
-  );
+  const setProcessingInitialTool = useAppStore((s) => s.setProcessingInitialTool);
 
   // Newest first for display; the store keeps runs oldest first.
   const entries = useMemo(() => [...history].reverse(), [history]);
@@ -200,44 +178,31 @@ export function ProcessingHistoryDialog(): ReactElement {
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t("processing.history.title")}</DialogTitle>
-          <DialogDescription>
-            {t("processing.history.description")}
-          </DialogDescription>
+          <DialogDescription>{t("processing.history.description")}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="h-[24rem] rounded-md border">
           {entries.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              {t("processing.history.empty")}
-            </p>
+            <p className="p-4 text-sm text-muted-foreground">{t("processing.history.empty")}</p>
           ) : (
             <div className="flex flex-col gap-1 p-2">
               {entries.map((run) => {
                 const inputs = Object.values(run.inputLayerNames ?? {});
                 return (
-                  <div
-                    key={run.id}
-                    className="rounded-md border bg-muted/20 px-3 py-2"
-                  >
+                  <div key={run.id} className="rounded-md border bg-muted/20 px-3 py-2">
                     <div className="flex items-center gap-2">
                       {run.status === "success" ? (
                         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
                       ) : (
                         <XCircle className="h-4 w-4 shrink-0 text-destructive" />
                       )}
-                      <span className="truncate text-sm font-medium">
-                        {run.toolName}
-                      </span>
+                      <span className="truncate text-sm font-medium">{run.toolName}</span>
                       <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                         {run.engine}
                       </span>
                       <span className="ms-auto shrink-0 text-xs text-muted-foreground">
-                        {run.startedAt
-                          ? new Date(run.startedAt).toLocaleString()
-                          : ""}
-                        {run.durationMs !== undefined
-                          ? ` · ${formatDuration(run.durationMs)}`
-                          : ""}
+                        {run.startedAt ? new Date(run.startedAt).toLocaleString() : ""}
+                        {run.durationMs !== undefined ? ` · ${formatDuration(run.durationMs)}` : ""}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-1">
@@ -250,9 +215,7 @@ export function ProcessingHistoryDialog(): ReactElement {
                         {run.status === "error" && run.error
                           ? run.error
                           : [
-                              inputs.length > 0
-                                ? `${inputs.join(", ")}`
-                                : (run.inputPath ?? ""),
+                              inputs.length > 0 ? `${inputs.join(", ")}` : (run.inputPath ?? ""),
                               (run.outputLayerNames?.length ?? 0) > 0
                                 ? `→ ${run.outputLayerNames?.join(", ")}`
                                 : run.outputPath
@@ -311,16 +274,13 @@ export function ProcessingHistoryDialog(): ReactElement {
                           ? t("processing.history.copied")
                           : t("processing.history.copyJson")}
                       </Button>
-                      {PYTHON_ELIGIBLE_KINDS.has(run.kind) &&
-                      PYTHON_TOOL_IDS.has(run.toolId) ? (
+                      {PYTHON_ELIGIBLE_KINDS.has(run.kind) && PYTHON_TOOL_IDS.has(run.toolId) ? (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 gap-1 px-2 text-xs"
                           title={t("processing.history.copyPython")}
-                          onClick={() =>
-                            void copyText(`${run.id}:py`, pythonSnippet(run))
-                          }
+                          onClick={() => void copyText(`${run.id}:py`, pythonSnippet(run))}
                         >
                           <FileCode2 className="h-3.5 w-3.5" />
                           {copied === `${run.id}:py`

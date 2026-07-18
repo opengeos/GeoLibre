@@ -26,9 +26,7 @@ export interface PluginBundleForHashing {
  * @param bundle - The fetched entry source and optional style source.
  * @returns The lowercase hex SHA-256 digest.
  */
-export async function computePluginBundleHash(
-  bundle: PluginBundleForHashing,
-): Promise<string> {
+export async function computePluginBundleHash(bundle: PluginBundleForHashing): Promise<string> {
   // Hash entry and style independently, then hash the two digests together --
   // rather than concatenating the raw sources with a delimiter. A delimiter can
   // be forged: a NUL byte is legal inside JS/CSS source, so an attacker
@@ -41,10 +39,7 @@ export async function computePluginBundleHash(
     crypto.subtle.digest("SHA-256", encoder.encode(bundle.entrySource)),
     crypto.subtle.digest("SHA-256", encoder.encode(bundle.styleSource ?? "")),
   ]);
-  const combined = new Uint8Array([
-    ...new Uint8Array(entryDigest),
-    ...new Uint8Array(styleDigest),
-  ]);
+  const combined = new Uint8Array([...new Uint8Array(entryDigest), ...new Uint8Array(styleDigest)]);
   const digest = await crypto.subtle.digest("SHA-256", combined);
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))

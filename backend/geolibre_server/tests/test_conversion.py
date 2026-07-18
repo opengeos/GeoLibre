@@ -12,18 +12,6 @@ from geolibre_server.app.conversion import (
     _VECTOR_LAYERS_SCRIPT,
     _VECTOR_SCRIPT,
     _VECTOR_TO_VECTOR_SCRIPT,
-    _evict_finished_jobs_locked,
-    _output_extension,
-    _validate_input_path,
-    _validate_paths,
-    csv_to_geoparquet,
-    raster_to_cog,
-    vector_layers,
-    vector_to_geoparquet,
-    vector_to_geopackage,
-    vector_to_pmtiles,
-    vector_to_shapefile,
-    vector_to_vector,
     CsvToGeoParquetRequest,
     RasterToCogRequest,
     VectorLayersRequest,
@@ -32,6 +20,18 @@ from geolibre_server.app.conversion import (
     VectorToPmtilesRequest,
     VectorToShapefileRequest,
     VectorToVectorRequest,
+    _evict_finished_jobs_locked,
+    _output_extension,
+    _validate_input_path,
+    _validate_paths,
+    csv_to_geoparquet,
+    raster_to_cog,
+    vector_layers,
+    vector_to_geopackage,
+    vector_to_geoparquet,
+    vector_to_pmtiles,
+    vector_to_shapefile,
+    vector_to_vector,
 )
 from geolibre_server.app.runtime import JobState
 
@@ -54,9 +54,7 @@ def test_validate_paths_accepts_existing_input_and_folder(tmp_path: Path) -> Non
     """Existing input files and writable output folders pass validation."""
     source = tmp_path / "input.geojson"
     source.write_text("{}", encoding="utf-8")
-    input_path, output_path = _validate_paths(
-        str(source), str(tmp_path / "out.parquet")
-    )
+    input_path, output_path = _validate_paths(str(source), str(tmp_path / "out.parquet"))
     assert input_path == str(source)
     assert output_path == str(tmp_path / "out.parquet")
 
@@ -81,9 +79,7 @@ def test_validate_input_path_rejects_plain_directory(tmp_path: Path) -> None:
     assert excinfo.value.status_code == 400
 
 
-def test_validate_input_path_rejects_gdb_outside_allowed_roots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_validate_input_path_rejects_gdb_outside_allowed_roots(tmp_path: Path, monkeypatch) -> None:
     """The allowlist confinement applies to .gdb directory inputs too."""
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -102,9 +98,7 @@ def test_vector_layers_rejects_missing_input(tmp_path: Path) -> None:
     assert excinfo.value.status_code == 400
 
 
-def test_vector_layers_starts_job_for_gdb_directory(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_vector_layers_starts_job_for_gdb_directory(tmp_path: Path, monkeypatch) -> None:
     """A .gdb directory input starts a layer-listing job with the resolved path."""
     gdb = tmp_path / "sample.gdb"
     gdb.mkdir()
@@ -125,9 +119,7 @@ def test_vector_layers_starts_job_for_gdb_directory(
     assert captured["params"] == {"input_path": str(gdb.resolve())}
 
 
-def test_vector_to_vector_passes_layer_and_target_srs(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_vector_to_vector_passes_layer_and_target_srs(tmp_path: Path, monkeypatch) -> None:
     """input_layer, target_srs, and source_srs flow through to the job params."""
     gdb = tmp_path / "sample.gdb"
     gdb.mkdir()
@@ -169,9 +161,7 @@ def test_validate_paths_rejects_missing_output_folder(tmp_path: Path) -> None:
     assert excinfo.value.status_code == 400
 
 
-def test_validate_paths_rejects_outside_allowed_roots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_validate_paths_rejects_outside_allowed_roots(tmp_path: Path, monkeypatch) -> None:
     """With an allowlist set, paths outside the roots are rejected (403)."""
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -183,9 +173,7 @@ def test_validate_paths_rejects_outside_allowed_roots(
     assert excinfo.value.status_code == 403
 
 
-def test_validate_paths_rejects_output_outside_allowed_roots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_validate_paths_rejects_output_outside_allowed_roots(tmp_path: Path, monkeypatch) -> None:
     """An allowlisted input but out-of-root output is rejected (403)."""
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -199,18 +187,14 @@ def test_validate_paths_rejects_output_outside_allowed_roots(
     assert excinfo.value.status_code == 403
 
 
-def test_validate_paths_allows_within_allowed_roots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_validate_paths_allows_within_allowed_roots(tmp_path: Path, monkeypatch) -> None:
     """Paths under an allowlisted root pass validation."""
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     source = allowed / "input.geojson"
     source.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(allowed.resolve())])
-    input_path, output_path = _validate_paths(
-        str(source), str(allowed / "out.parquet")
-    )
+    input_path, output_path = _validate_paths(str(source), str(allowed / "out.parquet"))
     assert input_path == str(source.resolve())
     assert output_path == str((allowed / "out.parquet").resolve())
 

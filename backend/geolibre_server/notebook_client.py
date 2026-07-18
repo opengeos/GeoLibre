@@ -127,9 +127,7 @@ def _points_to_featurecollection(points: Iterable[Any]) -> dict[str, Any]:
             lng = point.get("lng", point.get("lon", point.get("longitude")))
             lat = point.get("lat", point.get("latitude"))
             if lng is None or lat is None:
-                raise ValueError(
-                    "Point dict needs lng/lat (or lon/longitude, latitude)."
-                )
+                raise ValueError("Point dict needs lng/lat (or lon/longitude, latitude).")
             props = {
                 k: v
                 for k, v in point.items()
@@ -174,9 +172,7 @@ class HostMap:
             params["duration"] = float(duration)
         _send("flyTo", params)
 
-    def set_view(
-        self, lng: float, lat: float, *, zoom: float | None = None
-    ) -> None:
+    def set_view(self, lng: float, lat: float, *, zoom: float | None = None) -> None:
         """Jump the camera to ``(lng, lat)`` (and optional ``zoom``)."""
         params: dict[str, Any] = {"center": [float(lng), float(lat)]}
         if zoom is not None:

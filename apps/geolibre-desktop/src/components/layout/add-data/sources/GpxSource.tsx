@@ -29,29 +29,24 @@ export function GpxSource() {
     path: string;
     text: string;
   } | null>(null);
-  const [selectedGpxLayerKinds, setSelectedGpxLayerKinds] = useState<
-    Record<GpxLayerKind, boolean>
-  >({
-    routes: true,
-    routePoints: false,
-    tracks: true,
-    trackPoints: false,
-    waypoints: true,
-  });
-
-  const hasSelectedGpxLayerKind = Object.values(selectedGpxLayerKinds).some(
-    Boolean,
+  const [selectedGpxLayerKinds, setSelectedGpxLayerKinds] = useState<Record<GpxLayerKind, boolean>>(
+    {
+      routes: true,
+      routePoints: false,
+      tracks: true,
+      trackPoints: false,
+      waypoints: true,
+    },
   );
+
+  const hasSelectedGpxLayerKind = Object.values(selectedGpxLayerKinds).some(Boolean);
 
   const handleGpxModeChange = (mode: GpxMode) => {
     setGpxMode(mode);
     setSelectedGpx(null);
   };
 
-  const setGpxLayerKindSelected = (
-    layerKind: GpxLayerKind,
-    selected: boolean,
-  ) => {
+  const setGpxLayerKindSelected = (layerKind: GpxLayerKind, selected: boolean) => {
     setSelectedGpxLayerKinds((current) => ({
       ...current,
       [layerKind]: selected,
@@ -104,9 +99,7 @@ export function GpxSource() {
 
     const response = await fetch(proxyFeedRequestUrl(sourcePath));
     if (!response.ok) {
-      throw new Error(
-        t("addData.common.requestFailed", { status: response.status }),
-      );
+      throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
     return {
       sourcePath,
@@ -160,9 +153,7 @@ export function GpxSource() {
     ];
     const layers = gpxLayerGroups
       .filter(
-        (group) =>
-          selectedGpxLayerKinds[group.kind] &&
-          group.featureCollection.features.length > 0,
+        (group) => selectedGpxLayerKinds[group.kind] && group.featureCollection.features.length > 0,
       )
       .map((group) => ({
         ...createBaseLayer(
@@ -194,19 +185,20 @@ export function GpxSource() {
     for (const layer of layers) {
       source.shell.addLayer(layer, source.beforeLayer);
     }
-    const combinedBounds = layers.reduce<
-      [number, number, number, number] | null
-    >((merged, layer) => {
-      const bounds = getLayerBounds(layer);
-      if (!bounds) return merged;
-      if (!merged) return bounds;
-      return [
-        Math.min(merged[0], bounds[0]),
-        Math.min(merged[1], bounds[1]),
-        Math.max(merged[2], bounds[2]),
-        Math.max(merged[3], bounds[3]),
-      ];
-    }, null);
+    const combinedBounds = layers.reduce<[number, number, number, number] | null>(
+      (merged, layer) => {
+        const bounds = getLayerBounds(layer);
+        if (!bounds) return merged;
+        if (!merged) return bounds;
+        return [
+          Math.min(merged[0], bounds[0]),
+          Math.min(merged[1], bounds[1]),
+          Math.max(merged[2], bounds[2]),
+          Math.max(merged[3], bounds[3]),
+        ];
+      },
+      null,
+    );
     if (combinedBounds) {
       source.shell.mapControllerRef.current?.fitBounds(combinedBounds);
     } else {
@@ -231,9 +223,7 @@ export function GpxSource() {
           <Select
             id="gpx-mode"
             value={gpxMode}
-            onChange={(event) =>
-              handleGpxModeChange(event.target.value as GpxMode)
-            }
+            onChange={(event) => handleGpxModeChange(event.target.value as GpxMode)}
           >
             <option value="url">{t("addData.gpx.url")}</option>
             <option value="file">{t("addData.gpx.file")}</option>
@@ -271,9 +261,7 @@ export function GpxSource() {
               <input
                 type="checkbox"
                 checked={selectedGpxLayerKinds.waypoints}
-                onChange={(event) =>
-                  setGpxLayerKindSelected("waypoints", event.target.checked)
-                }
+                onChange={(event) => setGpxLayerKindSelected("waypoints", event.target.checked)}
               />
               {t("addData.gpx.waypoints")}
             </label>
@@ -281,9 +269,7 @@ export function GpxSource() {
               <input
                 type="checkbox"
                 checked={selectedGpxLayerKinds.tracks}
-                onChange={(event) =>
-                  setGpxLayerKindSelected("tracks", event.target.checked)
-                }
+                onChange={(event) => setGpxLayerKindSelected("tracks", event.target.checked)}
               />
               {t("addData.gpx.tracks")}
             </label>
@@ -291,9 +277,7 @@ export function GpxSource() {
               <input
                 type="checkbox"
                 checked={selectedGpxLayerKinds.trackPoints}
-                onChange={(event) =>
-                  setGpxLayerKindSelected("trackPoints", event.target.checked)
-                }
+                onChange={(event) => setGpxLayerKindSelected("trackPoints", event.target.checked)}
               />
               {t("addData.gpx.trackPoints")}
             </label>
@@ -301,9 +285,7 @@ export function GpxSource() {
               <input
                 type="checkbox"
                 checked={selectedGpxLayerKinds.routes}
-                onChange={(event) =>
-                  setGpxLayerKindSelected("routes", event.target.checked)
-                }
+                onChange={(event) => setGpxLayerKindSelected("routes", event.target.checked)}
               />
               {t("addData.gpx.routes")}
             </label>
@@ -311,9 +293,7 @@ export function GpxSource() {
               <input
                 type="checkbox"
                 checked={selectedGpxLayerKinds.routePoints}
-                onChange={(event) =>
-                  setGpxLayerKindSelected("routePoints", event.target.checked)
-                }
+                onChange={(event) => setGpxLayerKindSelected("routePoints", event.target.checked)}
               />
               {t("addData.gpx.routePoints")}
             </label>

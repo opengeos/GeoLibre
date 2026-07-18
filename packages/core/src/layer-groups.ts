@@ -30,10 +30,7 @@ export type LayerTreeItem =
  * @param groups Group definitions.
  * @returns Panel rows in top-to-bottom display order.
  */
-export function buildLayerTree(
-  layers: GeoLibreLayer[],
-  groups: LayerGroup[],
-): LayerTreeItem[] {
+export function buildLayerTree(layers: GeoLibreLayer[], groups: LayerGroup[]): LayerTreeItem[] {
   const groupById = new Map(groups.map((g) => [g.id, g]));
   const display = [...layers].reverse();
 
@@ -91,10 +88,7 @@ export function buildLayerTree(
  * @param groups Group definitions.
  * @returns Layers with group effects applied.
  */
-export function applyGroupEffects(
-  layers: GeoLibreLayer[],
-  groups: LayerGroup[],
-): GeoLibreLayer[] {
+export function applyGroupEffects(layers: GeoLibreLayer[], groups: LayerGroup[]): GeoLibreLayer[] {
   if (groups.length === 0) return layers;
   const groupById = new Map(groups.map((g) => [g.id, g]));
   return layers.map((layer) => {
@@ -115,10 +109,7 @@ export function applyGroupEffects(
  * @param groupId Group whose members to locate.
  * @returns Ascending list of member indices (empty when the group has none).
  */
-export function groupMemberIndices(
-  layers: GeoLibreLayer[],
-  groupId: string,
-): number[] {
+export function groupMemberIndices(layers: GeoLibreLayer[], groupId: string): number[] {
   const indices: number[] = [];
   for (let i = 0; i < layers.length; i++) {
     if (layers[i]?.groupId === groupId) indices.push(i);
@@ -139,9 +130,7 @@ export function groupMemberIndices(
  * @param layers Flat layer list, possibly with interleaved group members.
  * @returns A new array with grouped layers made contiguous.
  */
-export function normalizeGroupContiguity(
-  layers: GeoLibreLayer[],
-): GeoLibreLayer[] {
+export function normalizeGroupContiguity(layers: GeoLibreLayer[]): GeoLibreLayer[] {
   const result: GeoLibreLayer[] = [];
   const placed = new Set<string>();
   for (let i = 0; i < layers.length; i++) {

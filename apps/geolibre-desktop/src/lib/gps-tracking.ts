@@ -112,10 +112,7 @@ export function haversineMeters(a: Position, b: Position): number {
 }
 
 /** True when a fix passes the accuracy gate (used for both logging and capture). */
-export function fixMeetsAccuracy(
-  fix: GpsFix,
-  settings: GpsTrackingSettings,
-): boolean {
+export function fixMeetsAccuracy(fix: GpsFix, settings: GpsTrackingSettings): boolean {
   return settings.maxAccuracyM <= 0 || fix.accuracy <= settings.maxAccuracyM;
 }
 
@@ -131,16 +128,12 @@ export function shouldLogFix(
 ): boolean {
   if (!fixMeetsAccuracy(next, settings)) return false;
   if (!prev) return true;
-  if (
-    settings.minTimeS > 0 &&
-    next.timestamp - prev.timestamp < settings.minTimeS * 1000
-  ) {
+  if (settings.minTimeS > 0 && next.timestamp - prev.timestamp < settings.minTimeS * 1000) {
     return false;
   }
   if (
     settings.minDistanceM > 0 &&
-    haversineMeters([prev.lng, prev.lat], [next.lng, next.lat]) <
-      settings.minDistanceM
+    haversineMeters([prev.lng, prev.lat], [next.lng, next.lat]) < settings.minDistanceM
   ) {
     return false;
   }
@@ -189,18 +182,13 @@ export function trackStats(segments: GpsTrackSegments): TrackStats {
     }
   }
   const all = segments.flat();
-  const durationS =
-    all.length >= 2
-      ? (all[all.length - 1].timestamp - all[0].timestamp) / 1000
-      : 0;
+  const durationS = all.length >= 2 ? (all[all.length - 1].timestamp - all[0].timestamp) / 1000 : 0;
   return { distanceM, durationS, pointCount: all.length };
 }
 
 /** A fix's GeoJSON coordinate, carrying altitude as the third value if known. */
 function fixPosition(fix: GpsFix): Position {
-  return fix.altitude != null
-    ? [fix.lng, fix.lat, fix.altitude]
-    : [fix.lng, fix.lat];
+  return fix.altitude != null ? [fix.lng, fix.lat, fix.altitude] : [fix.lng, fix.lat];
 }
 
 /** `metadata` flags tagging layers created by the GPS Tracking tool. */
@@ -225,15 +213,11 @@ export function isGpsCaptureLayer(layer: GpsLayerLike): boolean {
  * property (flat for a LineString, nested per segment for a MultiLineString)
  * so the recording remains GPX-exportable after a project save/load round trip.
  */
-export function trackFeature(
-  segments: GpsTrackSegments,
-): Feature<LineString | MultiLineString> {
+export function trackFeature(segments: GpsTrackSegments): Feature<LineString | MultiLineString> {
   const kept = lineSegments(segments);
   const stats = trackStats(kept);
   const all = kept.flat();
-  const times = kept.map((seg) =>
-    seg.map((f) => new Date(f.timestamp).toISOString()),
-  );
+  const times = kept.map((seg) => seg.map((f) => new Date(f.timestamp).toISOString()));
   return {
     type: "Feature",
     geometry:
@@ -250,18 +234,14 @@ export function trackFeature(
       distance_m: Math.round(stats.distanceM * 10) / 10,
       duration_s: Math.round(stats.durationS),
       start_time: all.length ? new Date(all[0].timestamp).toISOString() : null,
-      end_time: all.length
-        ? new Date(all[all.length - 1].timestamp).toISOString()
-        : null,
+      end_time: all.length ? new Date(all[all.length - 1].timestamp).toISOString() : null,
       times: kept.length === 1 ? times[0] : times,
     },
   };
 }
 
 /** The FeatureCollection saved as a track layer (a single track feature). */
-export function trackFeatureCollection(
-  segments: GpsTrackSegments,
-): FeatureCollection {
+export function trackFeatureCollection(segments: GpsTrackSegments): FeatureCollection {
   return { type: "FeatureCollection", features: [trackFeature(segments)] };
 }
 
@@ -330,9 +310,7 @@ function escapeXml(text: string): string {
 }
 
 function gpxTrkpt(fix: GpsFix, indent: string): string {
-  const lines = [
-    `${indent}<trkpt lat="${fix.lat}" lon="${fix.lng}">`,
-  ];
+  const lines = [`${indent}<trkpt lat="${fix.lat}" lon="${fix.lng}">`];
   if (fix.altitude != null) lines.push(`${indent}  <ele>${fix.altitude}</ele>`);
   lines.push(
     `${indent}  <time>${new Date(fix.timestamp).toISOString()}</time>`,
@@ -347,16 +325,9 @@ function gpxTrkpt(fix: GpsFix, indent: string): string {
  * elevation and timestamps. The complement of the reader in `gpx.ts`, which
  * is import-only.
  */
-export function buildTrackGpx(
-  segments: GpsTrackSegments,
-  name: string,
-): string {
+export function buildTrackGpx(segments: GpsTrackSegments, name: string): string {
   const segs = lineSegments(segments).map((seg) =>
-    [
-      `    <trkseg>`,
-      seg.map((f) => gpxTrkpt(f, "      ")).join("\n"),
-      `    </trkseg>`,
-    ].join("\n"),
+    [`    <trkseg>`, seg.map((f) => gpxTrkpt(f, "      ")).join("\n"), `    </trkseg>`].join("\n"),
   );
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,

@@ -1,8 +1,4 @@
-import {
-  isDuckDBQueryLayer,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { isDuckDBQueryLayer, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { getDuckDBLayerRows } from "@geolibre/plugins";
 import { useMemo } from "react";
 import type { ChartRow } from "../lib/attribute-charts";

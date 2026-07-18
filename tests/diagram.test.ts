@@ -52,9 +52,7 @@ describe("isDiagramStyleEnabled", () => {
     assert.equal(isDiagramStyleEnabled(style({ diagramType: "none" })), false);
     assert.equal(isDiagramStyleEnabled(style({ diagramFields: [] })), false);
     assert.equal(
-      isDiagramStyleEnabled(
-        style({ diagramFields: [{ property: "", color: "#fff" }] }),
-      ),
+      isDiagramStyleEnabled(style({ diagramFields: [{ property: "", color: "#fff" }] })),
       false,
     );
   });
@@ -100,10 +98,7 @@ describe("diagramsSuppressedByPointRenderer", () => {
 
 describe("diagramAnchor", () => {
   it("anchors points at their own coordinates", () => {
-    assert.deepEqual(
-      diagramAnchor({ type: "Point", coordinates: [1, 2] }),
-      [1, 2],
-    );
+    assert.deepEqual(diagramAnchor({ type: "Point", coordinates: [1, 2] }), [1, 2]);
   });
 
   it("anchors a polygon at its centroid", () => {
@@ -170,20 +165,14 @@ describe("diagramAnchor", () => {
 
   it("returns null for missing or non-finite geometry", () => {
     assert.equal(diagramAnchor(null), null);
-    assert.equal(
-      diagramAnchor({ type: "Point", coordinates: [Number.NaN, 0] }),
-      null,
-    );
+    assert.equal(diagramAnchor({ type: "Point", coordinates: [Number.NaN, 0] }), null);
   });
 });
 
 describe("collectDiagramData", () => {
   it("reads one value per field and computes totals and maxima", () => {
     const data = collectDiagramData(
-      collection([
-        pointFeature({ a: 3, b: 1 }),
-        pointFeature({ a: 1, b: 5 }),
-      ]),
+      collection([pointFeature({ a: 3, b: 1 }), pointFeature({ a: 1, b: 5 })]),
       style({ diagramSizeMode: "sum" }),
     );
     assert.equal(data.data.length, 2);
@@ -196,10 +185,7 @@ describe("collectDiagramData", () => {
   });
 
   it("clamps negative and non-numeric values to zero", () => {
-    const data = collectDiagramData(
-      collection([pointFeature({ a: -5, b: "7" })]),
-      style(),
-    );
+    const data = collectDiagramData(collection([pointFeature({ a: -5, b: "7" })]), style());
     assert.deepEqual(data.data[0].values, [0, 7]);
   });
 
@@ -218,10 +204,7 @@ describe("collectDiagramData", () => {
 
   it("falls back to constant sizing when attribute mode has no field yet", () => {
     const data = collectDiagramData(
-      collection([
-        pointFeature({ a: 1, b: 1 }),
-        pointFeature({ a: 5, b: 5 }),
-      ]),
+      collection([pointFeature({ a: 1, b: 1 }), pointFeature({ a: 5, b: 5 })]),
       style({ diagramSizeMode: "attribute", diagramSizeProperty: "" }),
     );
     assert.ok(data.data.every((datum) => datum.sizeValue === 1));
@@ -258,9 +241,8 @@ describe("collectDiagramData", () => {
   it("bounds the raw scan on sparse layers and reports it as truncation", () => {
     // Only a handful of the features are drawable, so the drawn count stays
     // far below the draw cap — the raw-scan cap must still stop the loop.
-    const sparse = Array.from(
-      { length: MAX_DIAGRAM_SCAN_FEATURES + 10 },
-      (_, i) => pointFeature(i < 3 ? { a: 1, b: 1 } : { a: 0, b: 0 }),
+    const sparse = Array.from({ length: MAX_DIAGRAM_SCAN_FEATURES + 10 }, (_, i) =>
+      pointFeature(i < 3 ? { a: 1, b: 1 } : { a: 0, b: 0 }),
     );
     const data = collectDiagramData(collection(sparse), style());
     assert.equal(data.data.length, 3);
@@ -364,18 +346,11 @@ describe("diagramPixelSize", () => {
   };
 
   it("returns the configured size for fixed sizing", () => {
-    assert.equal(
-      diagramPixelSize(datum, style({ diagramSize: 42 }), 100),
-      42,
-    );
+    assert.equal(diagramPixelSize(datum, style({ diagramSize: 42 }), 100), 42);
   });
 
   it("scales by square root so area tracks the value", () => {
-    const scaled = diagramPixelSize(
-      datum,
-      style({ diagramSizeMode: "sum", diagramSize: 40 }),
-      100,
-    );
+    const scaled = diagramPixelSize(datum, style({ diagramSizeMode: "sum", diagramSize: 40 }), 100);
     assert.equal(scaled, 40 * Math.sqrt(25 / 100));
   });
 

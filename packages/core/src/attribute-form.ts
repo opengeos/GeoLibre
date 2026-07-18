@@ -64,9 +64,7 @@ export function getAttributeFormField(
 }
 
 /** The label attribute forms should show for a configured field. */
-export function attributeFormFieldLabel(
-  config: AttributeFormFieldConfig,
-): string {
+export function attributeFormFieldLabel(config: AttributeFormFieldConfig): string {
   return config.alias?.trim() || config.field;
 }
 
@@ -91,23 +89,16 @@ export function parseValueMapText(text: string): AttributeFormValueMapEntry[] {
 }
 
 /** Serialize value-map entries back into the designer's editable text form. */
-export function valueMapToText(
-  entries: readonly AttributeFormValueMapEntry[] | undefined,
-): string {
+export function valueMapToText(entries: readonly AttributeFormValueMapEntry[] | undefined): string {
   return (entries ?? [])
     .map((entry) =>
-      entry.label && entry.label !== entry.value
-        ? `${entry.value}=${entry.label}`
-        : entry.value,
+      entry.label && entry.label !== entry.value ? `${entry.value}=${entry.label}` : entry.value,
     )
     .join("\n");
 }
 
 /** Display label for a stored value under a value-map widget. */
-export function valueMapLabelFor(
-  config: AttributeFormFieldConfig,
-  value: unknown,
-): string {
+export function valueMapLabelFor(config: AttributeFormFieldConfig, value: unknown): string {
   const text = value == null ? "" : String(value);
   const entry = config.valueMap?.find((candidate) => candidate.value === text);
   return entry?.label ?? text;
@@ -119,10 +110,7 @@ export function valueMapLabelFor(
  * string that does not parse is returned verbatim so validation can flag it
  * instead of silently dropping the input.
  */
-export function coerceAttributeFormValue(
-  config: AttributeFormFieldConfig,
-  raw: string,
-): unknown {
+export function coerceAttributeFormValue(config: AttributeFormFieldConfig, raw: string): unknown {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   if (config.widget === "number" || config.widget === "range") {
@@ -192,8 +180,7 @@ export function validateAttributeFormField(
   if (empty) {
     // An unchecked checkbox is a valid false-like state, not a missing value —
     // requiring it would block every save with a confusing "value required".
-    if (config.required && config.widget !== "checkbox")
-      return { code: "required" };
+    if (config.required && config.widget !== "checkbox") return { code: "required" };
   } else {
     if (config.widget === "number" || config.widget === "range") {
       const numeric = typeof value === "number" ? value : Number(value);
@@ -230,9 +217,7 @@ export function validateAttributeFormField(
     if (result.kind === "value" && result.value !== true) {
       return {
         code: "constraint",
-        ...(config.constraintDescription
-          ? { message: config.constraintDescription }
-          : {}),
+        ...(config.constraintDescription ? { message: config.constraintDescription } : {}),
       };
     }
   }

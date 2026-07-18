@@ -43,9 +43,7 @@ export function OsmPbfDialogs({ osmPbf }: OsmPbfDialogsProps) {
             <Button variant="outline" onClick={() => osmPbf.setConfirm(null)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={osmPbf.runConfirmed}>
-              {t("toolbar.item.continue")}
-            </Button>
+            <Button onClick={osmPbf.runConfirmed}>{t("toolbar.item.continue")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -53,9 +51,7 @@ export function OsmPbfDialogs({ osmPbf }: OsmPbfDialogsProps) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.addOsmPbfLayerTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.addOsmPbfLayerDesc")}
-            </DialogDescription>
+            <DialogDescription>{t("toolbar.item.addOsmPbfLayerDesc")}</DialogDescription>
           </DialogHeader>
           <form
             className="space-y-3"
@@ -82,9 +78,7 @@ export function OsmPbfDialogs({ osmPbf }: OsmPbfDialogsProps) {
                 value={osmPbf.url}
                 onChange={(e) => osmPbf.setUrl(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                {t("toolbar.item.osmPbfUrlHint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("toolbar.item.osmPbfUrlHint")}</p>
             </div>
             <div className="flex items-center justify-between gap-2">
               <Button

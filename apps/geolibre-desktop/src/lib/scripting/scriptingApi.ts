@@ -20,9 +20,7 @@ import { captureMapImage } from "../print-layout-export";
 // console expose identical behaviour.
 
 /** A single command handler: params object in, value (or promise) out. */
-export type ScriptingHandler = (
-  params: Record<string, unknown>,
-) => unknown | Promise<unknown>;
+export type ScriptingHandler = (params: Record<string, unknown>) => unknown | Promise<unknown>;
 
 export type ScriptingHandlers = Record<string, ScriptingHandler>;
 
@@ -69,9 +67,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return null;
     },
     fitBounds: (params) => {
-      getController()?.fitBounds(
-        params.bounds as [number, number, number, number],
-      );
+      getController()?.fitBounds(params.bounds as [number, number, number, number]);
       return null;
     },
     setView: (params) => {
@@ -84,15 +80,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     // -- queries ------------------------------------------------------------
     identify: (params) => {
       const lngLat = params.lngLat as [number, number];
-      const layerId =
-        typeof params.layerId === "string" ? params.layerId : undefined;
+      const layerId = typeof params.layerId === "string" ? params.layerId : undefined;
       return getController()?.identifyFeatures(lngLat, layerId) ?? [];
     },
     getLayerFeatures: (params) => {
       const layerId = requireLayerId(params);
-      const layer = useAppStore
-        .getState()
-        .layers.find((item) => item.id === layerId);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
       return layer.geojson?.features ?? [];
     },
@@ -143,9 +136,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return null;
     },
     setVisibility: (params) => {
-      useAppStore
-        .getState()
-        .setLayerVisibility(requireLayerId(params), Boolean(params.visible));
+      useAppStore.getState().setLayerVisibility(requireLayerId(params), Boolean(params.visible));
       return null;
     },
     setOpacity: (params) => {
@@ -154,18 +145,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       if (!Number.isFinite(raw)) {
         throw new Error("setOpacity: opacity must be a finite number");
       }
-      useAppStore
-        .getState()
-        .setLayerOpacity(layerId, Math.min(1, Math.max(0, raw)));
+      useAppStore.getState().setLayerOpacity(layerId, Math.min(1, Math.max(0, raw)));
       return null;
     },
     setStyle: (params) => {
       useAppStore
         .getState()
-        .setLayerStyle(
-          requireLayerId(params),
-          params.style as Record<string, unknown>,
-        );
+        .setLayerStyle(requireLayerId(params), params.style as Record<string, unknown>);
       return null;
     },
     setBasemap: (params) => {
@@ -173,22 +159,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       // "undefined") and non-http(s) schemes like javascript:/data: that would
       // be persisted into project state and snapshots.
       const url = params.url;
-      if (
-        typeof url !== "string" ||
-        (!/^https?:\/\//i.test(url) && !url.startsWith("/"))
-      ) {
-        throw new Error(
-          "setBasemap: url must be an http(s) or root-relative URL string",
-        );
+      if (typeof url !== "string" || (!/^https?:\/\//i.test(url) && !url.startsWith("/"))) {
+        throw new Error("setBasemap: url must be an http(s) or root-relative URL string");
       }
       useAppStore.getState().setBasemapStyleUrl(url);
       return null;
     },
     zoomToLayer: (params) => {
       const layerId = requireLayerId(params);
-      const layer = useAppStore
-        .getState()
-        .layers.find((item) => item.id === layerId);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
       getController()?.fitLayer(layer);
       return null;
@@ -247,9 +226,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             const layerId = useAppStore.getState().addGeoJsonLayer(name, fc);
             tracker.addOutputLayer(name);
             resultLayerIds.push(layerId);
-            const layer = useAppStore
-              .getState()
-              .layers.find((item) => item.id === layerId);
+            const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
             if (layer) getController()?.fitLayer(layer);
           },
           duckdb: createDuckDbCapability(),
@@ -262,10 +239,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         };
         await algo.run(ctx);
       } catch (error) {
-        tracker.finish(
-          "error",
-          error instanceof Error ? error.message : String(error),
-        );
+        tracker.finish("error", error instanceof Error ? error.message : String(error));
         throw error;
       }
       if (softError) tracker.finish("error", softError);

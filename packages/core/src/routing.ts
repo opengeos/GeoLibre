@@ -1,10 +1,4 @@
-import type {
-  Feature,
-  FeatureCollection,
-  LineString,
-  MultiPolygon,
-  Polygon,
-} from "geojson";
+import type { Feature, FeatureCollection, LineString, MultiPolygon, Polygon } from "geojson";
 import { getRuntimeEnvironment } from "./runtime-env";
 
 /**
@@ -50,9 +44,7 @@ export interface RoutingPoint {
 export function getRoutingConfig(): RoutingConfig {
   const env = getRuntimeEnvironment();
   return {
-    endpoint:
-      stripTrailingSlash(env.VITE_ROUTING_ENDPOINT?.trim()) ||
-      DEFAULT_ROUTING_ENDPOINT,
+    endpoint: stripTrailingSlash(env.VITE_ROUTING_ENDPOINT?.trim()) || DEFAULT_ROUTING_ENDPOINT,
   };
 }
 
@@ -132,8 +124,7 @@ export function isochroneResponseToFeatures(
   for (const feature of features) {
     const type = feature?.geometry?.type;
     if (type !== "Polygon" && type !== "MultiPolygon") continue;
-    const contour = (feature.properties as { contour?: unknown } | null)
-      ?.contour;
+    const contour = (feature.properties as { contour?: unknown } | null)?.contour;
     out.push({
       type: "Feature",
       geometry: feature.geometry as Polygon | MultiPolygon,
@@ -208,8 +199,7 @@ export function matrixResponseToFeatures(
   targets: RoutingPoint[],
   ctx: { mode: RoutingMode },
 ): Feature<LineString, MatrixFeatureProps>[] {
-  const rows = (response as { sources_to_targets?: MatrixCell[][] } | null)
-    ?.sources_to_targets;
+  const rows = (response as { sources_to_targets?: MatrixCell[][] } | null)?.sources_to_targets;
   if (!Array.isArray(rows)) return [];
   const out: Feature<LineString, MatrixFeatureProps>[] = [];
   for (const row of rows) {
@@ -256,10 +246,7 @@ export interface RouteRequestBody {
  * @param mode - The travel mode (costing model).
  * @returns The request body.
  */
-export function buildRouteRequest(
-  points: RoutingPoint[],
-  mode: RoutingMode,
-): RouteRequestBody {
+export function buildRouteRequest(points: RoutingPoint[], mode: RoutingMode): RouteRequestBody {
   return {
     locations: points.map((p) => ({ lon: p.lon, lat: p.lat })),
     costing: mode,
@@ -276,10 +263,7 @@ export function buildRouteRequest(
  * @param precision - Number of decimal digits the encoder used (6 for Valhalla).
  * @returns The decoded `[lon, lat]` coordinates in order.
  */
-export function decodePolyline(
-  encoded: string,
-  precision = 6,
-): [number, number][] {
+export function decodePolyline(encoded: string, precision = 6): [number, number][] {
   const factor = 10 ** precision;
   const len = encoded.length;
   const coordinates: [number, number][] = [];
@@ -363,8 +347,7 @@ export function routeResponseToFeatures(
         from_id: from?.id ?? index,
         to_id: to?.id ?? index + 1,
         time_s: typeof leg.summary?.time === "number" ? leg.summary.time : 0,
-        distance_km:
-          typeof leg.summary?.length === "number" ? leg.summary.length : 0,
+        distance_km: typeof leg.summary?.length === "number" ? leg.summary.length : 0,
         mode: ctx.mode,
       },
     });
@@ -439,11 +422,7 @@ export class RoutingRequestError extends Error {
   }
 }
 
-async function postJson(
-  url: string,
-  body: unknown,
-  signal?: AbortSignal,
-): Promise<unknown> {
+async function postJson(url: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -485,11 +464,7 @@ export function requestMatrix(
   body: MatrixRequestBody,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  return postJson(
-    `${stripTrailingSlash(endpoint)}/sources_to_targets`,
-    body,
-    signal,
-  );
+  return postJson(`${stripTrailingSlash(endpoint)}/sources_to_targets`, body, signal);
 }
 
 /**

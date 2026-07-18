@@ -87,10 +87,7 @@ export function urlHosts(urls: string[]): string[] {
  * ones safe to evict from the cache when `region` is deleted. Shared tiles
  * (common to an overlapping region) are retained.
  */
-export function exclusiveTileUrls(
-  region: OfflineRegion,
-  others: OfflineRegion[],
-): string[] {
+export function exclusiveTileUrls(region: OfflineRegion, others: OfflineRegion[]): string[] {
   const keep = new Set<string>();
   for (const other of others) {
     if (other.id === region.id) continue;
@@ -114,8 +111,7 @@ function isOfflineRegion(value: unknown): value is OfflineRegion {
   if (!value || typeof value !== "object") return false;
   const r = value as Record<string, unknown>;
   const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
-  const isStrArray = (v: unknown) =>
-    Array.isArray(v) && v.every((x) => typeof x === "string");
+  const isStrArray = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
   // Validate every field, including numeric and array-element invariants: a
   // tampered or older record that slips through here is cast to a trusted
   // OfflineRegion and would surface as a corrupt id (`regionId` → "NaN…"),
@@ -154,9 +150,7 @@ export function loadOfflineRegions(storage?: Storage): OfflineRegion[] {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isOfflineRegion)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+    return parsed.filter(isOfflineRegion).sort((a, b) => b.updatedAt - a.updatedAt);
   } catch {
     return [];
   }
@@ -167,10 +161,7 @@ export function loadOfflineRegions(storage?: Storage): OfflineRegion[] {
  * rejected (e.g. QuotaExceededError when many large regions are stored) so the
  * caller can warn the user rather than silently losing the record.
  */
-export function persistOfflineRegions(
-  regions: OfflineRegion[],
-  storage?: Storage,
-): boolean {
+export function persistOfflineRegions(regions: OfflineRegion[], storage?: Storage): boolean {
   const store = getStorage(storage);
   if (!store) return false;
   try {
@@ -204,14 +195,8 @@ export function upsertOfflineRegion(
 }
 
 /** Rename a region in place. Returns the updated list. */
-export function renameOfflineRegion(
-  id: string,
-  name: string,
-  storage?: Storage,
-): OfflineRegion[] {
-  const regions = loadOfflineRegions(storage).map((r) =>
-    r.id === id ? { ...r, name } : r,
-  );
+export function renameOfflineRegion(id: string, name: string, storage?: Storage): OfflineRegion[] {
+  const regions = loadOfflineRegions(storage).map((r) => (r.id === id ? { ...r, name } : r));
   persistOfflineRegions(regions, storage);
   return regions;
 }
@@ -220,11 +205,7 @@ export function renameOfflineRegion(
  * Bump a region's `updatedAt` to `updatedAt` (epoch ms), e.g. after a successful
  * partial retry re-warms its failed tiles. No-ops if the region isn't found.
  */
-export function touchOfflineRegion(
-  id: string,
-  updatedAt: number,
-  storage?: Storage,
-): void {
+export function touchOfflineRegion(id: string, updatedAt: number, storage?: Storage): void {
   const existing = loadOfflineRegions(storage);
   if (!existing.some((r) => r.id === id)) return;
   const regions = existing

@@ -21,11 +21,7 @@ interface MapModeBannerProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
-function formatDistance(
-  meters: number,
-  locale: string,
-  t: TFunction,
-): string {
+function formatDistance(meters: number, locale: string, t: TFunction): string {
   if (meters >= 1000) {
     const value = new Intl.NumberFormat(locale, {
       maximumFractionDigits: meters >= 10000 ? 0 : 1,
@@ -38,11 +34,7 @@ function formatDistance(
   return t("map.directionsMode.distanceMeters", { value });
 }
 
-function formatDuration(
-  seconds: number,
-  locale: string,
-  t: TFunction,
-): string {
+function formatDuration(seconds: number, locale: string, t: TFunction): string {
   if (seconds < 30) {
     return t("map.directionsMode.durationLessThanMinute");
   }
@@ -124,15 +116,10 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
           data-testid="directions-mode-banner"
         >
           <div className="flex items-start gap-2">
-            <Navigation
-              className="mt-0.5 h-4 w-4 shrink-0 text-primary"
-              aria-hidden="true"
-            />
+            <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <div className="min-w-0">
               <p className="font-medium">{t("map.directionsMode.title")}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("map.directionsMode.hint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("map.directionsMode.hint")}</p>
             </div>
           </div>
           {/* Visually-hidden live region so screen readers are told when the
@@ -164,11 +151,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
                         {t("map.directionsMode.totalDistance")}
                       </div>
                       <p className="truncate text-sm font-semibold">
-                        {formatDistance(
-                          routeMetrics.totalDistanceMeters,
-                          i18n.language,
-                          t,
-                        )}
+                        {formatDistance(routeMetrics.totalDistanceMeters, i18n.language, t)}
                       </p>
                     </div>
                     <div className="min-w-0">
@@ -177,38 +160,23 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
                         {t("map.directionsMode.estimatedTime")}
                       </div>
                       <p className="truncate text-sm font-semibold">
-                        {formatDuration(
-                          routeMetrics.totalDurationSeconds,
-                          i18n.language,
-                          t,
-                        )}
+                        {formatDuration(routeMetrics.totalDurationSeconds, i18n.language, t)}
                       </p>
                     </div>
                   </div>
                   {routeMetrics.legs.length > 1 ? (
                     <div className="max-h-20 space-y-1 overflow-auto border-t pt-2 text-xs text-muted-foreground">
                       {routeMetrics.legs.map((leg, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between gap-3"
-                        >
+                        <div key={index} className="flex items-center justify-between gap-3">
                           <span>
                             {t("map.directionsMode.segment", {
                               index: index + 1,
                             })}
                           </span>
                           <span className="shrink-0 tabular-nums">
-                            {formatDistance(
-                              leg.distanceMeters,
-                              i18n.language,
-                              t,
-                            )}
+                            {formatDistance(leg.distanceMeters, i18n.language, t)}
                             {" / "}
-                            {formatDuration(
-                              leg.durationSeconds,
-                              i18n.language,
-                              t,
-                            )}
+                            {formatDuration(leg.durationSeconds, i18n.language, t)}
                           </span>
                         </div>
                       ))}
@@ -268,15 +236,10 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
           aria-label={t("map.reverseGeocodeMode.title")}
           data-testid="reverse-geocode-mode-banner"
         >
-          <MapPin
-            className="h-4 w-4 shrink-0 text-primary"
-            aria-hidden="true"
-          />
+          <MapPin className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="font-medium">{t("map.reverseGeocodeMode.title")}</p>
-            <p className="text-xs text-muted-foreground">
-              {t("map.reverseGeocodeMode.hint")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("map.reverseGeocodeMode.hint")}</p>
           </div>
           <Button
             type="button"

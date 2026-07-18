@@ -35,8 +35,7 @@ export const DropdownMenuSubTrigger = React.forwardRef<
     <ChevronRight className="ms-auto h-4 w-4 shrink-0 rtl:rotate-180" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
-DropdownMenuSubTrigger.displayName =
-  DropdownMenuPrimitive.SubTrigger.displayName;
+DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
 
 export const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
@@ -68,8 +67,7 @@ export const DropdownMenuSubContent = React.forwardRef<
     />
   </DropdownMenuPrimitive.Portal>
 ));
-DropdownMenuSubContent.displayName =
-  DropdownMenuPrimitive.SubContent.displayName;
+DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 
 export const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
@@ -155,8 +153,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
     {children}
   </DropdownMenuPrimitive.CheckboxItem>
 ));
-DropdownMenuCheckboxItem.displayName =
-  DropdownMenuPrimitive.CheckboxItem.displayName;
+DropdownMenuCheckboxItem.displayName = DropdownMenuPrimitive.CheckboxItem.displayName;
 
 export const DropdownMenuRadioItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>,
@@ -178,8 +175,7 @@ export const DropdownMenuRadioItem = React.forwardRef<
     {children}
   </DropdownMenuPrimitive.RadioItem>
 ));
-DropdownMenuRadioItem.displayName =
-  DropdownMenuPrimitive.RadioItem.displayName;
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName;
 
 export const DropdownMenuLabel = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Label>,
@@ -189,11 +185,7 @@ export const DropdownMenuLabel = React.forwardRef<
 >(({ className, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn(
-      "px-2 py-1.5 text-sm font-semibold",
-      inset && "ps-8",
-      className,
-    )}
+    className={cn("px-2 py-1.5 text-sm font-semibold", inset && "ps-8", className)}
     {...props}
   />
 ));
@@ -209,8 +201,7 @@ export const DropdownMenuSeparator = React.forwardRef<
     {...props}
   />
 ));
-DropdownMenuSeparator.displayName =
-  DropdownMenuPrimitive.Separator.displayName;
+DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
 export const DropdownMenuShortcut = ({
   className,

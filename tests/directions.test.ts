@@ -123,10 +123,7 @@ describe("directions route metrics extraction", () => {
       routes: [
         {
           geometry: "",
-          legs: [
-            { distance: 1000, duration: 300 },
-            { distance: 500 },
-          ],
+          legs: [{ distance: 1000, duration: 300 }, { distance: 500 }],
         },
       ],
       waypoints: [],

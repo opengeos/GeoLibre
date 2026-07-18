@@ -10,19 +10,13 @@ export const PLACEHOLDER_LAYER_TYPES = new Set([
 ]);
 
 export function isPlaceholderLayer(layer: GeoLibreLayer): boolean {
-  if (
-    Array.isArray(layer.metadata.nativeLayerIds) &&
-    layer.metadata.nativeLayerIds.length > 0
-  ) {
+  if (Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0) {
     return false;
   }
 
   if (layer.metadata.externalDeckLayer === true) return false;
 
-  return (
-    PLACEHOLDER_LAYER_TYPES.has(layer.type) ||
-    layer.metadata.placeholder === true
-  );
+  return PLACEHOLDER_LAYER_TYPES.has(layer.type) || layer.metadata.placeholder === true;
 }
 
 export function placeholderMessage(layer: GeoLibreLayer): string {

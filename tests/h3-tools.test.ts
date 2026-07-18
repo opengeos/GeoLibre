@@ -16,10 +16,7 @@ import {
   suggestResolution,
 } from "../packages/processing/src/h3-tools";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
-import type {
-  DuckDbCapability,
-  ProcessingContext,
-} from "../packages/processing/src/types";
+import type { DuckDbCapability, ProcessingContext } from "../packages/processing/src/types";
 
 describe("h3 resolution math", () => {
   it("exposes 16 average-area entries (res 0..15), strictly decreasing", () => {
@@ -92,7 +89,15 @@ function polygonLayer(): GeoLibreLayer {
           properties: {},
           geometry: {
             type: "Polygon",
-            coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+                [0, 0],
+              ],
+            ],
           },
         },
       ],
@@ -141,8 +146,7 @@ function mockDuckDb(): DuckDbCapability & {
         {
           h3: "8928308280fffff",
           count: 1,
-          geojson:
-            '{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}',
+          geojson: '{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}',
         },
       ];
     },
@@ -360,10 +364,7 @@ describe("h3 tools", () => {
 
 describe("h3 SQL + geometry builders", () => {
   it("builds a closed POLYGON WKT from a bbox", () => {
-    assert.equal(
-      bboxToWktPolygon([0, 1, 2, 3]),
-      "POLYGON((0 1, 2 1, 2 3, 0 3, 0 1))",
-    );
+    assert.equal(bboxToWktPolygon([0, 1, 2, 3]), "POLYGON((0 1, 2 1, 2 3, 0 3, 0 1))");
   });
 
   it("builds grid SQL from a WKT literal, escaping single quotes", () => {
@@ -372,7 +373,10 @@ describe("h3 SQL + geometry builders", () => {
     const sql = buildGridFromWktSql("POLYGON((0 0, 1 0, 1 1, 0 0))'x", 7);
     assert.match(sql, /h3_polygon_wkt_to_cells\('POLYGON\(\(0 0, 1 0, 1 1, 0 0\)\)''x', 7\)/);
     assert.match(sql, /h3_h3_to_string\(cell\) AS h3/);
-    assert.match(sql, /ST_AsGeoJSON\(ST_GeomFromText\(h3_cell_to_boundary_wkt\(cell\)\)\) AS geojson/);
+    assert.match(
+      sql,
+      /ST_AsGeoJSON\(ST_GeomFromText\(h3_cell_to_boundary_wkt\(cell\)\)\) AS geojson/,
+    );
   });
 
   it("builds polyfill grid SQL that unions only polygon geometry and guards NULL", () => {
@@ -395,10 +399,7 @@ describe("h3 SQL + geometry builders", () => {
     assert.match(sql, /ST_Centroid\(geom\) AS pt/);
     assert.match(sql, /count\(\*\) AS count/);
     assert.doesNotMatch(sql, /AS value/);
-    assert.match(
-      sql,
-      /ST_GeometryType\(geom\) IN \('POINT', 'MULTIPOINT'\)/,
-    );
+    assert.match(sql, /ST_GeometryType\(geom\) IN \('POINT', 'MULTIPOINT'\)/);
   });
 
   it("builds bin SQL for an aggregate, mapping mean->avg and quoting the field", () => {

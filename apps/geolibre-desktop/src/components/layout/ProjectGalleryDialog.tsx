@@ -59,9 +59,7 @@ const PAGE_SIZE = 24;
 
 /** Lowercased haystack for the client-side title/author/tag filter. */
 function searchHaystack(project: SharedProject): string {
-  return [project.title, project.username, ...project.tags]
-    .join(" ")
-    .toLowerCase();
+  return [project.title, project.username, ...project.tags].join(" ").toLowerCase();
 }
 
 /**
@@ -102,15 +100,11 @@ export function ProjectGalleryDialog({
   onOpenProject,
 }: ProjectGalleryDialogProps) {
   const { t } = useTranslation();
-  const trimmedToken = (
-    useDesktopSettingsStore((s) => s.desktopSettings.shareToken) ?? ""
-  ).trim();
+  const trimmedToken = (useDesktopSettingsStore((s) => s.desktopSettings.shareToken) ?? "").trim();
   const hasToken = trimmedToken.length > 0;
   const [scope, setScope] = useState<GalleryScope>("featured");
   const [projects, setProjects] = useState<SharedProject[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "loadingMore">(
-    "idle",
-  );
+  const [status, setStatus] = useState<"idle" | "loading" | "loadingMore">("idle");
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   // Next-page offset tracked from the server's raw record count, not the
@@ -124,8 +118,7 @@ export function ProjectGalleryDialog({
 
   // Without a token, the "My projects" scope isn't available; fall back to the
   // featured tab.
-  const effectiveScope: GalleryScope =
-    scope === "mine" && !hasToken ? "featured" : scope;
+  const effectiveScope: GalleryScope = scope === "mine" && !hasToken ? "featured" : scope;
 
   // Explicit dialog size once the user drags the corner grip (null = the
   // default responsive size). `dialogRef` reads the live element size at the
@@ -142,62 +135,53 @@ export function ProjectGalleryDialog({
   // via a -50% transform, so each edge moves by half the size change; growing
   // by 2x the pointer delta keeps the grip under the cursor (mirrors the Print
   // Layout dialog's resize idiom).
-  const startDialogResize = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      const el = dialogRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startW = rect.width;
-      const startH = rect.height;
-      let next = { width: startW, height: startH };
-      let frame: number | null = null;
-      const prevCursor = document.body.style.cursor;
-      const prevSelect = document.body.style.userSelect;
-      document.body.style.cursor = "nwse-resize";
-      document.body.style.userSelect = "none";
+  const startDialogResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const el = dialogRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = rect.width;
+    const startH = rect.height;
+    let next = { width: startW, height: startH };
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "nwse-resize";
+    document.body.style.userSelect = "none";
 
-      const onMove = (e: PointerEvent) => {
-        next = {
-          width: Math.max(
-            480,
-            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2),
-          ),
-          height: Math.max(
-            360,
-            Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
-          ),
-        };
-        if (frame !== null) return;
-        frame = window.requestAnimationFrame(() => {
-          frame = null;
-          setDialogSize(next);
-        });
+    const onMove = (e: PointerEvent) => {
+      next = {
+        width: Math.max(480, Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2)),
+        height: Math.max(360, Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2)),
       };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onUp);
-        if (frame !== null) window.cancelAnimationFrame(frame);
-        document.body.style.cursor = prevCursor;
-        document.body.style.userSelect = prevSelect;
-        resizeCleanupRef.current = null;
-      };
-      const onUp = () => {
-        cleanup();
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
         setDialogSize(next);
-      };
-      resizeCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onUp);
-    },
-    [],
-  );
+      });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      resizeCleanupRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setDialogSize(next);
+    };
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
 
   // Fetch a page. `offset === 0` is the initial load (replaces the list);
   // anything else appends. Each call supersedes a prior in-flight fetch.
@@ -230,9 +214,7 @@ export function ProjectGalleryDialog({
             signal: controller.signal,
           });
           if (controller.signal.aborted) return;
-          setProjects((prev) =>
-            offset === 0 ? result.projects : [...prev, ...result.projects],
-          );
+          setProjects((prev) => (offset === 0 ? result.projects : [...prev, ...result.projects]));
           setHasMore(result.hasMore);
           // Advance by the server's raw count so dropped records can't skew the
           // next offset.
@@ -275,9 +257,7 @@ export function ProjectGalleryDialog({
     try {
       await onOpenProject(
         project.rawJsonUrl,
-        effectiveScope === "mine"
-          ? projectOpenToken(project, trimmedToken)
-          : undefined,
+        effectiveScope === "mine" ? projectOpenToken(project, trimmedToken) : undefined,
       );
       onOpenChange(false);
     } catch (err) {
@@ -295,8 +275,7 @@ export function ProjectGalleryDialog({
     : projects;
 
   const showInitialSpinner = status === "loading" && projects.length === 0;
-  const showEmpty =
-    status !== "loading" && !error && visibleProjects.length === 0;
+  const showEmpty = status !== "loading" && !error && visibleProjects.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -373,9 +352,7 @@ export function ProjectGalleryDialog({
         </div>
 
         {!hasToken ? (
-          <p className="text-xs text-muted-foreground">
-            {t("gallery.signedOutHint")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("gallery.signedOutHint")}</p>
         ) : null}
 
         {openError ? (
@@ -493,14 +470,8 @@ function VisibilityBadge({ visibility }: { visibility: string }) {
   const isPrivate = visibility === "private";
   return (
     <span className="absolute start-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
-      {isPrivate ? (
-        <Lock className="h-2.5 w-2.5" />
-      ) : (
-        <EyeOff className="h-2.5 w-2.5" />
-      )}
-      {isPrivate
-        ? t("gallery.visibilityPrivate")
-        : t("gallery.visibilityUnlisted")}
+      {isPrivate ? <Lock className="h-2.5 w-2.5" /> : <EyeOff className="h-2.5 w-2.5" />}
+      {isPrivate ? t("gallery.visibilityPrivate") : t("gallery.visibilityUnlisted")}
     </span>
   );
 }
@@ -548,17 +519,12 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
       </button>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
-        <p
-          className="truncate text-sm font-medium"
-          title={project.title || t("gallery.untitled")}
-        >
+        <p className="truncate text-sm font-medium" title={project.title || t("gallery.untitled")}>
           {project.title || t("gallery.untitled")}
         </p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {project.username ? (
-            <span className="truncate">
-              {t("gallery.byAuthor", { author: project.username })}
-            </span>
+            <span className="truncate">{t("gallery.byAuthor", { author: project.username })}</span>
           ) : null}
           <span className="ms-auto flex shrink-0 items-center gap-1">
             <Eye className="h-3 w-3" />
@@ -567,12 +533,7 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
         </div>
 
         <div className="mt-2 flex items-center gap-2">
-          <Button
-            size="sm"
-            className="flex-1"
-            disabled={disabled}
-            onClick={onOpen}
-          >
+          <Button size="sm" className="flex-1" disabled={disabled} onClick={onOpen}>
             {opening ? (
               <>
                 <Loader2 className="me-2 h-4 w-4 animate-spin" />

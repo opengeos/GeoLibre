@@ -14,14 +14,8 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
-import {
-  planetaryBasemapLabel,
-  planetaryBasemapSectionKey,
-} from "../../lib/planetary-sections";
-import {
-  buildRemotePmtilesBasemap,
-  isPmtilesStyleUrl,
-} from "../../lib/pmtiles-basemap-url";
+import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
+import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { CollapsibleSection } from "../CollapsibleSection";
 import {
   Button,
@@ -36,13 +30,7 @@ import {
   Select,
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const DEFAULT_BASEMAP_ID = "liberty";
@@ -108,8 +96,7 @@ export function NewProjectDialog({
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
-  const [selectedBasemapId, setSelectedBasemapId] =
-    useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
+  const [selectedBasemapId, setSelectedBasemapId] = useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
   const [customUrl, setCustomUrl] = useState("");
   const [customFlavor, setCustomFlavor] = useState<ProtomapsFlavor>("light");
@@ -125,16 +112,14 @@ export function NewProjectDialog({
   // the build or from Settings → Environment variables, so re-resolve when the
   // dialog opens and whenever the runtime env changes; an absent key hides the
   // section.
-  const [protomapsPresets, setProtomapsPresets] = useState<PresetBasemap[]>(
-    resolveProtomapsPresets,
-  );
+  const [protomapsPresets, setProtomapsPresets] =
+    useState<PresetBasemap[]>(resolveProtomapsPresets);
   useEffect(() => {
     if (!open) return;
     const refresh = () => setProtomapsPresets(resolveProtomapsPresets());
     refresh();
     window.addEventListener("geolibre:runtime-env-change", refresh);
-    return () =>
-      window.removeEventListener("geolibre:runtime-env-change", refresh);
+    return () => window.removeEventListener("geolibre:runtime-env-change", refresh);
   }, [open]);
   // Move focus into the custom URL field the moment the user selects the
   // "Custom URL" basemap, so the now-unlocked input is ready to type into.
@@ -168,11 +153,7 @@ export function NewProjectDialog({
     if (!customStyleUrl) return false;
     try {
       const url = new URL(customStyleUrl);
-      return (
-        url.protocol === "http:" ||
-        url.protocol === "https:" ||
-        url.protocol === "pmtiles:"
-      );
+      return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "pmtiles:";
     } catch {
       return false;
     }
@@ -213,10 +194,7 @@ export function NewProjectDialog({
       // A planetary basemap seeds the matching celestial body; other basemaps
       // leave the project on the default Earth ellipsoid.
       ellipsoidId: selectedPlanetary?.ellipsoidId,
-      mapView:
-        selectedBasemapId === LIBERTY_3D_ID
-          ? THREE_D_MAP_VIEW
-          : createDefaultMapView(),
+      mapView: selectedBasemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
     });
     onProjectCreated?.();
     onOpenChange(false);
@@ -252,9 +230,7 @@ export function NewProjectDialog({
           <>
             <DialogHeader>
               <DialogTitle>{t("newProject.savePromptTitle")}</DialogTitle>
-              <DialogDescription>
-                {t("newProject.savePromptDescription")}
-              </DialogDescription>
+              <DialogDescription>{t("newProject.savePromptDescription")}</DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-2">
               <Button
@@ -273,11 +249,7 @@ export function NewProjectDialog({
               >
                 {t("newProject.doNotSave")}
               </Button>
-              <Button
-                type="button"
-                disabled={isSaving}
-                onClick={handleSaveThenContinue}
-              >
+              <Button type="button" disabled={isSaving} onClick={handleSaveThenContinue}>
                 {isSaving ? t("newProject.saving") : t("common.save")}
               </Button>
             </div>
@@ -364,17 +336,13 @@ export function NewProjectDialog({
                       title={heading}
                       // Collapsed by default, but auto-expanded when the selected
                       // basemap is one of these, so the selection stays visible.
-                      defaultOpen={group.basemaps.some(
-                        (b) => b.id === selectedBasemapId,
-                      )}
+                      defaultOpen={group.basemaps.some((b) => b.id === selectedBasemapId)}
                     >
                       {grid}
                     </CollapsibleSection>
                   ) : (
                     <div key={group.id} className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {heading}
-                      </p>
+                      <p className="text-xs font-medium text-muted-foreground">{heading}</p>
                       {grid}
                     </div>
                   );
@@ -424,9 +392,7 @@ export function NewProjectDialog({
                     <Select
                       id="custom-basemap-flavor"
                       value={customFlavor}
-                      onChange={(event) =>
-                        setCustomFlavor(event.target.value as ProtomapsFlavor)
-                      }
+                      onChange={(event) => setCustomFlavor(event.target.value as ProtomapsFlavor)}
                     >
                       {PROTOMAPS_FLAVORS.map((f) => (
                         <option key={f} value={f}>
@@ -437,18 +403,12 @@ export function NewProjectDialog({
                   </div>
                 ) : null}
                 {isCustomSelected && customStyleUrl && !isCustomUrlValid ? (
-                  <p className="text-xs text-destructive">
-                    {t("newProject.invalidCustomUrl")}
-                  </p>
+                  <p className="text-xs text-destructive">{t("newProject.invalidCustomUrl")}</p>
                 ) : null}
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenChange(false)}
-                >
+                <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={!canCreate}>

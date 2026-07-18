@@ -1,18 +1,13 @@
 import * as React from "react";
 import { cn } from "../lib/utils";
 
-export const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    />
-  </div>
-));
+export const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
+  ({ className, ...props }, ref) => (
+    <div className="relative w-full overflow-auto">
+      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+    </div>
+  ),
+);
 Table.displayName = "Table";
 
 export const TableHeader = React.forwardRef<
@@ -27,11 +22,7 @@ export const TableBody = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <tbody
-    ref={ref}
-    className={cn("[&_tr:last-child]:border-0", className)}
-    {...props}
-  />
+  <tbody ref={ref} className={cn("[&_tr:last-child]:border-0", className)} {...props} />
 ));
 TableBody.displayName = "TableBody";
 
@@ -56,10 +47,7 @@ export const TableHead = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <th
     ref={ref}
-    className={cn(
-      "h-10 px-2 text-start align-middle font-medium text-muted-foreground",
-      className,
-    )}
+    className={cn("h-10 px-2 text-start align-middle font-medium text-muted-foreground", className)}
     {...props}
   />
 ));
@@ -69,10 +57,6 @@ export const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
 >(({ className, ...props }, ref) => (
-  <td
-    ref={ref}
-    className={cn("p-2 align-middle", className)}
-    {...props}
-  />
+  <td ref={ref} className={cn("p-2 align-middle", className)} {...props} />
 ));
 TableCell.displayName = "TableCell";

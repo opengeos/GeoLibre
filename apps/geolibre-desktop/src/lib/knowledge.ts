@@ -124,11 +124,7 @@ function formatCoord(value: number): string {
 export function buildGeosearchUrl(
   lat: number,
   lon: number,
-  {
-    lang,
-    radiusM = DEFAULT_NEARBY_RADIUS_M,
-    limit = DEFAULT_NEARBY_LIMIT,
-  }: NearbyOptions = {},
+  { lang, radiusM = DEFAULT_NEARBY_RADIUS_M, limit = DEFAULT_NEARBY_LIMIT }: NearbyOptions = {},
 ): string {
   const host = `${wikipediaLang(lang)}.wikipedia.org`;
   const params = new URLSearchParams({
@@ -163,11 +159,7 @@ export function parseGeosearch(json: unknown): WikiNearbyPlace[] {
     const pageId = Number(r.pageid);
     const lat = Number(r.lat);
     const lon = Number(r.lon);
-    if (
-      typeof r.title !== "string" ||
-      !Number.isFinite(pageId) ||
-      !isValidLatLon(lat, lon)
-    ) {
+    if (typeof r.title !== "string" || !Number.isFinite(pageId) || !isValidLatLon(lat, lon)) {
       continue;
     }
     places.push({
@@ -176,9 +168,7 @@ export function parseGeosearch(json: unknown): WikiNearbyPlace[] {
       lat,
       lon,
       // Unknown distance sorts last (Infinity), never as the nearest article.
-      distanceM: Number.isFinite(Number(r.dist))
-        ? Number(r.dist)
-        : Number.POSITIVE_INFINITY,
+      distanceM: Number.isFinite(Number(r.dist)) ? Number(r.dist) : Number.POSITIVE_INFINITY,
     });
   }
   // The API returns nearest-first, but sort defensively so the card can always
@@ -196,9 +186,7 @@ export function parseSummary(json: unknown, lang: string): WikiSummary | null {
   if (r.type === "disambiguation") return null;
   const extract = typeof r.extract === "string" ? r.extract : "";
   const thumbnail = r.thumbnail as { source?: unknown } | undefined;
-  const contentUrls = r.content_urls as
-    | { desktop?: { page?: unknown } }
-    | undefined;
+  const contentUrls = r.content_urls as { desktop?: { page?: unknown } } | undefined;
   const coordinates = r.coordinates as { lat?: unknown; lon?: unknown } | undefined;
   const lat = Number(coordinates?.lat);
   const lon = Number(coordinates?.lon);
@@ -206,10 +194,8 @@ export function parseSummary(json: unknown, lang: string): WikiSummary | null {
   return {
     title: r.title,
     extract,
-    description:
-      typeof r.description === "string" ? r.description : undefined,
-    thumbnailUrl:
-      typeof thumbnail?.source === "string" ? thumbnail.source : undefined,
+    description: typeof r.description === "string" ? r.description : undefined,
+    thumbnailUrl: typeof thumbnail?.source === "string" ? thumbnail.source : undefined,
     contentUrl:
       typeof contentUrls?.desktop?.page === "string"
         ? contentUrls.desktop.page
@@ -230,10 +216,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
  * stalled network can never hang a request — and the card stuck in "loading" —
  * indefinitely. Either the caller aborting or the timeout firing cancels it.
  */
-async function fetchWithTimeout(
-  url: string,
-  signal?: AbortSignal,
-): Promise<Response> {
+async function fetchWithTimeout(url: string, signal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   // `abort` only fires on a future transition, so honour a signal that is
@@ -268,10 +251,7 @@ export async function fetchNearbyPlaces(
   // (e.g. 190) and would otherwise fail the bounds check and return nothing.
   const wrappedLon = normalizeLon(lon);
   if (!isValidLatLon(lat, wrappedLon)) return [];
-  const json = await getJson(
-    buildGeosearchUrl(lat, wrappedLon, options),
-    options.signal,
-  );
+  const json = await getJson(buildGeosearchUrl(lat, wrappedLon, options), options.signal);
   return parseGeosearch(json);
 }
 
@@ -286,10 +266,7 @@ export async function fetchArticleSummary(
   options: { lang?: string; signal?: AbortSignal } = {},
 ): Promise<WikiSummary | null> {
   const lang = wikipediaLang(options.lang);
-  const response = await fetchWithTimeout(
-    buildSummaryUrl(title, lang),
-    options.signal,
-  );
+  const response = await fetchWithTimeout(buildSummaryUrl(title, lang), options.signal);
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`Wikipedia request failed: ${response.status}`);

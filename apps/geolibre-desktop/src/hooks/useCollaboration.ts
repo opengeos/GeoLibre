@@ -31,11 +31,7 @@ export interface CollaborationApi {
   /** True when `VITE_GEOLIBRE_COLLAB_URL` is configured; gates all UI. */
   enabled: boolean;
   /** Host a new session and connect. Resolves with the shareable code. */
-  start: (
-    displayName: string,
-    color: string,
-    mode: CollaborationMode,
-  ) => Promise<string>;
+  start: (displayName: string, color: string, mode: CollaborationMode) => Promise<string>;
   /** Join an existing session by its code. */
   join: (sessionId: string, displayName: string, color: string) => Promise<void>;
   /** Leave the active session and tear everything down. */
@@ -51,10 +47,7 @@ export interface CollaborationApi {
    * (#754). Returns true if it reached an open socket, so the caller can keep
    * the draft when a send is dropped (socket not open).
    */
-  sendChat: (
-    text: string,
-    coordinate?: { lng: number; lat: number } | null,
-  ) => boolean;
+  sendChat: (text: string, coordinate?: { lng: number; lat: number } | null) => boolean;
 }
 
 /**
@@ -126,7 +119,7 @@ export function useCollaboration(
     // A host-set per-participant override wins over the session mode (#754);
     // fall back to the mode when there is no override for us.
     const self = c.participants.find((p) => p.clientId === c.clientId);
-    return self?.editOverride ?? (c.mode === "co-edit");
+    return self?.editOverride ?? c.mode === "co-edit";
   };
 
   const sendSnapshot = (): void => {
@@ -156,15 +149,11 @@ export function useCollaboration(
     }, RESTORE_DEBOUNCE_MS);
   };
 
-  const applyRemoteSnapshot = (
-    project: GeoLibreProject,
-    initial: boolean,
-  ): void => {
+  const applyRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
     // Keep each participant's own camera: replace the incoming view with the
     // local one before applying, so a peer's edit never yanks our viewport.
     // Where others are looking is conveyed by presence viewport rectangles.
-    const localView =
-      mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
+    const localView = mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
     const merged: GeoLibreProject = { ...project, mapView: localView };
     if (initial) {
       // First bootstrap (the welcome snapshot): a one-time full loadProject is
@@ -195,9 +184,7 @@ export function useCollaboration(
     // Serializing `merged` (the pre-normalization input) instead would mismatch
     // applyProjectToStore's normalized output (deduped styles, defaults,
     // reordering) and create a broadcast feedback loop.
-    lastContentRef.current = serializeProject(
-      buildProjectSnapshot(mapControllerRef),
-    );
+    lastContentRef.current = serializeProject(buildProjectSnapshot(mapControllerRef));
   };
 
   const handleMessage = (message: ServerMessage): void => {
@@ -224,9 +211,7 @@ export function useCollaboration(
         // immediately, not only after their next move.
         for (const [clientId, entry] of Object.entries(message.presence)) {
           if (clientId === message.clientId) continue;
-          const participant = message.participants.find(
-            (p) => p.clientId === clientId,
-          );
+          const participant = message.participants.find((p) => p.clientId === clientId);
           store.updateCollaborationPresence(clientId, {
             displayName: participant?.displayName ?? i18n.t("collaborate.guest"),
             color: participant?.color ?? "#888888",
@@ -250,9 +235,7 @@ export function useCollaboration(
       case "presence": {
         if (message.clientId === selfIdRef.current) break;
         const collab = useAppStore.getState().collaboration;
-        const participant = collab.participants.find(
-          (p) => p.clientId === message.clientId,
-        );
+        const participant = collab.participants.find((p) => p.clientId === message.clientId);
         const presence: CollaborationPresence = {
           displayName: participant?.displayName ?? i18n.t("collaborate.guest"),
           color: participant?.color ?? "#888888",
@@ -261,11 +244,7 @@ export function useCollaboration(
         };
         store.updateCollaborationPresence(message.clientId, presence);
         // Follow mode: mirror the host's camera onto the local map.
-        if (
-          collab.followHost &&
-          participant?.role === "host" &&
-          message.view
-        ) {
+        if (collab.followHost && participant?.role === "host" && message.view) {
           mapControllerRef.current?.applyView(message.view);
         }
         break;
@@ -299,11 +278,7 @@ export function useCollaboration(
 
   // Wire the store subscription and map presence handlers once a connection is
   // open. Returns a teardown that removes them all.
-  const attach = (
-    displayName: string,
-    color: string,
-    hostToken: string | undefined,
-  ): void => {
+  const attach = (displayName: string, color: string, hostToken: string | undefined): void => {
     const conn = connRef.current;
     if (!conn) return;
 
@@ -475,28 +450,19 @@ export function useCollaboration(
     connRef.current?.send({ type: "set-mode", mode });
   }, []);
 
-  const setParticipantMode = useCallback(
-    (clientId: string, canEditFlag: boolean) => {
-      connRef.current?.send({
-        type: "set-participant-mode",
-        clientId,
-        canEdit: canEditFlag,
-      });
-    },
-    [],
-  );
+  const setParticipantMode = useCallback((clientId: string, canEditFlag: boolean) => {
+    connRef.current?.send({
+      type: "set-participant-mode",
+      clientId,
+      canEdit: canEditFlag,
+    });
+  }, []);
 
-  const sendChat = useCallback(
-    (text: string, coordinate?: { lng: number; lat: number } | null) => {
-      const trimmed = text.trim();
-      if (!trimmed) return false;
-      return (
-        connRef.current?.send({ type: "chat", text: trimmed, coordinate }) ??
-        false
-      );
-    },
-    [],
-  );
+  const sendChat = useCallback((text: string, coordinate?: { lng: number; lat: number } | null) => {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    return connRef.current?.send({ type: "chat", text: trimmed, coordinate }) ?? false;
+  }, []);
 
   const setFollowHost = useCallback((enabled: boolean) => {
     const store = useAppStore.getState();
@@ -504,12 +470,8 @@ export function useCollaboration(
     if (!enabled) return;
     // Jump to the host's last-known viewport immediately so following takes
     // effect now rather than only on the host's next move.
-    const host = store.collaboration.participants.find(
-      (p) => p.role === "host",
-    );
-    const view = host
-      ? store.collaboration.presence[host.clientId]?.view
-      : null;
+    const host = store.collaboration.participants.find((p) => p.role === "host");
+    const view = host ? store.collaboration.presence[host.clientId]?.view : null;
     if (view) mapControllerRef.current?.applyView(view);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

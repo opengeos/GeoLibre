@@ -79,16 +79,13 @@ describe("statistics tools registry", () => {
   it("exposes all five spatial-statistics tools", () => {
     // The sorted-id comparison below fully pins membership; no separate
     // (fragile) length assertion is needed.
-    assert.deepEqual(
-      STATISTICS_TOOLS.map((t) => t.id).sort(),
-      [
-        "average-nearest-neighbor",
-        "getis-ord-gi",
-        "global-morans-i",
-        "kernel-density",
-        "local-morans-i",
-      ],
-    );
+    assert.deepEqual(STATISTICS_TOOLS.map((t) => t.id).sort(), [
+      "average-nearest-neighbor",
+      "getis-ord-gi",
+      "global-morans-i",
+      "kernel-density",
+      "local-morans-i",
+    ]);
   });
 
   it("looks tools up by id", () => {
@@ -140,9 +137,7 @@ describe("Getis-Ord Gi*", () => {
     ]);
     const { results } = run(getisOrdTool, layer, { k: 2 });
     assert.equal(results.length, 1);
-    const z = results[0].geojson.features.map(
-      (f) => f.properties?.["v_gi_z"] as number,
-    );
+    const z = results[0].geojson.features.map((f) => f.properties?.["v_gi_z"] as number);
     // Indices 0-2 are the high cluster, 3-5 the low cluster.
     assert.ok(
       z.slice(0, 3).every((value) => value > 0),
@@ -180,9 +175,7 @@ describe("local Moran's I (LISA)", () => {
     const features = results[0].geojson.features;
     // Select the high-value members by attribute rather than position, so the
     // assertion holds even if the tool ever reorders output features.
-    const highFeatures = features.filter(
-      (f) => (f.properties?.["v"] as number) > 50,
-    );
+    const highFeatures = features.filter((f) => (f.properties?.["v"] as number) > 50);
     assert.equal(highFeatures.length, 3);
     // High-cluster members have a positive local I and sit in quadrant 1.
     for (const f of highFeatures) {
@@ -198,16 +191,21 @@ describe("average nearest neighbor", () => {
     // nearest neighbor sits inside its own knot, far below the expected random
     // spacing for the overall density -> a strongly clustered (<1) ratio.
     const clustered = pointLayer(
-      ([
-        [0, 0],
-        [1, 0],
-        [0, 1],
-        [1, 1],
-      ] as Array<[number, number]>).flatMap(([lon, lat]) => [
-        [lon, lat, {}],
-        [lon + 0.0005, lat, {}],
-        [lon, lat + 0.0005, {}],
-      ] as Array<[number, number, Record<string, unknown>]>),
+      (
+        [
+          [0, 0],
+          [1, 0],
+          [0, 1],
+          [1, 1],
+        ] as Array<[number, number]>
+      ).flatMap(
+        ([lon, lat]) =>
+          [
+            [lon, lat, {}],
+            [lon + 0.0005, lat, {}],
+            [lon, lat + 0.0005, {}],
+          ] as Array<[number, number, Record<string, unknown>]>,
+      ),
     );
     const clusteredRatio = loggedNumber(
       run(averageNearestNeighborTool, clustered, {}).messages,

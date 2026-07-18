@@ -166,10 +166,7 @@ describe("base64FromBytes", () => {
     // A payload past the 0x8000 chunk size exercises the chunked loop.
     const bytes = new Uint8Array(0x8000 + 500);
     for (let i = 0; i < bytes.length; i += 1) bytes[i] = (i * 31) & 0xff;
-    assert.equal(
-      base64FromBytes(bytes),
-      Buffer.from(bytes).toString("base64"),
-    );
+    assert.equal(base64FromBytes(bytes), Buffer.from(bytes).toString("base64"));
   });
 
   it("handles an empty input", () => {
@@ -180,14 +177,8 @@ describe("base64FromBytes", () => {
 describe("createFullResolutionDataUrl", () => {
   it("embeds the original bytes with the MIME from the magic bytes", async () => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x42]);
-    const url = await createFullResolutionDataUrl(
-      new Blob([bytes]),
-      "IMG_1234.JPG",
-    );
-    assert.equal(
-      url,
-      `data:image/jpeg;base64,${Buffer.from(bytes).toString("base64")}`,
-    );
+    const url = await createFullResolutionDataUrl(new Blob([bytes]), "IMG_1234.JPG");
+    assert.equal(url, `data:image/jpeg;base64,${Buffer.from(bytes).toString("base64")}`);
   });
 
   it("recognizes PNG and WebP signatures, case-insensitively", async () => {
@@ -198,13 +189,11 @@ describe("createFullResolutionDataUrl", () => {
       ),
     );
     // "RIFF" + 4 size bytes + "WEBP".
-    const webp = new Uint8Array([
-      0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
-    ]);
+    const webp = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
     assert.ok(
-      (
-        await createFullResolutionDataUrl(new Blob([webp]), "a.webp")
-      )?.startsWith("data:image/webp;base64,"),
+      (await createFullResolutionDataUrl(new Blob([webp]), "a.webp"))?.startsWith(
+        "data:image/webp;base64,",
+      ),
     );
   });
 
@@ -212,10 +201,7 @@ describe("createFullResolutionDataUrl", () => {
     // JPEG magic bytes (FF D8 FF) in a file named .png must yield image/jpeg,
     // not image/png, so the data URL stays decodable.
     const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
-    const url = await createFullResolutionDataUrl(
-      new Blob([jpegBytes]),
-      "mislabeled.png",
-    );
+    const url = await createFullResolutionDataUrl(new Blob([jpegBytes]), "mislabeled.png");
     assert.ok(url?.startsWith("data:image/jpeg;base64,"), url ?? "null");
   });
 
@@ -223,10 +209,7 @@ describe("createFullResolutionDataUrl", () => {
     // A GIF (magic GIF89a) saved as .jpg decodes for a thumbnail but must not be
     // embedded as image/jpeg, which would be undecodable.
     const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
-    assert.equal(
-      await createFullResolutionDataUrl(new Blob([gif]), "actually-a.jpg"),
-      null,
-    );
+    assert.equal(await createFullResolutionDataUrl(new Blob([gif]), "actually-a.jpg"), null);
   });
 
   it("falls back to thumbnail-only for a pathologically large original", async () => {

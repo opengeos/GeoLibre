@@ -9,19 +9,14 @@ import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 
 type IsLocalFileLayer = (layer: GeoLibreLayer) => boolean;
 type GetLayerWatchConfig = (layer: GeoLibreLayer) => { enabled: boolean };
-type SetLayerWatchConfig = (
-  layer: GeoLibreLayer,
-  enabled: boolean,
-) => Partial<GeoLibreLayer>;
+type SetLayerWatchConfig = (layer: GeoLibreLayer, enabled: boolean) => Partial<GeoLibreLayer>;
 
 let isLocalFileLayer: IsLocalFileLayer;
 let getLayerWatchConfig: GetLayerWatchConfig;
 let setLayerWatchConfig: SetLayerWatchConfig;
 
 before(async () => {
-  const mod = await import(
-    "../apps/geolibre-desktop/src/lib/local-file-watch"
-  );
+  const mod = await import("../apps/geolibre-desktop/src/lib/local-file-watch");
   isLocalFileLayer = mod.isLocalFileLayer;
   getLayerWatchConfig = mod.getLayerWatchConfig;
   setLayerWatchConfig = mod.setLayerWatchConfig;
@@ -130,9 +125,8 @@ describe("getLayerWatchConfig / setLayerWatchConfig", () => {
   it("round-trips through get after set", () => {
     const layer = makeLayer();
     const enabled = setLayerWatchConfig(layer, true);
-    assert.deepEqual(
-      getLayerWatchConfig({ ...layer, ...enabled } as GeoLibreLayer),
-      { enabled: true },
-    );
+    assert.deepEqual(getLayerWatchConfig({ ...layer, ...enabled } as GeoLibreLayer), {
+      enabled: true,
+    });
   });
 });

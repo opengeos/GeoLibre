@@ -4,20 +4,14 @@ import { maplibreTimeSliderPlugin } from "../packages/plugins/src/plugins/maplib
 
 // applyProjectState / getProjectState touch no app methods while no control is
 // active (the plugin is never activated here), so a bare stub satisfies the type.
-const app = {} as Parameters<
-  NonNullable<typeof maplibreTimeSliderPlugin.applyProjectState>
->[0];
+const app = {} as Parameters<NonNullable<typeof maplibreTimeSliderPlugin.applyProjectState>>[0];
 
 const apply = (state: unknown): boolean =>
   maplibreTimeSliderPlugin.applyProjectState?.(app, state) ?? false;
 const saved = (): Record<string, unknown> | undefined =>
-  maplibreTimeSliderPlugin.getProjectState?.() as
-    | Record<string, unknown>
-    | undefined;
+  maplibreTimeSliderPlugin.getProjectState?.() as Record<string, unknown> | undefined;
 
-function baseConfig(
-  overrides: Record<string, unknown> = {},
-): Record<string, unknown> {
+function baseConfig(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     startDate: "2020-01-01T00:00:00.000Z",
     interval: 1,

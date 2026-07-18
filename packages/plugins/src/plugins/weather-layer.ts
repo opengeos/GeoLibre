@@ -88,10 +88,7 @@ function rasterSourceId(layerId: string): string {
  * primitives; the per-value `JSON.stringify` compare would be order-sensitive
  * for a nested object value, but none are used here.
  */
-function metadataEqual(
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-): boolean {
+function metadataEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
@@ -102,9 +99,7 @@ function metadataEqual(
   );
 }
 
-export function createWeatherLayer(
-  config: WeatherLayerConfig,
-): WeatherLayerController {
+export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerController {
   let appRef: GeoLibreAppAPI | null = null;
   /** Id of the store layer this engine owns, or null when inactive. */
   let layerId: string | null = null;
@@ -132,9 +127,7 @@ export function createWeatherLayer(
   const applyFrameToMap = (): void => {
     if (layerId === null || frames.length === 0) return;
     const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
-    const source = map?.getSource(rasterSourceId(layerId)) as
-      | RasterTileSource
-      | undefined;
+    const source = map?.getSource(rasterSourceId(layerId)) as RasterTileSource | undefined;
     source?.setTiles([frames[index].tileUrl]);
   };
 
@@ -158,12 +151,8 @@ export function createWeatherLayer(
     }
     const frame = frames[index];
     const nextMetadata = { ...frame.metadata, [config.layerFlag]: true };
-    const currentTile = Array.isArray(layer.source.tiles)
-      ? layer.source.tiles[0]
-      : undefined;
-    const unchanged =
-      currentTile === frame.tileUrl &&
-      metadataEqual(layer.metadata, nextMetadata);
+    const currentTile = Array.isArray(layer.source.tiles) ? layer.source.tiles[0] : undefined;
+    const unchanged = currentTile === frame.tileUrl && metadataEqual(layer.metadata, nextMetadata);
     if (unchanged) return;
     store.updateLayer(layerId, {
       source: { ...layer.source, tiles: [frame.tileUrl] },
@@ -190,10 +179,7 @@ export function createWeatherLayer(
     frameTimer = setInterval(() => {
       // If the layer was deleted from the Layers panel mid-playback, halt so the
       // loop doesn't keep advancing/notifying against a layer that's gone.
-      if (
-        layerId === null ||
-        !useAppStore.getState().layers.some((l) => l.id === layerId)
-      ) {
+      if (layerId === null || !useAppStore.getState().layers.some((l) => l.id === layerId)) {
         stopPlaying();
         notify();
         return;
@@ -216,10 +202,7 @@ export function createWeatherLayer(
    */
   const handleMapError = (event: unknown): void => {
     if (!playing || layerId === null) return;
-    const record = event as
-      | { sourceId?: string; error?: { sourceId?: string } }
-      | null
-      | undefined;
+    const record = event as { sourceId?: string; error?: { sourceId?: string } } | null | undefined;
     const sourceId = record?.sourceId ?? record?.error?.sourceId;
     if (sourceId !== rasterSourceId(layerId)) return;
     const now = Date.now();
@@ -246,9 +229,7 @@ export function createWeatherLayer(
       }
       const store = useAppStore.getState();
       // A layer restored from the saved project (tagged with our flag), if any.
-      const existing = store.layers.find(
-        (l) => l.metadata?.[config.layerFlag] === true,
-      );
+      const existing = store.layers.find((l) => l.metadata?.[config.layerFlag] === true);
       // No fresh frames (offline / source briefly down): adopt a restored layer
       // and keep its last-saved tiles so it isn't orphaned in the panel with no
       // menu control; only fail (rolling the toggle back) when there's nothing

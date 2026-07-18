@@ -123,8 +123,7 @@ export const DEFAULT_ELLIPSOID_ID: EllipsoidId = "earth";
 /** Look an ellipsoid up by id, falling back to Earth for unknown ids. */
 export function getEllipsoid(id: string | undefined): Ellipsoid {
   return (
-    ELLIPSOIDS.find((e) => e.id === id) ??
-    ELLIPSOIDS.find((e) => e.id === DEFAULT_ELLIPSOID_ID)!
+    ELLIPSOIDS.find((e) => e.id === id) ?? ELLIPSOIDS.find((e) => e.id === DEFAULT_ELLIPSOID_ID)!
   );
 }
 
@@ -202,8 +201,7 @@ export interface PlanetaryBasemap {
 
 export const PLANETARY_BASEMAP_SENTINEL_PREFIX = "geolibre://basemap/";
 
-const OPM_ATTRIBUTION =
-  '<a href="https://www.openplanetary.org/opm">OpenPlanetaryMap</a>';
+const OPM_ATTRIBUTION = '<a href="https://www.openplanetary.org/opm">OpenPlanetaryMap</a>';
 
 /** Data-source credit joined with the OpenPlanetaryMap attribution. */
 const opmCredit = (source: string) => `${source} · ${OPM_ATTRIBUTION}`;
@@ -221,12 +219,10 @@ const TILE_PROXY_BASE = "https://tiles.geolibre.app/opm";
 const WMS_PROXY_BASE = "https://tiles.geolibre.app/wms";
 
 // USGS Astrogeology, the origin of every reprojected WMS basemap below.
-const USGS_ASTRO_ATTRIBUTION =
-  '<a href="https://astrogeology.usgs.gov/">USGS Astrogeology</a>';
+const USGS_ASTRO_ATTRIBUTION = '<a href="https://astrogeology.usgs.gov/">USGS Astrogeology</a>';
 
 /** Data-source credit joined with the USGS Astrogeology attribution. */
-const usgsCredit = (source: string) =>
-  `${source} · ${USGS_ASTRO_ATTRIBUTION}`;
+const usgsCredit = (source: string) => `${source} · ${USGS_ASTRO_ATTRIBUTION}`;
 
 // The OpenPlanetaryMap Mars and Moon basemaps
 // (https://openplanetarymap.org/basemaps/). Every one is a pre-rendered raster
@@ -507,8 +503,7 @@ export const PLANETARY_BASEMAP_GROUPS: readonly PlanetaryBasemapGroup[] = (
     const basemaps = PLANETARY_BASEMAPS.filter((b) =>
       ellipsoidId
         ? b.ellipsoidId === ellipsoidId
-        : b.ellipsoidId !== "earth" &&
-          !DEDICATED_SECTION_BODIES.includes(b.ellipsoidId),
+        : b.ellipsoidId !== "earth" && !DEDICATED_SECTION_BODIES.includes(b.ellipsoidId),
     );
     // The combined "other" section spans many bodies, so order it alphabetically
     // by body name; a stable sort keeps each body's basemaps grouped together.
@@ -517,9 +512,7 @@ export const PLANETARY_BASEMAP_GROUPS: readonly PlanetaryBasemapGroup[] = (
       basemaps:
         id === "other"
           ? [...basemaps].sort((a, b) =>
-              getEllipsoid(a.ellipsoidId).name.localeCompare(
-                getEllipsoid(b.ellipsoidId).name,
-              ),
+              getEllipsoid(a.ellipsoidId).name.localeCompare(getEllipsoid(b.ellipsoidId).name),
             )
           : basemaps,
     };
@@ -545,19 +538,14 @@ export function getPlanetaryBasemapByStyleUrl(
 ): PlanetaryBasemap | undefined {
   if (!styleUrl?.startsWith(PLANETARY_BASEMAP_SENTINEL_PREFIX)) return undefined;
   const id = styleUrl.slice(PLANETARY_BASEMAP_SENTINEL_PREFIX.length);
-  const resolvedId = Object.prototype.hasOwnProperty.call(
-    LEGACY_PLANETARY_BASEMAP_IDS,
-    id,
-  )
+  const resolvedId = Object.prototype.hasOwnProperty.call(LEGACY_PLANETARY_BASEMAP_IDS, id)
     ? LEGACY_PLANETARY_BASEMAP_IDS[id]
     : id;
   return PLANETARY_BASEMAPS.find((b) => b.id === resolvedId);
 }
 
 /** Look a planetary basemap up by its stable id. */
-export function getPlanetaryBasemapById(
-  id: string,
-): PlanetaryBasemap | undefined {
+export function getPlanetaryBasemapById(id: string): PlanetaryBasemap | undefined {
   return PLANETARY_BASEMAPS.find((b) => b.id === id);
 }
 

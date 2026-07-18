@@ -31,18 +31,13 @@ import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
-import {
-  BUILTIN_DETECTION_MODELS,
-  fetchDetectionModel,
-} from "../../lib/detection-models";
+import { BUILTIN_DETECTION_MODELS, fetchDetectionModel } from "../../lib/detection-models";
 
 interface ObjectDetectionDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
-const IMAGE_FILTERS = [
-  { name: "Imagery", extensions: ["tif", "tiff"] },
-];
+const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff"] }];
 const IMAGE_ACCEPT = ".tif,.tiff";
 const MODEL_FILTERS = [{ name: "ONNX model", extensions: ["onnx"] }];
 const MODEL_ACCEPT = ".onnx";
@@ -179,14 +174,10 @@ export function ObjectDetectionDialog({
   const [imageName, setImageName] = useState("");
   // Default to a built-in model so detection works out of the box with no file.
   const [modelSource, setModelSource] = useState<"builtin" | "local">("builtin");
-  const [builtinModelId, setBuiltinModelId] = useState(
-    BUILTIN_DETECTION_MODELS[0].id,
-  );
+  const [builtinModelId, setBuiltinModelId] = useState(BUILTIN_DETECTION_MODELS[0].id);
   const [modelBytes, setModelBytes] = useState<ArrayBuffer | null>(null);
   const [modelName, setModelName] = useState("");
-  const [classNames, setClassNames] = useState(
-    BUILTIN_DETECTION_MODELS[0].classNames.join(", "),
-  );
+  const [classNames, setClassNames] = useState(BUILTIN_DETECTION_MODELS[0].classNames.join(", "));
   const [confidence, setConfidence] = useState(0.25);
   const [iou, setIou] = useState(0.45);
   const [inputSize, setInputSize] = useState(640);
@@ -212,8 +203,7 @@ export function ObjectDetectionDialog({
       if ((event.target as HTMLElement).closest("button")) return;
       event.preventDefault();
       const el = panelRef.current;
-      const parent =
-        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const parent = (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
       const pb = parent?.getBoundingClientRect();
       const eb = el?.getBoundingClientRect();
       const start: PanelPos = pos ?? {
@@ -230,12 +220,8 @@ export function ObjectDetectionDialog({
       const move = (m: PointerEvent) => {
         if (!panelRef.current) return;
         const bounds = parent?.getBoundingClientRect();
-        const maxX = bounds
-          ? bounds.width - w - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
-        const maxY = bounds
-          ? bounds.height - h - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
+        const maxX = bounds ? bounds.width - w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxY = bounds ? bounds.height - h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
         setPos({
           x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
           y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
@@ -329,9 +315,7 @@ export function ObjectDetectionDialog({
       // or use the user-supplied file.
       let modelData = modelBytes;
       if (modelSource === "builtin") {
-        const model = BUILTIN_DETECTION_MODELS.find(
-          (m) => m.id === builtinModelId,
-        );
+        const model = BUILTIN_DETECTION_MODELS.find((m) => m.id === builtinModelId);
         if (!model) {
           setError(t("objectDetection.error.chooseModel"));
           return;
@@ -409,9 +393,7 @@ export function ObjectDetectionDialog({
         }),
       );
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t("objectDetection.error.failed"),
-      );
+      setError(err instanceof Error ? err.message : t("objectDetection.error.failed"));
     } finally {
       inferringRef.current = false;
       setRunning(false);
@@ -450,14 +432,8 @@ export function ObjectDetectionDialog({
         onPointerDown={handleDragStart}
       >
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <GripVertical
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <ScanSearch
-            className="h-4 w-4 shrink-0 text-primary"
-            aria-hidden="true"
-          />
+          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ScanSearch className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <span className="truncate">{t("objectDetection.title")}</span>
         </div>
         <button
@@ -471,9 +447,7 @@ export function ObjectDetectionDialog({
       </div>
 
       <div className="flex flex-col overflow-auto p-3">
-        <p className="mb-2 text-xs text-muted-foreground">
-          {t("objectDetection.description")}
-        </p>
+        <p className="mb-2 text-xs text-muted-foreground">{t("objectDetection.description")}</p>
         <div className="flex flex-col gap-3">
           <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -524,12 +498,8 @@ export function ObjectDetectionDialog({
                 if (next === "builtin") selectBuiltinModel(builtinModelId);
               }}
             >
-              <option value="builtin">
-                {t("objectDetection.modelSourceBuiltin")}
-              </option>
-              <option value="local">
-                {t("objectDetection.modelSourceLocal")}
-              </option>
+              <option value="builtin">{t("objectDetection.modelSourceBuiltin")}</option>
+              <option value="local">{t("objectDetection.modelSourceLocal")}</option>
             </Select>
           </div>
 
@@ -656,9 +626,7 @@ export function ObjectDetectionDialog({
                   // Snap to a valid multiple of 32 (YOLO stride) in [32, 4096]:
                   // the HTML step/max are advisory, and a non-multiple or
                   // oversized input yields a misaligned or huge inference tensor.
-                  setInputSize((prev) =>
-                    Math.min(4096, Math.max(32, Math.round(prev / 32) * 32)),
-                  )
+                  setInputSize((prev) => Math.min(4096, Math.max(32, Math.round(prev / 32) * 32)))
                 }
               />
             </div>
@@ -667,11 +635,7 @@ export function ObjectDetectionDialog({
           <div className="flex items-center gap-3">
             <Button
               onClick={() => void handleRun()}
-              disabled={
-                running ||
-                !imageBytes ||
-                (modelSource === "local" && !modelBytes)
-              }
+              disabled={running || !imageBytes || (modelSource === "local" && !modelBytes)}
               className="gap-2"
             >
               {running ? (

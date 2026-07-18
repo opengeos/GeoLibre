@@ -93,9 +93,7 @@ describe("favorites persistence", () => {
 
   it("dispatches a change event on write", () => {
     addFavorite(svc("a"));
-    const events = (
-      globalThis as unknown as { window: { __events: Event[] } }
-    ).window.__events;
+    const events = (globalThis as unknown as { window: { __events: Event[] } }).window.__events;
     assert.ok(events.some((e) => (e as Event).type === FAVORITES_CHANGED_EVENT));
   });
 
@@ -129,10 +127,7 @@ describe("favorites persistence", () => {
     }));
     (
       globalThis as unknown as { window: { localStorage: MemoryStorage } }
-    ).window.localStorage.setItem(
-      "geolibre.browser.favorites",
-      JSON.stringify(many),
-    );
+    ).window.localStorage.setItem("geolibre.browser.favorites", JSON.stringify(many));
     assert.equal(readBrowserFavorites().length, MAX_FAVORITES);
   });
 

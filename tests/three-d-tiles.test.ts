@@ -34,11 +34,7 @@ describe("resolveThreeDTilesRequestHeaders", () => {
 
   it("prefers an explicit key already present in the headers", () => {
     assert.deepEqual(
-      resolveThreeDTilesRequestHeaders(
-        GOOGLE,
-        { "X-GOOG-API-KEY": "header-key" },
-        "env-key",
-      ),
+      resolveThreeDTilesRequestHeaders(GOOGLE, { "X-GOOG-API-KEY": "header-key" }, "env-key"),
       { "X-GOOG-API-KEY": "header-key" },
     );
   });
@@ -52,10 +48,7 @@ describe("resolveThreeDTilesRequestHeaders", () => {
 
   it("detects the Google Photorealistic tileset url", () => {
     assert.equal(isGooglePhotorealisticTilesetUrl(GOOGLE), true);
-    assert.equal(
-      isGooglePhotorealisticTilesetUrl("https://tile.googleapis.com/other"),
-      false,
-    );
+    assert.equal(isGooglePhotorealisticTilesetUrl("https://tile.googleapis.com/other"), false);
     assert.equal(isGooglePhotorealisticTilesetUrl("not a url"), false);
   });
 });
@@ -93,10 +86,9 @@ describe("persistedThreeDTilesRequestHeaders", () => {
 
 describe("stripGoogleMapsApiKeyHeader", () => {
   it("removes the key header case-insensitively and keeps the rest", () => {
-    assert.deepEqual(
-      stripGoogleMapsApiKeyHeader({ "x-goog-api-key": "secret", Accept: "json" }),
-      { Accept: "json" },
-    );
+    assert.deepEqual(stripGoogleMapsApiKeyHeader({ "x-goog-api-key": "secret", Accept: "json" }), {
+      Accept: "json",
+    });
   });
 
   it("returns undefined for empty or missing input", () => {
@@ -107,10 +99,7 @@ describe("stripGoogleMapsApiKeyHeader", () => {
 
 describe("googleMapsApiKeyHeaderValue", () => {
   it("returns the real key value, case-insensitively", () => {
-    assert.equal(
-      googleMapsApiKeyHeaderValue({ "x-goog-api-key": " key " }),
-      "key",
-    );
+    assert.equal(googleMapsApiKeyHeaderValue({ "x-goog-api-key": " key " }), "key");
   });
 
   it("ignores a masked placeholder and missing values", () => {

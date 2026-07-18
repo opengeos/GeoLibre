@@ -26,10 +26,7 @@ function makeLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
   } as unknown as GeoLibreLayer;
 }
 
-function point(
-  id: string | number | undefined,
-  properties: Record<string, unknown> = {},
-) {
+function point(id: string | number | undefined, properties: Record<string, unknown> = {}) {
   return {
     type: "Feature" as const,
     id,
@@ -59,10 +56,7 @@ describe("canEditLayerGeometry", () => {
   });
 
   it("rejects non-vector layer types", () => {
-    assert.equal(
-      canEditLayerGeometry(makeLayer({ type: "raster", geojson: undefined })),
-      false,
-    );
+    assert.equal(canEditLayerGeometry(makeLayer({ type: "raster", geojson: undefined })), false);
   });
 
   it("rejects a layer without an in-memory feature collection", () => {
@@ -86,9 +80,7 @@ describe("canEditLayerGeometry", () => {
 
   it("rejects the GeoEditor Sketches layer", () => {
     assert.equal(
-      canEditLayerGeometry(
-        makeLayer({ metadata: { sourceKind: "geoeditor-sketches" } }),
-      ),
+      canEditLayerGeometry(makeLayer({ metadata: { sourceKind: "geoeditor-sketches" } })),
       false,
     );
   });
@@ -168,23 +160,14 @@ describe("tagFeatureKeys", () => {
       features: [point("a"), point(undefined)],
     };
     const tagged = tagFeatureKeys(collection);
-    assert.equal(
-      tagged.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY],
-      "a",
-    );
+    assert.equal(tagged.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY], "a");
     assert.equal(tagged.features[0].id, "a");
     // The untagged feature gets a freshly allocated, non-colliding id.
     const secondId = String(tagged.features[1].id);
-    assert.equal(
-      tagged.features[1].properties?.[GEOMETRY_EDIT_FID_PROPERTY],
-      secondId,
-    );
+    assert.equal(tagged.features[1].properties?.[GEOMETRY_EDIT_FID_PROPERTY], secondId);
     assert.notEqual(secondId, "a");
     // Original collection is not mutated.
-    assert.equal(
-      collection.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY],
-      undefined,
-    );
+    assert.equal(collection.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY], undefined);
   });
 
   it("assigns unique ids when the input has duplicate ids", () => {
@@ -276,10 +259,7 @@ describe("reconcileEditedFeatures", () => {
 });
 
 describe("planGeoEditorOverlayOrder", () => {
-  function row(
-    id: string,
-    flags: Partial<OverlayOrderLayer> = {},
-  ): OverlayOrderLayer {
+  function row(id: string, flags: Partial<OverlayOrderLayer> = {}): OverlayOrderLayer {
     return { id, isOverlay: false, isAnchor: false, ...flags };
   }
 

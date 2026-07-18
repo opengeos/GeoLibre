@@ -61,10 +61,7 @@ function makeDeps(): Recorder {
   };
 }
 
-function raster(
-  id: string,
-  patch: Partial<SwipeCogRasterSnapshot> = {},
-): SwipeCogRasterSnapshot {
+function raster(id: string, patch: Partial<SwipeCogRasterSnapshot> = {}): SwipeCogRasterSnapshot {
   return {
     id,
     name: id,

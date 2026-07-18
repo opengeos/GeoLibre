@@ -23,17 +23,7 @@ export type AddDataKind =
 /** A data source loadable either from a remote URL or a local file. */
 export type FeedMode = "url" | "file";
 export type GpxMode = FeedMode;
-export type GpxLayerKind =
-  | "waypoints"
-  | "tracks"
-  | "trackPoints"
-  | "routes"
-  | "routePoints";
+export type GpxLayerKind = "waypoints" | "tracks" | "trackPoints" | "routes" | "routePoints";
 export type GeoRssMode = FeedMode;
 export type DelimitedTextMode = FeedMode;
-export type DelimitedTextDelimiter =
-  | "comma"
-  | "tab"
-  | "semicolon"
-  | "pipe"
-  | "custom";
+export type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";

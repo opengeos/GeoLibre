@@ -32,10 +32,7 @@ export function isPmtilesStyleUrl(url: string): boolean {
  * Builds and registers a Protomaps basemap style for a remote PMTiles URL and
  * returns the sentinel URL to set as the basemap style (`setBasemapStyleUrl`).
  */
-export function buildRemotePmtilesBasemap(
-  url: string,
-  flavor: ProtomapsFlavor,
-): string {
+export function buildRemotePmtilesBasemap(url: string, flavor: ProtomapsFlavor): string {
   const sourceUrl = url.trim();
   // Register the pmtiles:// protocol + a FetchSource for this archive so the
   // style's `pmtiles://<url>` source can fetch tiles (a raw basemap style never
@@ -49,16 +46,10 @@ export function buildRemotePmtilesBasemap(
     // URLs, so a relative "./" base (embed/demo build) must be absolutised;
     // document.baseURI also keeps a sub-path (GEOLIBRE_APP_BASE) working where a
     // bare "/basemaps-assets" would 404. Mirrors BasemapExtractPanel.
-    assetsBaseUrl: new URL(
-      `${import.meta.env.BASE_URL}basemaps-assets`,
-      document.baseURI,
-    ).href,
+    assetsBaseUrl: new URL(`${import.meta.env.BASE_URL}basemaps-assets`, document.baseURI).href,
   });
   // The percent-encoded URL is the registry id: the same URL reuses one entry
   // (a flavor change replaces it) and distinct URLs never collide — a fixed-
   // width hash could, silently evicting one basemap when another is applied.
-  return registerOfflineBasemapStyle(
-    `remote-pmtiles-${encodeURIComponent(sourceUrl)}`,
-    style,
-  );
+  return registerOfflineBasemapStyle(`remote-pmtiles-${encodeURIComponent(sourceUrl)}`, style);
 }

@@ -42,10 +42,7 @@ describe("normalizeSunSettings", () => {
 describe("solar declination", () => {
   it("is near +23.4° at the June solstice and near -23.4° at December", () => {
     const june = sunEquatorialPosition(Date.UTC(2024, 5, 20, 20, 51));
-    assert.ok(
-      Math.abs(june.delta - 23.44) < 0.4,
-      `June declination ${june.delta} not near +23.44`,
-    );
+    assert.ok(Math.abs(june.delta - 23.44) < 0.4, `June declination ${june.delta} not near +23.44`);
     const dec = sunEquatorialPosition(Date.UTC(2024, 11, 21, 9, 21));
     assert.ok(
       Math.abs(dec.delta + 23.44) < 0.4,
@@ -76,15 +73,9 @@ describe("subsolarPoint / sunPositionAt round trip", () => {
     it(`sun is overhead at its subsolar point (${new Date(dateMs).toISOString()})`, () => {
       const { lat, lng } = subsolarPoint(dateMs);
       const here = sunPositionAt(dateMs, lat, lng);
-      assert.ok(
-        here.altitude > 89,
-        `altitude ${here.altitude} at subsolar point should be ~90`,
-      );
+      assert.ok(here.altitude > 89, `altitude ${here.altitude} at subsolar point should be ~90`);
       const anti = sunPositionAt(dateMs, -lat, lng + 180);
-      assert.ok(
-        anti.altitude < -89,
-        `altitude ${anti.altitude} at antipode should be ~-90`,
-      );
+      assert.ok(anti.altitude < -89, `altitude ${anti.altitude} at antipode should be ~-90`);
     });
   }
 

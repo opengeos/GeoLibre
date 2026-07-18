@@ -12,9 +12,7 @@ import { KIND_I18N_KEY } from "../apps/geolibre-desktop/src/components/layout/ad
 // silently rendering the raw key at runtime.
 const en = JSON.parse(
   readFileSync(
-    fileURLToPath(
-      new URL("../apps/geolibre-desktop/src/i18n/locales/en.json", import.meta.url),
-    ),
+    fileURLToPath(new URL("../apps/geolibre-desktop/src/i18n/locales/en.json", import.meta.url)),
     "utf8",
   ),
 ) as { addData: { kind: Record<string, { label?: string; description?: string }> } };
@@ -29,19 +27,13 @@ describe("Add Data dialog kind i18n keys", () => {
         "string",
         `addData.kind.${key}.label is missing or not a string`,
       );
-      assert.ok(
-        entry.label.trim().length > 0,
-        `addData.kind.${key}.label is empty`,
-      );
+      assert.ok(entry.label.trim().length > 0, `addData.kind.${key}.label is empty`);
       assert.equal(
         typeof entry.description,
         "string",
         `addData.kind.${key}.description is missing or not a string`,
       );
-      assert.ok(
-        entry.description.trim().length > 0,
-        `addData.kind.${key}.description is empty`,
-      );
+      assert.ok(entry.description.trim().length > 0, `addData.kind.${key}.description is empty`);
     });
   }
 });

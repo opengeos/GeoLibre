@@ -108,15 +108,9 @@ export async function loadExternalPlugins(
     });
   }
   const loadedPluginIds: string[] = [];
-  const registeredPluginIds = new Set(
-    manager.list().map((plugin) => plugin.id),
-  );
+  const registeredPluginIds = new Set(manager.list().map((plugin) => plugin.id));
 
-  for (const bundle of [
-    ...filesystemResult.bundles,
-    ...urlBundles,
-    ...webBundles,
-  ]) {
+  for (const bundle of [...filesystemResult.bundles, ...urlBundles, ...webBundles]) {
     try {
       const loadedFrom = externallyLoadedPluginSources.get(bundle.manifest.id);
       if (loadedFrom !== undefined) {
@@ -166,20 +160,14 @@ export async function loadExternalPlugins(
       issues.push({
         archiveName: bundle.archiveName,
         sourceUrl: bundle.sourceUrl,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Could not load external plugin.",
+        message: error instanceof Error ? error.message : "Could not load external plugin.",
       });
     }
   }
 
   return {
     pluginsDirectories: filesystemResult.pluginsDirectories,
-    pluginSources: [
-      ...pluginManifestUrls,
-      ...filesystemResult.pluginsDirectories,
-    ],
+    pluginSources: [...pluginManifestUrls, ...filesystemResult.pluginsDirectories],
     loadedPluginIds,
     issues,
   };
@@ -198,12 +186,9 @@ export function isExternalPluginId(pluginId: string): boolean {
 async function loadFilesystemPluginBundles(
   additionalPluginDirectories: string[],
 ): Promise<ExternalPluginBundleLoadResult> {
-  return invoke<ExternalPluginBundleLoadResult>(
-    "load_external_plugin_bundles",
-    {
-      additionalPluginDirectories,
-    },
-  );
+  return invoke<ExternalPluginBundleLoadResult>("load_external_plugin_bundles", {
+    additionalPluginDirectories,
+  });
 }
 
 async function loadPluginUrlBundles(
@@ -224,10 +209,7 @@ async function loadPluginUrlBundles(
       // crypto.subtle unavailable) to this one URL — letting it throw here would
       // reject the whole loadExternalPlugins Promise.all and drop every plugin.
       try {
-        const integrity = await verifyPluginBundleIntegrity(
-          manifestUrls[index],
-          bundle,
-        );
+        const integrity = await verifyPluginBundleIntegrity(manifestUrls[index], bundle);
         if (integrity.status === "changed") {
           issues.push({
             archiveName: bundle.archiveName,
@@ -282,9 +264,7 @@ async function loadPluginUrlBundle(
     signal,
   });
   if (!manifestResponse.ok) {
-    throw new Error(
-      `Could not fetch plugin manifest: HTTP ${manifestResponse.status}`,
-    );
+    throw new Error(`Could not fetch plugin manifest: HTTP ${manifestResponse.status}`);
   }
 
   const manifest = (await manifestResponse.json()) as unknown;
@@ -293,14 +273,10 @@ async function loadPluginUrlBundle(
   }
 
   const entryUrl = resolvePluginAssetUrl(manifestUrl, manifest.entry);
-  const styleUrl = manifest.style
-    ? resolvePluginAssetUrl(manifestUrl, manifest.style)
-    : null;
+  const styleUrl = manifest.style ? resolvePluginAssetUrl(manifestUrl, manifest.style) : null;
   const [entrySource, styleSource] = await Promise.all([
     fetchPluginText(entryUrl, "plugin entry", signal),
-    styleUrl
-      ? fetchPluginText(styleUrl, "plugin style", signal)
-      : Promise.resolve(null),
+    styleUrl ? fetchPluginText(styleUrl, "plugin style", signal) : Promise.resolve(null),
   ]);
 
   return {
@@ -312,11 +288,7 @@ async function loadPluginUrlBundle(
   };
 }
 
-async function fetchPluginText(
-  url: string,
-  label: string,
-  signal?: AbortSignal,
-): Promise<string> {
+async function fetchPluginText(url: string, label: string, signal?: AbortSignal): Promise<string> {
   // `no-cache` revalidates so the entry/style stay in sync with the manifest
   // version even when a static host caches them for much longer than the
   // manifest (see loadPluginUrlBundle).
@@ -336,9 +308,7 @@ async function fetchPluginText(
   if (!reader) {
     const text = await response.text();
     if (new TextEncoder().encode(text).byteLength > MAX_PLUGIN_ASSET_BYTES) {
-      throw new Error(
-        `Could not fetch ${label}: exceeds the 50 MB size limit.`,
-      );
+      throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
     }
     return text;
   }
@@ -351,9 +321,7 @@ async function fetchPluginText(
     totalBytes += value.byteLength;
     if (totalBytes > MAX_PLUGIN_ASSET_BYTES) {
       await reader.cancel();
-      throw new Error(
-        `Could not fetch ${label}: exceeds the 50 MB size limit.`,
-      );
+      throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
     }
     chunks.push(value);
   }
@@ -367,9 +335,7 @@ async function fetchPluginText(
   return new TextDecoder().decode(merged);
 }
 
-async function importExternalPlugin(
-  bundle: ExternalPluginBundle,
-): Promise<GeoLibrePlugin> {
+async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLibrePlugin> {
   const moduleUrl = URL.createObjectURL(
     new Blob([bundle.entrySource], { type: "text/javascript" }),
   );
@@ -381,9 +347,7 @@ async function importExternalPlugin(
     };
     const candidate = module.default ?? module.plugin;
     if (!isGeoLibrePlugin(candidate)) {
-      throw new Error(
-        "Entry must export a GeoLibrePlugin as default or plugin.",
-      );
+      throw new Error("Entry must export a GeoLibrePlugin as default or plugin.");
     }
     validateManifestMatchesPlugin(bundle.manifest, candidate);
     if (candidate.activeByDefault) {
@@ -422,10 +386,7 @@ function validateManifestMatchesPlugin(
   }
 }
 
-function injectExternalPluginStyle(
-  pluginId: string,
-  styleSource: string,
-): void {
+function injectExternalPluginStyle(pluginId: string, styleSource: string): void {
   const styleId = `geolibre-external-plugin-style:${pluginId}`;
   if (document.getElementById(styleId)) return;
 
@@ -437,9 +398,7 @@ function injectExternalPluginStyle(
 }
 
 function removeExternalPluginStyle(pluginId: string): void {
-  document
-    .getElementById(`geolibre-external-plugin-style:${pluginId}`)
-    ?.remove();
+  document.getElementById(`geolibre-external-plugin-style:${pluginId}`)?.remove();
 }
 
 // ---------------------------------------------------------------------------
@@ -517,8 +476,7 @@ export async function installWebPluginArchive(
     installedAt: pluginInstallTimestamp(),
   });
 
-  const wasActive =
-    existingSource !== undefined && manager.isActive(plugin.id);
+  const wasActive = existingSource !== undefined && manager.isActive(plugin.id);
   if (existingSource !== undefined) {
     manager.unregister(plugin.id, app);
     removeExternalPluginStyle(plugin.id);
@@ -590,10 +548,7 @@ export function resolvePluginAssetUrlForLoadedPlugin(
   pluginId: string,
   relativePath: string,
 ): string | null {
-  return pluginAssetUrlFromSource(
-    externallyLoadedPluginSources.get(pluginId),
-    relativePath,
-  );
+  return pluginAssetUrlFromSource(externallyLoadedPluginSources.get(pluginId), relativePath);
 }
 
 /**
@@ -677,11 +632,7 @@ export function reloadExternalUrlPlugin(
 ): Promise<GeoLibrePlugin> {
   const inFlight = inFlightUrlUpgrades.get(manifestUrl);
   if (inFlight) return inFlight;
-  const promise = reloadExternalUrlPluginUncoalesced(
-    manager,
-    manifestUrl,
-    app,
-  ).finally(() => {
+  const promise = reloadExternalUrlPluginUncoalesced(manager, manifestUrl, app).finally(() => {
     inFlightUrlUpgrades.delete(manifestUrl);
   });
   inFlightUrlUpgrades.set(manifestUrl, promise);

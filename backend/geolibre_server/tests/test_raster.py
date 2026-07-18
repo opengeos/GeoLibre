@@ -273,7 +273,6 @@ def test_interpolate_idw_writes_raster(tmp_path: Path) -> None:
 
 @requires_rasterio
 def test_interpolate_kriging_recovers_trend(tmp_path: Path) -> None:
-    import numpy as np
     import rasterio
 
     src = _write_points(tmp_path / "points.geojson")
@@ -559,8 +558,7 @@ def test_zonal_statistics_reprojects_wgs84_zones(tmp_path: Path) -> None:
         },
     )
     by_name = {
-        f["properties"]["name"]: f["properties"]
-        for f in json.loads(out.read_text())["features"]
+        f["properties"]["name"]: f["properties"] for f in json.loads(out.read_text())["features"]
     }
     assert by_name["left"]["count"] > 0
     assert by_name["left"]["mean"] == 0.0
@@ -899,9 +897,7 @@ def test_mosaic_rejects_mismatched_band_count(tmp_path: Path) -> None:
             sys.executable,
             "-c",
             _RASTER_TOOL_SCRIPTS["mosaic"],
-            json.dumps(
-                {"input_path": str(a), "output_path": str(out), "raster_2": str(b)}
-            ),
+            json.dumps({"input_path": str(a), "output_path": str(out), "raster_2": str(b)}),
         ],
         check=False,
         capture_output=True,

@@ -72,10 +72,7 @@ export const useFileNamePrompt = create<FileNamePromptState>((set, get) => ({
  * Append the first allowed extension to a user-entered file name when it lacks
  * one, so a name like "my-story" becomes "my-story.html".
  */
-export function ensureFileExtension(
-  name: string,
-  extensions: string[],
-): string {
+export function ensureFileExtension(name: string, extensions: string[]): string {
   const ext = extensions[0];
   if (!ext) return name;
   const lower = name.toLowerCase();

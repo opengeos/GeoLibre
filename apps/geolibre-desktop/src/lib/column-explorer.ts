@@ -14,12 +14,7 @@ import {
   type ChartRow,
   type HistogramResult,
 } from "./attribute-charts";
-import {
-  computeNumericStats,
-  computeTextStats,
-  isBlank,
-  type FieldStats,
-} from "./attribute-stats";
+import { computeNumericStats, computeTextStats, isBlank, type FieldStats } from "./attribute-stats";
 
 /** Bins used for a numeric column's distribution sparkline. */
 export const COLUMN_EXPLORER_BINS = 12;
@@ -56,10 +51,7 @@ export interface ColumnSummary {
  * least two finite values that make up at least half of those populated rows),
  * so the explorer still agrees with the Charts panel on what counts as a number.
  */
-export function summarizeColumn(
-  rows: ChartRow[],
-  key: string,
-): ColumnSummary | null {
+export function summarizeColumn(rows: ChartRow[], key: string): ColumnSummary | null {
   const values: number[] = [];
   let nulls = 0;
   let nonNumeric = 0;
@@ -99,10 +91,7 @@ export function summarizeColumn(
  * any that yield no statistics. The single pass each column makes over `rows` is
  * synchronous, matching the in-memory feature sets the attribute table holds.
  */
-export function summarizeColumns(
-  rows: ChartRow[],
-  columns: string[],
-): ColumnSummary[] {
+export function summarizeColumns(rows: ChartRow[], columns: string[]): ColumnSummary[] {
   const summaries: ColumnSummary[] = [];
   for (const key of columns) {
     const summary = summarizeColumn(rows, key);

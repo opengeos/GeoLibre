@@ -96,9 +96,7 @@ function recordingCanvas(): {
 }
 
 function baseOptions(overrides: Partial<LayoutOptions> = {}): LayoutOptions {
-  const legend: LegendEntry[] = [
-    { id: "a", name: "Roads", swatches: [{ color: "#ff0000" }] },
-  ];
+  const legend: LegendEntry[] = [{ id: "a", name: "Roads", swatches: [{ color: "#ff0000" }] }];
   return {
     title: "Map",
     subtitle: "",
@@ -417,10 +415,7 @@ describe("computeScaleRatio", () => {
   });
 
   it("returns 0 when there is no captured map", () => {
-    assert.equal(
-      computeScaleRatio(baseOptions({ metersPerPixel: 10, mapImage: null })),
-      0,
-    );
+    assert.equal(computeScaleRatio(baseOptions({ metersPerPixel: 10, mapImage: null })), 0);
   });
 
   it("returns a positive representative fraction for a millimetre page", () => {
@@ -490,13 +485,8 @@ describe("drawLayout map frame border (GH #749)", () => {
 
   it("draws the frame in the chosen colour and thickness", () => {
     const { canvas, strokes } = strokeRecordingCanvas();
-    drawLayout(
-      canvas,
-      baseOptions({ mapBorderColor: "#123456", mapBorderWidth: 5 }),
-    );
-    const frame = strokes.find(
-      (s) => isBodyBorder(s) && s.strokeStyle === "#123456",
-    );
+    drawLayout(canvas, baseOptions({ mapBorderColor: "#123456", mapBorderWidth: 5 }));
+    const frame = strokes.find((s) => isBodyBorder(s) && s.strokeStyle === "#123456");
     assert.ok(frame, "expected the map frame to use the custom colour");
     assert.ok(frame.lineWidth > 1, "expected a thicker frame for width 5");
   });
@@ -504,10 +494,7 @@ describe("drawLayout map frame border (GH #749)", () => {
   it("hides the frame when the thickness is 0", () => {
     const { canvas, strokes } = strokeRecordingCanvas();
     drawLayout(canvas, baseOptions({ mapBorderWidth: 0 }));
-    assert.ok(
-      !strokes.some(isBodyBorder),
-      "expected no map frame stroke when width is 0",
-    );
+    assert.ok(!strokes.some(isBodyBorder), "expected no map frame stroke when width is 0");
   });
 });
 
@@ -530,14 +517,7 @@ describe("drawLayout data blocks (GH #1324)", () => {
         },
       }),
     );
-    for (const text of [
-      "Cities",
-      "name",
-      "pop",
-      "Springfield",
-      "42000",
-      "+3 more",
-    ]) {
+    for (const text of ["Cities", "name", "pop", "Springfield", "42000", "+3 more"]) {
       const fill = fills.find((f) => f.text === text);
       assert.ok(fill, `expected "${text}" to be drawn`);
       assert.equal(fill.textAlign, "left");
@@ -664,10 +644,7 @@ describe("drawLayout data blocks (GH #1324)", () => {
     assert.ok(rec.fills.some((f) => f.text === "b (25%)"));
     // One arc per slice plus the outline circle (the north arrow's backing
     // disc also uses arc, so require at least that many new arcs).
-    assert.ok(
-      rec.arcs - before >= 3,
-      "expected slice arcs and the outline circle to be drawn",
-    );
+    assert.ok(rec.arcs - before >= 3, "expected slice arcs and the outline circle to be drawn");
     // Slice colours are also used for the legend swatch rects.
     assert.ok(rec.fillRects.some((r) => r.fillStyle === "#111111"));
     assert.ok(rec.fillRects.some((r) => r.fillStyle === "#222222"));
@@ -698,9 +675,6 @@ describe("drawLayout data blocks (GH #1324)", () => {
     assert.ok(rec.fills.some((f) => f.text === "9" && f.textAlign === "right"));
     assert.ok(rec.fills.some((f) => f.text === "5" && f.textAlign === "right"));
     // The path itself: one stroked polyline with a segment per point pair.
-    assert.ok(
-      rec.polylines.includes(2),
-      "expected a stroked 2-segment polyline for the 3 points",
-    );
+    assert.ok(rec.polylines.includes(2), "expected a stroked 2-segment polyline for the 3 points");
   });
 });

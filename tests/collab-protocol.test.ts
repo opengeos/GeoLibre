@@ -16,25 +16,16 @@ import type { CollaborationParticipant } from "@geolibre/core";
 
 describe("resolveCollabBaseUrl", () => {
   it("accepts a wss host", () => {
-    assert.equal(
-      resolveCollabBaseUrl("wss://collab.geolibre.app"),
-      "wss://collab.geolibre.app",
-    );
+    assert.equal(resolveCollabBaseUrl("wss://collab.geolibre.app"), "wss://collab.geolibre.app");
   });
 
   it("accepts ws on loopback for local dev", () => {
-    assert.equal(
-      resolveCollabBaseUrl("ws://127.0.0.1:8787"),
-      "ws://127.0.0.1:8787",
-    );
+    assert.equal(resolveCollabBaseUrl("ws://127.0.0.1:8787"), "ws://127.0.0.1:8787");
     assert.equal(resolveCollabBaseUrl("ws://localhost:8787"), "ws://localhost:8787");
   });
 
   it("trims a trailing slash", () => {
-    assert.equal(
-      resolveCollabBaseUrl("wss://collab.geolibre.app/"),
-      "wss://collab.geolibre.app",
-    );
+    assert.equal(resolveCollabBaseUrl("wss://collab.geolibre.app/"), "wss://collab.geolibre.app");
   });
 
   it("rejects plaintext ws on a non-loopback host", () => {
@@ -69,9 +60,7 @@ describe("url derivation", () => {
 });
 
 describe("participantCanEdit", () => {
-  const base = (
-    over: Partial<CollaborationParticipant>,
-  ): CollaborationParticipant => ({
+  const base = (over: Partial<CollaborationParticipant>): CollaborationParticipant => ({
     clientId: "x",
     displayName: "X",
     color: "#000000",
@@ -92,15 +81,9 @@ describe("participantCanEdit", () => {
 
   it("lets a host-set override win over the session mode", () => {
     // Pinned to view-only inside an otherwise co-edit session.
-    assert.equal(
-      participantCanEdit(base({ editOverride: false }), "co-edit"),
-      false,
-    );
+    assert.equal(participantCanEdit(base({ editOverride: false }), "co-edit"), false);
     // Granted edit inside an otherwise view-only session.
-    assert.equal(
-      participantCanEdit(base({ editOverride: true }), "view-only"),
-      true,
-    );
+    assert.equal(participantCanEdit(base({ editOverride: true }), "view-only"), true);
   });
 });
 
@@ -138,10 +121,7 @@ describe("new protocol messages round-trip", () => {
     };
     const parsed = JSON.parse(JSON.stringify(server)) as ServerMessage;
     assert.equal(parsed.type, "chat");
-    assert.equal(
-      parsed.type === "chat" ? parsed.message.text : null,
-      "hi",
-    );
+    assert.equal(parsed.type === "chat" ? parsed.message.text : null, "hi");
   });
 });
 
@@ -180,10 +160,7 @@ describe("createSession", () => {
   it("throws a friendly error on a non-ok status", async () => {
     const fail: typeof fetch = (async () =>
       new Response("nope", { status: 500 })) as unknown as typeof fetch;
-    await assert.rejects(
-      () => createSession("co-edit", "wss://x.example", fail),
-      /HTTP 500/,
-    );
+    await assert.rejects(() => createSession("co-edit", "wss://x.example", fail), /HTTP 500/);
   });
 });
 

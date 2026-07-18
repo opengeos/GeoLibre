@@ -37,10 +37,9 @@ export function quoteIdentifier(value: string): string {
 
 /** Whether a table of the given name exists in the SQLite database. */
 export function tableExists(db: Database, name: string): boolean {
-  const result = db.exec(
-    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name",
-    { ":name": name },
-  );
+  const result = db.exec("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name", {
+    ":name": name,
+  });
   return result.length > 0 && result[0].values.length > 0;
 }
 
@@ -121,9 +120,7 @@ export function ensureGpkgFeatureCountSync(
       }
     }
 
-    const needsCount = [...featureTables.keys()].filter(
-      (key) => !tablesWithValidCount.has(key),
-    );
+    const needsCount = [...featureTables.keys()].filter((key) => !tablesWithValidCount.has(key));
     if (needsCount.length === 0) return bytes;
 
     if (!hasOgrContents) {
@@ -141,9 +138,7 @@ export function ensureGpkgFeatureCountSync(
       // keeps the other feature tables repairable instead of aborting the whole
       // file (which would leave every table unpatched).
       try {
-        const countResult = db.exec(
-          `SELECT count(*) FROM ${quoteIdentifier(tableName)}`,
-        );
+        const countResult = db.exec(`SELECT count(*) FROM ${quoteIdentifier(tableName)}`);
         const count = countResult[0]?.values[0]?.[0] ?? 0;
         const storedName = tablesWithRow.get(key);
         if (storedName !== undefined) {
@@ -220,10 +215,7 @@ export async function ensureGpkgFeatureCount(
     const SQL = await loadSqlJs();
     return ensureGpkgFeatureCountSync(SQL, bytes);
   } catch (error) {
-    console.warn(
-      "[GeoLibre] Could not ensure gpkg_ogr_contents; reading file as-is.",
-      error,
-    );
+    console.warn("[GeoLibre] Could not ensure gpkg_ogr_contents; reading file as-is.", error);
     return bytes;
   }
 }

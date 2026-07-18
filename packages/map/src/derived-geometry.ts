@@ -4,12 +4,7 @@ import buffer from "@turf/buffer";
 import centroid from "@turf/centroid";
 import convex from "@turf/convex";
 import mask from "@turf/mask";
-import type {
-  Feature,
-  FeatureCollection,
-  MultiPolygon,
-  Polygon,
-} from "geojson";
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeometryGeneratorType, LayerStyle } from "@geolibre/core";
 import { styleValue } from "@geolibre/core";
 
@@ -47,18 +42,12 @@ const maskCache = new WeakMap<
   FeatureCollection,
   FeatureCollection<Polygon | MultiPolygon> | null
 >();
-const generatorCache = new WeakMap<
-  FeatureCollection,
-  Map<string, FeatureCollection>
->();
+const generatorCache = new WeakMap<FeatureCollection, Map<string, FeatureCollection>>();
 
-function polygonFeatures(
-  collection: FeatureCollection,
-): Feature<Polygon | MultiPolygon>[] {
+function polygonFeatures(collection: FeatureCollection): Feature<Polygon | MultiPolygon>[] {
   return collection.features.filter(
     (feature): feature is Feature<Polygon | MultiPolygon> =>
-      feature.geometry?.type === "Polygon" ||
-      feature.geometry?.type === "MultiPolygon",
+      feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon",
   );
 }
 
@@ -126,8 +115,7 @@ export function buildGeneratedGeometry(
 ): FeatureCollection | null {
   if (type === "none") return null;
   if (collection.features.length > MAX_DERIVED_FEATURES) return EMPTY;
-  const distance =
-    type === "buffer" && Number.isFinite(bufferDistance) ? bufferDistance : 0;
+  const distance = type === "buffer" && Number.isFinite(bufferDistance) ? bufferDistance : 0;
   if (type === "buffer" && distance === 0) return EMPTY;
   const key = type === "buffer" ? `buffer:${distance}` : type;
   let byKey = generatorCache.get(collection);
@@ -195,9 +183,7 @@ function deriveFeature(
       case "convex-hull":
         return convex({ type: "FeatureCollection", features: [feature] });
       case "buffer":
-        return (
-          buffer(feature, bufferDistance, { units: "meters" }) ?? null
-        );
+        return buffer(feature, bufferDistance, { units: "meters" }) ?? null;
     }
   } catch {
     // Per-feature failures (invalid geometry) skip that feature only.

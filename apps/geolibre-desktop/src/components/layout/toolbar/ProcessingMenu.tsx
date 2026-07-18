@@ -39,9 +39,7 @@ export function ProcessingMenu({
 }: ProcessingMenuProps) {
   const { t } = useTranslation();
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
-  const setProcessingInitialTool = useAppStore(
-    (s) => s.setProcessingInitialTool,
-  );
+  const setProcessingInitialTool = useAppStore((s) => s.setProcessingInitialTool);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
@@ -50,17 +48,13 @@ export function ProcessingMenu({
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
-  const setSegmentEverythingOpen = useAppStore(
-    (s) => s.setSegmentEverythingOpen,
-  );
+  const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
-  const setProcessingHistoryOpen = useAppStore(
-    (s) => s.setProcessingHistoryOpen,
-  );
+  const setProcessingHistoryOpen = useAppStore((s) => s.setProcessingHistoryOpen);
 
   // Format Conversion, Raster tools, and AI Segmentation require the Python
   // sidecar, which cannot run on Android/iOS — hide them on mobile so they don't
@@ -148,18 +142,13 @@ export function ProcessingMenu({
               <DropdownMenuSubContent>
                 {cat.subcategories.length === 1
                   ? cat.subcategories[0].tools.map((tool) => (
-                      <DropdownMenuItem
-                        key={tool.id}
-                        onSelect={() => openWhiteboxTool(tool.id)}
-                      >
+                      <DropdownMenuItem key={tool.id} onSelect={() => openWhiteboxTool(tool.id)}>
                         {tool.name}
                       </DropdownMenuItem>
                     ))
                   : cat.subcategories.map((sub) => (
                       <DropdownMenuSub key={sub.label}>
-                        <DropdownMenuSubTrigger>
-                          {sub.label}
-                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>{sub.label}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           {sub.tools.map((tool) => (
                             <DropdownMenuItem
@@ -182,394 +171,325 @@ export function ProcessingMenu({
             category submenus above. Each child keeps its own visibility gate;
             the parent shows when any child does. */}
         {showGeolibre && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {t("toolbar.item.geolibre")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-        {!mobile && show("processing.conversion") && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {t("toolbar.item.conversion")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("vector-to-vector")}
-            >
-              {t("toolbar.conversion.vectorToVector")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("vector-to-geoparquet")}
-            >
-              {t("toolbar.conversion.vectorToGeoparquet")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("vector-to-flatgeobuf")}
-            >
-              {t("toolbar.conversion.vectorToFlatgeobuf")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("vector-to-shapefile")}
-            >
-              {t("toolbar.conversion.vectorToShapefile")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("vector-to-geopackage")}
-            >
-              {t("toolbar.conversion.vectorToGeopackage")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("csv-to-geoparquet")}
-            >
-              {t("toolbar.conversion.csvToGeoparquet")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("vector-to-pmtiles")}
-            >
-              {t("toolbar.conversion.vectorToPmtiles")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("raster-to-pmtiles")}
-            >
-              {t("toolbar.conversion.rasterToPmtiles")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConversionOpen("raster-to-cog")}
-            >
-              {t("toolbar.conversion.rasterToCog")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        )}
-        {show("processing.vector") && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {t("toolbar.item.vector")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupGeometry")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("buffer")}>
-              {t("toolbar.vectorTool.buffer")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("centroids")}>
-              {t("toolbar.vectorTool.centroids")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("convex-hull")}>
-              {t("toolbar.vectorTool.convexHull")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("dissolve")}>
-              {t("toolbar.vectorTool.dissolve")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("bounding-box")}
-            >
-              {t("toolbar.vectorTool.boundingBox")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
-              {t("toolbar.vectorTool.simplify")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("reproject")}>
-              {t("toolbar.vectorTool.reproject")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("explode")}>
-              {t("toolbar.vectorTool.explode")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("aggregate")}>
-              {t("toolbar.vectorTool.aggregate")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("smooth")}>
-              {t("toolbar.vectorTool.smooth")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("grid")}>
-              {t("toolbar.vectorTool.grid")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("voronoi")}>
-              {t("toolbar.vectorTool.voronoi")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("cell-sectors")}
-            >
-              {t("toolbar.vectorTool.cellSectors")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupOverlay")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("clip")}>
-              {t("toolbar.vectorTool.clip")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("intersection")}>
-              {t("toolbar.vectorTool.intersection")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("difference")}>
-              {t("toolbar.vectorTool.difference")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("union")}>
-              {t("toolbar.vectorTool.union")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupJoin")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("spatial-join")}>
-              {t("toolbar.vectorTool.spatialJoin")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("attribute-join")}
-            >
-              {t("toolbar.vectorTool.attributeJoin")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupSelect")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("select-by-value")}
-            >
-              {t("toolbar.vectorTool.selectByValue")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("select-by-location")}
-            >
-              {t("toolbar.vectorTool.selectByLocation")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupH3")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-grid")}>
-              {t("toolbar.vectorTool.h3Grid")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("h3-bin-points")}
-            >
-              {t("toolbar.vectorTool.h3BinPoints")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupMovement")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("trajectory-speed")}
-            >
-              {t("toolbar.vectorTool.trajectorySpeed")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("detect-stops")}
-            >
-              {t("toolbar.vectorTool.detectStops")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("space-time-proximity")}
-            >
-              {t("toolbar.vectorTool.spaceTimeProximity")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupDataQuality")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("check-validity")}
-            >
-              {t("toolbar.vectorTool.checkValidity")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("fix-geometries")}
-            >
-              {t("toolbar.vectorTool.fixGeometries")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("check-topology-rules")}
-            >
-              {t("toolbar.vectorTool.checkTopologyRules")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setVectorToolOpen("fix-topology")}
-            >
-              {t("toolbar.vectorTool.fixTopology")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        )}
-        {show("processing.network") && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {t("toolbar.item.network")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem onSelect={() => onOpenNetworkTool("isochrone")}>
-              {t("toolbar.networkTool.isochrone")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onOpenNetworkTool("od-matrix")}>
-              {t("toolbar.networkTool.odMatrix")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => onOpenNetworkTool("sequential-route")}
-            >
-              {t("toolbar.networkTool.sequentialRoute")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        )}
-        {show("processing.statistics") && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {t("toolbar.item.statistics")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem
-              onSelect={() => setStatisticsToolOpen("global-morans-i")}
-            >
-              {t("toolbar.statisticsTool.globalMoransI")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setStatisticsToolOpen("local-morans-i")}
-            >
-              {t("toolbar.statisticsTool.localMoransI")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setStatisticsToolOpen("getis-ord-gi")}
-            >
-              {t("toolbar.statisticsTool.getisOrd")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() =>
-                setStatisticsToolOpen("average-nearest-neighbor")
-              }
-            >
-              {t("toolbar.statisticsTool.averageNearestNeighbor")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setStatisticsToolOpen("kernel-density")}
-            >
-              {t("toolbar.statisticsTool.kernelDensity")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        )}
-        {!mobile && show("processing.raster") && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {t("toolbar.item.raster")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupTerrain")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("hillshade")}>
-              {t("toolbar.rasterTool.hillshade")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("slope")}>
-              {t("toolbar.rasterTool.slope")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("aspect")}>
-              {t("toolbar.rasterTool.aspect")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupReproject")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("reproject")}>
-              {t("toolbar.rasterTool.reproject")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("resample")}>
-              {t("toolbar.rasterTool.resample")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupClip")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-extent")}>
-              {t("toolbar.rasterTool.clipExtent")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-mask")}>
-              {t("toolbar.rasterTool.clipMask")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupRasterToVector")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("polygonize")}>
-              {t("toolbar.rasterTool.polygonize")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
-              {t("toolbar.rasterTool.contour")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupVectorToRaster")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("interpolate")}>
-              {t("toolbar.rasterTool.interpolate")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.subGroupAnalysis")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("zonal")}>
-              {t("toolbar.rasterTool.zonal")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("raster-calc")}>
-              {t("toolbar.rasterTool.rasterCalc")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("spectral-index")}>
-              {t("toolbar.rasterTool.spectralIndex")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("reclassify")}>
-              {t("toolbar.rasterTool.reclassify")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("mosaic")}>
-              {t("toolbar.rasterTool.mosaic")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRasterToolOpen("focal")}>
-              {t("toolbar.rasterTool.focal")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onOpenGeoreferencer}>
-              {t("toolbar.item.georeferencing")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        )}
-        {showGeolibreTools && showGeolibreActions && <DropdownMenuSeparator />}
-        {show("processing.geocode") && (
-          <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
-            {t("toolbar.item.geocode")}
-          </DropdownMenuItem>
-        )}
-        {show("processing.modelBuilder") && (
-          <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
-            {t("toolbar.item.modelBuilder")}
-          </DropdownMenuItem>
-        )}
-        {!mobile && show("processing.segmentation") && (
-          <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
-            {t("toolbar.command.segmentation")}
-          </DropdownMenuItem>
-        )}
-        {/* Detection runs client-side (onnxruntime-web), not via the sidecar,
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>{t("toolbar.item.geolibre")}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {!mobile && show("processing.conversion") && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.conversion")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-vector")}>
+                      {t("toolbar.conversion.vectorToVector")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-geoparquet")}>
+                      {t("toolbar.conversion.vectorToGeoparquet")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-flatgeobuf")}>
+                      {t("toolbar.conversion.vectorToFlatgeobuf")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-shapefile")}>
+                      {t("toolbar.conversion.vectorToShapefile")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-geopackage")}>
+                      {t("toolbar.conversion.vectorToGeopackage")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("csv-to-geoparquet")}>
+                      {t("toolbar.conversion.csvToGeoparquet")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-pmtiles")}>
+                      {t("toolbar.conversion.vectorToPmtiles")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("raster-to-pmtiles")}>
+                      {t("toolbar.conversion.rasterToPmtiles")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConversionOpen("raster-to-cog")}>
+                      {t("toolbar.conversion.rasterToCog")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {show("processing.vector") && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.vector")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupGeometry")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("buffer")}>
+                      {t("toolbar.vectorTool.buffer")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("centroids")}>
+                      {t("toolbar.vectorTool.centroids")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("convex-hull")}>
+                      {t("toolbar.vectorTool.convexHull")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dissolve")}>
+                      {t("toolbar.vectorTool.dissolve")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("bounding-box")}>
+                      {t("toolbar.vectorTool.boundingBox")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
+                      {t("toolbar.vectorTool.simplify")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("reproject")}>
+                      {t("toolbar.vectorTool.reproject")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("explode")}>
+                      {t("toolbar.vectorTool.explode")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("aggregate")}>
+                      {t("toolbar.vectorTool.aggregate")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("smooth")}>
+                      {t("toolbar.vectorTool.smooth")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("grid")}>
+                      {t("toolbar.vectorTool.grid")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("voronoi")}>
+                      {t("toolbar.vectorTool.voronoi")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("cell-sectors")}>
+                      {t("toolbar.vectorTool.cellSectors")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupOverlay")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("clip")}>
+                      {t("toolbar.vectorTool.clip")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("intersection")}>
+                      {t("toolbar.vectorTool.intersection")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("difference")}>
+                      {t("toolbar.vectorTool.difference")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("union")}>
+                      {t("toolbar.vectorTool.union")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupJoin")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("spatial-join")}>
+                      {t("toolbar.vectorTool.spatialJoin")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("attribute-join")}>
+                      {t("toolbar.vectorTool.attributeJoin")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupSelect")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("select-by-value")}>
+                      {t("toolbar.vectorTool.selectByValue")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("select-by-location")}>
+                      {t("toolbar.vectorTool.selectByLocation")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupH3")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-grid")}>
+                      {t("toolbar.vectorTool.h3Grid")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-bin-points")}>
+                      {t("toolbar.vectorTool.h3BinPoints")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupMovement")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("trajectory-speed")}>
+                      {t("toolbar.vectorTool.trajectorySpeed")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("detect-stops")}>
+                      {t("toolbar.vectorTool.detectStops")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("space-time-proximity")}>
+                      {t("toolbar.vectorTool.spaceTimeProximity")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupDataQuality")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("check-validity")}>
+                      {t("toolbar.vectorTool.checkValidity")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("fix-geometries")}>
+                      {t("toolbar.vectorTool.fixGeometries")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("check-topology-rules")}>
+                      {t("toolbar.vectorTool.checkTopologyRules")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("fix-topology")}>
+                      {t("toolbar.vectorTool.fixTopology")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {show("processing.network") && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.network")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("isochrone")}>
+                      {t("toolbar.networkTool.isochrone")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("od-matrix")}>
+                      {t("toolbar.networkTool.odMatrix")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("sequential-route")}>
+                      {t("toolbar.networkTool.sequentialRoute")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {show("processing.statistics") && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.statistics")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("global-morans-i")}>
+                      {t("toolbar.statisticsTool.globalMoransI")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("local-morans-i")}>
+                      {t("toolbar.statisticsTool.localMoransI")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("getis-ord-gi")}>
+                      {t("toolbar.statisticsTool.getisOrd")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => setStatisticsToolOpen("average-nearest-neighbor")}
+                    >
+                      {t("toolbar.statisticsTool.averageNearestNeighbor")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("kernel-density")}>
+                      {t("toolbar.statisticsTool.kernelDensity")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {!mobile && show("processing.raster") && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.raster")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupTerrain")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("hillshade")}>
+                      {t("toolbar.rasterTool.hillshade")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("slope")}>
+                      {t("toolbar.rasterTool.slope")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("aspect")}>
+                      {t("toolbar.rasterTool.aspect")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupReproject")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("reproject")}>
+                      {t("toolbar.rasterTool.reproject")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("resample")}>
+                      {t("toolbar.rasterTool.resample")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupClip")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-extent")}>
+                      {t("toolbar.rasterTool.clipExtent")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-mask")}>
+                      {t("toolbar.rasterTool.clipMask")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupRasterToVector")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("polygonize")}>
+                      {t("toolbar.rasterTool.polygonize")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
+                      {t("toolbar.rasterTool.contour")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupVectorToRaster")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("interpolate")}>
+                      {t("toolbar.rasterTool.interpolate")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupAnalysis")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("zonal")}>
+                      {t("toolbar.rasterTool.zonal")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("raster-calc")}>
+                      {t("toolbar.rasterTool.rasterCalc")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("spectral-index")}>
+                      {t("toolbar.rasterTool.spectralIndex")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("reclassify")}>
+                      {t("toolbar.rasterTool.reclassify")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("mosaic")}>
+                      {t("toolbar.rasterTool.mosaic")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setRasterToolOpen("focal")}>
+                      {t("toolbar.rasterTool.focal")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={onOpenGeoreferencer}>
+                      {t("toolbar.item.georeferencing")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {showGeolibreTools && showGeolibreActions && <DropdownMenuSeparator />}
+              {show("processing.geocode") && (
+                <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
+                  {t("toolbar.item.geocode")}
+                </DropdownMenuItem>
+              )}
+              {show("processing.modelBuilder") && (
+                <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
+                  {t("toolbar.item.modelBuilder")}
+                </DropdownMenuItem>
+              )}
+              {!mobile && show("processing.segmentation") && (
+                <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
+                  {t("toolbar.command.segmentation")}
+                </DropdownMenuItem>
+              )}
+              {/* Detection runs client-side (onnxruntime-web), not via the sidecar,
             so it stays available on mobile/web clients (no `!mobile` gate). */}
-        {show("processing.objectDetection") && (
-          <DropdownMenuItem onSelect={() => setObjectDetectionOpen(true)}>
-            {t("toolbar.command.objectDetection")}
-          </DropdownMenuItem>
-        )}
-        {/* SlimSAM "segment everything" also runs client-side (onnxruntime-web),
+              {show("processing.objectDetection") && (
+                <DropdownMenuItem onSelect={() => setObjectDetectionOpen(true)}>
+                  {t("toolbar.command.objectDetection")}
+                </DropdownMenuItem>
+              )}
+              {/* SlimSAM "segment everything" also runs client-side (onnxruntime-web),
             so it stays available on mobile/web clients (no `!mobile` gate). */}
-        {show("processing.segmentEverything") && (
-          <DropdownMenuItem onSelect={() => setSegmentEverythingOpen(true)}>
-            {t("toolbar.command.segmentEverything")}
-          </DropdownMenuItem>
-        )}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+              {show("processing.segmentEverything") && (
+                <DropdownMenuItem onSelect={() => setSegmentEverythingOpen(true)}>
+                  {t("toolbar.command.segmentEverything")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         )}
         {/* Divide the tool-category submenus (Whitebox, GeoLibre) from the
             workspaces and consoles below. Only when both sides are present. */}
-        {(showWhitebox || showGeolibre) &&
-          showWorkspacesOrServices && <DropdownMenuSeparator />}
+        {(showWhitebox || showGeolibre) && showWorkspacesOrServices && <DropdownMenuSeparator />}
         {show("processing.sqlWorkspace") && (
           <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
             {t("toolbar.command.sqlWorkspace")}

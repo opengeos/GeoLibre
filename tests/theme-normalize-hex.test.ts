@@ -25,17 +25,7 @@ describe("normalizeHexColor", () => {
   it("returns null for anything that is not a valid 3- or 6-digit hex", () => {
     // `#1234` is the CSS Color 4 RGBA shorthand — valid in CSS, but this app
     // only renders 3- or 6-digit hex, so it must be rejected here.
-    for (const bad of [
-      "",
-      "   ",
-      "#",
-      "nothex",
-      "#12",
-      "#1234",
-      "#12345",
-      "#1234567",
-      "ggg",
-    ]) {
+    for (const bad of ["", "   ", "#", "nothex", "#12", "#1234", "#12345", "#1234567", "ggg"]) {
       assert.equal(normalizeHexColor(bad), null, `expected null for ${bad}`);
     }
   });

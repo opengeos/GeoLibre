@@ -7,18 +7,18 @@
  * the rest of the plugin stays easy to test.
  */
 
-import type { LngLat } from './geometry';
+import type { LngLat } from "./geometry";
 
 /** Open-Meteo accepts at most 100 coordinates per elevation request. */
 export const MAX_POINTS_PER_REQUEST = 100;
 
-const ENDPOINT = 'https://api.open-meteo.com/v1/elevation';
+const ENDPOINT = "https://api.open-meteo.com/v1/elevation";
 
 /** Error thrown when an elevation request cannot be completed or parsed. */
 export class ElevationFetchError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ElevationFetchError';
+    this.name = "ElevationFetchError";
   }
 }
 
@@ -41,10 +41,7 @@ interface ElevationResponse {
  * @throws {ElevationFetchError} On too many points, a network error, a non-2xx
  *   response, a malformed body, or a length mismatch
  */
-export async function fetchElevations(
-  points: LngLat[],
-  fetchImpl?: FetchLike,
-): Promise<number[]> {
+export async function fetchElevations(points: LngLat[], fetchImpl?: FetchLike): Promise<number[]> {
   if (points.length === 0) return [];
   if (points.length > MAX_POINTS_PER_REQUEST) {
     throw new ElevationFetchError(
@@ -53,46 +50,41 @@ export async function fetchElevations(
   }
 
   const doFetch: FetchLike = fetchImpl ?? ((url, init) => fetch(url, init));
-  const latitudes = points.map((p) => p[1].toFixed(6)).join(',');
-  const longitudes = points.map((p) => p[0].toFixed(6)).join(',');
+  const latitudes = points.map((p) => p[1].toFixed(6)).join(",");
+  const longitudes = points.map((p) => p[0].toFixed(6)).join(",");
   const url = `${ENDPOINT}?latitude=${latitudes}&longitude=${longitudes}`;
 
   // A default fetch never times out, so a hung request would leave the control's
   // busy state stuck with no recovery. Abort after ELEVATION_REQUEST_TIMEOUT_MS
   // and surface it as a normal fetch error the caller already handles.
   const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    ELEVATION_REQUEST_TIMEOUT_MS,
-  );
+  const timeoutId = setTimeout(() => controller.abort(), ELEVATION_REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
     response = await doFetch(url, { signal: controller.signal });
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ElevationFetchError('Elevation request timed out.');
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ElevationFetchError("Elevation request timed out.");
     }
-    const detail = error instanceof Error ? error.message : 'unknown error';
+    const detail = error instanceof Error ? error.message : "unknown error";
     throw new ElevationFetchError(`Could not reach the elevation service: ${detail}`);
   } finally {
     clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
-    throw new ElevationFetchError(
-      `Elevation request failed (HTTP ${response.status}).`,
-    );
+    throw new ElevationFetchError(`Elevation request failed (HTTP ${response.status}).`);
   }
 
   let data: ElevationResponse;
   try {
     data = (await response.json()) as ElevationResponse;
   } catch {
-    throw new ElevationFetchError('Could not parse the elevation response.');
+    throw new ElevationFetchError("Could not parse the elevation response.");
   }
 
   if (!data || !Array.isArray(data.elevation)) {
-    throw new ElevationFetchError('Malformed elevation response.');
+    throw new ElevationFetchError("Malformed elevation response.");
   }
   if (data.elevation.length !== points.length) {
     throw new ElevationFetchError(

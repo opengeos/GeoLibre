@@ -126,10 +126,7 @@ const asNumber = (value: unknown): number =>
  * `/api/thumbnails/...`) into an absolute URL against the share host. Returns
  * `null` when there is no usable value so the UI can show a placeholder.
  */
-export function resolveThumbnailUrl(
-  value: unknown,
-  base: string,
-): string | null {
+export function resolveThumbnailUrl(value: unknown, base: string): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     return new URL(value, `${base}/`).toString();
@@ -144,10 +141,7 @@ export function resolveThumbnailUrl(
  * (a usable id and raw JSON URL), so a single malformed entry can't break the
  * whole page. `title` may be empty; the UI substitutes a translated placeholder.
  */
-function normalizeProject(
-  raw: RawSharedProject,
-  base: string,
-): SharedProject | null {
+function normalizeProject(raw: RawSharedProject, base: string): SharedProject | null {
   const id = asString(raw.id);
   const rawJsonUrl = asString(raw.rawJsonUrl);
   if (!id || !rawJsonUrl) return null;
@@ -166,9 +160,7 @@ function normalizeProject(
     featured: raw.featured === true,
     createdAt: asString(raw.createdAt),
     updatedAt: asString(raw.updatedAt),
-    tags: Array.isArray(raw.tags)
-      ? raw.tags.filter((t): t is string => typeof t === "string")
-      : [],
+    tags: Array.isArray(raw.tags) ? raw.tags.filter((t): t is string => typeof t === "string") : [],
     rawJsonUrl,
     projectUrl: asString(raw.projectUrl),
     viewerUrl: asString(raw.viewerUrl),
@@ -204,9 +196,7 @@ export async function fetchSharedProjects(
 
   // Combine the caller's abort signal (dialog close) with a hard deadline.
   const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, timeout])
-    : timeout;
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 
   let response: Response;
   try {
@@ -241,8 +231,7 @@ export async function fetchSharedProjects(
 
   // A full page (returned count meets the requested limit) implies more exist.
   // Without a limit we can't infer a next page, so report no more.
-  const hasMore =
-    options.limit != null && rawProjects.length >= options.limit;
+  const hasMore = options.limit != null && rawProjects.length >= options.limit;
 
   return { projects, hasMore, rawCount: rawProjects.length };
 }
@@ -295,12 +284,7 @@ export function shareAuthorizedFetch(
     baseOrigin = null;
   }
   return (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const href =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
+    const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     let sameHost = false;
     try {
       sameHost = baseOrigin != null && new URL(href).origin === baseOrigin;
@@ -325,23 +309,15 @@ export function shareAuthorizedFetch(
  *   account has no username (`username-required`), or the network/host fails. A
  *   caller-initiated abort propagates as `AbortError`.
  */
-export async function fetchMyProjects(
-  options: FetchMyProjectsOptions,
-): Promise<SharedProject[]> {
+export async function fetchMyProjects(options: FetchMyProjectsOptions): Promise<SharedProject[]> {
   const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
   // One auth path for both production and tests: the injected fetch (or the
   // share fetch, which the desktop build routes natively to bypass CORS — see
   // share-fetch.ts) flows through the same same-origin token gating.
-  const authFetch = shareAuthorizedFetch(
-    options.token,
-    base,
-    options.fetchImpl ?? getShareFetch(),
-  );
+  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
 
   const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, timeout])
-    : timeout;
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 
   const request = async (path: string): Promise<unknown> => {
     let response: Response;
@@ -378,9 +354,9 @@ export async function fetchMyProjects(
     throw new GalleryError("username-required");
   }
 
-  const payload = (await request(
-    `/api/users/${encodeURIComponent(username)}/projects`,
-  )) as { projects?: RawSharedProject[] } | null;
+  const payload = (await request(`/api/users/${encodeURIComponent(username)}/projects`)) as {
+    projects?: RawSharedProject[];
+  } | null;
   const rawProjects = Array.isArray(payload?.projects) ? payload.projects : [];
   return rawProjects
     .map((raw) => normalizeProject(raw, base))

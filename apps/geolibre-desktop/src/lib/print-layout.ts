@@ -8,12 +8,7 @@
  * (PNG / PDF), so the preview is faithful to the output.
  */
 
-import {
-  formatRoundNum,
-  getRoundNum,
-  scaleDenomination,
-  type MapScaleUnit,
-} from "@geolibre/core";
+import { formatRoundNum, getRoundNum, scaleDenomination, type MapScaleUnit } from "@geolibre/core";
 
 export type PaperSizeId =
   | "a4"
@@ -52,13 +47,55 @@ export interface PaperSize {
 export const PAPER_SIZES: PaperSize[] = [
   { id: "a4", label: "A4 (210 × 297 mm)", width: 210, height: 297, unit: "mm", group: "paper" },
   { id: "a3", label: "A3 (297 × 420 mm)", width: 297, height: 420, unit: "mm", group: "paper" },
-  { id: "letter", label: "Letter (8.5 × 11 in)", width: 215.9, height: 279.4, unit: "mm", group: "paper" },
-  { id: "legal", label: "Legal (8.5 × 14 in)", width: 215.9, height: 355.6, unit: "mm", group: "paper" },
-  { id: "tabloid", label: "Tabloid (11 × 17 in)", width: 279.4, height: 431.8, unit: "mm", group: "paper" },
-  { id: "fullhd", label: "Full HD (1920 × 1080 px)", width: 1080, height: 1920, unit: "px", group: "screen" },
+  {
+    id: "letter",
+    label: "Letter (8.5 × 11 in)",
+    width: 215.9,
+    height: 279.4,
+    unit: "mm",
+    group: "paper",
+  },
+  {
+    id: "legal",
+    label: "Legal (8.5 × 14 in)",
+    width: 215.9,
+    height: 355.6,
+    unit: "mm",
+    group: "paper",
+  },
+  {
+    id: "tabloid",
+    label: "Tabloid (11 × 17 in)",
+    width: 279.4,
+    height: 431.8,
+    unit: "mm",
+    group: "paper",
+  },
+  {
+    id: "fullhd",
+    label: "Full HD (1920 × 1080 px)",
+    width: 1080,
+    height: 1920,
+    unit: "px",
+    group: "screen",
+  },
   { id: "hd", label: "HD (1280 × 720 px)", width: 720, height: 1280, unit: "px", group: "screen" },
-  { id: "uhd4k", label: "4K UHD (3840 × 2160 px)", width: 2160, height: 3840, unit: "px", group: "screen" },
-  { id: "square", label: "Square (1080 × 1080 px)", width: 1080, height: 1080, unit: "px", group: "screen" },
+  {
+    id: "uhd4k",
+    label: "4K UHD (3840 × 2160 px)",
+    width: 2160,
+    height: 3840,
+    unit: "px",
+    group: "screen",
+  },
+  {
+    id: "square",
+    label: "Square (1080 × 1080 px)",
+    width: 1080,
+    height: 1080,
+    unit: "px",
+    group: "screen",
+  },
   { id: "custom", label: "Custom…", width: 1280, height: 720, unit: "px", group: "screen" },
 ];
 
@@ -119,10 +156,7 @@ export function pageMm(size: ResolvedPageSize): {
  * Convert a resolved page size to output pixels at the given dpi. Pixel-unit
  * sizes are exact (dpi is ignored); millimetre sizes scale by dpi/25.4.
  */
-export function pagePx(
-  size: ResolvedPageSize,
-  dpi: number,
-): { width: number; height: number } {
+export function pagePx(size: ResolvedPageSize, dpi: number): { width: number; height: number } {
   if (size.unit === "px") {
     return { width: Math.round(size.width), height: Math.round(size.height) };
   }
@@ -147,11 +181,7 @@ export interface LegendEntry {
 }
 
 /** Corner of the map body a composed panel is anchored to. */
-export type BodyCorner =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type BodyCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 /**
  * Resolved, drawable data for the chart block (GH #1324). Like the colorbar's
@@ -405,8 +435,7 @@ function resolveContentFlags(opts: LayoutOptions): ContentFlags {
   // the other new booleans: GH #526 wants a pre-checked "Created with GeoLibre"
   // credit so it survives a user replacing the footer text.
   const attributionText =
-    opts.showAttribution !== false &&
-    (opts.attributionText ?? "Created with GeoLibre").trim();
+    opts.showAttribution !== false && (opts.attributionText ?? "Created with GeoLibre").trim();
   const footerText = opts.showFooter && opts.footerText.trim();
   const dateText = (opts.showDate && (opts.dateText ?? "").trim()) || false;
   return {
@@ -440,8 +469,7 @@ interface BodyRect {
  */
 function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
   const unit = Math.min(W, H) / 100;
-  const marginScale =
-    opts.pageMargin === "none" ? 0 : opts.pageMargin === "narrow" ? 0.5 : 1;
+  const marginScale = opts.pageMargin === "none" ? 0 : opts.pageMargin === "narrow" ? 0.5 : 1;
   const margin = unit * 5 * marginScale;
   const f = resolveContentFlags(opts);
 
@@ -540,10 +568,7 @@ export function computeScaleRatio(opts: LayoutOptions): number {
  *   size in pixels.
  * @param opts - Layout content and options.
  */
-export function drawLayout(
-  canvas: HTMLCanvasElement,
-  opts: LayoutOptions,
-): void {
+export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
@@ -552,11 +577,7 @@ export function drawLayout(
   // Scale furniture relative to the page's shorter side so output looks the
   // same at any resolution / paper size. The body rectangle and unit come from
   // the shared geometry helper so the on-screen scale matches the export.
-  const { unit, margin, bodyX, bodyY, bodyW, bodyH } = computeBodyRect(
-    opts,
-    W,
-    H,
-  );
+  const { unit, margin, bodyX, bodyY, bodyW, bodyH } = computeBodyRect(opts, W, H);
   const {
     hasTitleText,
     hasSubtitleText,
@@ -575,8 +596,7 @@ export function drawLayout(
   ctx.fillRect(0, 0, W, H);
 
   // X anchor + canvas textAlign for the chosen title alignment.
-  const titleX =
-    titleAlign === "left" ? margin : titleAlign === "right" ? W - margin : W / 2;
+  const titleX = titleAlign === "left" ? margin : titleAlign === "right" ? W - margin : W / 2;
 
   // --- Title block (outside the map) -------------------------------------
   if (hasTitleBlock && !titleInside) {
@@ -665,8 +685,7 @@ export function drawLayout(
   // thickness of 0 hides the frame entirely (GH #749). The thickness is a 0–10
   // scale relative to the page so it reads the same at any export resolution.
   const mapBorderScale = Math.max(0, Math.min(10, opts.mapBorderWidth ?? 1));
-  const mapBorderWidth =
-    mapBorderScale > 0 ? Math.max(1, unit * 0.2 * mapBorderScale) : 0;
+  const mapBorderWidth = mapBorderScale > 0 ? Math.max(1, unit * 0.2 * mapBorderScale) : 0;
   if (mapBorderWidth > 0) {
     ctx.strokeStyle = opts.mapBorderColor ?? BORDER;
     ctx.lineWidth = mapBorderWidth;
@@ -734,8 +753,7 @@ export function drawLayout(
   const inset = unit * 2;
   // Metres per pixel in the *output* image after cover scaling.
   const outputMpp = opts.metersPerPixel / (coverScale || 1);
-  const hasScale =
-    opts.showScaleBar && outputMpp > 0 && Number.isFinite(outputMpp);
+  const hasScale = opts.showScaleBar && outputMpp > 0 && Number.isFinite(outputMpp);
   // Representative fraction (1:N) from the shared, resolution-independent helper
   // so the scale bar, the info block, and the dialog's scale input all agree.
   // It is only non-zero for physical paper sizes with a captured map.
@@ -753,13 +771,7 @@ export function drawLayout(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    drawInfoBlock(
-      ctx,
-      bodyX + bodyW - inset,
-      bodyY + bodyH - inset,
-      infoLines,
-      unit,
-    );
+    drawInfoBlock(ctx, bodyX + bodyW - inset, bodyY + bodyH - inset, infoLines, unit);
     ctx.restore();
   }
 
@@ -768,9 +780,7 @@ export function drawLayout(
   // When the info block occupies the bottom-right corner, move the scale bar +
   // north arrow to the bottom-left so they never sit under the block.
   const navOnLeft = hasInfoBlock;
-  const navAnchorX = navOnLeft
-    ? bodyX + inset + bodyW * 0.28
-    : bodyX + bodyW - inset;
+  const navAnchorX = navOnLeft ? bodyX + inset + bodyW * 0.28 : bodyX + bodyW - inset;
 
   // --- Scale bar + north arrow ------------------------------------------
   let scaleTopY = bodyY + bodyH - inset;
@@ -823,17 +833,10 @@ export function drawLayout(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    legendHeight = drawLegend(
-      ctx,
-      bodyX + inset,
-      bodyY + inset,
-      opts.legend,
-      unit,
-      {
-        title: opts.legendTitle,
-        groupByLayer: opts.legendGroupByLayer,
-      },
-    );
+    legendHeight = drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit, {
+      title: opts.legendTitle,
+      groupByLayer: opts.legendGroupByLayer,
+    });
     ctx.restore();
   }
 
@@ -900,11 +903,7 @@ export function drawLayout(
     );
   }
 
-  if (
-    opts.dataTable &&
-    opts.dataTable.columns.length > 0 &&
-    opts.dataTable.rows.length > 0
-  ) {
+  if (opts.dataTable && opts.dataTable.columns.length > 0 && opts.dataTable.rows.length > 0) {
     const table = opts.dataTable;
     drawCornerPanel(table.position, (corner, stackOffset) =>
       drawDataTable(
@@ -1256,9 +1255,7 @@ function drawColorbar(
   // Enough decimals to keep adjacent ticks distinct for small ranges (at least
   // 2, as before, for normal ranges).
   const decimals =
-    step > 0 && step < 1
-      ? Math.max(2, Math.min(8, Math.ceil(-Math.log10(step)) + 1))
-      : 2;
+    step > 0 && step < 1 ? Math.max(2, Math.min(8, Math.ceil(-Math.log10(step)) + 1)) : 2;
   const ticks = Array.from({ length: TICKS }, (_, i) => {
     const t = TICKS === 1 ? 0.5 : i / (TICKS - 1);
     return { t, text: formatColorbarTick(cb.min + span * t, decimals) };
@@ -1504,11 +1501,7 @@ function panelOrigin(
  * Truncate text to fit `maxWidth` with a trailing ellipsis, using the context's
  * current font. Returns the text unchanged when it already fits.
  */
-function truncateToWidth(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-): string {
+function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let lo = 0;
   let hi = text.length;
@@ -1571,8 +1564,7 @@ function drawDataTable(
       rows = rows.slice(0, fitRows);
     }
   }
-  const note =
-    hidden > 0 ? (table.formatNote?.(hidden) ?? `+${hidden} more`) : "";
+  const note = hidden > 0 ? (table.formatNote?.(hidden) ?? `+${hidden} more`) : "";
   const hasNote = note.length > 0;
 
   ctx.save();
@@ -1587,8 +1579,7 @@ function drawDataTable(
     }
     return Math.min(w, maxColW);
   });
-  let contentW =
-    colW.reduce((sum, w) => sum + w, 0) + colGap * (table.columns.length - 1);
+  let contentW = colW.reduce((sum, w) => sum + w, 0) + colGap * (table.columns.length - 1);
   // Shrink every column proportionally if the table would overrun the body;
   // cell text is ellipsis-truncated to its final column width below.
   const availW = bodyW - inset * 2 - pad * 2;
@@ -1601,8 +1592,7 @@ function drawDataTable(
   const titleW = hasTitle ? ctx.measureText(title).width : 0;
 
   const boxW = pad * 2 + Math.max(contentW, Math.min(titleW, availW));
-  const boxH =
-    pad * 2 + titleBlockH + (1 + rows.length) * rowH + (hasNote ? rowH : 0);
+  const boxH = pad * 2 + titleBlockH + (1 + rows.length) * rowH + (hasNote ? rowH : 0);
   const { x, y } = panelOrigin(
     table.position,
     bodyX,
@@ -1716,20 +1706,13 @@ function drawDataChart(
     // chart is never silently incomplete.
     const barNote =
       (data.truncated ?? 0) > 0
-        ? (chart.formatNote?.(data.truncated ?? 0) ??
-          `+${data.truncated} more`)
+        ? (chart.formatNote?.(data.truncated ?? 0) ?? `+${data.truncated} more`)
         : "";
     let labelW = 0;
     let valueW = 0;
     for (const bar of data.bars) {
-      labelW = Math.max(
-        labelW,
-        Math.min(ctx.measureText(bar.label).width, labelCap),
-      );
-      valueW = Math.max(
-        valueW,
-        ctx.measureText(formatColorbarTick(bar.value)).width,
-      );
+      labelW = Math.max(labelW, Math.min(ctx.measureText(bar.label).width, labelCap));
+      valueW = Math.max(valueW, ctx.measureText(formatColorbarTick(bar.value)).width);
     }
     contentW = labelW + gap + barAreaW + gap + valueW;
     contentH = (data.bars.length + (barNote ? 1 : 0)) * rowH;
@@ -1751,11 +1734,7 @@ function drawDataChart(
         ctx.fillStyle = bar.color;
         ctx.fillRect(barX, cy - labelSize * 0.85, barW, labelSize);
         ctx.fillStyle = INK;
-        ctx.fillText(
-          formatColorbarTick(bar.value),
-          cx0 + labelW + gap + barAreaW + gap,
-          cy,
-        );
+        ctx.fillText(formatColorbarTick(bar.value), cx0 + labelW + gap + barAreaW + gap, cy);
       }
       if (barNote) {
         cy += rowH;
@@ -1772,12 +1751,7 @@ function drawDataChart(
       const pct = Math.round((slice.value / data.total) * 100);
       legendW = Math.max(
         legendW,
-        swatch +
-          gap +
-          Math.min(
-            ctx.measureText(`${slice.label} (${pct}%)`).width,
-            unit * 22,
-          ),
+        swatch + gap + Math.min(ctx.measureText(`${slice.label} (${pct}%)`).width, unit * 22),
       );
     }
     contentW = diameter + gap * 2 + legendW;
@@ -1808,19 +1782,9 @@ function drawDataChart(
       for (const slice of data.slices) {
         cy += rowH;
         ctx.fillStyle = slice.color;
-        ctx.fillRect(
-          cx0 + diameter + gap * 2,
-          cy - swatch * 0.85,
-          swatch,
-          swatch,
-        );
+        ctx.fillRect(cx0 + diameter + gap * 2, cy - swatch * 0.85, swatch, swatch);
         ctx.strokeStyle = BORDER;
-        ctx.strokeRect(
-          cx0 + diameter + gap * 2,
-          cy - swatch * 0.85,
-          swatch,
-          swatch,
-        );
+        ctx.strokeRect(cx0 + diameter + gap * 2, cy - swatch * 0.85, swatch, swatch);
         const pct = Math.round((slice.value / data.total) * 100);
         ctx.fillStyle = INK;
         ctx.fillText(
@@ -1835,10 +1799,7 @@ function drawDataChart(
     const plotH = unit * 12;
     const maxLabel = formatColorbarTick(data.max);
     const minLabel = formatColorbarTick(data.min);
-    const axisW = Math.max(
-      ctx.measureText(maxLabel).width,
-      ctx.measureText(minLabel).width,
-    );
+    const axisW = Math.max(ctx.measureText(maxLabel).width, ctx.measureText(minLabel).width);
     contentW = axisW + gap + plotW;
     contentH = plotH;
     drawContent = (cx0, cy0) => {
@@ -1856,21 +1817,14 @@ function drawDataChart(
       const spanY = data.max - data.min || 1;
       const spanX = Math.max(1, data.length - 1);
       const px = (index: number) => plotX + (index / spanX) * plotW;
-      const py = (value: number) =>
-        cy0 + plotH - ((value - data.min) / spanY) * plotH;
+      const py = (value: number) => cy0 + plotH - ((value - data.min) / spanY) * plotH;
       ctx.strokeStyle = data.color;
       ctx.lineWidth = Math.max(1, unit * 0.25);
       if (data.points.length === 1) {
         // A single sample has no path to stroke; mark it with a dot instead.
         ctx.fillStyle = data.color;
         ctx.beginPath();
-        ctx.arc(
-          px(data.points[0].index),
-          py(data.points[0].value),
-          unit * 0.5,
-          0,
-          Math.PI * 2,
-        );
+        ctx.arc(px(data.points[0].index), py(data.points[0].value), unit * 0.5, 0, Math.PI * 2);
         ctx.fill();
       } else if (data.points.length > 1) {
         ctx.beginPath();
@@ -1912,11 +1866,7 @@ function drawDataChart(
   if (hasTitle) {
     ctx.fillStyle = INK;
     ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
-    ctx.fillText(
-      truncateToWidth(ctx, title, boxW - pad * 2),
-      x + pad,
-      topY + titleSize,
-    );
+    ctx.fillText(truncateToWidth(ctx, title, boxW - pad * 2), x + pad, topY + titleSize);
     topY += titleBlock;
   }
   ctx.font = `400 ${labelSize}px system-ui, sans-serif`;

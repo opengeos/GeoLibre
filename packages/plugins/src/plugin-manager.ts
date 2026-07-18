@@ -11,10 +11,7 @@ export class PluginManager {
   private plugins = new Map<string, GeoLibrePlugin>();
   private active = new Set<string>();
   private defaultActive = new Set<string>();
-  private defaultMapControlPositions = new Map<
-    string,
-    GeoLibreMapControlPosition
-  >();
+  private defaultMapControlPositions = new Map<string, GeoLibreMapControlPosition>();
   private handledUrlParametersByContext = new Map<string, Set<string>>();
   private inFlightUrlContexts = new Map<string, number>();
   private urlParameterNamesById = new Map<string, string[]>();
@@ -35,10 +32,7 @@ export class PluginManager {
       }
     }
     this.plugins.set(plugin.id, plugin);
-    this.urlParameterNamesById.set(
-      plugin.id,
-      normalizeUrlParameterNames(plugin.urlParameterNames),
-    );
+    this.urlParameterNamesById.set(plugin.id, normalizeUrlParameterNames(plugin.urlParameterNames));
     const defaultPosition = plugin.getMapControlPosition?.();
     if (defaultPosition) {
       this.defaultMapControlPositions.set(plugin.id, defaultPosition);
@@ -82,10 +76,7 @@ export class PluginManager {
       try {
         plugin.deactivate(scopeAppToPlugin(app, id));
       } catch (error) {
-        console.warn(
-          `Plugin '${id}' threw while deactivating during unregister.`,
-          error,
-        );
+        console.warn(`Plugin '${id}' threw while deactivating during unregister.`, error);
       }
       this.active.delete(id);
     }
@@ -123,9 +114,7 @@ export class PluginManager {
       // persist project state must overwrite manifestUrls with the real list
       // (see TopToolbar.handleSave and persistProjectPluginState).
       manifestUrls: [],
-      activePluginIds: Array.from(this.plugins.keys()).filter((id) =>
-        this.active.has(id),
-      ),
+      activePluginIds: Array.from(this.plugins.keys()).filter((id) => this.active.has(id)),
       mapControlPositions,
       settings,
     };
@@ -199,10 +188,7 @@ export class PluginManager {
     generation: number,
     error?: unknown,
   ): void {
-    if (
-      !this.active.has(id) ||
-      this.activationGenerations.get(id) !== generation
-    ) {
+    if (!this.active.has(id) || this.activationGenerations.get(id) !== generation) {
       return;
     }
     if (error !== undefined) {
@@ -218,10 +204,7 @@ export class PluginManager {
         // run even when nothing was mounted.
         plugin.deactivate(app);
       } catch (deactivateError) {
-        console.warn(
-          `Plugin '${id}' threw while reverting a failed activation.`,
-          deactivateError,
-        );
+        console.warn(`Plugin '${id}' threw while reverting a failed activation.`, deactivateError);
       }
     }
     this.notify();
@@ -258,19 +241,14 @@ export class PluginManager {
     // never evicted, so a suspended dispatch cannot lose its dedup entries
     // and re-run plugins for the same context; the map can temporarily exceed
     // MAX_HANDLED_URL_CONTEXTS while that many dispatches overlap.
-    this.inFlightUrlContexts.set(
-      contextKey,
-      (this.inFlightUrlContexts.get(contextKey) ?? 0) + 1,
-    );
+    this.inFlightUrlContexts.set(contextKey, (this.inFlightUrlContexts.get(contextKey) ?? 0) + 1);
 
     let handledPluginIds = this.handledUrlParametersByContext.get(contextKey);
     if (!handledPluginIds) {
       handledPluginIds = new Set();
       this.handledUrlParametersByContext.set(contextKey, handledPluginIds);
       for (const key of this.handledUrlParametersByContext.keys()) {
-        if (
-          this.handledUrlParametersByContext.size <= MAX_HANDLED_URL_CONTEXTS
-        ) {
+        if (this.handledUrlParametersByContext.size <= MAX_HANDLED_URL_CONTEXTS) {
           break;
         }
         if (this.inFlightUrlContexts.has(key)) continue;
@@ -283,10 +261,7 @@ export class PluginManager {
         if (!plugin.handleUrlParameters) continue;
 
         const parameterNames = this.urlParameterNamesById.get(id) ?? [];
-        if (
-          parameterNames.length === 0 ||
-          !parameterNames.some((name) => params.has(name))
-        ) {
+        if (parameterNames.length === 0 || !parameterNames.some((name) => params.has(name))) {
           continue;
         }
 
@@ -325,18 +300,12 @@ export class PluginManager {
         }
 
         try {
-          await plugin.handleUrlParameters(
-            scopeAppToPlugin(app, id),
-            new URLSearchParams(params),
-          );
+          await plugin.handleUrlParameters(scopeAppToPlugin(app, id), new URLSearchParams(params));
         } catch (error) {
           // Unmark so a later dispatch for the same context retries the
           // plugin instead of silently skipping it after a failure.
           handledPluginIds.delete(id);
-          console.warn(
-            `Plugin '${id}' could not handle GeoLibre URL parameters.`,
-            error,
-          );
+          console.warn(`Plugin '${id}' could not handle GeoLibre URL parameters.`, error);
         }
       }
     } finally {
@@ -353,10 +322,7 @@ export class PluginManager {
   ): void {
     const plugin = this.plugins.get(id);
     if (!plugin?.setMapControlPosition) return;
-    const updated = plugin.setMapControlPosition(
-      scopeAppToPlugin(app, id),
-      position,
-    );
+    const updated = plugin.setMapControlPosition(scopeAppToPlugin(app, id), position);
     if (updated === false) return;
     this.notify();
   }
@@ -366,9 +332,7 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     options: { resetMissingSettings?: boolean } = {},
   ): void {
-    const targetActive = new Set(
-      state?.activePluginIds ?? Array.from(this.defaultActive),
-    );
+    const targetActive = new Set(state?.activePluginIds ?? Array.from(this.defaultActive));
     let changed = false;
 
     // Plugins pop their control panel open when activated so a user who just
@@ -428,10 +392,7 @@ export class PluginManager {
       // Regular project loads apply only the settings present in the file. New
       // project resets can opt into clearing cached state for every plugin.
       const hasSetting = state?.settings && id in state.settings;
-      if (
-        plugin.applyProjectState &&
-        (hasSetting || options.resetMissingSettings)
-      ) {
+      if (plugin.applyProjectState && (hasSetting || options.resetMissingSettings)) {
         const updated = plugin.applyProjectState(
           scopedApp,
           hasSetting ? state.settings[id] : undefined,
@@ -545,7 +506,5 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 function normalizeUrlParameterNames(names: string[] | undefined): string[] {
   if (!names) return [];
-  return Array.from(
-    new Set(names.map((name) => name.trim()).filter((name) => name.length > 0)),
-  );
+  return Array.from(new Set(names.map((name) => name.trim()).filter((name) => name.length > 0)));
 }

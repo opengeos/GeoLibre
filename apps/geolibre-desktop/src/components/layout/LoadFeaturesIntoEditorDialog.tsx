@@ -93,8 +93,7 @@ export function LoadFeaturesIntoEditorDialog({
   // that layer's geometry (not the loaded view features), so loading/saving here
   // would be wrong; the panel disables its actions and shows a note instead.
   const geometryEditActive =
-    useSyncExternalStore(subscribeGeometryEdit, getGeometryEditTargetLayerId) !==
-    null;
+    useSyncExternalStore(subscribeGeometryEdit, getGeometryEditTargetLayerId) !== null;
   const [eligible, setEligible] = useState<EligibleLayer[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [editorName, setEditorName] = useState("");
@@ -113,9 +112,7 @@ export function LoadFeaturesIntoEditorDialog({
   // Default placement: bottom-left of the map, anchored by `bottom` so the panel
   // grows upward and always keeps a gap above the status bar. Once the user
   // drags it, `dragPos` (a top/left position) takes over.
-  const [anchor, setAnchor] = useState<{ x: number; bottom: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<{ x: number; bottom: number } | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -160,9 +157,7 @@ export function LoadFeaturesIntoEditorDialog({
     const next = computeEligible();
     setEligible(next);
     setSelectedId(
-      initialLayerId && next.some((entry) => entry.id === initialLayerId)
-        ? initialLayerId
-        : "",
+      initialLayerId && next.some((entry) => entry.id === initialLayerId) ? initialLayerId : "",
     );
     setStatus(null);
     setConfirmCount(null);
@@ -172,13 +167,9 @@ export function LoadFeaturesIntoEditorDialog({
     // Open at the bottom-left of the map canvas by default (measured from the
     // map container, so it clears the left Layers panel), leaving a gap above
     // the status bar. Anchored by `bottom` so growing content extends upward.
-    const mapRect = mapControllerRef.current
-      ?.getMap()
-      ?.getContainer()
-      ?.getBoundingClientRect();
+    const mapRect = mapControllerRef.current?.getMap()?.getContainer()?.getBoundingClientRect();
     const left = mapRect ? mapRect.left + EDGE_MARGIN : EDGE_MARGIN;
-    const bottomOffset =
-      (mapRect ? window.innerHeight - mapRect.bottom : 0) + STATUS_BAR_GAP;
+    const bottomOffset = (mapRect ? window.innerHeight - mapRect.bottom : 0) + STATUS_BAR_GAP;
     setAnchor({ x: left, bottom: bottomOffset });
     setDragPos(null);
     try {
@@ -227,10 +218,7 @@ export function LoadFeaturesIntoEditorDialog({
           });
           return;
         }
-        const { imported, dropped } = await loadViewFeaturesIntoEditor(
-          features,
-          { replace },
-        );
+        const { imported, dropped } = await loadViewFeaturesIntoEditor(features, { replace });
         setChangesAvailable(hasViewImportBaseline());
         if (imported === 0) {
           setStatus({ message: t("loadEditorFeatures.noEditable"), kind: "error" });
@@ -254,10 +242,7 @@ export function LoadFeaturesIntoEditorDialog({
         });
       } catch (error) {
         setStatus({
-          message:
-            error instanceof Error
-              ? error.message
-              : t("loadEditorFeatures.loadFailed"),
+          message: error instanceof Error ? error.message : t("loadEditorFeatures.loadFailed"),
           kind: "error",
         });
       } finally {
@@ -285,17 +270,11 @@ export function LoadFeaturesIntoEditorDialog({
       window.setTimeout(() => {
         let features: Feature[];
         try {
-          features = queryViewLayerFeatures(
-            map as unknown as ViewImportMap,
-            selectedLayer.source,
-          );
+          features = queryViewLayerFeatures(map as unknown as ViewImportMap, selectedLayer.source);
         } catch (error) {
           // e.g. the layer's source was removed between selecting and loading.
           setStatus({
-            message:
-              error instanceof Error
-                ? error.message
-                : t("loadEditorFeatures.loadFailed"),
+            message: error instanceof Error ? error.message : t("loadEditorFeatures.loadFailed"),
             kind: "error",
           });
           setBusy(false);
@@ -341,11 +320,7 @@ export function LoadFeaturesIntoEditorDialog({
       setBusy(true);
       try {
         const baseName = `${changedOnly ? "feature-changes" : "features"}_${timestampSlug(now)}`;
-        const saved = await exportVectorLayer(
-          result.collection,
-          "geojson",
-          baseName,
-        );
+        const saved = await exportVectorLayer(result.collection, "geojson", baseName);
         if (saved === null) return; // user cancelled the save dialog
         const { added, modified, deleted } = result.counts;
         setStatus({
@@ -358,10 +333,7 @@ export function LoadFeaturesIntoEditorDialog({
         });
       } catch (error) {
         setStatus({
-          message:
-            error instanceof Error
-              ? error.message
-              : t("loadEditorFeatures.saveFailed"),
+          message: error instanceof Error ? error.message : t("loadEditorFeatures.saveFailed"),
           kind: "error",
         });
       } finally {
@@ -458,11 +430,7 @@ export function LoadFeaturesIntoEditorDialog({
           aria-expanded={!collapsed}
           onClick={() => setCollapsed((value) => !value)}
         >
-          {collapsed ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
+          {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
         <Button
           variant="ghost"
@@ -476,15 +444,8 @@ export function LoadFeaturesIntoEditorDialog({
         </Button>
       </div>
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 space-y-4 overflow-auto p-4",
-          collapsed && "hidden",
-        )}
-      >
-        <p className="text-xs text-muted-foreground">
-          {t("loadEditorFeatures.description")}
-        </p>
+      <div className={cn("min-h-0 flex-1 space-y-4 overflow-auto p-4", collapsed && "hidden")}>
+        <p className="text-xs text-muted-foreground">{t("loadEditorFeatures.description")}</p>
 
         {geometryEditActive && (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
@@ -493,9 +454,7 @@ export function LoadFeaturesIntoEditorDialog({
         )}
 
         <div className="space-y-1.5">
-          <Label htmlFor="load-editor-layer">
-            {t("loadEditorFeatures.vectorLayer")}
-          </Label>
+          <Label htmlFor="load-editor-layer">{t("loadEditorFeatures.vectorLayer")}</Label>
           <div className="flex items-center gap-2">
             <Select
               id="load-editor-layer"
@@ -526,16 +485,12 @@ export function LoadFeaturesIntoEditorDialog({
             </Button>
           </div>
           {eligible.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              {t("loadEditorFeatures.noLayers")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("loadEditorFeatures.noLayers")}</p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="load-editor-name">
-            {t("loadEditorFeatures.editorName")}
-          </Label>
+          <Label htmlFor="load-editor-name">{t("loadEditorFeatures.editorName")}</Label>
           <Input
             id="load-editor-name"
             value={editorName}

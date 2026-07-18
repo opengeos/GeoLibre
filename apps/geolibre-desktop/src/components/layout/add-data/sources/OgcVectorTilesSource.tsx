@@ -2,10 +2,7 @@ import { Input, Label } from "@geolibre/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveOgcVectorTiles } from "../../../../lib/ogc-vector-tiles";
-import {
-  DEFAULT_OGC_VECTOR_TILES_STYLE_URL,
-  DEFAULT_OGC_VECTOR_TILES_URL,
-} from "../constants";
+import { DEFAULT_OGC_VECTOR_TILES_STYLE_URL, DEFAULT_OGC_VECTOR_TILES_URL } from "../constants";
 import { createBaseLayer } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
@@ -69,10 +66,7 @@ export function OgcVectorTilesSource() {
     if (config.sourceLayers.length === 0) {
       throw new Error(t("addData.ogcVectorTiles.errorNoLayers"));
     }
-    const name =
-      source.layerName.trim() ||
-      config.name ||
-      t("addData.ogcVectorTiles.defaultName");
+    const name = source.layerName.trim() || config.name || t("addData.ogcVectorTiles.defaultName");
     source.addAndClose(
       createBaseLayer(
         name,
@@ -117,9 +111,7 @@ export function OgcVectorTilesSource() {
     >
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="ogc-vt-tiles-url">
-            {t("addData.ogcVectorTiles.tilesUrl")}
-          </Label>
+          <Label htmlFor="ogc-vt-tiles-url">{t("addData.ogcVectorTiles.tilesUrl")}</Label>
           <Input
             id="ogc-vt-tiles-url"
             placeholder={t("addData.ogcVectorTiles.tilesUrlPlaceholder")}
@@ -131,9 +123,7 @@ export function OgcVectorTilesSource() {
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ogc-vt-style-url">
-            {t("addData.ogcVectorTiles.styleUrl")}
-          </Label>
+          <Label htmlFor="ogc-vt-style-url">{t("addData.ogcVectorTiles.styleUrl")}</Label>
           <Input
             id="ogc-vt-style-url"
             placeholder={t("addData.ogcVectorTiles.styleUrlPlaceholder")}
@@ -145,9 +135,7 @@ export function OgcVectorTilesSource() {
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ogc-vt-source-layers">
-            {t("addData.ogcVectorTiles.sourceLayers")}
-          </Label>
+          <Label htmlFor="ogc-vt-source-layers">{t("addData.ogcVectorTiles.sourceLayers")}</Label>
           <Input
             id="ogc-vt-source-layers"
             placeholder={t("addData.ogcVectorTiles.sourceLayersPlaceholder")}

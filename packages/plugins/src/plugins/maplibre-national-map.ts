@@ -5,11 +5,7 @@ import {
   type NationalMapControlOptions,
 } from "maplibre-gl-national-map";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -73,18 +69,10 @@ const nationalMapAdapter: WebServiceAdapter<NationalMapControl> = {
           native?.source ??
           (spec
             ? {
-                ...(spec.source.tileSize !== undefined
-                  ? { tileSize: spec.source.tileSize }
-                  : {}),
-                ...(spec.source.minzoom !== undefined
-                  ? { minzoom: spec.source.minzoom }
-                  : {}),
-                ...(spec.source.maxzoom !== undefined
-                  ? { maxzoom: spec.source.maxzoom }
-                  : {}),
-                ...(spec.source.attribution
-                  ? { attribution: spec.source.attribution }
-                  : {}),
+                ...(spec.source.tileSize !== undefined ? { tileSize: spec.source.tileSize } : {}),
+                ...(spec.source.minzoom !== undefined ? { minzoom: spec.source.minzoom } : {}),
+                ...(spec.source.maxzoom !== undefined ? { maxzoom: spec.source.maxzoom } : {}),
+                ...(spec.source.attribution ? { attribution: spec.source.attribution } : {}),
               }
             : {}),
         metadata: { nationalMapServiceId: active.service.id },
@@ -141,9 +129,7 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
   version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
     if (!nationalMapControl) {
-      nationalMapControl = new NationalMapControl(
-        getNationalMapControlOptions(),
-      );
+      nationalMapControl = new NationalMapControl(getNationalMapControlOptions());
     }
 
     const added = app.addMapControl(nationalMapControl, nationalMapPosition);
@@ -161,10 +147,7 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
     nationalMapControl = null;
   },
   getMapControlPosition: () => nationalMapPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     nationalMapPosition = position;
     if (!nationalMapControl) return;
     app.removeMapControl(nationalMapControl);

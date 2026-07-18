@@ -1,15 +1,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
-import {
-  extractCogSubset,
-  extractWmsSubset,
-  extractXyzTileSubset,
-} from "@geolibre/processing";
+import { extractCogSubset, extractWmsSubset, extractXyzTileSubset } from "@geolibre/processing";
 
-import {
-  normalizeSubdomains,
-  rasterSubsetKind,
-  type RasterSubsetKind,
-} from "./raster-subset-kind";
+import { normalizeSubdomains, rasterSubsetKind, type RasterSubsetKind } from "./raster-subset-kind";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 import { fetchableUrl } from "./url-utils";
 
@@ -189,8 +181,7 @@ export async function extractRasterSubset(
   if (kind === "xyz") {
     const tiles = source.tiles as string[];
     return extractXyzTileSubset(tiles[0], {
-      tileSize:
-        typeof source.tileSize === "number" ? source.tileSize : undefined,
+      tileSize: typeof source.tileSize === "number" ? source.tileSize : undefined,
       // The extractor rotates `{s}` by indexing into `subdomains` per tile, so a
       // string of letters ("abc") works directly. Some sources instead store the
       // MapLibre/Leaflet-style `string[]` (see offline-tiles.ts); join it into
@@ -221,9 +212,7 @@ export async function saveRasterSubset(
   return saveBinaryFileWithFallback(bytes, {
     defaultName: `${baseName}_subset.tif`,
     filters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
-    browserTypes: [
-      { description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } },
-    ],
+    browserTypes: [{ description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } }],
     mimeType: "image/tiff",
   });
 }

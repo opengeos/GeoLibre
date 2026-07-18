@@ -14,10 +14,7 @@ export const DEFAULT_LANGUAGE = "en";
  * code for any catalog whose code is missing here, so this map is purely
  * cosmetic — a catalog never fails to load for lack of an entry.
  */
-export const LANGUAGE_NAMES: Record<
-  string,
-  { nativeName: string; englishName: string }
-> = {
+export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: string }> = {
   en: { nativeName: "English", englishName: "English" },
   zh: { nativeName: "中文", englishName: "Chinese" },
   es: { nativeName: "Español", englishName: "Spanish" },
@@ -48,9 +45,7 @@ export type LanguageDirection = "ltr" | "rtl";
  * The writing direction for a language tag. Works for any tag, not just the
  * codes in `LANGUAGE_NAMES`, and defaults to `ltr` for unknown or empty input.
  */
-export function languageDirection(
-  code: string | null | undefined,
-): LanguageDirection {
+export function languageDirection(code: string | null | undefined): LanguageDirection {
   if (!code) return "ltr";
   const base = code.trim().toLowerCase().split(/[-_]/)[0];
   return RTL_LANGUAGES.has(base) ? "rtl" : "ltr";
@@ -99,9 +94,7 @@ export function resolveLanguage(
   if (!normalized) return null;
   // Match case-insensitively but return the catalog's actual code, so a shipped
   // regional catalog like `pt-BR.json` still resolves from a `pt-br` input.
-  const byLower = new Map(
-    available.map((code) => [code.trim().toLowerCase(), code] as const),
-  );
+  const byLower = new Map(available.map((code) => [code.trim().toLowerCase(), code] as const));
   const exact = byLower.get(normalized);
   if (exact) return exact;
   const base = normalized.split(/[-_]/)[0];

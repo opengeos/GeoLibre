@@ -14,10 +14,7 @@
         },
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            -78.0,
-            35.0
-          ]
+          "coordinates": [-78.0, 35.0]
         }
       },
       {
@@ -29,10 +26,7 @@
         },
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            -80.8,
-            35.2
-          ]
+          "coordinates": [-80.8, 35.2]
         }
       },
       {
@@ -44,10 +38,7 @@
         },
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            -82.5,
-            35.6
-          ]
+          "coordinates": [-82.5, 35.6]
         }
       },
       {
@@ -59,10 +50,7 @@
         },
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            -77.9,
-            34.2
-          ]
+          "coordinates": [-77.9, 34.2]
         }
       }
     ]
@@ -80,26 +68,11 @@
           "type": "Polygon",
           "coordinates": [
             [
-              [
-                -78.5,
-                33.5
-              ],
-              [
-                -78.5,
-                35.5
-              ],
-              [
-                -76.5,
-                35.5
-              ],
-              [
-                -76.5,
-                33.5
-              ],
-              [
-                -78.5,
-                33.5
-              ]
+              [-78.5, 33.5],
+              [-78.5, 35.5],
+              [-76.5, 35.5],
+              [-76.5, 33.5],
+              [-78.5, 33.5]
             ]
           ]
         }
@@ -115,17 +88,11 @@
     "geometry": [
       {
         "type": "Point",
-        "coordinates": [
-          -78.0,
-          35.0
-        ]
+        "coordinates": [-78.0, 35.0]
       },
       {
         "type": "Point",
-        "coordinates": [
-          -77.9,
-          34.2
-        ]
+        "coordinates": [-77.9, 34.2]
       }
     ],
     "properties": [
@@ -144,6 +111,6 @@
         "code": "01"
       }
     ],
-    "tolerance": 1e-09
+    "tolerance": 1e-9
   }
 }

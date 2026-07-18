@@ -157,9 +157,7 @@ def test_add_vector_local_file_inlined(monkeypatch, m):
 
 
 def test_add_vector_local_file_warns_on_ignored_kwargs(monkeypatch, m):
-    monkeypatch.setattr(
-        gmod, "_read_local_vector", lambda _p, data_format=None: {"type": "x"}
-    )
+    monkeypatch.setattr(gmod, "_read_local_vector", lambda _p, data_format=None: {"type": "x"})
     with pytest.warns(UserWarning, match="ignored for local files"):
         m.add_vector("/data/parcels.shp", source_layer="layer0")
 
@@ -267,7 +265,11 @@ def test_add_markers_from_geojson(m):
     fc = {
         "type": "FeatureCollection",
         "features": [
-            {"type": "Feature", "properties": {}, "geometry": {"type": "Point", "coordinates": [1, 2]}}
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Point", "coordinates": [1, 2]},
+            }
         ],
     }
     m.add_markers(fc)

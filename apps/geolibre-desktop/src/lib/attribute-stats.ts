@@ -83,10 +83,7 @@ export function computeNumericStats(
 
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  const median =
-    sorted.length % 2 === 0
-      ? (sorted[mid - 1] + sorted[mid]) / 2
-      : sorted[mid];
+  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 
   // Sample standard deviation (divide by n − 1, matching pandas/Excel STDEV);
   // undefined for a single value, reported as 0.

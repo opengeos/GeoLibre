@@ -43,10 +43,7 @@ describe("raster tools registry", () => {
     for (const tool of RASTER_TOOLS) {
       assert.ok(tool.inputFilters.length > 0, `${tool.id} has input filters`);
       assert.ok(tool.outputFilters.length > 0, `${tool.id} has output filters`);
-      assert.ok(
-        tool.defaultOutputName.length > 0,
-        `${tool.id} has a default output name`,
-      );
+      assert.ok(tool.defaultOutputName.length > 0, `${tool.id} has a default output name`);
     }
   });
 

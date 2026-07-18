@@ -14,16 +14,11 @@
 // All three run entirely client-side, so the web build needs no Python sidecar
 // for them.
 import type { RunToolOptions, ToolResult } from "geolibre-wasm/tools";
-import type {
-  WasmToolRequest,
-  WasmToolResponse,
-} from "./wasm-convert.worker";
+import type { WasmToolRequest, WasmToolResponse } from "./wasm-convert.worker";
 
 /** The subset of `geolibre-wasm/tools` these converters use. */
 interface ConvertToolsModule {
-  initTools: (
-    source?: URL | Response | BufferSource | string,
-  ) => Promise<WebAssembly.Module>;
+  initTools: (source?: URL | Response | BufferSource | string) => Promise<WebAssembly.Module>;
   runTool: (tool: string, opts?: RunToolOptions) => Promise<ToolResult>;
 }
 
@@ -74,18 +69,14 @@ export async function initConvertTools(
  */
 function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL("./wasm-convert.worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    worker.addEventListener(
-      "message",
-      (event: MessageEvent<WasmToolResponse>) => {
-        worker.terminate();
-        if (event.data.ok) resolve(event.data.result);
-        else reject(new Error(event.data.error || `${request.tool} failed.`));
-      },
-    );
+    const worker = new Worker(new URL("./wasm-convert.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    worker.addEventListener("message", (event: MessageEvent<WasmToolResponse>) => {
+      worker.terminate();
+      if (event.data.ok) resolve(event.data.result);
+      else reject(new Error(event.data.error || `${request.tool} failed.`));
+    });
     worker.addEventListener("error", (event) => {
       worker.terminate();
       reject(new Error(event.message || `The ${request.tool} worker failed.`));
@@ -94,9 +85,7 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
     // would otherwise leave this promise pending forever.
     worker.addEventListener("messageerror", () => {
       worker.terminate();
-      reject(
-        new Error(`The ${request.tool} worker posted an undeserializable message.`),
-      );
+      reject(new Error(`The ${request.tool} worker posted an undeserializable message.`));
     });
     // The input files are structured-cloned rather than transferred: these
     // wrappers do not otherwise take ownership of the caller's bytes, and a
@@ -117,9 +106,7 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
  * (node, tests). The inline path is why {@link initConvertTools} still takes an
  * explicit wasm source: a worker resolves its own bundled copy instead.
  */
-async function runToolInBackground(
-  request: WasmToolRequest,
-): Promise<ToolResult> {
+async function runToolInBackground(request: WasmToolRequest): Promise<ToolResult> {
   if (typeof Worker === "undefined") {
     const { runTool } = await loadToolsModule();
     return runTool(request.tool, { args: request.args, input: request.input });
@@ -151,9 +138,7 @@ function assertToolSucceeded(tool: string, result: ToolResult): void {
   const detail = [...result.stdout]
     .reverse()
     .find((line) => /error|unsupported|unknown|invalid/i.test(line));
-  throw new Error(
-    detail?.trim() || `${tool} failed with exit code ${result.exitCode}.`,
-  );
+  throw new Error(detail?.trim() || `${tool} failed with exit code ${result.exitCode}.`);
 }
 
 /**
@@ -161,21 +146,14 @@ function assertToolSucceeded(tool: string, result: ToolResult): void {
  * value is left off entirely, which is what lets callers say "leave it to the
  * tool" rather than having this module restate the tool's own defaults.
  */
-function appendFlags(
-  args: string[],
-  flags: Array<[string, number | string | undefined]>,
-): void {
+function appendFlags(args: string[], flags: Array<[string, number | string | undefined]>): void {
   for (const [name, value] of flags) {
     if (value !== undefined) args.push(`--${name}=${value}`);
   }
 }
 
 /** Pull the single expected output out of a tool's virtual /work filesystem. */
-function requireOutput(
-  tool: string,
-  result: ToolResult,
-  outputName: string,
-): Uint8Array {
+function requireOutput(tool: string, result: ToolResult, outputName: string): Uint8Array {
   const data = result.files[outputName];
   if (!data) {
     throw new Error(`${tool} produced no ${outputName} output.`);
@@ -217,22 +195,12 @@ export async function convertVectorWithWasm(
 }
 
 /** Colormaps `write_pmtiles` can render a single band with. */
-export const PMTILES_COLORMAPS = [
-  "viridis",
-  "magma",
-  "turbo",
-  "terrain",
-  "grayscale",
-] as const;
+export const PMTILES_COLORMAPS = ["viridis", "magma", "turbo", "terrain", "grayscale"] as const;
 
 export type PmtilesColormap = (typeof PMTILES_COLORMAPS)[number];
 
 /** Resampling methods `write_pmtiles` can build the pyramid with. */
-export const PMTILES_RESAMPLING_METHODS = [
-  "bilinear",
-  "nearest",
-  "cubic",
-] as const;
+export const PMTILES_RESAMPLING_METHODS = ["bilinear", "nearest", "cubic"] as const;
 
 export type PmtilesResamplingMethod = (typeof PMTILES_RESAMPLING_METHODS)[number];
 

@@ -18,7 +18,7 @@ describe("leadingDebounce", () => {
     const calls: number[] = [];
     const fn = leadingDebounce(
       (n: number) => calls.push(n),
-      () => 0
+      () => 0,
     );
     fn(1);
     fn(2);
@@ -30,7 +30,7 @@ describe("leadingDebounce", () => {
     const calls: number[] = [];
     const fn = leadingDebounce(
       (n: number) => calls.push(n),
-      () => 20
+      () => 20,
     );
     fn(1); // leading edge -> fires
     fn(2); // within window -> suppressed
@@ -47,7 +47,7 @@ describe("leadingDebounce", () => {
     const calls: number[] = [];
     const fn = leadingDebounce(
       (n: number) => calls.push(n),
-      () => 1000
+      () => 1000,
     );
     fn(1); // leading edge -> fires
     fn(2); // within window -> suppressed

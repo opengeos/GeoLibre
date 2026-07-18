@@ -88,8 +88,7 @@ export function attributionForTileUrl(url: string): string | undefined {
     // `evil-gebco.net`. Unlike the EOX branch this matches on host alone (no
     // LAYERS check) because wms.gebco.net serves only the bathymetry grid today;
     // if GEBCO ever hosts a differently-licensed product here, gate on the layer.
-    const isGebcoHost =
-      hostname === "gebco.net" || hostname.endsWith(".gebco.net");
+    const isGebcoHost = hostname === "gebco.net" || hostname.endsWith(".gebco.net");
     if (isGebcoHost) {
       return GEBCO_ATTRIBUTION;
     }
@@ -99,10 +98,7 @@ export function attributionForTileUrl(url: string): string | undefined {
   return undefined;
 }
 
-export function appendQuery(
-  endpoint: string,
-  params: Array<[string, string]>,
-): string {
+export function appendQuery(endpoint: string, params: Array<[string, string]>): string {
   const separator = endpoint.includes("?")
     ? endpoint.endsWith("?") || endpoint.endsWith("&")
       ? ""
@@ -110,8 +106,7 @@ export function appendQuery(
     : "?";
   const query = params
     .map(([key, value]) => {
-      const encodedValue =
-        value === "{bbox-epsg-3857}" ? value : encodeURIComponent(value);
+      const encodedValue = value === "{bbox-epsg-3857}" ? value : encodeURIComponent(value);
       return `${encodeURIComponent(key)}=${encodedValue}`;
     })
     .join("&");
@@ -125,9 +120,7 @@ export function appendQuery(
  * "1.1.1".
  */
 export function normalizeWmsVersion(version: unknown): string {
-  return typeof version === "string" && version.trim().startsWith("1.3")
-    ? "1.3.0"
-    : "1.1.1";
+  return typeof version === "string" && version.trim().startsWith("1.3") ? "1.3.0" : "1.1.1";
 }
 
 export function createWmsTileUrl(options: {
@@ -190,10 +183,7 @@ export function parseRequiredNumber(value: string, label: string): number {
   return parsed;
 }
 
-export function parseOptionalNumber(
-  value: string,
-  label: string,
-): number | undefined {
+export function parseOptionalNumber(value: string, label: string): number | undefined {
   if (!value.trim()) return undefined;
   return parseRequiredNumber(value, label);
 }
@@ -239,11 +229,7 @@ export function errorMessage(error: unknown, fallback: string): string {
  * through. This routes the fetch-error classification through `t()` so the form
  * does not surface an untranslated string next to its localized labels.
  */
-export function serviceRequestErrorMessage(
-  error: unknown,
-  t: TFunction,
-  fallback: string,
-): string {
+export function serviceRequestErrorMessage(error: unknown, t: TFunction, fallback: string): string {
   const { kind } = classifyFetchFailure(error);
   if (kind === "network") return t("addData.common.networkFailure");
   if (kind === "timeout") return t("addData.common.requestTimedOut");
@@ -267,9 +253,7 @@ function isViteDevServer(): boolean {
  * unchanged. The proxy is generic; the `GPX_PROXY_PATH` name is historical.
  */
 export function proxyFeedRequestUrl(url: string): string {
-  return isViteDevServer()
-    ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+  return isViteDevServer() ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
 }
 
 /**
@@ -451,12 +435,8 @@ function buildCapabilitiesUrl(
  * @param service - Which operation-parameter set to strip.
  * @returns The endpoint with its OGC operation parameters removed.
  */
-export function stripOgcOperationParams(
-  endpoint: string,
-  service: "WMS" | "WFS",
-): string {
-  const operationParams =
-    service === "WMS" ? WMS_OPERATION_PARAMS : WFS_OPERATION_PARAMS;
+export function stripOgcOperationParams(endpoint: string, service: "WMS" | "WFS"): string {
+  const operationParams = service === "WMS" ? WMS_OPERATION_PARAMS : WFS_OPERATION_PARAMS;
   return rewriteEndpointQuery(endpoint, operationParams, []);
 }
 
@@ -569,10 +549,7 @@ function directChildText(element: Element, localName: string): string {
  * expected element. An OWS/OGC exception root carries a human-readable reason,
  * so surface it; anything else (e.g. an HTML error page) gets a generic note.
  */
-function capabilitiesRootError(
-  root: Element | null,
-  service: "WMS" | "WFS",
-): string {
+function capabilitiesRootError(root: Element | null, service: "WMS" | "WFS"): string {
   const rootName = root?.localName;
   const isException =
     rootName === "ServiceExceptionReport" ||
@@ -647,10 +624,7 @@ const WFS_OPERATION_PARAMS: ReadonlySet<string> = new Set([
   "resulttype",
 ]);
 
-export function createWfsGetCapabilitiesUrl(
-  endpoint: string,
-  version?: string,
-): string {
+export function createWfsGetCapabilitiesUrl(endpoint: string, version?: string): string {
   return buildCapabilitiesUrl(endpoint, "WFS", WFS_OPERATION_PARAMS, version);
 }
 
@@ -662,9 +636,7 @@ export function createWfsGetCapabilitiesUrl(
  * @param xmlText - The raw GetCapabilities XML response body.
  * @returns The feature types in document order, deduplicated by name.
  */
-export function parseWfsCapabilitiesFeatureTypes(
-  xmlText: string,
-): WfsFeatureTypeOption[] {
+export function parseWfsCapabilitiesFeatureTypes(xmlText: string): WfsFeatureTypeOption[] {
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   if (doc.querySelector("parsererror")) {
     throw new Error("Could not parse the WFS capabilities document.");

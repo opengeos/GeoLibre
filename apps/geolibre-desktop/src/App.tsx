@@ -25,11 +25,7 @@ export default function App() {
   const { themeMode, toggleThemeMode } = useThemeMode();
   const projectUrlLoadState = useProjectUrlLoader();
   const { showOnboarding, dismissOnboarding } = useUiProfileBootstrap();
-  const {
-    pending: pendingUpdate,
-    remindLater,
-    skipVersion,
-  } = useStartupUpdateCheck();
+  const { pending: pendingUpdate, remindLater, skipVersion } = useStartupUpdateCheck();
 
   useDesktopSettingsPersistence();
   useThemeScheme();

@@ -32,9 +32,7 @@ const CHECK_THROTTLE_MS = 6 * 60 * 60 * 1000;
 function readLastCheck(): number {
   if (typeof window === "undefined") return 0;
   try {
-    return Number(
-      window.localStorage.getItem(UPDATE_LAST_CHECK_STORAGE_KEY) ?? 0,
-    );
+    return Number(window.localStorage.getItem(UPDATE_LAST_CHECK_STORAGE_KEY) ?? 0);
   } catch {
     return 0;
   }
@@ -43,10 +41,7 @@ function readLastCheck(): number {
 function writeLastCheck(timestamp: number): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
-      UPDATE_LAST_CHECK_STORAGE_KEY,
-      String(timestamp),
-    );
+    window.localStorage.setItem(UPDATE_LAST_CHECK_STORAGE_KEY, String(timestamp));
   } catch {
     // Best-effort: ignore quota or disabled-storage errors.
   }
@@ -95,8 +90,7 @@ export function useStartupUpdateCheck() {
     // 10.2.5), so it never reaches out to GitHub to check for a newer release.
     if (IS_STORE_BUILD) return;
 
-    const settings =
-      useDesktopSettingsStore.getState().desktopSettings.updates;
+    const settings = useDesktopSettingsStore.getState().desktopSettings.updates;
     if (!settings.checkOnStartup) return;
 
     // Throttle the network call so frequent relaunches don't burn the GitHub
@@ -132,11 +126,7 @@ export function useStartupUpdateCheck() {
         // response that failed (rate limit, HTTP error) still counts toward the
         // throttle window; an abort or a transient network failure does not, so
         // the next launch retries instead of staying silent for the full window.
-        if (
-          !cancelled &&
-          error instanceof UpdateCheckError &&
-          error.code !== "network"
-        ) {
+        if (!cancelled && error instanceof UpdateCheckError && error.code !== "network") {
           writeLastCheck(now);
         }
       }

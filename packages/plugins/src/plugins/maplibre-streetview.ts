@@ -1,13 +1,6 @@
 import { getGoogleMapsApiKey } from "@geolibre/core";
-import {
-  StreetViewControl,
-  type StreetViewControlOptions,
-} from "maplibre-gl-streetview";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import { StreetViewControl, type StreetViewControlOptions } from "maplibre-gl-streetview";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
 const streetViewEnv = (
   import.meta as ImportMeta & {
@@ -31,13 +24,15 @@ function getStreetViewCredentials(): Pick<
 > {
   const env = getRuntimeEnvironment();
   const googleApiKey = getGoogleMapsApiKey(env);
-  const mapillaryAccessToken =
-    env.VITE_MAPILLARY_ACCESS_TOKEN?.trim() || undefined;
+  const mapillaryAccessToken = env.VITE_MAPILLARY_ACCESS_TOKEN?.trim() || undefined;
 
   // Pick a default provider that actually has credentials so the panel does not
   // open onto a provider it cannot authenticate. Google wins when both are set.
-  const defaultProvider: StreetViewControlOptions["defaultProvider"] =
-    googleApiKey ? "google" : mapillaryAccessToken ? "mapillary" : "google";
+  const defaultProvider: StreetViewControlOptions["defaultProvider"] = googleApiKey
+    ? "google"
+    : mapillaryAccessToken
+      ? "mapillary"
+      : "google";
 
   return {
     defaultProvider,
@@ -68,13 +63,8 @@ let removeRuntimeEnvListener: (() => void) | null = null;
 let appliedCredentialsSignature: string | null = null;
 
 function credentialsSignature(): string {
-  const { defaultProvider, googleApiKey, mapillaryAccessToken } =
-    getStreetViewCredentials();
-  return JSON.stringify([
-    defaultProvider,
-    googleApiKey ?? "",
-    mapillaryAccessToken ?? "",
-  ]);
+  const { defaultProvider, googleApiKey, mapillaryAccessToken } = getStreetViewCredentials();
+  return JSON.stringify([defaultProvider, googleApiKey ?? "", mapillaryAccessToken ?? ""]);
 }
 
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
@@ -104,10 +94,7 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
     cleanupRuntimeEnvListener();
   },
   getMapControlPosition: () => streetViewPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     streetViewPosition = position;
     if (!streetViewControl) return;
     app.removeMapControl(streetViewControl);
@@ -153,15 +140,9 @@ function addRuntimeEnvListener(): void {
     setTimeout(() => streetViewControl?.expand(), 0);
   };
 
-  window.addEventListener(
-    "geolibre:runtime-env-change",
-    handleRuntimeEnvChange,
-  );
+  window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   removeRuntimeEnvListener = () => {
-    window.removeEventListener(
-      "geolibre:runtime-env-change",
-      handleRuntimeEnvChange,
-    );
+    window.removeEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   };
 }
 

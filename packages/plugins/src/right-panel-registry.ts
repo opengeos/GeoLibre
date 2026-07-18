@@ -1,7 +1,4 @@
-import type {
-  GeoLibreRightPanelDock,
-  GeoLibreRightPanelRegistration,
-} from "./types";
+import type { GeoLibreRightPanelDock, GeoLibreRightPanelRegistration } from "./types";
 import { PanelTitleResolver } from "./panel-title";
 
 /**
@@ -59,9 +56,7 @@ const ALL_DOCKS: readonly RightPanelDock[] = Object.freeze([
 const DEFAULT_DOCK: RightPanelDock = "right-of-style";
 
 function normalizeDock(dock: unknown): RightPanelDock {
-  return ALL_DOCKS.includes(dock as RightPanelDock)
-    ? (dock as RightPanelDock)
-    : DEFAULT_DOCK;
+  return ALL_DOCKS.includes(dock as RightPanelDock) ? (dock as RightPanelDock) : DEFAULT_DOCK;
 }
 
 /**
@@ -89,9 +84,7 @@ const registry = new Map<string, GeoLibreRightPanelRegistration>();
 // per-id warning dedup the accessors rely on because they are called unmemoized
 // on every render) is shared with the floating-panel registry via
 // PanelTitleResolver. Each registry owns its own instance.
-const titleResolver = new PanelTitleResolver<GeoLibreRightPanelRegistration>(
-  "Right panel",
-);
+const titleResolver = new PanelTitleResolver<GeoLibreRightPanelRegistration>("Right panel");
 const listeners = new Set<() => void>();
 
 let activeId: string | null = null;
@@ -134,9 +127,7 @@ function runHook(
  * closes the panel (if active) and removes it from the registry; a plugin
  * should call it from its `deactivate` hook.
  */
-export function registerRightPanel(
-  panel: GeoLibreRightPanelRegistration,
-): () => void {
+export function registerRightPanel(panel: GeoLibreRightPanelRegistration): () => void {
   if (!panel || typeof panel.id !== "string" || panel.id.length === 0) {
     throw new Error("registerRightPanel requires a panel with a non-empty id.");
   }
@@ -149,9 +140,7 @@ export function registerRightPanel(
     throw new Error(`Right panel "${panel.id}" must have a non-empty title.`);
   }
   if (typeof panel.render !== "function") {
-    throw new Error(
-      `Right panel "${panel.id}" must provide a render(container) function.`,
-    );
+    throw new Error(`Right panel "${panel.id}" must provide a render(container) function.`);
   }
   // Normalize title to a resolver so both strings and getters update live.
   titleResolver.set(panel);
@@ -253,11 +242,7 @@ export function closeRightPanel(id: string): void {
  * is unknown, or the panel is already there.
  */
 export function setActiveRightPanelDock(dock: RightPanelDock): void {
-  if (
-    activeId === null ||
-    !ALL_DOCKS.includes(dock) ||
-    activeDock === dock
-  ) {
+  if (activeId === null || !ALL_DOCKS.includes(dock) || activeDock === dock) {
     return;
   }
   activeDock = dock;

@@ -1,8 +1,4 @@
-import type {
-  DeckVizFieldMapping,
-  DeckVizFormat,
-  DeckVizRole,
-} from "@geolibre/plugins";
+import type { DeckVizFieldMapping, DeckVizFormat, DeckVizRole } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { parseDelimitedTextRows } from "./delimited-text";
 
@@ -39,10 +35,7 @@ const SAMPLE_FEATURE_LIMIT = 500;
  *   (comma/tab/semicolon/pipe) when omitted, so .tsv/.txt files parse correctly.
  * @returns The detected format, columns, and parsed data.
  */
-export function detectAndParseDeckVizInput(
-  text: string,
-  delimiter?: string,
-): DeckVizParsedInput {
+export function detectAndParseDeckVizInput(text: string, delimiter?: string): DeckVizParsedInput {
   const trimmed = text.replace(/^﻿/, "").trimStart();
   if (!trimmed) throw new Error("The file is empty.");
 
@@ -56,10 +49,7 @@ export function detectAndParseDeckVizInput(
     return parseJsonInput(parsed);
   }
 
-  const { fields, rows } = parseDelimitedTextRows(
-    text,
-    delimiter ?? sniffDelimiter(trimmed),
-  );
+  const { fields, rows } = parseDelimitedTextRows(text, delimiter ?? sniffDelimiter(trimmed));
   const sample = rows[0];
   return {
     format: "csv-rows",
@@ -84,9 +74,7 @@ function parseJsonInput(parsed: unknown): DeckVizParsedInput {
   }
 
   if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error(
-      "Unsupported JSON. Provide a GeoJSON FeatureCollection or a JSON array.",
-    );
+    throw new Error("Unsupported JSON. Provide a GeoJSON FeatureCollection or a JSON array.");
   }
 
   const first = parsed[0];
@@ -94,9 +82,7 @@ function parseJsonInput(parsed: unknown): DeckVizParsedInput {
     // Scan the first few rows so optional trailing columns on later rows are
     // still offered in the field-mapping picker.
     const width = Math.max(
-      ...parsed
-        .slice(0, 10)
-        .map((row) => (Array.isArray(row) ? row.length : 0)),
+      ...parsed.slice(0, 10).map((row) => (Array.isArray(row) ? row.length : 0)),
     );
     return {
       format: "json-array",
@@ -122,9 +108,7 @@ function parseJsonInput(parsed: unknown): DeckVizParsedInput {
     };
   }
 
-  throw new Error(
-    "Unsupported JSON array. Expected an array of objects or [lng, lat] tuples.",
-  );
+  throw new Error("Unsupported JSON array. Expected an array of objects or [lng, lat] tuples.");
 }
 
 /**
@@ -188,9 +172,7 @@ function matchNamedColumn(
   // Prefix match only for multi-character tokens, so "y" cannot grab "city".
   for (const detect of role.detect) {
     if (detect.length < 3) continue;
-    const prefix = candidates.find((candidate) =>
-      candidate.lower.startsWith(detect),
-    );
+    const prefix = candidates.find((candidate) => candidate.lower.startsWith(detect));
     if (prefix) return prefix.value;
   }
 
@@ -278,9 +260,7 @@ function sampleLabel(name: string, sample: unknown): string {
   return `${name} (${preview})`;
 }
 
-function isFeatureCollectionLike(
-  value: unknown,
-): value is { type: string; features?: unknown } {
+function isFeatureCollectionLike(value: unknown): value is { type: string; features?: unknown } {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -288,9 +268,7 @@ function isFeatureCollectionLike(
   );
 }
 
-function normalizeFeatureCollection(value: {
-  features?: unknown;
-}): FeatureCollection {
+function normalizeFeatureCollection(value: { features?: unknown }): FeatureCollection {
   const features = Array.isArray(value.features) ? value.features : [];
   return { type: "FeatureCollection", features } as FeatureCollection;
 }

@@ -110,8 +110,7 @@ def _check_python_import(python_executable: str) -> None:
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeBootstrapError(
-            f"{python_executable}: import timed out after "
-            f"{RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
+            f"{python_executable}: import timed out after {RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
         ) from exc
     if completed.returncode != 0:
         detail = (
@@ -298,11 +297,7 @@ class ExternalRuntimeSession:
                 f"after {timeout} seconds"
             ) from exc
         if completed.returncode != 0:
-            detail = (
-                completed.stderr.strip()
-                or completed.stdout.strip()
-                or "unknown runtime error"
-            )
+            detail = completed.stderr.strip() or completed.stdout.strip() or "unknown runtime error"
             raise RuntimeBootstrapError(f"{self.python_executable}: {detail}")
         return completed.stdout
 
@@ -405,9 +400,7 @@ class ExternalRuntimeSession:
 
         try:
             if process.stdout is None:
-                raise RuntimeBootstrapError(
-                    "Whitebox subprocess stdout is unexpectedly None"
-                )
+                raise RuntimeBootstrapError("Whitebox subprocess stdout is unexpectedly None")
             stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
             stderr_thread.start()
             # A watchdog kills the subprocess if it exceeds the deadline.
@@ -425,19 +418,19 @@ class ExternalRuntimeSession:
                     if line.startswith("__WBW_EVENT__"):
                         if callback:
                             callback(
-                                base64.b64decode(
-                                    line[len("__WBW_EVENT__") :]
-                                ).decode("utf-8", "replace")
+                                base64.b64decode(line[len("__WBW_EVENT__") :]).decode(
+                                    "utf-8", "replace"
+                                )
                             )
                     elif line.startswith("__WBW_RESULT__"):
-                        completed_result = base64.b64decode(
-                            line[len("__WBW_RESULT__") :]
-                        ).decode("utf-8", "replace")
+                        completed_result = base64.b64decode(line[len("__WBW_RESULT__") :]).decode(
+                            "utf-8", "replace"
+                        )
                     elif line.startswith("__WBW_ERROR__"):
                         errors.append(
-                            base64.b64decode(
-                                line[len("__WBW_ERROR__") :]
-                            ).decode("utf-8", "replace")
+                            base64.b64decode(line[len("__WBW_ERROR__") :]).decode(
+                                "utf-8", "replace"
+                            )
                         )
                 rc = process.wait()
             finally:
@@ -452,14 +445,10 @@ class ExternalRuntimeSession:
             # process (see _on_timeout), so a set flag reliably means a genuine
             # timeout regardless of the resulting exit code.
             if timed_out.is_set():
-                raise RuntimeBootstrapError(
-                    f"Whitebox tool run timed out after {timeout} seconds"
-                )
+                raise RuntimeBootstrapError(f"Whitebox tool run timed out after {timeout} seconds")
             if rc != 0 or errors:
                 raise RuntimeBootstrapError(
-                    "\n".join(errors)
-                    or stderr
-                    or "Whitebox runtime execution failed"
+                    "\n".join(errors) or stderr or "Whitebox runtime execution failed"
                 )
             return completed_result or "{}"
         finally:
@@ -591,9 +580,7 @@ def _normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
     fixed.setdefault("category", "General")
     tier = str(fixed.get("license_tier_name") or fixed.get("license_tier") or "open")
     fixed["license_tier"] = tier.lower()
-    fixed["locked"] = bool(
-        fixed.get("locked", False) or not fixed.get("available", True)
-    )
+    fixed["locked"] = bool(fixed.get("locked", False) or not fixed.get("available", True))
     fixed["params"] = _clean_params(fixed.get("params", []))
     fixed.setdefault("defaults", {})
     return fixed
@@ -897,7 +884,9 @@ def _prepare_arguments(
     return args, working_directory
 
 
-def _extract_outputs(result: Any, args: dict[str, Any], tool: dict[str, Any] | None) -> dict[str, Any]:
+def _extract_outputs(
+    result: Any, args: dict[str, Any], tool: dict[str, Any] | None
+) -> dict[str, Any]:
     """Extract output paths from runtime result JSON and output parameters."""
     outputs: dict[str, Any] = {}
     output_param_names: set[str] = set()
@@ -946,9 +935,7 @@ def _append_job_message(job_id: str, event: Any) -> None:
     with _JOBS_LOCK:
         job = _JOBS[job_id]
         messages = [*job.messages, message]
-        _JOBS[job_id] = job.model_copy(
-            update={"messages": messages, "updated_at": _utc_now()}
-        )
+        _JOBS[job_id] = job.model_copy(update={"messages": messages, "updated_at": _utc_now()})
 
 
 def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
@@ -1022,9 +1009,7 @@ def whitebox_tools(include_pro: bool = False, tier: str = "open"):
         tools = _load_catalog(include_pro=include_pro, tier=tier)
     except Exception as exc:
         logger.warning("Failed to load Whitebox tool catalog", exc_info=True)
-        raise HTTPException(
-            status_code=503, detail="Whitebox tool catalog is unavailable"
-        ) from exc
+        raise HTTPException(status_code=503, detail="Whitebox tool catalog is unavailable") from exc
     return {"tools": tools, "tool_count": len(tools)}
 
 
@@ -1035,9 +1020,7 @@ def whitebox_tool(tool_id: str, include_pro: bool = False, tier: str = "open"):
         session = create_runtime_session(include_pro=include_pro, tier=tier)
         metadata = _parse_json_maybe(session.get_tool_metadata_json(tool_id))
     except Exception as exc:
-        logger.warning(
-            "Failed to load metadata for Whitebox tool %s", tool_id, exc_info=True
-        )
+        logger.warning("Failed to load metadata for Whitebox tool %s", tool_id, exc_info=True)
         raise HTTPException(
             status_code=503, detail="Whitebox tool metadata is unavailable"
         ) from exc
@@ -1053,11 +1036,7 @@ def _evict_finished_jobs_locked() -> None:
     excess = len(_JOBS) - MAX_RETAINED_JOBS
     if excess <= 0:
         return
-    finished = [
-        job_id
-        for job_id, job in _JOBS.items()
-        if job.status in {"succeeded", "failed"}
-    ]
+    finished = [job_id for job_id, job in _JOBS.items() if job.status in {"succeeded", "failed"}]
     for job_id in finished[:excess]:
         _JOBS.pop(job_id, None)
 
@@ -1144,17 +1123,13 @@ def whitebox_output(path: str):
     if Path(output_path).suffix.lower() not in {".json", ".geojson"}:
         raise HTTPException(status_code=400, detail="Only JSON outputs can be read")
     if output_path not in _known_output_paths():
-        raise HTTPException(
-            status_code=403, detail="Path is not a known Whitebox output"
-        )
+        raise HTTPException(status_code=403, detail="Path is not a known Whitebox output")
     # Reject a symlinked final component before reading. Combined with the
     # O_NOFOLLOW open this closes the symlink-swap TOCTOU on POSIX; on Windows
     # it is the sole mitigation. A swapped intermediate directory is out of
     # scope (it requires write access to the output's parent directory).
     if os.path.islink(output_path):
-        raise HTTPException(
-            status_code=403, detail="Output path must not be a symbolic link"
-        )
+        raise HTTPException(status_code=403, detail="Output path must not be a symbolic link")
     try:
         return json.loads(_read_text_no_symlink(output_path))
     except FileNotFoundError as exc:

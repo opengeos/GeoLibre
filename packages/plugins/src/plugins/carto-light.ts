@@ -1,7 +1,6 @@
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-const CARTO_LIGHT =
-  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const CARTO_LIGHT = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 
 export const cartoLightPlugin: GeoLibrePlugin = {
   id: "carto-light",

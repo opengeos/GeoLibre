@@ -1,11 +1,6 @@
 import type { Database, SqlJsStatic } from "sql.js";
 import type { FeatureCollection, Geometry } from "geojson";
-import {
-  type BoundingBox,
-  emptyBoundingBox,
-  encodeWkb,
-  extendBoundingBox,
-} from "./geometry-wkb";
+import { type BoundingBox, emptyBoundingBox, encodeWkb, extendBoundingBox } from "./geometry-wkb";
 import { loadSqlJs } from "./gpkg-ogr-contents";
 
 /**
@@ -51,10 +46,7 @@ function quoteIdentifier(value: string): string {
 function sanitizeColumnName(name: string, taken: Set<string>): string {
   let cleaned = name.replace(/[^\p{L}\p{N}_]+/gu, "_").replace(/^_+/, "");
   if (!cleaned) cleaned = "field";
-  if (
-    cleaned.toLowerCase() === FID_COLUMN ||
-    cleaned.toLowerCase() === GEOMETRY_COLUMN
-  ) {
+  if (cleaned.toLowerCase() === FID_COLUMN || cleaned.toLowerCase() === GEOMETRY_COLUMN) {
     cleaned = `${cleaned}_`;
   }
   let candidate = cleaned;
@@ -87,10 +79,7 @@ function inferColumnType(values: unknown[]): ColumnType {
 }
 
 /** Coerce a property value to what a SQLite bind expects for `type`. */
-function coerceValue(
-  value: unknown,
-  type: ColumnType,
-): number | string | null {
+function coerceValue(value: unknown, type: ColumnType): number | string | null {
   if (value == null) return null;
   if (type === "TEXT") {
     return typeof value === "object" ? JSON.stringify(value) : String(value);
@@ -142,9 +131,7 @@ function createMetadataTables(db: Database): void {
       description TEXT
     );`,
   );
-  const srs = db.prepare(
-    `INSERT INTO gpkg_spatial_ref_sys VALUES (?, ?, ?, ?, ?, ?);`,
-  );
+  const srs = db.prepare(`INSERT INTO gpkg_spatial_ref_sys VALUES (?, ?, ?, ?, ?, ?);`);
   try {
     srs.run(["Undefined cartesian SRS", -1, "NONE", -1, "undefined", null]);
     srs.run(["Undefined geographic SRS", 0, "NONE", 0, "undefined", null]);
@@ -260,10 +247,7 @@ export function writeGeoPackageSync(
       );`,
     );
 
-    const insertColumns = [
-      GEOMETRY_COLUMN,
-      ...columns.map((column) => column.name),
-    ];
+    const insertColumns = [GEOMETRY_COLUMN, ...columns.map((column) => column.name)];
     const placeholders = insertColumns.map(() => "?").join(", ");
     const insert = db.prepare(
       `INSERT INTO ${quoteIdentifier(tableName)} (${insertColumns
@@ -273,9 +257,7 @@ export function writeGeoPackageSync(
     try {
       db.run("BEGIN;");
       for (const feature of features) {
-        const row: (number | string | Uint8Array | null)[] = [
-          geoPackageBlob(feature.geometry),
-        ];
+        const row: (number | string | Uint8Array | null)[] = [geoPackageBlob(feature.geometry)];
         for (const column of columns) {
           row.push(coerceValue(feature.properties?.[column.key], column.type));
         }
@@ -286,8 +268,7 @@ export function writeGeoPackageSync(
       insert.free();
     }
 
-    const finiteBox =
-      Number.isFinite(box.minX) && Number.isFinite(box.minY);
+    const finiteBox = Number.isFinite(box.minX) && Number.isFinite(box.minY);
     const contents = db.prepare(
       `INSERT INTO gpkg_contents
         (table_name, data_type, identifier, description, min_x, min_y, max_x, max_y, srs_id)
@@ -307,10 +288,12 @@ export function writeGeoPackageSync(
       contents.free();
     }
 
-    db.run(
-      `INSERT INTO gpkg_geometry_columns VALUES (?, ?, ?, ?, 0, 0);`,
-      [tableName, GEOMETRY_COLUMN, geometryTypeName(geometryTypes), SRS_ID],
-    );
+    db.run(`INSERT INTO gpkg_geometry_columns VALUES (?, ?, ?, ?, 0, 0);`, [
+      tableName,
+      GEOMETRY_COLUMN,
+      geometryTypeName(geometryTypes),
+      SRS_ID,
+    ]);
     db.run(`INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (?, ?);`, [
       tableName,
       features.length,

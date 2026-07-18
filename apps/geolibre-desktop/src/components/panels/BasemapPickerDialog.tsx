@@ -26,19 +26,9 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
-import {
-  isOfflineBasemapSentinel,
-  PROTOMAPS_FLAVORS,
-  type ProtomapsFlavor,
-} from "@geolibre/map";
-import {
-  planetaryBasemapLabel,
-  planetaryBasemapSectionKey,
-} from "../../lib/planetary-sections";
-import {
-  buildRemotePmtilesBasemap,
-  isPmtilesStyleUrl,
-} from "../../lib/pmtiles-basemap-url";
+import { isOfflineBasemapSentinel, PROTOMAPS_FLAVORS, type ProtomapsFlavor } from "@geolibre/map";
+import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
+import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { CollapsibleSection } from "../CollapsibleSection";
 
 // Picking the "Liberty 3D" preset applies the Liberty style and tilts the
@@ -113,10 +103,7 @@ interface BasemapPickerDialogProps {
  * a custom style URL) and applies the selection instantly via the store. The
  * current camera is preserved, so only the underlying map style changes.
  */
-export function BasemapPickerDialog({
-  open,
-  onOpenChange,
-}: BasemapPickerDialogProps) {
+export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogProps) {
   const { t } = useTranslation();
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
@@ -128,16 +115,14 @@ export function BasemapPickerDialog({
   // the build or from Settings → Environment variables, so re-resolve when the
   // dialog opens and whenever the runtime env changes; an absent key hides the
   // section.
-  const [protomapsPresets, setProtomapsPresets] = useState<PresetBasemap[]>(
-    resolveProtomapsPresets,
-  );
+  const [protomapsPresets, setProtomapsPresets] =
+    useState<PresetBasemap[]>(resolveProtomapsPresets);
   useEffect(() => {
     if (!open) return;
     const refresh = () => setProtomapsPresets(resolveProtomapsPresets());
     refresh();
     window.addEventListener("geolibre:runtime-env-change", refresh);
-    return () =>
-      window.removeEventListener("geolibre:runtime-env-change", refresh);
+    return () => window.removeEventListener("geolibre:runtime-env-change", refresh);
   }, [open]);
 
   const allPresets = useMemo(
@@ -172,9 +157,7 @@ export function BasemapPickerDialog({
   const [customFlavor, setCustomFlavor] = useState<ProtomapsFlavor>("light");
   useEffect(() => {
     if (!open) return;
-    setCustomUrl(
-      activeChoice === CUSTOM_CHOICE ? basemapStyleUrl : readStoredCustomUrl(),
-    );
+    setCustomUrl(activeChoice === CUSTOM_CHOICE ? basemapStyleUrl : readStoredCustomUrl());
     setCustomFlavor(readStoredCustomFlavor());
     // Re-seed only when the dialog opens, not on every store change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,11 +169,7 @@ export function BasemapPickerDialog({
     if (!customStyleUrl) return false;
     try {
       const url = new URL(customStyleUrl);
-      return (
-        url.protocol === "http:" ||
-        url.protocol === "https:" ||
-        url.protocol === "pmtiles:"
-      );
+      return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "pmtiles:";
     } catch {
       return false;
     }
@@ -230,9 +209,7 @@ export function BasemapPickerDialog({
       // Ignore unavailable storage; persistence is best-effort.
     }
     setBasemapStyleUrl(
-      customIsPmtiles
-        ? buildRemotePmtilesBasemap(customStyleUrl, customFlavor)
-        : customStyleUrl,
+      customIsPmtiles ? buildRemotePmtilesBasemap(customStyleUrl, customFlavor) : customStyleUrl,
     );
     onOpenChange(false);
   };
@@ -312,9 +289,7 @@ export function BasemapPickerDialog({
               </CollapsibleSection>
             ) : (
               <div key={group.id} className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  {heading}
-                </p>
+                <p className="text-xs font-medium text-muted-foreground">{heading}</p>
                 {grid}
               </div>
             );
@@ -334,9 +309,7 @@ export function BasemapPickerDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="basemap-picker-custom-url">
-              {t("newProject.customUrlButton")}
-            </Label>
+            <Label htmlFor="basemap-picker-custom-url">{t("newProject.customUrlButton")}</Label>
             <div className="flex gap-2">
               <Input
                 id="basemap-picker-custom-url"
@@ -352,18 +325,13 @@ export function BasemapPickerDialog({
             </div>
             {customIsPmtiles ? (
               <div className="space-y-1">
-                <Label
-                  htmlFor="basemap-picker-custom-flavor"
-                  className="text-xs"
-                >
+                <Label htmlFor="basemap-picker-custom-flavor" className="text-xs">
                   {t("basemapExtract.style")}
                 </Label>
                 <Select
                   id="basemap-picker-custom-flavor"
                   value={customFlavor}
-                  onChange={(event) =>
-                    setCustomFlavor(event.target.value as ProtomapsFlavor)
-                  }
+                  onChange={(event) => setCustomFlavor(event.target.value as ProtomapsFlavor)}
                 >
                   {PROTOMAPS_FLAVORS.map((f) => (
                     <option key={f} value={f}>
@@ -374,9 +342,7 @@ export function BasemapPickerDialog({
               </div>
             ) : null}
             {customStyleUrl && !isCustomUrlValid ? (
-              <p className="text-xs text-destructive">
-                {t("basemapPicker.invalidUrl")}
-              </p>
+              <p className="text-xs text-destructive">{t("basemapPicker.invalidUrl")}</p>
             ) : null}
           </div>
         </form>

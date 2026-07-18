@@ -261,11 +261,7 @@ export function buildTimeBinding(
  * @param amount - Signed number of units to add.
  * @returns A new shifted date.
  */
-export function addGranularityUnits(
-  date: Date,
-  unit: TimeGranularity,
-  amount: number,
-): Date {
+export function addGranularityUnits(date: Date, unit: TimeGranularity, amount: number): Date {
   if (unit === "hour") return new Date(date.getTime() + amount * 3_600_000);
   if (unit === "day") return new Date(date.getTime() + amount * 86_400_000);
   const y = date.getUTCFullYear();
@@ -276,8 +272,7 @@ export function addGranularityUnits(
   const s = date.getUTCSeconds();
   // Resolve the target year/month, folding any month overflow into the year.
   const rawMonth = unit === "month" ? m + amount : m;
-  const targetYear =
-    (unit === "year" ? y + amount : y) + Math.floor(rawMonth / 12);
+  const targetYear = (unit === "year" ? y + amount : y) + Math.floor(rawMonth / 12);
   const targetMonth = ((rawMonth % 12) + 12) % 12;
   // Day 0 of the next month is the last day of the target month.
   const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
@@ -303,11 +298,7 @@ export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
   if (valueKind === "epochMs" || valueKind === "epochS") {
     const scale = valueKind === "epochS" ? 0.001 : 1;
     const value = ["to-number", ["get", property]];
-    return [
-      "all",
-      [">=", value, lowerMs * scale],
-      ["<", value, upperMs * scale],
-    ];
+    return ["all", [">=", value, lowerMs * scale], ["<", value, upperMs * scale]];
   }
 
   // Compare a fixed-length leading slice of the ISO text on both sides so a
@@ -317,15 +308,10 @@ export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
   // their wall-clock text and should use a consistent representation (UTC is
   // recommended); mixed explicit offsets are not normalized.
   const boundLength = valueKind === "isoDate" ? 10 : 19;
-  const toBound = (ms: number): string =>
-    new Date(ms).toISOString().slice(0, boundLength);
+  const toBound = (ms: number): string => new Date(ms).toISOString().slice(0, boundLength);
   // `to-string` coerces missing/null values to "" so the comparison never
   // throws on a feature that lacks the property; "" sorts before any real
   // timestamp, so undated features fall outside every window.
   const value = ["slice", ["to-string", ["get", property]], 0, boundLength];
-  return [
-    "all",
-    [">=", value, toBound(lowerMs)],
-    ["<", value, toBound(upperMs)],
-  ];
+  return ["all", [">=", value, toBound(lowerMs)], ["<", value, toBound(upperMs)]];
 }

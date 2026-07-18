@@ -103,10 +103,7 @@ describe("postgis connection registry", () => {
     // (scripting, assistant, New Project): only live layer ids survive.
     prunePostgisConnections(["layer-kept"]);
     assert.equal(resolvePostgisConnection(postgisLayer("layer-gone")), null);
-    assert.equal(
-      resolvePostgisConnection(postgisLayer("layer-kept")),
-      CONNECTION,
-    );
+    assert.equal(resolvePostgisConnection(postgisLayer("layer-kept")), CONNECTION);
     unregisterPostgisConnection("layer-kept");
   });
 

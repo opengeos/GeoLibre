@@ -19,8 +19,7 @@ function makeMapStub(nativeLayerId: string, nativeType: string) {
     };
   const map = {
     getStyle: () => ({ layers: [{ id: nativeLayerId, type: nativeType }] }),
-    getLayer: (id: string) =>
-      id === nativeLayerId ? { id, type: nativeType } : undefined,
+    getLayer: (id: string) => (id === nativeLayerId ? { id, type: nativeType } : undefined),
     getSource: () => undefined,
     setLayoutProperty: record("setLayoutProperty"),
     setPaintProperty: record("setPaintProperty"),

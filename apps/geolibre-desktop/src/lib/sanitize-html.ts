@@ -39,20 +39,44 @@ export function sanitizeStoryHtml(html: string): string {
   // not supported. Fall back to escaping the markup wholesale — strictly more
   // conservative than sanitizing, and those environments never render it.
   if (!DOMPurify.isSupported) {
-    return html
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    return html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
   // Story text is prose with links and light formatting, so allow only that set
   // of tags rather than the full HTML profile. This excludes forms, tables,
   // media, and other structural elements by construction.
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
-      "a", "abbr", "b", "blockquote", "br", "code", "del", "em",
-      "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "ins", "kbd",
-      "li", "mark", "ol", "p", "pre", "s", "small", "span", "strong",
-      "sub", "sup", "u", "ul",
+      "a",
+      "abbr",
+      "b",
+      "blockquote",
+      "br",
+      "code",
+      "del",
+      "em",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "hr",
+      "i",
+      "ins",
+      "kbd",
+      "li",
+      "mark",
+      "ol",
+      "p",
+      "pre",
+      "s",
+      "small",
+      "span",
+      "strong",
+      "sub",
+      "sup",
+      "u",
+      "ul",
     ],
     ALLOWED_ATTR: ["href", "title", "target", "rel"],
   });

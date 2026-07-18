@@ -48,13 +48,7 @@ export interface ServiceLibraryEntry {
   builtin?: boolean;
 }
 
-const SERVICE_KINDS: readonly ServiceLibraryKind[] = [
-  "wms",
-  "wfs",
-  "wmts",
-  "xyz",
-  "arcgis",
-];
+const SERVICE_KINDS: readonly ServiceLibraryKind[] = ["wms", "wfs", "wmts", "xyz", "arcgis"];
 
 /** Label used for entries that have no category set. */
 export const UNCATEGORIZED_LABEL = "Uncategorized";
@@ -69,11 +63,7 @@ function createServiceId(): string {
 }
 
 /** Reads a string field, coercing numbers/booleans, with a fallback. */
-export function serviceFieldString(
-  fields: ServiceFields,
-  key: string,
-  fallback = "",
-): string {
+export function serviceFieldString(fields: ServiceFields, key: string, fallback = ""): string {
   const value = fields[key];
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") {
@@ -83,31 +73,20 @@ export function serviceFieldString(
 }
 
 /** Reads a boolean field, with a fallback when absent or non-boolean. */
-export function serviceFieldBoolean(
-  fields: ServiceFields,
-  key: string,
-  fallback = false,
-): boolean {
+export function serviceFieldBoolean(fields: ServiceFields, key: string, fallback = false): boolean {
   const value = fields[key];
   return typeof value === "boolean" ? value : fallback;
 }
 
 function isServiceKind(value: unknown): value is ServiceLibraryKind {
-  return (
-    typeof value === "string" &&
-    (SERVICE_KINDS as readonly string[]).includes(value)
-  );
+  return typeof value === "string" && (SERVICE_KINDS as readonly string[]).includes(value);
 }
 
 function normalizeFields(value: unknown): ServiceFields {
   if (!value || typeof value !== "object") return {};
   const result: ServiceFields = {};
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (
-      typeof raw === "string" ||
-      typeof raw === "number" ||
-      typeof raw === "boolean"
-    ) {
+    if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") {
       result[key] = raw;
     }
   }
@@ -128,11 +107,8 @@ function normalizeEntry(value: unknown): ServiceLibraryEntry | null {
   const fields = normalizeFields(record.fields);
   if (Object.keys(fields).length === 0) return null;
   const id =
-    typeof record.id === "string" && record.id.trim()
-      ? record.id.trim()
-      : createServiceId();
-  const category =
-    typeof record.category === "string" ? record.category.trim() : "";
+    typeof record.id === "string" && record.id.trim() ? record.id.trim() : createServiceId();
+  const category = typeof record.category === "string" ? record.category.trim() : "";
   return { id, name, category, kind: record.kind, fields };
 }
 

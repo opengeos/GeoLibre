@@ -261,7 +261,10 @@ describe("normalizeStyleLibraryEntries", () => {
 
 describe("style library bundles", () => {
   it("round-trips entries through serialize/parse", () => {
-    const entries = [entry(), entry({ id: "entry-b", kind: "ramp", style: { vectorStyleColorRamp: "blues" } })];
+    const entries = [
+      entry(),
+      entry({ id: "entry-b", kind: "ramp", style: { vectorStyleColorRamp: "blues" } }),
+    ];
     const parsed = parseStyleLibrary(serializeStyleLibrary(entries));
     assert.deepEqual(parsed, entries);
   });
@@ -275,9 +278,7 @@ describe("style library bundles", () => {
     assert.throws(() => parseStyleLibrary("not json"));
     assert.throws(() => parseStyleLibrary('{"type":"something-else"}'));
     assert.throws(() =>
-      parseStyleLibrary(
-        '{"type":"geolibre-style-library","version":1,"entries":[]}',
-      ),
+      parseStyleLibrary('{"type":"geolibre-style-library","version":1,"entries":[]}'),
     );
   });
 

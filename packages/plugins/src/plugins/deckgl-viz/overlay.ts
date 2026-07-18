@@ -2,16 +2,10 @@ import { type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../../types";
 import { ensureMercatorProjection } from "../map-projection-utils";
-import {
-  ensureSharedDeckOverlay,
-  setSharedDeckLayers,
-} from "../shared-deck-overlay";
+import { ensureSharedDeckOverlay, setSharedDeckLayers } from "../shared-deck-overlay";
 import { buildDiagramLayers, isDiagramLayer } from "./diagrams";
 import { buildElevation3dLayers, isElevation3dLayer } from "./elevation";
-import {
-  type DeckVizBuildContext,
-  getDeckVizLayerDef,
-} from "./registry";
+import { type DeckVizBuildContext, getDeckVizLayerDef } from "./registry";
 import { deckVizRows, isDeckVizLayer, readDeckVizConfig } from "./store-layer";
 
 /**
@@ -137,13 +131,9 @@ function renderDeckVizLayers(): void {
 
   const storeLayers = useAppStore.getState().layers;
   const vizLayers = storeLayers.filter(isDeckVizLayer);
-  const diagramLayers = storeLayers.filter(
-    (layer) => layer.visible && isDiagramLayer(layer),
-  );
+  const diagramLayers = storeLayers.filter((layer) => layer.visible && isDiagramLayer(layer));
   const hasRenderableLayers =
-    vizLayers.length > 0 ||
-    diagramLayers.length > 0 ||
-    storeLayers.some(isElevation3dLayer);
+    vizLayers.length > 0 || diagramLayers.length > 0 || storeLayers.some(isElevation3dLayer);
 
   if (!hasRenderableLayers) {
     setSharedDeckLayers("deckviz", []);
@@ -170,9 +160,7 @@ function renderDeckVizLayers(): void {
   const map = appRef.getMap?.() ?? null;
   const diagramOptions = {
     zoom: map?.getZoom(),
-    project: map
-      ? (position: [number, number]) => map.project(position)
-      : null,
+    project: map ? (position: [number, number]) => map.project(position) : null,
   };
   syncViewListeners(
     diagramLayers.some(
@@ -249,9 +237,7 @@ function buildContext(layer: GeoLibreLayer): RenderEntry | null {
       : config.style.lineWidth,
   };
   const ctx: DeckVizBuildContext = {
-    rows: isGeoJson
-      ? undefined
-      : (deckVizRows(layer) as DeckVizBuildContext["rows"]),
+    rows: isGeoJson ? undefined : (deckVizRows(layer) as DeckVizBuildContext["rows"]),
     geojson: isGeoJson ? layer.geojson : undefined,
     fieldMapping: config.fieldMapping,
     style,

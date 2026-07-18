@@ -12,21 +12,8 @@ import {
   subscribeSunSettings,
 } from "@geolibre/plugins";
 import { Button, Slider } from "@geolibre/ui";
-import {
-  Clock3,
-  Pause,
-  Play,
-  Repeat,
-  SkipBack,
-  SkipForward,
-  Sun,
-  X,
-} from "lucide-react";
-import {
-  type PointerEvent as ReactPointerEvent,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { Clock3, Pause, Play, Repeat, SkipBack, SkipForward, Sun, X } from "lucide-react";
+import { type PointerEvent as ReactPointerEvent, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
 
@@ -54,10 +41,7 @@ function minutesOfLocalDay(dateMs: number): number {
 }
 
 function withMinutesOfLocalDay(dateMs: number, minutes: number): number {
-  return (
-    localDayStart(dateMs) +
-    clamp(minutes, 0, MINUTES_PER_DAY - 1) * MS_PER_MINUTE
-  );
+  return localDayStart(dateMs) + clamp(minutes, 0, MINUTES_PER_DAY - 1) * MS_PER_MINUTE;
 }
 
 /** Format epoch ms as date/time input values in device local time. */
@@ -89,11 +73,7 @@ function formatClock(dateMs: number): string {
  * engine — this component only reads and writes the shared settings.
  */
 export function SunPanel() {
-  const visible = useSyncExternalStore(
-    subscribeSunPanel,
-    isSunPanelVisible,
-    isSunPanelVisible,
-  );
+  const visible = useSyncExternalStore(subscribeSunPanel, isSunPanelVisible, isSunPanelVisible);
   if (!visible) return null;
   return <SunPanelCard />;
 }
@@ -196,9 +176,7 @@ function SunPanelCard() {
       >
         <Sun className="h-4 w-4 text-amber-500" />
         <span className="text-sm font-medium">{t("toolbar.sun.title")}</span>
-        <span className="ms-1 truncate text-xs text-muted-foreground">
-          {dateLabel}
-        </span>
+        <span className="ms-1 truncate text-xs text-muted-foreground">{dateLabel}</span>
         <Button
           variant="ghost"
           size="icon"
@@ -213,9 +191,7 @@ function SunPanelCard() {
       <div className="space-y-3 p-3">
         <div className="flex items-end gap-2">
           <label className="min-w-0 flex-1 space-y-1">
-            <span className="block text-xs text-muted-foreground">
-              {t("toolbar.sun.date")}
-            </span>
+            <span className="block text-xs text-muted-foreground">{t("toolbar.sun.date")}</span>
             <input
               type="date"
               className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
@@ -224,9 +200,7 @@ function SunPanelCard() {
             />
           </label>
           <label className="w-[7.5rem] space-y-1">
-            <span className="block text-xs text-muted-foreground">
-              {t("toolbar.sun.time")}
-            </span>
+            <span className="block text-xs text-muted-foreground">{t("toolbar.sun.time")}</span>
             <input
               type="time"
               className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm tabular-nums"
@@ -288,11 +262,7 @@ function SunPanelCard() {
             aria-label={playing ? t("toolbar.sun.pause") : t("toolbar.sun.play")}
             onClick={() => setSunSettings({ playing: !playing })}
           >
-            {playing ? (
-              <Pause className="h-4 w-4" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
+            {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </Button>
           <Button
             variant="ghost"
@@ -389,15 +359,7 @@ interface SliderRowProps {
   onChange: (value: number) => void;
 }
 
-function SliderRow({
-  label,
-  min,
-  max,
-  step,
-  value,
-  format,
-  onChange,
-}: SliderRowProps) {
+function SliderRow({ label, min, max, step, value, format, onChange }: SliderRowProps) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">

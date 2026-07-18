@@ -14,11 +14,7 @@ import type { LoadedModel } from "./tauri-io";
  * @param scale - The per-axis scale factors.
  * @returns A single positive scale factor (1 when the average is not positive).
  */
-export function kmlModelUniformScale(scale: {
-  x: number;
-  y: number;
-  z: number;
-}): number {
+export function kmlModelUniformScale(scale: { x: number; y: number; z: number }): number {
   const average = (scale.x + scale.y + scale.z) / 3;
   return average > 0 ? average : 1;
 }
@@ -59,12 +55,8 @@ export function kmlModelRow(model: LoadedModel): {
  * normal building-scale models untouched.
  */
 export function kmlModelTranslation(model: LoadedModel): [number, number, number] {
-  const min = Number.isFinite(model.verticalMinMeters)
-    ? model.verticalMinMeters
-    : 0;
-  const max = Number.isFinite(model.verticalMaxMeters)
-    ? model.verticalMaxMeters
-    : 0;
+  const min = Number.isFinite(model.verticalMinMeters) ? model.verticalMinMeters : 0;
+  const max = Number.isFinite(model.verticalMaxMeters) ? model.verticalMaxMeters : 0;
   const verticalSpan = max - min;
   if (verticalSpan < 1000 || max <= 0) return [0, 0, 0];
   return [0, 0, -max * kmlModelUniformScale(model.scale)];

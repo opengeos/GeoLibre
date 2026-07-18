@@ -26,8 +26,7 @@ function makeVectorControlMapStub(layerId: string) {
   };
   const map = {
     getStyle: () => ({ layers: [circleSpec] }),
-    getLayer: (id: string) =>
-      id === circleSpec.id ? { id, type: "circle" } : undefined,
+    getLayer: (id: string) => (id === circleSpec.id ? { id, type: "circle" } : undefined),
     getSource: () => undefined,
     getFilter: () => circleSpec.filter,
     getPaintProperty: () => undefined,
@@ -43,10 +42,7 @@ function makeVectorControlMapStub(layerId: string) {
   return { map, calls };
 }
 
-function vectorControlLayer(
-  layerId: string,
-  patch: Partial<GeoLibreLayer> = {},
-): GeoLibreLayer {
+function vectorControlLayer(layerId: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   return {
     id: layerId,
     name: "us_cities",
@@ -133,12 +129,8 @@ describe("vector-control point symbology overlay (#1311)", () => {
 
     const added = calls.find((c) => c.method === "addLayer");
     assert.ok(added, "expected the marker overlay layer to be added");
-    const layout = (added.args[0] as { layout: Record<string, unknown> })
-      .layout;
-    assert.ok(
-      Array.isArray(layout["icon-size"]),
-      "expected a data-driven icon-size expression",
-    );
+    const layout = (added.args[0] as { layout: Record<string, unknown> }).layout;
+    assert.ok(Array.isArray(layout["icon-size"]), "expected a data-driven icon-size expression");
   });
 
   it("overrides the control circle's radius while proportional sizing is on", () => {
@@ -193,11 +185,7 @@ describe("vector-control point symbology overlay (#1311)", () => {
     assert.equal(typeof firstRadius[1].args[2], "number");
 
     const secondRadius = radiusCalls(second.calls, "vecw");
-    assert.equal(
-      secondRadius.length,
-      2,
-      "expected the second map to restore independently",
-    );
+    assert.equal(secondRadius.length, 2, "expected the second map to restore independently");
     assert.equal(typeof secondRadius[1].args[2], "number");
   });
 
@@ -288,10 +276,7 @@ describe("vector-control point symbology overlay (#1311)", () => {
       !calls.some((c) => c.method === "setPaintProperty"),
       "expected paint to be left to the control",
     );
-    assert.ok(
-      !calls.some((c) => c.method === "addLayer"),
-      "expected no overlay layer",
-    );
+    assert.ok(!calls.some((c) => c.method === "addLayer"), "expected no overlay layer");
   });
 
   it("keeps the cluster renderer untouched", () => {

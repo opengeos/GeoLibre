@@ -126,10 +126,7 @@ export const VECTOR_COLOR_RAMPS: readonly ColorRamp[] = [
  * @returns The matching ramp, or the first ramp.
  */
 export function getVectorColorRamp(value: string): ColorRamp {
-  return (
-    VECTOR_COLOR_RAMPS.find((colorRamp) => colorRamp.value === value) ??
-    VECTOR_COLOR_RAMPS[0]
-  );
+  return VECTOR_COLOR_RAMPS.find((colorRamp) => colorRamp.value === value) ?? VECTOR_COLOR_RAMPS[0];
 }
 
 /**
@@ -140,10 +137,7 @@ export function getVectorColorRamp(value: string): ColorRamp {
  * @param count - Number of colors to produce.
  * @returns An array of `count` hex colors (a single end color when count <= 1).
  */
-export function interpolateRampColors(
-  colorRamp: string,
-  count: number,
-): string[] {
+export function interpolateRampColors(colorRamp: string, count: number): string[] {
   return interpolateColors(getVectorColorRamp(colorRamp).colors, count);
 }
 
@@ -156,10 +150,7 @@ export function interpolateRampColors(
  * @param count - Number of colors to produce.
  * @returns An array of `count` hex colors (a single end color when count <= 1).
  */
-export function interpolateColors(
-  colors: readonly string[],
-  count: number,
-): string[] {
+export function interpolateColors(colors: readonly string[], count: number): string[] {
   const anchors = colors.length > 0 ? colors : ["#000000"];
   if (count <= 0) return [];
   if (count === 1) return [anchors[anchors.length - 1]];
@@ -222,11 +213,7 @@ export function parseHexColorList(input: string): string[] {
  * @param ratio - Blend factor in [0, 1].
  * @returns The interpolated hex color.
  */
-export function interpolateHexColor(
-  from: string,
-  to: string,
-  ratio: number,
-): string {
+export function interpolateHexColor(from: string, to: string, ratio: number): string {
   const start = parseHexColor(from);
   const end = parseHexColor(to);
   return rgbToHex({
@@ -273,11 +260,7 @@ export function rgbToHex(color: { b: number; g: number; r: number }): string {
  * @param count - Number of breaks to produce.
  * @returns The break values (min..max inclusive when count > 1).
  */
-export function createEqualIntervalBreaks(
-  min: number,
-  max: number,
-  count: number,
-): number[] {
+export function createEqualIntervalBreaks(min: number, max: number, count: number): number[] {
   return Array.from({ length: count }, (_, index) => {
     const ratio = count === 1 ? 0 : index / (count - 1);
     return min + (max - min) * ratio;
@@ -298,13 +281,10 @@ export function createQuantileBreaks(values: number[], count: number): number[] 
   // yield NaN breaks; callers that have no values get an empty result instead.
   if (sorted.length === 0) return [];
   return Array.from({ length: count }, (_, index) => {
-    const position =
-      count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);
+    const position = count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);
     const lowerIndex = Math.floor(position);
     const upperIndex = Math.min(sorted.length - 1, Math.ceil(position));
     const ratio = position - lowerIndex;
-    return (
-      sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio
-    );
+    return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio;
   });
 }

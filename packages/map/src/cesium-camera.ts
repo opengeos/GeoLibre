@@ -29,8 +29,7 @@ function clamp(value: number, min: number, max: number): number {
  * field-of-view, so it is the stable quantity to match across the two engines.
  */
 export function groundResolution(zoom: number, latDeg: number): number {
-  const latRad =
-    (clamp(latDeg, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT) * Math.PI) / 180;
+  const latRad = (clamp(latDeg, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT) * Math.PI) / 180;
   return (Math.cos(latRad) * EARTH_CIRCUMFERENCE) / (TILE_SIZE * 2 ** zoom);
 }
 
@@ -40,30 +39,17 @@ export function groundResolution(zoom: number, latDeg: number): number {
  * ground extent as a MapLibre pane at `zoom`. Matching the extent this way keeps
  * the on-screen scale in step even when the two panes differ in pixel height.
  */
-export function zoomToRange(
-  zoom: number,
-  latDeg: number,
-  heightPx: number,
-  fovy: number,
-): number {
+export function zoomToRange(zoom: number, latDeg: number, heightPx: number, fovy: number): number {
   const extent = groundResolution(zoom, latDeg) * heightPx;
   return extent / (2 * Math.tan(fovy / 2));
 }
 
 /** Inverse of {@link zoomToRange}: recover the MapLibre zoom from a range. */
-export function rangeToZoom(
-  range: number,
-  latDeg: number,
-  heightPx: number,
-  fovy: number,
-): number {
+export function rangeToZoom(range: number, latDeg: number, heightPx: number, fovy: number): number {
   const extent = 2 * range * Math.tan(fovy / 2);
   const gr = extent / heightPx;
-  const latRad =
-    (clamp(latDeg, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT) * Math.PI) / 180;
-  return Math.log2(
-    (Math.cos(latRad) * EARTH_CIRCUMFERENCE) / (TILE_SIZE * gr),
-  );
+  const latRad = (clamp(latDeg, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT) * Math.PI) / 180;
+  return Math.log2((Math.cos(latRad) * EARTH_CIRCUMFERENCE) / (TILE_SIZE * gr));
 }
 
 /** MapLibre pitch (0 = nadir) → Cesium pitch (−90° = nadir), in degrees. */
@@ -107,19 +93,13 @@ export function applyMapViewToCamera(
   view: MapViewState,
 ): void {
   const [lng, lat] = view.center;
-  const range = Math.max(
-    zoomToRange(view.zoom, lat, canvasHeight(viewer), cameraFovy(viewer)),
-    1,
-  );
+  const range = Math.max(zoomToRange(view.zoom, lat, canvasHeight(viewer), cameraFovy(viewer)), 1);
   const heading = Cesium.Math.toRadians(normalizeBearing(view.bearing));
   const pitch = Cesium.Math.toRadians(mapLibrePitchToCesiumDeg(view.pitch));
   const target = Cesium.Cartesian3.fromDegrees(lng, lat);
   // lookAt orients the camera in the target's local frame; resetting the
   // transform to identity hands control back for free user navigation.
-  viewer.camera.lookAt(
-    target,
-    new Cesium.HeadingPitchRange(heading, pitch, range),
-  );
+  viewer.camera.lookAt(target, new Cesium.HeadingPitchRange(heading, pitch, range));
   viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
 }
 
@@ -146,10 +126,7 @@ export function readMapViewFromCamera(
   let lat: number;
   let range: number;
   if (groundPoint) {
-    const carto = Cesium.Cartographic.fromCartesian(
-      groundPoint,
-      ellipsoid,
-    );
+    const carto = Cesium.Cartographic.fromCartesian(groundPoint, ellipsoid);
     lng = Cesium.Math.toDegrees(carto.longitude);
     lat = Cesium.Math.toDegrees(carto.latitude);
     range = Cesium.Cartesian3.distance(camera.positionWC, groundPoint);
@@ -160,11 +137,7 @@ export function readMapViewFromCamera(
     range = carto.height;
   }
 
-  const zoom = clamp(
-    rangeToZoom(range, lat, height, cameraFovy(viewer)),
-    0,
-    24,
-  );
+  const zoom = clamp(rangeToZoom(range, lat, height, cameraFovy(viewer)), 0, 24);
   return {
     center: [lng, lat],
     zoom,

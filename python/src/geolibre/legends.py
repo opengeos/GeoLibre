@@ -96,7 +96,6 @@ def get_builtin_legend(name: str) -> _LegendPreset:
     preset = BUILTIN_LEGENDS.get(key)
     if preset is None:
         raise ValueError(
-            f"Unknown built-in legend {name!r}. Available presets: "
-            f"{builtin_legend_names()}"
+            f"Unknown built-in legend {name!r}. Available presets: {builtin_legend_names()}"
         )
     return preset

@@ -28,17 +28,11 @@ export async function waitForMap(page: Page, path = "/"): Promise<void> {
  * `name` is test-controlled and assumed simple/ASCII: it is the dropped file's
  * base name and, after the drop pipeline strips the extension, the layer name.
  */
-export async function dropGeoJson(
-  page: Page,
-  name: string,
-  text: string,
-): Promise<void> {
+export async function dropGeoJson(page: Page, name: string, text: string): Promise<void> {
   const dataTransfer = await page.evaluateHandle(
     ({ contents, fileName }) => {
       const dt = new DataTransfer();
-      dt.items.add(
-        new File([contents], fileName, { type: "application/geo+json" }),
-      );
+      dt.items.add(new File([contents], fileName, { type: "application/geo+json" }));
       return dt;
     },
     { contents: text, fileName: `${name}.geojson` },
@@ -53,7 +47,5 @@ export async function dropGeoJson(
 
 /** The layer-panel row for a dropped GeoJSON layer, keyed by its base name. */
 export function layerRow(page: Page, name: string) {
-  return page.locator(
-    `[data-testid="layer-row"][data-layer-name="${name}"]`,
-  );
+  return page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`);
 }

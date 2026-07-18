@@ -1,12 +1,7 @@
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Database, SqlJsStatic } from "sql.js";
 import { decodeWkb } from "./geometry-wkb";
-import {
-  loadSqlJs,
-  looksLikeSqlite,
-  quoteIdentifier,
-  tableExists,
-} from "./gpkg-ogr-contents";
+import { loadSqlJs, looksLikeSqlite, quoteIdentifier, tableExists } from "./gpkg-ogr-contents";
 
 /**
  * Read GeoPackages with sql.js (SQLite/WASM) instead of DuckDB's `ST_Read`.
@@ -108,9 +103,7 @@ function selectLayer(db: Database): GeoPackageLayer | null {
   const srsId = row[2] == null ? null : Number(row[2]);
 
   let idColumn: string | null = null;
-  for (const info of db.exec(
-    `PRAGMA table_info(${quoteIdentifier(table)})`,
-  )[0]?.values ?? []) {
+  for (const info of db.exec(`PRAGMA table_info(${quoteIdentifier(table)})`)[0]?.values ?? []) {
     // table_info columns: cid, name, type, notnull, dflt_value, pk.
     if (info[5] === 1) idColumn = String(info[1]);
   }
@@ -151,8 +144,7 @@ function resolveEpsgCode(db: Database, srsId: number | null): number | null {
 
 /** Count a layer's rows without materializing them (for the large-dataset guard). */
 function countLayerRows(db: Database, table: string): number {
-  const row = db.exec(`SELECT count(*) FROM ${quoteIdentifier(table)}`)[0]
-    ?.values[0];
+  const row = db.exec(`SELECT count(*) FROM ${quoteIdentifier(table)}`)[0]?.values[0];
   return Number(row?.[0] ?? 0);
 }
 
@@ -229,10 +221,7 @@ function readGeoPackage(db: Database): GeoPackageReadResult {
  * the first layer into a GeoJSON FeatureCollection. Separated so it can be
  * unit-tested with an already-initialised sql.js factory.
  */
-export function readGeoPackageSync(
-  SQL: SqlJsStatic,
-  bytes: Uint8Array,
-): GeoPackageReadResult {
+export function readGeoPackageSync(SQL: SqlJsStatic, bytes: Uint8Array): GeoPackageReadResult {
   const db = new SQL.Database(bytes);
   try {
     return readGeoPackage(db);
@@ -264,9 +253,7 @@ export interface GeoPackageLayerCount {
  * Invoked with the first layer's feature count before its rows are read, so a
  * caller can prompt about a large dataset. Throw (or reject) to abort the load.
  */
-export type LargeGeoPackageGuard = (
-  count: GeoPackageLayerCount,
-) => void | Promise<void>;
+export type LargeGeoPackageGuard = (count: GeoPackageLayerCount) => void | Promise<void>;
 
 /**
  * Read a GeoPackage buffer into a GeoJSON FeatureCollection via sql.js,

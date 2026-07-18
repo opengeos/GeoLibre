@@ -20,10 +20,7 @@ test("rejects a malformed GeoJSON drop and stays usable", async ({ page }) => {
   // (`data-drop-error="true"`) once the async parse pipeline has actually run and
   // failed. Asserting the negative row count only after this avoids the trivial
   // "passes because the row never existed yet" race the reviewers flagged.
-  await expect(page.getByTestId("drop-status")).toHaveAttribute(
-    "data-drop-error",
-    "true",
-  );
+  await expect(page.getByTestId("drop-status")).toHaveAttribute("data-drop-error", "true");
   await expect(layerRow(page, "malformed")).toHaveCount(0);
   // The app shell survived the failure — the map is still mounted.
   await expect(page.getByTestId("map-canvas")).toBeVisible();

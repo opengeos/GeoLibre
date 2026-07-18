@@ -34,10 +34,7 @@ export function CollapsibleSection({
       >
         <ChevronRight
           aria-hidden
-          className={cn(
-            "h-3.5 w-3.5 transition-transform",
-            open ? "rotate-90" : "rtl:rotate-180",
-          )}
+          className={cn("h-3.5 w-3.5 transition-transform", open ? "rotate-90" : "rtl:rotate-180")}
         />
         {title}
       </button>

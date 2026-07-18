@@ -1,9 +1,5 @@
 import { geocodeReverse } from "@geolibre/core";
-import type {
-  Map as MapLibreMap,
-  MapMouseEvent,
-  Popup,
-} from "maplibre-gl";
+import type { Map as MapLibreMap, MapMouseEvent, Popup } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 /**
@@ -55,17 +51,11 @@ let labels: ReverseGeocodeLabels = {
 };
 
 /** Override the popup strings (called from the app layer with translated text). */
-export function setReverseGeocodeLabels(
-  next: Partial<ReverseGeocodeLabels>,
-): void {
+export function setReverseGeocodeLabels(next: Partial<ReverseGeocodeLabels>): void {
   labels = { ...labels, ...next };
 }
 
-function buildPopupContent(
-  title: string,
-  body: string,
-  copyLabel: string,
-): HTMLElement {
+function buildPopupContent(title: string, body: string, copyLabel: string): HTMLElement {
   // Build a DOM node rather than an HTML string so the geocoder's returned text
   // is set via textContent (never parsed as HTML) and the copy button's handler
   // can be bound directly.
@@ -127,13 +117,7 @@ async function showReverseGeocodePopup(
     const resolved = await geocodeReverse(lng, lat, { signal });
     if (requestToken !== lookupToken || !popup) return;
     const label = resolved?.displayName ?? labels.noAddress;
-    popup.setDOMContent(
-      buildPopupContent(
-        resolved?.displayName ?? "",
-        label,
-        labels.copyAddress,
-      ),
-    );
+    popup.setDOMContent(buildPopupContent(resolved?.displayName ?? "", label, labels.copyAddress));
   } catch {
     // A superseded/aborted request fails the token check and is ignored; only a
     // still-current failure surfaces the error text.
@@ -190,10 +174,7 @@ function teardown(app: GeoLibreAppAPI): void {
  * re-init. Mirrors `restoreDirections`: the desktop shell calls this after
  * restoring plugin state. Idempotent.
  */
-export function restoreReverseGeocode(
-  app: GeoLibreAppAPI,
-  active: boolean,
-): void {
+export function restoreReverseGeocode(app: GeoLibreAppAPI, active: boolean): void {
   if (!active) {
     teardown(app);
     return;

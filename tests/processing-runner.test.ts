@@ -51,8 +51,7 @@ describe("processing runner", () => {
     assert.equal(output.features.length, 2);
     assert.ok(
       output.features.every(
-        (f) =>
-          f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon",
+        (f) => f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon",
       ),
     );
   });
@@ -151,10 +150,7 @@ describe("processing runner", () => {
         },
       ],
     };
-    const results = await runModel(
-      model,
-      makeHost({ signal: controller.signal }),
-    );
+    const results = await runModel(model, makeHost({ signal: controller.signal }));
     assert.equal(results.length, 0);
   });
 

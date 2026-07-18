@@ -1,10 +1,4 @@
-import type {
-  Feature,
-  FeatureCollection,
-  GeoJsonProperties,
-  Geometry,
-  Position,
-} from "geojson";
+import type { Feature, FeatureCollection, GeoJsonProperties, Geometry, Position } from "geojson";
 
 /**
  * A minimal KML reader that, unlike the DuckDB/GDAL path, preserves the
@@ -161,13 +155,7 @@ function groundOverlayFromElement(element: Element): KmlGroundOverlay | null {
   // Reject a box outside WGS84 range (a malformed overlay); MapLibre's image
   // source would otherwise silently drop such corners, leaving an invisible
   // layer with no feedback.
-  if (
-    north > 90 ||
-    south < -90 ||
-    north < south ||
-    Math.abs(east) > 180 ||
-    Math.abs(west) > 180
-  ) {
+  if (north > 90 || south < -90 || north < south || Math.abs(east) > 180 || Math.abs(west) > 180) {
     return null;
   }
 
@@ -207,11 +195,7 @@ function parseKmlTime(element: Element): KmlTimeBounds | null {
   // KML time can be inherited: a `<TimeSpan>`/`<TimeStamp>` on an enclosing
   // `<Folder>`/`<Document>` applies to descendant features that lack their own,
   // so walk up until one is found (the overlay's own primitive wins).
-  for (
-    let node: Element | null = element;
-    node;
-    node = node.parentElement
-  ) {
+  for (let node: Element | null = element; node; node = node.parentElement) {
     const span = directChild(node, "TimeSpan");
     if (span) {
       const begin = parseKmlDate(childText(span, "begin"));
@@ -287,10 +271,7 @@ export function latLonBoxCorners(
   return corners.map(([lng, lat]): [number, number] => {
     const dx = (lng - centerLng) * latScale;
     const dy = lat - centerLat;
-    return [
-      centerLng + (dx * cos - dy * sin) / latScale,
-      centerLat + (dx * sin + dy * cos),
-    ];
+    return [centerLng + (dx * cos - dy * sin) / latScale, centerLat + (dx * sin + dy * cos)];
   });
 }
 
@@ -363,11 +344,8 @@ function modelFromElement(element: Element): KmlModel | null {
   // <altitude> (common in SketchUp/Google Earth exports) leaves the model
   // floating in the air.
   const altitudeMode = childText(element, "altitudeMode")?.toLowerCase();
-  const honorsAltitude =
-    altitudeMode === "absolute" || altitudeMode === "relativetoground";
-  const altitude = honorsAltitude
-    ? numberOr(location && childText(location, "altitude"), 0)
-    : 0;
+  const honorsAltitude = altitudeMode === "absolute" || altitudeMode === "relativetoground";
+  const altitude = honorsAltitude ? numberOr(location && childText(location, "altitude"), 0) : 0;
 
   const orientation = directChild(element, "Orientation");
   const heading = numberOr(orientation && childText(orientation, "heading"), 0);
@@ -464,10 +442,7 @@ function collectStyles(root: Element): Map<string, KmlStyle> {
 // `<Pair>` may carry an inline `<Style>` instead of a `<styleUrl>` (KML 2.2
 // §12.2); that inline style is registered in `styles` under a synthetic id so
 // the lookup path in `resolvePlacemarkStyle` stays uniform.
-function collectStyleMaps(
-  root: Element,
-  styles: Map<string, KmlStyle>,
-): Map<string, string> {
+function collectStyleMaps(root: Element, styles: Map<string, KmlStyle>): Map<string, string> {
   const styleMaps = new Map<string, string>();
   for (const element of descendants(root, "StyleMap")) {
     const id = element.getAttribute("id");
@@ -533,9 +508,7 @@ function styleFromElement(element: Element): KmlStyle {
  * simplestyle `#rrggbb` color plus an opacity in [0, 1]. Returns null when the
  * value is missing or malformed.
  */
-function parseKmlColor(
-  value: string | undefined,
-): { color: string; opacity: number } | null {
+function parseKmlColor(value: string | undefined): { color: string; opacity: number } | null {
   if (!value) return null;
   const hex = value.trim().toLowerCase();
   if (!/^[0-9a-f]{8}$/.test(hex)) return null;
@@ -576,15 +549,11 @@ function geometryFromElement(element: Element): Geometry | null {
   switch (element.localName.toLowerCase()) {
     case "point": {
       const coordinates = coordinateList(element);
-      return coordinates.length > 0
-        ? { type: "Point", coordinates: coordinates[0] }
-        : null;
+      return coordinates.length > 0 ? { type: "Point", coordinates: coordinates[0] } : null;
     }
     case "linestring": {
       const coordinates = coordinateList(element);
-      return coordinates.length >= 2
-        ? { type: "LineString", coordinates }
-        : null;
+      return coordinates.length >= 2 ? { type: "LineString", coordinates } : null;
     }
     // A standalone LinearRing (outside a Polygon boundary) is semantically a
     // closed loop, so emit it as a single-ring Polygon and close it defensively.
@@ -695,9 +664,7 @@ function descendants(parent: Element, localName: string): Element[] {
 
 function directChildren(parent: Element, localName: string): Element[] {
   const target = localName.toLowerCase();
-  return Array.from(parent.children).filter(
-    (child) => child.localName.toLowerCase() === target,
-  );
+  return Array.from(parent.children).filter((child) => child.localName.toLowerCase() === target);
 }
 
 function directChild(parent: Element, localName: string): Element | undefined {

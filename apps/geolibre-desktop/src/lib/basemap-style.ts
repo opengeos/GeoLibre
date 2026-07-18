@@ -95,10 +95,7 @@ const BASEMAP_SELECT_FIXES = `
 }
 `;
 
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById(BASEMAP_STYLE_ID)
-) {
+if (typeof document !== "undefined" && !document.getElementById(BASEMAP_STYLE_ID)) {
   const style = document.createElement("style");
   style.id = BASEMAP_STYLE_ID;
   style.textContent = BASEMAP_SELECT_FIXES;
@@ -113,26 +110,18 @@ const closeBasemapSelectMenu = () => {
   openMenu?.remove();
   openMenu = null;
   document
-    .querySelectorAll<HTMLButtonElement>(
-      `.${BASEMAP_SELECT_PROXY_CLASS}.is-open`,
-    )
+    .querySelectorAll<HTMLButtonElement>(`.${BASEMAP_SELECT_PROXY_CLASS}.is-open`)
     .forEach((button) => {
       button.classList.remove("is-open");
       button.setAttribute("aria-expanded", "false");
     });
 };
 
-const syncBasemapSelectProxy = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const syncBasemapSelectProxy = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   button.textContent = select.options[select.selectedIndex]?.text ?? "";
 };
 
-const openBasemapSelectMenu = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const openBasemapSelectMenu = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   closeBasemapSelectMenu();
   syncBasemapSelectProxy(select, button);
 
@@ -165,9 +154,7 @@ const openBasemapSelectMenu = (
     menu.appendChild(item);
   });
 
-  const items = Array.from(
-    menu.querySelectorAll<HTMLButtonElement>("button"),
-  );
+  const items = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
   menu.addEventListener("click", (event) => event.stopPropagation());
   menu.addEventListener("keydown", (event) => {
     const current = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -226,18 +213,14 @@ const enhanceBasemapSelect = (select: HTMLSelectElement) => {
     if (event.key === "Escape") closeBasemapSelectMenu();
   });
 
-  select.addEventListener("change", () =>
-    syncBasemapSelectProxy(select, button),
-  );
+  select.addEventListener("change", () => syncBasemapSelectProxy(select, button));
   select.classList.add("is-proxied");
   select.insertAdjacentElement("afterend", button);
 };
 
 const enhanceBasemapSelects = () => {
   document
-    .querySelectorAll<HTMLSelectElement>(
-      ".basemap-control-panel .basemap-control-select",
-    )
+    .querySelectorAll<HTMLSelectElement>(".basemap-control-panel .basemap-control-select")
     .forEach(enhanceBasemapSelect);
 };
 

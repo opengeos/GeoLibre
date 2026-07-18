@@ -1,6 +1,7 @@
 """Named MapLibre basemap styles for the GeoLibre Python API."""
 
 from __future__ import annotations
+
 from types import MappingProxyType
 from typing import Final, Mapping
 from urllib.parse import urlparse
@@ -56,6 +57,5 @@ def resolve_basemap(basemap: str) -> str:
     except KeyError as exc:
         available = ", ".join(sorted(BASEMAPS))
         raise ValueError(
-            f"Unknown basemap {basemap!r}. "
-            f"Expected a style URL or one of: {available}"
+            f"Unknown basemap {basemap!r}. Expected a style URL or one of: {available}"
         ) from exc

@@ -250,9 +250,7 @@ def test_write_updates_inserts_and_deletes(live_table) -> None:
     edited = [f for f in features if f is not memphis] + [chattanooga]
 
     result = postgis_write(
-        PostgisWriteRequest(
-            connection=LIVE_DSN, table=TABLE, geojson=_collection(edited)
-        )
+        PostgisWriteRequest(connection=LIVE_DSN, table=TABLE, geojson=_collection(edited))
     )
     # Only the actually-edited row is rewritten; the untouched one is skipped.
     assert result["updated"] == 1
@@ -280,9 +278,7 @@ def test_write_skips_unchanged_rows(live_table) -> None:
     """Saving an untouched layer must not rewrite (or delete) any row."""
     read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
     result = postgis_write(
-        PostgisWriteRequest(
-            connection=LIVE_DSN, table=TABLE, geojson=read["geojson"]
-        )
+        PostgisWriteRequest(connection=LIVE_DSN, table=TABLE, geojson=read["geojson"])
     )
     assert result["updated"] == 0
     assert result["inserted"] == 0
@@ -295,9 +291,7 @@ def test_write_reports_skipped_columns(live_table) -> None:
     features = read["geojson"]["features"]
     features[0]["properties"]["added_in_editor"] = "not a column"
     result = postgis_write(
-        PostgisWriteRequest(
-            connection=LIVE_DSN, table=TABLE, geojson=_collection(features)
-        )
+        PostgisWriteRequest(connection=LIVE_DSN, table=TABLE, geojson=_collection(features))
     )
     assert any("added_in_editor" in message for message in result["messages"])
     # Also exposed structurally so clients can build a translated warning.
@@ -314,9 +308,7 @@ def test_write_rolls_back_on_failure(live_table) -> None:
     features[1]["properties"]["name"] = None
     with pytest.raises(HTTPException) as exc:
         postgis_write(
-            PostgisWriteRequest(
-                connection=LIVE_DSN, table=TABLE, geojson=_collection(features)
-            )
+            PostgisWriteRequest(connection=LIVE_DSN, table=TABLE, geojson=_collection(features))
         )
     assert exc.value.status_code == 400
     rows = _rows(f"SELECT name, population FROM {TABLE} ORDER BY name")
@@ -331,9 +323,7 @@ def test_write_null_pk_property_falls_back_to_feature_id(live_table) -> None:
     features = read["geojson"]["features"]
     features[0]["properties"]["gid"] = None  # feature["id"] still carries the key
     result = postgis_write(
-        PostgisWriteRequest(
-            connection=LIVE_DSN, table=TABLE, geojson=_collection(features)
-        )
+        PostgisWriteRequest(connection=LIVE_DSN, table=TABLE, geojson=_collection(features))
     )
     # Matched as updates (none inserted or deleted); the key column itself is
     # never written, so no row values changed and all three are skipped.
@@ -388,9 +378,7 @@ def test_read_excludes_secondary_geometry_columns(live_table) -> None:
     """Extra geometry columns must not surface as (hex WKB) attributes."""
     with psycopg.connect(LIVE_DSN) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)"
-            )
+            cur.execute(f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)")
             cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Transform(geom, 4326)")
         conn.commit()
     read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
@@ -436,9 +424,7 @@ def test_write_diffs_correctly_with_uuid_primary_key(live_table) -> None:
         original_ids = sorted(f["properties"]["id"] for f in features)
         features[0]["properties"]["name"] = "a-edited"
         result = postgis_write(
-            PostgisWriteRequest(
-                connection=LIVE_DSN, table=table, geojson=_collection(features)
-            )
+            PostgisWriteRequest(connection=LIVE_DSN, table=table, geojson=_collection(features))
         )
         # A str-vs-UUID mismatch would report 0 updated, 2 inserted, 2 deleted.
         assert result["updated"] == 1  # the edited row; the untouched one skips
@@ -568,9 +554,7 @@ def test_native_array_and_jsonb_columns_round_trip(live_table) -> None:
             )
         )
         assert result["updated"] == 1
-        rows = _rows(
-            f"SELECT tags[3], attrs->>'k', pg_typeof(tags)::text FROM {table}"
-        )
+        rows = _rows(f"SELECT tags[3], attrs->>'k', pg_typeof(tags)::text FROM {table}")
         assert rows == [("c", "2", "text[]")]
     finally:
         with psycopg.connect(LIVE_DSN) as conn:

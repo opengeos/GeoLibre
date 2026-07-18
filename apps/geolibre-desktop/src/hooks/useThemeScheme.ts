@@ -8,12 +8,8 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
  * this hook sets the accent scheme on top of it.
  */
 export function useThemeScheme(): void {
-  const scheme = useDesktopSettingsStore(
-    (state) => state.desktopSettings.theme.scheme,
-  );
-  const customColor = useDesktopSettingsStore(
-    (state) => state.desktopSettings.theme.customColor,
-  );
+  const scheme = useDesktopSettingsStore((state) => state.desktopSettings.theme.scheme);
+  const customColor = useDesktopSettingsStore((state) => state.desktopSettings.theme.customColor);
 
   useLayoutEffect(() => {
     applyThemeScheme(scheme, customColor);

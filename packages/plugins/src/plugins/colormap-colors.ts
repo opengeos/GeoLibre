@@ -38,9 +38,7 @@ export function colormapColors(name: string): readonly string[] | null {
  * @param name - The colormap name.
  * @returns The resolved colors, or null on failure.
  */
-export function warmColormapColors(
-  name: string,
-): Promise<readonly string[] | null> {
+export function warmColormapColors(name: string): Promise<readonly string[] | null> {
   const known = colormapColors(name);
   if (known) return Promise.resolve(known);
   let pending = inflight.get(name);

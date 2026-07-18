@@ -80,10 +80,7 @@ export function resolveThreeDTilesRequestHeaders(
 ): Record<string, string> | undefined {
   if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
   const nonGoogleHeaders = stripGoogleMapsApiKeyHeader(headers);
-  const apiKey =
-    googleMapsApiKeyHeaderValue(headers) ??
-    googleMapsApiKey ??
-    getGoogleMapsApiKey();
+  const apiKey = googleMapsApiKeyHeaderValue(headers) ?? googleMapsApiKey ?? getGoogleMapsApiKey();
   if (!apiKey) return nonEmptyRecord(nonGoogleHeaders);
   return {
     ...(nonGoogleHeaders ?? {}),

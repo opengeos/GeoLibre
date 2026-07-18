@@ -61,7 +61,7 @@ describe("buildProjectHtml", () => {
   it("escapes the title to prevent HTML injection", () => {
     const html = buildProjectHtml({
       project: PROJECT,
-      title: "<b>hi</b> & \"q\"",
+      title: '<b>hi</b> & "q"',
     });
     assert.match(html, /<title>&lt;b&gt;hi&lt;\/b&gt; &amp; &quot;q&quot;<\/title>/);
     assert.ok(!html.includes("<b>hi</b>"));
@@ -74,10 +74,7 @@ describe("buildProjectHtml", () => {
       appUrl: "https://example.com/app?lang=fr",
     });
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
-    assert.match(
-      html,
-      /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/,
-    );
+    assert.match(html, /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/);
   });
 
   it("falls back to the default viewer for an unsafe appUrl", () => {
@@ -127,10 +124,7 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://example.com/app#/view",
     });
-    assert.match(
-      html,
-      /src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/,
-    );
+    assert.match(html, /src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/);
   });
 
   it("accepts calc() dimensions with division", () => {
@@ -149,8 +143,7 @@ describe("buildProjectHtml", () => {
       /Invalid CSS width/,
     );
     assert.throws(
-      () =>
-        buildProjectHtml({ project: PROJECT, title: "T", height: "1px;color:red" }),
+      () => buildProjectHtml({ project: PROJECT, title: "T", height: "1px;color:red" }),
       /Invalid CSS height/,
     );
   });
@@ -170,25 +163,13 @@ describe("resolveViewerBaseUrl", () => {
   });
 
   it("accepts HTTP only on loopback", () => {
-    assert.equal(
-      resolveViewerBaseUrl("http://localhost:5173/"),
-      "http://localhost:5173/",
-    );
-    assert.equal(
-      resolveViewerBaseUrl("http://127.0.0.1:5173/"),
-      "http://127.0.0.1:5173/",
-    );
+    assert.equal(resolveViewerBaseUrl("http://localhost:5173/"), "http://localhost:5173/");
+    assert.equal(resolveViewerBaseUrl("http://127.0.0.1:5173/"), "http://127.0.0.1:5173/");
   });
 
   it("rejects plaintext HTTP on a public host and lookalike loopback", () => {
-    assert.equal(
-      resolveViewerBaseUrl("http://example.com/"),
-      DEFAULT_VIEWER_BASE_URL,
-    );
-    assert.equal(
-      resolveViewerBaseUrl("http://localhost.evil.com/"),
-      DEFAULT_VIEWER_BASE_URL,
-    );
+    assert.equal(resolveViewerBaseUrl("http://example.com/"), DEFAULT_VIEWER_BASE_URL);
+    assert.equal(resolveViewerBaseUrl("http://localhost.evil.com/"), DEFAULT_VIEWER_BASE_URL);
     assert.equal(resolveViewerBaseUrl("not a url"), DEFAULT_VIEWER_BASE_URL);
   });
 });

@@ -15,10 +15,7 @@ function utf8(bytes: Uint8Array | undefined): string {
 // A minimal fake fetch returning a 206 over a fixed buffer, recording the Range.
 function fakeRangeFetch(buffer: Uint8Array) {
   const calls: { url: string; range?: string }[] = [];
-  const fetchImpl = async (
-    url: string,
-    init?: { headers?: Record<string, string> }
-  ) => {
+  const fetchImpl = async (url: string, init?: { headers?: Record<string, string> }) => {
     const range = init?.headers?.Range;
     calls.push({ url, range });
     let slice = buffer;
@@ -29,10 +26,7 @@ function fakeRangeFetch(buffer: Uint8Array) {
     return {
       status: range ? 206 : 200,
       arrayBuffer: async () =>
-        slice.buffer.slice(
-          slice.byteOffset,
-          slice.byteOffset + slice.byteLength
-        ),
+        slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength),
     };
   };
   return { fetchImpl, calls };
@@ -69,7 +63,7 @@ describe("KerchunkReferenceStore.get", () => {
     const { fetchImpl, calls } = fakeRangeFetch(file);
     const store = new KerchunkReferenceStore(
       { "air/0.0.0": ["http://data/air.nc", 2, 3] },
-      { fetchImpl }
+      { fetchImpl },
     );
     const bytes = await store.get("air/0.0.0");
     assert.deepEqual([...bytes!], [12, 13, 14]);
@@ -84,27 +78,21 @@ describe("KerchunkReferenceStore.get", () => {
     });
     const store = new KerchunkReferenceStore(
       { "air/0.0.0": ["http://data/air.nc", 2, 3] },
-      { fetchImpl }
+      { fetchImpl },
     );
-    await assert.rejects(
-      () => store.get("air/0.0.0"),
-      /Kerchunk range read failed/
-    );
+    await assert.rejects(() => store.get("air/0.0.0"), /Kerchunk range read failed/);
   });
 
   it("merges custom headers into range requests", async () => {
     const { fetchImpl, calls } = fakeRangeFetch(new Uint8Array([0, 0, 0, 0]));
     const captured: Record<string, string>[] = [];
-    const wrapped = async (
-      url: string,
-      init?: { headers?: Record<string, string> }
-    ) => {
+    const wrapped = async (url: string, init?: { headers?: Record<string, string> }) => {
       captured.push(init?.headers ?? {});
       return fetchImpl(url, init);
     };
     const store = new KerchunkReferenceStore(
       { "v/0": ["http://d/x", 0, 2] },
-      { fetchImpl: wrapped, headers: { Authorization: "Bearer t" } }
+      { fetchImpl: wrapped, headers: { Authorization: "Bearer t" } },
     );
     await store.get("v/0");
     assert.equal(captured[0].Authorization, "Bearer t");
@@ -133,19 +121,15 @@ describe("normalizeKerchunkReference", () => {
   it("resolves relative chunk URLs against the reference URL", () => {
     const refs = normalizeKerchunkReference(
       { version: 1, refs: { "air/0.0.0": ["air.nc", 10, 20] } },
-      "https://host.example/data/air.kerchunk.json"
+      "https://host.example/data/air.kerchunk.json",
     );
-    assert.deepEqual(refs["air/0.0.0"], [
-      "https://host.example/data/air.nc",
-      10,
-      20,
-    ]);
+    assert.deepEqual(refs["air/0.0.0"], ["https://host.example/data/air.nc", 10, 20]);
   });
 
   it("leaves absolute chunk URLs unchanged", () => {
     const refs = normalizeKerchunkReference(
       { version: 1, refs: { "air/0.0.0": ["s3://bucket/air.nc", 1, 2] } },
-      "https://host.example/ref.json"
+      "https://host.example/ref.json",
     );
     assert.equal((refs["air/0.0.0"] as string[])[0], "s3://bucket/air.nc");
   });
@@ -158,7 +142,7 @@ describe("normalizeKerchunkReference", () => {
           refs: {},
           templates: { u: "http://d/{}" },
         }),
-      /templated/i
+      /templated/i,
     );
   });
 
@@ -174,7 +158,7 @@ describe("normalizeKerchunkReference", () => {
   it("does not resolve an empty chunk URL to the manifest itself", () => {
     const refs = normalizeKerchunkReference(
       { version: 1, refs: { "air/0.0.0": ["", 0, 5] } },
-      "https://host.example/ref.json"
+      "https://host.example/ref.json",
     );
     assert.equal((refs["air/0.0.0"] as [string, number, number])[0], "");
   });
@@ -186,7 +170,7 @@ describe("normalizeKerchunkReference", () => {
           version: 1,
           refs: { "air/0.0.0": ["air.nc", 10] as unknown as [string] },
         }),
-      /got 2/
+      /got 2/,
     );
   });
 
@@ -196,14 +180,10 @@ describe("normalizeKerchunkReference", () => {
         normalizeKerchunkReference({
           version: 1,
           refs: {
-            "air/0.0.0": ["air.nc", "x", 5] as unknown as [
-              string,
-              number,
-              number,
-            ],
+            "air/0.0.0": ["air.nc", "x", 5] as unknown as [string, number, number],
           },
         }),
-      /must be numbers/
+      /must be numbers/,
     );
   });
 
@@ -214,15 +194,12 @@ describe("normalizeKerchunkReference", () => {
           version: 1,
           refs: { "air/.zattrs": 42 as unknown as string },
         }),
-      /unexpected value type/
+      /unexpected value type/,
     );
   });
 
   it("throws when there are no refs", () => {
-    assert.throws(
-      () => normalizeKerchunkReference({ version: 1 }),
-      /no `refs`/
-    );
+    assert.throws(() => normalizeKerchunkReference({ version: 1 }), /no `refs`/);
   });
 });
 
@@ -240,7 +217,7 @@ describe("listKerchunkVariables", () => {
     const vars = listKerchunkVariables(refs);
     assert.deepEqual(
       vars.map((v) => v.name),
-      ["air"]
+      ["air"],
     );
   });
 
@@ -259,8 +236,7 @@ describe("loadKerchunkReference", () => {
     });
     const fetchImpl = async () => ({
       status: 200,
-      arrayBuffer: async () =>
-        new TextEncoder().encode(doc).buffer as ArrayBuffer,
+      arrayBuffer: async () => new TextEncoder().encode(doc).buffer as ArrayBuffer,
     });
     const refs = await loadKerchunkReference("https://h.example/d/ref.json", {
       fetchImpl,
@@ -270,16 +246,12 @@ describe("loadKerchunkReference", () => {
 
   it("forwards custom headers to the manifest fetch", async () => {
     const seen: Array<Record<string, string> | undefined> = [];
-    const fetchImpl = async (
-      _url: string,
-      init?: { headers?: Record<string, string> }
-    ) => {
+    const fetchImpl = async (_url: string, init?: { headers?: Record<string, string> }) => {
       seen.push(init?.headers);
       return {
         status: 200,
         arrayBuffer: async () =>
-          new TextEncoder().encode(JSON.stringify({ version: 1, refs: {} }))
-            .buffer as ArrayBuffer,
+          new TextEncoder().encode(JSON.stringify({ version: 1, refs: {} })).buffer as ArrayBuffer,
       };
     };
     await loadKerchunkReference("https://h.example/d/ref.json", {
@@ -296,19 +268,18 @@ describe("loadKerchunkReference", () => {
     });
     await assert.rejects(
       () => loadKerchunkReference("https://h/ref.json", { fetchImpl }),
-      /HTTP 404/
+      /HTTP 404/,
     );
   });
 
   it("rejects when the response body is not valid JSON", async () => {
     const fetchImpl = async () => ({
       status: 200,
-      arrayBuffer: async () =>
-        new TextEncoder().encode("not json").buffer as ArrayBuffer,
+      arrayBuffer: async () => new TextEncoder().encode("not json").buffer as ArrayBuffer,
     });
     await assert.rejects(
       () => loadKerchunkReference("https://h/ref.json", { fetchImpl }),
-      SyntaxError
+      SyntaxError,
     );
   });
 });

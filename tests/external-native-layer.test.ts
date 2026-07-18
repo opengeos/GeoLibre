@@ -93,10 +93,7 @@ describe("createExternalNativeStoreLayer", () => {
       metadata: {},
     };
 
-    const layer = createExternalNativeStoreLayer(
-      baseRegistration({ opacity: 0.5 }),
-      existing,
-    );
+    const layer = createExternalNativeStoreLayer(baseRegistration({ opacity: 0.5 }), existing);
 
     assert.equal(layer.opacity, 0.5);
   });
@@ -130,10 +127,7 @@ describe("createExternalNativeStoreLayer", () => {
       metadata: {},
     };
 
-    const layer = createExternalNativeStoreLayer(
-      baseRegistration({ opacity: 0.8 }),
-      existing,
-    );
+    const layer = createExternalNativeStoreLayer(baseRegistration({ opacity: 0.8 }), existing);
 
     assert.equal(layer.opacity, 0.8);
   });
@@ -146,10 +140,7 @@ describe("createExternalNativeStoreLayer", () => {
     assert.equal(layer.style.fillColor, "#123456");
     assert.equal(layer.style.strokeColor, DEFAULT_LAYER_STYLE.strokeColor);
     assert.equal(layer.metadata?.externalNativeLayer, true);
-    assert.deepEqual(layer.metadata?.nativeLayerIds, [
-      "plugin-layer-fill",
-      "plugin-layer-outline",
-    ]);
+    assert.deepEqual(layer.metadata?.nativeLayerIds, ["plugin-layer-fill", "plugin-layer-outline"]);
   });
 
   it("preserves existing visibility when false", () => {

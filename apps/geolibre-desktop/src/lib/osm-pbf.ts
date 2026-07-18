@@ -53,11 +53,7 @@ type MutableBounds = [number, number, number, number];
 function extendBounds(bounds: MutableBounds, geometry: Geometry | null): void {
   if (!geometry || geometry.type === "GeometryCollection") return;
   const walk = (coords: unknown): void => {
-    if (
-      Array.isArray(coords) &&
-      typeof coords[0] === "number" &&
-      typeof coords[1] === "number"
-    ) {
+    if (Array.isArray(coords) && typeof coords[0] === "number" && typeof coords[1] === "number") {
       const [x, y] = coords as [number, number];
       if (x < bounds[0]) bounds[0] = x;
       if (y < bounds[1]) bounds[1] = y;
@@ -88,9 +84,7 @@ async function buildOsmFromPbf(bytes: Uint8Array): Promise<Osm> {
   const osm = new Osm({ header });
 
   for await (const block of blocks) {
-    const blockStringIndexMap = osm.stringTable.createBlockIndexMap(
-      block.stringtable,
-    );
+    const blockStringIndexMap = osm.stringTable.createBlockIndexMap(block.stringtable);
     for (const group of block.primitivegroup) {
       const { ways, relations, dense } = group;
       if (dense) {
@@ -111,9 +105,7 @@ async function buildOsmFromPbf(bytes: Uint8Array): Promise<Osm> {
   return osm;
 }
 
-function geometryBucket(
-  geometry: Geometry | null,
-): "points" | "lines" | "polygons" | null {
+function geometryBucket(geometry: Geometry | null): "points" | "lines" | "polygons" | null {
   switch (geometry?.type) {
     case "Point":
     case "MultiPoint":
@@ -210,9 +202,7 @@ export async function parseOsmPbf(
     points: { type: "FeatureCollection", features: points },
     lines: { type: "FeatureCollection", features: lines },
     polygons: { type: "FeatureCollection", features: polygons },
-    bounds: Number.isFinite(bounds[0])
-      ? [bounds[0], bounds[1], bounds[2], bounds[3]]
-      : null,
+    bounds: Number.isFinite(bounds[0]) ? [bounds[0], bounds[1], bounds[2], bounds[3]] : null,
     counts: {
       nodes: osm.nodes.size,
       ways: osm.ways.size,

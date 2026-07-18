@@ -23,12 +23,8 @@
 const MOBILE_UA_PATTERN = /Android|iPhone|iPad|iPod/i;
 
 export function isMobile(
-  userAgent: string = typeof navigator !== "undefined"
-    ? navigator.userAgent
-    : "",
-  maxTouchPoints: number = typeof navigator !== "undefined"
-    ? navigator.maxTouchPoints
-    : 0,
+  userAgent: string = typeof navigator !== "undefined" ? navigator.userAgent : "",
+  maxTouchPoints: number = typeof navigator !== "undefined" ? navigator.maxTouchPoints : 0,
 ): boolean {
   if (MOBILE_UA_PATTERN.test(userAgent)) return true;
   // iPadOS 13+ requests desktop sites by default and spoofs a macOS UA; a real

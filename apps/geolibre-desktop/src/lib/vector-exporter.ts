@@ -8,9 +8,7 @@ export interface BinaryVectorExportResult {
   mimeType: string;
 }
 
-async function exportGeoParquet(
-  geojson: FeatureCollection,
-): Promise<Uint8Array> {
+async function exportGeoParquet(geojson: FeatureCollection): Promise<Uint8Array> {
   const { exportDuckDbGeoParquet } = await import("./duckdb-vector-loader");
   return exportDuckDbGeoParquet(geojson);
 }

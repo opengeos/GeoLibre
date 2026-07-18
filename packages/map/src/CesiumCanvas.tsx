@@ -6,11 +6,7 @@ import {
 } from "@geolibre/core";
 import type { Viewer } from "cesium";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import {
-  applyMapViewToCamera,
-  isSameView,
-  readMapViewFromCamera,
-} from "./cesium-camera";
+import { applyMapViewToCamera, isSameView, readMapViewFromCamera } from "./cesium-camera";
 import { CesiumLayerSync } from "./cesium-layer-sync";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
@@ -28,8 +24,7 @@ import { CesiumLayerSync } from "./cesium-layer-sync";
  * an absolute `/cesium` would 404 the Workers/Assets and crash the render loop.
  */
 const APP_BASE_URL =
-  (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL ??
-  "/";
+  (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/";
 const CESIUM_BASE_URL = `${APP_BASE_URL}cesium`;
 /** id for the one-time <link> to Cesium's widget stylesheet (served from base). */
 const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
@@ -69,10 +64,7 @@ function prepareCesiumEnvironment(): void {
  * the viewer is created exactly once in a dependency-free effect, torn down on
  * unmount, and its camera is kept in step with the shared store camera.
  */
-export const CesiumCanvas = memo(function CesiumCanvas({
-  viewId,
-  ionToken,
-}: CesiumCanvasProps) {
+export const CesiumCanvas = memo(function CesiumCanvas({ viewId, ionToken }: CesiumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Viewer | null>(null);
   const cesiumRef = useRef<typeof import("cesium") | null>(null);
@@ -103,9 +95,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   // camera when sync is on, otherwise this pane's own saved camera.
   const syncView = useAppStore((s) => s.mapLayout.syncView);
   const globalView = useAppStore((s) => s.mapView);
-  const entryView = useAppStore(
-    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.view,
-  );
+  const entryView = useAppStore((s) => s.secondaryMapViews.find((p) => p.id === viewId)?.view);
 
   // Layer sync inputs, mirrored from SecondaryMapCanvas: the shared layers with
   // this pane's per-layer visibility overrides, then group effects folded in.
@@ -250,10 +240,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({
 
         // Seed the camera from the shared store camera before the first frame.
         const state = useAppStore.getState();
-        const pane = state.secondaryMapViews.find(
-          (p) => p.id === viewIdRef.current,
-        );
-        applyView(state.mapLayout.syncView ? state.mapView : pane?.view ?? state.mapView);
+        const pane = state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
+        applyView(state.mapLayout.syncView ? state.mapView : (pane?.view ?? state.mapView));
 
         // Render the store layers on the globe before the first frame.
         layerSyncRef.current?.sync(paneLayersRef.current);
@@ -281,9 +269,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           if (live.mapLayout.syncView && !isSameView(view, live.mapView)) {
             live.setMapView(view, userDriven);
           }
-          const paneView = live.secondaryMapViews.find(
-            (p) => p.id === viewIdRef.current,
-          )?.view;
+          const paneView = live.secondaryMapViews.find((p) => p.id === viewIdRef.current)?.view;
           if (!paneView || !isSameView(view, paneView)) {
             live.setSecondaryMapView(viewIdRef.current, view, userDriven);
           }
@@ -350,11 +336,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   ]);
 
   return (
-    <div
-      className="relative h-full w-full"
-      data-testid="cesium-canvas"
-      data-view-id={viewId}
-    >
+    <div className="relative h-full w-full" data-testid="cesium-canvas" data-view-id={viewId}>
       <div ref={containerRef} className="h-full w-full" />
       {error ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-destructive">

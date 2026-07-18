@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  type LayerStyle,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
 
 // Stateful fake MapLibre map, mirroring tests/point-renderer-sync.test.ts: it
@@ -20,8 +16,7 @@ function makeMap() {
       calls.push({ method, args });
     };
   const map = {
-    getSource: (id: string) =>
-      sources.has(id) ? { setData: record("setData") } : undefined,
+    getSource: (id: string) => (sources.has(id) ? { setData: record("setData") } : undefined),
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
       calls.push({ method: "addSource", args: [id, spec] });
@@ -30,8 +25,7 @@ function makeMap() {
       sources.delete(id);
       calls.push({ method: "removeSource", args: [id] });
     },
-    getLayer: (id: string) =>
-      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       calls.push({ method: "addLayer", args: [spec, beforeId] });
@@ -144,11 +138,7 @@ describe("inverted fill sync", () => {
   it("falls back to the normal filtered fill while a time filter is active", () => {
     const { map, layers } = makeMap();
     const layer = polygonLayer({ invertedFillEnabled: true });
-    (layer as { timeFilter?: unknown[] }).timeFilter = [
-      ">=",
-      ["get", "t"],
-      0,
-    ];
+    (layer as { timeFilter?: unknown[] }).timeFilter = [">=", ["get", "t"], 0];
     syncLayer(map as never, layer);
     // The mask derives from raw features and cannot honor the filter, so the
     // normal (filtered) fill renders instead.
@@ -171,10 +161,7 @@ describe("inverted fill sync", () => {
 describe("line decoration sync", () => {
   it("adds a line-placed symbol layer with the decoration icon", () => {
     const { map, layers } = makeMap();
-    syncLayer(
-      map as never,
-      lineLayer({ lineDecoration: "arrow", lineDecorationSpacing: 120 }),
-    );
+    syncLayer(map as never, lineLayer({ lineDecoration: "arrow", lineDecorationSpacing: 120 }));
     const decoration = layers.get("layer-lines-line-decoration") as {
       type: string;
       layout: Record<string, unknown>;
@@ -183,10 +170,7 @@ describe("line decoration sync", () => {
     assert.equal(decoration.type, "symbol");
     assert.equal(decoration.layout["symbol-placement"], "line");
     assert.equal(decoration.layout["symbol-spacing"], 120);
-    assert.match(
-      String(decoration.layout["icon-image"]),
-      /^geolibre-line-decoration-arrow-/,
-    );
+    assert.match(String(decoration.layout["icon-image"]), /^geolibre-line-decoration-arrow-/);
     assert.equal(decoration.metadata["geolibre:internal"], true);
   });
 
@@ -228,14 +212,8 @@ describe("geometry generator sync", () => {
         geometryGeneratorBufferDistance: 5000,
       }),
     );
-    assert.equal(
-      (layers.get("layer-poly-generator-fill") as { type: string }).type,
-      "fill",
-    );
-    assert.equal(
-      (layers.get("layer-poly-generator-line") as { type: string }).type,
-      "line",
-    );
+    assert.equal((layers.get("layer-poly-generator-fill") as { type: string }).type, "fill");
+    assert.equal((layers.get("layer-poly-generator-line") as { type: string }).type, "line");
     assert.ok(!layers.has("layer-poly-generator-circle"));
   });
 
@@ -245,11 +223,7 @@ describe("geometry generator sync", () => {
     assert.ok(layers.has("layer-poly-generator-circle"));
 
     const filtered = polygonLayer({ geometryGenerator: "centroid" });
-    (filtered as { timeFilter?: unknown[] }).timeFilter = [
-      ">=",
-      ["get", "t"],
-      0,
-    ];
+    (filtered as { timeFilter?: unknown[] }).timeFilter = [">=", ["get", "t"], 0];
     syncLayer(map as never, filtered);
     // Derived features cannot honor the filter, so they are suppressed
     // rather than rendering hidden features.

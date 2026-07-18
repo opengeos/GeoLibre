@@ -32,12 +32,7 @@ type DeviceListener = (device: unknown) => void;
  * position stays visible above the 3D track it rides (see #1210).
  * Ordering WITHIN a source is whatever order that source supplies.
  */
-const SOURCE_DRAW_ORDER = [
-  "raster",
-  "google-3d-tiles",
-  "deckviz",
-  "route-anim",
-] as const;
+const SOURCE_DRAW_ORDER = ["raster", "google-3d-tiles", "deckviz", "route-anim"] as const;
 export type SharedDeckSource = (typeof SOURCE_DRAW_ORDER)[number];
 
 let overlay: MapboxOverlay | null = null;
@@ -79,9 +74,7 @@ let mountGaveUp = false;
  * @param app - The host application API.
  * @returns The shared overlay, or null when deck.gl is unavailable.
  */
-export function ensureSharedDeckOverlay(
-  app: GeoLibreAppAPI,
-): Promise<MapboxOverlay | null> {
+export function ensureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
   if (ensureInFlight) return ensureInFlight;
   ensureInFlight = runEnsureSharedDeckOverlay(app).finally(() => {
     ensureInFlight = null;
@@ -89,9 +82,7 @@ export function ensureSharedDeckOverlay(
   return ensureInFlight;
 }
 
-async function runEnsureSharedDeckOverlay(
-  app: GeoLibreAppAPI,
-): Promise<MapboxOverlay | null> {
+async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
   appRef = app;
   if (!app.getDeckGL) return null;
   deckGL ??= await app.getDeckGL();
@@ -150,10 +141,7 @@ async function runEnsureSharedDeckOverlay(
  * @param source - The producer key.
  * @param layers - That producer's deck layers, in its own draw order.
  */
-export function setSharedDeckLayers(
-  source: SharedDeckSource,
-  layers: Layer[],
-): void {
+export function setSharedDeckLayers(source: SharedDeckSource, layers: Layer[]): void {
   if (layers.length > 0) layersBySource.set(source, layers);
   else layersBySource.delete(source);
   renderSharedDeckOverlay();
@@ -220,11 +208,7 @@ function renderSharedDeckOverlay(): void {
 }
 
 function scheduleMountRetry(): void {
-  if (
-    mountRetryScheduled ||
-    mountGaveUp ||
-    typeof requestAnimationFrame === "undefined"
-  ) {
+  if (mountRetryScheduled || mountGaveUp || typeof requestAnimationFrame === "undefined") {
     return;
   }
   if (mountRetries >= MAX_MOUNT_RETRIES) {

@@ -1,8 +1,4 @@
-import {
-  type GeoLibreLayer,
-  type SelectionMode,
-  SELECTION_MODES,
-} from "@geolibre/core";
+import { type GeoLibreLayer, type SelectionMode, SELECTION_MODES } from "@geolibre/core";
 import { Label, Select, cn } from "@geolibre/ui";
 import type { ParseKeys } from "i18next";
 import { GripHorizontal, X } from "lucide-react";
@@ -66,10 +62,7 @@ export function SelectionFloatingPanel({
     // Keep the panel within the map area so it can't be dragged off-canvas.
     const x = Math.max(
       0,
-      Math.min(
-        event.clientX - dragOffset.current.x - bounds.left,
-        bounds.width - card.offsetWidth,
-      ),
+      Math.min(event.clientX - dragOffset.current.x - bounds.left, bounds.width - card.offsetWidth),
     );
     const y = Math.max(
       0,
@@ -117,9 +110,7 @@ export function SelectionFloatingPanel({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-3">
-          {children}
-        </div>
+        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-3">{children}</div>
       </div>
     </div>
   );
@@ -130,9 +121,7 @@ export function SelectionFloatingPanel({
  * features are present in the store. Matches the highlight/attribute-table
  * model, which resolves selection ids against `layer.geojson`.
  */
-export function selectableVectorLayers(
-  layers: GeoLibreLayer[],
-): GeoLibreLayer[] {
+export function selectableVectorLayers(layers: GeoLibreLayer[]): GeoLibreLayer[] {
   return layers.filter((layer) => (layer.geojson?.features?.length ?? 0) > 0);
 }
 
@@ -170,11 +159,7 @@ export function SelectionModeField({
         onChange={(event) => onChange(event.target.value as SelectionMode)}
       >
         {SELECTION_MODES.map((value) => (
-          <option
-            key={value}
-            value={value}
-            disabled={disableCombineModes && value !== "new"}
-          >
+          <option key={value} value={value} disabled={disableCombineModes && value !== "new"}>
             {t(SELECTION_MODE_LABEL_KEYS[value])}
           </option>
         ))}

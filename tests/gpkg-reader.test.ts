@@ -66,15 +66,16 @@ function buildGpkg(
     "INSERT INTO gpkg_contents (table_name, data_type, srs_id) VALUES ('places','features',:s)",
     { ":s": srsId },
   );
-  db.run(
-    "INSERT INTO gpkg_geometry_columns VALUES ('places','geom','GEOMETRY',:s,0,0)",
-    { ":s": srsId },
-  );
+  db.run("INSERT INTO gpkg_geometry_columns VALUES ('places','geom','GEOMETRY',:s,0,0)", {
+    ":s": srsId,
+  });
   if (options.srs) {
-    db.run(
-      "INSERT INTO gpkg_spatial_ref_sys VALUES (:n,:id,:org,:code,'','')",
-      { ":n": "custom", ":id": options.srs.id, ":org": options.srs.org, ":code": options.srs.code },
-    );
+    db.run("INSERT INTO gpkg_spatial_ref_sys VALUES (:n,:id,:org,:code,'','')", {
+      ":n": "custom",
+      ":id": options.srs.id,
+      ":org": options.srs.org,
+      ":code": options.srs.code,
+    });
   }
   for (const feature of features) {
     db.run("INSERT INTO places (geom, name) VALUES (:g, :n)", {
@@ -115,10 +116,7 @@ describe("stripGeoPackageHeader", () => {
     blob[0] = 0x47;
     blob[1] = 0x50;
     blob[3] = 5 << 1; // envelope indicator 5 (reserved) in bits 1-3
-    assert.throws(
-      () => stripGeoPackageHeader(blob),
-      /reserved envelope indicator 5/,
-    );
+    assert.throws(() => stripGeoPackageHeader(blob), /reserved envelope indicator 5/);
   });
 
   it("throws on a truncated header", () => {
@@ -141,7 +139,13 @@ describe("readGeoPackageSync", () => {
     const bytes = buildGpkg([
       { geometry: { type: "Point", coordinates: [-85.6, 42.9] }, name: "a" },
       {
-        geometry: { type: "LineString", coordinates: [[-85.6, 42.9], [-85.5, 43]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [-85.6, 42.9],
+            [-85.5, 43],
+          ],
+        },
         name: "b",
       },
     ]);
@@ -165,18 +169,18 @@ describe("readGeoPackageSync", () => {
   });
 
   it("reports a non-WGS84 EPSG code for reprojection", () => {
-    const bytes = buildGpkg(
-      [{ geometry: { type: "Point", coordinates: [1, 2] }, name: "a" }],
-      { srsId: 3857, srs: { id: 3857, org: "EPSG", code: 3857 } },
-    );
+    const bytes = buildGpkg([{ geometry: { type: "Point", coordinates: [1, 2] }, name: "a" }], {
+      srsId: 3857,
+      srs: { id: 3857, org: "EPSG", code: 3857 },
+    });
     assert.equal(readGeoPackageSync(SQL, bytes).epsgCode, 3857);
   });
 
   it("treats WGS84 3D (EPSG:4979) as needing no reprojection", () => {
-    const bytes = buildGpkg(
-      [{ geometry: { type: "Point", coordinates: [1, 2] }, name: "a" }],
-      { srsId: 4979, srs: { id: 4979, org: "EPSG", code: 4979 } },
-    );
+    const bytes = buildGpkg([{ geometry: { type: "Point", coordinates: [1, 2] }, name: "a" }], {
+      srsId: 4979,
+      srs: { id: 4979, org: "EPSG", code: 4979 },
+    });
     assert.equal(readGeoPackageSync(SQL, bytes).epsgCode, null);
   });
 

@@ -121,19 +121,14 @@ export function ExpressionBuilderDialog({
       }),
     [source, sampleFeature, zoom, variables, expectedType],
   );
-  const fieldTypes = useMemo(
-    () => inferFieldTypes(features, fieldNames),
-    [features, fieldNames],
-  );
+  const fieldTypes = useMemo(() => inferFieldTypes(features, fieldNames), [features, fieldNames]);
 
   const filteredCategories = useMemo(() => {
     const query = functionQuery.trim().toLowerCase();
     if (!query) return EXPRESSION_FUNCTION_CATEGORIES;
     return EXPRESSION_FUNCTION_CATEGORIES.map((category) => ({
       ...category,
-      functions: category.functions.filter((entry) =>
-        entry.name.toLowerCase().includes(query),
-      ),
+      functions: category.functions.filter((entry) => entry.name.toLowerCase().includes(query)),
     })).filter((category) => category.functions.length > 0);
   }, [functionQuery]);
 
@@ -179,9 +174,7 @@ export function ExpressionBuilderDialog({
     // also strips tolerated trailing commas that stricter downstream parsers
     // (e.g. the label expression check) would reject.
     const applied = validation.parsed
-      ? JSON.stringify(
-          substituteExpressionVariables(validation.parsed, variables),
-        )
+      ? JSON.stringify(substituteExpressionVariables(validation.parsed, variables))
       : "";
     onApply(applied);
     onOpenChange(false);
@@ -190,9 +183,7 @@ export function ExpressionBuilderDialog({
   const previewBody = () => {
     if (preview.kind === "empty") {
       return (
-        <p className="text-xs text-muted-foreground">
-          {t("style.expressionBuilder.previewEmpty")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("style.expressionBuilder.previewEmpty")}</p>
       );
     }
     if (preview.kind === "error") {
@@ -280,17 +271,13 @@ export function ExpressionBuilderDialog({
                 {shapeError ?? validation.errors.join("; ")}
               </p>
             ) : source.trim() ? (
-              <p className="text-xs text-muted-foreground">
-                {t("style.expressionBuilder.valid")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("style.expressionBuilder.valid")}</p>
             ) : null}
           </div>
 
           <div className="space-y-1.5 rounded-md border border-input p-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium">
-                {t("style.expressionBuilder.preview")}
-              </span>
+              <span className="text-xs font-medium">{t("style.expressionBuilder.preview")}</span>
               {features.length > 0 ? (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Button
@@ -318,9 +305,7 @@ export function ExpressionBuilderDialog({
                     title={t("style.expressionBuilder.nextFeature")}
                     aria-label={t("style.expressionBuilder.nextFeature")}
                     onClick={() =>
-                      setSampleIndex((index) =>
-                        Math.min(features.length - 1, index + 1),
-                      )
+                      setSampleIndex((index) => Math.min(features.length - 1, index + 1))
                     }
                   >
                     <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
@@ -337,9 +322,7 @@ export function ExpressionBuilderDialog({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <span className="text-xs font-medium">
-                {t("style.expressionBuilder.fields")}
-              </span>
+              <span className="text-xs font-medium">{t("style.expressionBuilder.fields")}</span>
               <ScrollArea className="h-44 rounded-md border border-input">
                 <div className="p-1">
                   {fieldNames.length === 0 ? (
@@ -387,9 +370,7 @@ export function ExpressionBuilderDialog({
                     filteredCategories.map((category) => (
                       <div key={category.key} className="mb-1">
                         <p className="px-2 py-1 text-[10px] font-medium uppercase text-muted-foreground">
-                          {t(
-                            `style.expressionBuilder.categories.${category.key}` as ParseKeys,
-                          )}
+                          {t(`style.expressionBuilder.categories.${category.key}` as ParseKeys)}
                         </p>
                         {category.functions.map((entry) => (
                           <button
@@ -412,9 +393,7 @@ export function ExpressionBuilderDialog({
             </div>
 
             <div className="space-y-1.5">
-              <span className="text-xs font-medium">
-                {t("style.expressionBuilder.variables")}
-              </span>
+              <span className="text-xs font-medium">{t("style.expressionBuilder.variables")}</span>
               <ScrollArea className="h-44 rounded-md border border-input">
                 <div className="p-1">
                   {variables.map((variable) => (
@@ -423,9 +402,7 @@ export function ExpressionBuilderDialog({
                       type="button"
                       className="block w-full rounded px-2 py-1 text-start text-xs hover:bg-accent"
                       title={String(variable.value)}
-                      onClick={() =>
-                        insertSnippet(JSON.stringify(variable.token))
-                      }
+                      onClick={() => insertSnippet(JSON.stringify(variable.token))}
                     >
                       <span className="font-mono">{variable.token}</span>
                       <span className="block truncate text-[10px] text-muted-foreground">
@@ -443,11 +420,7 @@ export function ExpressionBuilderDialog({
           </p>
 
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
             <Button type="button" disabled={!validation.ok} onClick={handleApply}>

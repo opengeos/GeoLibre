@@ -47,10 +47,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  BROWSER_PANEL_ID,
-  useRegisterBrowserPanel,
-} from "../../hooks/useRegisterBrowserPanel";
+import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import {
@@ -67,15 +64,9 @@ import {
   type DroppedRaster,
 } from "../../lib/tauri-io";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
-import {
-  isPhotoDropFileName,
-  type GeotaggedPhotoResult,
-} from "../../lib/geotagged-photos";
+import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
-import {
-  PANEL_RESIZE_END_EVENT,
-  PANEL_RESIZE_START_EVENT,
-} from "../../lib/panel-resize";
+import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 import i18n from "../../i18n";
 import {
   addOsmPbfLayers,
@@ -96,10 +87,7 @@ import {
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
-import {
-  hasKnowledgeCardConsent,
-  recordKnowledgeCardConsent,
-} from "../../lib/knowledge-consent";
+import { hasKnowledgeCardConsent, recordKnowledgeCardConsent } from "../../lib/knowledge-consent";
 import { wikipediaLang } from "../../lib/knowledge";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
@@ -120,22 +108,13 @@ import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { MapContextMenu } from "./MapContextMenu";
-import {
-  KnowledgeCardPanel,
-  type KnowledgePlace,
-} from "./KnowledgeCardPanel";
+import { KnowledgeCardPanel, type KnowledgePlace } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
-import {
-  appendDiagnostic,
-  useDiagnosticsSnapshot,
-} from "../../lib/diagnostics";
-import {
-  SectionErrorBoundary,
-  SilentErrorBoundary,
-} from "../common/error-boundaries";
+import { appendDiagnostic, useDiagnosticsSnapshot } from "../../lib/diagnostics";
+import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { RasterAttributeTable } from "../panels/RasterAttributeTable";
 import { BrowserPanel } from "../panels/BrowserPanel";
@@ -484,9 +463,7 @@ function layerNameFromPath(path: string): string {
   return fileNameFromPath(path).replace(/\.[^.]+$/, "") || "Vector Layer";
 }
 
-type ImportedVectorLayer = Awaited<
-  ReturnType<typeof loadDroppedVectorFiles>
->[number];
+type ImportedVectorLayer = Awaited<ReturnType<typeof loadDroppedVectorFiles>>[number];
 
 const DEFAULT_SIDE_PANEL_WIDTH = 320;
 const MIN_SIDE_PANEL_WIDTH = 180;
@@ -518,10 +495,7 @@ function initialSidePanelWidth(): number {
 }
 
 type ShellStyle = CSSProperties &
-  Record<
-    "--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width",
-    string
-  >;
+  Record<"--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width", string>;
 
 export function DesktopShell({
   layoutOptions,
@@ -593,11 +567,8 @@ export function DesktopShell({
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
   // `pendingKnowledgePlace` holds the target while the one-time consent notice
   // is open, so it can be applied only after the user acknowledges it.
-  const [knowledgePlace, setKnowledgePlace] = useState<KnowledgePlace | null>(
-    null,
-  );
-  const [pendingKnowledgePlace, setPendingKnowledgePlace] =
-    useState<KnowledgePlace | null>(null);
+  const [knowledgePlace, setKnowledgePlace] = useState<KnowledgePlace | null>(null);
+  const [pendingKnowledgePlace, setPendingKnowledgePlace] = useState<KnowledgePlace | null>(null);
   const [knowledgeNoticeOpen, setKnowledgeNoticeOpen] = useState(false);
   // Open a knowledge card for a clicked point, gating the first lookup behind a
   // one-time privacy notice since it sends the coordinate to Wikipedia.
@@ -625,16 +596,13 @@ export function DesktopShell({
   }, []);
   // The COG/WMS/XYZ layer whose bounding-box subset is being extracted in the
   // floating Extract Subset panel, or null when that panel is closed.
-  const [rasterSubsetLayer, setRasterSubsetLayer] =
-    useState<GeoLibreLayer | null>(null);
+  const [rasterSubsetLayer, setRasterSubsetLayer] = useState<GeoLibreLayer | null>(null);
   // Whether that layer still exists in the store; subscribe to the derived
   // boolean (not the whole layers array) so this large component only re-renders
   // when it flips. Close the panel if its layer is removed, matching how
   // LayerPanel clears its own per-layer dialog state.
   const rasterSubsetLayerExists = useAppStore((s) =>
-    rasterSubsetLayer
-      ? s.layers.some((layer) => layer.id === rasterSubsetLayer.id)
-      : true,
+    rasterSubsetLayer ? s.layers.some((layer) => layer.id === rasterSubsetLayer.id) : true,
   );
   useEffect(() => {
     if (rasterSubsetLayer && !rasterSubsetLayerExists) {
@@ -652,8 +620,7 @@ export function DesktopShell({
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
-  const { isActive: isPluginActive, toggle: togglePlugin } =
-    usePluginRegistry();
+  const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const addLayer = useAppStore((s) => s.addLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
@@ -680,9 +647,7 @@ export function DesktopShell({
   // Style (right) or Layers (left) sidebar surface (issue #765).
   const replaceStylePanelId = useReplaceStylePanelId();
   const replaceLayersPanelId = useReplaceLayersPanelId();
-  const [pluginPanelWidth, setPluginPanelWidth] = useState(
-    PLUGIN_PANEL_DEFAULT_WIDTH,
-  );
+  const [pluginPanelWidth, setPluginPanelWidth] = useState(PLUGIN_PANEL_DEFAULT_WIDTH);
   // The active plugin panel's content lives in this one host element (created
   // once per app instance). The active dock slot adopts it via appendChild, so
   // moving the panel between docks relocates the same DOM and preserves the
@@ -704,8 +669,7 @@ export function DesktopShell({
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
   // The dock slots adopt whichever host owns the active panel's content: the
   // Browser's dedicated portal host, or the shared imperative plugin host.
-  const dockContentEl =
-    activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
+  const dockContentEl = activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
   // Render the active panel into the shared host once; re-run when its
   // registration is replaced (re-registration refresh) but not on dock/collapse
   // changes. Keyed on the render function identity so that a plugin
@@ -739,9 +703,7 @@ export function DesktopShell({
   useEffect(() => {
     const panel = activePanelId ? getRightPanel(activePanelId) : undefined;
     if (!panel) return;
-    setPluginPanelWidth(
-      clampPluginPanelWidth(panel.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH),
-    );
+    setPluginPanelWidth(clampPluginPanelWidth(panel.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePanelId]);
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
@@ -768,9 +730,7 @@ export function DesktopShell({
   // so the dialog stays mounted in toolbar-hidden layouts.
   const collaboration = useCollaboration(mapControllerRef);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
-  const setCollaborateDialogOpen = useAppStore(
-    (s) => s.setCollaborateDialogOpen,
-  );
+  const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate
   // dialog (which prefills the code) so the recipient only picks a name and
   // joins, instead of having to find the Project menu first.
@@ -791,9 +751,7 @@ export function DesktopShell({
   useRasterIdentify();
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
-  const [notebookPanelWidth, setNotebookPanelWidth] = useState(
-    DEFAULT_NOTEBOOK_PANEL_WIDTH,
-  );
+  const [notebookPanelWidth, setNotebookPanelWidth] = useState(DEFAULT_NOTEBOOK_PANEL_WIDTH);
   // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
   // 50/50 between the map and the notebook: we size the notebook to half of the
   // space it shares with the map (the row width minus the layer panel and the
@@ -808,16 +766,12 @@ export function DesktopShell({
     const shellWidth = shellRef.current?.getBoundingClientRect().width ?? 0;
     if (shellWidth <= 0) return;
     const layerWidth = layoutOptions.layerPanelVisible ? layerPanelWidth : 0;
-    const styleRailWidth = layoutOptions.stylePanelVisible
-      ? COLLAPSED_PANEL_RAIL_WIDTH
-      : 0;
+    const styleRailWidth = layoutOptions.stylePanelVisible ? COLLAPSED_PANEL_RAIL_WIDTH : 0;
     const half = Math.round((shellWidth - layerWidth - styleRailWidth) / 2);
     // Honor the same min/max bounds as the drag-resize handler so the auto-size
     // and manual-resize paths cannot diverge (an ultrawide shell would otherwise
     // initialize past MAX, a width the user could never drag back to).
-    setNotebookPanelWidth(
-      clamp(half, MIN_NOTEBOOK_PANEL_WIDTH, MAX_NOTEBOOK_PANEL_WIDTH),
-    );
+    setNotebookPanelWidth(clamp(half, MIN_NOTEBOOK_PANEL_WIDTH, MAX_NOTEBOOK_PANEL_WIDTH));
   }, [
     notebookOpen,
     layoutOptions.layerPanelVisible,
@@ -843,9 +797,7 @@ export function DesktopShell({
   }, []);
 
   const ensureLayerGeojsonFromSource = useCallback(async (layerId: string) => {
-    const layer = useAppStore
-      .getState()
-      .layers.find((candidate) => candidate.id === layerId);
+    const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
     if (!layer || layer.geojson) return;
     const sourceIds = layer.metadata.sourceIds;
     const sourceId = Array.isArray(sourceIds) ? sourceIds[0] : undefined;
@@ -861,9 +813,7 @@ export function DesktopShell({
         typeof data === "object" &&
         (data as { type?: string }).type === "FeatureCollection"
       ) {
-        useAppStore
-          .getState()
-          .updateLayer(layerId, { geojson: data as FeatureCollection });
+        useAppStore.getState().updateLayer(layerId, { geojson: data as FeatureCollection });
       }
     } catch {
       // Best effort; startLayerGeometryEdit will fail and surface an error.
@@ -924,8 +874,7 @@ export function DesktopShell({
       // Guard against concurrent triggers (double-click, or two layers in quick
       // succession) so we do not add duplicate materialized layers.
       if (materializingRef.current) return;
-      const query =
-        typeof layer.metadata.query === "string" ? layer.metadata.query : null;
+      const query = typeof layer.metadata.query === "string" ? layer.metadata.query : null;
       if (!query) {
         setDropError("This DuckDB layer has no stored query to materialize.");
         clearDropMessageLater();
@@ -950,20 +899,12 @@ export function DesktopShell({
           throw new Error("The query did not return a geometry column.");
         }
         const id = addGeoJsonLayer(`${layer.name} (editable)`, result.geojson);
-        const created = useAppStore
-          .getState()
-          .layers.find((candidate) => candidate.id === id);
+        const created = useAppStore.getState().layers.find((candidate) => candidate.id === id);
         if (created) mapControllerRef.current?.fitLayer(created);
-        setDropMessage(
-          `Materialized ${result.geojson.features.length.toLocaleString()} features.`,
-        );
+        setDropMessage(`Materialized ${result.geojson.features.length.toLocaleString()} features.`);
       } catch (error) {
         setDropMessage(null);
-        setDropError(
-          error instanceof Error
-            ? error.message
-            : "Could not materialize this layer.",
-        );
+        setDropError(error instanceof Error ? error.message : "Could not materialize this layer.");
       } finally {
         materializingRef.current = false;
         clearDropMessageLater();
@@ -993,10 +934,7 @@ export function DesktopShell({
         // the user already agreed to download. A local file resolves instantly,
         // so it defers to the post-read prompt below, which can pick the
         // large-raster warning now that the dimensions are cheap to read. See #916.
-        if (
-          bytesAreRemote &&
-          !window.confirm(t("raster.cogConvertRemoteConfirm", { name }))
-        ) {
+        if (bytesAreRemote && !window.confirm(t("raster.cogConvertRemoteConfirm", { name }))) {
           return;
         }
         // Read the source bytes in their own try so a failure to obtain them
@@ -1066,18 +1004,10 @@ export function DesktopShell({
     // or the map is reinitialised (mapReadyGeneration), not on every
     // incremental plugin write-back. projectPlugins is read from the store
     // snapshot at call time so it is always current without being a dependency.
-    if (
-      !externalPluginsReady ||
-      !mapReadyGeneration ||
-      !mapControllerRef.current
-    )
-      return;
+    if (!externalPluginsReady || !mapReadyGeneration || !mapControllerRef.current) return;
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
-    pluginManager.restoreProjectState(
-      useAppStore.getState().projectPlugins,
-      appAPI,
-    );
+    pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restorePlanetaryComputerLayers(appAPI);
@@ -1123,26 +1053,16 @@ export function DesktopShell({
     // privacy notice, deactivate it so no coordinates are sent without consent;
     // the user must re-enable it (which shows the notice). This makes the
     // consent gate cover every activation path, not just the toolbar toggle.
-    if (
-      pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID) &&
-      !hasReverseGeocodeConsent()
-    ) {
+    if (pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID) && !hasReverseGeocodeConsent()) {
       pluginManager.deactivate(REVERSE_GEOCODE_PLUGIN_ID, appAPI);
     }
-    restoreReverseGeocode(
-      appAPI,
-      pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID),
-    );
+    restoreReverseGeocode(appAPI, pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID));
     // Same contract for the deck.gl overlay: re-attach it to the current map
     // and re-render any deckgl-viz layers a restored project carries.
     restoreDeckViz(appAPI, pluginManager.isActive(DECK_VIZ_PLUGIN_ID));
     const search = window.location.search;
     void pluginManager
-      .handleUrlParameters(
-        new URLSearchParams(search),
-        appAPI,
-        `${projectGeneration}:${search}`,
-      )
+      .handleUrlParameters(new URLSearchParams(search), appAPI, `${projectGeneration}:${search}`)
       .catch(console.error);
   }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
@@ -1163,9 +1083,7 @@ export function DesktopShell({
   // language change (t identity changes), since that native control lives
   // outside React.
   useEffect(() => {
-    mapControllerRef.current?.setCompassLabel(
-      t("toolbar.item.resetPitchBearing"),
-    );
+    mapControllerRef.current?.setCompassLabel(t("toolbar.item.resetPitchBearing"));
   }, [t, mapReadyGeneration]);
 
   // Keep the on-map terrain control's tooltip translated (it lives outside
@@ -1257,9 +1175,7 @@ export function DesktopShell({
         togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
       }
 
-      const importedLayer = useAppStore
-        .getState()
-        .layers.find((layer) => layer.id === lastLayerId);
+      const importedLayer = useAppStore.getState().layers.find((layer) => layer.id === lastLayerId);
       if (importedLayer) {
         // A deck.gl-backed layer (e.g. a KML <Model> scenegraph) mounts its
         // overlay on the next render; fitting synchronously here races that
@@ -1270,9 +1186,7 @@ export function DesktopShell({
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               window.setTimeout(() => {
-                const current = useAppStore
-                  .getState()
-                  .layers.find((layer) => layer.id === layerId);
+                const current = useAppStore.getState().layers.find((layer) => layer.id === layerId);
                 if (current) mapControllerRef.current?.fitLayer(current);
               }, 50);
             });
@@ -1296,13 +1210,8 @@ export function DesktopShell({
   const addDroppedPhotos = useCallback(
     (result: GeotaggedPhotoResult | null): number => {
       if (!result || result.located === 0) return 0;
-      const layerId = addGeoJsonLayer(
-        t("addData.photos.defaultName"),
-        result.featureCollection,
-      );
-      const layer = useAppStore
-        .getState()
-        .layers.find((existing) => existing.id === layerId);
+      const layerId = addGeoJsonLayer(t("addData.photos.defaultName"), result.featureCollection);
+      const layer = useAppStore.getState().layers.find((existing) => existing.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
       // Report skipped (no-GPS) photos too, mirroring the Add Data dialog's
       // summary, so a partially-skipped drop isn't silent.
@@ -1310,26 +1219,21 @@ export function DesktopShell({
         count: result.located,
       });
       const skippedNote =
-        result.skipped > 0
-          ? ` ${t("addData.photos.skippedNote", { count: result.skipped })}`
-          : "";
+        result.skipped > 0 ? ` ${t("addData.photos.skippedNote", { count: result.skipped })}` : "";
       setDropMessage(summary + skippedNote);
       return result.located;
     },
     [addGeoJsonLayer, t],
   );
 
-  const addDroppedRasters = useCallback(
-    async (rasters: DroppedRaster[]): Promise<number> => {
-      if (!rasters.length) return 0;
-      const appAPI = createAppAPI(mapControllerRef);
-      for (const raster of rasters) {
-        await addRasterToMap(appAPI, raster.source, { name: raster.name });
-      }
-      return rasters.length;
-    },
-    [],
-  );
+  const addDroppedRasters = useCallback(async (rasters: DroppedRaster[]): Promise<number> => {
+    if (!rasters.length) return 0;
+    const appAPI = createAppAPI(mapControllerRef);
+    for (const raster of rasters) {
+      await addRasterToMap(appAPI, raster.source, { name: raster.name });
+    }
+    return rasters.length;
+  }, []);
 
   // Add a single local file (clicked in the Browser panel's Files tree) as a
   // layer, reusing the same loaders + store dispatch as the drag-and-drop path.
@@ -1339,9 +1243,7 @@ export function DesktopShell({
     async (path: string): Promise<string | null> => {
       try {
         if (isRasterFileName(path)) {
-          const count = await addDroppedRasters(
-            await loadDroppedRasterPaths([path]),
-          );
+          const count = await addDroppedRasters(await loadDroppedRasterPaths([path]));
           return count > 0 ? null : t("browser.addFileFailed");
         }
         let cancelled = false;
@@ -1364,9 +1266,7 @@ export function DesktopShell({
         addImportedVectorLayers(importedLayers);
         return null;
       } catch (error) {
-        return error instanceof Error
-          ? error.message
-          : t("browser.addFileFailed");
+        return error instanceof Error ? error.message : t("browser.addFileFailed");
       }
     },
     [addDroppedRasters, addImportedVectorLayers, t],
@@ -1446,9 +1346,7 @@ export function DesktopShell({
             // single-FeatureCollection pipeline (which would otherwise route a
             // .pbf to DuckDB ST_Read and merge it).
             const pbfPaths = paths.filter((path) => isOsmPbfFileName(path));
-            const otherPaths = paths.filter(
-              (path) => !isOsmPbfFileName(path),
-            );
+            const otherPaths = paths.filter((path) => !isOsmPbfFileName(path));
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -1476,8 +1374,7 @@ export function DesktopShell({
                   // Guard against a subview Uint8Array: .buffer would include
                   // extra bytes and corrupt the parse, so slice to the exact view.
                   const buffer =
-                    bytes.byteOffset === 0 &&
-                    bytes.byteLength === bytes.buffer.byteLength
+                    bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
                       ? (bytes.buffer as ArrayBuffer)
                       : (bytes.buffer.slice(
                           bytes.byteOffset,
@@ -1519,18 +1416,12 @@ export function DesktopShell({
             // Surface a clear message when every dropped photo lacked GPS, so
             // the drop doesn't complete silently.
             if (photoResult && photoCount === 0 && photoResult.total > 0) {
-              setDropError(
-                t("addData.photos.errorNoGps", { count: photoResult.total }),
-              );
+              setDropError(t("addData.photos.errorNoGps", { count: photoResult.total }));
             }
-            const restPaths = otherPaths.filter(
-              (path) => !isPhotoDropFileName(path),
-            );
+            const restPaths = otherPaths.filter((path) => !isPhotoDropFileName(path));
 
             if (restPaths.length > 0) {
-              const rasterCount = await addDroppedRasters(
-                await loadDroppedRasterPaths(restPaths),
-              );
+              const rasterCount = await addDroppedRasters(await loadDroppedRasterPaths(restPaths));
               const importedLayers = await loadDroppedVectorPaths(restPaths, {
                 onLargeDataset: confirmLargeVectorDataset,
               });
@@ -1548,11 +1439,7 @@ export function DesktopShell({
             }
           } catch (error) {
             setDropMessage(null);
-            setDropError(
-              error instanceof Error
-                ? error.message
-                : "Could not import files.",
-            );
+            setDropError(error instanceof Error ? error.message : "Could not import files.");
           } finally {
             clearDropMessageLater();
           }
@@ -1573,11 +1460,7 @@ export function DesktopShell({
       disposed = true;
       unlisten?.();
     };
-  }, [clearDropMessageLater,
-    finishDrop,
-    addDroppedRasters,
-    addDroppedPhotos,
-    addGeoJsonLayer]);
+  }, [clearDropMessageLater, finishDrop, addDroppedRasters, addDroppedPhotos, addGeoJsonLayer]);
 
   const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!hasDroppedFiles(event)) return;
@@ -1616,9 +1499,7 @@ export function DesktopShell({
         // finishDrop throws on an empty list, so only call it when non-PBF
         // files were dropped.
         const pbfFiles = allFiles.filter((file) => isOsmPbfFileName(file.name));
-        const otherFiles = allFiles.filter(
-          (file) => !isOsmPbfFileName(file.name),
-        );
+        const otherFiles = allFiles.filter((file) => !isOsmPbfFileName(file.name));
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge
@@ -1673,18 +1554,12 @@ export function DesktopShell({
         // Surface a clear message when every dropped photo lacked GPS, so the
         // drop doesn't complete silently.
         if (photoResult && photoCount === 0 && photoResult.total > 0) {
-          setDropError(
-            t("addData.photos.errorNoGps", { count: photoResult.total }),
-          );
+          setDropError(t("addData.photos.errorNoGps", { count: photoResult.total }));
         }
-        const restFiles = otherFiles.filter(
-          (file) => !isPhotoDropFileName(file.name),
-        );
+        const restFiles = otherFiles.filter((file) => !isPhotoDropFileName(file.name));
 
         if (restFiles.length > 0) {
-          const rasterCount = await addDroppedRasters(
-            loadDroppedRasterFiles(restFiles),
-          );
+          const rasterCount = await addDroppedRasters(loadDroppedRasterFiles(restFiles));
           const importedLayers = await loadDroppedVectorFiles(restFiles, {
             onLargeDataset: confirmLargeVectorDataset,
           });
@@ -1706,18 +1581,12 @@ export function DesktopShell({
         }
       } catch (error) {
         setDropMessage(null);
-        setDropError(
-          error instanceof Error ? error.message : "Could not import files.",
-        );
+        setDropError(error instanceof Error ? error.message : "Could not import files.");
       } finally {
         clearDropMessageLater();
       }
     },
-    [clearDropMessageLater,
-    finishDrop,
-    addDroppedRasters,
-    addDroppedPhotos,
-    addGeoJsonLayer],
+    [clearDropMessageLater, finishDrop, addDroppedRasters, addDroppedPhotos, addGeoJsonLayer],
   );
 
   const startLayerPanelResize = useCallback(
@@ -1732,10 +1601,8 @@ export function DesktopShell({
       const startWidth = layerPanelWidth;
       // In a right-to-left layout the panels are mirrored, so pointer deltas
       // (and the deferred-resize guide anchor) flip sign.
-      const dirSign =
-        getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      const panelRect =
-        event.currentTarget.parentElement?.getBoundingClientRect();
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -1756,18 +1623,13 @@ export function DesktopShell({
           if (deferPanelResize) {
             if (verticalResizeGuideRef.current && panelRect) {
               verticalResizeGuideRef.current.style.left = `${
-                dirSign === 1
-                  ? panelRect.left + nextWidth
-                  : panelRect.right - nextWidth
+                dirSign === 1 ? panelRect.left + nextWidth : panelRect.right - nextWidth
               }px`;
               verticalResizeGuideRef.current.classList.remove("hidden");
             }
             return;
           }
-          shellRef.current?.style.setProperty(
-            "--layer-panel-width",
-            `${nextWidth}px`,
-          );
+          shellRef.current?.style.setProperty("--layer-panel-width", `${nextWidth}px`);
         });
       };
 
@@ -1780,10 +1642,7 @@ export function DesktopShell({
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
         }
-        shellRef.current?.style.setProperty(
-          "--layer-panel-width",
-          `${nextWidth}px`,
-        );
+        shellRef.current?.style.setProperty("--layer-panel-width", `${nextWidth}px`);
         verticalResizeGuideRef.current?.classList.add("hidden");
         setLayerPanelWidth(nextWidth);
         window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
@@ -1811,10 +1670,8 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = stylePanelWidth;
-      const dirSign =
-        getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      const panelRect =
-        event.currentTarget.parentElement?.getBoundingClientRect();
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -1835,18 +1692,13 @@ export function DesktopShell({
           if (deferPanelResize) {
             if (verticalResizeGuideRef.current && panelRect) {
               verticalResizeGuideRef.current.style.left = `${
-                dirSign === 1
-                  ? panelRect.right - nextWidth
-                  : panelRect.left + nextWidth
+                dirSign === 1 ? panelRect.right - nextWidth : panelRect.left + nextWidth
               }px`;
               verticalResizeGuideRef.current.classList.remove("hidden");
             }
             return;
           }
-          shellRef.current?.style.setProperty(
-            "--style-panel-width",
-            `${nextWidth}px`,
-          );
+          shellRef.current?.style.setProperty("--style-panel-width", `${nextWidth}px`);
         });
       };
 
@@ -1859,10 +1711,7 @@ export function DesktopShell({
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
         }
-        shellRef.current?.style.setProperty(
-          "--style-panel-width",
-          `${nextWidth}px`,
-        );
+        shellRef.current?.style.setProperty("--style-panel-width", `${nextWidth}px`);
         verticalResizeGuideRef.current?.classList.add("hidden");
         setStylePanelWidth(nextWidth);
         window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
@@ -1891,10 +1740,8 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = notebookPanelWidth;
-      const dirSign =
-        getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      const panelRect =
-        event.currentTarget.parentElement?.getBoundingClientRect();
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -1915,18 +1762,13 @@ export function DesktopShell({
           if (deferPanelResize) {
             if (verticalResizeGuideRef.current && panelRect) {
               verticalResizeGuideRef.current.style.left = `${
-                dirSign === 1
-                  ? panelRect.right - nextWidth
-                  : panelRect.left + nextWidth
+                dirSign === 1 ? panelRect.right - nextWidth : panelRect.left + nextWidth
               }px`;
               verticalResizeGuideRef.current.classList.remove("hidden");
             }
             return;
           }
-          shellRef.current?.style.setProperty(
-            "--notebook-panel-width",
-            `${nextWidth}px`,
-          );
+          shellRef.current?.style.setProperty("--notebook-panel-width", `${nextWidth}px`);
         });
       };
 
@@ -1939,10 +1781,7 @@ export function DesktopShell({
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
         }
-        shellRef.current?.style.setProperty(
-          "--notebook-panel-width",
-          `${nextWidth}px`,
-        );
+        shellRef.current?.style.setProperty("--notebook-panel-width", `${nextWidth}px`);
         verticalResizeGuideRef.current?.classList.add("hidden");
         setNotebookPanelWidth(nextWidth);
         window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
@@ -1986,10 +1825,7 @@ export function DesktopShell({
           />
         </SectionErrorBoundary>
       ) : null}
-      <div
-        data-workspace-row=""
-        className="relative flex min-h-0 flex-1 flex-col md:flex-row"
-      >
+      <div data-workspace-row="" className="relative flex min-h-0 flex-1 flex-col md:flex-row">
         {/* The Browser panel body is portaled into its dedicated content host
             (which the dock slots relocate between positions), so it shares the
             app's React context and the shell owns its dock chrome. */}
@@ -2023,8 +1859,7 @@ export function DesktopShell({
               // On a phone-width viewport both start collapsed (panels overlay
               // there), matching the mobile "panels default collapsed" behavior.
               initialBuiltinExpanded={
-                replaceLayersPanelId === BROWSER_PANEL_ID &&
-                !getIsMobileViewport()
+                replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
               }
               // The story-map presentation is the only standalone Layers
               // autoCollapse trigger (the notebook collapses Style, not Layers).
@@ -2071,9 +1906,7 @@ export function DesktopShell({
                     openRasterLayerPanel(createAppAPI(mapControllerRef))
                   }
                   onOpenRasterSubset={setRasterSubsetLayer}
-                  autoCollapse={
-                    storymapPresenting || autoCollapsedPanel === "layers"
-                  }
+                  autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
                 />
               </SectionErrorBoundary>
             ) : null}
@@ -2123,10 +1956,7 @@ export function DesktopShell({
                   over the map, so a fault here must never take down the map
                   itself (it shares this subtree's error boundary otherwise). */}
               <SilentErrorBoundary label="Collaboration status">
-                <CollaborationStatusBadge
-                  api={collaboration}
-                  mapControllerRef={mapControllerRef}
-                />
+                <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
@@ -2248,9 +2078,7 @@ export function DesktopShell({
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
                   autoCollapse={
-                    notebookOpen ||
-                    storymapPresenting ||
-                    autoCollapsedPanel === "style"
+                    notebookOpen || storymapPresenting || autoCollapsedPanel === "style"
                   }
                 />
               </SectionErrorBoundary>
@@ -2295,20 +2123,14 @@ export function DesktopShell({
         </SectionErrorBoundary>
       ) : null}
       {pythonConsoleOpen ? (
-        <SectionErrorBoundary
-          label="Python console"
-          onClose={() => setPythonConsoleOpen(false)}
-        >
+        <SectionErrorBoundary label="Python console" onClose={() => setPythonConsoleOpen(false)}>
           <Suspense fallback={null}>
             <PythonConsolePanel mapControllerRef={mapControllerRef} />
           </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {sqlWorkspaceOpen ? (
-        <SectionErrorBoundary
-          label="SQL workspace"
-          onClose={() => setSqlWorkspaceOpen(false)}
-        >
+        <SectionErrorBoundary label="SQL workspace" onClose={() => setSqlWorkspaceOpen(false)}>
           <Suspense fallback={null}>
             <SqlWorkspacePanel />
           </Suspense>
@@ -2351,11 +2173,9 @@ export function DesktopShell({
             // `fileName` (when given) becomes the layer's sourcePath while `name`
             // stays the human-readable display name; the control keeps them
             // separate (info.source.fileName vs info.name).
-            const file = new File(
-              [bytes as BlobPart],
-              fileName ?? `${name}.tif`,
-              { type: "image/tiff" },
-            );
+            const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+              type: "image/tiff",
+            });
             await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
           }}
         />
@@ -2396,9 +2216,7 @@ export function DesktopShell({
       {isDraggingFiles ? (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="max-w-sm rounded-md border bg-background px-4 py-3 text-center shadow-lg">
-            <p className="text-sm font-medium">
-              {t("toolbar.fileDrop.overlayTitle")}
-            </p>
+            <p className="text-sm font-medium">{t("toolbar.fileDrop.overlayTitle")}</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {t("toolbar.fileDrop.overlaySubtext")}
             </p>

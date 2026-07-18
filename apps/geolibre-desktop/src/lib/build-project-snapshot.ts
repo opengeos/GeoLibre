@@ -1,8 +1,4 @@
-import {
-  projectFromStore,
-  useAppStore,
-  type GeoLibreProject,
-} from "@geolibre/core";
+import { projectFromStore, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import { getPluginManager } from "../hooks/usePlugins";

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  type LabelStyle,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LabelStyle } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
 
 // Stateful fake MapLibre map (mirrors point-renderer-sync.test.ts) so a test can
@@ -17,15 +13,12 @@ function makeMap() {
     // the source as wrong-typed and recreates every render layer on each sync,
     // so re-sync tests would never exercise ensureLayer's update branch.
     getSource: (id: string) =>
-      sources.has(id)
-        ? { type: sources.get(id)?.type, setData: () => {} }
-        : undefined,
+      sources.has(id) ? { type: sources.get(id)?.type, setData: () => {} } : undefined,
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
     },
     removeSource: (id: string) => sources.delete(id),
-    getLayer: (id: string) =>
-      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
     addLayer: (spec: Record<string, unknown>) => {
       layers.set(spec.id as string, spec);
     },
@@ -58,10 +51,7 @@ function makeMap() {
 
 type Geom = "point" | "line";
 
-function labeledLayer(
-  labelPatch: Partial<LabelStyle>,
-  geometry: Geom = "point",
-): GeoLibreLayer {
+function labeledLayer(labelPatch: Partial<LabelStyle>, geometry: Geom = "point"): GeoLibreLayer {
   const coords =
     geometry === "line"
       ? {
@@ -86,9 +76,7 @@ function labeledLayer(
     metadata: {},
     geojson: {
       type: "FeatureCollection",
-      features: [
-        { type: "Feature", properties: { name: "A", pop: 5 }, geometry: coords },
-      ],
+      features: [{ type: "Feature", properties: { name: "A", pop: 5 }, geometry: coords }],
     },
   };
 }
@@ -106,10 +94,7 @@ describe("label sync", () => {
     };
     assert.ok(label, "label layer should exist");
     assert.equal(label.type, "symbol");
-    assert.deepEqual(label.layout["text-field"], [
-      "to-string",
-      ["coalesce", ["get", "name"], ""],
-    ]);
+    assert.deepEqual(label.layout["text-field"], ["to-string", ["coalesce", ["get", "name"], ""]]);
     assert.equal(label.layout["symbol-placement"], "point");
   });
 
@@ -157,35 +142,23 @@ describe("label sync", () => {
     );
 
     const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
-    assert.deepEqual(label.layout["text-field"], [
-      "to-string",
-      ["coalesce", ["get", "name"], ""],
-    ]);
+    assert.deepEqual(label.layout["text-field"], ["to-string", ["coalesce", ["get", "name"], ""]]);
   });
 
   it("falls back to the field when the expression is valid JSON but not an array", () => {
     const { map, layers } = makeMap();
     // `42` / `{"k":1}` parse cleanly but are not MapLibre expressions.
-    syncLayer(
-      map as never,
-      labeledLayer({ enabled: true, field: "name", expression: '{"k":1}' }),
-    );
+    syncLayer(map as never, labeledLayer({ enabled: true, field: "name", expression: '{"k":1}' }));
 
     const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
-    assert.deepEqual(label.layout["text-field"], [
-      "to-string",
-      ["coalesce", ["get", "name"], ""],
-    ]);
+    assert.deepEqual(label.layout["text-field"], ["to-string", ["coalesce", ["get", "name"], ""]]);
   });
 
   it("does not create a label layer when the expression is invalid and no field is set", () => {
     const { map, layers } = makeMap();
     // Invalid expression + empty field would fall back to an empty text-field;
     // the layer must be skipped rather than added with invisible text.
-    syncLayer(
-      map as never,
-      labeledLayer({ enabled: true, field: "", expression: "{not json" }),
-    );
+    syncLayer(map as never, labeledLayer({ enabled: true, field: "", expression: "{not json" }));
     assert.ok(!layers.has(LABEL_ID));
   });
 
@@ -194,10 +167,7 @@ describe("label sync", () => {
     syncLayer(map as never, labeledLayer({ enabled: true, field: "name" }));
     assert.ok(layers.has(LABEL_ID));
 
-    syncLayer(
-      map as never,
-      labeledLayer({ enabled: true, field: "", expression: "{not json" }),
-    );
+    syncLayer(map as never, labeledLayer({ enabled: true, field: "", expression: "{not json" }));
     assert.ok(!layers.has(LABEL_ID));
   });
 
@@ -264,9 +234,7 @@ describe("label sync", () => {
     assert.equal(label.layout["text-transform"], "uppercase");
   });
 
-  function colocatedPointLayer(
-    labelPatch: Partial<LabelStyle>,
-  ): GeoLibreLayer {
+  function colocatedPointLayer(labelPatch: Partial<LabelStyle>): GeoLibreLayer {
     return {
       id: "lyr",
       name: "Layer",
@@ -313,8 +281,7 @@ describe("label sync", () => {
     assert.ok(sources.has(LABEL_SOURCE_ID), "dedup source should exist");
     assert.equal(label.source, LABEL_SOURCE_ID);
     assert.deepEqual(label.layout["text-field"], ["get", "__geolibre_label"]);
-    const data = (sources.get(LABEL_SOURCE_ID) as { data: GeoJSON.FeatureCollection })
-      .data;
+    const data = (sources.get(LABEL_SOURCE_ID) as { data: GeoJSON.FeatureCollection }).data;
     assert.equal(data.features.length, 1);
   });
 
@@ -330,10 +297,7 @@ describe("label sync", () => {
     layer.timeFilter = ["<=", ["get", "t"], 5] as unknown[];
     syncLayer(map as never, layer);
 
-    assert.ok(
-      !sources.has(LABEL_SOURCE_ID),
-      "no dedup source while time-filtered",
-    );
+    assert.ok(!sources.has(LABEL_SOURCE_ID), "no dedup source while time-filtered");
     const label = layers.get(LABEL_ID) as { source: string };
     assert.equal(label.source, "source-lyr");
   });
@@ -387,10 +351,7 @@ describe("label sync", () => {
       layout: Record<string, unknown>;
     };
     assert.equal(label.source, "source-lyr");
-    assert.deepEqual(label.layout["text-field"], [
-      "to-string",
-      ["coalesce", ["get", "name"], ""],
-    ]);
+    assert.deepEqual(label.layout["text-field"], ["to-string", ["coalesce", ["get", "name"], ""]]);
   });
 
   it("removes the dedup source when dedup is turned back off", () => {
@@ -401,10 +362,7 @@ describe("label sync", () => {
     );
     assert.ok(sources.has(LABEL_SOURCE_ID));
 
-    syncLayer(
-      map as never,
-      colocatedPointLayer({ enabled: true, field: "name", dedupe: "off" }),
-    );
+    syncLayer(map as never, colocatedPointLayer({ enabled: true, field: "name", dedupe: "off" }));
     assert.ok(!sources.has(LABEL_SOURCE_ID), "dedup source should be removed");
     const label = layers.get(LABEL_ID) as { source: string };
     assert.equal(label.source, "source-lyr");
@@ -420,8 +378,7 @@ describe("label sync", () => {
         enabled: true,
         field: "name",
         sizeExpression: '["+", ["get", "pop"], 8]',
-        colorExpression:
-          '["case", [">", ["get", "pop"], 3], "#ff0000", "#00ff00"]',
+        colorExpression: '["case", [">", ["get", "pop"], 3], "#ff0000", "#00ff00"]',
         opacityExpression: '["case", [">", ["get", "pop"], 3], 1, 0.5]',
         priorityExpression: '["-", 0, ["get", "pop"]]',
       }),
@@ -432,23 +389,14 @@ describe("label sync", () => {
       paint: Record<string, unknown>;
     };
     assert.deepEqual(label.layout["text-size"], ["+", ["get", "pop"], 8]);
-    assert.deepEqual(label.layout["symbol-sort-key"], [
-      "-",
-      0,
-      ["get", "pop"],
-    ]);
+    assert.deepEqual(label.layout["symbol-sort-key"], ["-", 0, ["get", "pop"]]);
     assert.deepEqual(label.paint["text-color"], [
       "case",
       [">", ["get", "pop"], 3],
       "#ff0000",
       "#00ff00",
     ]);
-    assert.deepEqual(label.paint["text-opacity"], [
-      "case",
-      [">", ["get", "pop"], 3],
-      1,
-      0.5,
-    ]);
+    assert.deepEqual(label.paint["text-opacity"], ["case", [">", ["get", "pop"], 3], 1, 0.5]);
   });
 
   it("falls back to the literal controls when an override is invalid", () => {

@@ -7,9 +7,7 @@ const PATCHED_POPUP_MARKER = "__geolibreGlobePopupOcclusionPatched";
 const DEFAULT_OCCLUDED_OPACITY = 0;
 const ZERO_OPACITY_STRING = /^[+-]?(?:0+(?:\.0*)?|\.(?:0+))$/;
 
-type PopupConstructor = new (
-  options?: maplibregl.PopupOptions,
-) => maplibregl.Popup;
+type PopupConstructor = new (options?: maplibregl.PopupOptions) => maplibregl.Popup;
 
 type PatchablePopupConstructor = PopupConstructor & {
   [PATCHED_POPUP_MARKER]?: true;
@@ -89,19 +87,13 @@ export function syncPopupGlobeOcclusion(popup: maplibregl.Popup): boolean {
   }
 
   const lngLat = popupInternals.getLngLat();
-  const occluded =
-    Boolean(lngLat) && Boolean(isLocationOccluded?.call(transform, lngLat));
+  const occluded = Boolean(lngLat) && Boolean(isLocationOccluded?.call(transform, lngLat));
   container.style.opacity = occluded ? `${opacity}` : "";
-  setPopupOccluded(
-    container,
-    occluded && shouldSuppressInteraction(popupInternals),
-  );
+  setPopupOccluded(container, occluded && shouldSuppressInteraction(popupInternals));
   return occluded;
 }
 
-export function installGlobePopupOcclusion(
-  maplibre: typeof maplibregl,
-): void {
+export function installGlobePopupOcclusion(maplibre: typeof maplibregl): void {
   const api = maplibre as unknown as PatchableMapLibre;
   const OriginalPopup = api.Popup;
   if (OriginalPopup[PATCHED_POPUP_MARKER]) return;
@@ -110,8 +102,7 @@ export function installGlobePopupOcclusion(
     constructor(options: maplibregl.PopupOptions = {}) {
       super({
         ...options,
-        locationOccludedOpacity:
-          options.locationOccludedOpacity ?? DEFAULT_OCCLUDED_OPACITY,
+        locationOccludedOpacity: options.locationOccludedOpacity ?? DEFAULT_OCCLUDED_OPACITY,
       });
 
       const popup = this as unknown as PopupInternals;

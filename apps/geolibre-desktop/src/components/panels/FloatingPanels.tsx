@@ -1,8 +1,4 @@
-import {
-  closeFloatingPanel,
-  focusFloatingPanel,
-  getFloatingPanel,
-} from "@geolibre/plugins";
+import { closeFloatingPanel, focusFloatingPanel, getFloatingPanel } from "@geolibre/plugins";
 import { Button } from "@geolibre/ui";
 import { GripVertical, X } from "lucide-react";
 import {
@@ -28,13 +24,7 @@ const MAX_HEIGHT = 900;
 const STAGGER = 24;
 const EDGE_MARGIN = 12;
 
-function FloatingPanelCard({
-  id,
-  initialOffset,
-}: {
-  id: string;
-  initialOffset: number;
-}) {
+function FloatingPanelCard({ id, initialOffset }: { id: string; initialOffset: number }) {
   const { t } = useTranslation();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -47,9 +37,7 @@ function FloatingPanelCard({
     width: clamp(panel?.defaultWidth ?? DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
     // undefined height means "size to content" (the historical behavior).
     height:
-      panel?.defaultHeight != null
-        ? clamp(panel.defaultHeight, MIN_HEIGHT, MAX_HEIGHT)
-        : undefined,
+      panel?.defaultHeight != null ? clamp(panel.defaultHeight, MIN_HEIGHT, MAX_HEIGHT) : undefined,
   }));
   const { width } = size;
   // Once the user drags or resizes the card, stop auto-anchoring it to a corner
@@ -221,9 +209,7 @@ function FloatingPanelCard({
         ) : (
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         )}
-        <span className="flex-1 truncate text-sm font-semibold">
-          {panel.title}
-        </span>
+        <span className="flex-1 truncate text-sm font-semibold">{panel.title}</span>
         <Button
           variant="ghost"
           size="icon"

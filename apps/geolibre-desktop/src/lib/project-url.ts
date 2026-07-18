@@ -25,12 +25,8 @@ export function projectUrlFromLocation(): string | null {
     if (url) return url;
   }
 
-  const bareQuery = search.startsWith("?")
-    ? safeDecodeURIComponent(search.slice(1)).trim()
-    : "";
-  return /^https?:\/\//i.test(bareQuery)
-    ? normalizeProjectUrl(bareQuery)
-    : null;
+  const bareQuery = search.startsWith("?") ? safeDecodeURIComponent(search.slice(1)).trim() : "";
+  return /^https?:\/\//i.test(bareQuery) ? normalizeProjectUrl(bareQuery) : null;
 }
 
 /**
@@ -75,8 +71,7 @@ export async function fetchProjectFromUrl(
   // A caller-initiated abort (dialog close / unmount) surfaces as an
   // `AbortError`; let it propagate untouched so the caller can ignore it,
   // matching the abort handling in `share-geolibre.ts`.
-  const isAbort = (error: unknown) =>
-    error instanceof DOMException && error.name === "AbortError";
+  const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
   let response: Response;
   try {
@@ -96,8 +91,7 @@ export async function fetchProjectFromUrl(
       ? `HTTP ${response.status} ${response.statusText}`
       : `HTTP ${response.status}`;
     throw new Error(
-      `Could not fetch the project from ${projectUrl}: the server responded ` +
-        `with ${status}.`,
+      `Could not fetch the project from ${projectUrl}: the server responded ` + `with ${status}.`,
     );
   }
 
@@ -123,8 +117,7 @@ export async function fetchProjectFromUrl(
     const raw = error instanceof Error ? error.message : String(error);
     const detail = raw.replace(/^Invalid GeoLibre project:\s*/i, "") || raw;
     throw new Error(
-      `The file at ${projectUrl} is not a valid GeoLibre project ` +
-        `(.geolibre.json): ${detail}`,
+      `The file at ${projectUrl} is not a valid GeoLibre project ` + `(.geolibre.json): ${detail}`,
       { cause: error },
     );
   }

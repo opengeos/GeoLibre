@@ -1,10 +1,4 @@
-import type {
-  Feature,
-  FeatureCollection,
-  GeoJSON,
-  Geometry,
-  Position,
-} from "geojson";
+import type { Feature, FeatureCollection, GeoJSON, Geometry, Position } from "geojson";
 
 /**
  * Helpers for vector data whose coordinates carry a Z value (elevation), e.g.
@@ -27,9 +21,7 @@ const hasZCache = new WeakMap<object, boolean>();
  *
  * @param geojson - Any GeoJSON object (geometry, feature, or collection).
  */
-export function geojsonHasZCoordinates(
-  geojson: GeoJSON | null | undefined,
-): boolean {
+export function geojsonHasZCoordinates(geojson: GeoJSON | null | undefined): boolean {
   if (!geojson) return false;
   const cached = hasZCache.get(geojson);
   if (cached !== undefined) return cached;
@@ -66,9 +58,7 @@ export function transformGeojsonElevation(
   const mapPosition = (position: Position): Position => [
     position[0],
     position[1],
-    (typeof position[2] === "number" && Number.isFinite(position[2])
-      ? position[2]
-      : 0) *
+    (typeof position[2] === "number" && Number.isFinite(position[2]) ? position[2] : 0) *
       verticalScale +
       offset,
   ];
@@ -81,32 +71,22 @@ export function transformGeojsonElevation(
   };
 }
 
-function someGeometry(
-  geojson: GeoJSON,
-  predicate: (geometry: Geometry) => boolean,
-): boolean {
+function someGeometry(geojson: GeoJSON, predicate: (geometry: Geometry) => boolean): boolean {
   switch (geojson.type) {
     case "FeatureCollection":
       return geojson.features.some((feature) =>
         feature.geometry ? someGeometry(feature.geometry, predicate) : false,
       );
     case "Feature":
-      return geojson.geometry
-        ? someGeometry(geojson.geometry, predicate)
-        : false;
+      return geojson.geometry ? someGeometry(geojson.geometry, predicate) : false;
     case "GeometryCollection":
-      return geojson.geometries.some((geometry) =>
-        someGeometry(geometry, predicate),
-      );
+      return geojson.geometries.some((geometry) => someGeometry(geometry, predicate));
     default:
       return predicate(geojson);
   }
 }
 
-function somePosition(
-  geometry: Geometry,
-  predicate: (position: Position) => boolean,
-): boolean {
+function somePosition(geometry: Geometry, predicate: (position: Position) => boolean): boolean {
   switch (geometry.type) {
     case "Point":
       return predicate(geometry.coordinates);
@@ -117,13 +97,9 @@ function somePosition(
     case "Polygon":
       return geometry.coordinates.some((ring) => ring.some(predicate));
     case "MultiPolygon":
-      return geometry.coordinates.some((polygon) =>
-        polygon.some((ring) => ring.some(predicate)),
-      );
+      return geometry.coordinates.some((polygon) => polygon.some((ring) => ring.some(predicate)));
     case "GeometryCollection":
-      return geometry.geometries.some((child) =>
-        somePosition(child, predicate),
-      );
+      return geometry.geometries.some((child) => somePosition(child, predicate));
     default:
       return false;
   }

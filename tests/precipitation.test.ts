@@ -16,10 +16,7 @@ describe("radarFramesFromResponse", () => {
       },
     });
     assert.equal(frames.length, 2);
-    assert.equal(
-      frames[0].tileUrl,
-      `${validHost}/v2/radar/aaaa/512/{z}/{x}/{y}/4/1_1.png`,
-    );
+    assert.equal(frames[0].tileUrl, `${validHost}/v2/radar/aaaa/512/{z}/{x}/{y}/4/1_1.png`);
     // {z}/{y}/{x} is a GIBS quirk; RainViewer is plain {z}/{x}/{y}.
     assert.ok(frames[1].tileUrl.endsWith("/512/{z}/{x}/{y}/4/1_1.png"));
     assert.ok(typeof frames[0].label === "string" && frames[0].label.length > 0);
@@ -34,21 +31,36 @@ describe("radarFramesFromResponse", () => {
 
   it("rejects a non-https, non-rainviewer, or missing host (untrusted API response)", () => {
     const past = [{ time: 1_700_000_000, path: "/v2/radar/aaaa" }];
-    assert.deepEqual(radarFramesFromResponse({ host: "http://tilecache.rainviewer.com", radar: { past } }), []);
-    assert.deepEqual(radarFramesFromResponse({ host: "https://evil.example", radar: { past } }), []);
+    assert.deepEqual(
+      radarFramesFromResponse({ host: "http://tilecache.rainviewer.com", radar: { past } }),
+      [],
+    );
+    assert.deepEqual(
+      radarFramesFromResponse({ host: "https://evil.example", radar: { past } }),
+      [],
+    );
     assert.deepEqual(radarFramesFromResponse({ host: "ftp://x", radar: { past } }), []);
     assert.deepEqual(radarFramesFromResponse({ radar: { past } }), []);
     // Userinfo trick: real authority is evil.example, not rainviewer.com.
     assert.deepEqual(
-      radarFramesFromResponse({ host: "https://tilecache.rainviewer.com@evil.example", radar: { past } }),
+      radarFramesFromResponse({
+        host: "https://tilecache.rainviewer.com@evil.example",
+        radar: { past },
+      }),
       [],
     );
   });
 
   it("accepts any rainviewer.com subdomain over https", () => {
     const past = [{ time: 1_700_000_000, path: "/v2/radar/aaaa" }];
-    assert.equal(radarFramesFromResponse({ host: "https://rainviewer.com", radar: { past } }).length, 1);
-    assert.equal(radarFramesFromResponse({ host: "https://cdn.rainviewer.com", radar: { past } }).length, 1);
+    assert.equal(
+      radarFramesFromResponse({ host: "https://rainviewer.com", radar: { past } }).length,
+      1,
+    );
+    assert.equal(
+      radarFramesFromResponse({ host: "https://cdn.rainviewer.com", radar: { past } }).length,
+      1,
+    );
   });
 
   it("sorts frames oldest → newest even if the API returns them out of order", () => {

@@ -108,9 +108,7 @@ describe("sourceLayersForQueryRefresh", () => {
     const source = makeLayer({ id: "source", name: "countries" });
     const other = makeLayer({ id: "other", name: "rivers" });
     assert.deepEqual(
-      sourceLayersForQueryRefresh(query, [source, query, other]).map(
-        (layer) => layer.id,
-      ),
+      sourceLayersForQueryRefresh(query, [source, query, other]).map((layer) => layer.id),
       ["source", "other"],
     );
   });

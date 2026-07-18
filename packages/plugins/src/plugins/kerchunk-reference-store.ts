@@ -29,7 +29,7 @@ export interface KerchunkDocument {
 
 type FetchImpl = (
   input: string,
-  init?: { headers?: Record<string, string> }
+  init?: { headers?: Record<string, string> },
 ) => Promise<{
   status: number;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -69,7 +69,7 @@ function decodeBase64(b64: string): Uint8Array {
  */
 export function normalizeKerchunkReference(
   doc: KerchunkDocument,
-  referenceUrl?: string
+  referenceUrl?: string,
 ): KerchunkRefs {
   const refs: KerchunkRefs | undefined =
     doc.refs ?? (looksLikeFlatRefs(doc) ? (doc as KerchunkRefs) : undefined);
@@ -80,9 +80,7 @@ export function normalizeKerchunkReference(
     (doc.templates && Object.keys(doc.templates).length > 0) ||
     (Array.isArray(doc.gen) && doc.gen.length > 0)
   ) {
-    throw new Error(
-      "Templated kerchunk references (templates/gen) are not supported."
-    );
+    throw new Error("Templated kerchunk references (templates/gen) are not supported.");
   }
 
   const resolved: KerchunkRefs = {};
@@ -93,24 +91,20 @@ export function normalizeKerchunkReference(
       const url = resolveUrl(arr[0] as string, referenceUrl);
       if (arr.length === 2) {
         throw new Error(
-          `Invalid kerchunk reference for key "${key}": array refs must have 1 element (whole file) or 3 (url, offset, length), got 2.`
+          `Invalid kerchunk reference for key "${key}": array refs must have 1 element (whole file) or 3 (url, offset, length), got 2.`,
         );
       }
-      if (
-        arr.length >= 3 &&
-        (typeof arr[1] !== "number" || typeof arr[2] !== "number")
-      ) {
+      if (arr.length >= 3 && (typeof arr[1] !== "number" || typeof arr[2] !== "number")) {
         throw new Error(
-          `Invalid kerchunk reference for key "${key}": offset and length must be numbers.`
+          `Invalid kerchunk reference for key "${key}": offset and length must be numbers.`,
         );
       }
-      resolved[key] =
-        arr.length >= 3 ? [url, arr[1] as number, arr[2] as number] : [url];
+      resolved[key] = arr.length >= 3 ? [url, arr[1] as number, arr[2] as number] : [url];
     } else if (typeof value === "string") {
       resolved[key] = value;
     } else {
       throw new Error(
-        `Invalid kerchunk reference for key "${key}": unexpected value type "${typeof value}".`
+        `Invalid kerchunk reference for key "${key}": unexpected value type "${typeof value}".`,
       );
     }
   }
@@ -148,11 +142,10 @@ export class KerchunkReferenceStore {
 
   constructor(
     refs: KerchunkRefs,
-    options: { fetchImpl?: FetchImpl; headers?: Record<string, string> } = {}
+    options: { fetchImpl?: FetchImpl; headers?: Record<string, string> } = {},
   ) {
     this.refs = refs;
-    this.fetchImpl =
-      options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
+    this.fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
     this.headers = options.headers;
   }
 
@@ -179,19 +172,15 @@ export class KerchunkReferenceStore {
         ? {
             headers: {
               ...this.headers,
-              Range: `bytes=${offset}-${
-                (offset as number) + (length as number) - 1
-              }`,
+              Range: `bytes=${offset}-${(offset as number) + (length as number) - 1}`,
             },
           }
         : this.headers
-        ? { headers: { ...this.headers } }
-        : undefined;
+          ? { headers: { ...this.headers } }
+          : undefined;
     const res = await this.fetchImpl(url, init);
     if (res.status !== 206 && res.status !== 200) {
-      throw new Error(
-        `Kerchunk range read failed: ${url} -> HTTP ${res.status}`
-      );
+      throw new Error(`Kerchunk range read failed: ${url} -> HTTP ${res.status}`);
     }
     return new Uint8Array(await res.arrayBuffer());
   }
@@ -223,10 +212,7 @@ export function listKerchunkVariables(refs: KerchunkRefs): KerchunkVariable[] {
     let shape: number[] = [];
     try {
       const parsed = JSON.parse(value).shape;
-      shape =
-        Array.isArray(parsed) && parsed.every((n) => typeof n === "number")
-          ? parsed
-          : [];
+      shape = Array.isArray(parsed) && parsed.every((n) => typeof n === "number") ? parsed : [];
     } catch {
       continue;
     }
@@ -237,10 +223,7 @@ export function listKerchunkVariables(refs: KerchunkRefs): KerchunkVariable[] {
     if (typeof attrs === "string") {
       try {
         const parsed = JSON.parse(attrs)._ARRAY_DIMENSIONS;
-        dims =
-          Array.isArray(parsed) && parsed.every((d) => typeof d === "string")
-            ? parsed
-            : [];
+        dims = Array.isArray(parsed) && parsed.every((d) => typeof d === "string") ? parsed : [];
       } catch {
         dims = [];
       }
@@ -284,9 +267,7 @@ async function readCappedBody(res: {
 }
 
 function manifestTooLargeError(): Error {
-  return new Error(
-    `Kerchunk manifest too large (limit ${MAX_MANIFEST_BYTES} bytes).`
-  );
+  return new Error(`Kerchunk manifest too large (limit ${MAX_MANIFEST_BYTES} bytes).`);
 }
 
 /**
@@ -298,14 +279,10 @@ function manifestTooLargeError(): Error {
  */
 export async function loadKerchunkReference(
   url: string,
-  options: { fetchImpl?: FetchImpl; headers?: Record<string, string> } = {}
+  options: { fetchImpl?: FetchImpl; headers?: Record<string, string> } = {},
 ): Promise<KerchunkRefs> {
-  const fetchImpl =
-    options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
-  const res = await fetchImpl(
-    url,
-    options.headers ? { headers: options.headers } : undefined
-  );
+  const fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
+  const res = await fetchImpl(url, options.headers ? { headers: options.headers } : undefined);
   if (res.status !== 200) {
     throw new Error(`Failed to fetch kerchunk reference: HTTP ${res.status}`);
   }
@@ -313,7 +290,7 @@ export async function loadKerchunkReference(
   const contentLength = Number(res.headers?.get?.("content-length") ?? 0);
   if (contentLength > MAX_MANIFEST_BYTES) {
     throw new Error(
-      `Kerchunk manifest too large: ${contentLength} bytes (limit ${MAX_MANIFEST_BYTES}).`
+      `Kerchunk manifest too large: ${contentLength} bytes (limit ${MAX_MANIFEST_BYTES}).`,
     );
   }
   // ...and cap the actual bytes read, so chunked/compressed/header-less

@@ -48,18 +48,12 @@ function clamp(value: number, lo: number, hi: number): number {
  * Returns:
  *   The tile column (`x`) and row (`y`), clamped to the valid range for `z`.
  */
-export function lngLatToTile(
-  lng: number,
-  lat: number,
-  z: number,
-): { x: number; y: number } {
+export function lngLatToTile(lng: number, lat: number, z: number): { x: number; y: number } {
   const n = 2 ** z;
   const clampedLat = clamp(lat, -85.05112878, 85.05112878);
   const latRad = (clampedLat * Math.PI) / 180;
   const x = Math.floor(((lng + 180) / 360) * n);
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
-  );
+  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
   return { x: clamp(x, 0, n - 1), y: clamp(y, 0, n - 1) };
 }
 
@@ -170,11 +164,7 @@ export function planOfflineZoom(
  * Count the tiles covering `bbox` across `[minZoom, maxZoom]` without
  * materializing them — used to preview download size before committing.
  */
-export function countTiles(
-  bbox: Bbox,
-  minZoom: number,
-  maxZoom: number,
-): number {
+export function countTiles(bbox: Bbox, minZoom: number, maxZoom: number): number {
   let total = 0;
   for (const part of splitAntimeridian(bbox)) {
     for (let z = minZoom; z <= maxZoom; z++) {
@@ -224,11 +214,7 @@ export function tileToQuadkey({ z, x, y }: TileCoord): string {
  * trailing `.` separator so `https://{s}.host/…` becomes `https://host/…`
  * rather than the invalid `https://.host/…`.
  */
-export function expandTileUrl(
-  template: string,
-  tile: TileCoord,
-  subdomains?: string[],
-): string {
+export function expandTileUrl(template: string, tile: TileCoord, subdomains?: string[]): string {
   const tmsY = 2 ** tile.z - 1 - tile.y;
   const sub = subdomains?.[0];
   return template
@@ -237,9 +223,7 @@ export function expandTileUrl(
     .replace(/\{y\}/g, String(tile.y))
     .replace(/\{-y\}/g, String(tmsY))
     .replace(/\{quadkey\}/g, tileToQuadkey(tile))
-    .replace(/\{s\}\.?/g, (match) =>
-      sub ? (match.endsWith(".") ? `${sub}.` : sub) : "",
-    );
+    .replace(/\{s\}\.?/g, (match) => (sub ? (match.endsWith(".") ? `${sub}.` : sub) : ""));
 }
 
 /** Resolve a possibly-relative style asset URL against the document origin. */
@@ -387,8 +371,7 @@ export async function countOfflineTiles(
   maxZoom: number,
   options: { signal?: AbortSignal } = {},
 ): Promise<number> {
-  return (await collectTileUrls(map, bbox, minZoom, maxZoom, options.signal))
-    .size;
+  return (await collectTileUrls(map, bbox, minZoom, maxZoom, options.signal)).size;
 }
 
 /**
@@ -462,10 +445,7 @@ export async function collectOfflineUrls(
  * for these URLs so the download (`collectOfflineUrls`) and the size preview
  * (`countStyleAssets`) can never disagree about how many there are (#992).
  */
-function collectStyleAssetUrls(
-  style: StyleLike,
-  glyphRanges: string[],
-): string[] {
+function collectStyleAssetUrls(style: StyleLike, glyphRanges: string[]): string[] {
   const urls = new Set<string>();
 
   // Sprite (icons): json + png at 1x and 2x. MapLibre allows `sprite` to be a
@@ -493,20 +473,14 @@ function collectStyleAssetUrls(
   if (glyphs) {
     const fontstacks = new Set<string>();
     for (const layer of style.layers ?? []) {
-      const fonts = (layer as { layout?: { "text-font"?: string[] } }).layout?.[
-        "text-font"
-      ];
+      const fonts = (layer as { layout?: { "text-font"?: string[] } }).layout?.["text-font"];
       if (Array.isArray(fonts) && fonts.length > 0) {
         fontstacks.add(fonts.join(","));
       }
     }
     for (const stack of fontstacks) {
       for (const range of glyphRanges) {
-        urls.add(
-          absolute(
-            glyphs.replace("{fontstack}", stack).replace("{range}", range),
-          ),
-        );
+        urls.add(absolute(glyphs.replace("{fontstack}", stack).replace("{range}", range)));
       }
     }
   }
@@ -587,9 +561,7 @@ export async function warmUrls(
     // AbortSignal.any shipped in Chrome 116 / Firefox 124 / Safari 17.4. On
     // older engines fall back to the timeout alone so the request still times
     // out (it just won't also abort on the parent cancel signal).
-    return typeof AbortSignal.any === "function"
-      ? AbortSignal.any([signal, timeout])
-      : timeout;
+    return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : timeout;
   };
   const progress: WarmProgress = {
     done: 0,
@@ -635,10 +607,7 @@ export async function warmUrls(
 
   // Clamp to at least one worker (a 0/negative concurrency would spawn none and
   // silently warm nothing), and never more than there are URLs.
-  const workerCount = Math.min(
-    Math.max(1, Math.floor(concurrency)),
-    urls.length,
-  );
+  const workerCount = Math.min(Math.max(1, Math.floor(concurrency)), urls.length);
   const workers = Array.from({ length: workerCount }, worker);
   await Promise.all(workers);
   return progress;

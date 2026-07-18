@@ -63,10 +63,7 @@ describe("regionId", () => {
   });
 
   it("differs when the zoom range differs", () => {
-    assert.notEqual(
-      regionId([-10, -10, 10, 10], 4, 6),
-      regionId([-10, -10, 10, 10], 4, 7),
-    );
+    assert.notEqual(regionId([-10, -10, 10, 10], 4, 6), regionId([-10, -10, 10, 10], 4, 7));
   });
 });
 
@@ -129,20 +126,14 @@ describe("persistence round-trip", () => {
 
   it("replaces an existing region by id without duplicating", () => {
     upsertOfflineRegion(makeRegion({ id: "r1", tileCount: 1 }), storage);
-    upsertOfflineRegion(
-      makeRegion({ id: "r1", tileCount: 5, updatedAt: 2000 }),
-      storage,
-    );
+    upsertOfflineRegion(makeRegion({ id: "r1", tileCount: 5, updatedAt: 2000 }), storage);
     const loaded = loadOfflineRegions(storage);
     assert.equal(loaded.length, 1);
     assert.equal(loaded[0].tileCount, 5);
   });
 
   it("preserves a custom name and original createdAt on re-download", () => {
-    upsertOfflineRegion(
-      makeRegion({ id: "r1", name: "My City", createdAt: 100 }),
-      storage,
-    );
+    upsertOfflineRegion(makeRegion({ id: "r1", name: "My City", createdAt: 100 }), storage);
     upsertOfflineRegion(
       makeRegion({
         id: "r1",

@@ -1,12 +1,5 @@
 import { createRequire } from "node:module";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
@@ -46,10 +39,7 @@ export function copyCesiumAssets(destDir: string): Plugin {
     const markerPath = join(destDir, VERSION_MARKER);
     // Skip when the copy already matches the installed version so a dev-server
     // restart does not re-copy the (large) Assets directory every time.
-    if (
-      existsSync(markerPath) &&
-      readFileSync(markerPath, "utf8").trim() === version
-    ) {
+    if (existsSync(markerPath) && readFileSync(markerPath, "utf8").trim() === version) {
       return;
     }
     // Stale or missing: rebuild the copy from scratch so a version bump never

@@ -43,9 +43,7 @@ class CustomBuildHook(BuildHookInterface):
                 "`npm run build:embed` first."
             )
 
-        self.app.display_info(
-            "Building embedded GeoLibre web app (npm run build:embed)..."
-        )
+        self.app.display_info("Building embedded GeoLibre web app (npm run build:embed)...")
         try:
             subprocess.run(
                 ["npm", "run", "build:embed"],
@@ -61,6 +59,5 @@ class CustomBuildHook(BuildHookInterface):
 
         if not (STATIC_APP / "index.html").is_file():
             raise RuntimeError(
-                "The embed build completed but produced no index.html at "
-                f"{STATIC_APP}."
+                f"The embed build completed but produced no index.html at {STATIC_APP}."
             )

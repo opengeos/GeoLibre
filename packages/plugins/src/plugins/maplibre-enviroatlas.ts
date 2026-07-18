@@ -7,11 +7,7 @@ import {
   type ServiceRef,
 } from "maplibre-gl-enviroatlas";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -101,9 +97,7 @@ const enviroAtlasAdapter: WebServiceAdapter<EnviroAtlasControl> = {
     const map = control.getMap();
     return control.getState().addedLayers.map((added) => {
       const native = readNativeRasterSource(map, added.sourceId);
-      const tiles = native?.tiles ?? [
-        buildTileTemplate(added.service, added.sublayerId),
-      ];
+      const tiles = native?.tiles ?? [buildTileTemplate(added.service, added.sublayerId)];
       return {
         id: added.layerId,
         name: `EnviroAtlas ${added.label}`,
@@ -120,9 +114,7 @@ const enviroAtlasAdapter: WebServiceAdapter<EnviroAtlasControl> = {
         metadata: {
           enviroatlasId: added.id,
           enviroatlasService: { ...added.service },
-          ...(added.sublayerId !== undefined
-            ? { enviroatlasSublayerId: added.sublayerId }
-            : {}),
+          ...(added.sublayerId !== undefined ? { enviroatlasSublayerId: added.sublayerId } : {}),
           enviroatlasLabel: added.label,
           ...(added.bounds ? { enviroatlasBounds: added.bounds } : {}),
         },
@@ -155,9 +147,7 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
   version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
     if (!enviroAtlasControl) {
-      enviroAtlasControl = new EnviroAtlasControl(
-        getEnviroAtlasControlOptions(),
-      );
+      enviroAtlasControl = new EnviroAtlasControl(getEnviroAtlasControlOptions());
     }
 
     const added = app.addMapControl(enviroAtlasControl, enviroAtlasPosition);
@@ -175,10 +165,7 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
     enviroAtlasControl = null;
   },
   getMapControlPosition: () => enviroAtlasPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     enviroAtlasPosition = position;
     if (!enviroAtlasControl) return;
     app.removeMapControl(enviroAtlasControl);

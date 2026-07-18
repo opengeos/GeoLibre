@@ -51,9 +51,7 @@ export function computeRowSelection(input: RowSelectionInput): RowSelectionResul
       return { ids: [featureId], anchor: featureId };
     }
     const [from, to] =
-      anchorIndex <= clickedIndex
-        ? [anchorIndex, clickedIndex]
-        : [clickedIndex, anchorIndex];
+      anchorIndex <= clickedIndex ? [anchorIndex, clickedIndex] : [clickedIndex, anchorIndex];
     const rangeIds = sortedIds.slice(from, to + 1);
     const merged = additive ? [...selectedIds, ...rangeIds] : rangeIds;
     return { ids: [...new Set(merged)], anchor: anchorId };

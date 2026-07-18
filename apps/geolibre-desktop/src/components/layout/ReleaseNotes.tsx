@@ -46,11 +46,7 @@ export function ReleaseNotes({ notes }: ReleaseNotesProps) {
     .filter((line) => line.length > 0);
 
   if (lines.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        {t("updates.noChangelog")}
-      </p>
-    );
+    return <p className="text-xs text-muted-foreground">{t("updates.noChangelog")}</p>;
   }
 
   return (

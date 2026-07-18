@@ -68,10 +68,7 @@ describe("buildXyzLayer", () => {
       tileSize: "-256",
       shortUrl: false,
     });
-    assert.equal(
-      (negative.source as Record<string, unknown>).tileSize,
-      256,
-    );
+    assert.equal((negative.source as Record<string, unknown>).tileSize, 256);
   });
 
   it("records the original and resolved URLs for a redirected short URL", () => {
@@ -135,10 +132,7 @@ describe("buildWmsLayer", () => {
       tileSize: "256",
       version: "1.3.0",
     });
-    assert.equal(
-      (layer.source as Record<string, unknown>).attribution,
-      GEBCO_ATTRIBUTION,
-    );
+    assert.equal((layer.source as Record<string, unknown>).attribution, GEBCO_ATTRIBUTION);
   });
 });
 
@@ -161,10 +155,7 @@ describe("buildWmtsLayer", () => {
       url: "https://tiles.gebco.net/{z}/{x}/{y}.png",
       tileSize: "256",
     });
-    assert.equal(
-      (layer.source as Record<string, unknown>).attribution,
-      GEBCO_ATTRIBUTION,
-    );
+    assert.equal((layer.source as Record<string, unknown>).attribution, GEBCO_ATTRIBUTION);
   });
 });
 
@@ -216,10 +207,11 @@ describe("field mappers", () => {
       tileSize: "256",
       shortUrl: false,
     });
-    assert.deepEqual(
-      xyzFieldsToRequest({ url: "https://x", tileSize: "512", shortUrl: true }),
-      { url: "https://x", tileSize: "512", shortUrl: true },
-    );
+    assert.deepEqual(xyzFieldsToRequest({ url: "https://x", tileSize: "512", shortUrl: true }), {
+      url: "https://x",
+      tileSize: "512",
+      shortUrl: true,
+    });
   });
 
   it("resolves the WMS version from a saved field over the endpoint", () => {
@@ -245,9 +237,7 @@ describe("field mappers", () => {
   });
 
   it("defaults the WMS version to 1.1.1 when neither source has it", () => {
-    const params = wmsFieldsToParams(
-      entry("wms", { endpoint: "https://e/wms", layers: "a" }),
-    );
+    const params = wmsFieldsToParams(entry("wms", { endpoint: "https://e/wms", layers: "a" }));
     assert.equal(params.version, "1.1.1");
   });
 
@@ -320,10 +310,10 @@ describe("applyServiceEntry", () => {
 
   it("adds a WMS layer through the store, honoring the insert position", async () => {
     const { added, deps } = stubDeps();
-    await applyServiceEntry(
-      entry("wms", { endpoint: "https://e/wms", layers: "a" }, "My WMS"),
-      { ...deps, beforeLayerId: "layer-2" },
-    );
+    await applyServiceEntry(entry("wms", { endpoint: "https://e/wms", layers: "a" }, "My WMS"), {
+      ...deps,
+      beforeLayerId: "layer-2",
+    });
     assert.equal(added.length, 1);
     assert.equal(added[0].layer.type, "wms");
     assert.equal(added[0].layer.name, "My WMS");
@@ -361,20 +351,14 @@ describe("applyServiceEntry", () => {
       })) as typeof globalThis.fetch;
     try {
       await applyServiceEntry(
-        entry(
-          "wfs",
-          { endpoint: "https://e/wfs", typeName: "topp:states" },
-          "States",
-        ),
+        entry("wfs", { endpoint: "https://e/wfs", typeName: "topp:states" }, "States"),
         {
           addLayer: (layer, beforeLayerId = null) => {
             added.push({ layer, beforeLayerId });
           },
           mapControllerRef: {
             current: { fitLayer: (layer: GeoLibreLayer) => fitted.push(layer) },
-          } as unknown as Parameters<
-            typeof applyServiceEntry
-          >[1]["mapControllerRef"],
+          } as unknown as Parameters<typeof applyServiceEntry>[1]["mapControllerRef"],
         },
       );
     } finally {
@@ -401,14 +385,8 @@ describe("applyServiceEntry", () => {
     );
     // XYZ validates before the (browser-only) maplibre import, so this is safe
     // to assert under Node.
-    await assert.rejects(
-      () => applyServiceEntry(entry("xyz", { url: "" }), deps),
-      /no tile URL/i,
-    );
-    await assert.rejects(
-      () => applyServiceEntry(entry("wfs", { endpoint: "" }), deps),
-      /no URL/i,
-    );
+    await assert.rejects(() => applyServiceEntry(entry("xyz", { url: "" }), deps), /no tile URL/i);
+    await assert.rejects(() => applyServiceEntry(entry("wfs", { endpoint: "" }), deps), /no URL/i);
     // WFS mirrors WfsSource's output-format and numeric max-features guards.
     await assert.rejects(
       () =>

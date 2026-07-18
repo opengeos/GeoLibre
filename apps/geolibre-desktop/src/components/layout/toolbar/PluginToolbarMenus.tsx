@@ -1,7 +1,4 @@
-import type {
-  GeoLibreToolbarMenu,
-  GeoLibreToolbarMenuItem,
-} from "@geolibre/plugins";
+import type { GeoLibreToolbarMenu, GeoLibreToolbarMenuItem } from "@geolibre/plugins";
 import {
   Button,
   DropdownMenu,
@@ -42,11 +39,7 @@ function MenuIcon({ icon, className }: { icon?: string; className: string }) {
 const MAX_MENU_DEPTH = 8;
 
 /** Render a plugin menu item tree (actions, submenus, separators) recursively. */
-function renderItems(
-  items: GeoLibreToolbarMenuItem[],
-  menuId: string,
-  depth = 0,
-): React.ReactNode {
+function renderItems(items: GeoLibreToolbarMenuItem[], menuId: string, depth = 0): React.ReactNode {
   if (depth > MAX_MENU_DEPTH) {
     console.warn(
       `Toolbar menu "${menuId}" exceeds the maximum submenu depth (${MAX_MENU_DEPTH}); deeper items are not rendered.`,
@@ -81,10 +74,7 @@ function renderItems(
           try {
             item.onSelect();
           } catch (error) {
-            console.error(
-              `Toolbar menu "${menuId}" item "${item.id}" onSelect threw.`,
-              error,
-            );
+            console.error(`Toolbar menu "${menuId}" item "${item.id}" onSelect threw.`, error);
           }
         }}
       >
@@ -95,13 +85,7 @@ function renderItems(
   });
 }
 
-function PluginToolbarMenu({
-  menu,
-  chrome,
-}: {
-  menu: GeoLibreToolbarMenu;
-  chrome: ToolbarChrome;
-}) {
+function PluginToolbarMenu({ menu, chrome }: { menu: GeoLibreToolbarMenu; chrome: ToolbarChrome }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -133,10 +117,7 @@ function PluginToolbarMenu({
  * the Help menu (selected by `placement`). Renders nothing when no menu in the
  * requested group has any items.
  */
-export function PluginToolbarMenus({
-  chrome,
-  placement,
-}: PluginToolbarMenusProps) {
+export function PluginToolbarMenus({ chrome, placement }: PluginToolbarMenusProps) {
   const { entries } = useToolbarMenus();
   // Skip menus with no items so a plugin never shows a button that opens to a
   // blank dropdown, and keep only the menus that belong in this placement. A
@@ -148,9 +129,7 @@ export function PluginToolbarMenus({
     // source map. The two stay in sync because unregister always deactivates a
     // plugin (which removes its menu, re-rendering this list) before dropping
     // its source map entry, so a menu is never seen with a now-stale owner.
-    const external = Boolean(
-      entry.ownerPluginId && isExternalPluginId(entry.ownerPluginId),
-    );
+    const external = Boolean(entry.ownerPluginId && isExternalPluginId(entry.ownerPluginId));
     return placement === "external" ? external : !external;
   });
   if (visible.length === 0) return null;

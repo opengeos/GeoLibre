@@ -26,22 +26,17 @@ describe("normalizeHexColor", () => {
 
 describe("parseHexColorList", () => {
   it("splits on commas, semicolons, and whitespace and drops invalid tokens", () => {
-    assert.deepEqual(
-      parseHexColorList("#ff0000, #00ff00 #0000ff"),
-      ["#ff0000", "#00ff00", "#0000ff"],
-    );
-    assert.deepEqual(
-      parseHexColorList("ff0000; not-a-color\n#0f0"),
-      ["#ff0000", "#00ff00"],
-    );
+    assert.deepEqual(parseHexColorList("#ff0000, #00ff00 #0000ff"), [
+      "#ff0000",
+      "#00ff00",
+      "#0000ff",
+    ]);
+    assert.deepEqual(parseHexColorList("ff0000; not-a-color\n#0f0"), ["#ff0000", "#00ff00"]);
     assert.deepEqual(parseHexColorList("   "), []);
   });
 
   it("preserves order and keeps duplicates", () => {
-    assert.deepEqual(
-      parseHexColorList("#000, #000, #fff"),
-      ["#000000", "#000000", "#ffffff"],
-    );
+    assert.deepEqual(parseHexColorList("#000, #000, #fff"), ["#000000", "#000000", "#ffffff"]);
   });
 });
 
@@ -59,10 +54,6 @@ describe("interpolateColors", () => {
   });
 
   it("repeats a single anchor color across the requested count", () => {
-    assert.deepEqual(interpolateColors(["#abcdef"], 3), [
-      "#abcdef",
-      "#abcdef",
-      "#abcdef",
-    ]);
+    assert.deepEqual(interpolateColors(["#abcdef"], 3), ["#abcdef", "#abcdef", "#abcdef"]);
   });
 });

@@ -12,12 +12,7 @@ import type { GeoLibreDeckGL } from "../../types";
  */
 
 /** Visual grouping shown in the layer-type picker. */
-export type DeckVizCategory =
-  | "point"
-  | "flow"
-  | "geojson"
-  | "advanced"
-  | "models";
+export type DeckVizCategory = "point" | "flow" | "geojson" | "advanced" | "models";
 
 /**
  * How the source data is shaped. Drives both the dialog (file picker vs URL
@@ -47,12 +42,7 @@ export interface DeckVizRole {
 }
 
 /** Optional styling control the dialog renders for a layer. */
-export type DeckVizStyleControl =
-  | "color"
-  | "radius"
-  | "cellSize"
-  | "lineWidth"
-  | "extruded";
+export type DeckVizStyleControl = "color" | "radius" | "cellSize" | "lineWidth" | "extruded";
 
 /** User-tunable visual style, persisted in the layer's vizConfig. */
 export interface DeckVizStyle {
@@ -161,11 +151,7 @@ export interface DeckVizLayerDef {
   roles: DeckVizRole[];
   styleControls: DeckVizStyleControl[];
   animated?: boolean;
-  build: (
-    deckGL: GeoLibreDeckGL,
-    layerId: string,
-    ctx: DeckVizBuildContext,
-  ) => Layer;
+  build: (deckGL: GeoLibreDeckGL, layerId: string, ctx: DeckVizBuildContext) => Layer;
   example: DeckVizExample;
   /** Largest timestamp in the data, used to size the animation loop. */
   getTimeRange?: (ctx: DeckVizBuildContext) => number;
@@ -175,8 +161,7 @@ export interface DeckVizLayerDef {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-const DATA_BASE =
-  "https://raw.githubusercontent.com/visgl/deck.gl-data/master/examples";
+const DATA_BASE = "https://raw.githubusercontent.com/visgl/deck.gl-data/master/examples";
 
 // Yellow→red sequential ramp shared by the aggregation layers (matches the
 // deck.gl website examples), typed as deck.gl's RGB/RGBA color tuple list.
@@ -221,10 +206,7 @@ function positionAccessor(
 ): (record: AnyRecord) => [number, number] {
   const lngKey = mapping[lngRole];
   const latKey = mapping[latRole];
-  return (record) => [
-    readCoordinate(record, lngKey),
-    readCoordinate(record, latKey),
-  ];
+  return (record) => [readCoordinate(record, lngKey), readCoordinate(record, latKey)];
 }
 
 function rowsOf(ctx: DeckVizBuildContext): AnyRecord[] {
@@ -316,9 +298,7 @@ const OD_ROLES: DeckVizRole[] = [
   TARGET_LAT_ROLE,
 ];
 
-function weightAccessor(
-  mapping: DeckVizFieldMapping,
-): ((record: AnyRecord) => number) | undefined {
+function weightAccessor(mapping: DeckVizFieldMapping): ((record: AnyRecord) => number) | undefined {
   if (mapping.weight === undefined || mapping.weight === "") return undefined;
   const key = mapping.weight;
   return (record) => readNumber(record, key);
@@ -427,9 +407,7 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         getPosition: positionAccessor(ctx.fieldMapping),
         // Omit the weight accessors with no weight column so deck.gl uses its
         // count-based default; a constant accessor breaks GPU aggregation.
-        ...(weight
-          ? { getColorWeight: weight, getElevationWeight: weight }
-          : {}),
+        ...(weight ? { getColorWeight: weight, getElevationWeight: weight } : {}),
         radius: ctx.style.cellSize,
         extruded: ctx.style.extruded,
         elevationScale: ctx.style.extruded ? ctx.style.elevationScale : 0,
@@ -459,9 +437,7 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         id,
         data: rowsOf(ctx),
         getPosition: positionAccessor(ctx.fieldMapping),
-        ...(weight
-          ? { getColorWeight: weight, getElevationWeight: weight }
-          : {}),
+        ...(weight ? { getColorWeight: weight, getElevationWeight: weight } : {}),
         cellSize: ctx.style.cellSize,
         extruded: ctx.style.extruded,
         elevationScale: ctx.style.extruded ? ctx.style.elevationScale : 0,
@@ -548,16 +524,8 @@ const DEFINITIONS: DeckVizLayerDef[] = [
       new deckGL.layers.ArcLayer({
         id,
         data: rowsOf(ctx),
-        getSourcePosition: positionAccessor(
-          ctx.fieldMapping,
-          "sourceLng",
-          "sourceLat",
-        ),
-        getTargetPosition: positionAccessor(
-          ctx.fieldMapping,
-          "targetLng",
-          "targetLat",
-        ),
+        getSourcePosition: positionAccessor(ctx.fieldMapping, "sourceLng", "sourceLat"),
+        getTargetPosition: positionAccessor(ctx.fieldMapping, "targetLng", "targetLat"),
         getSourceColor: fillColor(ctx.style),
         getTargetColor: colorToRgba(ctx.style.color, 0.4),
         getWidth: ctx.style.lineWidth,
@@ -588,16 +556,8 @@ const DEFINITIONS: DeckVizLayerDef[] = [
       new deckGL.layers.LineLayer({
         id,
         data: rowsOf(ctx),
-        getSourcePosition: positionAccessor(
-          ctx.fieldMapping,
-          "sourceLng",
-          "sourceLat",
-        ),
-        getTargetPosition: positionAccessor(
-          ctx.fieldMapping,
-          "targetLng",
-          "targetLat",
-        ),
+        getSourcePosition: positionAccessor(ctx.fieldMapping, "sourceLng", "sourceLat"),
+        getTargetPosition: positionAccessor(ctx.fieldMapping, "targetLng", "targetLat"),
         getColor: fillColor(ctx.style),
         getWidth: ctx.style.lineWidth,
         opacity: ctx.opacity,
@@ -627,16 +587,8 @@ const DEFINITIONS: DeckVizLayerDef[] = [
       new deckGL.geoLayers.GreatCircleLayer({
         id,
         data: rowsOf(ctx),
-        getSourcePosition: positionAccessor(
-          ctx.fieldMapping,
-          "sourceLng",
-          "sourceLat",
-        ),
-        getTargetPosition: positionAccessor(
-          ctx.fieldMapping,
-          "targetLng",
-          "targetLat",
-        ),
+        getSourcePosition: positionAccessor(ctx.fieldMapping, "sourceLng", "sourceLat"),
+        getTargetPosition: positionAccessor(ctx.fieldMapping, "targetLng", "targetLat"),
         getSourceColor: fillColor(ctx.style),
         getTargetColor: colorToRgba(ctx.style.color, 0.4),
         getWidth: ctx.style.lineWidth,
@@ -784,8 +736,7 @@ const DEFINITIONS: DeckVizLayerDef[] = [
     kind: "trips",
     label: "Trips (animated)",
     category: "advanced",
-    description:
-      "Animated trails along paths. JSON array of objects with path & timestamps.",
+    description: "Animated trails along paths. JSON array of objects with path & timestamps.",
     inputKind: "json-objects",
     format: "json-objects",
     roles: [
@@ -816,14 +767,10 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         // deck.gl types PathGeometry as a flat number[], but PathLayer accepts
         // the nested [[lng,lat],...] arrays our data uses; cast to satisfy it.
         getPath: (record: AnyRecord) =>
-          (record as Record<string | number, unknown>)[
-            pathKey
-          ] as unknown as number[],
+          (record as Record<string | number, unknown>)[pathKey] as unknown as number[],
         getTimestamps: (record: AnyRecord) => {
           const stamps = (record as Record<string | number, unknown>)[tsKey];
-          return Array.isArray(stamps)
-            ? stamps.map((value) => Number(value) - minTs)
-            : [];
+          return Array.isArray(stamps) ? stamps.map((value) => Number(value) - minTs) : [];
         },
         getColor: fillColor(ctx.style),
         widthMinPixels: Math.max(ctx.style.lineWidth, 1),
@@ -876,12 +823,10 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         // Floor the on-screen size so distant models stay visible; leave the
         // ceiling unset so zooming in scales the model up naturally instead of
         // clamping a single large asset (building, turbine) to a small dot.
-        sizeMinPixels:
-          sg.sizeMinPixels ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeMinPixels ?? 1,
+        sizeMinPixels: sg.sizeMinPixels ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeMinPixels ?? 1,
         getPosition: (record: AnyRecord) => {
           const [lng, lat] = position(record);
-          const altitude =
-            (hasAlt ? readNumber(record, altKey) : 0) + sg.altitude;
+          const altitude = (hasAlt ? readNumber(record, altKey) : 0) + sg.altitude;
           return [lng, lat, altitude];
         },
         // glTF models are Y-up; the trailing 90° roll stands them upright in
@@ -891,8 +836,7 @@ const DEFINITIONS: DeckVizLayerDef[] = [
           hasBearing ? readNumber(record, bearingKey) : sg.bearing,
           sg.orientationRoll ?? DEFAULT_DECK_VIZ_SCENEGRAPH.orientationRoll ?? 90,
         ],
-        getTranslation:
-          sg.translation ?? DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0],
+        getTranslation: sg.translation ?? DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0],
         ...(hasScale
           ? {
               getScale: (record: AnyRecord): [number, number, number] => {
@@ -923,9 +867,7 @@ const DEFINITIONS: DeckVizLayerDef[] = [
   },
 ];
 
-const REGISTRY = new Map<string, DeckVizLayerDef>(
-  DEFINITIONS.map((def) => [def.kind, def]),
-);
+const REGISTRY = new Map<string, DeckVizLayerDef>(DEFINITIONS.map((def) => [def.kind, def]));
 
 /** All layer definitions, in registration (display) order. */
 export function listDeckVizLayerDefs(): DeckVizLayerDef[] {

@@ -35,11 +35,7 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
-import {
-  remapRowsToMercator,
-  tileGeoBounds,
-  wmsBboxFor,
-} from "./reproject";
+import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
 const DATASETS: Record<string, string> = {
@@ -47,12 +43,9 @@ const DATASETS: Record<string, string> = {
     "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_color-noshade_global",
   "mars-viking-mdim21":
     "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/viking_mdim21_global",
-  "mars-hillshade":
-    "https://s3.us-east-2.amazonaws.com/opmmarstiles/hillshade-tiles",
-  "mars-mola-color":
-    "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-color",
-  "mars-mola-gray":
-    "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-gray",
+  "mars-hillshade": "https://s3.us-east-2.amazonaws.com/opmmarstiles/hillshade-tiles",
+  "mars-mola-color": "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-color",
+  "mars-mola-gray": "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-gray",
   "moon-hillshaded-albedo":
     "https://s3.amazonaws.com/opmbuilder/301_moon/tiles/w/hillshaded-albedo",
 };
@@ -202,8 +195,7 @@ const CORS_HEADERS: Record<string, string> = {
   // Allow the Range request header (the /pmtiles route needs it) and expose the
   // response headers a range reader relies on. Harmless for the tile routes.
   "access-control-allow-headers": "range",
-  "access-control-expose-headers":
-    "content-range, content-length, etag, accept-ranges",
+  "access-control-expose-headers": "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
 };
 
@@ -365,10 +357,7 @@ function sourceCoopUpstream(pathname: string): string | null {
  * No client query parameters are forwarded — the upstream reads take none, and
  * dropping them keeps the cache key stable.
  */
-async function handleSourceCoop(
-  request: Request,
-  pathname: string,
-): Promise<Response> {
+async function handleSourceCoop(request: Request, pathname: string): Promise<Response> {
   if (!isAllowedOamOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
   }
@@ -387,17 +376,13 @@ async function handleSourceCoop(
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   }
   const headers = new Headers(CORS_HEADERS);
-  headers.set(
-    "content-type",
-    originResponse.headers.get("content-type") ?? "application/json",
-  );
+  headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
   // An unknown /api/v1 path returns the site's HTML 404 page with status 200,
   // so `ok` alone would happily cache a miss. Only cache a response whose
   // content type is what the client can actually parse.
   const contentType = headers.get("content-type") ?? "";
   const cacheable =
-    originResponse.ok &&
-    (contentType.includes("json") || contentType.includes("xml"));
+    originResponse.ok && (contentType.includes("json") || contentType.includes("xml"));
   headers.set("cache-control", cacheable ? SOURCE_COOP_CACHE_CONTROL : "no-store");
   return new Response(originResponse.body, {
     status: originResponse.status,
@@ -425,16 +410,13 @@ interface Env {}
  * per-client throttling). The upstream is public and unauthenticated, so this is
  * a Worker-egress cost concern, not an access-control bypass.
  */
-async function handlePmtilesRange(
-  request: Request,
-  name: string,
-): Promise<Response> {
+async function handlePmtilesRange(request: Request, name: string): Promise<Response> {
   const range = request.headers.get("range");
   if (!range) {
-    return new Response(
-      "This endpoint only serves HTTP range requests (send a Range header).",
-      { status: 400, headers: CORS_HEADERS },
-    );
+    return new Response("This endpoint only serves HTTP range requests (send a Range header).", {
+      status: 400,
+      headers: CORS_HEADERS,
+    });
   }
   const span = pmtilesRangeSpan(range);
   if (span === null || span > PMTILES_MAX_RANGE_BYTES) {
@@ -499,11 +481,7 @@ async function handlePmtilesRange(
 }
 
 export default {
-  async fetch(
-    request: Request,
-    _env: Env,
-    ctx: ExecutionContext,
-  ): Promise<Response> {
+  async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
@@ -578,16 +556,10 @@ export default {
         });
       }
       const headers = new Headers(CORS_HEADERS);
-      headers.set(
-        "content-type",
-        originResponse.headers.get("content-type") ?? "application/json",
-      );
+      headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
       // Only cache successful searches; a transient upstream error/throttle must
       // not be pinned in the browser for the OAM cache TTL.
-      headers.set(
-        "cache-control",
-        originResponse.ok ? OAM_CACHE_CONTROL : "no-store",
-      );
+      headers.set("cache-control", originResponse.ok ? OAM_CACHE_CONTROL : "no-store");
       return new Response(originResponse.body, {
         status: originResponse.status,
         headers,
@@ -613,9 +585,7 @@ export default {
     // Look up own properties only — a bare object literal inherits keys like
     // "constructor" from Object.prototype (and `[a-z0-9-]+` matches it), which
     // would otherwise resolve to a truthy function and slip past the 404 below.
-    const base = Object.hasOwn(DATASETS, dataset)
-      ? DATASETS[dataset]
-      : undefined;
+    const base = Object.hasOwn(DATASETS, dataset) ? DATASETS[dataset] : undefined;
     if (!base) {
       return new Response(`Unknown dataset: ${dataset}`, {
         status: 404,
@@ -650,14 +620,8 @@ export default {
     // Pass upstream errors (e.g. 403/404 for tiles past a mosaic's native zoom)
     // straight through, with CORS, so MapLibre just leaves that tile blank.
     const headers = new Headers(CORS_HEADERS);
-    headers.set(
-      "content-type",
-      originResponse.headers.get("content-type") ?? "image/png",
-    );
-    headers.set(
-      "cache-control",
-      originResponse.ok ? CACHE_CONTROL : NEGATIVE_CACHE_CONTROL,
-    );
+    headers.set("content-type", originResponse.headers.get("content-type") ?? "image/png");
+    headers.set("cache-control", originResponse.ok ? CACHE_CONTROL : NEGATIVE_CACHE_CONTROL);
 
     const response = new Response(originResponse.body, {
       status: originResponse.status,
@@ -689,9 +653,7 @@ async function handleWmsTile(
   const [, dataset, zs, xs, ys] = match;
   // Own-property lookup only, for the same Object.prototype reason as the OPM
   // path above (a slug like "constructor" must 404, not resolve to a function).
-  const ds = Object.hasOwn(WMS_DATASETS, dataset)
-    ? WMS_DATASETS[dataset]
-    : undefined;
+  const ds = Object.hasOwn(WMS_DATASETS, dataset) ? WMS_DATASETS[dataset] : undefined;
   if (!ds) {
     return new Response(`Unknown dataset: ${dataset}`, {
       status: 404,
@@ -764,20 +726,13 @@ async function handleWmsTile(
     }
     const rgba = new Uint8Array(UPNG.toRGBA8(decoded)[0]);
     const warped = remapRowsToMercator(rgba, WMS_TILE_SIZE, { z, x, y }, bounds);
-    out = UPNG.encode(
-      [warped.buffer as ArrayBuffer],
-      WMS_TILE_SIZE,
-      WMS_TILE_SIZE,
-      0,
-    );
+    out = UPNG.encode([warped.buffer as ArrayBuffer], WMS_TILE_SIZE, WMS_TILE_SIZE, 0);
   } catch (err) {
     // A 2xx response we can't decode/warp (e.g. a misconfigured dataset or an
     // unexpected upstream format/size) is a persistent failure, so degrade to a
     // negative-cached transparent tile — matching the upstream-status branch
     // above — instead of re-running this CPU-bound path on every request forever.
-    console.warn(
-      `WMS reproject decode failure: dataset=${dataset} error=${String(err)}`,
-    );
+    console.warn(`WMS reproject decode failure: dataset=${dataset} error=${String(err)}`);
     const resp = pngResponse(transparentTile(), NEGATIVE_CACHE_CONTROL);
     ctx.waitUntil(cache.put(request, resp.clone()));
     return resp;
@@ -802,12 +757,7 @@ let transparentTilePng: ArrayBuffer | undefined;
 function transparentTile(): ArrayBuffer {
   if (!transparentTilePng) {
     const rgba = new Uint8Array(WMS_TILE_SIZE * WMS_TILE_SIZE * 4);
-    transparentTilePng = UPNG.encode(
-      [rgba.buffer as ArrayBuffer],
-      WMS_TILE_SIZE,
-      WMS_TILE_SIZE,
-      0,
-    );
+    transparentTilePng = UPNG.encode([rgba.buffer as ArrayBuffer], WMS_TILE_SIZE, WMS_TILE_SIZE, 0);
   }
   return transparentTilePng.slice(0);
 }

@@ -37,10 +37,7 @@ export function BoundsRestrictionIndicator() {
       title={tooltip}
       data-testid="bounds-restriction-indicator"
     >
-      <Lock
-        className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400"
-        aria-hidden="true"
-      />
+      <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
       <span>{t("map.boundsRestricted")}</span>
       {/* Full description for assistive tech; the live region announces this
           along with the visible label, while sighted users get it via title. */}

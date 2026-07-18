@@ -230,10 +230,7 @@ export interface Candidate {
  * @param iouThreshold Boxes overlapping a kept box above this IoU are dropped.
  * @returns The surviving detections, highest score first.
  */
-export function nonMaxSuppression(
-  candidates: Candidate[],
-  iouThreshold: number,
-): Candidate[] {
+export function nonMaxSuppression(candidates: Candidate[], iouThreshold: number): Candidate[] {
   const sorted = [...candidates].sort((p, q) => q.score - p.score);
   const kept: Candidate[] = [];
   for (const cand of sorted) {
@@ -287,19 +284,15 @@ export function decodeYolo(
   // many classes (few anchors, but more channels), silently swapping the axes.
   // The channel axis is then the other dim; whether it sits on d1 (v8/v11, no
   // objectness) or d2 (v5, with objectness) determines the layout.
-  const expectedAnchors =
-    (inputSize / 8) ** 2 + (inputSize / 16) ** 2 + (inputSize / 32) ** 2;
-  const d2IsAnchors =
-    Math.abs(d2 - expectedAnchors) <= Math.abs(d1 - expectedAnchors);
+  const expectedAnchors = (inputSize / 8) ** 2 + (inputSize / 16) ** 2 + (inputSize / 32) ** 2;
+  const d2IsAnchors = Math.abs(d2 - expectedAnchors) <= Math.abs(d1 - expectedAnchors);
   const numAnchors = d2IsAnchors ? d2 : d1;
   const numChannels = d2IsAnchors ? d1 : d2;
   const v8 = d2IsAnchors;
   const hasObjectness = !v8;
   const numClasses = numChannels - (hasObjectness ? 5 : 4);
   if (numClasses < 1) {
-    throw new Error(
-      `Model output has too few channels (${numChannels}) to contain class scores.`,
-    );
+    throw new Error(`Model output has too few channels (${numChannels}) to contain class scores.`);
   }
 
   // Read one channel `c` of anchor `i` from either memory layout.
@@ -361,11 +354,7 @@ export async function detectObjects(
   // `3 * inputSize²` Float32 allocation, and out-of-range thresholds silently
   // break filtering/NMS. Fail fast with a clear message instead of OOMing or
   // returning nonsense.
-  if (
-    !Number.isInteger(inputSize) ||
-    inputSize < 32 ||
-    inputSize > MAX_INPUT_SIZE
-  ) {
+  if (!Number.isInteger(inputSize) || inputSize < 32 || inputSize > MAX_INPUT_SIZE) {
     throw new Error(`inputSize must be an integer between 32 and ${MAX_INPUT_SIZE}.`);
   }
   if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 1) {
@@ -414,12 +403,7 @@ export async function detectObjects(
     }
     const outData = output.data as Float32Array;
 
-    const candidates = decodeYolo(
-      outData,
-      output.dims,
-      confidenceThreshold,
-      inputSize,
-    );
+    const candidates = decodeYolo(outData, output.dims, confidenceThreshold, inputSize);
     const kept = nonMaxSuppression(candidates, iouThreshold);
 
     // Undo the letterbox (input pixels -> source pixels) and clamp to the raster.

@@ -1,8 +1,5 @@
 import type { GeoLibrePlugin } from "../types";
-import {
-  activateDeckViz,
-  deactivateDeckViz,
-} from "./deckgl-viz/overlay";
+import { activateDeckViz, deactivateDeckViz } from "./deckgl-viz/overlay";
 
 export const DECK_VIZ_PLUGIN_ID = "maplibre-deckgl-viz";
 

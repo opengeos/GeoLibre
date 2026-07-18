@@ -88,10 +88,7 @@ export function computeChart(rows: ChartRow[], spec: ChartSpec): ChartResult {
         type: "histogram",
         field,
         result: field
-          ? computeHistogram(
-              numericValues(rows, field),
-              spec.bins ?? DEFAULT_HISTOGRAM_BINS,
-            )
+          ? computeHistogram(numericValues(rows, field), spec.bins ?? DEFAULT_HISTOGRAM_BINS)
           : null,
       };
     }

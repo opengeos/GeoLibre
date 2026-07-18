@@ -1,9 +1,4 @@
-import {
-  parseProject,
-  serializeProject,
-  useAppStore,
-  type GeoLibreProject,
-} from "@geolibre/core";
+import { parseProject, serializeProject, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
@@ -52,9 +47,7 @@ type InboundMessage = LoadProjectMessage | RequestStateMessage;
  * @param mapControllerRef - Ref to the live map controller, read so the emitted
  *   snapshot captures the current camera (pan/zoom) rather than only the store.
  */
-export function useEmbedBridge(
-  mapControllerRef: RefObject<MapController | null>,
-): void {
+export function useEmbedBridge(mapControllerRef: RefObject<MapController | null>): void {
   useEffect(() => {
     if (!isEmbedded()) return;
     // The host is the embedding parent (the Jupyter/embed widget). The shared
@@ -70,8 +63,7 @@ export function useEmbedBridge(
     let lastLoadedSeq = 0;
     let lastPostedContent: string | null = null;
 
-    const buildProject = (): GeoLibreProject =>
-      buildProjectSnapshot(mapControllerRef);
+    const buildProject = (): GeoLibreProject => buildProjectSnapshot(mapControllerRef);
 
     const postState = () => {
       if (disposed) return;
@@ -123,9 +115,7 @@ export function useEmbedBridge(
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        useAppStore
-          .getState()
-          .loadProject(project, null, { rememberRecent: false });
+        useAppStore.getState().loadProject(project, null, { rememberRecent: false });
         // Suppress the snapshot this load would otherwise echo. loadProject is
         // synchronous, so cache the post-normalisation project (merged styles,
         // computed defaults) rather than the raw input; otherwise the first
@@ -163,10 +153,7 @@ export function useEmbedBridge(
     window.addEventListener("message", handleMessage);
     const unsubscribe = useAppStore.subscribe(scheduleState);
 
-    host.postMessage(
-      { type: "geolibre:ready", version: __GEOLIBRE_VERSION__ },
-      "*",
-    );
+    host.postMessage({ type: "geolibre:ready", version: __GEOLIBRE_VERSION__ }, "*");
 
     return () => {
       disposed = true;

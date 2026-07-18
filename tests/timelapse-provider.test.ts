@@ -62,9 +62,7 @@ describe("eoxS2CloudlessProvider", () => {
 
   it("shares one provider-level attribution for the map control", () => {
     assert.ok(eoxS2CloudlessProvider.attribution.includes("2018–2025"));
-    assert.ok(
-      eoxS2CloudlessProvider.attribution.includes("EOX IT Services GmbH"),
-    );
+    assert.ok(eoxS2CloudlessProvider.attribution.includes("EOX IT Services GmbH"));
   });
 
   it("caps the source maxzoom so the warm stack does not overfetch", () => {
@@ -214,27 +212,15 @@ describe("modisLandCoverProvider", () => {
 
 describe("timelapse provider registry", () => {
   it("returns the EOX provider by id and as the fallback", () => {
-    assert.equal(
-      getTimelapseProvider(EOX_S2CLOUDLESS_PROVIDER_ID),
-      eoxS2CloudlessProvider,
-    );
+    assert.equal(getTimelapseProvider(EOX_S2CLOUDLESS_PROVIDER_ID), eoxS2CloudlessProvider);
     assert.equal(getTimelapseProvider("no-such-provider"), eoxS2CloudlessProvider);
     assert.equal(getTimelapseProvider(undefined), eoxS2CloudlessProvider);
   });
 
   it("returns each NASA GIBS provider by id and lists all built-ins", () => {
-    assert.equal(
-      getTimelapseProvider(NASA_GIBS_WELD_PROVIDER_ID),
-      nasaGibsWeldProvider,
-    );
-    assert.equal(
-      getTimelapseProvider(NASA_GIBS_WELD_NDVI_PROVIDER_ID),
-      nasaGibsWeldNdviProvider,
-    );
-    assert.equal(
-      getTimelapseProvider(MODIS_LANDCOVER_PROVIDER_ID),
-      modisLandCoverProvider,
-    );
+    assert.equal(getTimelapseProvider(NASA_GIBS_WELD_PROVIDER_ID), nasaGibsWeldProvider);
+    assert.equal(getTimelapseProvider(NASA_GIBS_WELD_NDVI_PROVIDER_ID), nasaGibsWeldNdviProvider);
+    assert.equal(getTimelapseProvider(MODIS_LANDCOVER_PROVIDER_ID), modisLandCoverProvider);
     const all = listTimelapseProviders();
     assert.ok(all.includes(eoxS2CloudlessProvider));
     assert.ok(all.includes(nasaGibsWeldProvider));

@@ -83,6 +83,4 @@ def sql_run(request: SqlRunRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Sedona SQL failed")
-        raise HTTPException(
-            status_code=400, detail=f"Spatial SQL failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"Spatial SQL failed: {exc}") from exc

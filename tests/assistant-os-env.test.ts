@@ -35,10 +35,7 @@ describe("OS_ENV_VAR_NAMES", () => {
       "TAVILY_API_KEY",
     ]);
     for (const name of allowlist) {
-      assert.ok(
-        fieldNames.has(name) || extras.has(name),
-        `unrecognized OS env name: ${name}`,
-      );
+      assert.ok(fieldNames.has(name) || extras.has(name), `unrecognized OS env name: ${name}`);
     }
   });
 
@@ -70,17 +67,10 @@ describe("OS_ENV_VAR_NAMES", () => {
     // other is silently dropped (TS-only) or never requested (Rust-only). Guard
     // it here since a frontend node test can't otherwise reach lib.rs.
     const libRs = readFileSync(
-      fileURLToPath(
-        new URL(
-          "../apps/geolibre-desktop/src-tauri/src/lib.rs",
-          import.meta.url,
-        ),
-      ),
+      fileURLToPath(new URL("../apps/geolibre-desktop/src-tauri/src/lib.rs", import.meta.url)),
       "utf8",
     );
-    const block = libRs.match(
-      /const ALLOWED_ENV_VARS: &\[&str\] = &\[([\s\S]*?)\];/,
-    );
+    const block = libRs.match(/const ALLOWED_ENV_VARS: &\[&str\] = &\[([\s\S]*?)\];/);
     assert.ok(block, "ALLOWED_ENV_VARS not found in lib.rs");
     const rustNames = [...block[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     assert.deepEqual(
@@ -116,28 +106,19 @@ describe("OS env feeds provider resolution", () => {
     const osEnv = { OPENAI_API_KEY: "os-key" };
     const merged = { ...osEnv };
     assert.deepEqual(availableProviders(merged), ["openai"]);
-    assert.equal(
-      configForProvider("openai", undefined, merged)?.apiKey,
-      "os-key",
-    );
+    assert.equal(configForProvider("openai", undefined, merged)?.apiKey, "os-key");
   });
 
   it("lets a project key override the OS key on the same name", () => {
     const osEnv = { OPENAI_API_KEY: "os-key" };
     const projectEnv = { OPENAI_API_KEY: "project-key" };
     const merged = { ...osEnv, ...projectEnv };
-    assert.equal(
-      configForProvider("openai", undefined, merged)?.apiKey,
-      "project-key",
-    );
+    assert.equal(configForProvider("openai", undefined, merged)?.apiKey, "project-key");
   });
 });
 
 describe("scopeOsEnvToProject", () => {
-  const merge = (
-    osEnv: Record<string, string>,
-    projectEnv: Record<string, string>,
-  ) => ({
+  const merge = (osEnv: Record<string, string>, projectEnv: Record<string, string>) => ({
     ...scopeOsEnvToProject(osEnv, new Set(Object.keys(projectEnv))),
     ...projectEnv,
   });
@@ -152,22 +133,13 @@ describe("scopeOsEnvToProject", () => {
     // OS has GEMINI_API_KEY; the project overrides via the GOOGLE_API_KEY alias.
     // Without alias-group scoping, provider.ts's firstValue would still pick the
     // OS GEMINI_API_KEY (checked first), defeating "project always wins".
-    const merged = merge(
-      { GEMINI_API_KEY: "os-key" },
-      { GOOGLE_API_KEY: "project-key" },
-    );
-    assert.equal(
-      configForProvider("google", undefined, merged)?.apiKey,
-      "project-key",
-    );
+    const merged = merge({ GEMINI_API_KEY: "os-key" }, { GOOGLE_API_KEY: "project-key" });
+    assert.equal(configForProvider("google", undefined, merged)?.apiKey, "project-key");
     assert.ok(!("GEMINI_API_KEY" in merged));
   });
 
   it("does not shadow across unrelated credentials", () => {
-    const scoped = scopeOsEnvToProject(
-      { GEMINI_API_KEY: "os-gem" },
-      new Set(["OPENAI_API_KEY"]),
-    );
+    const scoped = scopeOsEnvToProject({ GEMINI_API_KEY: "os-gem" }, new Set(["OPENAI_API_KEY"]));
     assert.deepEqual(scoped, { GEMINI_API_KEY: "os-gem" });
   });
 
@@ -190,10 +162,7 @@ describe("scopeOsEnvToProject", () => {
     // GEMINI_API_KEY (same alias group), so the dialog's effectiveEnv agrees
     // with the runtime: the provider is NOT configured. Presence, not value,
     // decides shadowing.
-    const merged = merge(
-      { GEMINI_API_KEY: "os-key" },
-      { GOOGLE_API_KEY: "" },
-    );
+    const merged = merge({ GEMINI_API_KEY: "os-key" }, { GOOGLE_API_KEY: "" });
     assert.equal(configForProvider("google", undefined, merged), null);
   });
 });

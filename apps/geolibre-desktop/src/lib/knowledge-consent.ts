@@ -7,8 +7,7 @@
  * acknowledgment is a persisted per-device flag, mirroring the reverse-geocode
  * consent so every activation path is gated on it.
  */
-export const KNOWLEDGE_CARD_CONSENT_KEY =
-  "geolibre:knowledge-card-wikipedia-notice";
+export const KNOWLEDGE_CARD_CONSENT_KEY = "geolibre:knowledge-card-wikipedia-notice";
 
 /** Whether the user has acknowledged the knowledge-card privacy notice. */
 export function hasKnowledgeCardConsent(): boolean {

@@ -86,14 +86,8 @@ export function WidgetEditorDialog({
   }, [open, widget]);
 
   const data = useLayerChartData(layerId);
-  const numericCols = useMemo(
-    () => numericColumns(data.rows, data.columns),
-    [data],
-  );
-  const categoryCols = useMemo(
-    () => categoricalColumns(data.rows, data.columns),
-    [data],
-  );
+  const numericCols = useMemo(() => numericColumns(data.rows, data.columns), [data]);
+  const categoryCols = useMemo(() => categoricalColumns(data.rows, data.columns), [data]);
   const hasNumeric = numericCols.length > 0;
   const hasCategory = categoryCols.length > 0;
   const hasChartable = hasNumeric || hasCategory;
@@ -176,9 +170,7 @@ export function WidgetEditorDialog({
             </div>
 
             {!hasChartable ? (
-              <p className="text-sm text-muted-foreground">
-                {t("dashboard.editor.noFields")}
-              </p>
+              <p className="text-sm text-muted-foreground">{t("dashboard.editor.noFields")}</p>
             ) : (
               <div className="flex flex-wrap items-end gap-3">
                 <div className="grid gap-1.5">
@@ -295,9 +287,7 @@ export function WidgetEditorDialog({
                         id="widget-agg"
                         className="w-32"
                         value={aggregation}
-                        onChange={(event) =>
-                          setAggregation(event.target.value as BarAggregation)
-                        }
+                        onChange={(event) => setAggregation(event.target.value as BarAggregation)}
                       >
                         <option value="count">{t("dashboard.aggregate.count")}</option>
                         <option value="sum" disabled={!hasNumeric}>

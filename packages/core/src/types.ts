@@ -76,12 +76,7 @@ export type LayerType =
   | "video"
   | "image";
 
-export type VectorStyleMode =
-  | "single"
-  | "graduated"
-  | "categorized"
-  | "rule-based"
-  | "expression";
+export type VectorStyleMode = "single" | "graduated" | "categorized" | "rule-based" | "expression";
 
 /**
  * One entry in a {@link LayerStyle.vectorRules} rule-based renderer. Each rule
@@ -201,12 +196,7 @@ export type PointRenderer = "single" | "heatmap" | "cluster";
  * marker-line / arrow symbol layers: `"arrow"` renders directional arrowheads
  * that follow the line, the other shapes render as repeated markers.
  */
-export type LineDecoration =
-  | "none"
-  | "arrow"
-  | "triangle"
-  | "circle"
-  | "square";
+export type LineDecoration = "none" | "arrow" | "triangle" | "circle" | "square";
 
 /**
  * The per-feature derived geometry rendered by the geometry generator, or
@@ -215,12 +205,7 @@ export type LineDecoration =
  * hull, or a buffer) is drawn as an extra symbol over the layer's normal
  * symbology. `"centroid"` derives points; the rest derive polygons.
  */
-export type GeometryGeneratorType =
-  | "none"
-  | "centroid"
-  | "bounding-box"
-  | "convex-hull"
-  | "buffer";
+export type GeometryGeneratorType = "none" | "centroid" | "bounding-box" | "convex-hull" | "buffer";
 
 /**
  * Unit a stroke/line width is measured in. `"pixels"` is constant screen space;
@@ -663,10 +648,7 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
  * layer does not define it. Shared by `@geolibre/map` and the desktop app so
  * the two consumers cannot drift.
  */
-export function styleValue<K extends keyof LayerStyle>(
-  style: LayerStyle,
-  key: K,
-): LayerStyle[K] {
+export function styleValue<K extends keyof LayerStyle>(style: LayerStyle, key: K): LayerStyle[K] {
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
@@ -687,12 +669,8 @@ export const LARGE_VECTOR_FEATURE_THRESHOLD = 50_000;
  * @returns `true` when the collection exceeds
  *   {@link LARGE_VECTOR_FEATURE_THRESHOLD} features.
  */
-export function shouldUseTiledRendering(
-  geojson: GeoJSON.FeatureCollection | undefined,
-): boolean {
-  return (
-    (geojson?.features.length ?? 0) > LARGE_VECTOR_FEATURE_THRESHOLD
-  );
+export function shouldUseTiledRendering(geojson: GeoJSON.FeatureCollection | undefined): boolean {
+  return (geojson?.features.length ?? 0) > LARGE_VECTOR_FEATURE_THRESHOLD;
 }
 
 /**
@@ -750,13 +728,7 @@ export interface LayerJoin {
 }
 
 /** Edit-widget kinds the Attribute Form designer can assign to a field. */
-export type AttributeFormWidget =
-  | "text"
-  | "number"
-  | "range"
-  | "checkbox"
-  | "date"
-  | "valueMap";
+export type AttributeFormWidget = "text" | "number" | "range" | "checkbox" | "date" | "valueMap";
 
 /** One selectable entry of a `valueMap` widget (stored value + display label). */
 export interface AttributeFormValueMapEntry {
@@ -1319,11 +1291,7 @@ export interface StoryChapter {
   onChapterExit: StoryLayerOpacityChange[];
 }
 
-export type StoryInsetPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type StoryInsetPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 /**
  * A non-chapter intro/outro slide shown before the first or after the last
@@ -1489,13 +1457,7 @@ export const DEFAULT_DASHBOARD_COLUMNS = 2;
 
 /** The chart a {@link DashboardWidget} draws. Mirrors the attribute Charts
  * panel's types so a widget reuses the same rendering. */
-export type DashboardWidgetType =
-  | "histogram"
-  | "scatter"
-  | "bar"
-  | "line"
-  | "box"
-  | "pie";
+export type DashboardWidgetType = "histogram" | "scatter" | "bar" | "line" | "box" | "pie";
 
 /** How a bar widget reduces its category groups. */
 export type DashboardWidgetAggregation = "count" | "sum" | "mean";

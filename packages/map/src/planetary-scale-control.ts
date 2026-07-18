@@ -107,29 +107,18 @@ export interface LngLatLike {
 }
 
 /** Great-circle (haversine) distance in metres for a sphere of `radiusMeters`. */
-export function greatCircleMeters(
-  a: LngLatLike,
-  b: LngLatLike,
-  radiusMeters: number,
-): number {
+export function greatCircleMeters(a: LngLatLike, b: LngLatLike, radiusMeters: number): number {
   const rad = Math.PI / 180;
   const lat1 = a.lat * rad;
   const lat2 = b.lat * rad;
   const dLat = lat2 - lat1;
   const dLng = (b.lng - a.lng) * rad;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * radiusMeters * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /** Size the bar and label to a round distance in the requested unit system. */
-function setScale(
-  el: HTMLElement,
-  maxWidth: number,
-  maxMeters: number,
-  unit: MapScaleUnit,
-): void {
+function setScale(el: HTMLElement, maxWidth: number, maxMeters: number, unit: MapScaleUnit): void {
   const { span, label } = scaleSpan(maxMeters, unit);
   const rounded = getRoundNum(span);
   // rounded ≤ span, so the bar is never wider than maxWidth; clamp anyway as a

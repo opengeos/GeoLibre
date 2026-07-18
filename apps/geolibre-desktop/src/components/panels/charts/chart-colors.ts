@@ -82,10 +82,7 @@ export function shadeRamp(base: string, count: number): string[] {
  * Colors for a categorical chart's `count` marks: a monochromatic ramp of the
  * chosen `color`, or the multi-color palette when no valid color is given.
  */
-export function categoryColors(
-  color: string | null | undefined,
-  count: number,
-): string[] {
+export function categoryColors(color: string | null | undefined, count: number): string[] {
   if (isHexColor(color)) return shadeRamp(color, count);
   return Array.from({ length: count }, (_, i) => paletteColor(i));
 }

@@ -154,9 +154,7 @@ export function isInternalEditorLayerId(id: string): boolean {
  * @returns The loadable layers, in style (bottom-to-top) order.
  */
 export function listViewVectorLayers(
-  style:
-    | { layers?: unknown[]; sources?: Record<string, unknown> }
-    | undefined,
+  style: { layers?: unknown[]; sources?: Record<string, unknown> } | undefined,
 ): ViewVectorLayer[] {
   const layers = style?.layers;
   if (!Array.isArray(layers)) return [];
@@ -234,9 +232,7 @@ function stringArray(value: unknown): string[] {
  */
 export function resolveStoreLayerViewSource(
   layer: StoreLayerLike,
-  style:
-    | { layers?: unknown[]; sources?: Record<string, unknown> }
-    | undefined,
+  style: { layers?: unknown[]; sources?: Record<string, unknown> } | undefined,
 ): ViewVectorLayer | null {
   const layers = style?.layers;
   if (!Array.isArray(layers)) return null;
@@ -262,13 +258,10 @@ export function resolveStoreLayerViewSource(
     if (typeof sourceId !== "string" || sourceId.length === 0) continue;
     if (isInternalEditorLayerId(String(mapLayer.id ?? ""))) continue;
 
-    const belongs =
-      candidateIds.has(String(mapLayer.id ?? "")) ||
-      candidateSources.has(sourceId);
+    const belongs = candidateIds.has(String(mapLayer.id ?? "")) || candidateSources.has(sourceId);
     if (!belongs) continue;
 
-    const sourceType = (sources[sourceId] as { type?: string } | undefined)
-      ?.type;
+    const sourceType = (sources[sourceId] as { type?: string } | undefined)?.type;
     if (sourceType !== "vector" && sourceType !== "geojson") continue;
 
     const sourceLayer = mapLayer["source-layer"];
@@ -292,20 +285,14 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /** The [minX, minY, maxX, maxY] bounding box of a geometry, or null when empty. */
-function geometryBbox(
-  geometry: Geometry,
-): [number, number, number, number] | null {
+function geometryBbox(geometry: Geometry): [number, number, number, number] | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
   const walk = (value: unknown): void => {
     if (!Array.isArray(value)) return;
-    if (
-      value.length >= 2 &&
-      isFiniteNumber(value[0]) &&
-      isFiniteNumber(value[1])
-    ) {
+    if (value.length >= 2 && isFiniteNumber(value[0]) && isFiniteNumber(value[1])) {
       const [lng, lat] = value as [number, number];
       if (lng < minX) minX = lng;
       if (lng > maxX) maxX = lng;
@@ -339,18 +326,11 @@ export function geometryIntersectsBounds(
   const bbox = geometryBbox(geometry);
   if (!bbox) return false;
   const [minX, minY, maxX, maxY] = bbox;
-  return (
-    minX <= bounds.east &&
-    maxX >= bounds.west &&
-    minY <= bounds.north &&
-    maxY >= bounds.south
-  );
+  return minX <= bounds.east && maxX >= bounds.west && minY <= bounds.north && maxY >= bounds.south;
 }
 
 /** A rough size for a geometry, used to keep the largest of duplicate tiles. */
-export function geometryCoordinateCount(
-  geometry: Geometry | null | undefined,
-): number {
+export function geometryCoordinateCount(geometry: Geometry | null | undefined): number {
   if (!geometry) return 0;
   try {
     return JSON.stringify(geometry).length;
@@ -359,16 +339,12 @@ export function geometryCoordinateCount(
   }
 }
 
-function isPolygonal(
-  feature: Feature,
-): feature is Feature<Polygon | MultiPolygon> {
+function isPolygonal(feature: Feature): feature is Feature<Polygon | MultiPolygon> {
   const type = feature.geometry?.type;
   return type === "Polygon" || type === "MultiPolygon";
 }
 
-function isLinear(
-  feature: Feature,
-): feature is Feature<LineString | MultiLineString> {
+function isLinear(feature: Feature): feature is Feature<LineString | MultiLineString> {
   const type = feature.geometry?.type;
   return type === "LineString" || type === "MultiLineString";
 }
@@ -460,9 +436,7 @@ export function dedupeViewportFeatures(
     if (!geometryIntersectsBounds(raw.geometry, bounds)) continue;
 
     const props = raw.properties ?? {};
-    const key =
-      String(raw.id ?? props.id ?? props.osm_id ?? "") ||
-      `__auto_${autoIndex++}`;
+    const key = String(raw.id ?? props.id ?? props.osm_id ?? "") || `__auto_${autoIndex++}`;
     const feature: Feature = {
       type: "Feature",
       geometry: raw.geometry,
@@ -488,10 +462,7 @@ export function dedupeViewportFeatures(
  * @param layer The layer to query, from {@link listViewVectorLayers}.
  * @returns The in-view features, or an empty array when none are loaded.
  */
-export function queryViewLayerFeatures(
-  map: ViewImportMap,
-  layer: ViewVectorLayer,
-): Feature[] {
+export function queryViewLayerFeatures(map: ViewImportMap, layer: ViewVectorLayer): Feature[] {
   const sourceFeatures = map.querySourceFeatures(
     layer.sourceId,
     layer.sourceLayer ? { sourceLayer: layer.sourceLayer } : undefined,
@@ -529,10 +500,7 @@ function normalizeRing(value: unknown): Position[] | null {
   for (const entry of value) {
     const point = clonePosition(entry);
     if (!point) return null;
-    if (
-      points.length === 0 ||
-      !positionsEqual(points[points.length - 1], point)
-    ) {
+    if (points.length === 0 || !positionsEqual(points[points.length - 1], point)) {
       points.push(point);
     }
   }
@@ -575,9 +543,7 @@ function normalizeGeometry(geometry: Geometry | null): Geometry | null {
       const coordinates = (geometry.coordinates as unknown[])
         .map((line) => normalizeLine(line))
         .filter((line): line is Position[] => line != null);
-      return coordinates.length > 0
-        ? { type: "MultiLineString", coordinates }
-        : null;
+      return coordinates.length > 0 ? { type: "MultiLineString", coordinates } : null;
     }
     case "Polygon": {
       const coordinates = (geometry.coordinates as unknown[])
@@ -593,17 +559,13 @@ function normalizeGeometry(geometry: Geometry | null): Geometry | null {
             .filter((ring): ring is Position[] => ring != null),
         )
         .filter((polygon): polygon is Position[][] => polygon.length > 0);
-      return coordinates.length > 0
-        ? { type: "MultiPolygon", coordinates }
-        : null;
+      return coordinates.length > 0 ? { type: "MultiPolygon", coordinates } : null;
     }
     case "GeometryCollection": {
       const geometries = geometry.geometries
         .map((entry) => normalizeGeometry(entry))
         .filter((entry): entry is Geometry => entry != null);
-      return geometries.length > 0
-        ? { type: "GeometryCollection", geometries }
-        : null;
+      return geometries.length > 0 ? { type: "GeometryCollection", geometries } : null;
     }
     default:
       return null;
@@ -717,9 +679,7 @@ function canonicalGeometry(geometry: Geometry | null | undefined): string {
   if (!geometry) return "null";
   try {
     return JSON.stringify(
-      "coordinates" in geometry
-        ? (geometry as { coordinates: unknown }).coordinates
-        : geometry,
+      "coordinates" in geometry ? (geometry as { coordinates: unknown }).coordinates : geometry,
     );
   } catch {
     return "null";
@@ -761,9 +721,7 @@ function withEditorMetadata(
  * @param collection The editor's current feature collection.
  * @returns The export collection and a total feature count under `added`.
  */
-export function buildFullExport(
-  collection: FeatureCollection,
-): ViewImportExport {
+export function buildFullExport(collection: FeatureCollection): ViewImportExport {
   const features = collection.features.map((feature) =>
     withSafeId({
       ...feature,
@@ -808,11 +766,8 @@ export function buildChangedExport(
       seen.add(id);
       const original = baseline.get(id) as BaselineEntry;
       const geometryChanged =
-        canonicalGeometry(feature.geometry) !==
-        canonicalGeometry(original.geometry);
-      const propsChanged =
-        canonicalProperties(props) !==
-        canonicalProperties(original.properties);
+        canonicalGeometry(feature.geometry) !== canonicalGeometry(original.geometry);
+      const propsChanged = canonicalProperties(props) !== canonicalProperties(original.properties);
       if (!geometryChanged && !propsChanged) continue;
       features.push(
         withSafeId({

@@ -96,12 +96,7 @@ describe("computeHistogram", () => {
 
 describe("computeScatter", () => {
   it("returns only rows where both fields are finite, with extents", () => {
-    const data = rows(
-      { x: 1, y: 10 },
-      { x: 2, y: 20 },
-      { x: "bad", y: 30 },
-      { x: 4, y: null },
-    );
+    const data = rows({ x: 1, y: 10 }, { x: 2, y: 20 }, { x: "bad", y: 30 }, { x: 4, y: null });
     const result = computeScatter(data, "x", "y");
     assert.ok(result);
     assert.deepEqual(result.points, [
@@ -116,12 +111,7 @@ describe("computeScatter", () => {
   });
 
   it("caps rendered points but keeps full count and extents", () => {
-    const data = rows(
-      { x: 1, y: 1 },
-      { x: 2, y: 2 },
-      { x: 3, y: 3 },
-      { x: 9, y: 9 },
-    );
+    const data = rows({ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }, { x: 9, y: 9 });
     const result = computeScatter(data, "x", "y", 2);
     assert.ok(result);
     assert.equal(result.points.length, 2); // capped sample
@@ -217,11 +207,7 @@ describe("computeBar", () => {
   });
 
   it("omits sum/mean categories that have no numeric samples", () => {
-    const data = rows(
-      { kind: "a", v: 5 },
-      { kind: "b", v: null },
-      { kind: "b", v: "x" },
-    );
+    const data = rows({ kind: "a", v: 5 }, { kind: "b", v: null }, { kind: "b", v: "x" });
     // "b" has no finite value → excluded from sum (not shown as a zero bar).
     const result = computeBar(data, "kind", "sum", "v");
     assert.deepEqual(
@@ -235,12 +221,7 @@ describe("computeBar", () => {
     const result = computeBar(blanks, "k", "count", null);
     assert.equal(result?.bars.find((b) => b.label === "(blank)")?.value, 2);
 
-    const many = rows(
-      { k: "a" },
-      { k: "b" },
-      { k: "c" },
-      { k: "a" },
-    );
+    const many = rows({ k: "a" }, { k: "b" }, { k: "c" }, { k: "a" });
     const capped = computeBar(many, "k", "count", null, 2);
     assert.equal(capped?.bars.length, 2);
     assert.equal(capped?.truncated, 1);
@@ -309,12 +290,7 @@ describe("formatAxisValue", () => {
 
 describe("computePie", () => {
   it("counts rows per category and totals the whole", () => {
-    const data = rows(
-      { kind: "a" },
-      { kind: "a" },
-      { kind: "b" },
-      { kind: null },
-    );
+    const data = rows({ kind: "a" }, { kind: "a" }, { kind: "b" }, { kind: null });
     const result = computePie(data, "kind", "count", null);
     assert.ok(result);
     assert.equal(result.total, 4);
@@ -324,11 +300,7 @@ describe("computePie", () => {
   });
 
   it("sums a value field and keeps only positive contributions", () => {
-    const data = rows(
-      { kind: "a", amt: 10 },
-      { kind: "b", amt: -5 },
-      { kind: "c", amt: 0 },
-    );
+    const data = rows({ kind: "a", amt: 10 }, { kind: "b", amt: -5 }, { kind: "c", amt: 0 });
     const result = computePie(data, "kind", "sum", "amt");
     assert.ok(result);
     // Only "a" has a positive sum; non-positive slices are dropped.
@@ -337,9 +309,7 @@ describe("computePie", () => {
   });
 
   it("folds categories beyond the cap into an (other) slice", () => {
-    const data = rows(
-      ...Array.from({ length: 12 }, (_, i) => ({ kind: `k${i}` })),
-    );
+    const data = rows(...Array.from({ length: 12 }, (_, i) => ({ kind: `k${i}` })));
     const result = computePie(data, "kind", "count", null, 4);
     assert.ok(result);
     assert.equal(result.slices.length, 4);
@@ -351,10 +321,7 @@ describe("computePie", () => {
 
   it("returns null when there is nothing positive to chart", () => {
     assert.equal(computePie(rows(), "kind", "count", null), null);
-    assert.equal(
-      computePie(rows({ kind: "a", amt: -1 }), "kind", "sum", "amt"),
-      null,
-    );
+    assert.equal(computePie(rows({ kind: "a", amt: -1 }), "kind", "sum", "amt"), null);
   });
 
   it("renames the overflow slice when a real (other) category exists", () => {

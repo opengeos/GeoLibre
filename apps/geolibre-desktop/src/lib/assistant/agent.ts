@@ -6,11 +6,7 @@ import {
   resolveProviderConfig,
   type AssistantProviderId,
 } from "./provider";
-import {
-  createAssistantTools,
-  describeLayers,
-  type AssistantToolDeps,
-} from "./tools";
+import { createAssistantTools, describeLayers, type AssistantToolDeps } from "./tools";
 
 /** System prompt establishing the assistant's role, tools, and guardrails. */
 const SYSTEM_PROMPT = `You are GeoLibre's geospatial assistant. You help the user explore and analyze the data already loaded in their map by calling the provided tools.
@@ -43,8 +39,7 @@ export type AssistantStreamEvent =
 export class AssistantSession {
   private agent: Agent | null = null;
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
-  private selection: { provider: AssistantProviderId; model?: string } | null =
-    null;
+  private selection: { provider: AssistantProviderId; model?: string } | null = null;
   /** Last layer context sent, so it is only re-sent when it actually changes. */
   private lastContext: string | null = null;
 
@@ -59,9 +54,7 @@ export class AssistantSession {
    * Pin the provider/model (from the UI picker), or pass null to auto-resolve
    * from the configured keys. Rebuilds the agent on the next prompt.
    */
-  setSelection(
-    selection: { provider: AssistantProviderId; model?: string } | null,
-  ): void {
+  setSelection(selection: { provider: AssistantProviderId; model?: string } | null): void {
     this.selection = selection;
     this.reset();
   }

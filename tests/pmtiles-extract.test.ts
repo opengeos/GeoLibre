@@ -4,30 +4,20 @@ import { fileURLToPath } from "node:url";
 import { before, describe, it } from "node:test";
 import { PMTiles } from "pmtiles";
 import { initCogWasm } from "../packages/processing/src/cog-convert";
-import {
-  extractPmtiles,
-  pmtilesTileTypeKind,
-} from "../packages/processing/src/pmtiles-extract";
+import { extractPmtiles, pmtilesTileTypeKind } from "../packages/processing/src/pmtiles-extract";
 
 // A tiny z0-4 PNG PMTiles archive produced by scripts/gen-pmtiles-fixture.mjs
 // from the striped.tif fixture. Small enough to commit; real enough that the
 // reference pmtiles reader accepts the extract this suite produces from it.
 const archive = new Uint8Array(
-  readFileSync(
-    fileURLToPath(new URL("./fixtures/mini.pmtiles", import.meta.url)),
-  ),
+  readFileSync(fileURLToPath(new URL("./fixtures/mini.pmtiles", import.meta.url))),
 );
 
 // In the browser wasm-bindgen fetches the bundled asset; under node:test we
 // feed it the wasm bytes directly (same pattern as cog-convert.test.ts).
 const wasmBytes = new Uint8Array(
   readFileSync(
-    fileURLToPath(
-      new URL(
-        "../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm",
-        import.meta.url,
-      ),
-    ),
+    fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url)),
   ),
 );
 
@@ -57,14 +47,10 @@ function rangeServer(
     if (options?.ignoreRange) {
       return new Response(bytes.slice() as unknown as BodyInit, {
         status: 200,
-        headers: options?.omitContentLength
-          ? {}
-          : { "content-length": String(bytes.length) },
+        headers: options?.omitContentLength ? {} : { "content-length": String(bytes.length) },
       });
     }
-    const range = /bytes=(\d+)-(\d+)/.exec(
-      String(new Headers(init?.headers).get("range") ?? ""),
-    );
+    const range = /bytes=(\d+)-(\d+)/.exec(String(new Headers(init?.headers).get("range") ?? ""));
     assert.ok(range, "extractor must send a Range header");
     const start = Number(range[1]);
     const end = Math.min(Number(range[2]), bytes.length - 1);
@@ -97,14 +83,15 @@ describe("extractPmtiles", () => {
   it("extracts an archive the reference pmtiles reader accepts", async () => {
     const { fetchImpl } = rangeServer(archive);
     const phases: string[] = [];
-    const { archive: out, source, progress } = await extractPmtiles(
-      "https://example.test/mini.pmtiles",
-      {
-        bbox: WORLD_BBOX,
-        fetchImpl,
-        onProgress: (p) => phases.push(p.phase),
-      },
-    );
+    const {
+      archive: out,
+      source,
+      progress,
+    } = await extractPmtiles("https://example.test/mini.pmtiles", {
+      bbox: WORLD_BBOX,
+      fetchImpl,
+      onProgress: (p) => phases.push(p.phase),
+    });
 
     assert.equal(source.minZoom, 0);
     assert.equal(source.maxZoom, 4);
@@ -137,19 +124,16 @@ describe("extractPmtiles", () => {
   it("respects the zoom range and reports plan details before download", async () => {
     const { fetchImpl } = rangeServer(archive);
     let planned: number | undefined;
-    const { archive: out } = await extractPmtiles(
-      "https://example.test/mini.pmtiles",
-      {
-        bbox: WORLD_BBOX,
-        minZoom: 0,
-        maxZoom: 2,
-        fetchImpl,
-        confirmDownload: (p) => {
-          planned = p.estimatedOutputBytes;
-          return true;
-        },
+    const { archive: out } = await extractPmtiles("https://example.test/mini.pmtiles", {
+      bbox: WORLD_BBOX,
+      minZoom: 0,
+      maxZoom: 2,
+      fetchImpl,
+      confirmDownload: (p) => {
+        planned = p.estimatedOutputBytes;
+        return true;
       },
-    );
+    });
     assert.ok(planned !== undefined && planned > 0, "plan estimate reported");
     const header = await referenceReader(out).getHeader();
     assert.equal(header.maxZoom, 2);
@@ -163,8 +147,7 @@ describe("extractPmtiles", () => {
         fetchImpl,
         confirmDownload: () => false,
       }),
-      (error: unknown) =>
-        error instanceof DOMException && error.name === "AbortError",
+      (error: unknown) => error instanceof DOMException && error.name === "AbortError",
     );
   });
 
@@ -181,27 +164,26 @@ describe("extractPmtiles", () => {
           return true;
         },
       }),
-      (error: unknown) =>
-        error instanceof DOMException && error.name === "AbortError",
+      (error: unknown) => error instanceof DOMException && error.name === "AbortError",
     );
   });
 
   it("retries transient network failures", async () => {
     const { fetchImpl, requests } = rangeServer(archive, { failFirst: 1 });
-    const { archive: out } = await extractPmtiles(
-      "https://example.test/mini.pmtiles",
-      { bbox: WORLD_BBOX, fetchImpl },
-    );
+    const { archive: out } = await extractPmtiles("https://example.test/mini.pmtiles", {
+      bbox: WORLD_BBOX,
+      fetchImpl,
+    });
     assert.ok(out.length > 0);
     assert.ok(requests() >= 2, "the failed request must be retried");
   });
 
   it("falls back to slicing a small full-body 200 response", async () => {
     const { fetchImpl } = rangeServer(archive, { ignoreRange: true });
-    const { archive: out } = await extractPmtiles(
-      "https://example.test/mini.pmtiles",
-      { bbox: WORLD_BBOX, fetchImpl },
-    );
+    const { archive: out } = await extractPmtiles("https://example.test/mini.pmtiles", {
+      bbox: WORLD_BBOX,
+      fetchImpl,
+    });
     const header = await referenceReader(out).getHeader();
     assert.equal(header.maxZoom, 4);
   });
@@ -222,10 +204,10 @@ describe("extractPmtiles", () => {
 
   it("retries HTTP 429 rate limiting", async () => {
     const { fetchImpl, requests } = rangeServer(archive, { status429First: 1 });
-    const { archive: out } = await extractPmtiles(
-      "https://example.test/mini.pmtiles",
-      { bbox: WORLD_BBOX, fetchImpl },
-    );
+    const { archive: out } = await extractPmtiles("https://example.test/mini.pmtiles", {
+      bbox: WORLD_BBOX,
+      fetchImpl,
+    });
     assert.ok(out.length > 0);
     assert.ok(requests() >= 2, "a 429 must be retried");
   });

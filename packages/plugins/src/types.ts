@@ -2,11 +2,7 @@ import type { GeoLibreLayer, LayerStyle } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 
-export type GeoLibreMapControlPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type GeoLibreBuiltInMapControl =
   | "navigation"
@@ -188,11 +184,7 @@ export interface GeoLibrePickedVectorFile {
 
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
-  addGeoJsonLayer: (
-    name: string,
-    data: FeatureCollection,
-    sourcePath?: string,
-  ) => string;
+  addGeoJsonLayer: (name: string, data: FeatureCollection, sourcePath?: string) => string;
   /**
    * Add a native XYZ raster tile layer from a tile URL template (with
    * `{x}`/`{y}`/`{z}` placeholders) and return its layer id. Unlike calling
@@ -202,11 +194,7 @@ export interface GeoLibreAppAPI {
    * for forward-compatibility with host variants, so call it with optional
    * chaining.
    */
-  addTileLayer?: (
-    name: string,
-    url: string,
-    options?: GeoLibreTileLayerOptions,
-  ) => string;
+  addTileLayer?: (name: string, url: string, options?: GeoLibreTileLayerOptions) => string;
   /**
    * Add a native WMTS raster tile layer from a WMTS tile URL template and return
    * its layer id. Behaves like {@link addTileLayer} (the layer is a first-class
@@ -214,11 +202,7 @@ export interface GeoLibreAppAPI {
    * layers labelled distinctly. Typed optional for forward-compatibility, so
    * call it with optional chaining.
    */
-  addWmtsLayer?: (
-    name: string,
-    url: string,
-    options?: GeoLibreTileLayerOptions,
-  ) => string;
+  addWmtsLayer?: (name: string, url: string, options?: GeoLibreTileLayerOptions) => string;
   /**
    * Add a native WMS raster layer and return its layer id. The host builds the
    * GetMap tile URL from {@link GeoLibreWmsLayerOptions.url} and
@@ -238,11 +222,7 @@ export interface GeoLibreAppAPI {
    * rejects if the COG cannot be loaded. Typed optional for
    * forward-compatibility, so call it with optional chaining.
    */
-  addCogLayer?: (
-    name: string,
-    url: string,
-    options?: GeoLibreCogLayerOptions,
-  ) => Promise<string>;
+  addCogLayer?: (name: string, url: string, options?: GeoLibreCogLayerOptions) => Promise<string>;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
@@ -258,10 +238,7 @@ export interface GeoLibreAppAPI {
    * boundary: the resolved URL grants no access a plugin does not already have,
    * since any plugin can fetch any same-origin URL directly.
    */
-  resolvePluginAssetUrl?: (
-    pluginId: string,
-    relativePath: string,
-  ) => string | null;
+  resolvePluginAssetUrl?: (pluginId: string, relativePath: string) => string | null;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
   pickLocalDirectoryFiles?: () => Promise<File[] | null>;
@@ -285,9 +262,7 @@ export interface GeoLibreAppAPI {
    * Resolves to null off the desktop host, or when the file can no longer be
    * read (moved or deleted).
    */
-  readLocalVectorFile?: (
-    path: string,
-  ) => Promise<{
+  readLocalVectorFile?: (path: string) => Promise<{
     file: File;
     companionFiles: File[];
     nativeData?: FeatureCollection;
@@ -299,11 +274,7 @@ export interface GeoLibreAppAPI {
    * Pass `options` to control the file-type label/extensions (defaults to
    * GeoJSON).
    */
-  exportTextFile?: (
-    filename: string,
-    content: string,
-    options?: GeoLibreFileDialogOptions,
-  ) => void;
+  exportTextFile?: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => void;
   /**
    * Prompt the user to pick a text file and return its contents (a native open
    * dialog under Tauri, a file input on the web). Resolves to null when the
@@ -314,25 +285,13 @@ export interface GeoLibreAppAPI {
    * user dismisses the dialog without choosing a file. Under Tauri (the
    * primary desktop target) cancel resolves to null as expected.
    */
-  importTextFile?: (
-    options?: GeoLibreFileDialogOptions,
-  ) => Promise<string | null>;
-  registerExternalNativeLayer?: (
-    layer: GeoLibreExternalNativeLayerRegistration,
-  ) => void;
+  importTextFile?: (options?: GeoLibreFileDialogOptions) => Promise<string | null>;
+  registerExternalNativeLayer?: (layer: GeoLibreExternalNativeLayerRegistration) => void;
   unregisterExternalNativeLayer?: (id: string) => void;
-  addMapControl: (
-    control: IControl,
-    position?: GeoLibreMapControlPosition,
-  ) => boolean;
+  addMapControl: (control: IControl, position?: GeoLibreMapControlPosition) => boolean;
   removeMapControl: (control: IControl) => void;
-  setBuiltInMapControlVisible: (
-    control: GeoLibreBuiltInMapControl,
-    visible: boolean,
-  ) => boolean;
-  getBuiltInMapControlPosition: (
-    control: GeoLibreBuiltInMapControl,
-  ) => GeoLibreMapControlPosition;
+  setBuiltInMapControlVisible: (control: GeoLibreBuiltInMapControl, visible: boolean) => boolean;
+  getBuiltInMapControlPosition: (control: GeoLibreBuiltInMapControl) => GeoLibreMapControlPosition;
   setBuiltInMapControlPosition: (
     control: GeoLibreBuiltInMapControl,
     position: GeoLibreMapControlPosition,
@@ -437,9 +396,7 @@ export interface GeoLibreAppAPI {
    * {@link openFloatingPanel} is called. Unlike a right panel, several floating
    * panels can be open at once and they do not shrink the map.
    */
-  registerFloatingPanel?: (
-    panel: GeoLibreFloatingPanelRegistration,
-  ) => () => void;
+  registerFloatingPanel?: (panel: GeoLibreFloatingPanelRegistration) => () => void;
   /** Remove a registered floating panel (closing it if open). */
   unregisterFloatingPanel?: (id: string) => void;
   /** Open a floating panel (or bring an already-open one to the front). */
@@ -683,10 +640,7 @@ export interface GeoLibrePlugin {
    * invoked. A handler that throws is not counted as handled, so a later
    * dispatch for the same context retries it.
    */
-  handleUrlParameters?: (
-    app: GeoLibreAppAPI,
-    params: URLSearchParams,
-  ) => void | Promise<void>;
+  handleUrlParameters?: (app: GeoLibreAppAPI, params: URLSearchParams) => void | Promise<void>;
   getMapControlPosition?: () => GeoLibreMapControlPosition;
   setMapControlPosition?: (
     app: GeoLibreAppAPI,

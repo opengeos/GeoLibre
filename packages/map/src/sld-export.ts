@@ -98,10 +98,7 @@ function scaleDenominators(style: LayerStyle): string[] {
 }
 
 /** `Min`/`MaxScaleDenominator` lines for an explicit zoom window. */
-function scaleDenominatorsForWindow(
-  minZoom: number,
-  maxZoom: number,
-): string[] {
+function scaleDenominatorsForWindow(minZoom: number, maxZoom: number): string[] {
   const low = Math.min(minZoom, maxZoom);
   const high = Math.max(minZoom, maxZoom);
   const lines: string[] = [];
@@ -171,9 +168,7 @@ function strokeElement(paint: SymbolPaint): string {
 }
 
 function polygonSymbolizer(paint: SymbolPaint): string {
-  return `<PolygonSymbolizer>${fillElement(paint)}${strokeElement(
-    paint,
-  )}</PolygonSymbolizer>`;
+  return `<PolygonSymbolizer>${fillElement(paint)}${strokeElement(paint)}</PolygonSymbolizer>`;
 }
 
 function lineSymbolizer(paint: SymbolPaint): string {
@@ -185,11 +180,7 @@ function lineSymbolizer(paint: SymbolPaint): string {
  * color/size) when a shape marker is enabled and mappable, otherwise a circle
  * sized to the layer's circle radius (SLD `Size` is the graphic diameter).
  */
-function pointSymbolizer(
-  style: LayerStyle,
-  paint: SymbolPaint,
-  warnings: string[],
-): string {
+function pointSymbolizer(style: LayerStyle, paint: SymbolPaint, warnings: string[]): string {
   let wellKnownName = "circle";
   let markPaint = paint;
   let size = (paint.circleRadius ?? styleValue(style, "circleRadius")) * 2;
@@ -211,9 +202,7 @@ function pointSymbolizer(
       // strokeColor. Only non-circle shapes use the drawBuiltinMarker halo.
       shapeMarker = shape !== "circle";
     } else {
-      warnings.push(
-        `The "${shape}" marker has no SLD equivalent; points use a circle instead.`,
-      );
+      warnings.push(`The "${shape}" marker has no SLD equivalent; points use a circle instead.`);
     }
   }
 
@@ -257,21 +246,14 @@ function textSymbolizer(
   // field and warn.
   let field = labels.field.trim();
   if (!field && labels.expression.trim()) {
-    warnings.push(
-      "The label expression has no SLD equivalent; export the label field instead.",
-    );
+    warnings.push("The label expression has no SLD equivalent; export the label field instead.");
   }
   if (!field) return null;
 
   const parts: string[] = ["<TextSymbolizer>"];
+  parts.push(`<Label><ogc:PropertyName>${xmlEscape(field)}</ogc:PropertyName></Label>`);
   parts.push(
-    `<Label><ogc:PropertyName>${xmlEscape(field)}</ogc:PropertyName></Label>`,
-  );
-  parts.push(
-    `<Font>${cssParam("font-family", fontFamily)}${cssParam(
-      "font-size",
-      num(labels.size),
-    )}</Font>`,
+    `<Font>${cssParam("font-family", fontFamily)}${cssParam("font-size", num(labels.size))}</Font>`,
   );
 
   // Point vs line placement, with the point anchor/offset/rotation carried over.
@@ -288,18 +270,14 @@ function textSymbolizer(
           )}</AnchorPointY></AnchorPoint>`
         : "",
       labels.offsetX || labels.offsetY
-        ? `<Displacement><DisplacementX>${num(
-            labels.offsetX,
-          )}</DisplacementX><DisplacementY>${num(
+        ? `<Displacement><DisplacementX>${num(labels.offsetX)}</DisplacementX><DisplacementY>${num(
             -labels.offsetY,
           )}</DisplacementY></Displacement>`
         : "",
       labels.rotation ? `<Rotation>${num(labels.rotation)}</Rotation>` : "",
     ].join("");
     if (inner) {
-      parts.push(
-        `<LabelPlacement><PointPlacement>${inner}</PointPlacement></LabelPlacement>`,
-      );
+      parts.push(`<LabelPlacement><PointPlacement>${inner}</PointPlacement></LabelPlacement>`);
     }
   }
 
@@ -312,10 +290,7 @@ function textSymbolizer(
     );
   }
   parts.push(
-    `<Fill>${cssParam("fill", labels.color)}${cssParam(
-      "fill-opacity",
-      num(opacity),
-    )}</Fill>`,
+    `<Fill>${cssParam("fill", labels.color)}${cssParam("fill-opacity", num(opacity))}</Fill>`,
   );
   parts.push("</TextSymbolizer>");
   return parts.join("");
@@ -326,16 +301,8 @@ function textSymbolizer(
  * null for `center` (the SLD default, so it is left implicit).
  */
 function anchorPoint(anchor: string): [number, number] | null {
-  const x = anchor.includes("left")
-    ? 0
-    : anchor.includes("right")
-      ? 1
-      : 0.5;
-  const y = anchor.includes("bottom")
-    ? 0
-    : anchor.includes("top")
-      ? 1
-      : 0.5;
+  const x = anchor.includes("left") ? 0 : anchor.includes("right") ? 1 : 0.5;
+  const y = anchor.includes("bottom") ? 0 : anchor.includes("top") ? 1 : 0.5;
   if (x === 0.5 && y === 0.5) return null;
   return [x, y];
 }
@@ -361,8 +328,7 @@ function renderSymbolizers(
   // (matching vectorLineColorValue, which colors lines by the data value while
   // polygon outlines keep the flat stroke), falling back to the flat stroke.
   if (profile.hasLine) {
-    const linePaint =
-      lineColor !== undefined ? { ...paint, strokeColor: lineColor } : paint;
+    const linePaint = lineColor !== undefined ? { ...paint, strokeColor: lineColor } : paint;
     parts.push(lineSymbolizer(linePaint));
   }
   if (profile.hasPoint) parts.push(pointSymbolizer(style, paint, warnings));
@@ -388,11 +354,7 @@ function rule(
 }
 
 /** `<ogc:Filter>` for `PropertyIs…` on a property/literal, e.g. equals. */
-function comparisonFilter(
-  op: string,
-  property: string,
-  literal: string | number,
-): string {
+function comparisonFilter(op: string, property: string, literal: string | number): string {
   return `<ogc:Filter><ogc:${op}><ogc:PropertyName>${xmlEscape(
     property,
   )}</ogc:PropertyName><ogc:Literal>${xmlEscape(
@@ -401,11 +363,7 @@ function comparisonFilter(
 }
 
 /** A range `<ogc:And>` of `>= lower` and (when finite) `< upper`. */
-function rangeFilter(
-  property: string,
-  lower: number,
-  upper: number | null,
-): string {
+function rangeFilter(property: string, lower: number, upper: number | null): string {
   const prop = xmlEscape(property);
   const ge = `<ogc:PropertyIsGreaterThanOrEqualTo><ogc:PropertyName>${prop}</ogc:PropertyName><ogc:Literal>${num(
     lower,
@@ -425,7 +383,6 @@ function belowFilter(property: string, value: number): string {
     value,
   )}</ogc:Literal></ogc:PropertyIsLessThan></ogc:Filter>`;
 }
-
 
 /**
  * Translate a GeoLibre rule's MapLibre filter (JSON string) into an
@@ -512,11 +469,7 @@ function getProp(node: unknown): string | null {
 
 /** Read a scalar literal (string/number/boolean) from a filter operand. */
 function getLiteral(node: unknown): string | number | boolean | null {
-  if (
-    typeof node === "string" ||
-    typeof node === "number" ||
-    typeof node === "boolean"
-  ) {
+  if (typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
     return node;
   }
   // A ["literal", v] wrapper is unwrapped to its scalar.
@@ -589,10 +542,7 @@ function graduatedRules(
     .map((stop) => ({
       color: stop.color,
       label: stop.label,
-      value:
-        typeof stop.value === "number"
-          ? stop.value
-          : Number.parseFloat(String(stop.value)),
+      value: typeof stop.value === "number" ? stop.value : Number.parseFloat(String(stop.value)),
     }))
     // Drop stops with a non-numeric value or an invalid color, matching the
     // filtering vectorColorExpression applies before building the interpolation.
@@ -666,9 +616,7 @@ function ruleBasedRules(
   const out: string[] = [];
   const { rules: effective, elseRule } = effectiveVectorRules(style);
   if (rules.some((entry) => entry.enabled === false)) {
-    warnings.push(
-      "Disabled rules are not part of the rendered style and were not exported.",
-    );
+    warnings.push("Disabled rules are not part of the rendered style and were not exported.");
   }
   // A self-referencing parentId means "no parent" (top-level), so it does not
   // count as nesting for the flattening warning.
@@ -696,8 +644,7 @@ function ruleBasedRules(
       layerMaxZoom,
       clampZoom(entry.maxZoom ?? layerMaxZoom, MAX_LAYER_ZOOM),
     );
-    const hasRuleZoom =
-      entry.minZoom !== undefined || entry.maxZoom !== undefined;
+    const hasRuleZoom = entry.minZoom !== undefined || entry.maxZoom !== undefined;
     if (hasRuleZoom && ruleMinZoom >= ruleMaxZoom) {
       // The rule's zoom range lies entirely outside the layer's window, so
       // the live map never draws it (the layer's zoom clipping hides it).
@@ -708,21 +655,14 @@ function ruleBasedRules(
       );
       continue;
     }
-    const ruleScale = hasRuleZoom
-      ? scaleDenominatorsForWindow(ruleMinZoom, ruleMaxZoom)
-      : scale;
+    const ruleScale = hasRuleZoom ? scaleDenominatorsForWindow(ruleMinZoom, ruleMaxZoom) : scale;
     const paint: SymbolPaint = {
       ...base,
       fillColor: entry.color,
       strokeColor: entry.strokeColor ?? base.strokeColor,
       strokeWidth: entry.strokeWidth ?? base.strokeWidth,
-      fillOpacity:
-        entry.fillOpacity !== undefined
-          ? entry.fillOpacity * opacity
-          : base.fillOpacity,
-      ...(entry.circleRadius !== undefined
-        ? { circleRadius: entry.circleRadius }
-        : {}),
+      fillOpacity: entry.fillOpacity !== undefined ? entry.fillOpacity * opacity : base.fillOpacity,
+      ...(entry.circleRadius !== undefined ? { circleRadius: entry.circleRadius } : {}),
     };
     out.push(
       rule(
@@ -748,13 +688,9 @@ function ruleBasedRules(
   // is seeded with fillColor for fills and strokeColor for lines), so mirror
   // both here rather than using one color for both channels.
   const elseFillColor =
-    elseRule && isHexColor(elseRule.color)
-      ? elseRule.color
-      : styleValue(style, "fillColor");
+    elseRule && isHexColor(elseRule.color) ? elseRule.color : styleValue(style, "fillColor");
   const elseLineColor =
-    elseRule && isHexColor(elseRule.color)
-      ? elseRule.color
-      : styleValue(style, "strokeColor");
+    elseRule && isHexColor(elseRule.color) ? elseRule.color : styleValue(style, "strokeColor");
   // The else rule can carry its own symbol overrides, like any other rule.
   const elsePaint: SymbolPaint = {
     ...base,
@@ -763,17 +699,14 @@ function ruleBasedRules(
       ? (elseRule!.strokeColor as string)
       : base.strokeColor,
     strokeWidth:
-      typeof elseRule?.strokeWidth === "number" &&
-      Number.isFinite(elseRule.strokeWidth)
+      typeof elseRule?.strokeWidth === "number" && Number.isFinite(elseRule.strokeWidth)
         ? elseRule.strokeWidth
         : base.strokeWidth,
     fillOpacity:
-      typeof elseRule?.fillOpacity === "number" &&
-      Number.isFinite(elseRule.fillOpacity)
+      typeof elseRule?.fillOpacity === "number" && Number.isFinite(elseRule.fillOpacity)
         ? elseRule.fillOpacity * opacity
         : base.fillOpacity,
-    ...(typeof elseRule?.circleRadius === "number" &&
-    Number.isFinite(elseRule.circleRadius)
+    ...(typeof elseRule?.circleRadius === "number" && Number.isFinite(elseRule.circleRadius)
       ? { circleRadius: elseRule.circleRadius }
       : {}),
   };
@@ -851,9 +784,7 @@ export function buildSld(
   }
 
   if (styleValue(style, "extrusionEnabled")) {
-    warnings.push(
-      "3D extrusion has no SLD equivalent; the layer is exported as a flat 2D style.",
-    );
+    warnings.push("3D extrusion has no SLD equivalent; the layer is exported as a flat 2D style.");
   }
   const pointOnly = profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
   const pointRenderer = styleValue(style, "pointRenderer");
@@ -862,10 +793,7 @@ export function buildSld(
       `The ${pointRenderer} point renderer has no SLD equivalent; points are exported as plain markers.`,
     );
   }
-  if (
-    profile.hasPolygon &&
-    styleValue(style, "fillPattern") !== "none"
-  ) {
+  if (profile.hasPolygon && styleValue(style, "fillPattern") !== "none") {
     warnings.push(
       "The fill pattern has no portable SLD equivalent; the polygon uses a flat fill instead.",
     );
@@ -899,33 +827,15 @@ export function buildSld(
     (stop) =>
       isHexColor(stop.color) &&
       Number.isFinite(
-        typeof stop.value === "number"
-          ? stop.value
-          : Number.parseFloat(String(stop.value)),
+        typeof stop.value === "number" ? stop.value : Number.parseFloat(String(stop.value)),
       ),
   ).length;
 
   let renderRules: string;
   if (mode === "categorized" && property && validCategorized > 0) {
-    renderRules = categorizedRules(
-      style,
-      opacity,
-      property,
-      stops,
-      profile,
-      scale,
-      warnings,
-    );
+    renderRules = categorizedRules(style, opacity, property, stops, profile, scale, warnings);
   } else if (mode === "graduated" && property && validGraduated >= 2) {
-    renderRules = graduatedRules(
-      style,
-      opacity,
-      property,
-      stops,
-      profile,
-      scale,
-      warnings,
-    );
+    renderRules = graduatedRules(style, opacity, property, stops, profile, scale, warnings);
   } else if (mode === "rule-based" && styleValue(style, "vectorRules").length > 0) {
     renderRules = ruleBasedRules(
       style,
@@ -940,11 +850,7 @@ export function buildSld(
       warnings.push(
         "The custom color expression has no SLD equivalent; the layer is exported with its fallback color.",
       );
-    } else if (
-      mode === "categorized" ||
-      mode === "graduated" ||
-      mode === "rule-based"
-    ) {
+    } else if (mode === "categorized" || mode === "graduated" || mode === "rule-based") {
       // The renderer was attribute-driven but had no usable classes (no
       // property, all-invalid stops, or empty rules), so it fell back to a
       // single symbol; flag that rather than silently dropping the classes.
@@ -959,9 +865,7 @@ export function buildSld(
   // feature regardless of the render rules' filters (matching how the live map
   // draws one symbol layer for all features).
   const text = textSymbolizer(style, opacity, fontFamily, warnings);
-  const labelRule = text
-    ? rule("Labels", null, null, scale, text)
-    : "";
+  const labelRule = text ? rule("Labels", null, null, scale, text) : "";
 
   const name = xmlEscape(layer.name || "layer");
   const sld = [
@@ -996,10 +900,7 @@ export function buildSld(
  * without a DOM serializer (which is unavailable in the Node test environment).
  */
 function formatSld(xml: string): string {
-  const tokens = xml
-    .replace(/>\s*</g, "><")
-    .replace(/></g, ">\n<")
-    .split("\n");
+  const tokens = xml.replace(/>\s*</g, "><").replace(/></g, ">\n<").split("\n");
   let depth = 0;
   const out: string[] = [];
   for (const token of tokens) {

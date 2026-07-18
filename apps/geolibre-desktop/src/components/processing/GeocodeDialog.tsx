@@ -26,14 +26,7 @@ import {
 } from "@geolibre/ui";
 import type { Feature, FeatureCollection, Point } from "geojson";
 import { Loader2, MapPin, Upload, X } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { parseDelimitedTextRows } from "../../lib/delimited-text";
 import { sniffDelimiter } from "../../lib/deck-viz-input";
@@ -97,9 +90,7 @@ function isAbortError(error: unknown): boolean {
  * cancellable via an AbortController, and any rows matched before a cancel are
  * still added to the map.
  */
-export function GeocodeDialog({
-  mapControllerRef,
-}: GeocodeDialogProps): ReactElement {
+export function GeocodeDialog({ mapControllerRef }: GeocodeDialogProps): ReactElement {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.geocodeOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
@@ -136,9 +127,7 @@ export function GeocodeDialog({
   // Count only rows that will actually be geocoded (non-empty address), so the
   // cap warning matches the requests sent rather than the raw CSV row count.
   const geocodableCount =
-    csv && addressColumn
-      ? csvRowsToGeocodeRequests(csv.rows, [addressColumn]).length
-      : 0;
+    csv && addressColumn ? csvRowsToGeocodeRequests(csv.rows, [addressColumn]).length : 0;
   const willCap = Number.isFinite(cap) && geocodableCount > cap;
 
   const appendLog = useCallback((line: string) => {
@@ -224,9 +213,7 @@ export function GeocodeDialog({
             config,
             limit: 1,
           });
-          const feature = results[0]
-            ? geocodeMatchToFeature(results[0], request.row)
-            : null;
+          const feature = results[0] ? geocodeMatchToFeature(results[0], request.row) : null;
           if (feature) features.push(feature);
           else failed.push(request.index + 1);
         } catch (requestError) {
@@ -234,9 +221,7 @@ export function GeocodeDialog({
           // failure (e.g. an HTTP 429) is logged and the row is recorded as a
           // miss so the remaining rows still run.
           if (isAbortError(requestError)) throw requestError;
-          appendLog(
-            t("geocode.error", { message: (requestError as Error).message }),
-          );
+          appendLog(t("geocode.error", { message: (requestError as Error).message }));
           failed.push(request.index + 1);
         }
       }
@@ -251,9 +236,7 @@ export function GeocodeDialog({
         features,
       };
       const layerId = addGeoJsonLayer(layerNameFromFile(csv.fileName), fc);
-      const layer = useAppStore
-        .getState()
-        .layers.find((item) => item.id === layerId);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
     }
 
@@ -327,9 +310,7 @@ export function GeocodeDialog({
                 })}
               </span>
             ) : (
-              <span className="text-sm text-muted-foreground">
-                {t("geocode.noFile")}
-              </span>
+              <span className="text-sm text-muted-foreground">{t("geocode.noFile")}</span>
             )}
           </div>
 
@@ -348,9 +329,7 @@ export function GeocodeDialog({
             </Select>
             {/* `config.apiKey` check avoids doubling up with the amber missing-key warning below */}
             {geocoderNeedsApiKey(config) && !!config.apiKey ? (
-              <p className="text-xs text-muted-foreground">
-                {t("geocode.providerHint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("geocode.providerHint")}</p>
             ) : null}
           </div>
 
@@ -361,9 +340,7 @@ export function GeocodeDialog({
           ) : null}
 
           {provider.browserCorsRestricted ? (
-            <p className="text-xs text-amber-600 dark:text-amber-500">
-              {t("geocode.corsNote")}
-            </p>
+            <p className="text-xs text-amber-600 dark:text-amber-500">{t("geocode.corsNote")}</p>
           ) : null}
 
           {csv ? (
@@ -403,11 +380,7 @@ export function GeocodeDialog({
               {t("geocode.run")}
             </Button>
             {running ? (
-              <Button
-                variant="outline"
-                onClick={() => abortRef.current?.abort()}
-                className="gap-2"
-              >
+              <Button variant="outline" onClick={() => abortRef.current?.abort()} className="gap-2">
                 <X className="h-4 w-4" />
                 {t("geocode.cancel")}
               </Button>
@@ -416,9 +389,7 @@ export function GeocodeDialog({
 
           <ScrollArea className="h-40 rounded-md border bg-muted/30 p-2 font-mono text-xs">
             {log.length === 0 ? (
-              <span className="text-muted-foreground">
-                {t("geocode.outputPlaceholder")}
-              </span>
+              <span className="text-muted-foreground">{t("geocode.outputPlaceholder")}</span>
             ) : (
               log.map((line, index) => (
                 <div key={index} className="whitespace-pre-wrap">

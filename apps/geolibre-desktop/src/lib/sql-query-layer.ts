@@ -69,9 +69,7 @@ export function getSqlQueryLayerConfig(
  * @param layer The candidate layer.
  * @returns Whether the layer refreshes by re-executing its SQL.
  */
-export function isSqlQueryLayer(
-  layer: Pick<GeoLibreLayer, "metadata" | "type">,
-): boolean {
+export function isSqlQueryLayer(layer: Pick<GeoLibreLayer, "metadata" | "type">): boolean {
   return layer.type === "geojson" && getSqlQueryLayerConfig(layer) !== null;
 }
 
@@ -122,10 +120,7 @@ export async function refreshSqlQueryLayer(
   }
   // Deferred so this module stays importable without the DuckDB-WASM bundle.
   const { runSqlQuery } = await import("./sql-workspace");
-  const result = await runSqlQuery(
-    config.sql,
-    sourceLayersForQueryRefresh(layer, layers),
-  );
+  const result = await runSqlQuery(config.sql, sourceLayersForQueryRefresh(layer, layers));
   if (!result.geojson) {
     throw new Error(
       "The query result no longer has a geometry column. Edit the query in the SQL Workspace.",

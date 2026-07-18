@@ -73,7 +73,11 @@ describe("bundleFromZipBytes", () => {
 
   it("rejects an invalid manifest (entry not a .js/.mjs file)", async () => {
     const zip = makeZip({
-      "plugin.json": JSON.stringify({ ...VALID_MANIFEST, entry: "dist/plugin.txt", style: undefined }),
+      "plugin.json": JSON.stringify({
+        ...VALID_MANIFEST,
+        entry: "dist/plugin.txt",
+        style: undefined,
+      }),
       "dist/plugin.txt": "nope",
     });
     await assert.rejects(bundleFromZipBytes("demo.zip", zip), /manifest is invalid/);
@@ -91,10 +95,7 @@ describe("bundleFromZipBytes", () => {
       });
     const bundle = await bundleFromZipBytes("demo.zip", withFlag(true));
     assert.equal(bundle.manifest.activeByDefault, true);
-    await assert.rejects(
-      bundleFromZipBytes("demo.zip", withFlag("true")),
-      /manifest is invalid/,
-    );
+    await assert.rejects(bundleFromZipBytes("demo.zip", withFlag("true")), /manifest is invalid/);
   });
 
   it("rejects an entry path that escapes the archive", async () => {
@@ -109,6 +110,9 @@ describe("bundleFromZipBytes", () => {
     const zip = makeZip({
       "plugin.json": JSON.stringify({ ...VALID_MANIFEST, style: undefined }),
     });
-    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /entry 'dist\/plugin\.js' is missing/);
+    await assert.rejects(
+      bundleFromZipBytes("demo.zip", zip),
+      /entry 'dist\/plugin\.js' is missing/,
+    );
   });
 });

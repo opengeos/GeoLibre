@@ -27,8 +27,7 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   const dLng = toRadians(b[0] - a[0]);
   const sinDLat = Math.sin(dLat / 2);
   const sinDLng = Math.sin(dLng / 2);
-  const h =
-    sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -137,13 +136,8 @@ export interface ProfileStats {
  * @param distances - Cumulative distances in meters matching `elevations`
  * @returns The aggregated {@link ProfileStats}
  */
-export function computeStats(
-  elevations: number[],
-  distances: number[],
-): ProfileStats {
-  const totalDistance = distances.length
-    ? distances[distances.length - 1]
-    : 0;
+export function computeStats(elevations: number[], distances: number[]): ProfileStats {
+  const totalDistance = distances.length ? distances[distances.length - 1] : 0;
 
   if (elevations.length === 0) {
     return { min: 0, max: 0, gain: 0, loss: 0, totalDistance };

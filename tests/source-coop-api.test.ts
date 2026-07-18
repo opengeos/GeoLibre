@@ -95,10 +95,7 @@ describe("parseProduct", () => {
   it("reads `featured` as a rank number, not a boolean", () => {
     assert.equal(parseProduct(rawProduct({ featured: 1 }))?.featured, true);
     assert.equal(parseProduct(rawProduct({ featured: 0 }))?.featured, false);
-    assert.equal(
-      parseProduct(rawProduct({ featured: undefined }))?.featured,
-      false,
-    );
+    assert.equal(parseProduct(rawProduct({ featured: undefined }))?.featured, false);
   });
 
   it("falls back to the product id when the title is missing", () => {
@@ -121,14 +118,8 @@ describe("parseProduct", () => {
 
   it("tolerates a missing or malformed metadata.tags", () => {
     assert.deepEqual(parseProduct(rawProduct({ metadata: {} }))?.tags, []);
-    assert.deepEqual(
-      parseProduct(rawProduct({ metadata: { tags: "pmtiles" } }))?.tags,
-      [],
-    );
-    assert.deepEqual(
-      parseProduct(rawProduct({ metadata: { tags: ["ok", 7] } }))?.tags,
-      ["ok"],
-    );
+    assert.deepEqual(parseProduct(rawProduct({ metadata: { tags: "pmtiles" } }))?.tags, []);
+    assert.deepEqual(parseProduct(rawProduct({ metadata: { tags: ["ok", 7] } }))?.tags, ["ok"]);
   });
 });
 
@@ -142,10 +133,7 @@ describe("productUrl", () => {
 
   it("agrees with every record producer, so the three cannot drift", () => {
     const expected = productUrl("opengeos", "natural-earth");
-    assert.equal(
-      synthesizeProduct("opengeos", "natural-earth", "Natural Earth").url,
-      expected,
-    );
+    assert.equal(synthesizeProduct("opengeos", "natural-earth", "Natural Earth").url, expected);
     assert.equal(
       parseProduct({ account_id: "opengeos", product_id: "natural-earth" })?.url,
       expected,
@@ -327,9 +315,7 @@ describe("buildObjectUrl", () => {
 
 describe("buildListObjectsUrl", () => {
   it("addresses the account as the bucket, with the product as a prefix", () => {
-    const url = new URL(
-      buildListObjectsUrl({ accountId: "protomaps", prefix: "openstreetmap/" }),
-    );
+    const url = new URL(buildListObjectsUrl({ accountId: "protomaps", prefix: "openstreetmap/" }));
     // A trailing slash after the account is a NoSuchBucket 404 upstream.
     assert.equal(url.pathname, "/protomaps");
     assert.equal(url.searchParams.get("list-type"), "2");
@@ -368,9 +354,7 @@ describe("buildListObjectsUrl", () => {
   });
 
   it("omits the delimiter for a recursive listing", () => {
-    const url = new URL(
-      buildListObjectsUrl({ accountId: "a", prefix: "p/", delimited: false }),
-    );
+    const url = new URL(buildListObjectsUrl({ accountId: "a", prefix: "p/", delimited: false }));
     assert.equal(url.searchParams.get("delimiter"), null);
   });
 });
@@ -406,10 +390,7 @@ describe("parseListObjects", () => {
     assert.equal(first.name, "v3.pmtiles");
     assert.equal(first.size, 123545745644);
     assert.equal(first.format, "pmtiles");
-    assert.equal(
-      first.url,
-      `${SOURCE_COOP_DATA_BASE}/protomaps/openstreetmap/tiles/v3.pmtiles`,
-    );
+    assert.equal(first.url, `${SOURCE_COOP_DATA_BASE}/protomaps/openstreetmap/tiles/v3.pmtiles`);
   });
 
   it("drops the zero-byte folder placeholder objects", () => {
@@ -421,9 +402,7 @@ describe("parseListObjects", () => {
   });
 
   it("reads common prefixes as folders", () => {
-    assert.deepEqual(parseListObjects(xml, "protomaps").folders, [
-      "openstreetmap/tiles/",
-    ]);
+    assert.deepEqual(parseListObjects(xml, "protomaps").folders, ["openstreetmap/tiles/"]);
   });
 
   it("returns the continuation token only while truncated", () => {
@@ -445,10 +424,10 @@ describe("parseListObjects", () => {
 
 describe("listProductObjects", () => {
   it("surfaces the S3 error code when the proxy refuses", async () => {
-    const { fetchImpl } = stubFetch(
-      "<Error><Code>NoSuchBucket</Code></Error>",
-      { ok: false, status: 404 },
-    );
+    const { fetchImpl } = stubFetch("<Error><Code>NoSuchBucket</Code></Error>", {
+      ok: false,
+      status: 404,
+    });
     await assert.rejects(
       listProductObjects({ accountId: "nope", prefix: "p/" }, fetchImpl),
       NO_SUCH_BUCKET_PATTERN,
@@ -521,10 +500,7 @@ describe("mergeProducts", () => {
   });
 
   it("keeps distinct ids apart", () => {
-    const merged = mergeProducts(
-      [product({ productId: "a" })],
-      [product({ productId: "b" })],
-    );
+    const merged = mergeProducts([product({ productId: "a" })], [product({ productId: "b" })]);
     assert.equal(merged.length, 2);
   });
 });
@@ -625,11 +601,7 @@ const ALL_FORMATS: SourceCoopFormat[] = [
   "other",
 ];
 
-function object(
-  format: SourceCoopFormat,
-  size: number,
-  name = `data.${format}`,
-): SourceCoopObject {
+function object(format: SourceCoopFormat, size: number, name = `data.${format}`): SourceCoopObject {
   return {
     key: `product/${name}`,
     name,
@@ -642,13 +614,7 @@ function object(
 
 describe("usesDuckDB", () => {
   it("covers the formats the vector control reads", () => {
-    for (const format of [
-      "geoparquet",
-      "geojson",
-      "flatgeobuf",
-      "gpkg",
-      "csv",
-    ] as const) {
+    for (const format of ["geoparquet", "geojson", "flatgeobuf", "gpkg", "csv"] as const) {
       assert.equal(usesDuckDB(format), true, format);
     }
   });
@@ -699,14 +665,8 @@ describe("isTooLargeToOpen", () => {
   });
 
   it("draws the line exactly at the 32-bit limit", () => {
-    assert.equal(
-      isTooLargeToOpen(object("geoparquet", MAX_VECTOR_BYTES)),
-      false,
-    );
-    assert.equal(
-      isTooLargeToOpen(object("geoparquet", MAX_VECTOR_BYTES + 1)),
-      true,
-    );
+    assert.equal(isTooLargeToOpen(object("geoparquet", MAX_VECTOR_BYTES)), false);
+    assert.equal(isTooLargeToOpen(object("geoparquet", MAX_VECTOR_BYTES + 1)), true);
   });
 
   it("never rejects PMTiles or COG, at any size", () => {
@@ -733,14 +693,8 @@ describe("objectNote", () => {
   });
 
   it("offers the choice on a large GeoParquet", () => {
-    assert.equal(
-      objectNote(object("geoparquet", STREAM_HINT_BYTES)),
-      "streamChoice",
-    );
-    assert.equal(
-      objectNote(object("geoparquet", 847 * 1024 ** 2)),
-      "streamChoice",
-    );
+    assert.equal(objectNote(object("geoparquet", STREAM_HINT_BYTES)), "streamChoice");
+    assert.equal(objectNote(object("geoparquet", 847 * 1024 ** 2)), "streamChoice");
   });
 
   it("stays quiet on a small GeoParquet, where a copy is cheap", () => {

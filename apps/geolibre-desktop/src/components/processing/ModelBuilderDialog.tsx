@@ -43,14 +43,7 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 interface ModelBuilderDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -101,10 +94,7 @@ function ToolOptions(): ReactElement {
 }
 
 /** GeoJSON layers usable as inputs, optionally filtered by geometry family. */
-function geojsonLayers(
-  layers: GeoLibreLayer[],
-  filter?: GeometryFamily[],
-): GeoLibreLayer[] {
+function geojsonLayers(layers: GeoLibreLayer[], filter?: GeometryFamily[]): GeoLibreLayer[] {
   return layers.filter((layer) => {
     if (layer.type !== "geojson" || !layer.geojson) return false;
     if (!filter?.length) return true;
@@ -128,10 +118,7 @@ function defaultParams(tool: ProcessingAlgorithm): Record<string, unknown> {
 }
 
 /** Whether a parameter is visible given the current parameter values. */
-function isParamVisible(
-  param: AlgorithmParameter,
-  params: Record<string, unknown>,
-): boolean {
+function isParamVisible(param: AlgorithmParameter, params: Record<string, unknown>): boolean {
   const vw = param.visibleWhen;
   if (!vw) return true;
   const current = params[vw.param] as string | undefined;
@@ -140,10 +127,7 @@ function isParamVisible(
 }
 
 /** Attribute field names per GeoJSON layer, sampled for schemaless data. */
-function useFieldsByLayer(
-  layers: GeoLibreLayer[],
-  enabled: boolean,
-): Map<string, string[]> {
+function useFieldsByLayer(layers: GeoLibreLayer[], enabled: boolean): Map<string, string[]> {
   return useMemo(() => {
     const map = new Map<string, string[]>();
     if (!enabled) return map;
@@ -179,9 +163,7 @@ function viewportBoundsReader(
  * - **Models**: chain tools so each step's output feeds the next; saved with the
  *   project and re-runnable.
  */
-export function ModelBuilderDialog({
-  mapControllerRef,
-}: ModelBuilderDialogProps): ReactElement {
+export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps): ReactElement {
   const open = useAppStore((s) => s.ui.modelBuilderOpen);
   const setOpen = useAppStore((s) => s.setModelBuilderOpen);
   const [mode, setMode] = useState<"batch" | "models">("batch");
@@ -197,8 +179,8 @@ export function ModelBuilderDialog({
         <DialogHeader>
           <DialogTitle>Batch &amp; Models</DialogTitle>
           <DialogDescription>
-            Run a vector tool across many layers, or chain tools into a reusable
-            model saved with your project.
+            Run a vector tool across many layers, or chain tools into a reusable model saved with
+            your project.
           </DialogDescription>
         </DialogHeader>
 
@@ -262,26 +244,19 @@ function LogView({ log }: { log: string[] }): ReactElement {
 }
 
 /** Batch mode: one tool over many input layers with shared parameters. */
-function BatchPanel({
-  mapControllerRef,
-}: ModelBuilderDialogProps): ReactElement {
+function BatchPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement {
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const duckdb = useMemo(() => createDuckDbCapability(), []);
 
   const [toolId, setToolId] = useState<string>(VECTOR_TOOLS[0].id);
   const tool = useMemo(() => getVectorTool(toolId) ?? VECTOR_TOOLS[0], [toolId]);
-  const [params, setParams] = useState<Record<string, unknown>>(() =>
-    defaultParams(tool),
-  );
+  const [params, setParams] = useState<Record<string, unknown>>(() => defaultParams(tool));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
 
-  const appendLog = useCallback(
-    (message: string) => setLog((prev) => [...prev, message]),
-    [],
-  );
+  const appendLog = useCallback((message: string) => setLog((prev) => [...prev, message]), []);
 
   // Reset parameters and selection when the tool changes.
   useEffect(() => {
@@ -331,10 +306,7 @@ function BatchPanel({
         const next = { ...prev, [id]: value };
         // Clear any field parameter that drew its options from this layer.
         for (const param of tool.parameters) {
-          if (
-            param.type === "field" &&
-            (param.fieldSource ?? PRIMARY_INPUT_PARAM) === id
-          ) {
+          if (param.type === "field" && (param.fieldSource ?? PRIMARY_INPUT_PARAM) === id) {
             next[param.id] = undefined;
           }
         }
@@ -345,13 +317,10 @@ function BatchPanel({
   );
 
   const toggleLayer = useCallback((id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
-  const allSelected =
-    inputLayers.length > 0 && selectedIds.length === inputLayers.length;
+  const allSelected = inputLayers.length > 0 && selectedIds.length === inputLayers.length;
   const toggleAll = useCallback(() => {
     setSelectedIds(allSelected ? [] : inputLayers.map((l) => l.id));
   }, [allSelected, inputLayers]);
@@ -401,9 +370,7 @@ function BatchPanel({
           appendLog(`No features produced for ${layer.name}`);
         }
       }
-      appendLog(
-        `Batch complete: ${produced}/${selectedIds.length} layer(s) produced output`,
-      );
+      appendLog(`Batch complete: ${produced}/${selectedIds.length} layer(s) produced output`);
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
     } finally {
@@ -436,9 +403,7 @@ function BatchPanel({
         <div className="flex flex-col gap-3">
           <Label className="text-xs font-medium">Shared parameters</Label>
           {sharedParams.filter((p) => isParamVisible(p, params)).length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              This tool has no extra parameters.
-            </p>
+            <p className="text-xs text-muted-foreground">This tool has no extra parameters.</p>
           ) : (
             sharedParams
               .filter((p) => isParamVisible(p, params))
@@ -448,9 +413,7 @@ function BatchPanel({
                   param={param}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={
-                    param.type === "field" ? fieldOptions(param) : undefined
-                  }
+                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
                   onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))
@@ -473,9 +436,7 @@ function BatchPanel({
           </div>
           <ScrollArea className="h-44 rounded-md border p-1">
             {inputLayers.length === 0 ? (
-              <p className="p-2 text-xs text-muted-foreground">
-                No compatible GeoJSON layers.
-              </p>
+              <p className="p-2 text-xs text-muted-foreground">No compatible GeoJSON layers.</p>
             ) : (
               inputLayers.map((layer) => (
                 <label
@@ -498,11 +459,7 @@ function BatchPanel({
 
       <div>
         <Button onClick={handleRun} disabled={running} className="gap-2">
-          {running ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Play className="h-4 w-4" />
-          )}
+          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           Run batch
         </Button>
       </div>
@@ -513,9 +470,7 @@ function BatchPanel({
 }
 
 /** Models mode: chain tools into a saved, re-runnable pipeline. */
-function ModelPanel({
-  mapControllerRef,
-}: ModelBuilderDialogProps): ReactElement {
+function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement {
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const models = useAppStore((s) => s.models);
@@ -532,10 +487,7 @@ function ModelPanel({
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
 
-  const appendLog = useCallback(
-    (message: string) => setLog((prev) => [...prev, message]),
-    [],
-  );
+  const appendLog = useCallback((message: string) => setLog((prev) => [...prev, message]), []);
   const fieldsByLayer = useFieldsByLayer(layers, true);
   const isSaved = models.some((m) => m.id === draft.id);
 
@@ -559,10 +511,7 @@ function ModelPanel({
     if (!tool) return;
     setDraft((prev) => ({
       ...prev,
-      steps: [
-        ...prev.steps,
-        { id: createId(), toolId: tool.id, parameters: defaultParams(tool) },
-      ],
+      steps: [...prev.steps, { id: createId(), toolId: tool.id, parameters: defaultParams(tool) }],
     }));
   }, [addToolId]);
 
@@ -584,31 +533,25 @@ function ModelPanel({
     });
   }, []);
 
-  const updateStepParam = useCallback(
-    (stepId: string, paramId: string, value: unknown) => {
-      setDraft((prev) => ({
-        ...prev,
-        steps: prev.steps.map((step) => {
-          if (step.id !== stepId) return step;
-          const tool = getVectorTool(step.toolId);
-          const parameters = { ...step.parameters, [paramId]: value };
-          // Clear a field parameter when its source layer changes.
-          if (tool) {
-            for (const param of tool.parameters) {
-              if (
-                param.type === "field" &&
-                (param.fieldSource ?? PRIMARY_INPUT_PARAM) === paramId
-              ) {
-                parameters[param.id] = undefined;
-              }
+  const updateStepParam = useCallback((stepId: string, paramId: string, value: unknown) => {
+    setDraft((prev) => ({
+      ...prev,
+      steps: prev.steps.map((step) => {
+        if (step.id !== stepId) return step;
+        const tool = getVectorTool(step.toolId);
+        const parameters = { ...step.parameters, [paramId]: value };
+        // Clear a field parameter when its source layer changes.
+        if (tool) {
+          for (const param of tool.parameters) {
+            if (param.type === "field" && (param.fieldSource ?? PRIMARY_INPUT_PARAM) === paramId) {
+              parameters[param.id] = undefined;
             }
           }
-          return { ...step, parameters };
-        }),
-      }));
-    },
-    [],
-  );
+        }
+        return { ...step, parameters };
+      }),
+    }));
+  }, []);
 
   const handleSave = useCallback(() => {
     const name = draft.name.trim();
@@ -673,19 +616,12 @@ function ModelPanel({
     <div className="flex gap-4">
       {/* Saved models */}
       <div className="flex w-44 shrink-0 flex-col gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={newDraft}
-        >
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={newDraft}>
           <Plus className="h-3.5 w-3.5" /> New model
         </Button>
         <ScrollArea className="h-72 rounded-md border p-1">
           {models.length === 0 ? (
-            <p className="p-2 text-xs text-muted-foreground">
-              No saved models yet.
-            </p>
+            <p className="p-2 text-xs text-muted-foreground">No saved models yet.</p>
           ) : (
             models.map((model) => (
               <button
@@ -694,8 +630,7 @@ function ModelPanel({
                 onClick={() => loadModel(model)}
                 className={cn(
                   "w-full truncate rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
-                  model.id === draft.id &&
-                    "bg-accent font-medium text-accent-foreground",
+                  model.id === draft.id && "bg-accent font-medium text-accent-foreground",
                 )}
               >
                 {model.name || "Untitled model"}
@@ -714,18 +649,15 @@ function ModelPanel({
           <Input
             id="model-name"
             value={draft.name}
-            onChange={(e) =>
-              setDraft((prev) => ({ ...prev, name: e.target.value }))
-            }
+            onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
           />
         </div>
 
         <ScrollArea className="h-56 rounded-md border p-2">
           {draft.steps.length === 0 ? (
             <p className="p-2 text-xs text-muted-foreground">
-              Add a step to start building the pipeline. The first step reads an
-              input layer; each later step receives the previous step&apos;s
-              output.
+              Add a step to start building the pipeline. The first step reads an input layer; each
+              later step receives the previous step&apos;s output.
             </p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -737,9 +669,7 @@ function ModelPanel({
                   total={draft.steps.length}
                   layers={layers}
                   fieldsByLayer={fieldsByLayer}
-                  onParamChange={(paramId, value) =>
-                    updateStepParam(step.id, paramId, value)
-                  }
+                  onParamChange={(paramId, value) => updateStepParam(step.id, paramId, value)}
                   onRemove={() => removeStep(step.id)}
                   onMove={(dir) => moveStep(step.id, dir)}
                 />
@@ -751,18 +681,11 @@ function ModelPanel({
         <div className="flex items-end gap-2">
           <div className="flex flex-1 flex-col gap-1">
             <Label className="text-xs">Add step</Label>
-            <Select
-              value={addToolId}
-              onChange={(e) => setAddToolId(e.target.value)}
-            >
+            <Select value={addToolId} onChange={(e) => setAddToolId(e.target.value)}>
               <ToolOptions />
             </Select>
           </div>
-          <Button
-            variant="outline"
-            className="gap-1.5"
-            onClick={addStep}
-          >
+          <Button variant="outline" className="gap-1.5" onClick={addStep}>
             <Plus className="h-4 w-4" /> Add
           </Button>
         </div>
@@ -771,22 +694,13 @@ function ModelPanel({
 
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={handleRun} disabled={running} className="gap-2">
-            {running ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Run model
           </Button>
           <Button variant="outline" className="gap-2" onClick={handleSave}>
             <Save className="h-4 w-4" /> Save
           </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={handleDelete}
-            disabled={!isSaved}
-          >
+          <Button variant="outline" className="gap-2" onClick={handleDelete} disabled={!isSaved}>
             <Trash2 className="h-4 w-4" /> Delete
           </Button>
         </div>
@@ -883,15 +797,11 @@ function StepCard({
       </div>
 
       {!isFirst ? (
-        <p className="mb-2 text-xs text-muted-foreground">
-          Input: ← previous step output
-        </p>
+        <p className="mb-2 text-xs text-muted-foreground">Input: ← previous step output</p>
       ) : null}
 
       {!tool ? (
-        <p className="text-xs text-destructive">
-          Unknown tool &quot;{step.toolId}&quot;
-        </p>
+        <p className="text-xs text-destructive">Unknown tool &quot;{step.toolId}&quot;</p>
       ) : visibleParams.length === 0 ? (
         <p className="text-xs text-muted-foreground">No parameters.</p>
       ) : (
@@ -902,9 +812,7 @@ function StepCard({
               param={param}
               value={step.parameters[param.id]}
               layerOptions={layerOptions(param.geometryFilter)}
-              fieldOptions={
-                param.type === "field" ? fieldOptions(param) : undefined
-              }
+              fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
               onChange={(value) => onParamChange(param.id, value)}
             />
           ))}

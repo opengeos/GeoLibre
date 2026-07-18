@@ -11,11 +11,7 @@ import {
 import { Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ChartRow } from "../../lib/attribute-charts";
-import {
-  computeFieldStats,
-  formatStatValue,
-  type FieldStats,
-} from "../../lib/attribute-stats";
+import { computeFieldStats, formatStatValue, type FieldStats } from "../../lib/attribute-stats";
 
 interface AttributeStatsDialogProps {
   open: boolean;
@@ -81,9 +77,7 @@ export function AttributeStatsDialog({
   const copySummary = () => {
     if (!stats || !field) return;
     const lines = statRows(stats).map(([label, value]) => `${label}\t${value}`);
-    const header = `Field statistics — ${field}${
-      scope === "filtered" ? " (filtered)" : ""
-    }`;
+    const header = `Field statistics — ${field}${scope === "filtered" ? " (filtered)" : ""}`;
     void navigator.clipboard
       ?.writeText([header, ...lines].join("\n"))
       .then(() => setCopied(true))
@@ -137,9 +131,7 @@ export function AttributeStatsDialog({
                       setCopied(false);
                     }}
                   >
-                    <option value="all">
-                      All features ({rows.length.toLocaleString()})
-                    </option>
+                    <option value="all">All features ({rows.length.toLocaleString()})</option>
                     <option value="filtered">
                       Filtered ({filteredRows.length.toLocaleString()})
                     </option>
@@ -154,9 +146,7 @@ export function AttributeStatsDialog({
 
         <div className="flex items-center justify-end gap-2">
           {copied ? (
-            <span className="me-auto text-xs text-muted-foreground">
-              Copied to clipboard.
-            </span>
+            <span className="me-auto text-xs text-muted-foreground">Copied to clipboard.</span>
           ) : null}
           {stats ? (
             <Button variant="outline" onClick={copySummary}>
@@ -180,10 +170,7 @@ function statRows(stats: FieldStats): [string, string][] {
       ["Count", stats.count.toLocaleString()],
       ["Nulls", stats.nulls.toLocaleString()],
       ...(stats.nonNumeric > 0
-        ? ([["Non-numeric", stats.nonNumeric.toLocaleString()]] as [
-            string,
-            string,
-          ][])
+        ? ([["Non-numeric", stats.nonNumeric.toLocaleString()]] as [string, string][])
         : []),
       ["Unique", stats.unique.toLocaleString()],
       ["Min", formatStatValue(stats.min)],
@@ -204,9 +191,7 @@ function statRows(stats: FieldStats): [string, string][] {
 function StatsReadout({ stats }: { stats: FieldStats | null }) {
   if (!stats) {
     return (
-      <p className="py-6 text-center text-sm text-muted-foreground">
-        No values to summarize.
-      </p>
+      <p className="py-6 text-center text-sm text-muted-foreground">No values to summarize.</p>
     );
   }
 
@@ -223,9 +208,7 @@ function StatsReadout({ stats }: { stats: FieldStats | null }) {
 
       {stats.kind === "text" ? (
         <div className="grid gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            Most frequent values
-          </span>
+          <span className="text-xs font-medium text-muted-foreground">Most frequent values</span>
           {stats.top.length === 0 ? (
             <p className="text-sm text-muted-foreground">No populated values.</p>
           ) : (

@@ -68,23 +68,13 @@ function fmtCoord(value: number): string {
 }
 
 /** Order two corners into a `[west, south, east, north]` box. */
-function orderBbox(
-  a: [number, number],
-  b: [number, number],
-): [number, number, number, number] {
-  return [
-    Math.min(a[0], b[0]),
-    Math.min(a[1], b[1]),
-    Math.max(a[0], b[0]),
-    Math.max(a[1], b[1]),
-  ];
+function orderBbox(a: [number, number], b: [number, number]): [number, number, number, number] {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
  * missing, out of the valid lng/lat range, or the box is degenerate. */
-function parseBbox(
-  coords: CoordFields,
-): [number, number, number, number] | null {
+function parseBbox(coords: CoordFields): [number, number, number, number] | null {
   const west = Number(coords.west);
   const south = Number(coords.south);
   const east = Number(coords.east);
@@ -181,11 +171,7 @@ function parseExtraArgs(text: string): Record<string, unknown> | null {
  * (or zoom for XYZ), then saves the clipped GeoTIFF. The map stays interactive,
  * matching the Pixel Time Series panel's non-blocking pattern.
  */
-export function RasterSubsetPanel({
-  layer,
-  onClose,
-  mapControllerRef,
-}: RasterSubsetPanelProps) {
+export function RasterSubsetPanel({ layer, onClose, mapControllerRef }: RasterSubsetPanelProps) {
   const { t } = useTranslation();
   const kind: RasterSubsetKind | null = useMemo(
     () => (layer ? rasterSubsetKind(layer) : null),
@@ -382,18 +368,14 @@ export function RasterSubsetPanel({
     };
     const onWindowMove = (e: MouseEvent) => {
       if (!start) return;
-      setCoords(
-        coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))),
-      );
+      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
     };
     const onWindowUp = (e: MouseEvent) => {
       // Only end the draw for a release that actually started one (a canvas
       // mousedown set `start`); a click elsewhere while armed (e.g. "Use view"
       // or a field) must not silently exit draw mode.
       if (e.button !== 0 || !start) return;
-      setCoords(
-        coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))),
-      );
+      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
       start = null;
       setDrawing(false);
     };
@@ -424,9 +406,7 @@ export function RasterSubsetPanel({
     const map = mapControllerRef.current?.getMap();
     if (!map) return;
     const b = map.getBounds();
-    setCoords(
-      coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]),
-    );
+    setCoords(coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]));
     clearStatus();
   }, [mapControllerRef, clearStatus]);
 
@@ -444,8 +424,7 @@ export function RasterSubsetPanel({
       if ((event.target as HTMLElement).closest("button")) return;
       event.preventDefault();
       const el = panelRef.current;
-      const parent =
-        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const parent = (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
       const pb = parent?.getBoundingClientRect();
       const eb = el?.getBoundingClientRect();
       const start: PanelPos = pos ?? {
@@ -462,12 +441,8 @@ export function RasterSubsetPanel({
       const move = (m: PointerEvent) => {
         if (!panelRef.current) return;
         const bounds = parent?.getBoundingClientRect();
-        const maxX = bounds
-          ? bounds.width - w - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
-        const maxY = bounds
-          ? bounds.height - h - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
+        const maxX = bounds ? bounds.width - w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxY = bounds ? bounds.height - h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
         setPos({
           x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
           y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
@@ -490,18 +465,14 @@ export function RasterSubsetPanel({
   const zoomValue = Number(zoom);
   const zoomInvalid =
     kind === "xyz" &&
-    (zoom === "" ||
-      !Number.isInteger(zoomValue) ||
-      zoomValue < 0 ||
-      zoomValue > 30);
+    (zoom === "" || !Number.isInteger(zoomValue) || zoomValue < 0 || zoomValue > 30);
   const canExtract = !running && bbox !== null && !zoomInvalid;
 
   const handleExtract = useCallback(async () => {
     if (!layer || !bbox) return;
     // Read the freshest copy of the layer from the store so a rename or source
     // edit made after the panel opened is reflected (the panel holds a snapshot).
-    const liveLayer =
-      useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
+    const liveLayer = useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
     // Abort a prior run (if any) and start a fresh cancellable one.
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -536,10 +507,7 @@ export function RasterSubsetPanel({
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      const savedPath = await saveRasterSubset(
-        bytes,
-        sanitizeExportFileName(liveLayer.name),
-      );
+      const savedPath = await saveRasterSubset(bytes, sanitizeExportFileName(liveLayer.name));
       // A null path means the user cancelled the save dialog.
       if (savedPath !== null) setSuccess(t("rasterSubset.success"));
     } catch (err) {
@@ -561,10 +529,7 @@ export function RasterSubsetPanel({
   return (
     <>
       {screenPoints ? (
-        <svg
-          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
-          aria-hidden="true"
-        >
+        <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" aria-hidden="true">
           <polygon
             points={screenPoints.map((p) => `${p.x},${p.y}`).join(" ")}
             // Track the app's accent color so the box matches the theme.
@@ -593,10 +558,7 @@ export function RasterSubsetPanel({
           onPointerDown={handleDragStart}
         >
           <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-            <GripVertical
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
+            <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <Crop className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <span className="truncate">{t("rasterSubset.title")}</span>
           </div>
@@ -611,10 +573,7 @@ export function RasterSubsetPanel({
         </div>
 
         <div className="flex flex-col gap-3 overflow-auto p-3 text-sm">
-          <p
-            className="truncate text-xs text-muted-foreground"
-            title={layer.name}
-          >
+          <p className="truncate text-xs text-muted-foreground" title={layer.name}>
             {layer.name}
           </p>
 
@@ -630,19 +589,12 @@ export function RasterSubsetPanel({
               <Scan className="h-3.5 w-3.5" aria-hidden="true" />
               {drawing ? t("rasterSubset.drawing") : t("rasterSubset.drawBbox")}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleUseView}
-            >
+            <Button type="button" size="sm" variant="outline" onClick={handleUseView}>
               {t("rasterSubset.useView")}
             </Button>
           </div>
           {drawing ? (
-            <p className="text-xs text-muted-foreground">
-              {t("rasterSubset.drawHint")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("rasterSubset.drawHint")}</p>
           ) : null}
 
           <div className="grid grid-cols-2 gap-2">
@@ -695,9 +647,7 @@ export function RasterSubsetPanel({
                 }}
               />
               {zoomInvalid ? (
-                <p className="text-xs text-destructive">
-                  {t("rasterSubset.zoomHint")}
-                </p>
+                <p className="text-xs text-destructive">{t("rasterSubset.zoomHint")}</p>
               ) : null}
             </div>
           ) : (
@@ -718,9 +668,7 @@ export function RasterSubsetPanel({
                   clearStatus();
                 }}
               />
-              <p className="text-xs text-muted-foreground">
-                {t("rasterSubset.resolutionHint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("rasterSubset.resolutionHint")}</p>
             </div>
           )}
 
@@ -734,10 +682,7 @@ export function RasterSubsetPanel({
               {showAdvanced ? (
                 <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
               ) : (
-                <ChevronRight
-                  className="h-3.5 w-3.5 rtl:rotate-180"
-                  aria-hidden="true"
-                />
+                <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
               )}
               {t("rasterSubset.advanced")}
             </button>
@@ -807,9 +752,7 @@ export function RasterSubsetPanel({
             </p>
           ) : null}
           {success ? (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">
-              {success}
-            </p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">{success}</p>
           ) : null}
 
           <Button

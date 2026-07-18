@@ -17,11 +17,7 @@ import {
   layerNameFromPath,
   normalizeCrs,
 } from "../helpers";
-import {
-  AddDataSourceForm,
-  SampleDataSelect,
-  useAddDataSource,
-} from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 interface SelectedCadFile {
   path: string;
@@ -57,9 +53,7 @@ export function CadSource() {
   const { t } = useTranslation();
   const [defaultName] = useState(() => t("addData.cad.defaultName"));
   const source = useAddDataSource(defaultName);
-  const [selectedFile, setSelectedFile] = useState<SelectedCadFile | null>(
-    null,
-  );
+  const [selectedFile, setSelectedFile] = useState<SelectedCadFile | null>(null);
   const [layers, setLayers] = useState<CadLayerInfo[]>([]);
   // `null` = nothing chosen yet; "" is a real selection (an unnamed OGR layer,
   // which ST_Read reads as the first layer), so the two must stay distinct.
@@ -87,19 +81,13 @@ export function CadSource() {
   // user has since superseded bails out before touching state. The caller owns
   // the `isReadingLayers` flag (so the fetch in `handleSelectSample` is covered
   // too) — this helper never toggles it.
-  const applyCadBytes = async (
-    requestId: number,
-    path: string,
-    data: ArrayBuffer,
-  ) => {
+  const applyCadBytes = async (requestId: number, path: string, data: ArrayBuffer) => {
     const file: SelectedCadFile = { path, data };
     setSelectedFile(file);
     setLayers([]);
     setSelectedLayer(null);
     source.setLayerName((current) =>
-      current.trim() && current !== defaultName
-        ? current
-        : layerNameFromPath(path, defaultName),
+      current.trim() && current !== defaultName ? current : layerNameFromPath(path, defaultName),
     );
 
     const cadLayers = await readCadLayers(buildVectorFile(file));
@@ -114,9 +102,7 @@ export function CadSource() {
   const handleChooseFile = async () => {
     source.setError(null);
     const result = await openLocalDataFileWithFallback({
-      filters: [
-        { name: t("addData.cad.fileFilter"), extensions: ["dxf", "dwg"] },
-      ],
+      filters: [{ name: t("addData.cad.fileFilter"), extensions: ["dxf", "dwg"] }],
       accept: ".dxf,.dwg",
       readBinary: true,
     }).catch((err: unknown) => {
@@ -146,17 +132,14 @@ export function CadSource() {
     try {
       const response = await fetch(sample.url);
       if (!response.ok) {
-        throw new Error(
-          t("addData.common.requestFailed", { status: response.status }),
-        );
+        throw new Error(t("addData.common.requestFailed", { status: response.status }));
       }
       const data = await response.arrayBuffer();
       if (requestId !== loadSeq.current) return; // a newer load started
       setCrs(sample.crs);
       // Parse the path off the URL so a query string/fragment can't leak into
       // the filename (and thus the extension detection).
-      const filename =
-        new URL(sample.url).pathname.split("/").pop() || "sample.dxf";
+      const filename = new URL(sample.url).pathname.split("/").pop() || "sample.dxf";
       await applyCadBytes(requestId, filename, data);
     } catch (err) {
       if (requestId === loadSeq.current) {
@@ -178,10 +161,10 @@ export function CadSource() {
 
     let featureCollection;
     try {
-      featureCollection = await loadDuckDbVectorFile(
-        buildVectorFile(selectedFile),
-        { layer: selectedLayer, overrideSourceCrs },
-      );
+      featureCollection = await loadDuckDbVectorFile(buildVectorFile(selectedFile), {
+        layer: selectedLayer,
+        overrideSourceCrs,
+      });
     } catch (err) {
       if (isUnsupportedGeometryError(err)) {
         // Keep the raw cause in DevTools while showing the friendly message.
@@ -220,10 +203,7 @@ export function CadSource() {
       onSubmit={handleSubmit}
       error={source.error}
       submitDisabled={
-        source.isSubmitting ||
-        isReadingLayers ||
-        !selectedFile ||
-        selectedLayer === null
+        source.isSubmitting || isReadingLayers || !selectedFile || selectedLayer === null
       }
     >
       <div className="space-y-3">
@@ -299,9 +279,7 @@ export function CadSource() {
               </option>
             ))}
           </Select>
-          <p className="text-xs text-muted-foreground">
-            {t("addData.cad.crsHelp")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("addData.cad.crsHelp")}</p>
         </div>
 
         <SampleDataSelect

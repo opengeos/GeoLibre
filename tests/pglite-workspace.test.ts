@@ -67,10 +67,7 @@ describe("pickGeometryColumnName", () => {
   it("falls back when geom (and geometry) are taken", () => {
     assert.equal(pickGeometryColumnName(["geom"]), "geometry");
     assert.equal(pickGeometryColumnName(["geom", "geometry"]), "geom_2");
-    assert.equal(
-      pickGeometryColumnName(["geom", "geometry", "geom_2"]),
-      "geom_3",
-    );
+    assert.equal(pickGeometryColumnName(["geom", "geometry", "geom_2"]), "geom_3");
   });
 });
 
@@ -92,11 +89,7 @@ describe("buildCreateTableStatement", () => {
   });
 
   it("escapes embedded double quotes in column names", () => {
-    const sql = buildCreateTableStatement(
-      '"t"',
-      [{ name: 'we"ird', type: "text" }],
-      "geom",
-    );
+    const sql = buildCreateTableStatement('"t"', [{ name: 'we"ird', type: "text" }], "geom");
     assert.match(sql, /"we""ird" text/);
   });
 });
@@ -123,12 +116,9 @@ describe("buildInsertChunk", () => {
   });
 
   it("emits a null geometry parameter when a feature has no geometry", () => {
-    const { params } = buildInsertChunk(
-      '"t"',
-      [{ name: "id", type: "double precision" }],
-      "geom",
-      [feature({ id: 1 }, null)],
-    );
+    const { params } = buildInsertChunk('"t"', [{ name: "id", type: "double precision" }], "geom", [
+      feature({ id: 1 }, null),
+    ]);
     assert.deepEqual(params, [1, null]);
   });
 
@@ -152,12 +142,9 @@ describe("buildInsertChunk", () => {
   });
 
   it("stringifies non-string scalars for text columns", () => {
-    const { params } = buildInsertChunk(
-      '"t"',
-      [{ name: "mixed", type: "text" }],
-      "geom",
-      [feature({ mixed: 42 }, null)],
-    );
+    const { params } = buildInsertChunk('"t"', [{ name: "mixed", type: "text" }], "geom", [
+      feature({ mixed: 42 }, null),
+    ]);
     assert.deepEqual(params, ["42", null]);
   });
 });

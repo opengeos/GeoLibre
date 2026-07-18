@@ -21,8 +21,7 @@ const storage = new Map<string, string>();
   removeEventListener: () => {},
 };
 
-type DiagnosticsModule =
-  typeof import("../apps/geolibre-desktop/src/lib/diagnostics");
+type DiagnosticsModule = typeof import("../apps/geolibre-desktop/src/lib/diagnostics");
 let appendDiagnostic: DiagnosticsModule["appendDiagnostic"];
 let clearDiagnostics: DiagnosticsModule["clearDiagnostics"];
 let getDiagnosticsSnapshot: DiagnosticsModule["getDiagnosticsSnapshot"];
@@ -44,8 +43,7 @@ before(async () => {
 // Intentionally duplicated from diagnostics.ts: the key is a persistence
 // contract with users' localStorage, so an accidental rename in the source
 // should fail this test rather than be silently mirrored by an import.
-const CAPTURE_NETWORK_INFO_STORAGE_KEY =
-  "geolibre.diagnostics.captureNetworkInfo";
+const CAPTURE_NETWORK_INFO_STORAGE_KEY = "geolibre.diagnostics.captureNetworkInfo";
 
 describe("diagnostics network info capture", () => {
   beforeEach(() => {
@@ -157,9 +155,8 @@ describe("diagnostics startup transient suppression", () => {
   }
 
   before(async () => {
-    ({ installDiagnosticsCapture: installCapture } = await import(
-      "../apps/geolibre-desktop/src/lib/diagnostics"
-    ));
+    ({ installDiagnosticsCapture: installCapture } =
+      await import("../apps/geolibre-desktop/src/lib/diagnostics"));
   });
 
   beforeEach(() => {
@@ -201,9 +198,7 @@ describe("diagnostics startup transient suppression", () => {
   it("swallows a benign startup fetch rejection under Tauri", () => {
     win.__TAURI_INTERNALS__ = {};
     install();
-    const { event, wasPrevented } = rejectionEvent(
-      new TypeError("Failed to fetch"),
-    );
+    const { event, wasPrevented } = rejectionEvent(new TypeError("Failed to fetch"));
     listeners.get("unhandledrejection")?.(event);
     assert.equal(wasPrevented(), true);
     const [record] = getDiagnosticsSnapshot().records;
@@ -213,9 +208,7 @@ describe("diagnostics startup transient suppression", () => {
 
   it("leaves a fetch rejection alone outside the Tauri runtime", () => {
     install();
-    const { event, wasPrevented } = rejectionEvent(
-      new TypeError("Failed to fetch"),
-    );
+    const { event, wasPrevented } = rejectionEvent(new TypeError("Failed to fetch"));
     listeners.get("unhandledrejection")?.(event);
     assert.equal(wasPrevented(), false);
     const [record] = getDiagnosticsSnapshot().records;
@@ -229,9 +222,7 @@ describe("diagnostics startup transient suppression", () => {
     // installedAt is captured at install; jump past the grace window so the
     // rejection no longer counts as a startup transient.
     Date.now = () => realDateNow() + 60_000;
-    const { event, wasPrevented } = rejectionEvent(
-      new TypeError("Failed to fetch"),
-    );
+    const { event, wasPrevented } = rejectionEvent(new TypeError("Failed to fetch"));
     listeners.get("unhandledrejection")?.(event);
     assert.equal(wasPrevented(), false);
     assert.equal(getDiagnosticsSnapshot().records[0]?.level, "error");
@@ -292,8 +283,7 @@ describe("diagnostics startup transient suppression", () => {
       echoed = args;
     };
     install();
-    const message =
-      "Easing around a point is not supported under globe projection.";
+    const message = "Easing around a point is not supported under globe projection.";
     console.warn(message);
     // Echoed to the console for contributors, but not recorded in the panel.
     assert.deepEqual(echoed, [message]);
@@ -389,15 +379,12 @@ describe("diagnostics startup transient suppression", () => {
 
   it("downgrades a benign startup fetch failure under Tauri to a warning", async () => {
     win.__TAURI_INTERNALS__ = {};
-    win.fetch = (() =>
-      Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
+    win.fetch = (() => Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
     install();
     // The URL is illustrative of the real warm-up failure (a call to the Tauri
     // IPC endpoint); the benign-startup downgrade keys off the error message,
     // not the URL, so any URL would produce the same result here.
-    await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(
-      () => {},
-    );
+    await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(() => {});
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.category, "network");
     // The Tauri custom-protocol warm-up at launch retries over postMessage, so
@@ -409,12 +396,9 @@ describe("diagnostics startup transient suppression", () => {
   });
 
   it("keeps a startup fetch failure outside the Tauri runtime as an error", async () => {
-    win.fetch = (() =>
-      Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+    win.fetch = (() => Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
     install();
-    await (win.fetch as typeof fetch)("https://example.com/data").catch(
-      () => {},
-    );
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(() => {});
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.category, "network");
     assert.equal(record.level, "error");
@@ -423,26 +407,20 @@ describe("diagnostics startup transient suppression", () => {
 
   it("flags a fetch failure after the startup window as an error under Tauri", async () => {
     win.__TAURI_INTERNALS__ = {};
-    win.fetch = (() =>
-      Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
+    win.fetch = (() => Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
     install();
     // Jump past the grace window so the failure is no longer a startup transient.
     Date.now = () => realDateNow() + 60_000;
-    await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(
-      () => {},
-    );
+    await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(() => {});
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.level, "error");
     assert.equal(getDiagnosticsSnapshot().errorCount, 1);
   });
 
   it("classifies a genuine fetch network failure with an actionable hint", async () => {
-    win.fetch = (() =>
-      Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+    win.fetch = (() => Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
     install();
-    await (win.fetch as typeof fetch)("https://example.com/data").catch(
-      () => {},
-    );
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(() => {});
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.level, "error");
     // The opaque browser error is interpreted rather than left as a raw stack.
@@ -453,12 +431,9 @@ describe("diagnostics startup transient suppression", () => {
   });
 
   it("does not append a redundant label for an unclassified failure", async () => {
-    win.fetch = (() =>
-      Promise.reject(new Error("some opaque failure"))) as unknown as typeof fetch;
+    win.fetch = (() => Promise.reject(new Error("some opaque failure"))) as unknown as typeof fetch;
     install();
-    await (win.fetch as typeof fetch)("https://example.com/data").catch(
-      () => {},
-    );
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(() => {});
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.level, "error");
     // An "unknown" classification must not render "request failed (request failed)".

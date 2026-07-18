@@ -43,14 +43,7 @@ export const PHOTO_IMAGE_EXTENSIONS = [
  * which the map already routes to the GeoTIFF raster loader; a geotagged TIFF
  * photo can still be imported through the explicit Add Data > Photos dialog.
  */
-const PHOTO_DROP_EXTENSIONS = new Set([
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-  "heic",
-  "heif",
-]);
+const PHOTO_DROP_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "heic", "heif"]);
 
 /** Extensions the browser cannot decode on a canvas (thumbnail is skipped). */
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
@@ -107,12 +100,7 @@ function sniffImageMime(bytes: Uint8Array): string | null {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return "image/jpeg";
   }
-  if (
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  ) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
     return "image/png";
   }
   if (
@@ -168,9 +156,7 @@ function fileExtension(name: string): string {
 
 /** Whether a filename looks like an image the photo importer can read. */
 export function isPhotoFileName(name: string): boolean {
-  return (PHOTO_IMAGE_EXTENSIONS as readonly string[]).includes(
-    fileExtension(name),
-  );
+  return (PHOTO_IMAGE_EXTENSIONS as readonly string[]).includes(fileExtension(name));
 }
 
 /**
@@ -208,10 +194,7 @@ interface PhotoExif {
  * and `false` otherwise. Returning the pair (rather than a single-argument type
  * predicate) lets callers use both values without a cast.
  */
-export function isValidLngLat(
-  lng: unknown,
-  lat: unknown,
-): { lng: number; lat: number } | false {
+export function isValidLngLat(lng: unknown, lat: unknown): { lng: number; lat: number } | false {
   if (
     typeof lng === "number" &&
     typeof lat === "number" &&
@@ -281,9 +264,7 @@ export function buildPhotoProperties(
 
   const rawAltitude = roundTo(exif.GPSAltitude, 2);
   const altitude =
-    rawAltitude !== undefined && isBelowSeaLevel(exif.GPSAltitudeRef)
-      ? -rawAltitude
-      : rawAltitude;
+    rawAltitude !== undefined && isBelowSeaLevel(exif.GPSAltitudeRef) ? -rawAltitude : rawAltitude;
   if (altitude !== undefined) properties.altitude = altitude;
 
   const direction = roundTo(exif.GPSImgDirection, 1);
@@ -370,16 +351,10 @@ export async function createFullResolutionDataUrl(
  * inline image; the full-resolution image alone is null when the format can't be
  * shown natively, the bytes are mislabeled, or the original is over the ceiling.
  */
-async function createPhotoImages(
-  file: Blob,
-  fileName: string,
-): Promise<PhotoImages> {
+async function createPhotoImages(file: Blob, fileName: string): Promise<PhotoImages> {
   const empty: PhotoImages = { thumbnail: null, fullResolution: null };
   if (isHeicFileName(fileName)) return empty;
-  if (
-    typeof createImageBitmap !== "function" ||
-    typeof document === "undefined"
-  ) {
+  if (typeof createImageBitmap !== "function" || typeof document === "undefined") {
     return empty;
   }
 
@@ -444,9 +419,7 @@ export interface GeotaggedPhotoResult {
  * @param files - The image files to import (any non-image is simply skipped).
  * @returns The point layer plus per-batch counts for the caller's summary.
  */
-export async function loadGeotaggedPhotos(
-  files: File[],
-): Promise<GeotaggedPhotoResult> {
+export async function loadGeotaggedPhotos(files: File[]): Promise<GeotaggedPhotoResult> {
   const features: Feature<Point>[] = [];
   let withoutThumbnail = 0;
 
@@ -456,10 +429,7 @@ export async function loadGeotaggedPhotos(
     const coord = exif && isValidLngLat(exif.longitude, exif.latitude);
     if (!exif || !coord) continue;
 
-    const { thumbnail, fullResolution } = await createPhotoImages(
-      file,
-      fileName,
-    );
+    const { thumbnail, fullResolution } = await createPhotoImages(file, fileName);
     if (!thumbnail) withoutThumbnail += 1;
 
     features.push({
@@ -504,10 +474,7 @@ export async function loadPhotosAtLocation(
   for (const file of files) {
     const fileName = file.name || "photo";
     const exif = (await readPhotoExif(file)) ?? {};
-    const { thumbnail, fullResolution } = await createPhotoImages(
-      file,
-      fileName,
-    );
+    const { thumbnail, fullResolution } = await createPhotoImages(file, fileName);
     if (!thumbnail) withoutThumbnail += 1;
 
     features.push({

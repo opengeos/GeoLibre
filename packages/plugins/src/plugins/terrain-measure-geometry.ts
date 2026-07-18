@@ -24,9 +24,7 @@ export function haversineMeters(a: LngLat, b: LngLat, radius: number): number {
   const lat2 = b[1] * DEG_TO_RAD;
   const dLat = lat2 - lat1;
   const dLng = (b[0] - a[0]) * DEG_TO_RAD;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * radius * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -47,9 +45,7 @@ export function densifyLine(
 
   const cumulative: number[] = [0];
   for (let i = 1; i < coords.length; i += 1) {
-    cumulative.push(
-      cumulative[i - 1] + haversineMeters(coords[i - 1], coords[i], radius),
-    );
+    cumulative.push(cumulative[i - 1] + haversineMeters(coords[i - 1], coords[i], radius));
   }
   const total = cumulative[cumulative.length - 1];
   if (total === 0) {
@@ -114,9 +110,7 @@ export function surfaceDistance(
   distances: number[],
   elevations: (number | null)[],
 ): SurfaceDistanceResult {
-  const planarMeters = distances.length
-    ? distances[distances.length - 1] - distances[0]
-    : 0;
+  const planarMeters = distances.length ? distances[distances.length - 1] - distances[0] : 0;
   let surfaceMeters = 0;
   let gainMeters = 0;
   let lossMeters = 0;
@@ -150,8 +144,7 @@ export function surfaceDistance(
     if (i === 0) continue;
     const run = distances[i] - distances[i - 1];
     const prev = elevations[i - 1];
-    const prevElevation =
-      typeof prev === "number" && Number.isFinite(prev) ? prev : null;
+    const prevElevation = typeof prev === "number" && Number.isFinite(prev) ? prev : null;
     if (elevation !== null && prevElevation !== null) {
       surfaceMeters += Math.hypot(run, elevation - prevElevation);
     } else {
@@ -178,8 +171,7 @@ export function pointInRing(point: LngLat, ring: LngLat[]): boolean {
     const [xi, yi] = ring[i];
     const [xj, yj] = ring[j];
     const intersects =
-      yi > point[1] !== yj > point[1] &&
-      point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
+      yi > point[1] !== yj > point[1] && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
     if (intersects) inside = !inside;
   }
   return inside;
@@ -204,11 +196,7 @@ export interface AreaGrid {
  * grid has at most `maxSamples` points (and at least 2x2), sized so cells are
  * approximately square in meters. Degenerate rings return a null grid.
  */
-export function buildAreaGrid(
-  ring: LngLat[],
-  maxSamples: number,
-  radius: number,
-): AreaGrid | null {
+export function buildAreaGrid(ring: LngLat[], maxSamples: number, radius: number): AreaGrid | null {
   if (ring.length < 3) return null;
   let minLng = Infinity;
   let maxLng = -Infinity;
@@ -326,10 +314,7 @@ export function surfaceArea(
       secantSum += secant;
       // Clamp like the secant so a spiky DEM sample can't report a mean slope
       // the area contribution was already protected against.
-      slopeSum += Math.min(
-        Math.atan(Math.hypot(dzdx, dzdy)) / DEG_TO_RAD,
-        MAX_SLOPE_DEG,
-      );
+      slopeSum += Math.min(Math.atan(Math.hypot(dzdx, dzdy)) / DEG_TO_RAD, MAX_SLOPE_DEG);
       sampledCount += 1;
     }
   }

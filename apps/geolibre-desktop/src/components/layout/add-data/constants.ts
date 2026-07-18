@@ -3,10 +3,7 @@
  */
 
 import type { ArcGISLayerType } from "@geolibre/plugins";
-import type {
-  AddDataKind,
-  DelimitedTextDelimiter,
-} from "./types";
+import type { AddDataKind, DelimitedTextDelimiter } from "./types";
 
 // ~10 MB; deck-viz data is stored inline in the project file, so warn (but do
 // not block) when a very large payload would bloat saved projects.
@@ -97,27 +94,21 @@ export const DEFAULT_OGC_VECTOR_TILES_URL =
   "https://api.pdok.nl/lv/bgt/ogc/v1/tiles/WebMercatorQuad?f=tilejson";
 export const DEFAULT_OGC_VECTOR_TILES_STYLE_URL =
   "https://api.pdok.nl/lv/bgt/ogc/v1/styles/bgt_standaardvisualisatie__webmercatorquad?f=mapbox";
-export const DEFAULT_GPX_URL =
-  "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
+export const DEFAULT_GPX_URL = "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
 // USGS "Magnitude 2.5+ Earthquakes, Past Day" Atom feed (Simple georss:point).
 export const DEFAULT_GEORSS_URL =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom";
-export const DEFAULT_DELIMITED_TEXT_URL =
-  "https://data.source.coop/giswqs/opengeos/us_cities.csv";
+export const DEFAULT_DELIMITED_TEXT_URL = "https://data.source.coop/giswqs/opengeos/us_cities.csv";
 export const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";
 export const DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD = "longitude";
 // MapLibre's georeferenced video sample, pre-filled so the dialog works out of
 // the box. The corners are [lng, lat] pairs.
-export const DEFAULT_VIDEO_MP4_URL =
-  "https://static-assets.mapbox.com/mapbox-gl-js/drone.mp4";
-export const DEFAULT_VIDEO_WEBM_URL =
-  "https://static-assets.mapbox.com/mapbox-gl-js/drone.webm";
+export const DEFAULT_VIDEO_MP4_URL = "https://static-assets.mapbox.com/mapbox-gl-js/drone.mp4";
+export const DEFAULT_VIDEO_WEBM_URL = "https://static-assets.mapbox.com/mapbox-gl-js/drone.webm";
 export const DEFAULT_VIDEO_TOP_LEFT = "-122.51596391201019, 37.56238816766053";
 export const DEFAULT_VIDEO_TOP_RIGHT = "-122.51467645168304, 37.56410183312965";
-export const DEFAULT_VIDEO_BOTTOM_RIGHT =
-  "-122.51309394836426, 37.563391708549425";
-export const DEFAULT_VIDEO_BOTTOM_LEFT =
-  "-122.51423120498657, 37.56161849366671";
+export const DEFAULT_VIDEO_BOTTOM_RIGHT = "-122.51309394836426, 37.563391708549425";
+export const DEFAULT_VIDEO_BOTTOM_LEFT = "-122.51423120498657, 37.56161849366671";
 export const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 export const DEFAULT_ARCGIS_VECTOR_TILE_URL =

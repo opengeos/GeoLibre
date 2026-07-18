@@ -62,18 +62,12 @@ describe("dmsAxisToDecimal", () => {
   });
 
   it("recombines D/M/S into a decimal degree", () => {
-    const decimal = dmsAxisToDecimal(
-      { deg: "12", min: "34", sec: "55.2", dir: "E" },
-      "lon",
-    );
+    const decimal = dmsAxisToDecimal({ deg: "12", min: "34", sec: "55.2", dir: "E" }, "lon");
     assert.ok(Math.abs(decimal - 12.582) < 1e-9);
   });
 
   it("applies a negative sign for the negative hemisphere", () => {
-    const decimal = dmsAxisToDecimal(
-      { deg: "98", min: "28", sec: "8.3", dir: "W" },
-      "lon",
-    );
+    const decimal = dmsAxisToDecimal({ deg: "98", min: "28", sec: "8.3", dir: "W" }, "lon");
     assert.ok(decimal < 0);
   });
 

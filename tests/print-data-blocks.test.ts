@@ -13,11 +13,7 @@ import {
 import { collectAtlasFeatures } from "../apps/geolibre-desktop/src/lib/print-atlas";
 import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
-function point(
-  lng: number,
-  lat: number,
-  properties: Record<string, unknown>,
-): GeoJSON.Feature {
+function point(lng: number, lat: number, properties: Record<string, unknown>): GeoJSON.Feature {
   return {
     type: "Feature",
     properties,
@@ -143,35 +139,25 @@ describe("buildTableBlock", () => {
   });
 
   it("caps rows at the limit and reports the truncated count", () => {
-    const many = rows(
-      ...Array.from({ length: 30 }, (_, i) => ({ id: i })),
-    );
+    const many = rows(...Array.from({ length: 30 }, (_, i) => ({ id: i })));
     const table = buildTableBlock(many, { columns: ["id"], maxRows: 5 });
     assert.equal(table?.rows.length, 5);
     assert.equal(table?.truncated, 25);
     // Clamped into 1..MAX_TABLE_ROWS; non-finite falls back to the default.
-    assert.equal(
-      buildTableBlock(many, { columns: ["id"], maxRows: 0 })?.rows.length,
-      1,
-    );
+    assert.equal(buildTableBlock(many, { columns: ["id"], maxRows: 0 })?.rows.length, 1);
     assert.equal(
       buildTableBlock(many, { columns: ["id"], maxRows: 999 })?.rows.length,
       Math.min(30, MAX_TABLE_ROWS),
     );
     assert.equal(
-      buildTableBlock(many, { columns: ["id"], maxRows: Number.NaN })?.rows
-        .length,
+      buildTableBlock(many, { columns: ["id"], maxRows: Number.NaN })?.rows.length,
       DEFAULT_TABLE_ROWS,
     );
   });
 });
 
 describe("buildChartBlock", () => {
-  const source = rows(
-    { kind: "a", v: 10 },
-    { kind: "a", v: 30 },
-    { kind: "b", v: 5 },
-  );
+  const source = rows({ kind: "a", v: 10 }, { kind: "a", v: 30 }, { kind: "b", v: 5 });
 
   it("returns null for empty rows or incomplete configuration", () => {
     assert.equal(buildChartBlock([], { type: "bar", categoryField: "kind" }), null);
@@ -207,9 +193,7 @@ describe("buildChartBlock", () => {
   });
 
   it("reports bar categories dropped past the top-N cap", () => {
-    const many = rows(
-      ...Array.from({ length: 25 }, (_, i) => ({ kind: `k${i}` })),
-    );
+    const many = rows(...Array.from({ length: 25 }, (_, i) => ({ kind: `k${i}` })));
     const chart = buildChartBlock(many, {
       type: "bar",
       categoryField: "kind",
@@ -239,10 +223,10 @@ describe("buildChartBlock", () => {
   });
 
   it("builds a line chart over row order, skipping non-numeric rows", () => {
-    const chart = buildChartBlock(
-      rows({ v: 1 }, { v: "x" }, { v: 3 }),
-      { type: "line", valueField: "v" },
-    );
+    const chart = buildChartBlock(rows({ v: 1 }, { v: "x" }, { v: 3 }), {
+      type: "line",
+      valueField: "v",
+    });
     assert.ok(chart && chart.kind === "line");
     assert.deepEqual(
       chart.points.map((p) => [p.index, p.value]),

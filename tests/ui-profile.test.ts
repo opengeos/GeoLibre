@@ -44,32 +44,17 @@ describe("ui-profile tiers", () => {
 
 describe("showsAdvancedNotices", () => {
   it("shows when the profile is disabled", () => {
-    assert.equal(
-      showsAdvancedNotices(profile({ enabled: false, level: "beginner" })),
-      true,
-    );
+    assert.equal(showsAdvancedNotices(profile({ enabled: false, level: "beginner" })), true);
   });
 
   it("hides for the Beginner and Intermediate presets", () => {
-    assert.equal(
-      showsAdvancedNotices(profile({ enabled: true, level: "beginner" })),
-      false,
-    );
-    assert.equal(
-      showsAdvancedNotices(profile({ enabled: true, level: "intermediate" })),
-      false,
-    );
+    assert.equal(showsAdvancedNotices(profile({ enabled: true, level: "beginner" })), false);
+    assert.equal(showsAdvancedNotices(profile({ enabled: true, level: "intermediate" })), false);
   });
 
   it("shows for the Advanced preset and for a custom profile", () => {
-    assert.equal(
-      showsAdvancedNotices(profile({ enabled: true, level: "advanced" })),
-      true,
-    );
-    assert.equal(
-      showsAdvancedNotices(profile({ enabled: true, level: null })),
-      true,
-    );
+    assert.equal(showsAdvancedNotices(profile({ enabled: true, level: "advanced" })), true);
+    assert.equal(showsAdvancedNotices(profile({ enabled: true, level: null })), true);
   });
 });
 
@@ -99,19 +84,16 @@ describe("presetHiddenSets", () => {
 
   it("beginner hides every non-basic item", () => {
     const sets = presetHiddenSets("beginner", pluginIds);
-    const basicIds = DATA_SOURCE_CATALOG.filter(
-      (entry) => entry.tier === "basic",
-    ).map((entry) => entry.id);
+    const basicIds = DATA_SOURCE_CATALOG.filter((entry) => entry.tier === "basic").map(
+      (entry) => entry.id,
+    );
     for (const id of sets.hiddenDataSources) {
       assert.ok(!basicIds.includes(id), `${id} should stay visible`);
     }
     // A known advanced source is hidden; a known basic source is not.
     assert.ok(sets.hiddenDataSources.includes("postgres"));
     assert.ok(!sets.hiddenDataSources.includes("vector"));
-    assert.deepEqual(sets.hiddenPlugins, [
-      "maplibre-gl-swipe",
-      "maplibre-gl-geoagent",
-    ]);
+    assert.deepEqual(sets.hiddenPlugins, ["maplibre-gl-swipe", "maplibre-gl-geoagent"]);
   });
 
   it("intermediate keeps basic + intermediate, hides advanced", () => {
@@ -155,9 +137,7 @@ describe("menu presets and predicates", () => {
   });
 
   it("never hides the Settings Interface entry", () => {
-    assert.ok(
-      !MENU_ITEM_CATALOG.some((entry) => entry.id === "settings.interface"),
-    );
+    assert.ok(!MENU_ITEM_CATALOG.some((entry) => entry.id === "settings.interface"));
   });
 
   it("respects enabled for menu and item predicates", () => {
@@ -205,33 +185,22 @@ describe("activeInterfaceProfile", () => {
   });
 
   it("reports the active preset level when enabled", () => {
-    assert.equal(
-      activeInterfaceProfile(profile({ enabled: true, level: "beginner" })),
-      "beginner",
-    );
+    assert.equal(activeInterfaceProfile(profile({ enabled: true, level: "beginner" })), "beginner");
     assert.equal(
       activeInterfaceProfile(profile({ enabled: true, level: "intermediate" })),
       "intermediate",
     );
-    assert.equal(
-      activeInterfaceProfile(profile({ enabled: true, level: "advanced" })),
-      "advanced",
-    );
+    assert.equal(activeInterfaceProfile(profile({ enabled: true, level: "advanced" })), "advanced");
   });
 
   it("reports Custom when enabled with a hand-edited (null-level) profile", () => {
     assert.equal(
-      activeInterfaceProfile(
-        profile({ enabled: true, level: null, hiddenMenus: ["help"] }),
-      ),
+      activeInterfaceProfile(profile({ enabled: true, level: null, hiddenMenus: ["help"] })),
       "custom",
     );
     // Even with all hidden lists empty, level=null means the user has hand-edited
     // their way back to "show everything": still Custom, not Advanced.
-    assert.equal(
-      activeInterfaceProfile(profile({ enabled: true, level: null })),
-      "custom",
-    );
+    assert.equal(activeInterfaceProfile(profile({ enabled: true, level: null })), "custom");
   });
 });
 

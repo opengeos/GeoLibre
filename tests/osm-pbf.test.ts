@@ -2,14 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import {
-  type OsmPbfProgress,
-  parseOsmPbf,
-} from "../apps/geolibre-desktop/src/lib/osm-pbf";
+import { type OsmPbfProgress, parseOsmPbf } from "../apps/geolibre-desktop/src/lib/osm-pbf";
 
-const fixturePath = fileURLToPath(
-  new URL("./fixtures/sample.osm.pbf", import.meta.url),
-);
+const fixturePath = fileURLToPath(new URL("./fixtures/sample.osm.pbf", import.meta.url));
 
 // These fixtures are produced by scripts/gen-osm-fixture.mjs.
 const untaggedWayFixturePath = fileURLToPath(

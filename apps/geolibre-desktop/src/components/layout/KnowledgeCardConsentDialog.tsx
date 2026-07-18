@@ -31,9 +31,7 @@ export function KnowledgeCardConsentDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("knowledgeCard.noticeTitle")}</DialogTitle>
-          <DialogDescription>
-            {t("knowledgeCard.noticeDesc")}
-          </DialogDescription>
+          <DialogDescription>{t("knowledgeCard.noticeDesc")}</DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>

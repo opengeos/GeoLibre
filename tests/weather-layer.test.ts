@@ -35,8 +35,7 @@ function makeConfig(over: Partial<WeatherLayerConfig> = {}): WeatherLayerConfig 
   };
 }
 
-const ownedLayers = () =>
-  useAppStore.getState().layers.filter((l) => l.metadata?.[FLAG] === true);
+const ownedLayers = () => useAppStore.getState().layers.filter((l) => l.metadata?.[FLAG] === true);
 
 beforeEach(() => {
   useAppStore.setState({ layers: [], layerGroups: [], selectedLayerId: null });
@@ -157,7 +156,10 @@ describe("createWeatherLayer", () => {
       getMap: () => fakeMap,
     } as unknown as GeoLibreAppAPI;
 
-    const secondFrame: WeatherFrame = { ...frame, tileUrl: "https://example.test/2/{z}/{x}/{y}.png" };
+    const secondFrame: WeatherFrame = {
+      ...frame,
+      tileUrl: "https://example.test/2/{z}/{x}/{y}.png",
+    };
     const c = createWeatherLayer(
       makeConfig({ loadFrames: async () => [frame, secondFrame], frameMs: 60_000 }),
     );
@@ -185,7 +187,10 @@ describe("createWeatherLayer", () => {
       getSource: () => undefined,
     };
     const appWithMap = { getMap: () => fakeMap } as unknown as GeoLibreAppAPI;
-    const secondFrame: WeatherFrame = { ...frame, tileUrl: "https://example.test/2/{z}/{x}/{y}.png" };
+    const secondFrame: WeatherFrame = {
+      ...frame,
+      tileUrl: "https://example.test/2/{z}/{x}/{y}.png",
+    };
     const c = createWeatherLayer(
       makeConfig({ loadFrames: async () => [frame, secondFrame], frameMs: 60_000 }),
     );

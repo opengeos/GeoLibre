@@ -23,9 +23,7 @@ interface ProjectPluginTrustDialogProps {
  * dismiss without loading. It is a no-op when the project references only
  * already-installed or bundled plugins.
  */
-export function ProjectPluginTrustDialog({
-  trust,
-}: ProjectPluginTrustDialogProps) {
+export function ProjectPluginTrustDialog({ trust }: ProjectPluginTrustDialogProps) {
   const { t } = useTranslation();
 
   // Trusting/dismissing empties pendingUrls synchronously, before the dialog's
@@ -39,8 +37,7 @@ export function ProjectPluginTrustDialog({
       lastPendingUrls.current = trust.pendingUrls;
     }
   }, [trust.pendingUrls]);
-  const urls =
-    trust.pendingUrls.length > 0 ? trust.pendingUrls : lastPendingUrls.current;
+  const urls = trust.pendingUrls.length > 0 ? trust.pendingUrls : lastPendingUrls.current;
 
   return (
     <Dialog
@@ -70,9 +67,7 @@ export function ProjectPluginTrustDialog({
           <Button variant="outline" onClick={() => trust.dismiss()}>
             {t("managePlugins.trust.dismissButton")}
           </Button>
-          <Button onClick={() => trust.trust()}>
-            {t("managePlugins.trust.trustButton")}
-          </Button>
+          <Button onClick={() => trust.trust()}>{t("managePlugins.trust.trustButton")}</Button>
         </div>
       </DialogContent>
     </Dialog>

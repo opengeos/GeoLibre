@@ -45,17 +45,9 @@ interface EditMenuProps {
  */
 export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
   const { t } = useTranslation();
-  const canUndo = useStore(
-    useAppStore.temporal,
-    (s) => s.pastStates.length > 0,
-  );
-  const canRedo = useStore(
-    useAppStore.temporal,
-    (s) => s.futureStates.length > 0,
-  );
-  const setSelectByExpressionOpen = useAppStore(
-    (s) => s.setSelectByExpressionOpen,
-  );
+  const canUndo = useStore(useAppStore.temporal, (s) => s.pastStates.length > 0);
+  const canRedo = useStore(useAppStore.temporal, (s) => s.futureStates.length > 0);
+  const setSelectByExpressionOpen = useAppStore((s) => s.setSelectByExpressionOpen);
   const setSelectByLocationOpen = useAppStore((s) => s.setSelectByLocationOpen);
   // Narrow boolean/number selectors so the menu re-renders only when the
   // relevant facts change, not on every store write.
@@ -66,9 +58,7 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
   // disabled until two selectable layers exist (its dialog would otherwise
   // open straight to the "needs two vector layers" dead end).
   const hasTwoSelectableLayers = useAppStore(
-    (s) =>
-      s.layers.filter((layer) => (layer.geojson?.features?.length ?? 0) > 0)
-        .length >= 2,
+    (s) => s.layers.filter((layer) => (layer.geojson?.features?.length ?? 0) > 0).length >= 2,
   );
   const activeLayerSelectable = useAppStore((s) => {
     const layer = s.layers.find((l) => l.id === s.selectedLayerId);
@@ -84,9 +74,7 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
       .getState()
       .layers.find((l) => l.id === useAppStore.getState().selectedLayerId);
     if (!layer) return;
-    exportSelectionAsLayer(
-      t("selection.exportedLayerName", { name: layer.name }),
-    );
+    exportSelectionAsLayer(t("selection.exportedLayerName", { name: layer.name }));
   };
 
   const iconClass = "me-2 h-3.5 w-3.5 shrink-0";
@@ -117,9 +105,7 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
           <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
             <Redo2 className={iconClass} />
             <span className="whitespace-nowrap">{t("toolbar.item.redo")}</span>
-            <DropdownMenuShortcut>
-              Ctrl/Cmd+Shift+Z / Ctrl+Y
-            </DropdownMenuShortcut>
+            <DropdownMenuShortcut>Ctrl/Cmd+Shift+Z / Ctrl+Y</DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
         {(show("edit.selectByExpression") || show("edit.selectByLocation")) && (
@@ -142,9 +128,7 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
             onSelect={() => setSelectByLocationOpen(true)}
           >
             <Locate className={iconClass} />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.selectByLocationEllipsis")}
-            </span>
+            <span className="whitespace-nowrap">{t("toolbar.item.selectByLocationEllipsis")}</span>
           </DropdownMenuItem>
         )}
         {show("edit.zoomToSelection") && (
@@ -153,42 +137,25 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
             onSelect={() => zoomToSelection(mapControllerRef.current)}
           >
             <SquareDashed className={iconClass} />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.zoomToSelection")}
-            </span>
+            <span className="whitespace-nowrap">{t("toolbar.item.zoomToSelection")}</span>
           </DropdownMenuItem>
         )}
         {show("edit.invertSelection") && (
-          <DropdownMenuItem
-            disabled={!activeLayerSelectable}
-            onSelect={invertLayerSelection}
-          >
+          <DropdownMenuItem disabled={!activeLayerSelectable} onSelect={invertLayerSelection}>
             <Shuffle className={iconClass} />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.invertSelection")}
-            </span>
+            <span className="whitespace-nowrap">{t("toolbar.item.invertSelection")}</span>
           </DropdownMenuItem>
         )}
         {show("edit.clearSelection") && (
-          <DropdownMenuItem
-            disabled={!hasSelection}
-            onSelect={clearFeatureSelection}
-          >
+          <DropdownMenuItem disabled={!hasSelection} onSelect={clearFeatureSelection}>
             <X className={iconClass} />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.clearSelection")}
-            </span>
+            <span className="whitespace-nowrap">{t("toolbar.item.clearSelection")}</span>
           </DropdownMenuItem>
         )}
         {show("edit.exportSelection") && (
-          <DropdownMenuItem
-            disabled={!hasSelection}
-            onSelect={handleExportSelection}
-          >
+          <DropdownMenuItem disabled={!hasSelection} onSelect={handleExportSelection}>
             <FilePlus2 className={iconClass} />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.exportSelection")}
-            </span>
+            <span className="whitespace-nowrap">{t("toolbar.item.exportSelection")}</span>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

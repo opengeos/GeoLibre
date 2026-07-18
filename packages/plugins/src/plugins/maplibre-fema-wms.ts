@@ -5,11 +5,7 @@ import {
   type FemaWmsEventHandler,
 } from "maplibre-gl-fema-wms";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -44,9 +40,7 @@ function layerNameFromStoreLayer(layer: GeoLibreLayer): string | undefined {
 }
 
 function storedVisibility(layerId: string): boolean | undefined {
-  return useAppStore
-    .getState()
-    .layers.find((candidate) => candidate.id === layerId)?.visible;
+  return useAppStore.getState().layers.find((candidate) => candidate.id === layerId)?.visible;
 }
 
 function wmsLayerName(entry: WebServiceLayerEntry): string {
@@ -72,15 +66,11 @@ const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
   listActive: (control) => {
     const map = control.getMap();
     const state = control.getState();
-    const titles = new Map(
-      control.getLayers().map((info) => [info.name, info.title]),
-    );
+    const titles = new Map(control.getLayers().map((info) => [info.name, info.title]));
     return state.activeLayers.map((active) => {
       const id = `${NATIVE_ID_PREFIX}${active.name}`;
       const native = readNativeRasterSource(map, id);
-      const tiles = native?.tiles ?? [
-        buildGetMapTileUrl(state.url, active.name),
-      ];
+      const tiles = native?.tiles ?? [buildGetMapTileUrl(state.url, active.name)];
       const title = titles.get(active.name);
       return {
         id,
@@ -108,9 +98,7 @@ const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
     control.setLayerOpacity(wmsLayerName(entry), opacity);
   },
   adopt: (control, layers) => {
-    const activeNames = new Set(
-      control.getState().activeLayers.map((active) => active.name),
-    );
+    const activeNames = new Set(control.getState().activeLayers.map((active) => active.name));
     for (const layer of layers) {
       const name = layerNameFromStoreLayer(layer);
       if (!name || activeNames.has(name)) continue;
@@ -145,10 +133,7 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
     femaWmsControl = null;
   },
   getMapControlPosition: () => femaWmsPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     femaWmsPosition = position;
     if (!femaWmsControl) return;
     app.removeMapControl(femaWmsControl);

@@ -71,14 +71,7 @@ describe("computeTextStats", () => {
   });
 
   it("lists the most frequent values, ties broken alphabetically", () => {
-    const data = rows(
-      { c: "x" },
-      { c: "x" },
-      { c: "y" },
-      { c: "y" },
-      { c: "z" },
-      { c: "a" },
-    );
+    const data = rows({ c: "x" }, { c: "x" }, { c: "y" }, { c: "y" }, { c: "z" }, { c: "a" });
     const stats = computeTextStats(data, "c", 2);
     assert.deepEqual(stats.top, [
       { value: "x", count: 2 },
@@ -97,13 +90,7 @@ describe("computeTextStats", () => {
 
 describe("computeFieldStats", () => {
   it("treats a mostly-numeric field as numeric and counts blanks", () => {
-    const data = rows(
-      { pop: 10 },
-      { pop: "20" },
-      { pop: 30 },
-      { pop: null },
-      { pop: "" },
-    );
+    const data = rows({ pop: 10 }, { pop: "20" }, { pop: 30 }, { pop: null }, { pop: "" });
     const stats = computeFieldStats(data, "pop") as NumericFieldStats;
     assert.equal(stats.kind, "numeric");
     assert.equal(stats.count, 3);
@@ -121,11 +108,7 @@ describe("computeFieldStats", () => {
   });
 
   it("treats an id-like text field as text", () => {
-    const data = rows(
-      { name: "Alpha" },
-      { name: "Beta" },
-      { name: "Gamma" },
-    );
+    const data = rows({ name: "Alpha" }, { name: "Beta" }, { name: "Gamma" });
     const stats = computeFieldStats(data, "name");
     assert.equal(stats.kind, "text");
   });

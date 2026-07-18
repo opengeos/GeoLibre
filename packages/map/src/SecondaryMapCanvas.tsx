@@ -40,9 +40,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   const viewIdRef = useRef(viewId);
   viewIdRef.current = viewId;
 
-  const entry = useAppStore((s) =>
-    s.secondaryMapViews.find((pane) => pane.id === viewId),
-  );
+  const entry = useAppStore((s) => s.secondaryMapViews.find((pane) => pane.id === viewId));
   const syncView = useAppStore((s) => s.mapLayout.syncView);
   const mapPreferences = useAppStore((s) => s.preferences.map);
   const layers = useAppStore((s) => s.layers);
@@ -75,9 +73,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
     const state = useAppStore.getState();
-    const pane = state.secondaryMapViews.find(
-      (p) => p.id === viewIdRef.current,
-    );
+    const pane = state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
     const initialView: MapViewState | undefined = state.mapLayout.syncView
       ? state.mapView
       : pane?.view;
@@ -152,9 +148,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   // Reconcile the shared layers (with this pane's overrides) whenever they or
   // the overrides change.
   useEffect(() => {
-    controller.current?.waitAndSyncLayers(
-      applyGroupEffects(paneLayers, layerGroups),
-    );
+    controller.current?.waitAndSyncLayers(applyGroupEffects(paneLayers, layerGroups));
   }, [paneLayers, layerGroups]);
 
   // Basemap is shared with the primary map; follow the global store fields.

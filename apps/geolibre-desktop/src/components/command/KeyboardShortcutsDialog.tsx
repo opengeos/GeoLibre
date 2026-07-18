@@ -1,10 +1,4 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@geolibre/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { useMemo } from "react";
 import {
   type Command,
@@ -103,27 +97,20 @@ export function KeyboardShortcutsDialog({
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>
-            Press {formatShortcut(PALETTE_SHORTCUT, isMac)} to search every
-            action in the command palette.
+            Press {formatShortcut(PALETTE_SHORTCUT, isMac)} to search every action in the command
+            palette.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {groups.map(({ group, rows }) => (
             <div key={group} className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">
-                {group}
-              </p>
+              <p className="text-xs font-medium text-muted-foreground">{group}</p>
               <ul className="space-y-1">
                 {rows.map((row) => (
-                  <li
-                    key={row.id}
-                    className="flex items-center justify-between gap-4 text-sm"
-                  >
+                  <li key={row.id} className="flex items-center justify-between gap-4 text-sm">
                     <span className="min-w-0 truncate">{row.label}</span>
                     <kbd className="shrink-0 rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                      {row.shortcut
-                        ? formatShortcut(row.shortcut, isMac)
-                        : row.display}
+                      {row.shortcut ? formatShortcut(row.shortcut, isMac) : row.display}
                     </kbd>
                   </li>
                 ))}

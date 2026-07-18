@@ -134,8 +134,7 @@ export type SourceCoopFetch = (
   text: () => Promise<string>;
 }>;
 
-const defaultFetch: SourceCoopFetch = (url, signal) =>
-  fetch(url, signal ? { signal } : undefined);
+const defaultFetch: SourceCoopFetch = (url, signal) => fetch(url, signal ? { signal } : undefined);
 
 /** Guards a value before it reaches an `<a href>` or a map source. */
 export const HTTP_URL_RE = /^https?:\/\//i;
@@ -148,9 +147,7 @@ const PRODUCT_REF_RE = /^([a-z0-9][a-z0-9-_.]*)\/([a-z0-9][a-z0-9-_.]*)\/?$/i;
  * query is free text. Lets the panel resolve an exact product by id even
  * though no search endpoint exists (see the module comment).
  */
-export function parseProductRef(
-  query: string,
-): { accountId: string; productId: string } | null {
+export function parseProductRef(query: string): { accountId: string; productId: string } | null {
   const match = PRODUCT_REF_RE.exec(query.trim());
   return match ? { accountId: match[1], productId: match[2] } : null;
 }
@@ -235,9 +232,7 @@ export function synthesizeProduct(
 export function parseProductList(body: unknown): SourceCoopProduct[] {
   const raw = Array.isArray(body) ? body : asRecord(body).products;
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map(parseProduct)
-    .filter((product): product is SourceCoopProduct => product !== null);
+  return raw.map(parseProduct).filter((product): product is SourceCoopProduct => product !== null);
 }
 
 /** Unescapes the five XML entities that can appear in RSS/S3 text nodes. */
@@ -289,9 +284,7 @@ export function parseFeed(xml: string): SourceCoopProduct[] {
       description: xmlTag(item, "description"),
       tags: [],
       updatedAt:
-        parsedDate && !Number.isNaN(parsedDate.getTime())
-          ? parsedDate.toISOString()
-          : null,
+        parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null,
       featured: false,
       url: productUrl(ref.accountId, ref.productId),
     });
@@ -479,15 +472,10 @@ export function buildListObjectsUrl(options: {
   // Encoded like buildObjectUrl's account segment: `accountId` comes from
   // unvalidated API/feed text, so a `#` or `?` in it would otherwise silently
   // truncate the path here.
-  const url = new URL(
-    `${SOURCE_COOP_DATA_BASE}/${encodeURIComponent(options.accountId)}`,
-  );
+  const url = new URL(`${SOURCE_COOP_DATA_BASE}/${encodeURIComponent(options.accountId)}`);
   url.searchParams.set("list-type", "2");
   url.searchParams.set("prefix", options.prefix);
-  url.searchParams.set(
-    "max-keys",
-    String(options.maxKeys ?? SOURCE_COOP_LIST_MAX_KEYS),
-  );
+  url.searchParams.set("max-keys", String(options.maxKeys ?? SOURCE_COOP_LIST_MAX_KEYS));
   if (options.delimited !== false) url.searchParams.set("delimiter", "/");
   // URLSearchParams percent-encodes the token's `+`, `/` and `=` for us.
   if (options.token) url.searchParams.set("continuation-token", options.token);
@@ -499,10 +487,7 @@ export function buildListObjectsUrl(options: {
  * folder placeholder objects some tools write; they are dropped so they do not
  * show up as empty files next to the real `CommonPrefixes` folders.
  */
-export function parseListObjects(
-  xml: string,
-  accountId: string,
-): SourceCoopListing {
+export function parseListObjects(xml: string, accountId: string): SourceCoopListing {
   const objects: SourceCoopObject[] = [];
   for (const block of xmlBlocks(xml, "Contents")) {
     const key = xmlTag(block, "Key");
@@ -529,9 +514,7 @@ export function parseListObjects(
     objects,
     folders,
     nextToken:
-      xmlTag(xml, "IsTruncated") === "true"
-        ? xmlTag(xml, "NextContinuationToken") || null
-        : null,
+      xmlTag(xml, "IsTruncated") === "true" ? xmlTag(xml, "NextContinuationToken") || null : null,
   };
 }
 
@@ -543,10 +526,7 @@ export function parseListObjects(
  * client-side. Source Cooperative's own search is likewise a substring scan,
  * so this is not a downgrade in matching behaviour, only in corpus size.
  */
-export function filterProducts(
-  products: SourceCoopProduct[],
-  query: string,
-): SourceCoopProduct[] {
+export function filterProducts(products: SourceCoopProduct[], query: string): SourceCoopProduct[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return products;
   const scored: { product: SourceCoopProduct; score: number }[] = [];
@@ -585,9 +565,7 @@ export function filterProducts(
 }
 
 /** Merges catalog sources, preferring the richer record for a duplicate id. */
-export function mergeProducts(
-  ...groups: SourceCoopProduct[][]
-): SourceCoopProduct[] {
+export function mergeProducts(...groups: SourceCoopProduct[][]): SourceCoopProduct[] {
   const byId = new Map<string, SourceCoopProduct>();
   for (const group of groups) {
     for (const product of group) {
@@ -611,10 +589,7 @@ export function mergeProducts(
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const exponent = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1,
-  );
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** exponent;
   return `${value >= 100 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`;
 }

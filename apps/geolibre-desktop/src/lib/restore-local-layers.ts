@@ -1,8 +1,4 @@
-import {
-  hasPathTraversal,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { hasPathTraversal, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   isAbsoluteLocalPath,
   isLoadedVectorLayer,
@@ -65,9 +61,9 @@ export async function restoreLocalFileLayers(): Promise<void> {
         // only the vector entries carry the `geojson` these layers reload. Skip
         // the KML `<Model>` (COLLADA→GLB) conversion — including any remote-mesh
         // fetch — since the models are discarded by the filter below anyway.
-        const loaded = (
-          await loadDroppedVectorPaths([path], { skipModels: true })
-        ).filter(isLoadedVectorLayer);
+        const loaded = (await loadDroppedVectorPaths([path], { skipModels: true })).filter(
+          isLoadedVectorLayer,
+        );
         if (loaded.length === 0) {
           dropLayers(layers, path);
           return;
@@ -89,10 +85,7 @@ export async function restoreLocalFileLayers(): Promise<void> {
           useAppStore.getState().updateLayer(layer.id, { geojson: match.data });
         }
       } catch (error) {
-        console.warn(
-          `[GeoLibre] Could not reload local layer(s) from "${path}".`,
-          error,
-        );
+        console.warn(`[GeoLibre] Could not reload local layer(s) from "${path}".`, error);
         dropLayers(layers, path);
       }
     }),

@@ -41,10 +41,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
   const { t } = useTranslation();
   const setLayerVirtualFields = useAppStore((s) => s.setLayerVirtualFields);
 
-  const fields = useMemo(
-    () => layer.virtualFields ?? [],
-    [layer.virtualFields],
-  );
+  const fields = useMemo(() => layer.virtualFields ?? [], [layer.virtualFields]);
 
   const [formOpen, setFormOpen] = useState(false);
   // null while adding; the edited field's id while editing.
@@ -55,10 +52,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
 
   // Stable identities for the Expression Builder's memoization (see the
   // equivalent comment in SelectByExpressionDialog).
-  const features = useMemo(
-    () => layer.geojson?.features ?? [],
-    [layer.geojson],
-  );
+  const features = useMemo(() => layer.geojson?.features ?? [], [layer.geojson]);
   const fieldNames = useMemo(() => getAttributePropertyNames(layer), [layer]);
 
   // The engine evaluates a field against only the columns materialized by
@@ -78,13 +72,9 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
   );
   const builderFieldNames = useMemo(() => {
     const hidden = new Set(
-      editedAndLaterFields.flatMap((field) =>
-        field.addedField ? [field.addedField] : [],
-      ),
+      editedAndLaterFields.flatMap((field) => (field.addedField ? [field.addedField] : [])),
     );
-    return hidden.size === 0
-      ? fieldNames
-      : fieldNames.filter((name) => !hidden.has(name));
+    return hidden.size === 0 ? fieldNames : fieldNames.filter((name) => !hidden.has(name));
   }, [fieldNames, editedAndLaterFields]);
 
   // Names the draft may not use: every existing column plus the other virtual
@@ -105,15 +95,9 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
 
   const trimmedName = draftName.trim();
   const nameConflict = trimmedName.length > 0 && takenNames.has(trimmedName);
-  const validation = useMemo(
-    () => validateMapExpression(draftExpression),
-    [draftExpression],
-  );
+  const validation = useMemo(() => validateMapExpression(draftExpression), [draftExpression]);
   const canSubmit =
-    trimmedName.length > 0 &&
-    !nameConflict &&
-    draftExpression.trim().length > 0 &&
-    validation.ok;
+    trimmedName.length > 0 && !nameConflict && draftExpression.trim().length > 0 && validation.ok;
 
   const resetForm = () => {
     setEditingId(null);
@@ -176,9 +160,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
     <div className="space-y-3" data-testid="virtual-fields-section">
       <p className="text-sm font-semibold">{t("style.virtualFields.heading")}</p>
       {fields.length === 0 && !formOpen && (
-        <p className="text-xs text-muted-foreground">
-          {t("style.virtualFields.empty")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("style.virtualFields.empty")}</p>
       )}
       {fields.map((field) => {
         const enabled = field.enabled !== false;
@@ -200,9 +182,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
                 aria-label={t("style.virtualFields.enabledTitle")}
               />
               <SquareFunction className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-sm italic">
-                {field.name}
-              </span>
+              <span className="min-w-0 flex-1 truncate text-sm italic">{field.name}</span>
               <Button
                 variant="ghost"
                 size="icon"
@@ -224,9 +204,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <p className="truncate font-mono text-xs text-muted-foreground">
-              {field.expression}
-            </p>
+            <p className="truncate font-mono text-xs text-muted-foreground">{field.expression}</p>
             {field.error && (
               <p className="flex items-center gap-1 text-xs text-destructive">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -262,9 +240,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
               placeholder={t("style.virtualFields.namePlaceholder")}
             />
             {nameConflict && (
-              <p className="text-xs text-destructive">
-                {t("style.virtualFields.nameTaken")}
-              </p>
+              <p className="text-xs text-destructive">{t("style.virtualFields.nameTaken")}</p>
             )}
           </div>
           <div className="space-y-1">
@@ -292,8 +268,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
             />
             {draftExpression.trim().length > 0 && !validation.ok && (
               <p className="text-xs text-destructive">
-                {validation.errors[0] ??
-                  t("style.virtualFields.invalidExpression")}
+                {validation.errors[0] ?? t("style.virtualFields.invalidExpression")}
               </p>
             )}
           </div>
@@ -309,9 +284,7 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
               {t("style.virtualFields.cancel")}
             </Button>
             <Button size="sm" disabled={!canSubmit} onClick={submitField}>
-              {editingId
-                ? t("style.virtualFields.save")
-                : t("style.virtualFields.add")}
+              {editingId ? t("style.virtualFields.save") : t("style.virtualFields.add")}
             </Button>
           </div>
         </div>

@@ -9,11 +9,7 @@
 // tiled COG with overviews, and hands the bytes back so the caller can load the
 // result instead. It runs entirely client-side, so it works in the browser
 // build with no Python sidecar. See opengeos/GeoLibre#789.
-import init, {
-  CogBuilder,
-  GeoTiffReader,
-  geotiff_info,
-} from "geolibre-wasm";
+import init, { CogBuilder, GeoTiffReader, geotiff_info } from "geolibre-wasm";
 
 /** Header-only metadata for a GeoTIFF, parsed from {@link geotiff_info}. Cheap:
  * reads only the TIFF header, never the pixel data, so it is safe on large
@@ -48,12 +44,7 @@ const COG_TILE_SIZE = 512;
  * the Int16/Float32 DEMs this tool is most often pointed at. Desktop keeps the
  * full rio-cogeo list via the sidecar.
  */
-export const COG_WASM_COMPRESSIONS = [
-  "deflate",
-  "lzw",
-  "packbits",
-  "none",
-] as const;
+export const COG_WASM_COMPRESSIONS = ["deflate", "lzw", "packbits", "none"] as const;
 
 export type CogWasmCompression = (typeof COG_WASM_COMPRESSIONS)[number];
 
@@ -72,9 +63,7 @@ let wasmReady: Promise<void> | null = null;
  * @param moduleOrPath - Optional wasm bytes / URL / module for non-browser hosts.
  * @returns A promise that resolves once the module is ready.
  */
-export function initCogWasm(
-  moduleOrPath?: ArrayBuffer | Uint8Array | URL | string,
-): Promise<void> {
+export function initCogWasm(moduleOrPath?: ArrayBuffer | Uint8Array | URL | string): Promise<void> {
   if (!wasmReady) {
     wasmReady = init(
       moduleOrPath === undefined ? undefined : { module_or_path: moduleOrPath },

@@ -69,10 +69,7 @@ export function scaleDenomination(
  * bar's denomination) and its label — the shape the on-screen control consumes.
  * Derived from {@link scaleDenomination} so the two never diverge.
  */
-export function scaleSpan(
-  maxMeters: number,
-  unit: MapScaleUnit,
-): { span: number; label: string } {
+export function scaleSpan(maxMeters: number, unit: MapScaleUnit): { span: number; label: string } {
   const { metersPerUnit, label } = scaleDenomination(maxMeters, unit);
   return { span: maxMeters / metersPerUnit, label };
 }

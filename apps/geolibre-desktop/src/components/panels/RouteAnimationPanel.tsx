@@ -88,9 +88,7 @@ interface RouteAnimationPanelProps {
  * layer to coordinates and hands them to the plugin engine, which owns all map
  * work (marker, trail, camera).
  */
-export function RouteAnimationPanel({
-  mapControllerRef,
-}: RouteAnimationPanelProps) {
+export function RouteAnimationPanel({ mapControllerRef }: RouteAnimationPanelProps) {
   const visible = useSyncExternalStore(
     subscribeRouteAnimationPanel,
     isRouteAnimationPanelVisible,
@@ -181,22 +179,16 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
   useEffect(() => {
     let cancelled = false;
     const map = mapControllerRef.current?.getMap() ?? undefined;
-    const candidates = useAppStore
-      .getState()
-      .layers.filter((layer) => layer.type === "geojson");
+    const candidates = useAppStore.getState().layers.filter((layer) => layer.type === "geojson");
     (async () => {
       const resolved = await Promise.all(
         candidates.map(async (layer) => {
           const fc = await resolveLayerGeojson(layer, map).catch(() => null);
-          return fc && flattenToLine(fc).length >= 2
-            ? { id: layer.id, name: layer.name }
-            : null;
+          return fc && flattenToLine(fc).length >= 2 ? { id: layer.id, name: layer.name } : null;
         }),
       );
       if (!cancelled) {
-        setLineLayers(
-          resolved.filter((m): m is LineLayerOption => m !== null),
-        );
+        setLineLayers(resolved.filter((m): m is LineLayerOption => m !== null));
       }
     })();
     return () => {
@@ -245,9 +237,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
   // marker/trail ride the visualized 3D line. Re-runs when the layer's 3D style
   // values change or the route's Z availability does.
   useEffect(() => {
-    const layer = layerId
-      ? useAppStore.getState().layers.find((l) => l.id === layerId)
-      : undefined;
+    const layer = layerId ? useAppStore.getState().layers.find((l) => l.id === layerId) : undefined;
     if (!layer) {
       setRouteAnimationElevation({ active: false, verticalScale: 1, offset: 0 });
       return;
@@ -306,8 +296,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
   // Estimated length of one full pass at the current speed, shown next to the
   // export button so the user knows how long the video will be. Recomputed each
   // render (speed and layer changes both re-render this component).
-  const estimatedSeconds =
-    hasRoute && VIDEO_SUPPORTED ? getRouteAnimationDurationSeconds() : 0;
+  const estimatedSeconds = hasRoute && VIDEO_SUPPORTED ? getRouteAnimationDurationSeconds() : 0;
 
   // Record a single pass of the animation to a video file, then save it. The
   // recorder drives playback from the start to the end; on completion the file
@@ -342,9 +331,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       const name = await saveBinaryFileWithFallback(blob, {
         defaultName: `route-animation.${extension}`,
         filters: [{ name: fileType, extensions: [extension] }],
-        browserTypes: [
-          { description: fileType, accept: { [baseMime]: [`.${extension}`] } },
-        ],
+        browserTypes: [{ description: fileType, accept: { [baseMime]: [`.${extension}`] } }],
         mimeType: baseMime,
       });
       // A cancelled save dialog returns null; leave no "saved" banner in that case.
@@ -379,9 +366,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
         onPointerDown={handleDragStart}
       >
         <Navigation className="h-4 w-4 text-blue-500" />
-        <span className="text-sm font-medium">
-          {t("toolbar.routeAnimation.title")}
-        </span>
+        <span className="text-sm font-medium">{t("toolbar.routeAnimation.title")}</span>
         {/* When collapsed, keep play/pause reachable so the animation stays
             controllable while the panel body is out of the way. */}
         {collapsed && (
@@ -391,17 +376,11 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             className="ms-auto h-6 w-6"
             disabled={!hasRoute || busy}
             aria-label={
-              playing
-                ? t("toolbar.routeAnimation.pause")
-                : t("toolbar.routeAnimation.play")
+              playing ? t("toolbar.routeAnimation.pause") : t("toolbar.routeAnimation.play")
             }
             onClick={() => toggleRouteAnimationPlaying()}
           >
-            {playing ? (
-              <Pause className="h-3.5 w-3.5" />
-            ) : (
-              <Play className="h-3.5 w-3.5" />
-            )}
+            {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           </Button>
         )}
         <Button
@@ -413,14 +392,10 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           disabled={busy}
           aria-expanded={!collapsed}
           aria-label={
-            collapsed
-              ? t("toolbar.routeAnimation.expand")
-              : t("toolbar.routeAnimation.collapse")
+            collapsed ? t("toolbar.routeAnimation.expand") : t("toolbar.routeAnimation.collapse")
           }
           title={
-            collapsed
-              ? t("toolbar.routeAnimation.expand")
-              : t("toolbar.routeAnimation.collapse")
+            collapsed ? t("toolbar.routeAnimation.expand") : t("toolbar.routeAnimation.collapse")
           }
           onClick={() => setCollapsed((v) => !v)}
         >
@@ -445,256 +420,229 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       </div>
 
       {!collapsed && (
-      <div className="space-y-3 p-3">
-        <label className="block space-y-1">
-          <span className="block text-xs text-muted-foreground">
-            {t("toolbar.routeAnimation.layer")}
-          </span>
-          <Select
-            value={layerId ?? ""}
-            disabled={busy}
-            onChange={(e) =>
-              setRouteAnimationSettings({
-                layerId: e.target.value || null,
-                progress: 0,
-                playing: false,
-              })
-            }
-          >
-            <option value="">
-              {lineLayers.length === 0
-                ? t("toolbar.routeAnimation.noLineLayers")
-                : t("toolbar.routeAnimation.selectLayer")}
-            </option>
-            {lineLayers.map((layer) => (
-              <option key={layer.id} value={layer.id}>
-                {layer.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="default"
-            size="icon"
-            className="h-9 w-9"
-            disabled={!hasRoute || busy}
-            aria-label={
-              playing
-                ? t("toolbar.routeAnimation.pause")
-                : t("toolbar.routeAnimation.play")
-            }
-            onClick={() => toggleRouteAnimationPlaying()}
-          >
-            {playing ? (
-              <Pause className="h-4 w-4" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-          </Button>
-          <div className="min-w-0 flex-1">
-            <SliderRow
-              label={t("toolbar.routeAnimation.progress")}
-              min={0}
-              max={1}
-              step={0.001}
-              value={progress}
-              disabled={busy}
-              format={(v) => `${Math.round(v * 100)}%`}
-              onChange={(v) => setRouteAnimationProgress(v)}
-            />
-          </div>
-          <Button
-            variant={loop ? "default" : "outline"}
-            size="icon"
-            className="h-8 w-8"
-            disabled={busy}
-            aria-pressed={loop}
-            aria-label={t("toolbar.routeAnimation.loop")}
-            title={t("toolbar.routeAnimation.loop")}
-            onClick={() => setRouteAnimationSettings({ loop: !loop })}
-          >
-            <Repeat className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <SliderRow
-          label={t("toolbar.routeAnimation.speed")}
-          min={ROUTE_ANIM_SPEED_MIN}
-          max={ROUTE_ANIM_SPEED_MAX}
-          step={1}
-          value={speedMps}
-          disabled={busy}
-          format={(v) => `${Math.round(v)} m/s`}
-          onChange={(v) => setRouteAnimationSettings({ speedMps: v })}
-        />
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {t("toolbar.routeAnimation.marker")}
-          </span>
-          <div className="min-w-0 flex-1">
+        <div className="space-y-3 p-3">
+          <label className="block space-y-1">
+            <span className="block text-xs text-muted-foreground">
+              {t("toolbar.routeAnimation.layer")}
+            </span>
             <Select
-              aria-label={t("toolbar.routeAnimation.marker")}
-              value={markerStyle}
+              value={layerId ?? ""}
               disabled={busy}
               onChange={(e) =>
                 setRouteAnimationSettings({
-                  markerStyle: e.target.value as RouteMarkerStyle,
+                  layerId: e.target.value || null,
+                  progress: 0,
+                  playing: false,
                 })
               }
             >
-              {ROUTE_MARKER_STYLES.map((style) => (
-                <option key={style} value={style}>
-                  {t(`toolbar.routeAnimation.markerStyle.${style}`)}
+              <option value="">
+                {lineLayers.length === 0
+                  ? t("toolbar.routeAnimation.noLineLayers")
+                  : t("toolbar.routeAnimation.selectLayer")}
+              </option>
+              {lineLayers.map((layer) => (
+                <option key={layer.id} value={layer.id}>
+                  {layer.name}
                 </option>
               ))}
             </Select>
+          </label>
+
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="default"
+              size="icon"
+              className="h-9 w-9"
+              disabled={!hasRoute || busy}
+              aria-label={
+                playing ? t("toolbar.routeAnimation.pause") : t("toolbar.routeAnimation.play")
+              }
+              onClick={() => toggleRouteAnimationPlaying()}
+            >
+              {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </Button>
+            <div className="min-w-0 flex-1">
+              <SliderRow
+                label={t("toolbar.routeAnimation.progress")}
+                min={0}
+                max={1}
+                step={0.001}
+                value={progress}
+                disabled={busy}
+                format={(v) => `${Math.round(v * 100)}%`}
+                onChange={(v) => setRouteAnimationProgress(v)}
+              />
+            </div>
+            <Button
+              variant={loop ? "default" : "outline"}
+              size="icon"
+              className="h-8 w-8"
+              disabled={busy}
+              aria-pressed={loop}
+              aria-label={t("toolbar.routeAnimation.loop")}
+              title={t("toolbar.routeAnimation.loop")}
+              onClick={() => setRouteAnimationSettings({ loop: !loop })}
+            >
+              <Repeat className="h-4 w-4" />
+            </Button>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <input
-            type="color"
-            aria-label={t("toolbar.routeAnimation.color")}
-            title={t("toolbar.routeAnimation.color")}
-            value={color}
+          <SliderRow
+            label={t("toolbar.routeAnimation.speed")}
+            min={ROUTE_ANIM_SPEED_MIN}
+            max={ROUTE_ANIM_SPEED_MAX}
+            step={1}
+            value={speedMps}
             disabled={busy}
-            onChange={(e) =>
-              setRouteAnimationSettings({ color: e.target.value })
-            }
-            className="h-7 w-9 cursor-pointer rounded-md border border-input bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            format={(v) => `${Math.round(v)} m/s`}
+            onChange={(v) => setRouteAnimationSettings({ speedMps: v })}
           />
-          <ToggleChip
-            active={followCamera}
-            icon={<Video className="h-3.5 w-3.5" />}
-            label={t("toolbar.routeAnimation.followCamera")}
-            disabled={busy}
-            onClick={() =>
-              setRouteAnimationSettings({ followCamera: !followCamera })
-            }
-          />
-          <ToggleChip
-            active={showTrail}
-            icon={<Spline className="h-3.5 w-3.5" />}
-            label={t("toolbar.routeAnimation.trail")}
-            disabled={busy}
-            onClick={() => setRouteAnimationSettings({ showTrail: !showTrail })}
-          />
-        </div>
 
-        {/* Follow-camera controls: a chase cam that can tilt/zoom/rotate so the
-            view tracks an elevated 3D track instead of snapping flat (#1211).
-            Only shown while Follow is on. */}
-        {followCamera && (
-          <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2">
-            <SliderRow
-              label={t("toolbar.routeAnimation.followPitch")}
-              icon={<Mountain className="h-3.5 w-3.5" />}
-              min={ROUTE_FOLLOW_PITCH_MIN}
-              max={ROUTE_FOLLOW_PITCH_MAX}
-              step={1}
-              value={followPitch}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {t("toolbar.routeAnimation.marker")}
+            </span>
+            <div className="min-w-0 flex-1">
+              <Select
+                aria-label={t("toolbar.routeAnimation.marker")}
+                value={markerStyle}
+                disabled={busy}
+                onChange={(e) =>
+                  setRouteAnimationSettings({
+                    markerStyle: e.target.value as RouteMarkerStyle,
+                  })
+                }
+              >
+                {ROUTE_MARKER_STYLES.map((style) => (
+                  <option key={style} value={style}>
+                    {t(`toolbar.routeAnimation.markerStyle.${style}`)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <input
+              type="color"
+              aria-label={t("toolbar.routeAnimation.color")}
+              title={t("toolbar.routeAnimation.color")}
+              value={color}
               disabled={busy}
-              format={(v) => `${Math.round(v)}°`}
-              onChange={(v) => setRouteAnimationSettings({ followPitch: v })}
-            />
-            <SliderRow
-              label={t("toolbar.routeAnimation.followZoom")}
-              icon={<Search className="h-3.5 w-3.5" />}
-              min={ROUTE_FOLLOW_ZOOM_MIN}
-              max={ROUTE_FOLLOW_ZOOM_MAX}
-              step={0.5}
-              value={followZoom}
-              disabled={busy}
-              format={(v) => v.toFixed(1)}
-              onChange={(v) => setRouteAnimationSettings({ followZoom: v })}
+              onChange={(e) => setRouteAnimationSettings({ color: e.target.value })}
+              className="h-7 w-9 cursor-pointer rounded-md border border-input bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <ToggleChip
-              active={followRotate}
-              icon={<Compass className="h-3.5 w-3.5" />}
-              label={t("toolbar.routeAnimation.followRotate")}
+              active={followCamera}
+              icon={<Video className="h-3.5 w-3.5" />}
+              label={t("toolbar.routeAnimation.followCamera")}
               disabled={busy}
-              onClick={() =>
-                setRouteAnimationSettings({ followRotate: !followRotate })
-              }
+              onClick={() => setRouteAnimationSettings({ followCamera: !followCamera })}
+            />
+            <ToggleChip
+              active={showTrail}
+              icon={<Spline className="h-3.5 w-3.5" />}
+              label={t("toolbar.routeAnimation.trail")}
+              disabled={busy}
+              onClick={() => setRouteAnimationSettings({ showTrail: !showTrail })}
             />
           </div>
-        )}
 
-        {/* Video export: record one full pass of the animation to a video file.
+          {/* Follow-camera controls: a chase cam that can tilt/zoom/rotate so the
+            view tracks an elevated 3D track instead of snapping flat (#1211).
+            Only shown while Follow is on. */}
+          {followCamera && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2">
+              <SliderRow
+                label={t("toolbar.routeAnimation.followPitch")}
+                icon={<Mountain className="h-3.5 w-3.5" />}
+                min={ROUTE_FOLLOW_PITCH_MIN}
+                max={ROUTE_FOLLOW_PITCH_MAX}
+                step={1}
+                value={followPitch}
+                disabled={busy}
+                format={(v) => `${Math.round(v)}°`}
+                onChange={(v) => setRouteAnimationSettings({ followPitch: v })}
+              />
+              <SliderRow
+                label={t("toolbar.routeAnimation.followZoom")}
+                icon={<Search className="h-3.5 w-3.5" />}
+                min={ROUTE_FOLLOW_ZOOM_MIN}
+                max={ROUTE_FOLLOW_ZOOM_MAX}
+                step={0.5}
+                value={followZoom}
+                disabled={busy}
+                format={(v) => v.toFixed(1)}
+                onChange={(v) => setRouteAnimationSettings({ followZoom: v })}
+              />
+              <ToggleChip
+                active={followRotate}
+                icon={<Compass className="h-3.5 w-3.5" />}
+                label={t("toolbar.routeAnimation.followRotate")}
+                disabled={busy}
+                onClick={() => setRouteAnimationSettings({ followRotate: !followRotate })}
+              />
+            </div>
+          )}
+
+          {/* Video export: record one full pass of the animation to a video file.
             Only shown when the browser can record the canvas. */}
-        {VIDEO_SUPPORTED && (
-          <div className="space-y-1.5 border-t border-border pt-3">
-            {recordStatus === "recording" ? (
-              <div
-                role="status"
-                aria-live="polite"
-                className="flex items-center gap-2"
-              >
-                <Circle className="h-3 w-3 shrink-0 animate-pulse fill-red-500 text-red-500" />
-                <span className="flex-1 text-xs font-medium tabular-nums">
-                  {t("toolbar.routeAnimation.recordingStatus", {
-                    percent: recordPercent,
-                  })}
-                </span>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-7"
-                  onClick={stopRecording}
-                >
-                  {t("toolbar.routeAnimation.stop")}
-                </Button>
-              </div>
-            ) : recordStatus === "saving" ? (
-              <div
-                role="status"
-                aria-live="polite"
-                className="flex items-center gap-2"
-              >
-                <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted border-t-foreground" />
-                <span className="text-xs font-medium">
-                  {t("toolbar.routeAnimation.savingVideo")}
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 flex-1"
-                  disabled={!hasRoute}
-                  onClick={handleRecord}
-                >
-                  <Film className="me-1.5 h-3.5 w-3.5" />
-                  {VIDEO_EXTENSION === "mp4"
-                    ? t("toolbar.routeAnimation.saveVideoMp4")
-                    : t("toolbar.routeAnimation.saveVideoWebm")}
-                </Button>
-                {estimatedSeconds > 0 && (
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                    {t("toolbar.routeAnimation.estimatedLength", {
-                      seconds: estimatedSeconds.toFixed(1),
+          {VIDEO_SUPPORTED && (
+            <div className="space-y-1.5 border-t border-border pt-3">
+              {recordStatus === "recording" ? (
+                <div role="status" aria-live="polite" className="flex items-center gap-2">
+                  <Circle className="h-3 w-3 shrink-0 animate-pulse fill-red-500 text-red-500" />
+                  <span className="flex-1 text-xs font-medium tabular-nums">
+                    {t("toolbar.routeAnimation.recordingStatus", {
+                      percent: recordPercent,
                     })}
                   </span>
-                )}
-              </div>
-            )}
-            {savedVideoName && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                {t("toolbar.routeAnimation.videoSaved", {
-                  name: savedVideoName,
-                })}
-              </p>
-            )}
-            {videoError && (
-              <p className="text-xs text-destructive">{videoError}</p>
-            )}
-          </div>
-        )}
-      </div>
+                  <Button variant="destructive" size="sm" className="h-7" onClick={stopRecording}>
+                    {t("toolbar.routeAnimation.stop")}
+                  </Button>
+                </div>
+              ) : recordStatus === "saving" ? (
+                <div role="status" aria-live="polite" className="flex items-center gap-2">
+                  <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+                  <span className="text-xs font-medium">
+                    {t("toolbar.routeAnimation.savingVideo")}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 flex-1"
+                    disabled={!hasRoute}
+                    onClick={handleRecord}
+                  >
+                    <Film className="me-1.5 h-3.5 w-3.5" />
+                    {VIDEO_EXTENSION === "mp4"
+                      ? t("toolbar.routeAnimation.saveVideoMp4")
+                      : t("toolbar.routeAnimation.saveVideoWebm")}
+                  </Button>
+                  {estimatedSeconds > 0 && (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {t("toolbar.routeAnimation.estimatedLength", {
+                        seconds: estimatedSeconds.toFixed(1),
+                      })}
+                    </span>
+                  )}
+                </div>
+              )}
+              {savedVideoName && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                  {t("toolbar.routeAnimation.videoSaved", {
+                    name: savedVideoName,
+                  })}
+                </p>
+              )}
+              {videoError && <p className="text-xs text-destructive">{videoError}</p>}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

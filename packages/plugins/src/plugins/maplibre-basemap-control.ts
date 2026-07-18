@@ -7,11 +7,7 @@ import {
   type BasemapControlOptions,
   type ManagedRasterBasemap,
 } from "maplibre-gl-basemap-control";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
 const basemapEnv = (
   import.meta as ImportMeta & {
@@ -92,9 +88,7 @@ let labels: BasemapControlLabels = {
 };
 
 /** Override the panel strings (called from the app layer with translated text). */
-export function setBasemapControlLabels(
-  next: Partial<BasemapControlLabels>,
-): void {
+export function setBasemapControlLabels(next: Partial<BasemapControlLabels>): void {
   labels = { ...labels, ...next };
 }
 
@@ -109,8 +103,7 @@ const registeredRasterLayers = new Map<string, string>();
 // style basemaps, but it cannot know GeoLibre's background style when the
 // previous basemap was a stacked raster, so GeoLibre keeps this fallback. See
 // opengeos/GeoLibre#913.
-let styleChangeFallback: { attemptedUrl: string; previousUrl: string } | null =
-  null;
+let styleChangeFallback: { attemptedUrl: string; previousUrl: string } | null = null;
 
 export const BASEMAP_CONTROL_PLUGIN_ID = "maplibre-gl-basemap-control";
 
@@ -142,10 +135,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
       addRuntimeEnvListener();
     }
 
-    const added = app.addMapControl(
-      basemapControl,
-      basemapControlPosition,
-    );
+    const added = app.addMapControl(basemapControl, basemapControlPosition);
     if (!added) {
       // Tear the listener down too, or it outlives the nulled control: deactivate
       // bails on `!basemapControl`, so it would never be cleaned up otherwise.
@@ -168,9 +158,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     const stackedRasterIds = [...registeredRasterLayers.keys()];
     const activeBasemapIds = [
       ...new Set(
-        [activeStyleId, ...stackedRasterIds].filter(
-          (id): id is string => typeof id === "string",
-        ),
+        [activeStyleId, ...stackedRasterIds].filter((id): id is string => typeof id === "string"),
       ),
     ];
     basemapControl.setState({
@@ -196,10 +184,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     styleChangeFallback = null;
   },
   getMapControlPosition: () => basemapControlPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     basemapControlPosition = position;
     if (!basemapControl) return;
     app.removeMapControl(basemapControl);
@@ -212,9 +197,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   },
 };
 
-function getBasemapControlOptions(
-  app: GeoLibreAppAPI,
-): BasemapControlOptions {
+function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
   return {
     collapsed: false,
     position: basemapControlPosition,
@@ -270,10 +253,7 @@ function addRuntimeEnvListener(): void {
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   removeRuntimeEnvListener = () => {
-    window.removeEventListener(
-      "geolibre:runtime-env-change",
-      handleRuntimeEnvChange,
-    );
+    window.removeEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   };
 }
 
@@ -282,10 +262,7 @@ function cleanupRuntimeEnvListener(): void {
   removeRuntimeEnvListener = null;
 }
 
-function handleBasemapChange(
-  app: GeoLibreAppAPI,
-  event: BasemapControlEventPayload,
-): void {
+function handleBasemapChange(app: GeoLibreAppAPI, event: BasemapControlEventPayload): void {
   // Narrows the BasemapControlEventPayload union so event.basemap is accessible.
   if (event.type !== "basemapchange") return;
   // Any fresh user selection (a different style, or a raster overlay) supersedes
@@ -330,10 +307,7 @@ function handleBasemapChange(
 // the control does not own (the user had a raster basemap stacked on top). Only
 // acts when the failed style is still applied, so it never clobbers a newer
 // successful change. See opengeos/GeoLibre#913.
-function handleBasemapError(
-  app: GeoLibreAppAPI,
-  event: BasemapControlEventPayload,
-): void {
+function handleBasemapError(app: GeoLibreAppAPI, event: BasemapControlEventPayload): void {
   if (event.type !== "error") return;
   const fallback = styleChangeFallback;
   if (!fallback) return;
@@ -344,10 +318,7 @@ function handleBasemapError(
   }
 }
 
-function handleBasemapRemove(
-  app: GeoLibreAppAPI,
-  event: BasemapControlEventPayload,
-): void {
+function handleBasemapRemove(app: GeoLibreAppAPI, event: BasemapControlEventPayload): void {
   // Narrows the BasemapControlEventPayload union so event.basemap is accessible.
   if (event.type !== "basemapremove") return;
   const layerId = registeredRasterLayers.get(event.basemap.id);
@@ -404,8 +375,7 @@ function registerRasterBasemap(
       // Tile URL template lives in metadata, not sourcePath, which is reserved
       // for local file paths (GeoJSON, FlatGeobuf, etc.).
       tileType: "raster",
-      tileUrl:
-        basemap.source.tiles.length > 0 ? basemap.source.tiles[0] : undefined,
+      tileUrl: basemap.source.tiles.length > 0 ? basemap.source.tiles[0] : undefined,
     },
   });
   registeredRasterLayers.set(basemap.id, layerId);
@@ -418,10 +388,7 @@ function unregisterAllRasterBasemaps(app: GeoLibreAppAPI): void {
   registeredRasterLayers.clear();
 }
 
-function unregisterRasterBasemapsExcept(
-  app: GeoLibreAppAPI,
-  keepBasemapId: string,
-): void {
+function unregisterRasterBasemapsExcept(app: GeoLibreAppAPI, keepBasemapId: string): void {
   // Snapshot the entries so deleting from the Map mid-loop is safe.
   for (const [basemapId, layerId] of [...registeredRasterLayers.entries()]) {
     if (basemapId === keepBasemapId) continue;
@@ -434,9 +401,7 @@ function relinkRestoredRasterBasemaps(): void {
   if (registeredRasterLayers.size > 0) return;
   const restored = useAppStore
     .getState()
-    .layers.filter(
-      (layer) => layer.metadata?.sourceKind === "maplibre-basemap-control",
-    );
+    .layers.filter((layer) => layer.metadata?.sourceKind === "maplibre-basemap-control");
   for (const layer of restored) {
     const basemapId = layer.metadata?.basemapId;
     if (typeof basemapId === "string") {
@@ -470,9 +435,7 @@ function getManagedRaster(
   };
 }
 
-function normalizeBeforeId(
-  value: string | undefined | null,
-): string | undefined {
+function normalizeBeforeId(value: string | undefined | null): string | undefined {
   if (value == null) return undefined;
   const trimmed = value.trim();
   if (!trimmed || trimmed.toLowerCase() === "none") return undefined;

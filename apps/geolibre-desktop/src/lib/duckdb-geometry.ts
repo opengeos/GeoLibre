@@ -81,9 +81,7 @@ export function isUnsupportedSurfaceWkbError(error: unknown): boolean {
  * hold curves. For every other format this message must still fail loudly.
  */
 export function isGenericUnsupportedWkbError(error: unknown): boolean {
-  const message = (
-    error instanceof Error ? error.message : String(error)
-  ).toLowerCase();
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
   return message.includes("unsupported geometry type in wkb");
 }
 
@@ -101,10 +99,7 @@ export function normalizePropertyValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizePropertyValue);
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        normalizePropertyValue(item),
-      ]),
+      Object.entries(value).map(([key, item]) => [key, normalizePropertyValue(item)]),
     );
   }
   return value;
@@ -176,10 +171,7 @@ export function quoteIdentifier(value: string): string {
 // DuckDB Spatial reports CRS-annotated geometry types such as
 // GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
 export function isGeometryColumnType(columnType: unknown): boolean {
-  return (
-    typeof columnType === "string" &&
-    columnType.toUpperCase().startsWith("GEOMETRY")
-  );
+  return typeof columnType === "string" && columnType.toUpperCase().startsWith("GEOMETRY");
 }
 
 export interface DetectedGeometry {
@@ -206,9 +198,7 @@ export interface DetectedGeometry {
 export function detectGeometryColumn(
   description: Record<string, unknown>[],
 ): DetectedGeometry | null {
-  const native = description.find((row) =>
-    isGeometryColumnType(row.column_type),
-  )?.column_name;
+  const native = description.find((row) => isGeometryColumnType(row.column_type))?.column_name;
   if (typeof native === "string") {
     return { column: native, isWkb: false };
   }
@@ -218,10 +208,7 @@ export function detectGeometryColumn(
         typeof row.column_name === "string" &&
         WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
     )
-    .sort(
-      (a, b) =>
-        wkbColumnRank(a.column_name) - wkbColumnRank(b.column_name),
-    );
+    .sort((a, b) => wkbColumnRank(a.column_name) - wkbColumnRank(b.column_name));
 
   // Prefer binary/blob WKB candidates because DuckDB reads canonical WKB as
   // binary data. String WKB candidates are intentionally a later fallback and
@@ -230,8 +217,7 @@ export function detectGeometryColumn(
   // loose Parquet files.
   const wkb = rankedWkbCandidates.find(
     (row) =>
-      typeof row.column_type === "string" &&
-      /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type),
+      typeof row.column_type === "string" && /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type),
   )?.column_name;
   if (typeof wkb === "string") {
     return { column: wkb, isWkb: true };
@@ -240,8 +226,7 @@ export function detectGeometryColumn(
   const base64WkbCandidates = rankedWkbCandidates
     .filter(
       (row) =>
-        typeof row.column_type === "string" &&
-        /^(VARCHAR|TEXT|STRING)/i.test(row.column_type),
+        typeof row.column_type === "string" && /^(VARCHAR|TEXT|STRING)/i.test(row.column_type),
     )
     .map((row) => row.column_name);
   if (base64WkbCandidates.length > 0) {
@@ -271,9 +256,7 @@ function wkbColumnRank(name: string): number {
  */
 export function geometryExpr(detected: DetectedGeometry): string {
   if (detected.requiresBase64WkbValidation) {
-    throw new Error(
-      "Base64 WKB geometry candidates must be validated before SQL generation.",
-    );
+    throw new Error("Base64 WKB geometry candidates must be validated before SQL generation.");
   }
   const column = quoteIdentifier(detected.column);
   if (!detected.isWkb) return column;
@@ -292,10 +275,7 @@ export function geometryExpr(detected: DetectedGeometry): string {
  * @param sourceCrs The source CRS as `AUTHORITY:CODE`, or null to skip the
  *   reprojection to WGS84.
  */
-export function geometryGeoJsonSql(
-  geometryExpression: string,
-  sourceCrs: string | null,
-): string {
+export function geometryGeoJsonSql(geometryExpression: string, sourceCrs: string | null): string {
   if (!sourceCrs) {
     return `ST_AsGeoJSON(${geometryExpression})`;
   }
@@ -325,14 +305,11 @@ export const GDAL_AUTO_FID_COLUMN = "OGC_FID";
  * @param geojson Feature collection about to be handed to `ST_Read`.
  * @returns The collection without any `OGC_FID` properties.
  */
-export function stripAutoFidColumn(
-  geojson: FeatureCollection,
-): FeatureCollection {
+export function stripAutoFidColumn(geojson: FeatureCollection): FeatureCollection {
   // Scan first so the common (no-OGC_FID) path returns the original object
   // without allocating a throw-away features array or any feature copies.
   const needsStrip = geojson.features.some(
-    (feature) =>
-      feature.properties != null && GDAL_AUTO_FID_COLUMN in feature.properties,
+    (feature) => feature.properties != null && GDAL_AUTO_FID_COLUMN in feature.properties,
   );
   if (!needsStrip) return geojson;
   const features = geojson.features.map((feature) => {

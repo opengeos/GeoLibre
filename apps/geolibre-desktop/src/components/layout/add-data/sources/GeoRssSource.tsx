@@ -79,9 +79,7 @@ export function GeoRssSource() {
 
     const response = await fetch(proxyFeedRequestUrl(sourcePath));
     if (!response.ok) {
-      throw new Error(
-        t("addData.common.requestFailed", { status: response.status }),
-      );
+      throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
     return {
       sourcePath,
@@ -134,9 +132,7 @@ export function GeoRssSource() {
           <Select
             id="georss-mode"
             value={georssMode}
-            onChange={(event) =>
-              handleModeChange(event.target.value as GeoRssMode)
-            }
+            onChange={(event) => handleModeChange(event.target.value as GeoRssMode)}
           >
             <option value="url">{t("addData.georss.url")}</option>
             <option value="file">{t("addData.georss.file")}</option>
@@ -167,9 +163,7 @@ export function GeoRssSource() {
           </div>
         )}
         <SampleDataSelect
-          samples={[
-            { label: t("addData.georss.sampleLabel"), value: DEFAULT_GEORSS_URL },
-          ]}
+          samples={[{ label: t("addData.georss.sampleLabel"), value: DEFAULT_GEORSS_URL }]}
           onSelect={(url) => {
             setGeoRssMode("url");
             setSelectedFile(null);

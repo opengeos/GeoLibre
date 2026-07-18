@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type LayerStyle,
-  type VectorRule,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type LayerStyle, type VectorRule } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { buildQml, type QmlExportableLayer } from "../packages/map/src/qml-export";
 import { applyQmlImport, parseQml } from "../packages/map/src/qml-import";
@@ -31,8 +27,24 @@ function fc(geometry: Geometry): FeatureCollection {
     geometry === "point"
       ? { type: "Point", coordinates: [0, 0] }
       : geometry === "line"
-        ? { type: "LineString", coordinates: [[0, 0], [1, 1]] }
-        : { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
+        ? {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          }
+        : {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+          };
   return {
     type: "FeatureCollection",
     features: [{ type: "Feature", properties: {}, geometry: geom }],
@@ -293,7 +305,6 @@ describe("QML round-trip of extended rule-based symbology (#1305)", () => {
     assert.equal(elseRule?.strokeColor, "#1e40af");
   });
 
-
   it("preserves a per-rule circle size override on a point layer", () => {
     const rules: VectorRule[] = [
       {
@@ -305,7 +316,13 @@ describe("QML round-trip of extended rule-based symbology (#1305)", () => {
         circleRadius: 12,
         fillOpacity: 0.4,
       },
-      { id: "b", label: "City", filter: '["==", ["get", "capital"], false]', color: "#00ff00", isElse: false },
+      {
+        id: "b",
+        label: "City",
+        filter: '["==", ["get", "capital"], false]',
+        color: "#00ff00",
+        isElse: false,
+      },
       { id: "e", label: "", filter: "", color: "#cccccc", isElse: true },
     ];
     const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });

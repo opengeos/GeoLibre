@@ -56,8 +56,7 @@ function recenterAuthoredHorizontalGeometry(scene: Object3D): void {
     const key = geometry.uuid;
     if (visited.has(key)) return;
     visited.add(key);
-    const geometryBox =
-      geometry.boundingBox ?? new Box3().setFromBufferAttribute(position);
+    const geometryBox = geometry.boundingBox ?? new Box3().setFromBufferAttribute(position);
     authoredBox.union(geometryBox);
   });
   if (authoredBox.isEmpty()) return;

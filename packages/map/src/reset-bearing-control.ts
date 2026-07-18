@@ -23,8 +23,7 @@ export function resetBearingState(
   pitch: number,
 ): { isNorthUp: boolean; needleRotation: number } {
   return {
-    isNorthUp:
-      Math.abs(bearing) < NORTH_EPSILON && Math.abs(pitch) < NORTH_EPSILON,
+    isNorthUp: Math.abs(bearing) < NORTH_EPSILON && Math.abs(pitch) < NORTH_EPSILON,
     // `+ 0` normalises the -0 produced by negating a 0 bearing to 0.
     needleRotation: -bearing + 0,
   };
@@ -60,8 +59,7 @@ export class ResetBearingControl implements maplibregl.IControl {
     this.map = map;
 
     const container = document.createElement("div");
-    container.className =
-      "maplibregl-ctrl maplibregl-ctrl-group geolibre-reset-bearing-ctrl";
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-reset-bearing-ctrl";
 
     const button = document.createElement("button");
     button.type = "button";
@@ -72,10 +70,7 @@ export class ResetBearingControl implements maplibregl.IControl {
       this.map?.resetNorthPitch();
     });
 
-    const needle = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "svg",
-    );
+    const needle = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     needle.setAttribute("viewBox", "0 0 24 24");
     needle.setAttribute("aria-hidden", "true");
     needle.classList.add("geolibre-reset-bearing-needle");
@@ -92,9 +87,7 @@ export class ResetBearingControl implements maplibregl.IControl {
       '<polygon class="geolibre-reset-bearing-needle-south" points="12,22.5 9.6,19 14.4,19" />';
     // Set the cardinal letter via textContent (not interpolated into innerHTML)
     // so a caller-supplied northLabel can't inject markup into the SVG.
-    const labelEl = needle.querySelector(
-      ".geolibre-reset-bearing-needle-label",
-    );
+    const labelEl = needle.querySelector(".geolibre-reset-bearing-needle-label");
     if (labelEl) labelEl.textContent = this.northLabel;
     button.appendChild(needle);
 
@@ -147,9 +140,6 @@ export class ResetBearingControl implements maplibregl.IControl {
     // Nothing to reset when already north-up and flat: grey the button out and
     // drop the alert colour so it reads as inactive.
     this.button.disabled = isNorthUp;
-    this.button.classList.toggle(
-      "geolibre-reset-bearing-button--active",
-      !isNorthUp,
-    );
+    this.button.classList.toggle("geolibre-reset-bearing-button--active", !isNorthUp);
   }
 }

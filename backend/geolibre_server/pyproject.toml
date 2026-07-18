@@ -4,68 +4,39 @@ version = "1.0.0"
 description = "Optional Python processing sidecar for GeoLibre Desktop"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-  "fastapi>=0.115.0",
-  "uvicorn[standard]>=0.32.0",
-]
+dependencies = ["fastapi>=0.115.0", "uvicorn[standard]>=0.32.0"]
 
 [project.optional-dependencies]
-dev = [
-  "pytest>=8.0.0",
-  "pytest-cov>=5.0.0",
-]
+dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
 # Everything required to run the FULL backend test suite. Without these extras
 # the vector/raster/SQL/ML tests skip themselves (via skipif/importorskip), so a
 # `[dev]`-only install reports a misleadingly green, near-empty run. CI installs
 # this group; run it locally with `pip install -e "backend/geolibre_server[test]"`.
-test = [
-  "geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis]",
-]
-whitebox = [
-  "whitebox-workflows>=2.0.2",
-]
-conversion = [
-  "duckdb>=1.1.0",
-  "rio-cogeo>=5.0.0",
-  "freestiler>=0.1.0",
-]
+test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis]"]
+whitebox = ["whitebox-workflows>=2.0.2"]
+conversion = ["duckdb>=1.1.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
 # Optional GeoPandas engine for the Vector processing tools. Not installed by
 # default to keep the bundled sidecar small; the desktop app falls back to the
 # client-side (Turf.js) engine when this is absent.
-vector = [
-  "geopandas>=1.0",
-  "shapely>=2.0",
-]
+vector = ["geopandas>=1.0", "shapely>=2.0"]
 # PostGIS editable layers and write-back (issue #1070 phase 2). psycopg is the
 # only requirement: geometries are read/written as GeoJSON via ST_AsGeoJSON /
 # ST_GeomFromGeoJSON, so no GeoPandas is involved on this path.
-postgis = [
-  "psycopg[binary]>=3.1",
-]
+postgis = ["psycopg[binary]>=3.1"]
 # Raster processing tools (hillshade, slope, reproject, polygonize, contour...).
 # rasterio + numpy already arrive via the `conversion` extra (rio-cogeo); they
 # are listed here too so the raster feature can be installed on its own.
-raster = [
-  "rasterio>=1.3.0",
-  "numpy>=1.24",
-  "contourpy>=1.2.0",
-]
+raster = ["rasterio>=1.3.0", "numpy>=1.24", "contourpy>=1.2.0"]
 # Apache Sedona spatial-SQL engine (SedonaDB, the single-node Rust core). Backs
 # the "Apache Sedona" engine of the SQL Workspace; the desktop app falls back to
 # the in-browser CereusDB (WebAssembly) engine when this is absent. GeoPandas is
 # used to marshal GeoJSON layers in and SedonaDB results out.
-sedona = [
-  "apache-sedona[db]>=1.7.0",
-  "geopandas>=1.0",
-  "shapely>=2.0",
-]
+sedona = ["apache-sedona[db]>=1.7.0", "geopandas>=1.0", "shapely>=2.0"]
 # AI segmentation toolbox (SamGeo / SAM3). The sidecar only proxies to a
 # separate `samgeo-api` server, so it just needs an HTTP client here; the heavy
 # model stack (segment-geospatial[api,samgeo3] + Torch) is installed and run
 # separately (its own GPU env or launched on demand). See app/ml.py.
-ml = [
-  "httpx>=0.27",
-]
+ml = ["httpx>=0.27"]
 # Full JupyterLab server for the desktop Notebook panel. The desktop app
 # launches `jupyter lab` from this uv-managed env (see src-tauri/src/lib.rs);
 # the web build embeds the in-browser JupyterLite site instead, so this extra is
@@ -77,11 +48,7 @@ ml = [
 # with "No module named pip", and a bare `!pip install` falls through PATH to the
 # host's system pip (PEP-668 externally-managed -> error). Installing pip into the
 # kernel's own env makes `%pip install` work like a normal Jupyter environment.
-notebook = [
-  "jupyterlab>=4.2,<5",
-  "jupyter-server>=2.14",
-  "pip>=24",
-]
+notebook = ["jupyterlab>=4.2,<5", "jupyter-server>=2.14", "pip>=24"]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",

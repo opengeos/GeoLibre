@@ -2,9 +2,7 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import * as React from "react";
 import { cn } from "../lib/utils";
 
-export type ScrollAreaProps = React.ComponentPropsWithoutRef<
-  typeof ScrollAreaPrimitive.Root
-> & {
+export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
   /**
    * Ref to the scrollable viewport element. Exposed so consumers (e.g. a
    * virtualized list) can use it as their scroll container. Typed as a
@@ -23,10 +21,7 @@ export const ScrollArea = React.forwardRef<
     className={cn("relative overflow-hidden", className)}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport
-      ref={viewportRef}
-      className="h-full w-full rounded-[inherit]"
-    >
+    <ScrollAreaPrimitive.Viewport ref={viewportRef} className="h-full w-full rounded-[inherit]">
       {children}
     </ScrollAreaPrimitive.Viewport>
     <ScrollBar />
@@ -45,10 +40,8 @@ const ScrollBar = React.forwardRef<
     orientation={orientation}
     className={cn(
       "group z-30 flex touch-none select-none rounded-full bg-muted/70 transition-colors hover:bg-muted",
-      orientation === "vertical" &&
-        "h-full w-3.5 border-s border-border/60 p-0.5",
-      orientation === "horizontal" &&
-        "h-3.5 flex-col border-t border-border/60 p-0.5",
+      orientation === "vertical" && "h-full w-3.5 border-s border-border/60 p-0.5",
+      orientation === "horizontal" && "h-3.5 flex-col border-t border-border/60 p-0.5",
       className,
     )}
     {...props}

@@ -31,9 +31,7 @@ except Exception:  # pragma: no cover - depends on the optional extra
 
 # tests/fixtures/vector/cases relative to the repo root (…/backend/
 # geolibre_server/tests/test_vector_golden.py -> parents[3] is the repo root).
-_CASES_DIR = (
-    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "vector" / "cases"
-)
+_CASES_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "vector" / "cases"
 
 
 # Fail loudly if the repo layout changes and the parents[3] path no longer
@@ -81,9 +79,7 @@ def _almost_equal(a: Any, b: Any, tol: float) -> bool:
             return False
         return all(_almost_equal(a[k], b[k], tol) for k in a)
     if isinstance(a, list) and isinstance(b, list):
-        return len(a) == len(b) and all(
-            _almost_equal(x, y, tol) for x, y in zip(a, b)
-        )
+        return len(a) == len(b) and all(_almost_equal(x, y, tol) for x, y in zip(a, b))
     return a == b
 
 
@@ -155,9 +151,7 @@ def _assert_match(name: str, result: dict, expect: dict) -> None:
         )
 
     if expect.get("geometryTypes") is not None:
-        actual_types = sorted(
-            (f.get("geometry") or {}).get("type", "null") for f in features
-        )
+        actual_types = sorted((f.get("geometry") or {}).get("type", "null") for f in features)
         assert actual_types == sorted(expect["geometryTypes"]), (
             f"{name}: geometryTypes {actual_types} != {sorted(expect['geometryTypes'])}"
         )
@@ -171,9 +165,7 @@ def _assert_match(name: str, result: dict, expect: dict) -> None:
 
     if expect.get("geometry") is not None:
         want = expect["geometry"]
-        assert len(features) == len(want), (
-            f"{name}: geometry length {len(features)} != {len(want)}"
-        )
+        assert len(features) == len(want), f"{name}: geometry length {len(features)} != {len(want)}"
         for i, (feat, geom) in enumerate(zip(features, want)):
             assert _geometries_equal(feat.get("geometry"), geom, tol), (
                 f"{name}: geometry[{i}] mismatch\n  actual:   {feat.get('geometry')}\n"
@@ -183,9 +175,9 @@ def _assert_match(name: str, result: dict, expect: dict) -> None:
     if expect.get("bbox") is not None:
         actual_bbox = _bbox(features)
         assert actual_bbox is not None, f"{name}: expected a bbox but output is empty"
-        assert all(
-            abs(a - b) <= tol for a, b in zip(actual_bbox, expect["bbox"])
-        ), f"{name}: bbox {actual_bbox} != {expect['bbox']} (tol {tol})"
+        assert all(abs(a - b) <= tol for a, b in zip(actual_bbox, expect["bbox"])), (
+            f"{name}: bbox {actual_bbox} != {expect['bbox']} (tol {tol})"
+        )
 
 
 # --- the test -------------------------------------------------------------

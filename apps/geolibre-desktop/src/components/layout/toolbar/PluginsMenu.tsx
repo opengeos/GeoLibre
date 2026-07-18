@@ -29,11 +29,7 @@ import {
 import { Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { usePluginRegistry } from "../../../hooks/usePlugins";
-import {
-  type AppApi,
-  PLUGIN_POSITION_ITEMS,
-  type ToolbarChrome,
-} from "./constants";
+import { type AppApi, PLUGIN_POSITION_ITEMS, type ToolbarChrome } from "./constants";
 
 type PluginRegistry = ReturnType<typeof usePluginRegistry>;
 type RegisteredPlugin = PluginRegistry["plugins"][number];
@@ -89,20 +85,14 @@ export function PluginsMenu({
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
           <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
-            {isActive(p.id)
-              ? t("toolbar.item.deactivate")
-              : t("toolbar.item.activate")}
+            {isActive(p.id) ? t("toolbar.item.deactivate") : t("toolbar.item.activate")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("toolbar.item.position")}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={pluginPosition}
             onValueChange={(position: string) =>
-              setMapControlPosition(
-                p.id,
-                appApi,
-                position as GeoLibreMapControlPosition,
-              )
+              setMapControlPosition(p.id, appApi, position as GeoLibreMapControlPosition)
             }
           >
             {PLUGIN_POSITION_ITEMS.map((position) => (
@@ -184,9 +174,7 @@ export function PluginsMenu({
             <DropdownMenuSub key="web-services">
               <DropdownMenuSubTrigger>
                 {t("toolbar.item.webServices")}
-                {webServicePlugins.some((plugin) => isActive(plugin.id))
-                  ? " ✓"
-                  : ""}
+                {webServicePlugins.some((plugin) => isActive(plugin.id)) ? " ✓" : ""}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 {webServicePlugins.map(renderPluginMenuItem)}

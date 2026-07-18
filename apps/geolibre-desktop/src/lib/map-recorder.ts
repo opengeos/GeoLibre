@@ -108,9 +108,8 @@ export function isMapRecordingSupported(): boolean {
     typeof MediaRecorder !== "undefined" &&
     typeof HTMLCanvasElement !== "undefined" &&
     typeof HTMLCanvasElement.prototype.captureStream === "function" &&
-    pickSupportedMimeType(MAP_RECORD_MIME_CANDIDATES, (t) =>
-      MediaRecorder.isTypeSupported(t),
-    ) !== null
+    pickSupportedMimeType(MAP_RECORD_MIME_CANDIDATES, (t) => MediaRecorder.isTypeSupported(t)) !==
+      null
   );
 }
 
@@ -184,10 +183,7 @@ export function computeCaptureRect(
   const left = Math.min(Math.max(rawX, 0), baseWidth);
   const top = Math.min(Math.max(rawY, 0), baseHeight);
   const right = Math.min(Math.max(rawX + region.width * scale, 0), baseWidth);
-  const bottom = Math.min(
-    Math.max(rawY + region.height * scale, 0),
-    baseHeight,
-  );
+  const bottom = Math.min(Math.max(rawY + region.height * scale, 0), baseHeight);
   const sw = right - left;
   const sh = bottom - top;
   if (sw < 2 || sh < 2) return null;
@@ -246,9 +242,7 @@ export interface CaptionOptions {
 }
 
 /** True when a caption has at least one non-blank line to draw. */
-export function hasCaptionText(
-  options: CaptionOptions | null | undefined,
-): boolean {
+export function hasCaptionText(options: CaptionOptions | null | undefined): boolean {
   return Boolean(options && (options.title?.trim() || options.caption?.trim()));
 }
 
@@ -299,10 +293,7 @@ export function captionBoxOrigin(
   canvasH: number,
   margin: number,
 ): { x: number; y: number } {
-  const [vert, horiz] = position.split("-") as [
-    "top" | "bottom",
-    "left" | "center" | "right",
-  ];
+  const [vert, horiz] = position.split("-") as ["top" | "bottom", "left" | "center" | "right"];
   let x: number;
   if (horiz === "left") x = margin;
   else if (horiz === "right") x = canvasW - margin - boxW;
@@ -640,8 +631,7 @@ export async function recordMapCanvas({
 }: RecordMapOptions): Promise<MapRecording> {
   const mimeType = pickSupportedMimeType(
     MAP_RECORD_MIME_CANDIDATES,
-    (t) =>
-      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
+    (t) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
   );
   // mimeType is null when MediaRecorder is undefined (the callback returns false
   // for every candidate), so this also covers the no-MediaRecorder case.
@@ -650,12 +640,7 @@ export async function recordMapCanvas({
 
   const base = map.getCanvas();
   const cssWidth = base.clientWidth || base.width;
-  const rect = computeCaptureRect(
-    region ?? null,
-    base.width,
-    base.height,
-    cssWidth,
-  );
+  const rect = computeCaptureRect(region ?? null, base.width, base.height, cssWidth);
   if (!rect) {
     throw new Error("The recording area is empty or the map is not ready.");
   }
@@ -674,10 +659,7 @@ export async function recordMapCanvas({
       // recording that would otherwise succeed. If html2canvas-pro fails to load
       // (chunk 404, offline desktop build, blocked by an extension), fall back to
       // a canvas-only recording instead of failing the whole take.
-      console.warn(
-        "Skipping map panel overlays; html2canvas-pro failed to load",
-        err,
-      );
+      console.warn("Skipping map panel overlays; html2canvas-pro failed to load", err);
     }
   }
   // Rasterization is async and can outlast a quick Stop; if the caller already
@@ -745,12 +727,7 @@ export async function recordMapCanvas({
   let rafId = 0;
   const drawFrame = () => {
     const liveCssWidth = base.clientWidth || base.width;
-    const frameRect = computeCaptureRect(
-      region ?? null,
-      base.width,
-      base.height,
-      liveCssWidth,
-    );
+    const frameRect = computeCaptureRect(region ?? null, base.width, base.height, liveCssWidth);
     if (frameRect) {
       ctx.clearRect(0, 0, out.width, out.height);
       // Composite the base canvas plus any full-viewport deck.gl overlay, in DOM
@@ -890,10 +867,7 @@ export async function recordMapCanvas({
   // recording that hangs only on the final flush yields a slightly-truncated
   // video instead of nothing.
   const timeout = new Promise<Blob>((resolve) => {
-    const timer = setTimeout(
-      () => resolve(new Blob(chunks, { type: mimeType })),
-      STOP_TIMEOUT_MS,
-    );
+    const timer = setTimeout(() => resolve(new Blob(chunks, { type: mimeType })), STOP_TIMEOUT_MS);
     void finished.then(
       () => clearTimeout(timer),
       () => clearTimeout(timer),

@@ -163,10 +163,7 @@ function drawBars(
   if (maxFieldValue <= 0 || values.length === 0) return;
   // Gaps are capped to a fraction of the box so bars always fit inside their
   // own atlas cell (a forced minimum bar width would spill into neighbors).
-  const gap =
-    values.length > 1
-      ? Math.min(DPR, (width * 0.2) / (values.length - 1))
-      : 0;
+  const gap = values.length > 1 ? Math.min(DPR, (width * 0.2) / (values.length - 1)) : 0;
   const barWidth = (width - gap * (values.length - 1)) / values.length;
   ctx.lineWidth = Math.max(1, DPR / 2);
   ctx.strokeStyle = "rgba(255,255,255,0.9)";
@@ -284,13 +281,9 @@ function diagramCellSizes(
 ): { width: number; height: number }[] {
   const type = styleValue(style, "diagramType");
   return diagramData.data.map((datum) => {
-    const size = Math.round(
-      diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR,
-    );
+    const size = Math.round(diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR);
     const width =
-      type === "stacked-bar"
-        ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO))
-        : size;
+      type === "stacked-bar" ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO)) : size;
     return { width, height: size };
   });
 }
@@ -323,10 +316,7 @@ export function countAtlasDroppedDiagrams(
  * (cells laid out left-to-right in rows). Returns null when no feature has
  * drawable data.
  */
-function buildAtlas(
-  layer: GeoLibreLayer,
-  diagramData: DiagramData,
-): DiagramAtlas | null {
+function buildAtlas(layer: GeoLibreLayer, diagramData: DiagramData): DiagramAtlas | null {
   if (diagramData.data.length === 0) return null;
   if (typeof document === "undefined") return null;
   const style = layer.style;
@@ -355,27 +345,9 @@ function buildAtlas(
     const x = cell.x + CELL_PAD;
     const y = cell.y + CELL_PAD;
     if (type === "bar") {
-      drawBars(
-        ctx,
-        x,
-        y,
-        cell.width,
-        cell.height,
-        datum.values,
-        diagramData.maxFieldValue,
-        colors,
-      );
+      drawBars(ctx, x, y, cell.width, cell.height, datum.values, diagramData.maxFieldValue, colors);
     } else if (type === "stacked-bar") {
-      drawStackedBar(
-        ctx,
-        x,
-        y,
-        cell.width,
-        cell.height,
-        datum.values,
-        datum.total,
-        colors,
-      );
+      drawStackedBar(ctx, x, y, cell.width, cell.height, datum.values, datum.total, colors);
     } else {
       drawPie(
         ctx,
@@ -418,10 +390,7 @@ function getAtlas(layer: GeoLibreLayer): DiagramAtlas | null {
   const atlas = buildAtlas(layer, diagramData);
   // Derived from the packing arithmetic (not the built atlas) so the count is
   // right even when nothing fit and buildAtlas returned null.
-  const dropped = countAtlasDroppedDiagrams(
-    { geojson, style: layer.style },
-    diagramData,
-  );
+  const dropped = countAtlasDroppedDiagrams({ geojson, style: layer.style }, diagramData);
   // Console notes are gated on a change in the loss counts, so per-keystroke
   // style edits (each of which rebuilds the atlas) don't spam the console.
   if (diagramData.truncated && !cached?.truncated) {
@@ -456,10 +425,7 @@ function getAtlas(layer: GeoLibreLayer): DiagramAtlas | null {
  */
 export function declutterEntries<
   T extends { width: number; height: number; position: [number, number] },
->(
-  entries: T[],
-  project: (position: [number, number]) => { x: number; y: number },
-): T[] {
+>(entries: T[], project: (position: [number, number]) => { x: number; y: number }): T[] {
   interface Placed {
     x: number;
     y: number;
@@ -525,18 +491,13 @@ export function declutterEntries<
 // per-frame overlay rebuilds driven by an animated layer's rAF loop don't
 // redo the sort/overlap sweep while the view is unchanged; the overlay's
 // zoomend/moveend listeners produce a new signature once the view settles.
-const declutterCache = new WeakMap<
-  object,
-  { viewKey: string; result: AtlasEntry[] }
->();
+const declutterCache = new WeakMap<object, { viewKey: string; result: AtlasEntry[] }>();
 
 /**
  * A signature of the current view derived from two projected reference
  * points, capturing pan, zoom, and rotation without needing the map object.
  */
-function viewSignature(
-  project: (position: [number, number]) => { x: number; y: number },
-): string {
+function viewSignature(project: (position: [number, number]) => { x: number; y: number }): string {
   const a = project([0, 0]);
   const b = project([90, 45]);
   return `${a.x.toFixed(1)},${a.y.toFixed(1)},${b.x.toFixed(1)},${b.y.toFixed(1)}`;
@@ -552,11 +513,7 @@ export function buildDiagramLayers(
 ): Layer[] {
   const style = layer.style;
   const minZoom = styleValue(style, "diagramMinZoom");
-  if (
-    minZoom > 0 &&
-    typeof options.zoom === "number" &&
-    options.zoom < minZoom
-  ) {
+  if (minZoom > 0 && typeof options.zoom === "number" && options.zoom < minZoom) {
     return [];
   }
   const atlas = getAtlas(layer);

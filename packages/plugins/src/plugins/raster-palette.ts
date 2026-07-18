@@ -136,9 +136,7 @@ export async function buildPaletteLegend(
   // The coarsest overview is the cheapest full-coverage read; fall back to the
   // full-resolution image for a raster with no overview pyramid.
   const level: RasterLevel =
-    tiff.overviews.length > 0
-      ? tiff.overviews[tiff.overviews.length - 1]
-      : tiff;
+    tiff.overviews.length > 0 ? tiff.overviews[tiff.overviews.length - 1] : tiff;
 
   const present = new Set<number>();
   const totalTiles = level.tileCount.x * level.tileCount.y;
@@ -188,10 +186,7 @@ export async function buildPaletteLegend(
 // "Create legend from palette" action share it, and a band/re-render doesn't
 // re-scan the file. The in-flight promise is cached too, so concurrent callers
 // (preview effect + button) join one read instead of racing two scans.
-const legendCache = new Map<
-  string,
-  PaletteLegendEntry[] | Promise<PaletteLegendEntry[] | null>
->();
+const legendCache = new Map<string, PaletteLegendEntry[] | Promise<PaletteLegendEntry[] | null>>();
 
 /**
  * Cached wrapper around {@link extractPaletteLegend}, keyed by layer id, so the

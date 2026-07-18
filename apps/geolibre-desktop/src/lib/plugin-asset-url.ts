@@ -13,10 +13,7 @@ export function isManagedUrlSource(source: string): boolean {
 // scheme-qualified, or that escapes the manifest's own directory. Mirrors the
 // safety checks GeoLibre applies to a manifest's `entry`/`style` paths so a
 // plugin can only reach assets shipped inside its own folder.
-export function resolvePluginAssetUrl(
-  manifestUrl: string,
-  path: string,
-): string {
+export function resolvePluginAssetUrl(manifestUrl: string, path: string): string {
   if (
     path.startsWith("/") ||
     path.includes("\\") ||

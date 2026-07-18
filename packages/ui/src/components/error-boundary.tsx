@@ -41,10 +41,7 @@ interface ErrorBoundaryState {
  * lifecycle methods, and constructors of descendants. They do not catch errors
  * in event handlers, asynchronous code, or imperative (non-React) code.
  */
-export class ErrorBoundary extends React.Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {

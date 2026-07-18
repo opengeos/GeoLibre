@@ -13,8 +13,7 @@ export const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
  * startup update prompt. Suppresses the prompt for that one version so it does
  * not reappear on every launch (desktop only).
  */
-export const UPDATE_DISMISSED_VERSION_STORAGE_KEY =
-  "geolibre.updateDismissedVersion";
+export const UPDATE_DISMISSED_VERSION_STORAGE_KEY = "geolibre.updateDismissedVersion";
 
 /**
  * Epoch-millisecond timestamp of the last automated startup update check.

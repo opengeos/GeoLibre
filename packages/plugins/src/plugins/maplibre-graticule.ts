@@ -1,9 +1,4 @@
-import type {
-  Feature,
-  FeatureCollection,
-  LineString,
-  Point,
-} from "geojson";
+import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import type {
   ExpressionSpecification,
   GeoJSONSource,
@@ -168,15 +163,12 @@ export const DEFAULT_GRATICULE_SETTINGS: GraticuleSettings = {
 // "Nice" grid intervals in degrees, largest first. Auto mode picks the largest
 // step that still draws a useful number of lines across the viewport.
 const NICE_STEPS = [
-  45, 30, 20, 10, 5, 2, 1, 0.5, 0.25, 0.1, 0.05, 0.025, 0.01, 0.005, 0.0025,
-  0.001,
+  45, 30, 20, 10, 5, 2, 1, 0.5, 0.25, 0.1, 0.05, 0.025, 0.01, 0.005, 0.0025, 0.001,
 ];
 
 // "Nice" UTM grid intervals in metres, largest first (100 km down to 100 m).
 // Auto mode picks the largest step that still draws a useful number of lines.
-const NICE_METRIC_STEPS = [
-  100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100,
-];
+const NICE_METRIC_STEPS = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100];
 
 let settings: GraticuleSettings = { ...DEFAULT_GRATICULE_SETTINGS };
 let map: MapLibreMap | null = null;
@@ -349,11 +341,7 @@ function formatDms(value: number, positive: string, negative: string): string {
   return `${deg}°${mm}'${ss}"${hemi}`;
 }
 
-export function formatLon(
-  lon: number,
-  step: number,
-  format: GraticuleLabelFormat,
-): string {
+export function formatLon(lon: number, step: number, format: GraticuleLabelFormat): string {
   // Normalize to [-180, 180] for display even when the map reports wrapped lons.
   let normalized = ((((lon + 180) % 360) + 360) % 360) - 180;
   if (Object.is(normalized, -0)) normalized = 0;
@@ -362,11 +350,7 @@ export function formatLon(
   return `${Math.abs(normalized).toFixed(decimalsForStep(step))}°${hemi}`;
 }
 
-export function formatLat(
-  lat: number,
-  step: number,
-  format: GraticuleLabelFormat,
-): string {
+export function formatLat(lat: number, step: number, format: GraticuleLabelFormat): string {
   if (format === "dms") return formatDms(lat, "N", "S");
   const hemi = lat === 0 ? "" : lat > 0 ? "N" : "S";
   return `${Math.abs(lat).toFixed(decimalsForStep(step))}°${hemi}`;
@@ -412,9 +396,13 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
       geometry: { type: "LineString", coordinates: densifyLine(lon, south, north, "lon") },
     });
     if (settings.showLabels) {
-      labelFeatures.push(labelFeature(lon, south, formatLon(lon, step, settings.labelFormat), "bottom"));
+      labelFeatures.push(
+        labelFeature(lon, south, formatLon(lon, step, settings.labelFormat), "bottom"),
+      );
       if (showAllEdges) {
-        labelFeatures.push(labelFeature(lon, north, formatLon(lon, step, settings.labelFormat), "top"));
+        labelFeatures.push(
+          labelFeature(lon, north, formatLon(lon, step, settings.labelFormat), "top"),
+        );
       }
     }
     count += 1;
@@ -430,9 +418,13 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
       geometry: { type: "LineString", coordinates: densifyLine(lat, west, east, "lat") },
     });
     if (settings.showLabels) {
-      labelFeatures.push(labelFeature(west, lat, formatLat(lat, step, settings.labelFormat), "left"));
+      labelFeatures.push(
+        labelFeature(west, lat, formatLat(lat, step, settings.labelFormat), "left"),
+      );
       if (showAllEdges) {
-        labelFeatures.push(labelFeature(east, lat, formatLat(lat, step, settings.labelFormat), "right"));
+        labelFeatures.push(
+          labelFeature(east, lat, formatLat(lat, step, settings.labelFormat), "right"),
+        );
       }
     }
     count += 1;
@@ -511,10 +503,7 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   const lineFeatures: Feature<LineString>[] = [];
   const labelFeatures: Feature<Point>[] = [];
   const showAllEdges = settings.labelEdges === "all";
-  const step =
-    settings.spacingMode === "fixed"
-      ? Math.max(1, settings.spacingMeters)
-      : 0; // per-zone auto step is computed below; 0 is a placeholder
+  const step = settings.spacingMode === "fixed" ? Math.max(1, settings.spacingMeters) : 0; // per-zone auto step is computed below; 0 is a placeholder
   let reportedStep = step;
   const maxLines = 2000; // shared cap across all zones so a tiny step can't freeze the UI
   let count = 0;
@@ -542,11 +531,7 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   // 6° from -180°; align to the zone edge at or before `west` (works for the
   // unwrapped, possibly >180° range produced by an antimeridian-crossing view).
   const firstZoneWest = Math.floor((west + 180) / 6) * 6 - 180;
-  for (
-    let zoneWest = firstZoneWest;
-    zoneWest < east && count < maxLines;
-    zoneWest += 6
-  ) {
+  for (let zoneWest = firstZoneWest; zoneWest < east && count < maxLines; zoneWest += 6) {
     const zoneEast = zoneWest + 6;
     const clipWest = Math.max(zoneWest, west);
     const clipEast = Math.min(zoneEast, east);
@@ -569,9 +554,7 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
       if (!extent) continue;
       const { eMin, eMax, nMin, nMax } = extent;
       const zoneStep =
-        settings.spacingMode === "fixed"
-          ? step
-          : autoMetricStep(eMax - eMin, nMax - nMin);
+        settings.spacingMode === "fixed" ? step : autoMetricStep(eMax - eMin, nMax - nMin);
       reportedStep = zoneStep;
 
       // Inverse-project a projected point, wrapping its longitude into the
@@ -619,9 +602,7 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
           // so the line's endpoint sits under the label text rather than poking
           // out beside it, where a short line stub would read as a stray "-".
           if (bandAtSouth) {
-            labelFeatures.push(
-              labelFeature(coords[0][0], south, formatEasting(e), "bottom"),
-            );
+            labelFeatures.push(labelFeature(coords[0][0], south, formatEasting(e), "bottom"));
           }
           if (showAllEdges && bandAtNorth) {
             const top = coords[coords.length - 1];
@@ -649,9 +630,7 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
         if (settings.showLabels) {
           // Snap onto the zone's west/east boundary so the line endpoint tucks
           // under the label text instead of showing a stub beside it.
-          labelFeatures.push(
-            labelFeature(clipWest, coords[0][1], formatNorthing(n), "left"),
-          );
+          labelFeatures.push(labelFeature(clipWest, coords[0][1], formatNorthing(n), "left"));
           if (showAllEdges) {
             const right = coords[coords.length - 1];
             labelFeatures.push(labelFeature(clipEast, right[1], formatNorthing(n), "right"));
@@ -688,12 +667,7 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     if (settings.showLabels) {
       const zoneCenterLon = (clipWest + clipEast) / 2;
       labelFeatures.push(
-        labelFeature(
-          zoneCenterLon,
-          north,
-          utmZoneDesignation(zoneCenterLon, centerLat),
-          "top",
-        ),
+        labelFeature(zoneCenterLon, north, utmZoneDesignation(zoneCenterLon, centerLat), "top"),
       );
     }
   }
@@ -741,9 +715,7 @@ function pickTextFont(activeMap: MapLibreMap): string[] {
     for (const layer of styleLayers) {
       if (layer.id === LABEL_LAYER_ID) continue;
       if (layer.type !== "symbol") continue;
-      const font = (layer.layout as { "text-font"?: string[] } | undefined)?.[
-        "text-font"
-      ];
+      const font = (layer.layout as { "text-font"?: string[] } | undefined)?.["text-font"];
       if (!Array.isArray(font) || font.length === 0) continue;
       // Prefer an upright regular face; keep the first usable font as a fallback
       // for styles that only ship italic/bold faces.
@@ -802,7 +774,11 @@ function applyStyleProps(activeMap: MapLibreMap): void {
   );
 
   const anchor: ExpressionSpecification = ["get", "anchor"];
-  activeMap.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
+  activeMap.setLayoutProperty(
+    LABEL_LAYER_ID,
+    "visibility",
+    settings.showLabels ? "visible" : "none",
+  );
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-field", ["get", "label"]);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-font", pickTextFont(activeMap));
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-size", settings.labelSize);
@@ -872,12 +848,8 @@ function refreshGeometry(): void {
   if (!whenStyleReady(activeMap)) return;
   ensureLayers(activeMap);
   const geometry = buildGeometry(activeMap);
-  (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-    geometry.lines,
-  );
-  (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-    geometry.labels,
-  );
+  (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines);
+  (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.labels);
 }
 
 /**
@@ -909,8 +881,7 @@ class GraticuleControl implements IControl {
 
   onAdd(): HTMLElement {
     const container = document.createElement("div");
-    container.className =
-      "maplibregl-ctrl maplibregl-ctrl-group geolibre-graticule-ctrl";
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-graticule-ctrl";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "geolibre-graticule-button";
@@ -1051,11 +1022,7 @@ function buildPanelBody(container: HTMLElement): void {
     });
   };
 
-  const color = (
-    labelText: string,
-    get: () => string,
-    set: (value: string) => void,
-  ): void => {
+  const color = (labelText: string, get: () => string, set: (value: string) => void): void => {
     const el = document.createElement("input");
     el.type = "color";
     el.value = get();
@@ -1066,11 +1033,7 @@ function buildPanelBody(container: HTMLElement): void {
     addRow(labelText, el);
   };
 
-  const checkbox = (
-    labelText: string,
-    get: () => boolean,
-    set: (value: boolean) => void,
-  ): void => {
+  const checkbox = (labelText: string, get: () => boolean, set: (value: boolean) => void): void => {
     const el = document.createElement("input");
     el.type = "checkbox";
     el.checked = get();
@@ -1120,7 +1083,11 @@ function buildPanelBody(container: HTMLElement): void {
       () => settings.spacingMode === "auto",
     );
   }
-  color(labels.lineColor, () => settings.lineColor, (v) => setGraticuleSettings({ lineColor: v }));
+  color(
+    labels.lineColor,
+    () => settings.lineColor,
+    (v) => setGraticuleSettings({ lineColor: v }),
+  );
   number(
     labels.lineWidth,
     { min: 0.1, max: 6, step: 0.1 },
@@ -1133,8 +1100,16 @@ function buildPanelBody(container: HTMLElement): void {
     () => settings.lineOpacity,
     (v) => setGraticuleSettings({ lineOpacity: v }),
   );
-  checkbox(labels.dashedLines, () => settings.lineDashed, (v) => setGraticuleSettings({ lineDashed: v }));
-  checkbox(labels.showLabels, () => settings.showLabels, (v) => setGraticuleSettings({ showLabels: v }));
+  checkbox(
+    labels.dashedLines,
+    () => settings.lineDashed,
+    (v) => setGraticuleSettings({ lineDashed: v }),
+  );
+  checkbox(
+    labels.showLabels,
+    () => settings.showLabels,
+    (v) => setGraticuleSettings({ showLabels: v }),
+  );
   // The label format (decimal vs DMS) only applies to the geographic grid; UTM
   // labels are always metric easting/northing values.
   if (settings.gridType !== "utm") {
@@ -1157,7 +1132,11 @@ function buildPanelBody(container: HTMLElement): void {
     () => settings.labelEdges,
     (v) => setGraticuleSettings({ labelEdges: v as GraticuleLabelEdges }),
   );
-  color(labels.labelColor, () => settings.labelColor, (v) => setGraticuleSettings({ labelColor: v }));
+  color(
+    labels.labelColor,
+    () => settings.labelColor,
+    (v) => setGraticuleSettings({ labelColor: v }),
+  );
   number(
     labels.labelSize,
     { min: 6, max: 28, step: 1 },

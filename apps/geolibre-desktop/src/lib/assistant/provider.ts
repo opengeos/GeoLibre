@@ -51,9 +51,7 @@ export interface AssistantProviderConfig {
  * The first present, non-empty value wins. Read from the user's
  * Settings → Environment variables (never hard-coded).
  */
-const PROVIDER_KEY_NAMES: Partial<
-  Record<AssistantProviderId, readonly string[]>
-> = {
+const PROVIDER_KEY_NAMES: Partial<Record<AssistantProviderId, readonly string[]>> = {
   google: ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"],
   anthropic: ["ANTHROPIC_API_KEY"],
   openai: ["OPENAI_API_KEY"],
@@ -134,9 +132,7 @@ export function scopeOsEnvToProject(
   const scoped: RuntimeEnv = {};
   for (const [key, value] of Object.entries(osEnv)) {
     const group = OS_ENV_ALIAS_GROUPS.find((names) => names.includes(key));
-    const shadowed = group
-      ? group.some((name) => projectKeys.has(name))
-      : projectKeys.has(key);
+    const shadowed = group ? group.some((name) => projectKeys.has(name)) : projectKeys.has(key);
     if (!shadowed) scoped[key] = value;
   }
   return scoped;
@@ -175,10 +171,7 @@ export function mergeRuntimeEnv({
   projectEnv,
 }: RuntimeEnvSources): RuntimeEnv {
   return {
-    ...scopeOsEnvToProject(
-      osEnv,
-      new Set([...Object.keys(projectEnv), ...Object.keys(aiEnv)]),
-    ),
+    ...scopeOsEnvToProject(osEnv, new Set([...Object.keys(projectEnv), ...Object.keys(aiEnv)])),
     ...aiEnv,
     ...geocoderEnv,
     ...cesiumEnv,
@@ -196,12 +189,7 @@ export function mergeRuntimeEnv({
  */
 export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
   google: ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
-  anthropic: [
-    "claude-opus-4-8",
-    "claude-fable-5",
-    "claude-sonnet-4-6",
-    "claude-haiku-4-5",
-  ],
+  anthropic: ["claude-opus-4-8", "claude-fable-5", "claude-sonnet-4-6", "claude-haiku-4-5"],
   openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
   ollama: ["llama3.2", "llama3.1", "qwen2.5", "mistral", "gemma2"],
   bedrock: [
@@ -244,8 +232,7 @@ export type RuntimeEnv = Record<string, string>;
 export function readRuntimeEnv(): RuntimeEnv {
   if (typeof window === "undefined") return {};
   return (
-    (window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv })
-      .__GEOLIBRE_RUNTIME_ENV__ ?? {}
+    (window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv }).__GEOLIBRE_RUNTIME_ENV__ ?? {}
   );
 }
 
@@ -339,8 +326,7 @@ export function configForProvider(
     case "custom": {
       const baseURL = firstValue(env, "OPENAI_COMPATIBLE_BASE_URL");
       if (!baseURL || !modelId) return null;
-      const apiKey =
-        firstValue(env, "OPENAI_COMPATIBLE_API_KEY") ?? "not-needed";
+      const apiKey = firstValue(env, "OPENAI_COMPATIBLE_API_KEY") ?? "not-needed";
       return {
         provider,
         apiKey,
@@ -352,8 +338,7 @@ export function configForProvider(
       const accessKeyId = firstValue(env, "AWS_ACCESS_KEY_ID");
       const secretAccessKey = firstValue(env, "AWS_SECRET_ACCESS_KEY");
       if (!accessKeyId || !secretAccessKey) return null;
-      const region =
-        firstValue(env, "AWS_REGION", "AWS_DEFAULT_REGION") ?? "us-east-1";
+      const region = firstValue(env, "AWS_REGION", "AWS_DEFAULT_REGION") ?? "us-east-1";
       const sessionToken = firstValue(env, "AWS_SESSION_TOKEN") ?? undefined;
       return {
         provider,
@@ -395,9 +380,7 @@ export function hasProviderKey(env: RuntimeEnv = readRuntimeEnv()): boolean {
 }
 
 /** Providers that are currently configured, in preference order. */
-export function availableProviders(
-  env: RuntimeEnv = readRuntimeEnv(),
-): AssistantProviderId[] {
+export function availableProviders(env: RuntimeEnv = readRuntimeEnv()): AssistantProviderId[] {
   return ASSISTANT_PROVIDER_IDS.filter(
     (provider) => configForProvider(provider, undefined, env) !== null,
   );
@@ -414,9 +397,7 @@ export function availableProviders(
  * @param config A resolved provider selection.
  * @returns A ready-to-use Strands model instance.
  */
-export async function createModel(
-  config: AssistantProviderConfig,
-): Promise<Model> {
+export async function createModel(config: AssistantProviderConfig): Promise<Model> {
   switch (config.provider) {
     case "google": {
       const { GoogleModel } = await import("@strands-agents/sdk/models/google");
@@ -426,9 +407,7 @@ export async function createModel(
       }) as unknown as Model;
     }
     case "anthropic": {
-      const { AnthropicModel } = await import(
-        "@strands-agents/sdk/models/anthropic"
-      );
+      const { AnthropicModel } = await import("@strands-agents/sdk/models/anthropic");
       return new AnthropicModel({
         apiKey: config.apiKey,
         modelId: config.modelId,
@@ -459,9 +438,7 @@ export async function createModel(
       }) as unknown as Model;
     }
     case "bedrock": {
-      const { BedrockModel } = await import(
-        "@strands-agents/sdk/models/bedrock"
-      );
+      const { BedrockModel } = await import("@strands-agents/sdk/models/bedrock");
       return new BedrockModel({
         modelId: config.modelId,
         region: config.region,

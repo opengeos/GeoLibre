@@ -20,9 +20,7 @@ interface WebManifest {
 test("exposes a valid, installable web manifest", async ({ page }) => {
   await page.goto("/");
 
-  const manifestHref = await page
-    .locator('link[rel="manifest"]')
-    .getAttribute("href");
+  const manifestHref = await page.locator('link[rel="manifest"]').getAttribute("href");
   expect(manifestHref, "document should link a web manifest").toBeTruthy();
 
   const manifest: WebManifest = await page.evaluate(async (href) => {

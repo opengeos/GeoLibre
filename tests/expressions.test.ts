@@ -34,10 +34,7 @@ describe("expression function catalog", () => {
     for (const category of EXPRESSION_FUNCTION_CATEGORIES) {
       for (const entry of category.functions) {
         const validation = validateMapExpression(entry.snippet);
-        assert.ok(
-          validation.ok,
-          `${entry.name}: ${validation.errors.join("; ")}`,
-        );
+        assert.ok(validation.ok, `${entry.name}: ${validation.errors.join("; ")}`);
       }
     }
   });
@@ -53,10 +50,7 @@ describe("expression function catalog", () => {
     const en = JSON.parse(
       readFileSync(
         fileURLToPath(
-          new URL(
-            "../apps/geolibre-desktop/src/i18n/locales/en.json",
-            import.meta.url,
-          ),
+          new URL("../apps/geolibre-desktop/src/i18n/locales/en.json", import.meta.url),
         ),
         "utf8",
       ),
@@ -88,9 +82,7 @@ describe("expression function catalog", () => {
 
 describe("validateMapExpression", () => {
   it("accepts a valid expression, tolerating trailing commas", () => {
-    const validation = validateMapExpression(
-      '["==", ["get", "TYPE"], "park",]',
-    );
+    const validation = validateMapExpression('["==", ["get", "TYPE"], "park",]');
     assert.equal(validation.ok, true);
     assert.deepEqual(validation.parsed, ["==", ["get", "TYPE"], "park"]);
   });
@@ -113,10 +105,7 @@ describe("validateMapExpression", () => {
 
   it("enforces an expected result type when given", () => {
     const filter = { expectedType: "boolean" as const };
-    assert.equal(
-      validateMapExpression('["==", ["get", "a"], 1]', filter).ok,
-      true,
-    );
+    assert.equal(validateMapExpression('["==", ["get", "a"], 1]', filter).ok, true);
     const wrong = validateMapExpression('["concat", "a", "b"]', filter);
     assert.equal(wrong.ok, false);
     assert.equal(wrong.code, "compile");
@@ -150,18 +139,11 @@ describe("evaluateMapExpression", () => {
 
   it("supports geometry-type, id, and zoom", () => {
     assert.equal(
-      evaluateMapExpression('["geometry-type"]', { feature: sampleFeature })
-        .value,
+      evaluateMapExpression('["geometry-type"]', { feature: sampleFeature }).value,
       "Point",
     );
-    assert.equal(
-      evaluateMapExpression('["id"]', { feature: sampleFeature }).value,
-      7,
-    );
-    assert.equal(
-      evaluateMapExpression('["zoom"]', { zoom: 7.5 }).value,
-      7.5,
-    );
+    assert.equal(evaluateMapExpression('["id"]', { feature: sampleFeature }).value, 7);
+    assert.equal(evaluateMapExpression('["zoom"]', { zoom: 7.5 }).value, 7.5);
   });
 
   it("evaluates a boolean filter", () => {
@@ -174,10 +156,10 @@ describe("evaluateMapExpression", () => {
   });
 
   it("substitutes variables before evaluating", () => {
-    const preview = evaluateMapExpression(
-      '["concat", ["get", "name"], " / ", "@project_name"]',
-      { feature: sampleFeature, variables },
-    );
+    const preview = evaluateMapExpression('["concat", ["get", "name"], " / ", "@project_name"]', {
+      feature: sampleFeature,
+      variables,
+    });
     assert.equal(preview.value, "Springfield / Demo project");
   });
 
@@ -217,10 +199,7 @@ describe("evaluateMapExpression", () => {
       expectedType: "color",
     });
     assert.equal(preview.kind, "value");
-    assert.equal(
-      formatExpressionPreviewValue(preview.value),
-      "rgba(255, 0, 0, 1)",
-    );
+    assert.equal(formatExpressionPreviewValue(preview.value), "rgba(255, 0, 0, 1)");
   });
 });
 
@@ -233,10 +212,10 @@ describe("variables", () => {
   });
 
   it("leaves unknown @ strings untouched", () => {
-    assert.deepEqual(
-      substituteExpressionVariables(["get", "@unknown"], variables),
-      ["get", "@unknown"],
-    );
+    assert.deepEqual(substituteExpressionVariables(["get", "@unknown"], variables), [
+      "get",
+      "@unknown",
+    ]);
   });
 
   it("recognizes style-spec color shapes", () => {
@@ -257,10 +236,7 @@ describe("variables", () => {
 describe("field type inference", () => {
   it("infers primitive types, mixed, and unknown", () => {
     const types = inferFieldTypes(
-      [
-        { properties: { a: 1, b: "x", c: true, d: null } },
-        { properties: { a: "y", b: "z" } },
-      ],
+      [{ properties: { a: 1, b: "x", c: true, d: null } }, { properties: { a: "y", b: "z" } }],
       ["a", "b", "c", "d", "e"],
     );
     assert.deepEqual(types, {
@@ -276,10 +252,7 @@ describe("field type inference", () => {
 describe("preview formatting", () => {
   it("renders style-spec colors as rgba strings", () => {
     const preview = evaluateMapExpression('["to-color", "#ff0000"]', {});
-    assert.equal(
-      formatExpressionPreviewValue(preview.value),
-      "rgba(255, 0, 0, 1)",
-    );
+    assert.equal(formatExpressionPreviewValue(preview.value), "rgba(255, 0, 0, 1)");
   });
 
   it("renders plain values as JSON and null as null", () => {
@@ -292,9 +265,6 @@ describe("preview formatting", () => {
 describe("removeTrailingJsonCommas sharing", () => {
   it("still backs parseJsonExpression after the refactor", () => {
     assert.deepEqual(parseJsonExpression('["get", "a",]'), ["get", "a"]);
-    assert.equal(
-      removeTrailingJsonCommas('["a", "b",]'),
-      '["a", "b"]',
-    );
+    assert.equal(removeTrailingJsonCommas('["a", "b",]'), '["a", "b"]');
   });
 });

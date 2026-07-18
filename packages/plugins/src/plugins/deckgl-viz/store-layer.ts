@@ -1,7 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   DEFAULT_DECK_VIZ_SCENEGRAPH,
@@ -23,10 +20,7 @@ export const DECK_VIZ_SOURCE_KIND = "deckgl-viz";
  * @returns True when the layer was created by the Deck.gl Layer builder.
  */
 export function isDeckVizLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "deckgl-viz" &&
-    layer.metadata.sourceKind === DECK_VIZ_SOURCE_KIND
-  );
+  return layer.type === "deckgl-viz" && layer.metadata.sourceKind === DECK_VIZ_SOURCE_KIND;
 }
 
 /** Inputs for {@link createDeckVizStoreLayer}. */
@@ -79,12 +73,9 @@ const DECK_VIZ_ROW_WARN_COUNT = 50_000;
  * @param params - Layer name, viz config, and inline data.
  * @returns The corresponding GeoLibre store layer.
  */
-export function createDeckVizStoreLayer(
-  params: CreateDeckVizLayerParams,
-): GeoLibreLayer {
+export function createDeckVizStoreLayer(params: CreateDeckVizLayerParams): GeoLibreLayer {
   const id = params.id ?? crypto.randomUUID();
-  const rowCount =
-    params.rows?.length ?? params.geojson?.features.length ?? 0;
+  const rowCount = params.rows?.length ?? params.geojson?.features.length ?? 0;
   if (rowCount > DECK_VIZ_ROW_WARN_COUNT) {
     console.warn(
       "[GeoLibre] deck-viz: storing",
@@ -172,14 +163,11 @@ export function readDeckVizConfig(layer: GeoLibreLayer): DeckVizConfig | null {
  * Normalises the persisted scenegraph (glTF model) config, filling defaults so
  * a hand-edited or older project still renders. Returns null when absent.
  */
-function readScenegraphConfig(
-  raw: unknown,
-): DeckVizScenegraphConfig | null {
+function readScenegraphConfig(raw: unknown): DeckVizScenegraphConfig | null {
   if (!raw || typeof raw !== "object") return null;
   const candidate = raw as Partial<DeckVizScenegraphConfig>;
   return {
-    modelUrl:
-      typeof candidate.modelUrl === "string" ? candidate.modelUrl : "",
+    modelUrl: typeof candidate.modelUrl === "string" ? candidate.modelUrl : "",
     sizeScale: Number.isFinite(candidate.sizeScale)
       ? (candidate.sizeScale as number)
       : DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale,
@@ -199,14 +187,12 @@ function readScenegraphConfig(
   };
 }
 
-function readScenegraphTranslation(
-  raw: unknown,
-): [number, number, number] {
+function readScenegraphTranslation(raw: unknown): [number, number, number] {
   if (!Array.isArray(raw) || raw.length !== 3) {
     return DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0];
   }
   const values = raw.map((value) => Number(value));
   return values.every((value) => Number.isFinite(value))
     ? (values as [number, number, number])
-    : DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0];
+    : (DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0]);
 }

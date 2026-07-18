@@ -5,8 +5,7 @@ import { GEOCODING_PROVIDERS, setGeocodingFetch } from "@geolibre/core";
  * User-Agent (or Referer) naming the application; the WebView's browser `fetch`
  * cannot set that header, but Tauri's native HTTP client can.
  */
-const GEOCODER_USER_AGENT =
-  "GeoLibre-Desktop (+https://github.com/opengeos/GeoLibre)";
+const GEOCODER_USER_AGENT = "GeoLibre-Desktop (+https://github.com/opengeos/GeoLibre)";
 
 /**
  * Hosts of the built-in geocoding providers' default endpoints. Only these are
@@ -19,27 +18,20 @@ const GEOCODER_USER_AGENT =
  */
 const NATIVE_FETCH_HOSTS = new Set(
   GEOCODING_PROVIDERS.flatMap((provider) =>
-    [provider.defaultForwardEndpoint, provider.defaultReverseEndpoint].flatMap(
-      (endpoint) => {
-        try {
-          return [new URL(endpoint).host];
-        } catch {
-          return [];
-        }
-      },
-    ),
+    [provider.defaultForwardEndpoint, provider.defaultReverseEndpoint].flatMap((endpoint) => {
+      try {
+        return [new URL(endpoint).host];
+      } catch {
+        return [];
+      }
+    }),
   ),
 );
 
 /** The request URL's host, or null when it cannot be parsed. */
 function requestHost(input: RequestInfo | URL): string | null {
   try {
-    const href =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
+    const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     return new URL(href).host;
   } catch {
     return null;

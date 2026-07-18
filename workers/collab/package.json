@@ -2,13 +2,13 @@
   "name": "geolibre-collab-worker",
   "version": "0.0.0",
   "private": true,
-  "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260714.1",
-    "wrangler": "^4.110.0"
-  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260714.1",
+    "wrangler": "^4.110.0"
   }
 }

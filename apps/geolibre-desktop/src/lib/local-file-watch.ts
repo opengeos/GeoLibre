@@ -80,9 +80,7 @@ export function setLayerWatchConfig(
 ): Partial<GeoLibreLayer> {
   const { watch: _watch, ...restMetadata } = layer.metadata;
   return {
-    metadata: enabled
-      ? { ...restMetadata, watch: { enabled: true } }
-      : restMetadata,
+    metadata: enabled ? { ...restMetadata, watch: { enabled: true } } : restMetadata,
   };
 }
 
@@ -118,9 +116,9 @@ export async function reloadLocalFileLayer(
     throw new Error("This layer has no local file to reload.");
   }
 
-  const loaded = (
-    await loadDroppedVectorPaths([path], { skipModels: true })
-  ).filter(isLoadedVectorLayer);
+  const loaded = (await loadDroppedVectorPaths([path], { skipModels: true })).filter(
+    isLoadedVectorLayer,
+  );
   if (loaded.length === 0) {
     throw new Error("This file no longer contains any readable vector data.");
   }

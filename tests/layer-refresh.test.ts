@@ -152,9 +152,7 @@ describe("fetchWfsGeoJson output-format fallback", () => {
   const originalFetch = globalThis.fetch;
   const FEATURE_COLLECTION = {
     type: "FeatureCollection",
-    features: [
-      { type: "Feature", geometry: null, properties: { name: "x" } },
-    ],
+    features: [{ type: "Feature", geometry: null, properties: { name: "x" } }],
   };
 
   const baseParams = {
@@ -174,9 +172,7 @@ describe("fetchWfsGeoJson output-format fallback", () => {
     const requestedFormats: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      requestedFormats.push(
-        new URL(url).searchParams.get("outputFormat") ?? "",
-      );
+      requestedFormats.push(new URL(url).searchParams.get("outputFormat") ?? "");
       return new Response(JSON.stringify(FEATURE_COLLECTION), { status: 200 });
     }) as typeof fetch;
 
@@ -215,9 +211,7 @@ describe("fetchWfsGeoJson output-format fallback", () => {
     const requestedFormats: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      requestedFormats.push(
-        new URL(url).searchParams.get("outputFormat") ?? "",
-      );
+      requestedFormats.push(new URL(url).searchParams.get("outputFormat") ?? "");
       const format = new URL(url).searchParams.get("outputFormat") ?? "";
       // Only the second alias ("json") yields GeoJSON here.
       return format === "json"
@@ -332,9 +326,7 @@ describe("fetchWfsGeoJson output-format fallback", () => {
     const requestedFormats: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      requestedFormats.push(
-        new URL(url).searchParams.get("outputFormat") ?? "",
-      );
+      requestedFormats.push(new URL(url).searchParams.get("outputFormat") ?? "");
       return new Response(JSON.stringify(FEATURE_COLLECTION), { status: 200 });
     }) as typeof fetch;
 

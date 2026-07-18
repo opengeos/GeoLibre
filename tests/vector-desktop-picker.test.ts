@@ -38,10 +38,7 @@ describe("addPickedVectorFiles", () => {
     const picked: GeoLibrePickedVectorFile[] = [
       {
         file: new File(["shp"], "cities.shp"),
-        companionFiles: [
-          new File(["shx"], "cities.shx"),
-          new File(["dbf"], "cities.dbf"),
-        ],
+        companionFiles: [new File(["shx"], "cities.shx"), new File(["dbf"], "cities.dbf")],
         sourcePath: "/data/cities.shp",
       },
     ];

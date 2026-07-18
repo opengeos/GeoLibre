@@ -8,10 +8,7 @@ describe("martinSourceMatchesTable", () => {
   });
 
   it("matches a public-schema table by the qualified source id too", () => {
-    assert.equal(
-      martinSourceMatchesTable("public.roads", "public", "roads"),
-      true,
-    );
+    assert.equal(martinSourceMatchesTable("public.roads", "public", "roads"), true);
   });
 
   it("matches an unknown-schema table by the bare source id", () => {
@@ -19,20 +16,14 @@ describe("martinSourceMatchesTable", () => {
   });
 
   it("matches a non-public table only by its qualified source id", () => {
-    assert.equal(
-      martinSourceMatchesTable("census.roads", "census", "roads"),
-      true,
-    );
+    assert.equal(martinSourceMatchesTable("census.roads", "census", "roads"), true);
   });
 
   it("does not match a non-public table by a bare source id", () => {
     // The collision the matcher exists to prevent: a public.roads source must
     // not be selected for a clicked census.roads.
     assert.equal(martinSourceMatchesTable("roads", "census", "roads"), false);
-    assert.equal(
-      martinSourceMatchesTable("public.roads", "census", "roads"),
-      false,
-    );
+    assert.equal(martinSourceMatchesTable("public.roads", "census", "roads"), false);
   });
 
   it("does not match a different table name", () => {

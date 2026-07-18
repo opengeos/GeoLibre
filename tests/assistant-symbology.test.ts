@@ -86,15 +86,11 @@ describe("buildSymbologyStyle", () => {
 
   it("throws when the property has no values", () => {
     const layer = layerWith("pop", []);
-    assert.throws(() =>
-      buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }),
-    );
+    assert.throws(() => buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }));
   });
 
   it("throws when graduated mode is asked for non-numeric data", () => {
     const layer = layerWith("kind", ["red", "green", "blue"]);
-    assert.throws(() =>
-      buildSymbologyStyle(layer, { mode: "graduated", property: "kind" }),
-    );
+    assert.throws(() => buildSymbologyStyle(layer, { mode: "graduated", property: "kind" }));
   });
 });

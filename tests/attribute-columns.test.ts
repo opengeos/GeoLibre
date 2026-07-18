@@ -107,18 +107,16 @@ describe("addColumn (destructive)", () => {
       metadata: { columnSettings: { order: ["pop", "name", "area"] } },
     });
     const patch = addColumn(layer, DISCOVERED, "label", "text", "");
-    const settings = (patch?.metadata as Record<string, unknown>)
-      .columnSettings as { order: string[] };
+    const settings = (patch?.metadata as Record<string, unknown>).columnSettings as {
+      order: string[];
+    };
     assert.deepEqual(settings.order, ["pop", "name", "area", "label"]);
   });
 
   it("leaves order unset when none existed, relying on discovery order", () => {
     const layer = makeLayer();
     const patch = addColumn(layer, DISCOVERED, "label", "text", "");
-    assert.equal(
-      (patch?.metadata as Record<string, unknown>).columnSettings,
-      undefined,
-    );
+    assert.equal((patch?.metadata as Record<string, unknown>).columnSettings, undefined);
   });
 
   it("is a no-op for empty or colliding names", () => {
@@ -170,8 +168,10 @@ describe("renameColumn (destructive)", () => {
       metadata: { columnSettings: { hidden: ["pop"], order: ["pop", "name"] } },
     });
     const patch = renameColumn(layer, DISCOVERED, "pop", "Population");
-    const settings = (patch?.metadata as Record<string, unknown>)
-      .columnSettings as { hidden: string[]; order: string[] };
+    const settings = (patch?.metadata as Record<string, unknown>).columnSettings as {
+      hidden: string[];
+      order: string[];
+    };
     assert.deepEqual(settings.hidden, ["Population"]);
     assert.deepEqual(settings.order, ["Population", "name"]);
   });
@@ -207,10 +207,7 @@ describe("deleteColumn (destructive)", () => {
     for (const feature of patch.geojson!.features) {
       assert.ok(!("pop" in (feature.properties ?? {})));
     }
-    assert.deepEqual(Object.keys(patch.geojson!.features[0].properties ?? {}), [
-      "name",
-      "area",
-    ]);
+    assert.deepEqual(Object.keys(patch.geojson!.features[0].properties ?? {}), ["name", "area"]);
   });
 
   it("clears every style field that referenced the deleted column", () => {
@@ -231,8 +228,9 @@ describe("deleteColumn (destructive)", () => {
       metadata: { columnSettings: { order: ["pop", "name", "area"] } },
     });
     const patch = deleteColumn(layer, "pop");
-    const settings = (patch?.metadata as Record<string, unknown>)
-      .columnSettings as { order: string[] };
+    const settings = (patch?.metadata as Record<string, unknown>).columnSettings as {
+      order: string[];
+    };
     assert.deepEqual(settings.order, ["name", "area"]);
   });
 
@@ -257,10 +255,7 @@ describe("visibility toggles", () => {
     const hiddenLayer = makeLayer({ metadata: hide.metadata });
     const show = toggleColumnHidden(hiddenLayer, "pop");
     // Settings became empty, so the key is dropped entirely.
-    assert.equal(
-      (show.metadata as Record<string, unknown>).columnSettings,
-      undefined,
-    );
+    assert.equal((show.metadata as Record<string, unknown>).columnSettings, undefined);
   });
 
   it("showAllColumns clears the hidden list", () => {
@@ -268,10 +263,7 @@ describe("visibility toggles", () => {
       metadata: { columnSettings: { hidden: ["pop", "area"] } },
     });
     const patch = showAllColumns(layer);
-    assert.equal(
-      (patch.metadata as Record<string, unknown>).columnSettings,
-      undefined,
-    );
+    assert.equal((patch.metadata as Record<string, unknown>).columnSettings, undefined);
   });
 });
 
@@ -324,9 +316,7 @@ describe("getColumnSettings", () => {
     assert.deepEqual(getColumnSettings(undefined), {});
     assert.deepEqual(getColumnSettings(makeLayer({ metadata: {} })), {});
     assert.deepEqual(
-      getColumnSettings(
-        makeLayer({ metadata: { columnSettings: { hidden: "nope" } } }),
-      ),
+      getColumnSettings(makeLayer({ metadata: { columnSettings: { hidden: "nope" } } })),
       { hidden: undefined, order: undefined },
     );
   });

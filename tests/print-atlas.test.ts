@@ -26,10 +26,7 @@ function ctx(overrides: Partial<AtlasTokenContext> = {}): AtlasTokenContext {
   };
 }
 
-function feature(
-  properties: Record<string, unknown>,
-  coords: [number, number] = [0, 0],
-): Feature {
+function feature(properties: Record<string, unknown>, coords: [number, number] = [0, 0]): Feature {
   return {
     type: "Feature",
     properties,
@@ -44,24 +41,15 @@ function collection(features: Feature[]): FeatureCollection {
 describe("substituteAtlasTokens", () => {
   it("replaces the built-in tokens", () => {
     assert.equal(
-      substituteAtlasTokens(
-        "{atlas.name} - page {atlas.pagenumber} of {atlas.total}",
-        ctx(),
-      ),
+      substituteAtlasTokens("{atlas.name} - page {atlas.pagenumber} of {atlas.total}", ctx()),
       "Springfield - page 3 of 28",
     );
   });
 
   it("replaces attribute tokens and blanks unknown or null fields", () => {
+    assert.equal(substituteAtlasTokens("{atlas.attr:STATE}/{atlas.attr:MISSING}", ctx()), "IL/");
     assert.equal(
-      substituteAtlasTokens("{atlas.attr:STATE}/{atlas.attr:MISSING}", ctx()),
-      "IL/",
-    );
-    assert.equal(
-      substituteAtlasTokens(
-        "[{atlas.attr:NIL}]",
-        ctx({ properties: { NIL: null } }),
-      ),
+      substituteAtlasTokens("[{atlas.attr:NIL}]", ctx({ properties: { NIL: null } })),
       "[]",
     );
   });
@@ -81,20 +69,14 @@ describe("substituteAtlasTokens", () => {
 
 describe("stripAtlasTokens", () => {
   it("removes tokens and collapses leftover whitespace", () => {
-    assert.equal(
-      stripAtlasTokens("River atlas {atlas.name} {atlas.attr:SEG}"),
-      "River atlas",
-    );
+    assert.equal(stripAtlasTokens("River atlas {atlas.name} {atlas.attr:SEG}"), "River atlas");
     assert.equal(stripAtlasTokens("{atlas.pagenumber}"), "");
   });
 });
 
 describe("geometryBounds", () => {
   it("computes bounds for points, lines, and polygons", () => {
-    assert.deepEqual(
-      geometryBounds({ type: "Point", coordinates: [10, 20] }),
-      [10, 20, 10, 20],
-    );
+    assert.deepEqual(geometryBounds({ type: "Point", coordinates: [10, 20] }), [10, 20, 10, 20]);
     assert.deepEqual(
       geometryBounds({
         type: "LineString",
@@ -170,10 +152,7 @@ describe("geometryBounds", () => {
       [1, -5, 5, 1],
     );
     assert.equal(geometryBounds(null), null);
-    assert.equal(
-      geometryBounds({ type: "MultiPoint", coordinates: [] }),
-      null,
-    );
+    assert.equal(geometryBounds({ type: "MultiPoint", coordinates: [] }), null);
   });
 });
 
@@ -206,10 +185,7 @@ describe("expandBounds", () => {
 
 describe("listAtlasFields", () => {
   it("unions property keys in first-seen order", () => {
-    const fields = listAtlasFields([
-      feature({ b: 1, a: 2 }),
-      feature({ c: 3, a: 4 }),
-    ]);
+    const fields = listAtlasFields([feature({ b: 1, a: 2 }), feature({ c: 3, a: 4 })]);
     assert.deepEqual(fields, ["b", "a", "c"]);
   });
 });
@@ -258,9 +234,7 @@ describe("parseAtlasFilter", () => {
     const eq = parseAtlasFilter('NAME = "Sam and Max"');
     assert.equal(eq?.({ NAME: "Sam and Max" }), true);
     assert.equal(eq?.({ NAME: "Sam" }), false);
-    const combined = parseAtlasFilter(
-      "NAME contains 'rock and roll' and POP > 5",
-    );
+    const combined = parseAtlasFilter("NAME contains 'rock and roll' and POP > 5");
     assert.equal(combined?.({ NAME: "Rock and Roll Hall", POP: 10 }), true);
     assert.equal(combined?.({ NAME: "Rock and Roll Hall", POP: 1 }), false);
   });
@@ -303,16 +277,21 @@ describe("buildAtlasPages", () => {
       pages.map((p) => p.name),
       ["Feature 1", "Feature 2", "Feature 3"],
     );
-    assert.deepEqual(pages.map((p) => p.index), [0, 1, 2]);
-    assert.deepEqual(pages.map((p) => p.sourceIndex), [0, 1, 2]);
+    assert.deepEqual(
+      pages.map((p) => p.index),
+      [0, 1, 2],
+    );
+    assert.deepEqual(
+      pages.map((p) => p.sourceIndex),
+      [0, 1, 2],
+    );
     assert.deepEqual(pages[0].bounds, [1, 1, 1, 1]);
   });
 
   it("names pages from the name field, falling back per feature", () => {
-    const pages = buildAtlasPages(
-      collection([...features, feature({ NAME: "" }, [4, 4])]),
-      { nameField: "NAME" },
-    );
+    const pages = buildAtlasPages(collection([...features, feature({ NAME: "" }, [4, 4])]), {
+      nameField: "NAME",
+    });
     assert.deepEqual(
       pages.map((p) => p.name),
       ["B-ville", "A-town", "C-city", "Feature 4"],
@@ -337,9 +316,15 @@ describe("buildAtlasPages", () => {
       desc.map((p) => p.name),
       ["A-town", "B-ville", "C-city"],
     );
-    assert.deepEqual(desc.map((p) => p.index), [0, 1, 2]);
+    assert.deepEqual(
+      desc.map((p) => p.index),
+      [0, 1, 2],
+    );
     // Source identity survives the reorder.
-    assert.deepEqual(desc.map((p) => p.sourceIndex), [1, 0, 2]);
+    assert.deepEqual(
+      desc.map((p) => p.sourceIndex),
+      [1, 0, 2],
+    );
   });
 
   it("sorts missing values last in both directions", () => {
@@ -379,14 +364,8 @@ describe("buildAtlasPages", () => {
 
 describe("atlasEntryName", () => {
   it("substitutes tokens and sanitizes the result", () => {
-    assert.equal(
-      atlasEntryName("{atlas.pagenumber}-{atlas.name}", ctx()),
-      "3-Springfield",
-    );
-    assert.equal(
-      atlasEntryName("{atlas.attr:STATE} / {atlas.name}", ctx()),
-      "IL-Springfield",
-    );
+    assert.equal(atlasEntryName("{atlas.pagenumber}-{atlas.name}", ctx()), "3-Springfield");
+    assert.equal(atlasEntryName("{atlas.attr:STATE} / {atlas.name}", ctx()), "IL-Springfield");
   });
 
   it("falls back to the page number when the pattern collapses", () => {
@@ -429,9 +408,15 @@ describe("buildLineAtlasPages", () => {
     );
     assert.equal(pages[0].name, "Blackfeather km 0-25");
     assert.equal(pages[4].name, "Blackfeather km 100-111.2");
-    assert.deepEqual(pages.map((p) => p.index), [0, 1, 2, 3, 4]);
+    assert.deepEqual(
+      pages.map((p) => p.index),
+      [0, 1, 2, 3, 4],
+    );
     // sourceIndex keeps the *feature's* identity: all stretches of one line.
-    assert.deepEqual(pages.map((p) => p.sourceIndex), [0, 0, 0, 0, 0]);
+    assert.deepEqual(
+      pages.map((p) => p.sourceIndex),
+      [0, 0, 0, 0, 0],
+    );
     // Segment metadata and inherited feature attributes.
     assert.equal(pages[2].properties.segment, 3);
     assert.equal(pages[2].properties.segments, 5);
@@ -460,14 +445,11 @@ describe("buildLineAtlasPages", () => {
       ...equatorLine,
       properties: { river: "Southern", region: "south" },
     };
-    const pages = buildLineAtlasPages(
-      collection([point, equatorLine, southern]),
-      {
-        segmentKm: 60,
-        nameField: "river",
-        filter: parseAtlasFilter('region = "south"'),
-      },
-    );
+    const pages = buildLineAtlasPages(collection([point, equatorLine, southern]), {
+      segmentKm: 60,
+      nameField: "river",
+      filter: parseAtlasFilter('region = "south"'),
+    });
     assert.equal(pages.length, 2);
     assert.ok(pages.every((p) => p.name.startsWith("Southern")));
   });
@@ -499,14 +481,8 @@ describe("buildLineAtlasPages", () => {
   });
 
   it("returns no pages for a non-positive segment length", () => {
-    assert.deepEqual(
-      buildLineAtlasPages(collection([equatorLine]), { segmentKm: 0 }),
-      [],
-    );
-    assert.deepEqual(
-      buildLineAtlasPages(collection([equatorLine]), { segmentKm: NaN }),
-      [],
-    );
+    assert.deepEqual(buildLineAtlasPages(collection([equatorLine]), { segmentKm: 0 }), []);
+    assert.deepEqual(buildLineAtlasPages(collection([equatorLine]), { segmentKm: NaN }), []);
   });
 
   it("keeps per-feature sourceIndex distinct across multiple lines", () => {
@@ -517,8 +493,14 @@ describe("buildLineAtlasPages", () => {
     const pages = buildLineAtlasPages(collection([equatorLine, second]), {
       segmentKm: 60,
     });
-    assert.deepEqual(pages.map((p) => p.sourceIndex), [0, 0, 1, 1]);
-    assert.deepEqual(pages.map((p) => p.index), [0, 1, 2, 3]);
+    assert.deepEqual(
+      pages.map((p) => p.sourceIndex),
+      [0, 0, 1, 1],
+    );
+    assert.deepEqual(
+      pages.map((p) => p.index),
+      [0, 1, 2, 3],
+    );
   });
 
   it("caps a runaway series at MAX_LINE_ATLAS_PAGES", () => {
@@ -534,10 +516,7 @@ describe("buildLineAtlasPages", () => {
       properties: {},
       geometry: {
         type: "GeometryCollection",
-        geometries: [
-          { type: "Point", coordinates: [9, 9] },
-          equatorLine.geometry,
-        ],
+        geometries: [{ type: "Point", coordinates: [9, 9] }, equatorLine.geometry],
       },
     };
     assert.equal(hasLineGeometry(nested.geometry), true);

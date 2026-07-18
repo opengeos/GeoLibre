@@ -28,10 +28,7 @@ interface CanvasRect {
   height: number;
 }
 
-function rectFromPoints(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-): CanvasRect {
+function rectFromPoints(a: { x: number; y: number }, b: { x: number; y: number }): CanvasRect {
   return {
     x: Math.min(a.x, b.x),
     y: Math.min(a.y, b.y),
@@ -78,8 +75,7 @@ export function RegionSelectOverlay({
     if (!canvas || !map) return;
     const update = () => setCanvasBox(canvas.getBoundingClientRect());
     update();
-    const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     observer?.observe(canvas);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);

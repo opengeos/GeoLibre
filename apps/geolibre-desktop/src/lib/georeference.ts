@@ -52,9 +52,15 @@ function invert3x3(m: number[][]): number[][] | null {
   // magnitude)³, so an absolute epsilon misses near-collinear configs when the
   // pixel coordinates are large. Scale the threshold by the matrix norm.
   const scale = Math.max(
-    Math.abs(a), Math.abs(b), Math.abs(c),
-    Math.abs(d), Math.abs(e), Math.abs(f),
-    Math.abs(g), Math.abs(h), Math.abs(i),
+    Math.abs(a),
+    Math.abs(b),
+    Math.abs(c),
+    Math.abs(d),
+    Math.abs(e),
+    Math.abs(f),
+    Math.abs(g),
+    Math.abs(h),
+    Math.abs(i),
     1,
   );
   if (!Number.isFinite(det) || Math.abs(det) < 1e-12 * scale ** 3) return null;
@@ -164,9 +170,7 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   const dLng = (b[0] - a[0]) * toRad;
   const lat1 = a[1] * toRad;
   const lat2 = b[1] * toRad;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
@@ -182,29 +186,18 @@ export interface ResidualReport {
  * where the transform places the pixel and the GCP's actual map point, in metres.
  */
 export function gcpResidualsMeters(t: Affine, gcps: GCP[]): ResidualReport {
-  const perPoint = gcps.map((g) =>
-    haversineMeters(applyAffine(t, g.px, g.py), [g.lng, g.lat]),
-  );
+  const perPoint = gcps.map((g) => haversineMeters(applyAffine(t, g.px, g.py), [g.lng, g.lat]));
   const rms = perPoint.length
-    ? Math.sqrt(
-        perPoint.reduce((sum, r) => sum + r * r, 0) / perPoint.length,
-      )
+    ? Math.sqrt(perPoint.reduce((sum, r) => sum + r * r, 0) / perPoint.length)
     : 0;
   return { perPoint, rms };
 }
 
 /** Axis-aligned bounds [west, south, east, north] enclosing the corners. */
-export function cornersToBounds(
-  corners: LngLat[],
-): [number, number, number, number] {
+export function cornersToBounds(corners: LngLat[]): [number, number, number, number] {
   const lngs = corners.map((c) => c[0]);
   const lats = corners.map((c) => c[1]);
-  return [
-    Math.min(...lngs),
-    Math.min(...lats),
-    Math.max(...lngs),
-    Math.max(...lats),
-  ];
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
 }
 
 /** Warp method for GeoTIFF export. */
@@ -238,11 +231,7 @@ export function buildGcpTranslateArgs(gcps: GCP[]): string[] {
 /** gdalwarp args for a GCP-based warp to a Cloud-Optimized GeoTIFF. */
 export function warpArgsForTransform(transform: GeoTransform): string[] {
   const method =
-    transform === "tps"
-      ? ["-tps"]
-      : transform === "polynomial"
-        ? ["-order", "2"]
-        : ["-order", "1"];
+    transform === "tps" ? ["-tps"] : transform === "polynomial" ? ["-order", "2"] : ["-order", "1"];
   return [...method, "-t_srs", "EPSG:4326", "-r", "bilinear", "-of", "COG"];
 }
 

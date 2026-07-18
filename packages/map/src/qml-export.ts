@@ -286,11 +286,7 @@ function getProp(node: unknown): string | null {
 
 /** Read a scalar literal (string/number/boolean), unwrapping `["literal", v]`. */
 function getLiteral(node: unknown): string | number | boolean | null {
-  if (
-    typeof node === "string" ||
-    typeof node === "number" ||
-    typeof node === "boolean"
-  ) {
+  if (typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
     return node;
   }
   if (Array.isArray(node) && node[0] === "literal") return getLiteral(node[1]);
@@ -298,11 +294,7 @@ function getLiteral(node: unknown): string | number | boolean | null {
 }
 
 /** Build the `<labeling>` block for a layer whose labels are enabled, or "". */
-function labelingXml(
-  style: LayerStyle,
-  fontFamily: string,
-  warnings: string[],
-): string {
+function labelingXml(style: LayerStyle, fontFamily: string, warnings: string[]): string {
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
   if (!labels.enabled) return "";
 
@@ -318,9 +310,7 @@ function labelingXml(
     labels.haloWidth > 0
       ? `<text-buffer bufferDraw="1" bufferSize="${num(
           labels.haloWidth,
-        )}" bufferSizeUnits="Pixel" bufferColor="${hexToRgba(
-          labels.haloColor,
-        )}"/>`
+        )}" bufferSizeUnits="Pixel" bufferColor="${hexToRgba(labels.haloColor)}"/>`
       : '<text-buffer bufferDraw="0"/>';
 
   // QGIS `placement` is a small enum. GeoLibre only distinguishes point vs line
@@ -406,9 +396,7 @@ function categorizedRenderer(
   // The empty-value default category is QGIS's catch-all (the match fallback);
   // its color is the layer's single-symbol color for the geometry (markerColor
   // for a shape-marker point layer, stroke for lines, otherwise fill).
-  categories.push(
-    `<category value="" symbol="${index}" label="" render="true"/>`,
-  );
+  categories.push(`<category value="" symbol="${index}" label="" render="true"/>`);
   symbols.push(
     symbolXml(geometry, String(index), singleColor(style, geometry), paint, opacity, warnings),
   );
@@ -433,10 +421,7 @@ function graduatedRenderer(
     .map((stop) => ({
       color: stop.color,
       label: stop.label,
-      value:
-        typeof stop.value === "number"
-          ? stop.value
-          : Number.parseFloat(String(stop.value)),
+      value: typeof stop.value === "number" ? stop.value : Number.parseFloat(String(stop.value)),
     }))
     .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
@@ -458,8 +443,7 @@ function graduatedRenderer(
     // Each class covers [stop.value, next.value); the last is open-ended above.
     // The stop value is the class lower bound, so the exact stops round-trip.
     const upper = next ? next.value : Infinity;
-    const label =
-      stop.label || `${num(stop.value)} - ${next ? num(next.value) : "∞"}`;
+    const label = stop.label || `${num(stop.value)} - ${next ? num(next.value) : "∞"}`;
     ranges.push(
       `<range lower="${num(stop.value)}" upper="${
         Number.isFinite(upper) ? num(upper) : ""
@@ -480,16 +464,10 @@ function graduatedRenderer(
  * circle radius only overrides the marker size when the layer renders plain
  * circles (a shape marker's size is its own setting the rule cannot change).
  */
-function rulePaintFor(
-  entry: VectorRule,
-  paint: SymbolPaint,
-  style: LayerStyle,
-): SymbolPaint {
+function rulePaintFor(entry: VectorRule, paint: SymbolPaint, style: LayerStyle): SymbolPaint {
   return {
     ...paint,
-    strokeColor: isHexColor(entry.strokeColor)
-      ? (entry.strokeColor as string)
-      : paint.strokeColor,
+    strokeColor: isHexColor(entry.strokeColor) ? (entry.strokeColor as string) : paint.strokeColor,
     strokeWidth:
       typeof entry.strokeWidth === "number" && Number.isFinite(entry.strokeWidth)
         ? entry.strokeWidth
@@ -515,14 +493,10 @@ function rulePaintFor(
 function ruleScaleAttributes(rule: VectorRule): string {
   let out = "";
   if (typeof rule.maxZoom === "number" && Number.isFinite(rule.maxZoom)) {
-    out += ` scalemindenom="${num(
-      OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** rule.maxZoom,
-    )}"`;
+    out += ` scalemindenom="${num(OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** rule.maxZoom)}"`;
   }
   if (typeof rule.minZoom === "number" && Number.isFinite(rule.minZoom)) {
-    out += ` scalemaxdenom="${num(
-      OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** rule.minZoom,
-    )}"`;
+    out += ` scalemaxdenom="${num(OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** rule.minZoom)}"`;
   }
   return out;
 }
@@ -551,9 +525,7 @@ function ruleRenderer(
   const roots: VectorRule[] = [];
   for (const entry of concrete) {
     const parent =
-      entry.parentId && entry.parentId !== entry.id
-        ? byId.get(entry.parentId)
-        : undefined;
+      entry.parentId && entry.parentId !== entry.id ? byId.get(entry.parentId) : undefined;
     if (parent) {
       const siblings = childrenOf.get(parent.id);
       if (siblings) siblings.push(entry);
@@ -597,25 +569,14 @@ function ruleRenderer(
       const rulePaint = rulePaintFor(entry, paint, style);
       symbolAttribute = ` symbol="${symbols.length}"`;
       symbols.push(
-        symbolXml(
-          geometry,
-          String(symbols.length),
-          entry.color,
-          rulePaint,
-          opacity,
-          warnings,
-        ),
+        symbolXml(geometry, String(symbols.length), entry.color, rulePaint, opacity, warnings),
       );
     }
     const checkstate = entry.enabled === false ? ' checkstate="0"' : "";
     const attributes = `${filterAttribute}${symbolAttribute}${ruleScaleAttributes(
       entry,
-    )}${checkstate} label="${xmlEscape(entry.label || "")}" key="rule-${xmlEscape(
-      entry.id,
-    )}"`;
-    return children.length > 0
-      ? `<rule${attributes}>${children}</rule>`
-      : `<rule${attributes}/>`;
+    )}${checkstate} label="${xmlEscape(entry.label || "")}" key="rule-${xmlEscape(entry.id)}"`;
+    return children.length > 0 ? `<rule${attributes}>${children}</rule>` : `<rule${attributes}/>`;
   };
 
   const ruleXml = roots.map(emitRule).join("");
@@ -623,9 +584,7 @@ function ruleRenderer(
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.
   const elseColor =
-    elseRule && isHexColor(elseRule.color)
-      ? elseRule.color
-      : singleColor(style, geometry);
+    elseRule && isHexColor(elseRule.color) ? elseRule.color : singleColor(style, geometry);
   const elseCheckstate = elseRule?.enabled === false ? ' checkstate="0"' : "";
   const elseXml = `<rule filter="ELSE" symbol="${symbols.length}"${elseCheckstate} label="${xmlEscape(
     elseRule?.label || "",
@@ -681,15 +640,10 @@ export function buildQml(
   const geometry = symbolGeometry(profile);
 
   if (styleValue(style, "extrusionEnabled")) {
-    warnings.push(
-      "3D extrusion has no QML equivalent; the layer is exported as a flat 2D style.",
-    );
+    warnings.push("3D extrusion has no QML equivalent; the layer is exported as a flat 2D style.");
   }
   const pointRenderer = styleValue(style, "pointRenderer");
-  if (
-    geometry === "marker" &&
-    (pointRenderer === "heatmap" || pointRenderer === "cluster")
-  ) {
+  if (geometry === "marker" && (pointRenderer === "heatmap" || pointRenderer === "cluster")) {
     warnings.push(
       `The ${pointRenderer} point renderer has no QML equivalent; points are exported as plain markers.`,
     );
@@ -720,9 +674,7 @@ export function buildQml(
     (stop) =>
       isHexColor(stop.color) &&
       Number.isFinite(
-        typeof stop.value === "number"
-          ? stop.value
-          : Number.parseFloat(String(stop.value)),
+        typeof stop.value === "number" ? stop.value : Number.parseFloat(String(stop.value)),
       ),
   ).length;
 
@@ -731,27 +683,14 @@ export function buildQml(
     renderer = categorizedRenderer(geometry, style, opacity, property, stops, warnings);
   } else if (mode === "graduated" && property && validGraduated >= 2) {
     renderer = graduatedRenderer(geometry, style, opacity, property, stops, warnings);
-  } else if (
-    mode === "rule-based" &&
-    styleValue(style, "vectorRules").length > 0
-  ) {
-    renderer = ruleRenderer(
-      geometry,
-      style,
-      opacity,
-      styleValue(style, "vectorRules"),
-      warnings,
-    );
+  } else if (mode === "rule-based" && styleValue(style, "vectorRules").length > 0) {
+    renderer = ruleRenderer(geometry, style, opacity, styleValue(style, "vectorRules"), warnings);
   } else {
     if (mode === "expression") {
       warnings.push(
         "The custom color expression has no QML equivalent; the layer is exported with its fallback color.",
       );
-    } else if (
-      mode === "categorized" ||
-      mode === "graduated" ||
-      mode === "rule-based"
-    ) {
+    } else if (mode === "categorized" || mode === "graduated" || mode === "rule-based") {
       warnings.push(
         `The ${mode} renderer had no valid classes to export; the layer is exported as a single symbol.`,
       );
@@ -773,10 +712,7 @@ export function buildQml(
  * without a DOM serializer (which is unavailable in the Node test environment).
  */
 function formatQml(xml: string): string {
-  const tokens = xml
-    .replace(/>\s*</g, "><")
-    .replace(/></g, ">\n<")
-    .split("\n");
+  const tokens = xml.replace(/>\s*</g, "><").replace(/></g, ">\n<").split("\n");
   let depth = 0;
   const out: string[] = [];
   for (const token of tokens) {

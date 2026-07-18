@@ -14,9 +14,7 @@ import {
   type GeoLibreLayer,
   type LayerGroup,
 } from "@geolibre/core";
-import {
-  setHistoryCoalesceMs,
-} from "../packages/core/src/history";
+import { setHistoryCoalesceMs } from "../packages/core/src/history";
 import { redo, undo } from "../packages/core/src/store";
 
 function layer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
@@ -122,11 +120,7 @@ describe("applyGroupEffects", () => {
 
 describe("normalizeGroupContiguity", () => {
   it("pulls scattered group members into one block at the first member", () => {
-    const layers = [
-      layer("g1", { groupId: "g" }),
-      layer("x"),
-      layer("g2", { groupId: "g" }),
-    ];
+    const layers = [layer("g1", { groupId: "g" }), layer("x"), layer("g2", { groupId: "g" })];
     const result = normalizeGroupContiguity(layers);
     assert.deepEqual(
       result.map((l) => l.id),
@@ -154,7 +148,10 @@ describe("layer group store actions", () => {
     const g1 = useAppStore.getState().addLayerGroup();
     useAppStore.getState().addLayerGroup();
     assert.equal(
-      useAppStore.getState().layerGroups.map((g) => g.name).join(","),
+      useAppStore
+        .getState()
+        .layerGroups.map((g) => g.name)
+        .join(","),
       "Group 1,Group 2",
     );
     // Deleting "Group 1" frees that number; the next default fills the gap.
@@ -170,8 +167,7 @@ describe("layer group store actions", () => {
     assert.ok(cg);
     assert.equal(
       useAppStore.getState().addLayerGroup() &&
-        useAppStore.getState().layerGroups.find((g) => g.name === "Group 1") !==
-          undefined,
+        useAppStore.getState().layerGroups.find((g) => g.name === "Group 1") !== undefined,
       true,
     );
   });
@@ -185,9 +181,7 @@ describe("layer group store actions", () => {
     const grouped = layers.filter((l) => l.groupId === gid).map((l) => l.id);
     assert.deepEqual(grouped.sort(), [a, c].sort());
     // a and c are adjacent in the array (contiguous block).
-    const indices = layers
-      .map((l, i) => (l.groupId === gid ? i : -1))
-      .filter((i) => i >= 0);
+    const indices = layers.map((l, i) => (l.groupId === gid ? i : -1)).filter((i) => i >= 0);
     assert.equal(indices[1] - indices[0], 1);
   });
 
@@ -195,15 +189,9 @@ describe("layer group store actions", () => {
     const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
     const gid = useAppStore.getState().addLayerGroup("G");
     useAppStore.getState().moveLayerToGroup(a, gid);
-    assert.equal(
-      useAppStore.getState().layers.find((l) => l.id === a)?.groupId,
-      gid,
-    );
+    assert.equal(useAppStore.getState().layers.find((l) => l.id === a)?.groupId, gid);
     useAppStore.getState().moveLayerToGroup(a, null);
-    assert.equal(
-      useAppStore.getState().layers.find((l) => l.id === a)?.groupId,
-      undefined,
-    );
+    assert.equal(useAppStore.getState().layers.find((l) => l.id === a)?.groupId, undefined);
   });
 
   it("reorders a group block past a neighboring layer", () => {
@@ -224,10 +212,7 @@ describe("layer group store actions", () => {
     useAppStore.getState().removeLayerGroup(gid);
     assert.equal(useAppStore.getState().layerGroups.length, 0);
     assert.equal(useAppStore.getState().layers.length, 1);
-    assert.equal(
-      useAppStore.getState().layers[0].groupId,
-      undefined,
-    );
+    assert.equal(useAppStore.getState().layers[0].groupId, undefined);
 
     const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
     const gid2 = useAppStore.getState().addLayerGroup("G2", [b]);
@@ -260,10 +245,7 @@ describe("layer group store actions", () => {
     assert.equal(useAppStore.getState().layerGroups[0].collapsed, true);
     // Toggling collapse must not dirty the project nor record an undo entry.
     assert.equal(useAppStore.getState().isDirty, false);
-    assert.equal(
-      useAppStore.temporal.getState().pastStates.length,
-      pastBefore,
-    );
+    assert.equal(useAppStore.temporal.getState().pastStates.length, pastBefore);
     // But it is still persisted (so folders reopen collapsed).
     assert.equal(
       projectFromStore({
@@ -337,11 +319,7 @@ describe("layer group serialization", () => {
         version: "0.2.0",
         name: "Interleaved",
         mapView: { center: [0, 0], zoom: 1, bearing: 0, pitch: 0 },
-        layers: [
-          layer("g1", { groupId: "g" }),
-          layer("x"),
-          layer("g2", { groupId: "g" }),
-        ],
+        layers: [layer("g1", { groupId: "g" }), layer("x"), layer("g2", { groupId: "g" })],
         layerGroups: [group("g")],
       }),
     );

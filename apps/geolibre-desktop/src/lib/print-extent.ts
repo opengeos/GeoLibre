@@ -7,11 +7,7 @@
  * line layers) that persists after the drag so the user can see and re-draw it.
  * {@link captureMapImage} later crops the snapshot to this extent.
  */
-import type {
-  GeoJSONSource,
-  Map as MapLibreMap,
-  MapMouseEvent,
-} from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 
 /** A geographic bounding box as `[west, south, east, north]`. */
 export type PrintExtent = [number, number, number, number];
@@ -94,10 +90,7 @@ export function showPrintExtent(map: MapLibreMap, extent: PrintExtent): void {
  * while {@link captureMapImage} reads the drawing buffer, so the box outline is
  * never baked into the exported image.
  */
-export function setPrintExtentVisible(
-  map: MapLibreMap,
-  visible: boolean,
-): void {
+export function setPrintExtentVisible(map: MapLibreMap, visible: boolean): void {
   const value = visible ? "visible" : "none";
   for (const id of [FILL_LAYER_ID, LINE_LAYER_ID]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", value);
@@ -240,9 +233,7 @@ export function drawPrintExtent(
       raw: { x: number; y: number },
       shiftKey: boolean,
     ): { x: number; y: number } =>
-      start && shiftKey && options.aspect
-        ? snapToAspect(start, raw, options.aspect)
-        : raw;
+      start && shiftKey && options.aspect ? snapToAspect(start, raw, options.aspect) : raw;
 
     const preview = (raw: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return;
@@ -297,13 +288,8 @@ export function drawPrintExtent(
       start = pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY);
     };
     const onMapMove = (e: MapMouseEvent) =>
-      queueMove(
-        e.originalEvent.clientX,
-        e.originalEvent.clientY,
-        e.originalEvent.shiftKey,
-      );
-    const onWindowMove = (e: MouseEvent) =>
-      queueMove(e.clientX, e.clientY, e.shiftKey);
+      queueMove(e.originalEvent.clientX, e.originalEvent.clientY, e.originalEvent.shiftKey);
+    const onWindowMove = (e: MouseEvent) => queueMove(e.clientX, e.clientY, e.shiftKey);
     const onMapUp = (e: MapMouseEvent) => {
       if (e.originalEvent.button !== 0) return;
       commit(

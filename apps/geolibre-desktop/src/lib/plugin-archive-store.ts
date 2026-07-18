@@ -45,15 +45,12 @@ function openDatabase(): Promise<IDBDatabase> {
 function promisifyRequest<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(request.error ?? new Error("Plugin database request failed."));
+    request.onerror = () => reject(request.error ?? new Error("Plugin database request failed."));
   });
 }
 
 /** Persist (or overwrite) an installed plugin archive. */
-export async function putPluginArchive(
-  record: StoredPluginArchive,
-): Promise<void> {
+export async function putPluginArchive(record: StoredPluginArchive): Promise<void> {
   if (!pluginArchiveStorageAvailable()) {
     throw new Error("Installing plugins from a file is not supported here.");
   }
@@ -78,9 +75,7 @@ export async function getAllPluginArchives(): Promise<StoredPluginArchive[]> {
   try {
     const transaction = db.transaction(STORE_NAME, "readonly");
     return await promisifyRequest(
-      transaction.objectStore(STORE_NAME).getAll() as IDBRequest<
-        StoredPluginArchive[]
-      >,
+      transaction.objectStore(STORE_NAME).getAll() as IDBRequest<StoredPluginArchive[]>,
     );
   } finally {
     db.close();

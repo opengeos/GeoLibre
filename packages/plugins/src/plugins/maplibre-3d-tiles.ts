@@ -20,19 +20,12 @@ import {
   type ThreeDTilesControlOptions,
   type ThreeDTilesItemState,
 } from "maplibre-gl-3d-tiles";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreDeckGL,
-  GeoLibreMapControlPosition,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreDeckGL, GeoLibreMapControlPosition } from "../types";
 import {
   acquireMercatorProjectionLock,
   releaseMercatorProjectionLock,
 } from "./map-projection-utils";
-import {
-  ensureSharedDeckOverlay,
-  setSharedDeckLayers,
-} from "./shared-deck-overlay";
+import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import {
   addArcgisI3sTilesLayer,
   arcgisI3sSceneLayerName,
@@ -49,18 +42,14 @@ const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 const THREE_VERSION = "0.184.0";
 const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
 const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
-const GOOGLE_PHOTOREALISTIC_TILES_URL =
-  "https://tile.googleapis.com/v1/3dtiles/root.json";
-const GOOGLE_PHOTOREALISTIC_TILES_LABEL =
-  "Google Photorealistic 3D Tiles";
+const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
+const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
   "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
 const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
 const GOOGLE_MAPS_API_KEY_MASK = "********";
-const GOOGLE_PHOTOREALISTIC_SOURCE_KIND =
-  "google-photorealistic-3d-tiles";
-const GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX =
-  "geolibre-google-photorealistic-3d-tiles";
+const GOOGLE_PHOTOREALISTIC_SOURCE_KIND = "google-photorealistic-3d-tiles";
+const GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX = "geolibre-google-photorealistic-3d-tiles";
 const GOOGLE_PHOTOREALISTIC_INITIAL_VIEW = {
   center: [14.42, 50.089] as [number, number],
   zoom: 16,
@@ -132,9 +121,7 @@ type RenderableDeckLayer = {
   props: Record<string, unknown>;
   renderLayers(): unknown;
 };
-type DeckTile3DLayerClass = new (
-  props: Record<string, unknown>,
-) => RenderableDeckLayer;
+type DeckTile3DLayerClass = new (props: Record<string, unknown>) => RenderableDeckLayer;
 
 interface ThreeDTilesControlInternals {
   _layers?: Map<string, ThreeDTilesLayerInstance>;
@@ -160,14 +147,10 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   restoreGooglePhotorealisticTilesLayers(app);
   restoreArcgisI3sTilesLayers(app);
 
-  const layers = useAppStore
-    .getState()
-    .layers.filter(isThreeDTilesControlLayer);
+  const layers = useAppStore.getState().layers.filter(isThreeDTilesControlLayer);
   if (layers.length === 0) return;
 
-  const control = runWithThreeDTilesStoreSyncSuspended(() =>
-    ensureThreeDTilesControl(app),
-  );
+  const control = runWithThreeDTilesStoreSyncSuspended(() => ensureThreeDTilesControl(app));
   if (!control) return;
 
   const panelCollapsed = threeDTilesPanelCollapsedFromLayers(layers);
@@ -207,17 +190,12 @@ function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
   return true;
 }
 
-function ensureThreeDTilesControl(
-  app: GeoLibreAppAPI,
-): ThreeDTilesControl | null {
+function ensureThreeDTilesControl(app: GeoLibreAppAPI): ThreeDTilesControl | null {
   activeThreeDTilesApp = app;
   threeDTilesControl ??= createThreeDTilesControl();
 
   if (!threeDTilesControlMounted) {
-    const added = app.addMapControl(
-      threeDTilesControl,
-      threeDTilesControlPosition,
-    );
+    const added = app.addMapControl(threeDTilesControl, threeDTilesControlPosition);
     if (!added) {
       resetThreeDTilesControl(threeDTilesControl);
       if (activeThreeDTilesApp === app) activeThreeDTilesApp = null;
@@ -290,16 +268,10 @@ function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
 
   // Re-read state: the removals above produce a new store snapshot, so the
   // captured `store.layers` would still include the just-removed layers.
-  const layersById = new Map(
-    useAppStore.getState().layers.map((layer) => [layer.id, layer]),
-  );
+  const layersById = new Map(useAppStore.getState().layers.map((layer) => [layer.id, layer]));
   for (const tileset of state.tilesets) {
     const existingLayer = layersById.get(tileset.id);
-    const layer = createThreeDTilesStoreLayer(
-      tileset,
-      tileset.opacity,
-      state.collapsed,
-    );
+    const layer = createThreeDTilesStoreLayer(tileset, tileset.opacity, state.collapsed);
 
     if (existingLayer) {
       const update = createThreeDTilesLayerUpdate(existingLayer, layer);
@@ -315,9 +287,7 @@ function hydrateThreeDTilesControlFromStore(
   control: ThreeDTilesControl,
   options: { replaceExisting?: boolean } = {},
 ): void {
-  const layers = useAppStore
-    .getState()
-    .layers.filter(isThreeDTilesControlLayer);
+  const layers = useAppStore.getState().layers.filter(isThreeDTilesControlLayer);
   if (layers.length === 0) return;
 
   const tilesets = control.getState().tilesets;
@@ -357,9 +327,7 @@ function restoreThreeDTilesMapLayer(
     url,
     stringRecordValue(layer.source.requestHeaders),
   );
-  const existingTilesets = control
-    .getState()
-    .tilesets.filter((tileset) => tileset.id !== id);
+  const existingTilesets = control.getState().tilesets.filter((tileset) => tileset.id !== id);
   const savedCenter = lngLatPairValue(layer.metadata.center);
   const savedAltitude = optionalNumberValue(layer.metadata.altitude);
   const status = savedCenter ? "loaded" : "loading";
@@ -438,8 +406,7 @@ function updateThreeDTilesLoaded(
       : tileset,
   );
   const activeTileset =
-    tilesets.find((tileset) => tileset.id === state.activeTilesetId) ??
-    tilesets.at(-1);
+    tilesets.find((tileset) => tileset.id === state.activeTilesetId) ?? tilesets.at(-1);
 
   control.setState({
     altitude: activeTileset?.altitude,
@@ -450,11 +417,7 @@ function updateThreeDTilesLoaded(
   });
 }
 
-function updateThreeDTilesError(
-  control: ThreeDTilesControl,
-  id: string,
-  error: Error,
-): void {
+function updateThreeDTilesError(control: ThreeDTilesControl, id: string, error: Error): void {
   const state = control.getState();
   const message = error.message || "Unable to load 3D Tiles layer.";
   const tilesets = state.tilesets.map((tileset) =>
@@ -467,8 +430,7 @@ function updateThreeDTilesError(
       : tileset,
   );
   const activeTileset =
-    tilesets.find((tileset) => tileset.id === state.activeTilesetId) ??
-    tilesets.at(-1);
+    tilesets.find((tileset) => tileset.id === state.activeTilesetId) ?? tilesets.at(-1);
 
   control.setState({
     error: activeTileset?.error,
@@ -482,8 +444,7 @@ function createThreeDTilesStoreLayer(
   opacity = 1,
   panelCollapsed = true,
 ): GeoLibreLayer {
-  const layerName =
-    tileset.layerName || layerNameFromUrl(tileset.tilesetUrl, tileset.id);
+  const layerName = tileset.layerName || layerNameFromUrl(tileset.tilesetUrl, tileset.id);
   const beforeId = tileset.beforeId;
 
   return {
@@ -535,8 +496,7 @@ function createThreeDTilesLayerUpdate(
   const name = existingLayer.name || layer.name;
 
   if (existingLayer.name !== name) update.name = name;
-  if (existingLayer.beforeId !== layer.beforeId)
-    update.beforeId = layer.beforeId;
+  if (existingLayer.beforeId !== layer.beforeId) update.beforeId = layer.beforeId;
   if (existingLayer.opacity !== layer.opacity) update.opacity = layer.opacity;
   if (existingLayer.visible !== layer.visible) update.visible = layer.visible;
   if (existingLayer.sourcePath !== layer.sourcePath) {
@@ -585,10 +545,7 @@ function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
-function hasThreeDTilesTileset(
-  control: ThreeDTilesControl,
-  id: string,
-): boolean {
+function hasThreeDTilesTileset(control: ThreeDTilesControl, id: string): boolean {
   return control.getState().tilesets.some((tileset) => tileset.id === id);
 }
 
@@ -603,9 +560,7 @@ function showThreeDTilesControl(control: ThreeDTilesControl | null): void {
   installThreeDTilesPanelHandlers(control);
 }
 
-function installThreeDTilesPanelHandlers(
-  control: ThreeDTilesControl | null,
-): void {
+function installThreeDTilesPanelHandlers(control: ThreeDTilesControl | null): void {
   const panel = getThreeDTilesPanel(control);
   if (panel) {
     panel.classList.add("geolibre-3d-tiles-panel");
@@ -631,15 +586,9 @@ function addThreeDTilesRuntimeEnvListener(control: ThreeDTilesControl): void {
     renderGooglePhotorealisticTilesLayers();
   };
 
-  window.addEventListener(
-    "geolibre:runtime-env-change",
-    handleRuntimeEnvChange,
-  );
+  window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   threeDTilesRuntimeEnvUnsubscribe = () => {
-    window.removeEventListener(
-      "geolibre:runtime-env-change",
-      handleRuntimeEnvChange,
-    );
+    window.removeEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   };
 }
 
@@ -650,8 +599,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
   if (panel.dataset.geolibreGoogleTilesHandler === "true") return;
   panel.dataset.geolibreGoogleTilesHandler = "true";
 
-  const applyDefaults = () =>
-    applyGooglePhotorealisticTilesPanelDefaults(control);
+  const applyDefaults = () => applyGooglePhotorealisticTilesPanelDefaults(control);
   const deferApplyDefaults = () => window.setTimeout(applyDefaults, 0);
   const urlInput = getThreeDTilesUrlInput(panel);
   urlInput?.addEventListener("input", applyDefaults);
@@ -683,9 +631,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
   panel.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    const option = target.closest<HTMLButtonElement>(
-      ".three-d-tiles-sample-option",
-    );
+    const option = target.closest<HTMLButtonElement>(".three-d-tiles-sample-option");
     if (option?.title === GOOGLE_PHOTOREALISTIC_TILES_URL) {
       deferApplyDefaults();
     }
@@ -694,9 +640,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
   applyDefaults();
 }
 
-function applyGooglePhotorealisticTilesPanelDefaults(
-  control: ThreeDTilesControl,
-): void {
+function applyGooglePhotorealisticTilesPanelDefaults(control: ThreeDTilesControl): void {
   const panel = getThreeDTilesPanel(control);
   if (!panel) return;
 
@@ -711,9 +655,7 @@ function applyGooglePhotorealisticTilesPanelDefaults(
     );
     if (headersInput) {
       headersInput.value = serializeThreeDTilesRequestHeaders(
-        stripGoogleMapsApiKeyHeader(
-          parseThreeDTilesRequestHeaders(headersInput.value),
-        ),
+        stripGoogleMapsApiKeyHeader(parseThreeDTilesRequestHeaders(headersInput.value)),
       );
       headersInput.placeholder = "";
     }
@@ -726,15 +668,12 @@ function applyGooglePhotorealisticTilesPanelDefaults(
     return;
   }
 
-  const layerNameInput = panel.querySelector<HTMLInputElement>(
-    'input[aria-label="Layer name"]',
-  );
+  const layerNameInput = panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]');
   if (
     layerNameInput &&
     (!layerNameInput.value.trim() ||
       layerNameInput.value.trim() === "3D Tiles" ||
-      layerNameInput.value.trim() ===
-        layerNameFromUrl(GOOGLE_PHOTOREALISTIC_TILES_URL, "3D Tiles"))
+      layerNameInput.value.trim() === layerNameFromUrl(GOOGLE_PHOTOREALISTIC_TILES_URL, "3D Tiles"))
   ) {
     layerNameInput.value = GOOGLE_PHOTOREALISTIC_TILES_LABEL;
   }
@@ -795,19 +734,15 @@ function installGooglePhotorealisticHeadersToggle(
 
   const toggle = document.createElement("button");
   toggle.type = "button";
-  toggle.className =
-    "geolibre-google-tiles-key-toggle three-d-tiles-small-button";
+  toggle.className = "geolibre-google-tiles-key-toggle three-d-tiles-small-button";
   toggle.textContent = "Show key";
   toggle.setAttribute("aria-label", "Show Google Maps API key");
   toggle.setAttribute("aria-pressed", "false");
   toggle.hidden = true;
 
   toggle.addEventListener("click", () => {
-    const visible =
-      panel.dataset.geolibreGoogleMapsApiKeyVisible !== "true";
-    panel.dataset.geolibreGoogleMapsApiKeyVisible = visible
-      ? "true"
-      : "false";
+    const visible = panel.dataset.geolibreGoogleMapsApiKeyVisible !== "true";
+    panel.dataset.geolibreGoogleMapsApiKeyVisible = visible ? "true" : "false";
     updateGooglePhotorealisticHeadersToggle(toggle, visible);
 
     const rawHeaders = parseThreeDTilesRequestHeaders(headersInput.value);
@@ -817,25 +752,15 @@ function installGooglePhotorealisticHeadersToggle(
       rawHeaders,
       panelApiKey,
     );
-    headersInput.value = serializeGooglePhotorealisticPanelRequestHeaders(
-      headers,
-      visible,
-    );
+    headersInput.value = serializeGooglePhotorealisticPanelRequestHeaders(headers, visible);
   });
 
-  headersInput
-    .closest(".three-d-tiles-field")
-    ?.insertAdjacentElement("afterend", toggle) ??
+  headersInput.closest(".three-d-tiles-field")?.insertAdjacentElement("afterend", toggle) ??
     headersInput.insertAdjacentElement("afterend", toggle);
 }
 
-function setGooglePhotorealisticHeadersToggleVisible(
-  panel: HTMLElement,
-  visible: boolean,
-): void {
-  const toggle = panel.querySelector<HTMLButtonElement>(
-    ".geolibre-google-tiles-key-toggle",
-  );
+function setGooglePhotorealisticHeadersToggleVisible(panel: HTMLElement, visible: boolean): void {
+  const toggle = panel.querySelector<HTMLButtonElement>(".geolibre-google-tiles-key-toggle");
   if (toggle) toggle.hidden = !visible;
 }
 
@@ -870,34 +795,25 @@ async function addGooglePhotorealisticTilesFromPanel(
   }
 
   const name =
-    panel
-      .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
-      ?.value.trim() || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+    panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]')?.value.trim() ||
+    GOOGLE_PHOTOREALISTIC_TILES_LABEL;
   const rawHeaders = parseThreeDTilesRequestHeaders(
-    panel.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Request headers"]',
-    )?.value ?? "",
+    panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Request headers"]')?.value ?? "",
   );
-  const manualGoogleMapsApiKey = rememberGoogleMapsApiKeyFromHeaders(
-    panel,
-    rawHeaders,
-  );
+  const manualGoogleMapsApiKey = rememberGoogleMapsApiKeyFromHeaders(panel, rawHeaders);
   const headers = resolveThreeDTilesRequestHeaders(
     GOOGLE_PHOTOREALISTIC_TILES_URL,
     rawHeaders,
     manualGoogleMapsApiKey,
   );
   const flyToOnLoad =
-    panel.querySelector<HTMLInputElement>(
-      'input[aria-label="Fly to tileset after load"]',
-    )?.checked ?? true;
-  const visible =
-    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
+    panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
       ?.checked ?? true;
+  const visible =
+    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')?.checked ?? true;
   const opacity = numberValue(control.getState().opacity, 1);
   const altitudeOffset = numberInputValue(
-    panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')
-      ?.value,
+    panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')?.value,
     numberValue(control.getState().altitudeOffset, 0),
   );
 
@@ -920,10 +836,7 @@ async function addGooglePhotorealisticTilesFromPanel(
  * them to the deck.gl I3S overlay, since maplibre-gl-3d-tiles' three.js renderer
  * only handles OGC 3D Tiles. Mirrors the Google Photorealistic interception.
  */
-function installArcgisI3sTilesPanelHandlers(
-  control: ThreeDTilesControl,
-  panel: HTMLElement,
-): void {
+function installArcgisI3sTilesPanelHandlers(control: ThreeDTilesControl, panel: HTMLElement): void {
   if (panel.dataset.geolibreI3sTilesHandler === "true") return;
   panel.dataset.geolibreI3sTilesHandler = "true";
 
@@ -948,15 +861,10 @@ function installArcgisI3sTilesPanelHandlers(
   );
 }
 
-function addArcgisI3sTilesFromPanel(
-  control: ThreeDTilesControl,
-  panel: HTMLElement,
-): void {
+function addArcgisI3sTilesFromPanel(control: ThreeDTilesControl, panel: HTMLElement): void {
   const app = activeThreeDTilesApp;
   if (!app) {
-    console.warn(
-      "[GeoLibre] ArcGIS I3S submit ignored: no active 3D Tiles app",
-    );
+    console.warn("[GeoLibre] ArcGIS I3S submit ignored: no active 3D Tiles app");
     return;
   }
   const url = getThreeDTilesUrlInput(panel)?.value.trim();
@@ -966,18 +874,14 @@ function addArcgisI3sTilesFromPanel(
   }
 
   const name =
-    panel
-      .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
-      ?.value.trim() ||
+    panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]')?.value.trim() ||
     arcgisI3sSceneLayerName(url) ||
     layerNameFromUrl(url, "ArcGIS I3S Scene Layer");
   const flyTo =
-    panel.querySelector<HTMLInputElement>(
-      'input[aria-label="Fly to tileset after load"]',
-    )?.checked ?? true;
-  const visible =
-    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
+    panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
       ?.checked ?? true;
+  const visible =
+    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')?.checked ?? true;
   const opacity = numberValue(control.getState().opacity, 1);
 
   addArcgisI3sTilesLayer(app, { url, name, opacity, visible, flyTo });
@@ -985,9 +889,7 @@ function addArcgisI3sTilesFromPanel(
 }
 
 function restoreGooglePhotorealisticTilesLayers(app: GeoLibreAppAPI): void {
-  if (
-    useAppStore.getState().layers.some(isGooglePhotorealisticTilesLayer)
-  ) {
+  if (useAppStore.getState().layers.some(isGooglePhotorealisticTilesLayer)) {
     void ensureGooglePhotorealisticTilesOverlay(app);
   }
 }
@@ -1048,22 +950,15 @@ function addGooglePhotorealisticTilesLayer(
   return id;
 }
 
-function updateGooglePhotorealisticTilesPanelList(
-  control: ThreeDTilesControl | null,
-): void {
+function updateGooglePhotorealisticTilesPanelList(control: ThreeDTilesControl | null): void {
   const panel = getThreeDTilesPanel(control);
   if (!panel) return;
 
   const nativeTilesetCount = control?.getState().tilesets.length ?? 0;
-  const googleLayers = useAppStore
-    .getState()
-    .layers.filter(isGooglePhotorealisticTilesLayer);
-  const nativeStatus = panel.querySelector<HTMLElement>(
-    ".three-d-tiles-status",
-  );
+  const googleLayers = useAppStore.getState().layers.filter(isGooglePhotorealisticTilesLayer);
+  const nativeStatus = panel.querySelector<HTMLElement>(".three-d-tiles-status");
   if (nativeStatus) {
-    nativeStatus.hidden =
-      nativeTilesetCount === 0 && googleLayers.length > 0;
+    nativeStatus.hidden = nativeTilesetCount === 0 && googleLayers.length > 0;
   }
 
   const googleList = ensureGooglePhotorealisticTilesPanelList(panel);
@@ -1088,12 +983,8 @@ function updateGooglePhotorealisticTilesPanelList(
   }
 }
 
-function ensureGooglePhotorealisticTilesPanelList(
-  panel: HTMLElement,
-): HTMLElement {
-  const existing = panel.querySelector<HTMLElement>(
-    ".geolibre-google-tiles-list",
-  );
+function ensureGooglePhotorealisticTilesPanelList(panel: HTMLElement): HTMLElement {
+  const existing = panel.querySelector<HTMLElement>(".geolibre-google-tiles-list");
   if (existing) return existing;
 
   const googleList = document.createElement("div");
@@ -1110,12 +1001,9 @@ function ensureGooglePhotorealisticTilesPanelList(
   return googleList;
 }
 
-function createGooglePhotorealisticTilesPanelListItem(
-  layer: GeoLibreLayer,
-): HTMLElement {
+function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   const item = document.createElement("div");
-  item.className =
-    "geolibre-google-tiles-list-item three-d-tiles-list-item active";
+  item.className = "geolibre-google-tiles-list-item three-d-tiles-list-item active";
 
   const meta = document.createElement("div");
   meta.className = "three-d-tiles-list-meta";
@@ -1147,10 +1035,7 @@ function createGooglePhotorealisticTilesPanelListItem(
   const visible = document.createElement("input");
   visible.type = "checkbox";
   visible.checked = layer.visible;
-  visible.setAttribute(
-    "aria-label",
-    `Toggle ${layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL}`,
-  );
+  visible.setAttribute("aria-label", `Toggle ${layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL}`);
   visible.addEventListener("change", () => {
     useAppStore.getState().updateLayer(layer.id, { visible: visible.checked });
   });
@@ -1193,9 +1078,7 @@ function createGooglePhotorealisticTilesPanelListItem(
   return item;
 }
 
-function createGooglePhotorealisticTilesPanelSmallButton(
-  label: string,
-): HTMLButtonElement {
+function createGooglePhotorealisticTilesPanelSmallButton(label: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.className = "three-d-tiles-small-button";
   button.type = "button";
@@ -1230,11 +1113,7 @@ function forceGooglePhotorealisticMercatorProjection(
   app: GeoLibreAppAPI,
   mapOverride?: ReturnType<ThreeDTilesControl["getMap"]>,
 ): void {
-  acquireMercatorProjectionLock(
-    GOOGLE_PROJECTION_LOCK_KEY,
-    app,
-    mapOverride ?? app.getMap?.(),
-  );
+  acquireMercatorProjectionLock(GOOGLE_PROJECTION_LOCK_KEY, app, mapOverride ?? app.getMap?.());
 }
 
 function restoreGooglePhotorealisticPreviousProjection(): void {
@@ -1250,21 +1129,15 @@ function isGooglePhotorealisticTilesLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
-function ensureGooglePhotorealisticTilesOverlay(
-  app: GeoLibreAppAPI,
-): Promise<void> {
+function ensureGooglePhotorealisticTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   if (ensureGoogleTilesOverlayInFlight) return ensureGoogleTilesOverlayInFlight;
-  ensureGoogleTilesOverlayInFlight = runEnsureGooglePhotorealisticTilesOverlay(
-    app,
-  ).finally(() => {
+  ensureGoogleTilesOverlayInFlight = runEnsureGooglePhotorealisticTilesOverlay(app).finally(() => {
     ensureGoogleTilesOverlayInFlight = null;
   });
   return ensureGoogleTilesOverlayInFlight;
 }
 
-async function runEnsureGooglePhotorealisticTilesOverlay(
-  app: GeoLibreAppAPI,
-): Promise<void> {
+async function runEnsureGooglePhotorealisticTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   googleTilesApp = app;
   if (!app.getDeckGL) return;
   googleTilesDeckGL ??= await app.getDeckGL();
@@ -1279,15 +1152,10 @@ async function runEnsureGooglePhotorealisticTilesOverlay(
   googleTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
       const currentGoogleLayerIds = new Set(
-        state.layers
-          .filter(isGooglePhotorealisticTilesLayer)
-          .map(({ id }) => id),
+        state.layers.filter(isGooglePhotorealisticTilesLayer).map(({ id }) => id),
       );
       for (const layer of previous.layers) {
-        if (
-          isGooglePhotorealisticTilesLayer(layer) &&
-          !currentGoogleLayerIds.has(layer.id)
-        ) {
+        if (isGooglePhotorealisticTilesLayer(layer) && !currentGoogleLayerIds.has(layer.id)) {
           googleTilesApiKeysByLayerId.delete(layer.id);
         }
       }
@@ -1311,19 +1179,14 @@ function addGoogleTilesRuntimeEnvListener(): void {
   };
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   googleTilesRuntimeEnvUnsubscribe = () => {
-    window.removeEventListener(
-      "geolibre:runtime-env-change",
-      handleRuntimeEnvChange,
-    );
+    window.removeEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
   };
 }
 
 function renderGooglePhotorealisticTilesLayers(): void {
   if (!googleTilesDeckGL || !googleTilesApp) return;
 
-  const layers = useAppStore
-    .getState()
-    .layers.filter(isGooglePhotorealisticTilesLayer);
+  const layers = useAppStore.getState().layers.filter(isGooglePhotorealisticTilesLayer);
 
   // Drop our contribution and release the mercator lock once the last Google
   // tileset is gone. A non-null signature means we currently hold layers, so
@@ -1367,9 +1230,7 @@ function googleTilesLayerSignature(layers: GeoLibreLayer[]): string {
       // stale request headers.
       const headerEntries = headers
         ? JSON.stringify(
-            Object.entries(headers).sort(([left], [right]) =>
-              left.localeCompare(right),
-            ),
+            Object.entries(headers).sort(([left], [right]) => left.localeCompare(right)),
           )
         : "";
       return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${altitudeOffset}:${headerEntries}`;
@@ -1377,9 +1238,7 @@ function googleTilesLayerSignature(layers: GeoLibreLayer[]): string {
     .join("|");
 }
 
-function buildGooglePhotorealisticTilesDeckLayer(
-  layer: GeoLibreLayer,
-): Layer | null {
+function buildGooglePhotorealisticTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
   if (!googleTilesDeckGL) return null;
   const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
   const requestHeaders = resolveThreeDTilesRequestHeaders(
@@ -1414,54 +1273,34 @@ function getGoogleAltitudeOffsetTile3DLayerClass(): DeckTile3DLayerClass {
     throw new Error("deck.gl modules are not loaded");
   }
 
-  const BaseLayer = googleTilesDeckGL.geoLayers
-    .Tile3DLayer as unknown as DeckTile3DLayerClass;
+  const BaseLayer = googleTilesDeckGL.geoLayers.Tile3DLayer as unknown as DeckTile3DLayerClass;
   googleAltitudeOffsetTile3DLayerClass = class extends BaseLayer {
     static componentName = "GoogleAltitudeOffsetTile3DLayer";
 
     renderLayers(): unknown {
       const altitudeOffset = numberValue(this.props.altitudeOffset, 0);
-      return offsetGooglePhotorealisticTileLayers(
-        super.renderLayers(),
-        altitudeOffset,
-      );
+      return offsetGooglePhotorealisticTileLayers(super.renderLayers(), altitudeOffset);
     }
   };
   return googleAltitudeOffsetTile3DLayerClass;
 }
 
-function offsetGooglePhotorealisticTileLayers(
-  layers: unknown,
-  altitudeOffset: number,
-): unknown {
+function offsetGooglePhotorealisticTileLayers(layers: unknown, altitudeOffset: number): unknown {
   if (!Number.isFinite(altitudeOffset) || altitudeOffset === 0) {
     return layers;
   }
   if (Array.isArray(layers)) {
-    return layers.map((layer) =>
-      offsetGooglePhotorealisticTileLayers(layer, altitudeOffset),
-    );
+    return layers.map((layer) => offsetGooglePhotorealisticTileLayers(layer, altitudeOffset));
   }
   if (!isDeckLayerInstance(layers)) return layers;
 
   return layers.clone({
-    modelMatrix: translatedModelMatrix(
-      matrix16Value(layers.props.modelMatrix),
-      altitudeOffset,
-    ),
+    modelMatrix: translatedModelMatrix(matrix16Value(layers.props.modelMatrix), altitudeOffset),
   });
 }
 
-function translatedModelMatrix(
-  modelMatrix: number[] | null,
-  altitudeOffset: number,
-): number[] {
-  const source = modelMatrix ?? [
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
-  ];
+function translatedModelMatrix(modelMatrix: number[] | null, altitudeOffset: number): number[] {
+  const source = modelMatrix ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   const translated = [...source];
   translated[12] = source[12] + source[8] * altitudeOffset;
   translated[13] = source[13] + source[9] * altitudeOffset;
@@ -1473,10 +1312,7 @@ function translatedModelMatrix(
 function matrix16Value(value: unknown): number[] | null {
   if (!isArrayLike(value)) return null;
   const values = Array.from(value);
-  if (
-    values.length === 16 &&
-    values.every((entry): entry is number => typeof entry === "number")
-  ) {
+  if (values.length === 16 && values.every((entry): entry is number => typeof entry === "number")) {
     return values;
   }
   return null;
@@ -1486,39 +1322,28 @@ function isDeckLayerInstance(value: unknown): value is Layer & {
   props: Record<string, unknown>;
   clone(props: Record<string, unknown>): Layer;
 } {
-  return (
-    isRecord(value) &&
-    isRecord(value.props) &&
-    typeof value.clone === "function"
-  );
+  return isRecord(value) && isRecord(value.props) && typeof value.clone === "function";
 }
 
 function googlePhotorealisticTilesDeckLayerId(layer: GeoLibreLayer): string {
   const nativeLayerIds = layer.metadata.nativeLayerIds;
   if (Array.isArray(nativeLayerIds)) {
     const deckLayerId = nativeLayerIds.find(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
     );
     if (deckLayerId) return deckLayerId;
   }
   return `${layer.id}-deck`;
 }
 
-function getThreeDTilesPanel(
-  control: ThreeDTilesControl | null,
-): HTMLElement | null {
+function getThreeDTilesPanel(control: ThreeDTilesControl | null): HTMLElement | null {
   return (
-    control
-      ?.getMap()
-      ?.getContainer()
-      .querySelector<HTMLElement>(".three-d-tiles-control-panel") ?? null
+    control?.getMap()?.getContainer().querySelector<HTMLElement>(".three-d-tiles-control-panel") ??
+    null
   );
 }
 
-function installThreeDTilesToggleHandler(
-  control: ThreeDTilesControl | null,
-): void {
+function installThreeDTilesToggleHandler(control: ThreeDTilesControl | null): void {
   if (!control) return;
 
   const toggleButton = control
@@ -1545,9 +1370,7 @@ function installThreeDTilesCloseHandler(
   control: ThreeDTilesControl | null,
   panel: HTMLElement | null,
 ): void {
-  const closeButton = panel?.querySelector<HTMLButtonElement>(
-    ".three-d-tiles-control-close",
-  );
+  const closeButton = panel?.querySelector<HTMLButtonElement>(".three-d-tiles-control-close");
   if (!closeButton || closeButton.dataset.geolibreCloseHandler === "true") {
     return;
   }
@@ -1569,11 +1392,7 @@ function keepThreeDTilesPanelExpanded(control: ThreeDTilesControl): void {
   }, 0);
 }
 
-function setThreeDTilesOpacity(
-  control: ThreeDTilesControl,
-  id: string,
-  opacity: number,
-): void {
+function setThreeDTilesOpacity(control: ThreeDTilesControl, id: string, opacity: number): void {
   runWithThreeDTilesStoreSyncSuspended(() => {
     control.setOpacity(opacity, id, false);
   });
@@ -1593,9 +1412,8 @@ function isThreeDTilesStoreSyncSuspended(): boolean {
 }
 
 function threeDTilesPanelCollapsedFromLayers(layers: GeoLibreLayer[]): boolean {
-  const panelCollapsed = layers.find(
-    (layer) => typeof layer.metadata.panelCollapsed === "boolean",
-  )?.metadata.panelCollapsed;
+  const panelCollapsed = layers.find((layer) => typeof layer.metadata.panelCollapsed === "boolean")
+    ?.metadata.panelCollapsed;
   // Default to collapsed to match the control's initial state, so projects
   // saved before panelCollapsed existed do not pop the panel open on load.
   return typeof panelCollapsed === "boolean" ? panelCollapsed : true;
@@ -1613,8 +1431,7 @@ function restoredThreeDTilesLayerId(layer: GeoLibreLayer): string {
   const nativeLayerIds = layer.metadata.nativeLayerIds;
   if (Array.isArray(nativeLayerIds)) {
     const layerId = nativeLayerIds.find(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
     );
     if (layerId) return layerId;
   }
@@ -1650,8 +1467,7 @@ function getThreeDTilesDecoderOptions(control: ThreeDTilesControl): {
   }
   return {
     dracoDecoderPath: options?.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH,
-    ktx2TranscoderPath:
-      options?.ktx2TranscoderPath ?? DEFAULT_KTX2_TRANSCODER_PATH,
+    ktx2TranscoderPath: options?.ktx2TranscoderPath ?? DEFAULT_KTX2_TRANSCODER_PATH,
   };
 }
 
@@ -1690,9 +1506,7 @@ function numberInputValue(value: unknown, fallback: number): number {
 }
 
 function optionalNumberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function lngLatPairValue(value: unknown): [number, number] | undefined {
@@ -1711,16 +1525,13 @@ function lngLatPairValue(value: unknown): [number, number] | undefined {
   return undefined;
 }
 
-function stringRecordValue(
-  value: unknown,
-): Record<string, string> | undefined {
+function stringRecordValue(value: unknown): Record<string, string> | undefined {
   if (!isRecord(value)) return undefined;
   // Keep only valid string-valued headers with a non-empty name (an empty
   // header name is invalid per RFC 7230); drop malformed entries from a
   // hand-edited project file rather than discarding the whole set.
   const entries = Object.entries(value).filter(
-    (entry): entry is [string, string] =>
-      entry[0].trim() !== "" && typeof entry[1] === "string",
+    (entry): entry is [string, string] => entry[0].trim() !== "" && typeof entry[1] === "string",
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
@@ -1750,9 +1561,7 @@ function urlHasKeyQueryParam(url: string): boolean {
   }
 }
 
-function parseThreeDTilesRequestHeaders(
-  text: string,
-): Record<string, string> | undefined {
+function parseThreeDTilesRequestHeaders(text: string): Record<string, string> | undefined {
   const headers: Record<string, string> = {};
   for (const line of text.split("\n")) {
     const separator = line.indexOf(":");
@@ -1764,9 +1573,7 @@ function parseThreeDTilesRequestHeaders(
   return nonEmptyRecord(headers);
 }
 
-function serializeThreeDTilesRequestHeaders(
-  headers: Record<string, string> | undefined,
-): string {
+function serializeThreeDTilesRequestHeaders(headers: Record<string, string> | undefined): string {
   if (!headers) return "";
   return Object.entries(headers)
     .map(([name, value]) => `${name}: ${value}`)
@@ -1792,10 +1599,7 @@ function serializeGooglePhotorealisticPanelRequestHeaders(
   );
 }
 
-function recordsEqual(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): boolean {
+function recordsEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
     if (!valuesEqual(left[key], right[key])) return false;
@@ -1836,9 +1640,7 @@ function layerNameFromUrl(url: string, fallback: string): string {
     const segments = parsed.pathname.split("/").filter(Boolean);
     const fileName = segments.at(-1);
     const parentName = segments.at(-2);
-    return parentName && fileName
-      ? `${parentName}/${fileName}`
-      : (fileName ?? parsed.hostname);
+    return parentName && fileName ? `${parentName}/${fileName}` : (fileName ?? parsed.hostname);
   } catch {
     return fallback;
   }

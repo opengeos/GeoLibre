@@ -106,8 +106,7 @@ describe("spectral index expression builder", () => {
 
   it("throws when a required band is missing in custom mode", () => {
     assert.throws(
-      () =>
-        buildSpectralIndexExpression({ index: "ndvi", sensor: "custom", red: 1 }),
+      () => buildSpectralIndexExpression({ index: "ndvi", sensor: "custom", red: 1 }),
       /Band "nir" is required/,
     );
   });
@@ -140,11 +139,10 @@ describe("spectral index client compute", () => {
   it("computes NDVI over a multiband raster", () => {
     // 4 bands; band 3 = red = 2000, band 4 = nir = 6000 → (6000-2000)/8000 = 0.5
     const raster = makeRaster([[0], [0], [2000], [6000]]);
-    const { raster: out, messages } = runRasterToolClient(
-      "spectral-index",
-      raster,
-      { index: "ndvi", sensor: "sentinel2" },
-    );
+    const { raster: out, messages } = runRasterToolClient("spectral-index", raster, {
+      index: "ndvi",
+      sensor: "sentinel2",
+    });
     assert.equal(out.bands.length, 1);
     assert.ok(Math.abs(out.bands[0][0] - 0.5) < 1e-6);
     assert.ok(messages.some((m) => m.includes("(A4 - A3)")));

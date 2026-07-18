@@ -1,9 +1,6 @@
 import type { Feature, FeatureCollection, GeoJsonProperties } from "geojson";
 import type { GeoLibreLayer, LayerJoin, LayerVirtualField } from "./types";
-import {
-  applyLayerVirtualFields,
-  stripVirtualFieldColumns,
-} from "./virtual-fields";
+import { applyLayerVirtualFields, stripVirtualFieldColumns } from "./virtual-fields";
 
 /**
  * Persistent attribute joins (QGIS Layer Properties → Joins), issue #1315.
@@ -79,10 +76,7 @@ export function layerJoinKey(value: unknown): string | null {
  * bookkeeping) from a copy of `features`, restoring the pre-join properties.
  * Features without any tracked column are returned unchanged (same reference).
  */
-export function stripJoinFields(
-  features: Feature[],
-  joins: LayerJoin[] | undefined,
-): Feature[] {
+export function stripJoinFields(features: Feature[], joins: LayerJoin[] | undefined): Feature[] {
   const tracked = new Set<string>();
   for (const join of joins ?? []) {
     for (const field of join.addedFields ?? []) tracked.add(field);
@@ -147,9 +141,7 @@ export function applyLayerJoins(
     }
     return resolved.get(joinLayerId);
   };
-  const active = joinList.filter(
-    (join) => join.enabled !== false && resolveOnce(join.joinLayerId),
-  );
+  const active = joinList.filter((join) => join.enabled !== false && resolveOnce(join.joinLayerId));
   if (active.length === 0) {
     return {
       features,
@@ -175,8 +167,7 @@ export function applyLayerJoins(
   }
 
   const outJoins = joinList.map((join): LayerJoin => {
-    const source =
-      join.enabled === false ? undefined : resolveOnce(join.joinLayerId);
+    const source = join.enabled === false ? undefined : resolveOnce(join.joinLayerId);
     if (!source) return { ...join, addedFields: [], stats: undefined };
 
     const joinFeatures = (source.features ?? []).filter(Boolean);
@@ -296,8 +287,7 @@ export function applyJoinsToLayer(
     ...layer,
     geojson: { ...geojson, features: withVirtual.features },
     joins: applied.joins.length > 0 ? applied.joins : undefined,
-    virtualFields:
-      withVirtual.fields.length > 0 ? withVirtual.fields : undefined,
+    virtualFields: withVirtual.fields.length > 0 ? withVirtual.fields : undefined,
   };
 }
 
@@ -363,9 +353,7 @@ function topologicalJoinOrder(candidates: GeoLibreLayer[]): string[] {
   }
   const order: string[] = [];
   const orderedSet = new Set<string>();
-  const queue = candidates
-    .filter((layer) => indegree.get(layer.id) === 0)
-    .map((layer) => layer.id);
+  const queue = candidates.filter((layer) => indegree.get(layer.id) === 0).map((layer) => layer.id);
   while (order.length < candidates.length) {
     if (queue.length === 0) {
       // Every unordered layer has at least one unordered source, so walking
@@ -377,9 +365,7 @@ function topologicalJoinOrder(candidates: GeoLibreLayer[]): string[] {
       const walked = new Set<string>();
       while (!walked.has(cursor)) {
         walked.add(cursor);
-        const next = (sourcesOf.get(cursor) ?? []).find(
-          (source) => !orderedSet.has(source),
-        );
+        const next = (sourcesOf.get(cursor) ?? []).find((source) => !orderedSet.has(source));
         if (next === undefined) break;
         cursor = next;
       }
@@ -406,10 +392,7 @@ function topologicalJoinOrder(candidates: GeoLibreLayer[]): string[] {
  * layer joining two other affected layers sees both of them fresh regardless
  * of their positions in the layer panel. The seed itself is not touched.
  */
-export function cascadeLayerJoinRefresh(
-  layers: GeoLibreLayer[],
-  seedId: string,
-): GeoLibreLayer[] {
+export function cascadeLayerJoinRefresh(layers: GeoLibreLayer[], seedId: string): GeoLibreLayer[] {
   // Collect the transitive dependents of the seed.
   const affected = new Set<string>();
   const queue = [seedId];
@@ -417,11 +400,7 @@ export function cascadeLayerJoinRefresh(
     const sourceId = queue.shift() as string;
     for (const layer of layers) {
       if (layer.id === seedId || affected.has(layer.id)) continue;
-      if (
-        layer.joins?.some(
-          (join) => join.enabled !== false && join.joinLayerId === sourceId,
-        )
-      ) {
+      if (layer.joins?.some((join) => join.enabled !== false && join.joinLayerId === sourceId)) {
         affected.add(layer.id);
         queue.push(layer.id);
       }
@@ -430,13 +409,9 @@ export function cascadeLayerJoinRefresh(
   if (affected.size === 0) return layers;
 
   let current = layers;
-  const order = topologicalJoinOrder(
-    layers.filter((layer) => affected.has(layer.id)),
-  );
+  const order = topologicalJoinOrder(layers.filter((layer) => affected.has(layer.id)));
   for (const id of order) {
-    current = current.map((layer) =>
-      layer.id === id ? applyJoinsToLayer(layer, current) : layer,
-    );
+    current = current.map((layer) => (layer.id === id ? applyJoinsToLayer(layer, current) : layer));
   }
   return current;
 }
@@ -452,16 +427,12 @@ export function cascadeLayerJoinRefresh(
  * without joins or virtual fields pass through by reference.
  */
 export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
-  const joined = layers.filter(
-    (layer) => layer.joins?.length || layer.virtualFields?.length,
-  );
+  const joined = layers.filter((layer) => layer.joins?.length || layer.virtualFields?.length);
   if (joined.length === 0) return layers;
 
   let current = layers;
   for (const id of topologicalJoinOrder(joined)) {
-    current = current.map((layer) =>
-      layer.id === id ? applyJoinsToLayer(layer, current) : layer,
-    );
+    current = current.map((layer) => (layer.id === id ? applyJoinsToLayer(layer, current) : layer));
   }
   return current;
 }

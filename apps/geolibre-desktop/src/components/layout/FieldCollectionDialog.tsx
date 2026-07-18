@@ -92,11 +92,7 @@ function formatLatLng(lng: number, lat: number): string {
 }
 
 /** Add/update the transient drawing preview on the map. */
-function syncDrawPreview(
-  map: maplibregl.Map,
-  geometry: GeometryType,
-  verts: Vertex[],
-): void {
+function syncDrawPreview(map: maplibregl.Map, geometry: GeometryType, verts: Vertex[]): void {
   const data = drawPreview(geometry, verts);
   const src = map.getSource(DRAW_SOURCE) as maplibregl.GeoJSONSource | undefined;
   if (src) {
@@ -133,11 +129,7 @@ function syncDrawPreview(
 }
 
 function removeDrawPreview(map: maplibregl.Map): void {
-  for (const id of [
-    `${DRAW_SOURCE}-fill`,
-    `${DRAW_SOURCE}-line`,
-    `${DRAW_SOURCE}-pt`,
-  ]) {
+  for (const id of [`${DRAW_SOURCE}-fill`, `${DRAW_SOURCE}-line`, `${DRAW_SOURCE}-pt`]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
   if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
@@ -160,10 +152,7 @@ export function FieldCollectionDialog({
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
 
-  const collectionLayers = useMemo(
-    () => layers.filter((l) => isCollectionLayer(l)),
-    [layers],
-  );
+  const collectionLayers = useMemo(() => layers.filter((l) => isCollectionLayer(l)), [layers]);
 
   // Target layer: "" means "create a new layer" (the setup step is shown).
   const [layerId, setLayerId] = useState<string>("");
@@ -212,15 +201,9 @@ export function FieldCollectionDialog({
     if (!layerId) creatingRef.current = false;
   }, [layerId]);
 
-  const activeLayer = layerId
-    ? (layers.find((l) => l.id === layerId) ?? null)
-    : null;
-  const schema: CollectionSchema | null = activeLayer
-    ? getSchema(activeLayer)
-    : null;
-  const activeGeometry: GeometryType = activeLayer
-    ? getGeometryType(activeLayer)
-    : geometry;
+  const activeLayer = layerId ? (layers.find((l) => l.id === layerId) ?? null) : null;
+  const schema: CollectionSchema | null = activeLayer ? getSchema(activeLayer) : null;
+  const activeGeometry: GeometryType = activeLayer ? getGeometryType(activeLayer) : geometry;
   // The layer's Attribute Form designer config, narrowed to the collection
   // schema's own fields: a config for a field this form does not capture must
   // not block a save (its required/constraint rules have nothing to bind to).
@@ -234,10 +217,7 @@ export function FieldCollectionDialog({
     return fields.length > 0 ? { fields } : undefined;
   }, [activeLayer, schema]);
 
-  const getMap = useCallback(
-    () => mapControllerRef.current?.getMap() ?? null,
-    [mapControllerRef],
-  );
+  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
 
   const clearMarker = useCallback(() => {
     markerRef.current?.remove();
@@ -594,8 +574,7 @@ export function FieldCollectionDialog({
     const mergedErrors: Record<string, string> = { ...result.errors };
     for (const [key, error] of Object.entries(formResult.errors)) {
       // Stored pre-localized; errorText surfaces unknown codes verbatim.
-      if (!mergedErrors[key])
-        mergedErrors[key] = attributeFormErrorMessage(t, error);
+      if (!mergedErrors[key]) mergedErrors[key] = attributeFormErrorMessage(t, error);
     }
     if (Object.keys(mergedErrors).length > 0) {
       setErrors(mergedErrors);
@@ -606,9 +585,7 @@ export function FieldCollectionDialog({
     const props = buildPropertiesWithForm(schema, values, attributeForm, extra);
     const feature = buildGeometryFeature(activeGeometry, pending, props);
 
-    const current = useAppStore
-      .getState()
-      .layers.find((l) => l.id === activeLayer.id);
+    const current = useAppStore.getState().layers.find((l) => l.id === activeLayer.id);
     if (!current) {
       // The collection layer was removed while the form was open — don't claim
       // a save that silently goes nowhere.
@@ -666,8 +643,7 @@ export function FieldCollectionDialog({
   // Quick-access control on the map: once a collection layer exists, surface a
   // floating button so users can reopen the tool without the Controls menu
   // during a collection session. Hidden while capturing (dialog reopens itself).
-  const showQuickOpen =
-    !open && !picking && !drawing && collectionLayers.length > 0;
+  const showQuickOpen = !open && !picking && !drawing && collectionLayers.length > 0;
 
   return (
     <>
@@ -832,9 +808,7 @@ function DrawToolbar({
             : t("fieldCollection.needMore", { min: minCount })}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {t("fieldCollection.dblClickHint")}
-      </p>
+      <p className="text-xs text-muted-foreground">{t("fieldCollection.dblClickHint")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={onAddGps} disabled={locating}>
           {locating ? (
@@ -844,12 +818,7 @@ function DrawToolbar({
           )}
           {t("fieldCollection.addGpsVertex")}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onUndo}
-          disabled={count === 0}
-        >
+        <Button variant="outline" size="sm" onClick={onUndo} disabled={count === 0}>
           <Undo2 className="me-1 h-3.5 w-3.5" />
           {t("fieldCollection.undo")}
         </Button>
@@ -886,22 +855,14 @@ function PickBanner({ onCancel }: { onCancel: () => void }) {
       <div role="status" className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm">
           <Crosshair className="h-4 w-4 text-primary" />
-          <span className="font-medium">
-            {t("fieldCollection.pickBannerTitle")}
-          </span>
+          <span className="font-medium">{t("fieldCollection.pickBannerTitle")}</span>
         </div>
         <p id={hintId} className="text-xs text-muted-foreground">
           {t("fieldCollection.pickBannerHint")}
         </p>
       </div>
       <div className="flex justify-end">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-          autoFocus
-          aria-describedby={hintId}
-        >
+        <Button variant="ghost" size="sm" onClick={onCancel} autoFocus aria-describedby={hintId}>
           {t("common.cancel")}
         </Button>
       </div>
@@ -965,20 +926,14 @@ function SetupStep({
 
       <div className="flex items-center justify-between">
         <Label>{t("fieldCollection.fields")}</Label>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onDrafts([...drafts, newDraft()])}
-        >
+        <Button variant="ghost" size="sm" onClick={() => onDrafts([...drafts, newDraft()])}>
           <Plus className="me-1 h-3.5 w-3.5" />
           {t("fieldCollection.addField")}
         </Button>
       </div>
 
       {drafts.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {t("fieldCollection.noFields")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("fieldCollection.noFields")}</p>
       )}
 
       <div className="space-y-3">
@@ -995,9 +950,7 @@ function SetupStep({
                 aria-label={t("fieldCollection.fieldType")}
                 className="w-28 shrink-0"
                 value={d.type}
-                onChange={(e) =>
-                  update(d.id, { type: e.target.value as FieldType })
-                }
+                onChange={(e) => update(d.id, { type: e.target.value as FieldType })}
               >
                 {FIELD_TYPES.map((ft) => (
                   <option key={ft} value={ft}>
@@ -1088,10 +1041,7 @@ function CaptureStep({
   // Candidate properties for visibility expressions, computed once per render
   // instead of per field (visibility updates live as the user types).
   const candidateProps = useMemo(
-    () =>
-      attributeForm
-        ? buildPropertiesWithForm(schema, values, attributeForm)
-        : null,
+    () => (attributeForm ? buildPropertiesWithForm(schema, values, attributeForm) : null),
     [schema, values, attributeForm],
   );
 
@@ -1113,9 +1063,7 @@ function CaptureStep({
               ) : (
                 <Navigation className="me-2 h-4 w-4" />
               )}
-              {locating
-                ? t("fieldCollection.locating")
-                : t("fieldCollection.useGps")}
+              {locating ? t("fieldCollection.locating") : t("fieldCollection.useGps")}
             </Button>
             <Button variant="outline" onClick={onPickOnMap}>
               <Crosshair className="me-2 h-4 w-4" />
@@ -1132,9 +1080,7 @@ function CaptureStep({
 
       {!pending ? (
         <p className="text-sm text-muted-foreground">
-          {isPoint
-            ? t("fieldCollection.captureHint")
-            : t("fieldCollection.drawHint")}
+          {isPoint ? t("fieldCollection.captureHint") : t("fieldCollection.drawHint")}
         </p>
       ) : (
         <>
@@ -1152,11 +1098,7 @@ function CaptureStep({
             // Conditional visibility: a hidden field disappears from the form
             // (and its validation is skipped by handleSave). Evaluated against
             // the current candidate values so it updates as the user types.
-            if (
-              config &&
-              candidateProps &&
-              !isAttributeFormFieldVisible(config, candidateProps)
-            ) {
+            if (config && candidateProps && !isAttributeFormFieldVisible(config, candidateProps)) {
               return null;
             }
             const err = errorText(errors[field.key]);
@@ -1188,9 +1130,7 @@ function CaptureStep({
                       type="checkbox"
                       className="h-4 w-4"
                       checked={values[field.key] === "true"}
-                      onChange={(e) =>
-                        setValue(field.key, e.target.checked ? "true" : "false")
-                      }
+                      onChange={(e) => setValue(field.key, e.target.checked ? "true" : "false")}
                     />
                   </div>
                 ) : config ? (
@@ -1226,11 +1166,7 @@ function CaptureStep({
                   <Input
                     id={`fc-${field.key}`}
                     type={
-                      field.type === "number"
-                        ? "number"
-                        : field.type === "date"
-                          ? "date"
-                          : "text"
+                      field.type === "number" ? "number" : field.type === "date" ? "date" : "text"
                     }
                     value={values[field.key] ?? ""}
                     onChange={(e) => setValue(field.key, e.target.value)}
@@ -1250,9 +1186,7 @@ function CaptureStep({
           </Button>
 
           <div className="space-y-1.5">
-            <Label htmlFor="fc-photo">
-              {t("fieldCollection.photoOptional")}
-            </Label>
+            <Label htmlFor="fc-photo">{t("fieldCollection.photoOptional")}</Label>
             {photo ? (
               <div className="flex items-center gap-2">
                 <img

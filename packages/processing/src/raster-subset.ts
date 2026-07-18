@@ -11,11 +11,7 @@ import type {
   ExtractXyzTileSubsetOptions,
 } from "geolibre-wasm/tools";
 
-export type {
-  ExtractCogSubsetOptions,
-  ExtractWmsSubsetOptions,
-  ExtractXyzTileSubsetOptions,
-};
+export type { ExtractCogSubsetOptions, ExtractWmsSubsetOptions, ExtractXyzTileSubsetOptions };
 
 /** The subset of `geolibre-wasm/tools` used by the raster-subset extractors. */
 interface SubsetModule {
@@ -23,14 +19,8 @@ interface SubsetModule {
     source: string | Uint8Array | ArrayBuffer,
     opts: ExtractCogSubsetOptions,
   ) => Promise<Uint8Array>;
-  extractWmsSubset: (
-    url: string,
-    opts: ExtractWmsSubsetOptions,
-  ) => Promise<Uint8Array>;
-  extractXyzTileSubset: (
-    url: string,
-    opts: ExtractXyzTileSubsetOptions,
-  ) => Promise<Uint8Array>;
+  extractWmsSubset: (url: string, opts: ExtractWmsSubsetOptions) => Promise<Uint8Array>;
+  extractXyzTileSubset: (url: string, opts: ExtractXyzTileSubsetOptions) => Promise<Uint8Array>;
 }
 
 let subsetModulePromise: Promise<SubsetModule> | null = null;
@@ -42,12 +32,12 @@ let subsetModulePromise: Promise<SubsetModule> | null = null;
  * instead of staying permanently rejected for the session.
  */
 function loadSubsetModule(): Promise<SubsetModule> {
-  subsetModulePromise ??= (
-    import("geolibre-wasm/tools") as unknown as Promise<SubsetModule>
-  ).catch((error) => {
-    subsetModulePromise = null;
-    throw error;
-  });
+  subsetModulePromise ??= (import("geolibre-wasm/tools") as unknown as Promise<SubsetModule>).catch(
+    (error) => {
+      subsetModulePromise = null;
+      throw error;
+    },
+  );
   return subsetModulePromise;
 }
 

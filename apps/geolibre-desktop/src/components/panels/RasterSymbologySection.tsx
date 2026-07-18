@@ -1,8 +1,4 @@
-import {
-  type GeoLibreLayer,
-  parseHexColorList,
-  useAppStore,
-} from "@geolibre/core";
+import { type GeoLibreLayer, parseHexColorList, useAppStore } from "@geolibre/core";
 import {
   RASTER_MAX_CLASSES,
   RASTER_MAX_STORED_CLASSES,
@@ -103,14 +99,11 @@ function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
     : [1];
   const rescale =
     Array.isArray(raw.rescale) &&
-    raw.rescale.every(
-      (range) => Array.isArray(range) && range.length === 2,
-    )
+    raw.rescale.every((range) => Array.isArray(range) && range.length === 2)
       ? (raw.rescale as [number, number][])
       : null;
   return {
-    mode:
-      raw.mode === "rgb" ? "rgb" : raw.mode === "index" ? "index" : "single",
+    mode: raw.mode === "rgb" ? "rgb" : raw.mode === "index" ? "index" : "single",
     bands: bands.length > 0 ? bands : [1],
     index: typeof raw.index === "string" ? raw.index : undefined,
     colormap: typeof raw.colormap === "string" ? raw.colormap : DEFAULT_RAMP,
@@ -122,10 +115,7 @@ function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
       raw.nodata === "off" || typeof raw.nodata === "number"
         ? (raw.nodata as number | "off")
         : "auto",
-    stretch:
-      raw.stretch === "log" || raw.stretch === "sqrt"
-        ? raw.stretch
-        : "linear",
+    stretch: raw.stretch === "log" || raw.stretch === "sqrt" ? raw.stretch : "linear",
     gamma: typeof raw.gamma === "number" && raw.gamma > 0 ? raw.gamma : 1,
   };
 }
@@ -140,11 +130,7 @@ function readBandNames(layer: GeoLibreLayer): Map<number, string> {
   const map = new Map<number, string>();
   if (Array.isArray(raw)) {
     for (const pair of raw) {
-      if (
-        Array.isArray(pair) &&
-        typeof pair[0] === "number" &&
-        typeof pair[1] === "string"
-      ) {
+      if (Array.isArray(pair) && typeof pair[0] === "number" && typeof pair[1] === "string") {
         map.set(pair[0], pair[1]);
       }
     }
@@ -187,9 +173,7 @@ export function RasterSymbologySection({
 
   // Status of the "Create legend from palette" action: idle, in-flight, or a
   // message key (empty palette / read error) shown beneath the button.
-  const [legendStatus, setLegendStatus] = useState<
-    "idle" | "pending" | "empty" | "error"
-  >("idle");
+  const [legendStatus, setLegendStatus] = useState<"idle" | "pending" | "empty" | "error">("idle");
   // Aborts an in-flight palette read so its result can't land on a layer the
   // user has since switched away from.
   const legendAbortRef = useRef<AbortController | null>(null);
@@ -197,8 +181,7 @@ export function RasterSymbologySection({
   // The embedded palette's class colors, loaded (and cached) for palette
   // rasters so the color-ramp preview shows the real colors instead of the gray
   // fallback the "palette" sentinel resolves to.
-  const [paletteEntries, setPaletteEntries] =
-    useState<PaletteLegendEntry[] | null>(null);
+  const [paletteEntries, setPaletteEntries] = useState<PaletteLegendEntry[] | null>(null);
 
   // Clear the action state when the selected layer changes (like `stats`
   // above), and cancel any in-flight palette read so a late resolution never
@@ -219,17 +202,13 @@ export function RasterSymbologySection({
   // Locally-produced (file-backed) rasters expose only a session blob URL; pass
   // it so stats can be read directly when the control has no source URL.
   const localBytesUrl =
-    typeof layer.metadata?.localBytesUrl === "string"
-      ? layer.metadata.localBytesUrl
-      : null;
+    typeof layer.metadata?.localBytesUrl === "string" ? layer.metadata.localBytesUrl : null;
   // Source URL used by both the palette read and the legend action: the
   // control's URL for a remote COG, or the session blob for a file-backed one.
   const rasterUrl =
-    (typeof layer.source?.url === "string" ? layer.source.url : null) ??
-    localBytesUrl;
+    (typeof layer.source?.url === "string" ? layer.source.url : null) ?? localBytesUrl;
   // A single-band raster rendered through its embedded color table.
-  const isPaletteRaster =
-    state.mode === "single" && state.colormap === "palette";
+  const isPaletteRaster = state.mode === "single" && state.colormap === "palette";
 
   // Load the embedded palette colors for a palette raster (cached per layer),
   // so the ramp preview reflects the actual classes. Cleared first on a layer
@@ -272,8 +251,7 @@ export function RasterSymbologySection({
     if (!stats || stats === lastStatsRef.current) return;
     lastStatsRef.current = stats;
     if (!symbology?.classified || symbology.method === "manual") return;
-    const isDefaultRange =
-      symbology.breaks[0] === 0 && symbology.breaks.at(-1) === 1;
+    const isDefaultRange = symbology.breaks[0] === 0 && symbology.breaks.at(-1) === 1;
     const coversData =
       stats.min >= symbology.breaks[0] &&
       stats.max <= symbology.breaks[symbology.breaks.length - 1];
@@ -327,9 +305,7 @@ export function RasterSymbologySection({
   // remaining sprite colormaps are sampled once from the renderer's sprite and
   // fill in as they resolve. Declared before the RGB early return so the hook
   // order stays stable.
-  const [rampColors, setRampColors] = useState<
-    Record<string, readonly string[]>
-  >(() => {
+  const [rampColors, setRampColors] = useState<Record<string, readonly string[]>>(() => {
     const seed: Record<string, readonly string[]> = {};
     for (const colormap of SORTED_COLORMAPS) {
       const known = colormapColors(colormap.name);
@@ -374,10 +350,7 @@ export function RasterSymbologySection({
   }
 
   function recomputeSymbology(
-    next: Pick<
-      RasterSymbology,
-      "ramp" | "method" | "classCount" | "customColors"
-    >,
+    next: Pick<RasterSymbology, "ramp" | "method" | "classCount" | "customColors">,
     overrides: { range?: [number, number]; manualBreaks?: number[] } = {},
   ): void {
     // Reusing the prior histogram here is safe: a range override only happens
@@ -407,9 +380,7 @@ export function RasterSymbologySection({
           overrides.manualBreaks ?? symbology?.breaks,
         );
     const custom =
-      (next.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
-        ? next.customColors
-        : undefined;
+      (next.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS ? next.customColors : undefined;
     commit({
       statePatch: { colormap: next.ramp, rescale: rangeFromBreaks(breaks) },
       symbology: {
@@ -446,32 +417,25 @@ export function RasterSymbologySection({
     const stale = () => controller.signal.aborted;
     setLegendStatus("pending");
     try {
-      const entries = await getPaletteLegend(
-        layer.id,
-        rasterUrl,
-        controller.signal,
-      );
+      const entries = await getPaletteLegend(layer.id, rasterUrl, controller.signal);
       if (stale()) return;
       if (!entries || entries.length === 0) {
         setLegendStatus("empty");
         return;
       }
-      const opened = await openLegendPanelWithItems(
-        createAppAPI(mapControllerRef),
-        {
-          title: layer.name,
-          items: entries.map((entry) => ({
-            label: String(entry.value),
-            color: entry.color,
-            shape: "square" as const,
-          })),
-          // Dock the on-map legend opposite the editor panel (top-left) so the
-          // two don't overlap.
-          legendPosition: "bottom-right",
-          // Skip the mutation entirely if this call was superseded mid-flight.
-          signal: controller.signal,
-        },
-      );
+      const opened = await openLegendPanelWithItems(createAppAPI(mapControllerRef), {
+        title: layer.name,
+        items: entries.map((entry) => ({
+          label: String(entry.value),
+          color: entry.color,
+          shape: "square" as const,
+        })),
+        // Dock the on-map legend opposite the editor panel (top-left) so the
+        // two don't overlap.
+        legendPosition: "bottom-right",
+        // Skip the mutation entirely if this call was superseded mid-flight.
+        signal: controller.signal,
+      });
       if (stale()) return;
       setLegendStatus(opened ? "idle" : "error");
     } catch {
@@ -504,14 +468,10 @@ export function RasterSymbologySection({
         </p>
       )}
       {legendStatus === "error" && (
-        <p className="text-[10px] text-destructive">
-          {t("rasterSymbology.createLegendError")}
-        </p>
+        <p className="text-[10px] text-destructive">{t("rasterSymbology.createLegendError")}</p>
       )}
       {legendStatus !== "empty" && legendStatus !== "error" && (
-        <p className="text-[10px] text-muted-foreground">
-          {t("rasterSymbology.createLegendHint")}
-        </p>
+        <p className="text-[10px] text-muted-foreground">{t("rasterSymbology.createLegendHint")}</p>
       )}
     </div>
   ) : null;
@@ -524,12 +484,8 @@ export function RasterSymbologySection({
     const preset = indexById(presetId) ?? NORMALIZED_DIFFERENCE_INDICES[0];
     const max = bandCount ?? Math.max(2, ...state.bands);
     const clamp = (b: number) => Math.min(Math.max(1, b), Math.max(1, max));
-    const a = clamp(
-      guessBandForRole(preset.roleA, bandNames) ?? state.bands[0] ?? 1,
-    );
-    let b = clamp(
-      guessBandForRole(preset.roleB, bandNames) ?? (a === 2 ? 1 : 2),
-    );
+    const a = clamp(guessBandForRole(preset.roleA, bandNames) ?? state.bands[0] ?? 1);
+    let b = clamp(guessBandForRole(preset.roleB, bandNames) ?? (a === 2 ? 1 : 2));
     // Both roles can resolve to the same band (ambiguous band names, or a
     // single-band clamp); (A - B) / (A + B) with A === B is a constant 0, so
     // nudge B to a distinct band when the image has one.
@@ -554,8 +510,7 @@ export function RasterSymbologySection({
         onChange={(event) => {
           const mode = event.target.value as "single" | "rgb" | "index";
           if (mode === "rgb") {
-            const bands =
-              state.bands.length >= 3 ? state.bands.slice(0, 3) : [1, 2, 3];
+            const bands = state.bands.length >= 3 ? state.bands.slice(0, 3) : [1, 2, 3];
             commit({ statePatch: { mode, bands }, symbology: null });
           } else if (mode === "index") {
             commit({
@@ -571,13 +526,9 @@ export function RasterSymbologySection({
         {(bandCount === null || bandCount >= 2) && (
           <option value="index">Index (normalized difference)</option>
         )}
-        {(bandCount === null || bandCount >= 3) && (
-          <option value="rgb">RGB composite</option>
-        )}
+        {(bandCount === null || bandCount >= 3) && <option value="rgb">RGB composite</option>}
       </Select>
-      {bandCount === null && (
-        <p className="text-[10px] text-muted-foreground">Loading bands…</p>
-      )}
+      {bandCount === null && <p className="text-[10px] text-muted-foreground">Loading bands…</p>}
     </div>
   );
 
@@ -618,9 +569,7 @@ export function RasterSymbologySection({
     customColors?: string[];
   }): RasterSymbology | null {
     const custom =
-      (opts.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
-        ? opts.customColors
-        : undefined;
+      (opts.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS ? opts.customColors : undefined;
     if (!custom) return null;
     const breaks = computeRasterBreaks(method, stats, classCount);
     return {
@@ -683,8 +632,7 @@ export function RasterSymbologySection({
     // with the embedded palette's own class colors (once loaded) rather than the
     // misleading gray fallback the name would otherwise resolve to.
     const isImagePalette = ramp === "palette";
-    const paletteColors =
-      paletteEntries?.map((entry) => entry.color) ?? [];
+    const paletteColors = paletteEntries?.map((entry) => entry.color) ?? [];
     rampOptions.push({
       value: ramp,
       label: isImagePalette ? t("rasterSymbology.imagePalette") : ramp,
@@ -721,9 +669,7 @@ export function RasterSymbologySection({
         <IndexControls
           state={state}
           bandOptions={bandOptions}
-          onPreset={(id) =>
-            commit({ statePatch: indexPatchFor(id), symbology: null })
-          }
+          onPreset={(id) => commit({ statePatch: indexPatchFor(id), symbology: null })}
           onBands={(bands) => commit({ statePatch: { bands } })}
         />
       ) : (
@@ -733,9 +679,7 @@ export function RasterSymbologySection({
             id="rasterBand"
             value={String(band)}
             disabled={bandOptions.length === 0}
-            onChange={(event) =>
-              commit({ statePatch: { bands: [Number(event.target.value)] } })
-            }
+            onChange={(event) => commit({ statePatch: { bands: [Number(event.target.value)] } })}
           >
             {bandOptions.length === 0 ? (
               <option value={String(band)}>{`Band ${band}`}</option>
@@ -767,9 +711,7 @@ export function RasterSymbologySection({
               // clobbered by a late callback.
               const seed = colormapColors(ramp) ?? rampPreview;
               const colors =
-                seed.length >= MIN_CUSTOM_COLORS
-                  ? seed
-                  : (colormapColors("viridis") ?? []);
+                seed.length >= MIN_CUSTOM_COLORS ? seed : (colormapColors("viridis") ?? []);
               setCustomColors([...colors]);
             } else {
               selectNamedRamp(value);
@@ -818,12 +760,8 @@ export function RasterSymbologySection({
         <ClassificationControls
           symbology={symbology}
           stats={stats}
-          onMethod={(nextMethod) =>
-            recomputeSymbology({ ...symbology, method: nextMethod })
-          }
-          onClassCount={(count) =>
-            recomputeSymbology({ ...symbology, classCount: count })
-          }
+          onMethod={(nextMethod) => recomputeSymbology({ ...symbology, method: nextMethod })}
+          onClassCount={(count) => recomputeSymbology({ ...symbology, classCount: count })}
           onManualBreaks={(breaks) => {
             // Keep edges ascending: savedRasterSymbology rejects unsorted
             // breaks, which would silently collapse the classification UI.
@@ -869,17 +807,12 @@ export function RasterSymbologySection({
             value={state.gamma}
             step={0.1}
             min={0.1}
-            onCommit={(value) =>
-              commit({ statePatch: { gamma: value > 0 ? value : 1 } })
-            }
+            onCommit={(value) => commit({ statePatch: { gamma: value > 0 ? value : 1 } })}
           />
         </div>
       )}
 
-      <NodataControl
-        state={state}
-        onChange={(nodata) => commit({ statePatch: { nodata } })}
-      />
+      <NodataControl state={state} onChange={(nodata) => commit({ statePatch: { nodata } })} />
     </div>
   );
 }
@@ -1001,8 +934,7 @@ function IndexControls({
         </div>
         {bandA === bandB && (
           <p className="text-[10px] text-amber-600 dark:text-amber-500">
-            Operands A and B are the same band; the index is 0 everywhere. Pick
-            two different bands.
+            Operands A and B are the same band; the index is 0 everywhere. Pick two different bands.
           </p>
         )}
       </div>
@@ -1036,9 +968,7 @@ function ClassificationControls({
           <Select
             id="rasterMethod"
             value={symbology.method}
-            onChange={(event) =>
-              onMethod(event.target.value as RasterClassificationMethod)
-            }
+            onChange={(event) => onMethod(event.target.value as RasterClassificationMethod)}
           >
             {CLASSIFICATION_METHODS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -1067,9 +997,7 @@ function ClassificationControls({
               // Table can carry more classes than the authoring cap; show the
               // real count instead of letting the native select fall back to
               // the first option. Picking a listed count re-classifies.
-              <option value={symbology.classCount}>
-                {symbology.classCount}
-              </option>
+              <option value={symbology.classCount}>{symbology.classCount}</option>
             ) : null}
           </Select>
         </div>
@@ -1114,9 +1042,7 @@ function ClassificationControls({
       )}
 
       {symbology.method !== "manual" && !stats && (
-        <p className="text-[10px] text-muted-foreground">
-          Computing data range…
-        </p>
+        <p className="text-[10px] text-muted-foreground">Computing data range…</p>
       )}
     </div>
   );
@@ -1169,11 +1095,7 @@ function NodataControl({
 }) {
   const { t } = useTranslation();
   const mode =
-    state.nodata === "off"
-      ? "off"
-      : typeof state.nodata === "number"
-        ? "custom"
-        : "auto";
+    state.nodata === "off" ? "off" : typeof state.nodata === "number" ? "custom" : "auto";
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-2">

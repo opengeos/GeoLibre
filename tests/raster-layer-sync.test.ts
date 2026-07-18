@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState } from "maplibre-gl-raster";
 import {
   createRasterStoreLayer,
@@ -55,19 +51,14 @@ function rasterInfo(patch: Partial<RasterLayerInfo> = {}): RasterLayerInfo {
  * getState is a static snapshot of options.collapsed: tests exercising
  * event-driven expand/collapse transitions need a stateful fake instead.
  */
-function fakeControl(
-  infos: RasterLayerInfo[] = [],
-  options: { collapsed?: boolean } = {},
-) {
+function fakeControl(infos: RasterLayerInfo[] = [], options: { collapsed?: boolean } = {}) {
   const calls: { method: string; args: unknown[] }[] = [];
   const control: RasterSyncableControl = {
     getState: () => ({ collapsed: options.collapsed ?? true }),
     getRasters: () => infos,
     removeRaster: (id) => calls.push({ method: "removeRaster", args: [id] }),
-    setRasterState: (id, patch) =>
-      calls.push({ method: "setRasterState", args: [id, patch] }),
-    setVisible: (id, visible) =>
-      calls.push({ method: "setVisible", args: [id, visible] }),
+    setRasterState: (id, patch) => calls.push({ method: "setRasterState", args: [id, patch] }),
+    setVisible: (id, visible) => calls.push({ method: "setVisible", args: [id, visible] }),
   };
   return { control, calls };
 }
@@ -195,9 +186,7 @@ describe("createRasterStoreLayer", () => {
   });
 
   it("stores a null band count and band names before the header loads", () => {
-    const layer = createRasterStoreLayer(
-      rasterInfo({ bandCount: null, bandNames: null }),
-    );
+    const layer = createRasterStoreLayer(rasterInfo({ bandCount: null, bandNames: null }));
 
     assert.equal(layer.metadata.bandCount, null);
     assert.equal(layer.metadata.bandNames, null);
@@ -285,33 +274,20 @@ describe("syncRasterLayersToStore", () => {
     // metadata wholesale; the symbology must survive since it is not on the
     // control's RasterLayerInfo.
     syncRasterLayersToStore(
-      fakeControl([
-        rasterInfo({ bounds: { west: 0, south: 0, east: 1, north: 1 } }),
-      ]).control,
+      fakeControl([rasterInfo({ bounds: { west: 0, south: 0, east: 1, north: 1 } })]).control,
     );
 
-    assert.deepEqual(
-      useAppStore.getState().layers[0].metadata.rasterSymbology,
-      symbology,
-    );
+    assert.deepEqual(useAppStore.getState().layers[0].metadata.rasterSymbology, symbology);
   });
 
   it("refreshes the saved panel collapsed state", () => {
     const { control } = fakeControl([rasterInfo()]);
     syncRasterLayersToStore(control);
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      true,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, true);
 
-    syncRasterLayersToStore(
-      fakeControl([rasterInfo()], { collapsed: false }).control,
-    );
+    syncRasterLayersToStore(fakeControl([rasterInfo()], { collapsed: false }).control);
 
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      false,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, false);
   });
 
   it("flips panelCollapsed on store layers when an expand event syncs", () => {
@@ -335,17 +311,11 @@ describe("syncRasterLayersToStore", () => {
     };
 
     syncRasterLayersToStore(control);
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      true,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, true);
 
     expand();
 
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      false,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, false);
   });
 
   it("does not touch an existing layer when nothing changed", () => {
@@ -399,9 +369,7 @@ describe("wireRasterStoreSync", () => {
 
     useAppStore.getState().removeLayer("raster-1");
 
-    assert.deepEqual(calls, [
-      { method: "removeRaster", args: ["raster-1"] },
-    ]);
+    assert.deepEqual(calls, [{ method: "removeRaster", args: ["raster-1"] }]);
   });
 
   it("does not echo control-driven syncs back at the control", () => {
@@ -542,9 +510,7 @@ describe("savedRasterState", () => {
   });
 
   it("round-trips the auto-rescale (null) state explicitly", () => {
-    const layer = createRasterStoreLayer(
-      rasterInfo({ state: rasterState({ rescale: null }) }),
-    );
+    const layer = createRasterStoreLayer(rasterInfo({ state: rasterState({ rescale: null }) }));
 
     assert.equal(savedRasterState(layer).rescale, null);
   });

@@ -6,13 +6,7 @@
  * already builds for both GeoJSON and DuckDB query layers.
  */
 
-export type ChartType =
-  | "histogram"
-  | "scatter"
-  | "bar"
-  | "line"
-  | "box"
-  | "pie";
+export type ChartType = "histogram" | "scatter" | "bar" | "line" | "box" | "pie";
 
 /** A row as seen by the chart helpers — only its property bag matters. */
 export interface ChartRow {
@@ -99,10 +93,7 @@ export interface HistogramResult {
  * there are no values. When every value is identical (min === max) a single
  * bin holding them all is returned, avoiding a zero-width divide.
  */
-export function computeHistogram(
-  values: number[],
-  binCount: number,
-): HistogramResult | null {
+export function computeHistogram(values: number[], binCount: number): HistogramResult | null {
   if (values.length === 0) return null;
 
   let min = values[0];
@@ -303,10 +294,7 @@ export function computeBar(
   valueKey: string | null,
   maxBars: number = MAX_BAR_CATEGORIES,
 ): BarResult | null {
-  const groups = new Map<
-    string,
-    { count: number; sum: number; numericCount: number }
-  >();
+  const groups = new Map<string, { count: number; sum: number; numericCount: number }>();
   for (const row of rows) {
     const raw = row.properties[categoryKey];
     const label = raw == null || raw === "" ? "(blank)" : String(raw);

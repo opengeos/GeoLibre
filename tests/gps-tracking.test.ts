@@ -231,9 +231,7 @@ describe("gps-tracking track shaping", () => {
   });
 
   it("capturePointFeature records time, accuracy, and optional motion props", () => {
-    const f = capturePointFeature(
-      fix({ accuracy: 7.25, speed: 1.5, heading: 90, altitude: 12 }),
-    );
+    const f = capturePointFeature(fix({ accuracy: 7.25, speed: 1.5, heading: 90, altitude: 12 }));
     assert.deepEqual(f.geometry.coordinates, [-123.09, 44.05, 12]);
     assert.equal(f.properties?.accuracy_m, 7.3);
     assert.equal(f.properties?.speed_mps, 1.5);
@@ -283,9 +281,7 @@ describe("gps-tracking GPX export", () => {
 
   it("escapes XML in the track name", () => {
     const gpx = buildTrackGpx([[fix(), fix({ lat: 44.1 })]], `Trail <A> & "B"`);
-    assert.ok(
-      gpx.includes("<name>Trail &lt;A&gt; &amp; &quot;B&quot;</name>"),
-    );
+    assert.ok(gpx.includes("<name>Trail &lt;A&gt; &amp; &quot;B&quot;</name>"));
   });
 });
 
@@ -315,14 +311,8 @@ describe("gps-tracking misc", () => {
   });
 
   it("isGpsCaptureLayer requires geojson type and the metadata flag", () => {
-    assert.equal(
-      isGpsCaptureLayer({ type: "geojson", metadata: { gpsCapture: true } }),
-      true,
-    );
-    assert.equal(
-      isGpsCaptureLayer({ type: "tile", metadata: { gpsCapture: true } }),
-      false,
-    );
+    assert.equal(isGpsCaptureLayer({ type: "geojson", metadata: { gpsCapture: true } }), true);
+    assert.equal(isGpsCaptureLayer({ type: "tile", metadata: { gpsCapture: true } }), false);
     assert.equal(isGpsCaptureLayer({ type: "geojson", metadata: {} }), false);
   });
 

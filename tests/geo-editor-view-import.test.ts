@@ -43,7 +43,11 @@ describe("listViewVectorLayers", () => {
       { id: "user-points", type: "circle", source: "user" },
       { id: "sat", type: "raster", source: "imagery" },
       { id: "gm_main_polygons", type: "fill", source: "gm_main" },
-      { id: "geo-editor-selection-fill-layer", type: "fill", source: "geo-editor-selection-source" },
+      {
+        id: "geo-editor-selection-fill-layer",
+        type: "fill",
+        source: "geo-editor-selection-source",
+      },
       { id: "geolibre-highlight-fill", type: "fill", source: "user" },
       { id: "hillshade", type: "hillshade", source: "basemap" },
       { id: "no-source", type: "fill" },
@@ -150,7 +154,13 @@ describe("geometryIntersectsBounds", () => {
     assert.equal(geometryIntersectsBounds({ type: "Point", coordinates: [5, 5] }, bounds), true);
     assert.equal(
       geometryIntersectsBounds(
-        { type: "LineString", coordinates: [[-5, -5], [5, 5]] },
+        {
+          type: "LineString",
+          coordinates: [
+            [-5, -5],
+            [5, 5],
+          ],
+        },
         bounds,
       ),
       true,
@@ -164,7 +174,15 @@ describe("geometryIntersectsBounds", () => {
       geometryIntersectsBounds(
         {
           type: "Polygon",
-          coordinates: [[[-90, -90], [-90, 90], [90, 90], [90, -90], [-90, -90]]],
+          coordinates: [
+            [
+              [-90, -90],
+              [-90, 90],
+              [90, 90],
+              [90, -90],
+              [-90, -90],
+            ],
+          ],
         },
         bounds,
       ),
@@ -174,7 +192,13 @@ describe("geometryIntersectsBounds", () => {
   it("returns true for a line crossing the viewport with both endpoints outside", () => {
     assert.equal(
       geometryIntersectsBounds(
-        { type: "LineString", coordinates: [[-20, 5], [30, 5]] },
+        {
+          type: "LineString",
+          coordinates: [
+            [-20, 5],
+            [30, 5],
+          ],
+        },
         bounds,
       ),
       true,
@@ -222,13 +246,35 @@ describe("dedupeViewportFeatures", () => {
     const westHalf: Feature = {
       type: "Feature",
       id: 1,
-      geometry: { type: "Polygon", coordinates: [[[0, 0], [0, 2], [1, 2], [1, 0], [0, 0]]] },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [0, 2],
+            [1, 2],
+            [1, 0],
+            [0, 0],
+          ],
+        ],
+      },
       properties: { name: "split" },
     };
     const eastHalf: Feature = {
       type: "Feature",
       id: 1,
-      geometry: { type: "Polygon", coordinates: [[[1, 0], [1, 2], [2, 2], [2, 0], [1, 0]]] },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [1, 0],
+            [1, 2],
+            [2, 2],
+            [2, 0],
+            [1, 0],
+          ],
+        ],
+      },
       properties: { name: "split" },
     };
     const outside = point(200, 5, {});
@@ -252,22 +298,31 @@ describe("dedupeViewportFeatures", () => {
     const west: Feature = {
       type: "Feature",
       id: 7,
-      geometry: { type: "LineString", coordinates: [[0, 0], [1, 0]] },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [1, 0],
+        ],
+      },
       properties: { name: "road" },
     };
     const east: Feature = {
       type: "Feature",
       id: 7,
-      geometry: { type: "LineString", coordinates: [[1, 0], [2, 0]] },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [1, 0],
+          [2, 0],
+        ],
+      },
       properties: { name: "road" },
     };
     const result = dedupeViewportFeatures([west, east], WORLD);
     assert.equal(result.length, 1);
     assert.equal(result[0].geometry?.type, "MultiLineString");
-    assert.equal(
-      (result[0].geometry as { coordinates: number[][][] }).coordinates.length,
-      2,
-    );
+    assert.equal((result[0].geometry as { coordinates: number[][][] }).coordinates.length, 2);
   });
 });
 
@@ -320,7 +375,15 @@ describe("tagViewFeaturesForImport", () => {
   it("drops features whose geometry cannot be represented", () => {
     const bad: Feature = {
       type: "Feature",
-      geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 1]]] }, // < 3 points
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [1, 1],
+          ],
+        ],
+      }, // < 3 points
       properties: {},
     };
     const { prepared, dropped } = tagViewFeaturesForImport([bad, point(1, 1)]);
@@ -331,12 +394,20 @@ describe("tagViewFeaturesForImport", () => {
   it("closes open polygon rings", () => {
     const openRing: Feature = {
       type: "Feature",
-      geometry: { type: "Polygon", coordinates: [[[0, 0], [0, 1], [1, 1]]] },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [0, 1],
+            [1, 1],
+          ],
+        ],
+      },
       properties: {},
     };
     const { collection } = tagViewFeaturesForImport([openRing]);
-    const ring = (collection.features[0].geometry as { coordinates: number[][][] })
-      .coordinates[0];
+    const ring = (collection.features[0].geometry as { coordinates: number[][][] }).coordinates[0];
     assert.deepEqual(ring[0], ring[ring.length - 1]);
   });
 
@@ -381,29 +452,21 @@ describe("buildChangedExport", () => {
     assert.deepEqual(counts, { added: 1, modified: 1, deleted: 1 });
 
     const byChange = (kind: string) =>
-      collection.features.filter(
-        (f) => f.properties?.[VIEW_IMPORT_CHANGE_PROPERTY] === kind,
-      );
+      collection.features.filter((f) => f.properties?.[VIEW_IMPORT_CHANGE_PROPERTY] === kind);
     assert.equal(byChange("modified").length, 1);
     assert.equal(byChange("added").length, 1);
     assert.equal(byChange("deleted").length, 1);
 
     // The deleted feature keeps its original geometry and attributes.
     const deleted = byChange("deleted")[0];
-    assert.deepEqual(
-      (deleted.geometry as { coordinates: number[] }).coordinates,
-      [2, 2],
-    );
+    assert.deepEqual((deleted.geometry as { coordinates: number[] }).coordinates, [2, 2]);
     assert.equal(deleted.properties?.name, "delete-me");
 
     // Editor metadata is stamped (namespaced, so it can't clobber user
     // attributes) and internal tags are stripped from the export.
     const modified = byChange("modified")[0];
     assert.equal(modified.properties?.[VIEW_IMPORT_EDITOR_PROPERTY], "Alice");
-    assert.equal(
-      modified.properties?.[VIEW_IMPORT_MODIFIED_PROPERTY],
-      "2026-07-02T00:00:00.000Z",
-    );
+    assert.equal(modified.properties?.[VIEW_IMPORT_MODIFIED_PROPERTY], "2026-07-02T00:00:00.000Z");
     assert.ok(!(VIEW_IMPORT_ID_PROPERTY in (modified.properties ?? {})));
     assert.ok(!("__gm_shape" in (modified.properties ?? {})));
   });

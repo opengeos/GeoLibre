@@ -59,9 +59,7 @@ def _assert_public_url(url: str) -> None:
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
         if not ip.is_global:
-            raise ValueError(
-                f"Refusing to fetch from a non-public address ({ip}): {url}"
-            )
+            raise ValueError(f"Refusing to fetch from a non-public address ({ip}): {url}")
 
 
 class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
@@ -162,9 +160,7 @@ def build_empty_project(
     map_view = default_map_view()
     if center is not None:
         if len(center) != 2:
-            raise ValueError(
-                "center must be a [lng, lat] sequence with exactly 2 elements"
-            )
+            raise ValueError("center must be a [lng, lat] sequence with exactly 2 elements")
         map_view["center"] = [float(center[0]), float(center[1])]
     if zoom is not None:
         map_view["zoom"] = float(zoom)
@@ -342,11 +338,7 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
         separator = "?"
     query = "&".join(
         f"{quote(key, safe=_ENCODE_URI_SAFE)}="
-        + (
-            value
-            if value == "{bbox-epsg-3857}"
-            else quote(value, safe=_ENCODE_URI_SAFE)
-        )
+        + (value if value == "{bbox-epsg-3857}" else quote(value, safe=_ENCODE_URI_SAFE))
         for key, value in params
     )
     return f"{base}{separator}{query}{sep}{fragment}"
@@ -612,8 +604,7 @@ def vector_tiles_layer(
     if source_layers:
         if source_layer is not None:
             warnings.warn(
-                "source_layer is ignored when source_layers is provided; pass "
-                "one or the other.",
+                "source_layer is ignored when source_layers is provided; pass one or the other.",
                 stacklevel=2,
             )
         source["sourceLayers"] = list(source_layers)
@@ -759,14 +750,10 @@ def video_layer(
     # which would mask a malformed call and build a layer with fewer URLs.
     invalid = [u for u in urls if not (isinstance(u, str) and u)]
     if invalid:
-        raise ValueError(
-            f"video_layer: every URL must be a non-empty string; got {invalid!r}"
-        )
+        raise ValueError(f"video_layer: every URL must be a non-empty string; got {invalid!r}")
     clean_urls = list(urls)
     if any(not u.lower().startswith("https://") for u in clean_urls):
-        raise ValueError(
-            "Video URLs must start with https:// (the browser CSP blocks http://)"
-        )
+        raise ValueError("Video URLs must start with https:// (the browser CSP blocks http://)")
     if len(coordinates) != 4 or any(len(corner) != 2 for corner in coordinates):
         raise ValueError(
             "coordinates must be four [lng, lat] corners (top-left, top-right, "
@@ -868,9 +855,7 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
 
 # The four corners every map control accepts (CONTROL_POSITIONS in
 # maplibre-components.ts; PROJECT_PLUGIN_CONTROL_POSITIONS in core).
-CONTROL_POSITIONS = frozenset(
-    {"top-left", "top-right", "bottom-left", "bottom-right"}
-)
+CONTROL_POSITIONS = frozenset({"top-left", "top-right", "bottom-left", "bottom-right"})
 
 # Plugin ids registered in apps/geolibre-desktop/src/hooks/usePlugins.ts.
 SWIPE_PLUGIN_ID = "maplibre-gl-swipe"

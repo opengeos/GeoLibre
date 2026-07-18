@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import maplibregl from "maplibre-gl";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  type LayerStyle,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
 import { createMapController, MapController } from "../packages/map/src/map-controller";
 
 // Internal shape of MapController we reach into to inject a fake map. The
@@ -95,8 +91,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       sources.delete(id);
       calls.push({ method: "removeSource", args: [id] });
     },
-    getLayer: (id: string) =>
-      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       insertBefore(spec.id as string, beforeId);
@@ -147,9 +142,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       // clearing here would starve every layer after the first.
       if (!opts?.layers) return pendingRenderedFeatures;
       return pendingRenderedFeatures.filter((feature) =>
-        opts.layers?.includes(
-          (feature as { layer?: { id?: string } }).layer?.id ?? "",
-        ),
+        opts.layers?.includes((feature as { layer?: { id?: string } }).layer?.id ?? ""),
       );
     },
     getCenter: () => ({ lng: -100, lat: 40 }),
@@ -313,9 +306,7 @@ describe("MapController.syncLayers reconciliation", () => {
 
     controller.syncLayers([pointLayer("a")]);
     const addSourceCalls = () =>
-      fake.calls.filter(
-        (c) => c.method === "addSource" && c.args[0] === srcId("a"),
-      ).length;
+      fake.calls.filter((c) => c.method === "addSource" && c.args[0] === srcId("a")).length;
     assert.equal(addSourceCalls(), 1);
 
     const moved = pointLayer("a");
@@ -343,15 +334,11 @@ describe("MapController.syncLayers reconciliation", () => {
     controller.syncLayers([pointLayer("a")]);
     assert.equal(fake.sources.get(srcId("a"))?.cluster, undefined);
 
-    controller.syncLayers([
-      pointLayer("a", {}, { pointRenderer: "cluster", clusterRadius: 40 }),
-    ]);
+    controller.syncLayers([pointLayer("a", {}, { pointRenderer: "cluster", clusterRadius: 40 })]);
 
     assert.equal(fake.sources.get(srcId("a"))?.cluster, true);
     assert.ok(
-      fake.calls.some(
-        (c) => c.method === "removeSource" && c.args[0] === srcId("a"),
-      ),
+      fake.calls.some((c) => c.method === "removeSource" && c.args[0] === srcId("a")),
       "clustered source recreated",
     );
   });
@@ -379,9 +366,8 @@ describe("MapController.syncLayers reconciliation", () => {
 
     controller.syncLayers([pointLayer("a")]);
     const paintCallCount = () =>
-      fake.calls.filter(
-        (c) => c.method === "setPaintProperty" && c.args[0] === circleId("a"),
-      ).length;
+      fake.calls.filter((c) => c.method === "setPaintProperty" && c.args[0] === circleId("a"))
+        .length;
     const before = paintCallCount();
 
     controller.syncLayers([pointLayer("a", {}, { fillColor: "#ff0000" })]);
@@ -645,10 +631,7 @@ describe("MapController built-in control positions", () => {
     const ok = controller.setBuiltInControlPosition("geolocate", "bottom-right");
 
     assert.equal(ok, true);
-    assert.equal(
-      controller.getBuiltInControlPosition("geolocate"),
-      "bottom-right",
-    );
+    assert.equal(controller.getBuiltInControlPosition("geolocate"), "bottom-right");
   });
 
   it("passes a control through to the map and reports success", () => {
@@ -738,11 +721,9 @@ describe("MapController geolocate permission-denied recovery", () => {
   const originalControl = maplibregl.GeolocateControl;
 
   function withStubbedControl(run: () => Promise<void>): Promise<void> {
-    (maplibregl as { GeolocateControl: unknown }).GeolocateControl =
-      FakeGeolocateControl;
+    (maplibregl as { GeolocateControl: unknown }).GeolocateControl = FakeGeolocateControl;
     return run().finally(() => {
-      (maplibregl as { GeolocateControl: unknown }).GeolocateControl =
-        originalControl;
+      (maplibregl as { GeolocateControl: unknown }).GeolocateControl = originalControl;
     });
   }
 
@@ -802,9 +783,7 @@ describe("MapController geolocate permission-denied recovery", () => {
 
   it("re-creates when the permission query rejects", () =>
     withStubbedControl(async () => {
-      const restore = stubNavigator(null, () =>
-        Promise.reject(new Error("not supported")),
-      );
+      const restore = stubNavigator(null, () => Promise.reject(new Error("not supported")));
       try {
         const { internal, firstControl } = controllerWithGeolocate();
         firstControl.handlers.error({ code: 1 });
@@ -883,9 +862,7 @@ interface LayerLabelWindow {
 // publishLayerDisplayNames is guarded on `window`, which `node --test` lacks,
 // so stub a minimal one for the duration of a test. Dispatched event types are
 // recorded so a test can assert the swipe panel's change event actually fires.
-function withStubbedLabelWindow(
-  run: (win: LayerLabelWindow, dispatched: string[]) => void,
-): void {
+function withStubbedLabelWindow(run: (win: LayerLabelWindow, dispatched: string[]) => void): void {
   const globals = globalThis as { window?: LayerLabelWindow };
   const original = globals.window;
   const dispatched: string[] = [];
@@ -995,10 +972,7 @@ describe("MapController story-map layer helpers", () => {
   it("keeps only http(s) tile templates and drops non-embeddable urls", () => {
     const { controller } = externalRasterSetup({
       type: "raster",
-      tiles: [
-        "https://tiles.example.com/{z}/{x}/{y}.png",
-        "geolibre://local/{z}/{x}/{y}.png",
-      ],
+      tiles: ["https://tiles.example.com/{z}/{x}/{y}.png", "geolibre://local/{z}/{x}/{y}.png"],
       tileSize: 256,
     });
     const spec = controller.getLayerRasterSource("pc-1");

@@ -49,10 +49,7 @@ export function readPinnedFolders(): string[] {
     return Array.isArray(parsed)
       ? uniquePaths(
           parsed
-            .filter(
-              (item): item is string =>
-                typeof item === "string" && item.trim().length > 0,
-            )
+            .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
             // Normalize on read too, so a legacy entry stored un-normalized
             // (e.g. a trailing separator) dedupes against a normalized pin.
             .map(normalizeFolderPath),
@@ -67,10 +64,7 @@ function writePinnedFolders(paths: string[]): string[] {
   const next = uniquePaths(paths).slice(0, MAX_PINNED_FOLDERS);
   if (typeof window === "undefined") return next;
   try {
-    window.localStorage.setItem(
-      PINNED_FOLDERS_STORAGE_KEY,
-      JSON.stringify(next),
-    );
+    window.localStorage.setItem(PINNED_FOLDERS_STORAGE_KEY, JSON.stringify(next));
     window.dispatchEvent(new Event(PINNED_FOLDERS_CHANGED_EVENT));
   } catch {
     // Best-effort persistence: a quota/private-mode failure must not throw
@@ -92,7 +86,5 @@ export function pinFolder(path: string): string[] {
 /** Remove a folder from the pinned list. */
 export function unpinFolder(path: string): string[] {
   const normalized = normalizeFolderPath(path);
-  return writePinnedFolders(
-    readPinnedFolders().filter((value) => value !== normalized),
-  );
+  return writePinnedFolders(readPinnedFolders().filter((value) => value !== normalized));
 }

@@ -70,9 +70,7 @@ export function ColorRampSelect({
         disabled={disabled}
         // aria-label overrides the button's child text, so fold the selected
         // ramp name in or a screen reader would never announce the selection.
-        aria-label={
-          ariaLabel ? `${ariaLabel}: ${selected?.label ?? value}` : undefined
-        }
+        aria-label={ariaLabel ? `${ariaLabel}: ${selected?.label ?? value}` : undefined}
         className={cn(
           "flex h-9 w-full items-center gap-2 rounded-md border border-input bg-background py-1 ps-3 pe-3 text-sm shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
           className,
@@ -82,14 +80,10 @@ export function ColorRampSelect({
           aria-hidden="true"
           className="h-3.5 w-12 shrink-0 rounded-sm border"
           style={{
-            background: selected
-              ? rampGradient(selected.colors, reversed)
-              : undefined,
+            background: selected ? rampGradient(selected.colors, reversed) : undefined,
           }}
         />
-        <span className="min-w-0 flex-1 truncate text-start">
-          {selected?.label ?? value}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-start">{selected?.label ?? value}</span>
         <ChevronDown
           className="h-4 w-4 shrink-0 text-muted-foreground opacity-50"
           aria-hidden="true"
@@ -103,11 +97,7 @@ export function ColorRampSelect({
           {ramps.map((ramp) => (
             // The built-in radio indicator (a dot in the reserved left gutter)
             // marks the selected ramp; the swatch + label follow it.
-            <DropdownMenuRadioItem
-              key={ramp.value}
-              value={ramp.value}
-              className="gap-2"
-            >
+            <DropdownMenuRadioItem key={ramp.value} value={ramp.value} className="gap-2">
               <span
                 aria-hidden="true"
                 className="h-3.5 w-12 shrink-0 rounded-sm border"

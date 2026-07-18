@@ -85,8 +85,7 @@ def _require_httpx():
         import httpx  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover - exercised via status path
         raise RuntimeBootstrapError(
-            "The 'ml' extra is not installed. Install with: "
-            "pip install geolibre-server[ml]"
+            "The 'ml' extra is not installed. Install with: pip install geolibre-server[ml]"
         ) from exc
     return httpx
 
@@ -206,9 +205,7 @@ def _ensure_server() -> str:
                     **_subprocess_startup_kwargs(),
                 )
             except OSError as exc:
-                raise RuntimeBootstrapError(
-                    f"Failed to launch samgeo-api: {exc}"
-                ) from exc
+                raise RuntimeBootstrapError(f"Failed to launch samgeo-api: {exc}") from exc
             _child["proc"] = launched
             _child["url"] = url
 
@@ -227,7 +224,7 @@ def _ensure_server() -> str:
     _terminate_process(launched)
     _forget_child(launched)
     raise RuntimeBootstrapError(
-        "samgeo-api did not become healthy within " f"{_HEALTH_TIMEOUT_SECS}s."
+        f"samgeo-api did not become healthy within {_HEALTH_TIMEOUT_SECS}s."
     )
 
 
@@ -401,9 +398,7 @@ async def _forward_segment(request: Request, path: str) -> Response:
 
     try:
         async with httpx.AsyncClient(timeout=_PROXY_TIMEOUT_SECS) as client:
-            resp = await client.post(
-                f"{base}{path}", content=_body_iter(), headers=headers
-            )
+            resp = await client.post(f"{base}{path}", content=_body_iter(), headers=headers)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"samgeo-api error: {exc}")
     # The GeoJSON/PNG response is buffered (resp.content); it is bounded and far

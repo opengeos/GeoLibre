@@ -26,7 +26,7 @@ afterEach(() => {
 describe("getComponentsConstructors", () => {
   it("throws a clear, actionable error (not the cryptic destructure) when the module resolves to undefined", async () => {
     __setComponentsModuleLoaderForTests(
-      (): Promise<ComponentsModules> => Promise.resolve([undefined, null])
+      (): Promise<ComponentsModules> => Promise.resolve([undefined, null]),
     );
 
     await assert.rejects(
@@ -34,7 +34,7 @@ describe("getComponentsConstructors", () => {
       (error: Error) =>
         /could not be loaded/i.test(error.message) &&
         /reload the page/i.test(error.message) &&
-        !/destructure/i.test(error.message)
+        !/destructure/i.test(error.message),
     );
   });
 
@@ -56,12 +56,10 @@ describe("getComponentsConstructors", () => {
   it("memoizes a successful load so concurrent controls share one import", async () => {
     let calls = 0;
     const resolvers: Array<(modules: ComponentsModules) => void> = [];
-    __setComponentsModuleLoaderForTests(
-      (): Promise<ComponentsModules> => {
-        calls += 1;
-        return new Promise((resolve) => resolvers.push(resolve));
-      }
-    );
+    __setComponentsModuleLoaderForTests((): Promise<ComponentsModules> => {
+      calls += 1;
+      return new Promise((resolve) => resolvers.push(resolve));
+    });
 
     // Issue both calls before the loader resolves so this exercises the actual
     // in-flight dedup (the synchronous `??=` assignment), not just reuse of an

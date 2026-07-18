@@ -32,20 +32,12 @@ describe("solveAffine", () => {
   });
 
   it("returns null for collinear GCPs", () => {
-    const collinear = [
-      gcpFrom(KNOWN, 0, 0),
-      gcpFrom(KNOWN, 1, 0),
-      gcpFrom(KNOWN, 2, 0),
-    ];
+    const collinear = [gcpFrom(KNOWN, 0, 0), gcpFrom(KNOWN, 1, 0), gcpFrom(KNOWN, 2, 0)];
     assert.equal(solveAffine(collinear), null);
   });
 
   it("recovers a known transform exactly from 3 points", () => {
-    const gcps = [
-      gcpFrom(KNOWN, 0, 0),
-      gcpFrom(KNOWN, 100, 0),
-      gcpFrom(KNOWN, 0, 80),
-    ];
+    const gcps = [gcpFrom(KNOWN, 0, 0), gcpFrom(KNOWN, 100, 0), gcpFrom(KNOWN, 0, 80)];
     const t = solveAffine(gcps);
     assert.ok(t);
     for (const k of ["a", "b", "c", "d", "e", "f"] as const) {
@@ -83,11 +75,7 @@ describe("imageCornersToMap", () => {
 
 describe("gcpResidualsMeters", () => {
   it("is ~zero for an exact fit", () => {
-    const gcps = [
-      gcpFrom(KNOWN, 0, 0),
-      gcpFrom(KNOWN, 100, 0),
-      gcpFrom(KNOWN, 0, 80),
-    ];
+    const gcps = [gcpFrom(KNOWN, 0, 0), gcpFrom(KNOWN, 100, 0), gcpFrom(KNOWN, 0, 80)];
     const t = solveAffine(gcps)!;
     const { rms, perPoint } = gcpResidualsMeters(t, gcps);
     assert.equal(perPoint.length, 3);

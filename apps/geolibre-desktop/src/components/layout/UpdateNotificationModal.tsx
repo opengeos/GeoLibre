@@ -52,9 +52,7 @@ export function UpdateNotificationModal({
             {t("updates.startup.title")}
           </DialogTitle>
           <DialogDescription>
-            {pending
-              ? t(`updates.severity.${pending.severity}`)
-              : null}
+            {pending ? t(`updates.severity.${pending.severity}`) : null}
           </DialogDescription>
         </DialogHeader>
         {pending ? (
@@ -70,9 +68,7 @@ export function UpdateNotificationModal({
                 <div className="text-xs text-muted-foreground">
                   {t("updates.startup.latestVersion")}
                 </div>
-                <div className="font-mono text-foreground">
-                  {pending.release.version}
-                </div>
+                <div className="font-mono text-foreground">{pending.release.version}</div>
               </div>
             </div>
             <div className="space-y-1.5">

@@ -67,9 +67,7 @@ describe("compileFeatureExpression", () => {
 
 describe("applyLayerVirtualFields", () => {
   it("materializes the computed column and records bookkeeping", () => {
-    const { features, fields } = applyLayerVirtualFields(states().features, [
-      vfield(),
-    ]);
+    const { features, fields } = applyLayerVirtualFields(states().features, [vfield()]);
     assert.deepEqual(features[0].properties, {
       name: "Alabama",
       density: 94,
@@ -143,9 +141,10 @@ describe("applyLayerVirtualFields", () => {
     assert.equal(valid.fields[0].addedField, "double_density");
     assert.equal(valid.fields[0].error, undefined);
 
-    const broken = applyLayerVirtualFields([], [
-      vfield({ expression: '["definitely-not-an-operator"]' }),
-    ]);
+    const broken = applyLayerVirtualFields(
+      [],
+      [vfield({ expression: '["definitely-not-an-operator"]' })],
+    );
     assert.equal(broken.fields[0].addedField, undefined);
     assert.ok(broken.fields[0].error);
   });
@@ -242,9 +241,7 @@ describe("applyJoinsToLayer with virtual fields", () => {
     // Simulate a saved project whose materialized copy went stale: the stored
     // column says 999 but the expression says density * 2.
     const stale = makeLayer({
-      geojson: collection([
-        pointFeature({ name: "Alabama", density: 94, double_density: 999 }),
-      ]),
+      geojson: collection([pointFeature({ name: "Alabama", density: 94, double_density: 999 })]),
       virtualFields: [vfield({ addedField: "double_density" })],
     });
     const [healed] = reapplyLayerJoins([stale]);
@@ -288,11 +285,9 @@ describe("store integration", () => {
   it("a geojson replacement re-derives the virtual columns", () => {
     const id = useAppStore.getState().addGeoJsonLayer("States", states());
     useAppStore.getState().setLayerVirtualFields(id, [vfield()]);
-    useAppStore
-      .getState()
-      .updateLayer(id, {
-        geojson: collection([pointFeature({ name: "Alabama", density: 100 })]),
-      });
+    useAppStore.getState().updateLayer(id, {
+      geojson: collection([pointFeature({ name: "Alabama", density: 100 })]),
+    });
     const layer = layerById(id);
     assert.equal(layer.geojson?.features[0].properties?.double_density, 200);
   });
@@ -307,9 +302,7 @@ describe("store integration", () => {
     const id = useAppStore.getState().addGeoJsonLayer("States", states());
     useAppStore.getState().setLayerVirtualFields(id, [vfield()]);
     useAppStore.getState().updateLayer(id, {
-      geojson: collection([
-        pointFeature({ name: "Alabama", density: 100, double_density: 7 }),
-      ]),
+      geojson: collection([pointFeature({ name: "Alabama", density: 100, double_density: 7 })]),
     });
     const layer = layerById(id);
     assert.equal(layer.geojson?.features[0].properties?.double_density, 200);
@@ -336,19 +329,13 @@ describe("store integration", () => {
         expression: '["/", ["get", "pop"], ["get", "density"]]',
       }),
     ]);
-    assert.equal(
-      layerById(targetId).geojson?.features[0].properties?.pop_per_density,
-      10,
-    );
+    assert.equal(layerById(targetId).geojson?.features[0].properties?.pop_per_density, 10);
 
     // Doubling pop in the join table must flow through the join and into the
     // virtual field on the joined layer.
     useAppStore.getState().updateLayer(tableId, {
       geojson: collection([tableFeature({ state_name: "Alabama", pop: 1880 })]),
     });
-    assert.equal(
-      layerById(targetId).geojson?.features[0].properties?.pop_per_density,
-      20,
-    );
+    assert.equal(layerById(targetId).geojson?.features[0].properties?.pop_per_density, 20);
   });
 });

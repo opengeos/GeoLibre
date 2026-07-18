@@ -68,10 +68,7 @@ async function readOsEnvVars(): Promise<RuntimeEnv> {
     // Let a later call retry instead of memoizing the failure, and preserve any
     // previously cached values rather than clobbering them with an empty map.
     loadPromise = null;
-    console.warn(
-      "[geolibre] Could not read OS environment variables for the AI assistant:",
-      error,
-    );
+    console.warn("[geolibre] Could not read OS environment variables for the AI assistant:", error);
     return readOsEnv();
   }
 }

@@ -130,9 +130,7 @@ export function ParameterField({
           min={param.min}
           max={param.max}
           step={param.step}
-          onChange={(e) =>
-            onChange(e.target.value === "" ? undefined : Number(e.target.value))
-          }
+          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
         />
       </div>
     );

@@ -59,10 +59,7 @@ describe("delimited text parsing", () => {
     assert.equal(result.totalRows, 3);
     assert.equal(result.skippedRows, 2);
     assert.equal(result.data.features.length, 1);
-    assert.deepEqual(result.data.features[0].geometry.coordinates, [
-      -78.638,
-      35.779,
-    ]);
+    assert.deepEqual(result.data.features[0].geometry.coordinates, [-78.638, 35.779]);
   });
 
   it("rejects files with no valid coordinates", () => {
@@ -93,11 +90,7 @@ describe("delimited text parsing", () => {
 
   it("builds a non-spatial attribute table when both coordinate fields are blank", () => {
     const result = parseDelimitedTextLayer(
-      [
-        "code;name;chapter",
-        "AVH;Avoine d'hiver;1.1",
-        "BDP;Ble dur de printemps;1.1",
-      ].join("\n"),
+      ["code;name;chapter", "AVH;Avoine d'hiver;1.1", "BDP;Ble dur de printemps;1.1"].join("\n"),
       {
         delimiter: ";",
         longitudeField: "",
@@ -121,26 +114,20 @@ describe("delimited text parsing", () => {
   it("rejects a mixed selection where only one coordinate field is blank", () => {
     assert.throws(
       () =>
-        parseDelimitedTextLayer(
-          ["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"),
-          {
-            delimiter: ",",
-            longitudeField: "longitude",
-            latitudeField: "",
-          },
-        ),
+        parseDelimitedTextLayer(["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"), {
+          delimiter: ",",
+          longitudeField: "longitude",
+          latitudeField: "",
+        }),
       /Select both a longitude and a latitude field/,
     );
     assert.throws(
       () =>
-        parseDelimitedTextLayer(
-          ["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"),
-          {
-            delimiter: ",",
-            longitudeField: "",
-            latitudeField: "latitude",
-          },
-        ),
+        parseDelimitedTextLayer(["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"), {
+          delimiter: ",",
+          longitudeField: "",
+          latitudeField: "latitude",
+        }),
       /Select both a longitude and a latitude field/,
     );
   });
@@ -244,10 +231,9 @@ describe("layer refresh helpers", () => {
       enabled: true,
       intervalMs: MIN_REFRESH_INTERVAL_MS,
     });
-    assert.deepEqual(
-      setLayerRefreshConfig(source, { enabled: false, intervalMs: 0 }),
-      { metadata: {} },
-    );
+    assert.deepEqual(setLayerRefreshConfig(source, { enabled: false, intervalMs: 0 }), {
+      metadata: {},
+    });
   });
 
   it("only treats HTTP GeoJSON and WFS sources as refreshable", () => {

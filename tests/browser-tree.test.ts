@@ -94,10 +94,7 @@ describe("buildBrowserTree", () => {
 
   it("sorts services within a kind by name", () => {
     const tree = buildBrowserTree({
-      services: [
-        service("s1", "Zebra tiles", "xyz"),
-        service("s2", "Alpha tiles", "xyz"),
-      ],
+      services: [service("s1", "Zebra tiles", "xyz"), service("s2", "Alpha tiles", "xyz")],
       recentProjects: [],
     });
     const xyz = find(tree, "kind:xyz");
@@ -150,9 +147,7 @@ describe("buildBrowserTree", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
-      databaseConnections: [
-        { connectionString: "postgres://u@h/db", label: "db @ h" },
-      ],
+      databaseConnections: [{ connectionString: "postgres://u@h/db", label: "db @ h" }],
     });
     const db = find(tree, "section:databases");
     assert.equal(db?.kind, "section");
@@ -210,9 +205,7 @@ describe("buildPostgisTableNodes", () => {
   });
 
   it("carries the connection, schema, and table onto each table node", () => {
-    const nodes = buildPostgisTableNodes(CONN, [
-      { schema: "public", table: "roads" },
-    ]);
+    const nodes = buildPostgisTableNodes(CONN, [{ schema: "public", table: "roads" }]);
     const table = nodes[0].children?.[0];
     assert.equal(table?.kind, "table");
     assert.equal(table?.id, `table:${CONN}:public.roads`);
@@ -231,7 +224,14 @@ describe("buildPostgisTableNodes", () => {
 describe("buildFavoriteNodes", () => {
   it("rebuilds each favorite kind into its node", () => {
     const nodes = buildFavoriteNodes([
-      { id: "service:s1", kind: "service", label: "Basemap", serviceId: "s1", serviceKind: "xyz", builtin: true },
+      {
+        id: "service:s1",
+        kind: "service",
+        label: "Basemap",
+        serviceId: "s1",
+        serviceKind: "xyz",
+        builtin: true,
+      },
       { id: "folder:/d", kind: "folder", label: "d", path: "/d" },
       { id: "file:/d/a.geojson", kind: "file", label: "a.geojson", path: "/d/a.geojson" },
     ]);
@@ -259,9 +259,7 @@ describe("buildBrowserTree — Favorites section", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
-      favorites: [
-        { id: "service:s1", kind: "service", label: "Basemap", serviceId: "s1" },
-      ],
+      favorites: [{ id: "service:s1", kind: "service", label: "Basemap", serviceId: "s1" }],
     });
     // Favorites is the first section.
     assert.equal(tree[0].id, "section:favorites");
@@ -366,12 +364,7 @@ describe("augmentFolders", () => {
     });
 
   it("injects a loading row while a folder is loading", () => {
-    const out = augmentFolders(
-      baseTree(),
-      { "/d": { status: "loading" } },
-      "Loading…",
-      isLoadable,
-    );
+    const out = augmentFolders(baseTree(), { "/d": { status: "loading" } }, "Loading…", isLoadable);
     const folder = find(out, "folder:/d");
     assert.equal(folder?.children?.length, 1);
     assert.equal(folder?.children?.[0].kind, "info");
@@ -446,9 +439,7 @@ describe("augmentFolders", () => {
         },
         "/d/sub": {
           status: "loaded",
-          entries: [
-            { name: "b.geojson", path: "/d/sub/b.geojson", isDirectory: false },
-          ],
+          entries: [{ name: "b.geojson", path: "/d/sub/b.geojson", isDirectory: false }],
         },
       },
       "Loading…",
@@ -564,10 +555,7 @@ describe("flattenVisibleTree", () => {
 
 describe("filterBrowserTree", () => {
   const tree = buildBrowserTree({
-    services: [
-      service("s1", "Landsat imagery", "xyz"),
-      service("s2", "US States", "wms"),
-    ],
+    services: [service("s1", "Landsat imagery", "xyz"), service("s2", "US States", "wms")],
     recentProjects: RECENT,
   });
 
@@ -617,10 +605,7 @@ describe("filterBrowserTree", () => {
     // Two services of one kind, so a match on the kind label keeps both leaves
     // but leaves the section with a single surviving child.
     const twoWms = buildBrowserTree({
-      services: [
-        service("a", "Aerial", "wms"),
-        service("b", "Satellite", "wms"),
-      ],
+      services: [service("a", "Aerial", "wms"), service("b", "Satellite", "wms")],
       recentProjects: [],
     });
     const out = filterBrowserTree(twoWms, "wms");

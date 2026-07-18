@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 
 /**
  * Shared store-sync engine for the Web Services plugins (FEMA NFHL, NASA
@@ -71,17 +67,9 @@ export interface WebServiceAdapter<C> {
   /** Removes a layer from the control (the user deleted its store layer). */
   removeFromControl: (control: C, entry: WebServiceLayerEntry) => void;
   /** Pushes a store opacity change into the control, when supported. */
-  setControlOpacity?: (
-    control: C,
-    entry: WebServiceLayerEntry,
-    opacity: number,
-  ) => void;
+  setControlOpacity?: (control: C, entry: WebServiceLayerEntry, opacity: number) => void;
   /** Pushes a store visibility change into the control, when supported. */
-  setControlVisibility?: (
-    control: C,
-    entry: WebServiceLayerEntry,
-    visible: boolean,
-  ) => void;
+  setControlVisibility?: (control: C, entry: WebServiceLayerEntry, visible: boolean) => void;
   /**
    * Hands restored store layers (project reload) back to the control so its
    * panel lists them again. May complete asynchronously; the control's own
@@ -112,10 +100,7 @@ export function createWebServiceStoreSync<C>(
   // Last opacity/visibility seen on the control per layer id. Doubles as the
   // record of layers this engine manages: store layers outside this map are
   // either freshly restored (adopt) or not ours to remove.
-  const lastControlValues = new Map<
-    string,
-    { opacity: number; visible: boolean }
-  >();
+  const lastControlValues = new Map<string, { opacity: number; visible: boolean }>();
   // Layers handed to adopt() whose control-side registration is pending.
   const pendingAdoptionIds = new Set<string>();
   // Layers handed to removeFromControl() whose control-side removal is
@@ -178,18 +163,10 @@ export function createWebServiceStoreSync<C>(
         // Push opacity/visibility only when the control changed them, so a
         // value set through the Layers panel is not reverted by the next
         // unrelated control event.
-        if (
-          last &&
-          entry.opacity !== last.opacity &&
-          entry.opacity !== existing.opacity
-        ) {
+        if (last && entry.opacity !== last.opacity && entry.opacity !== existing.opacity) {
           store.updateLayer(entry.id, { opacity: entry.opacity });
         }
-        if (
-          last &&
-          entry.visible !== last.visible &&
-          entry.visible !== existing.visible
-        ) {
+        if (last && entry.visible !== last.visible && entry.visible !== existing.visible) {
           store.updateLayer(entry.id, { visible: entry.visible });
         }
       }
@@ -214,9 +191,7 @@ export function createWebServiceStoreSync<C>(
   function reverseSync(activeControl: C): void {
     const ownLayers = useAppStore
       .getState()
-      .layers.filter(
-        (layer) => layer.metadata.sourceKind === adapter.sourceKind,
-      );
+      .layers.filter((layer) => layer.metadata.sourceKind === adapter.sourceKind);
     const ownById = new Map(ownLayers.map((layer) => [layer.id, layer]));
     const entries = adapter.listActive(activeControl);
 
@@ -234,10 +209,7 @@ export function createWebServiceStoreSync<C>(
       if (adapter.setControlOpacity && storeLayer.opacity !== entry.opacity) {
         adapter.setControlOpacity(activeControl, entry, storeLayer.opacity);
       }
-      if (
-        adapter.setControlVisibility &&
-        storeLayer.visible !== entry.visible
-      ) {
+      if (adapter.setControlVisibility && storeLayer.visible !== entry.visible) {
         adapter.setControlVisibility(activeControl, entry, storeLayer.visible);
       }
     }
@@ -283,10 +255,7 @@ export function createWebServiceStoreSync<C>(
  * @param entry - The active layer reported by the control
  * @returns The store layer mirroring the control's native layer
  */
-export function createStoreLayer(
-  sourceKind: string,
-  entry: WebServiceLayerEntry,
-): GeoLibreLayer {
+export function createStoreLayer(sourceKind: string, entry: WebServiceLayerEntry): GeoLibreLayer {
   return {
     id: entry.id,
     name: entry.name,
@@ -317,18 +286,13 @@ export function createStoreLayer(
   };
 }
 
-function shouldUpdateStoreLayer(
-  existingLayer: GeoLibreLayer,
-  nextLayer: GeoLibreLayer,
-): boolean {
+function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibreLayer): boolean {
   return (
     existingLayer.type !== nextLayer.type ||
     existingLayer.name !== nextLayer.name ||
     existingLayer.sourcePath !== nextLayer.sourcePath ||
-    stableStringify(existingLayer.source) !==
-      stableStringify(nextLayer.source) ||
-    stableStringify(existingLayer.metadata) !==
-      stableStringify(nextLayer.metadata)
+    stableStringify(existingLayer.source) !== stableStringify(nextLayer.source) ||
+    stableStringify(existingLayer.metadata) !== stableStringify(nextLayer.metadata)
   );
 }
 
@@ -375,21 +339,12 @@ export function readNativeRasterSource(
   const raw = spec as Record<string, unknown>;
   if (raw.type !== "raster" || !Array.isArray(raw.tiles)) return null;
   const tiles = raw.tiles
-    .filter(
-      (tile): tile is string => typeof tile === "string" && tile.length > 0,
-    )
+    .filter((tile): tile is string => typeof tile === "string" && tile.length > 0)
     .map(unproxyWmsTileUrl);
   if (tiles.length === 0) return null;
 
   const source: Record<string, unknown> = {};
-  for (const key of [
-    "tileSize",
-    "minzoom",
-    "maxzoom",
-    "bounds",
-    "attribution",
-    "scheme",
-  ]) {
+  for (const key of ["tileSize", "minzoom", "maxzoom", "bounds", "attribution", "scheme"]) {
     if (raw[key] !== undefined) source[key] = raw[key];
   }
   return { tiles, source };
@@ -419,9 +374,7 @@ function unproxyWmsTileUrl(tile: string): string {
  * @returns The store layer type
  */
 export function layerTypeForTiles(tiles: string[]): "raster" | "wms" {
-  return tiles.some((tile) => tile.includes("{bbox-epsg-3857}"))
-    ? "wms"
-    : "raster";
+  return tiles.some((tile) => tile.includes("{bbox-epsg-3857}")) ? "wms" : "raster";
 }
 
 /**

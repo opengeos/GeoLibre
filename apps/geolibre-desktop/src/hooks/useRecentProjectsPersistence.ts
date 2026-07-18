@@ -31,10 +31,7 @@ function saveRecentProjects(projects: RecentProjectEntry[]) {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(
-      RECENT_PROJECTS_STORAGE_KEY,
-      JSON.stringify(projects),
-    );
+    window.localStorage.setItem(RECENT_PROJECTS_STORAGE_KEY, JSON.stringify(projects));
   } catch {
     // Persistence is best-effort; ignore quota or disabled-storage errors.
   }

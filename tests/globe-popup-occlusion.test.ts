@@ -100,10 +100,7 @@ describe("installGlobePopupOcclusion", () => {
     assert.equal(popup._container.style.opacity, "0");
     assert.equal(popup._container.style.pointerEvents, "none");
     assert.equal(popup._container.style.visibility, "hidden");
-    assert.equal(
-      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-      true,
-    );
+    assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), true);
 
     popup._map.transform.isLocationOccluded = () => false;
     popup._updateOpacity();
@@ -111,10 +108,7 @@ describe("installGlobePopupOcclusion", () => {
     assert.equal(popup._container.style.opacity, "");
     assert.equal(popup._container.style.pointerEvents, "auto");
     assert.equal(popup._container.style.visibility, "visible");
-    assert.equal(
-      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-      false,
-    );
+    assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), false);
   });
 
   it("respects explicit nonzero locationOccludedOpacity values", () => {
@@ -137,10 +131,7 @@ describe("installGlobePopupOcclusion", () => {
     assert.equal(popup._container.style.opacity, "0.35");
     assert.equal(popup._container.style.pointerEvents, "auto");
     assert.equal(popup._container.style.visibility, "visible");
-    assert.equal(
-      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-      false,
-    );
+    assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), false);
   });
 
   // Real browsers normalize " 0 " to "0"; the fake container stores it verbatim.
@@ -163,18 +154,13 @@ describe("installGlobePopupOcclusion", () => {
       assert.equal(popup._container.style.opacity, opacity);
       assert.equal(popup._container.style.pointerEvents, "none");
       assert.equal(popup._container.style.visibility, "hidden");
-      assert.equal(
-        popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-        true,
-      );
+      assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), true);
     });
   }
 
   for (const opacity of ["", " "]) {
     // Browsers reject " " as CSS opacity; the fake container stores it verbatim.
-    it(`does not suppress interaction for blank opacity ${JSON.stringify(
-      opacity,
-    )}`, () => {
+    it(`does not suppress interaction for blank opacity ${JSON.stringify(opacity)}`, () => {
       const maplibre = createMaplibreStub();
       installGlobePopupOcclusion(maplibre);
 
@@ -192,10 +178,7 @@ describe("installGlobePopupOcclusion", () => {
       assert.equal(popup._container.style.opacity, opacity);
       assert.equal(popup._container.style.pointerEvents, "auto");
       assert.equal(popup._container.style.visibility, "visible");
-      assert.equal(
-        popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-        false,
-      );
+      assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), false);
     });
   }
 
@@ -217,10 +200,7 @@ describe("installGlobePopupOcclusion", () => {
     assert.equal(popup._container.style.opacity, "0e0");
     assert.equal(popup._container.style.pointerEvents, "auto");
     assert.equal(popup._container.style.visibility, "visible");
-    assert.equal(
-      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-      false,
-    );
+    assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), false);
   });
 
   it("calls isLocationOccluded with the transform receiver", () => {
@@ -271,10 +251,7 @@ describe("installGlobePopupOcclusion", () => {
     assert.equal(called, false);
     assert.equal(popup._container.style.pointerEvents, "auto");
     assert.equal(popup._container.style.visibility, "visible");
-    assert.equal(
-      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
-      false,
-    );
+    assert.equal(popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS), false);
   });
 
   it("is idempotent", () => {

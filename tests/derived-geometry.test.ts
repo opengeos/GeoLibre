@@ -34,9 +34,7 @@ function square(
   };
 }
 
-function collection(
-  ...features: GeoJSON.Feature[]
-): FeatureCollection {
+function collection(...features: GeoJSON.Feature[]): FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
@@ -93,8 +91,7 @@ describe("buildGeneratedGeometry", () => {
     assert.equal(derived.features[0].geometry.type, "Point");
     assert.deepEqual(derived.features[0].properties, { name: "a" });
     assert.deepEqual(derived.features[1].properties, { name: "b" });
-    const [x, y] = (derived.features[0].geometry as GeoJSON.Point)
-      .coordinates;
+    const [x, y] = (derived.features[0].geometry as GeoJSON.Point).coordinates;
     assert.ok(Math.abs(x - 5) < 1e-6 && Math.abs(y - 5) < 1e-6);
   });
 
@@ -165,10 +162,7 @@ describe("buildGeneratedGeometry", () => {
     // The oldest entry (distance 1) was evicted, so it recomputes...
     assert.notEqual(buildGeneratedGeometry(fc, "buffer", 1), first);
     // ...while the newest entry is still cached.
-    assert.equal(
-      buildGeneratedGeometry(fc, "buffer", 9),
-      buildGeneratedGeometry(fc, "buffer", 9),
-    );
+    assert.equal(buildGeneratedGeometry(fc, "buffer", 9), buildGeneratedGeometry(fc, "buffer", 9));
   });
 
   it("normalizes 3D bounding boxes to their 2D corners", () => {

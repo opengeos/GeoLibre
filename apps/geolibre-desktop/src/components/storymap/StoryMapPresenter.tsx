@@ -132,10 +132,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const chapters = useMemo(() => storymap?.chapters ?? [], [storymap]);
   // The ordered scroll steps, recomputed when the story changes (it is frozen
   // during a presentation, so this is stable while presenting).
-  const steps = useMemo(
-    () => (storymap ? buildPresenterSteps(storymap) : []),
-    [storymap],
-  );
+  const steps = useMemo(() => (storymap ? buildPresenterSteps(storymap) : []), [storymap]);
   const hasChapters = presenting && chapters.length > 0;
 
   // Scroll a step into view; the IntersectionObserver then activates it and
@@ -147,9 +144,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   // programmatic jump so they can't override the target we just entered.
   const jumpingRef = useRef(false);
   const goToStep = useCallback((stepIndex: number) => {
-    const step = scrollRef.current?.querySelector<HTMLElement>(
-      `[data-step-index="${stepIndex}"]`,
-    );
+    const step = scrollRef.current?.querySelector<HTMLElement>(`[data-step-index="${stepIndex}"]`);
     // Center the card, not the step: the step carries a tall bottom padding, so
     // centering it would push the card (and its drag bar) above the viewport.
     const target = step?.querySelector<HTMLElement>(".glsm-card") ?? step;
@@ -168,26 +163,18 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const [cardLayouts, setCardLayouts] = useState<
     Record<string, { dx: number; dy: number; w: number | null; h: number | null }>
   >({});
-  const gestureRef = useRef<
-    | {
-        id: string;
-        mode: "drag" | "resize";
-        startX: number;
-        startY: number;
-        base: { dx: number; dy: number; w: number | null; h: number | null };
-      }
-    | null
-  >(null);
+  const gestureRef = useRef<{
+    id: string;
+    mode: "drag" | "resize";
+    startX: number;
+    startY: number;
+    base: { dx: number; dy: number; w: number | null; h: number | null };
+  } | null>(null);
   // Detaches the active gesture's window listeners; set while a drag is live.
   const gestureCleanupRef = useRef<(() => void) | null>(null);
 
   const startGesture = useCallback(
-    (
-      event: ReactPointerEvent,
-      id: string,
-      mode: "drag" | "resize",
-      cardEl: HTMLElement | null,
-    ) => {
+    (event: ReactPointerEvent, id: string, mode: "drag" | "resize", cardEl: HTMLElement | null) => {
       event.preventDefault();
       event.stopPropagation();
       const existing = cardLayouts[id];
@@ -243,15 +230,9 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
           // of the card horizontally on screen.
           const minTop = viewport.top + TOP_INSET;
           const maxTop = viewport.bottom - TOP_INSET;
-          dy = Math.min(
-            maxTop - flowTop,
-            Math.max(minTop - flowTop, dy),
-          );
+          dy = Math.min(maxTop - flowTop, Math.max(minTop - flowTop, dy));
           const maxLeft = viewport.right - EDGE_KEEP;
-          dx = Math.min(
-            maxLeft - flowLeft,
-            Math.max(leftBoundary - flowLeft, dx),
-          );
+          dx = Math.min(maxLeft - flowLeft, Math.max(leftBoundary - flowLeft, dx));
         }
         setCardLayouts((prev) => ({ ...prev, [g.id]: { ...g.base, dx, dy } }));
       };
@@ -323,9 +304,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
     const chapters = story.chapters;
     const steps = buildPresenterSteps(story);
 
-    const stepEls = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-step-index]"),
-    );
+    const stepEls = Array.from(container.querySelectorAll<HTMLElement>("[data-step-index]"));
 
     // Main-map marker, created once and moved per chapter.
     if (story.showMarkers) {
@@ -356,11 +335,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
     const applyEffects = (changes: StoryChapter["onChapterEnter"]) => {
       for (const change of changes) {
-        controller.setStoryLayerOpacity(
-          change.layerId,
-          change.opacity,
-          change.duration,
-        );
+        controller.setStoryLayerOpacity(change.layerId, change.opacity, change.duration);
       }
     };
 
@@ -453,9 +428,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       if (!step) return;
       activeStepRef.current = index;
 
-      stepEls.forEach((el, i) =>
-        el.classList.toggle("glsm-active", i === index),
-      );
+      stepEls.forEach((el, i) => el.classList.toggle("glsm-active", i === index));
 
       if (step.kind === "chapter") {
         enterChapter(step.chapter, step.chapterIndex);
@@ -473,9 +446,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         if (jumpingRef.current) return;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
-          const index = Number(
-            (entry.target as HTMLElement).dataset.stepIndex,
-          );
+          const index = Number((entry.target as HTMLElement).dataset.stepIndex);
           if (Number.isFinite(index)) enterStep(index);
         }
       },
@@ -540,8 +511,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const themeClass = theme === "light" ? "glsm-light" : "glsm-dark";
   // Chapters sit after the optional start slide, so a chapter's nav entry maps
   // to its scroll-step index by this offset.
-  const startOffset =
-    storymap && storymap.startSlide !== "none" ? 1 : 0;
+  const startOffset = storymap && storymap.startSlide !== "none" ? 1 : 0;
   // A start/closing slide is showing (no chapter highlighted). Slides are
   // documented as text-free, so the persistent story header/footer hide while
   // one is active (a blank/black cover already hides them; this also clears the
@@ -555,12 +525,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
     // clickable even though the story drives the camera.
     <div className="absolute inset-0 z-[70] overflow-hidden">
       <div className="absolute left-3 top-3 z-[72] flex items-center gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="shadow-md"
-          onClick={exitPresentation}
-        >
+        <Button variant="secondary" size="sm" className="shadow-md" onClick={exitPresentation}>
           <X className="me-1 h-4 w-4" />
           {t("storymap.exitPresentation")}
         </Button>
@@ -603,9 +568,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
               >
                 {index + 1}
               </span>
-              <span className="truncate">
-                {chapter.title || t("storymap.untitledChapter")}
-              </span>
+              <span className="truncate">{chapter.title || t("storymap.untitledChapter")}</span>
             </button>
           ))}
         </nav>
@@ -617,8 +580,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         // positioning on the outer wrapper where it cannot be overridden.
         <div
           className={`pointer-events-none absolute z-[71] h-44 w-44 overflow-hidden rounded-md border-2 border-white/80 shadow-lg ${
-            INSET_POSITION_CLASS[storymap.insetPosition] ??
-            INSET_POSITION_CLASS["bottom-left"]
+            INSET_POSITION_CLASS[storymap.insetPosition] ?? INSET_POSITION_CLASS["bottom-left"]
           }`}
         >
           <div ref={insetRef} className="h-full w-full" />
@@ -639,13 +601,9 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
       <div
         ref={scrollRef}
-        className={cn(
-          "glsm-scroll absolute inset-0 overflow-y-auto",
-          navOpen && "glsm-with-nav",
-        )}
+        className={cn("glsm-scroll absolute inset-0 overflow-y-auto", navOpen && "glsm-with-nav")}
       >
-        {storymap &&
-        (storymap.title || storymap.subtitle || storymap.byline) ? (
+        {storymap && (storymap.title || storymap.subtitle || storymap.byline) ? (
           <div
             className={`glsm-header ${themeClass}`}
             style={slideActive ? { visibility: "hidden" } : undefined}
@@ -672,9 +630,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
             const { chapter } = step;
             const layout = cardLayouts[chapter.id];
             const cardStyle = {
-              transform: layout
-                ? `translate(${layout.dx}px, ${layout.dy}px)`
-                : undefined,
+              transform: layout ? `translate(${layout.dx}px, ${layout.dy}px)` : undefined,
               width: layout?.w ? `${layout.w}px` : undefined,
               height: layout?.h ? `${layout.h}px` : undefined,
             };
@@ -702,9 +658,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
                     </span>
                   </div>
                   <div className="glsm-card-body">
-                    {chapter.image ? (
-                      <img src={chapter.image} alt={chapter.title} />
-                    ) : null}
+                    {chapter.image ? <img src={chapter.image} alt={chapter.title} /> : null}
                     {chapter.description ? (
                       <div
                         // Descriptions support inline HTML, matching the template;
@@ -719,12 +673,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
                     className="glsm-resize"
                     title={t("storymap.resizeHint")}
                     onPointerDown={(e) =>
-                      startGesture(
-                        e,
-                        chapter.id,
-                        "resize",
-                        e.currentTarget.parentElement,
-                      )
+                      startGesture(e, chapter.id, "resize", e.currentTarget.parentElement)
                     }
                   />
                 </div>

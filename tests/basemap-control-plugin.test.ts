@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   BASEMAP_CONTROL_PLUGIN_ID,
   getActiveBasemapControl,
@@ -72,9 +68,7 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
     assert.equal(
       useAppStore
         .getState()
-        .layers.filter(
-          (l) => l.metadata?.sourceKind === "maplibre-basemap-control",
-        ).length,
+        .layers.filter((l) => l.metadata?.sourceKind === "maplibre-basemap-control").length,
       1,
     );
   });

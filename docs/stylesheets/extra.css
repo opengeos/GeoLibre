@@ -120,10 +120,7 @@
   text-transform: uppercase;
 }
 
-[data-md-color-scheme="slate"]
-  .md-nav--primary
-  .md-nav__item--section
-  > .md-nav__link {
+[data-md-color-scheme="slate"] .md-nav--primary .md-nav__item--section > .md-nav__link {
   border-top-color: rgba(255, 255, 255, 0.12);
 }
 

@@ -56,12 +56,8 @@ export function findNamedTileBasemap(reference: string): NamedTileBasemap | null
   if (!target) return null;
   const exact =
     NAMED_TILE_BASEMAPS.find((basemap) => basemap.id === target) ??
-    NAMED_TILE_BASEMAPS.find(
-      (basemap) => basemap.label.toLowerCase() === target,
-    ) ??
-    NAMED_TILE_BASEMAPS.find((basemap) =>
-      basemap.label.toLowerCase().includes(target),
-    );
+    NAMED_TILE_BASEMAPS.find((basemap) => basemap.label.toLowerCase() === target) ??
+    NAMED_TILE_BASEMAPS.find((basemap) => basemap.label.toLowerCase().includes(target));
   if (exact) return exact;
   const queryTokens = tokens(target);
   if (queryTokens.length === 0) return null;

@@ -22,22 +22,15 @@ function fc(properties: Record<string, unknown>[]): FeatureCollection {
 
 describe("shapefileFieldWarnings", () => {
   before(async () => {
-    ({ shapefileFieldWarnings } = await import(
-      "../apps/geolibre-desktop/src/lib/vector-export"
-    ));
+    ({ shapefileFieldWarnings } = await import("../apps/geolibre-desktop/src/lib/vector-export"));
   });
 
   it("returns no warnings when every field name is Shapefile-safe", () => {
-    assert.deepEqual(
-      shapefileFieldWarnings(fc([{ name: "a", id: 1, value: 2 }])),
-      [],
-    );
+    assert.deepEqual(shapefileFieldWarnings(fc([{ name: "a", id: 1, value: 2 }])), []);
   });
 
   it("warns about field names longer than 10 characters", () => {
-    const warnings = shapefileFieldWarnings(
-      fc([{ population_total: 1, name: "x" }]),
-    );
+    const warnings = shapefileFieldWarnings(fc([{ population_total: 1, name: "x" }]));
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /truncates field names to 10 characters/);
     assert.match(warnings[0], /population_total/);
@@ -54,18 +47,14 @@ describe("shapefileFieldWarnings", () => {
   });
 
   it("collects field names across features with differing properties", () => {
-    const warnings = shapefileFieldWarnings(
-      fc([{ short: 1 }, { another_long_field: 2 }]),
-    );
+    const warnings = shapefileFieldWarnings(fc([{ short: 1 }, { another_long_field: 2 }]));
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /another_long_field/);
   });
 
   it("detects collisions caused by non-alphanumeric normalization", () => {
     // "my-field-x" and "my_field_x" both normalize to "my_field_x".
-    const warnings = shapefileFieldWarnings(
-      fc([{ "my-field-x": 1, my_field_x: 2 }]),
-    );
+    const warnings = shapefileFieldWarnings(fc([{ "my-field-x": 1, my_field_x: 2 }]));
     assert.ok(warnings.some((w) => /duplicate field names/.test(w)));
   });
 

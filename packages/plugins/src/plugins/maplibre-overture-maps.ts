@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   DEFAULT_TILES_BASE_URL,
   layerIdsForSourceLayer,
@@ -16,11 +12,7 @@ import {
   type OvertureMapsState,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
 let overturePosition: GeoLibreMapControlPosition = "top-left";
 
@@ -57,8 +49,7 @@ function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
     // no exporter.
     ...(app.exportTextFile
       ? {
-          onExport: (filename, data) =>
-            app.exportTextFile?.(filename, JSON.stringify(data)),
+          onExport: (filename, data) => app.exportTextFile?.(filename, JSON.stringify(data)),
         }
       : {}),
   });
@@ -68,17 +59,13 @@ function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
   return control;
 }
 
-function isOvertureMapsState(
-  value: unknown,
-): value is Partial<OvertureMapsState> {
+function isOvertureMapsState(value: unknown): value is Partial<OvertureMapsState> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
   // Require at least one distinctive OvertureMapsState field so an unrelated
   // object stored under this plugin's key is not forwarded to setState.
-  return (
-    "themes" in value || "release" in value || "collapsed" in value
-  );
+  return "themes" in value || "release" in value || "collapsed" in value;
 }
 
 export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
@@ -109,10 +96,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
     overtureControl = null;
   },
   getMapControlPosition: () => overturePosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     overturePosition = position;
     if (!overtureControl) return;
     // Snapshot before detaching from the map so a failed re-add still keeps
@@ -127,8 +111,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
     }
     setTimeout(() => overtureControl?.expand(), 0);
   },
-  getProjectState: () =>
-    overtureControl?.getState() ?? pendingState ?? undefined,
+  getProjectState: () => overtureControl?.getState() ?? pendingState ?? undefined,
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
     if (!isOvertureMapsState(state)) return false;
     pendingState = state;
@@ -170,10 +153,7 @@ let syncing = false;
 // Last visibility/opacity observed on the control per source layer. Doubles as
 // the record of source layers this sync manages, so a panel deletion can be
 // told apart from a source layer that was never mirrored.
-const lastControlValues = new Map<
-  string,
-  { visible: boolean; opacity: number }
->();
+const lastControlValues = new Map<string, { visible: boolean; opacity: number }>();
 
 const OVERTURE_UNITS: OvertureUnit[] = THEME_IDS.flatMap((theme) =>
   THEMES[theme].layers.map((layer) => ({
@@ -300,9 +280,7 @@ function reverseSync(control: OvertureMapsControl): void {
     const layerState = state.themes[unit.theme]?.layers[unit.sourceLayer];
     if (!layerState) continue;
     const key = unitKey(unit);
-    const storeLayer = store.layers.find(
-      (layer) => layer.id === storeLayerId(unit),
-    );
+    const storeLayer = store.layers.find((layer) => layer.id === storeLayerId(unit));
 
     if (!storeLayer) {
       // The entry was removed from the Layers panel: hide the source layer.
@@ -362,10 +340,7 @@ function createOvertureStoreLayer(
   };
 }
 
-function shouldUpdateStoreLayer(
-  existing: GeoLibreLayer,
-  next: GeoLibreLayer,
-): boolean {
+function shouldUpdateStoreLayer(existing: GeoLibreLayer, next: GeoLibreLayer): boolean {
   return (
     existing.name !== next.name ||
     existing.type !== next.type ||

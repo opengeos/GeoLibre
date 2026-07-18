@@ -31,9 +31,7 @@ describe("buildDedupedLabelFeatures", () => {
     const result = buildDedupedLabelFeatures(collection, "name", "unique");
     assert.ok(result);
     assert.equal(result.features.length, 2);
-    const labels = result.features
-      .map((f) => f.properties?.__geolibre_label)
-      .sort();
+    const labels = result.features.map((f) => f.properties?.__geolibre_label).sort();
     assert.deepEqual(labels, ["Antenna 1", "Other"]);
   });
 
@@ -83,10 +81,7 @@ describe("buildDedupedLabelFeatures", () => {
         },
       ],
     };
-    assert.equal(
-      buildDedupedLabelFeatures(collection, "name", "unique"),
-      null,
-    );
+    assert.equal(buildDedupedLabelFeatures(collection, "name", "unique"), null);
   });
 
   it("coerces non-string field values to strings", () => {

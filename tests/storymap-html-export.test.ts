@@ -79,10 +79,7 @@ describe("buildStoryMapHtml raster sources", () => {
       ],
     });
     assert.ok(html.includes("scene-a-source"), "adds the raster source");
-    assert.ok(
-      html.includes(JSON.stringify(TILEJSON_URL)),
-      "embeds the TileJSON url",
-    );
+    assert.ok(html.includes(JSON.stringify(TILEJSON_URL)), "embeds the TileJSON url");
     // The chapter opacity effects survive because the layer was inlined.
     assert.ok(
       html.includes('"layer": "scene-a"'),
@@ -108,10 +105,7 @@ describe("buildStoryMapHtml raster sources", () => {
     });
     assert.ok(html.includes("scene-a-source"));
     assert.ok(html.includes("https://tiles.example.com/{z}/{x}/{y}.png"));
-    assert.ok(
-      !html.includes(JSON.stringify(TILEJSON_URL)),
-      "does not also embed the TileJSON url",
-    );
+    assert.ok(!html.includes(JSON.stringify(TILEJSON_URL)), "does not also embed the TileJSON url");
   });
 
   it("drops raster layers whose url is not http(s)", () => {
@@ -125,14 +119,8 @@ describe("buildStoryMapHtml raster sources", () => {
         basemapStyleUrl: "https://tiles.example.com/style.json",
         layers: [rasterLayer("scene-a", { type: "raster", url })],
       });
-      assert.ok(
-        !html.includes("scene-a-source"),
-        `does not inline a source for ${url}`,
-      );
-      assert.ok(
-        !html.includes('"layer": "scene-a"'),
-        `filters the chapter effects for ${url}`,
-      );
+      assert.ok(!html.includes("scene-a-source"), `does not inline a source for ${url}`);
+      assert.ok(!html.includes('"layer": "scene-a"'), `filters the chapter effects for ${url}`);
     }
   });
 
@@ -147,14 +135,8 @@ describe("buildStoryMapHtml raster sources", () => {
         basemapStyleUrl: "https://tiles.example.com/style.json",
         layers: [rasterLayer("scene-a", { type: "raster", tiles: [tile] })],
       });
-      assert.ok(
-        !html.includes("scene-a-source"),
-        `does not inline a source for ${tile}`,
-      );
-      assert.ok(
-        !html.includes('"layer": "scene-a"'),
-        `filters the chapter effects for ${tile}`,
-      );
+      assert.ok(!html.includes("scene-a-source"), `does not inline a source for ${tile}`);
+      assert.ok(!html.includes('"layer": "scene-a"'), `filters the chapter effects for ${tile}`);
     }
   });
 

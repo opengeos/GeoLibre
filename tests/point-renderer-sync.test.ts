@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  type LayerStyle,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
 
 // Stateful fake MapLibre map: tracks sources and layers across sync passes so a
@@ -20,8 +16,7 @@ function makeMap() {
       calls.push({ method, args });
     };
   const map = {
-    getSource: (id: string) =>
-      sources.has(id) ? { setData: record("setData") } : undefined,
+    getSource: (id: string) => (sources.has(id) ? { setData: record("setData") } : undefined),
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
       calls.push({ method: "addSource", args: [id, spec] });
@@ -30,8 +25,7 @@ function makeMap() {
       sources.delete(id);
       calls.push({ method: "removeSource", args: [id] });
     },
-    getLayer: (id: string) =>
-      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       calls.push({ method: "addLayer", args: [spec, beforeId] });
@@ -102,10 +96,7 @@ describe("point renderer sync", () => {
     assert.ok(layers.has("layer-pts-circle"));
 
     syncLayer(map as never, pointLayer({ pointRenderer: "heatmap" }));
-    assert.equal(
-      (layers.get("layer-pts-heatmap") as { type: string }).type,
-      "heatmap",
-    );
+    assert.equal((layers.get("layer-pts-heatmap") as { type: string }).type, "heatmap");
     assert.ok(!layers.has("layer-pts-circle"));
   });
 
@@ -122,10 +113,7 @@ describe("point renderer sync", () => {
     assert.equal(src.clusterMaxZoom, 12);
 
     assert.equal((layers.get("layer-pts-cluster") as { type: string }).type, "circle");
-    assert.equal(
-      (layers.get("layer-pts-cluster-count") as { type: string }).type,
-      "symbol",
-    );
+    assert.equal((layers.get("layer-pts-cluster-count") as { type: string }).type, "symbol");
     // The unclustered points reuse the circle layer, filtered to non-clusters.
     const circle = layers.get("layer-pts-circle") as { filter: unknown };
     assert.deepEqual(circle.filter, ["!", ["has", "point_count"]]);

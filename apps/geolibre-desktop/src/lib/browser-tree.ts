@@ -131,13 +131,7 @@ const KIND_LABEL: Record<ServiceLibraryKind, string> = {
 };
 
 /** Kind grouping order under Services, mirroring the Add Data source order. */
-const KIND_ORDER: readonly ServiceLibraryKind[] = [
-  "xyz",
-  "wms",
-  "wfs",
-  "wmts",
-  "arcgis",
-];
+const KIND_ORDER: readonly ServiceLibraryKind[] = ["xyz", "wms", "wfs", "wmts", "arcgis"];
 
 /**
  * Groups services by kind (XYZ / WMS / WFS / WMTS / ArcGIS) so the tree mirrors
@@ -145,9 +139,7 @@ const KIND_ORDER: readonly ServiceLibraryKind[] = [
  * and the services within each by name. Built-in presets and user entries are
  * interleaved so each kind reads as one catalog.
  */
-function buildServiceKinds(
-  services: readonly ServiceLibraryEntry[],
-): BrowserNode[] {
+function buildServiceKinds(services: readonly ServiceLibraryEntry[]): BrowserNode[] {
   const byKind = new Map<ServiceLibraryKind, ServiceLibraryEntry[]>();
   for (const entry of services) {
     const bucket = byKind.get(entry.kind);
@@ -155,9 +147,7 @@ function buildServiceKinds(
     else byKind.set(entry.kind, [entry]);
   }
   return KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => {
-    const entries = [...(byKind.get(kind) ?? [])].sort((a, b) =>
-      byLabel(a.name, b.name),
-    );
+    const entries = [...(byKind.get(kind) ?? [])].sort((a, b) => byLabel(a.name, b.name));
     return {
       id: `kind:${kind}`,
       kind: "category" as const,
@@ -374,9 +364,7 @@ export interface FavoriteNodeInput {
  * @param favorites - The user's favorited node descriptors.
  * @returns One node per favorite (service/connection/folder/file).
  */
-export function buildFavoriteNodes(
-  favorites: readonly FavoriteNodeInput[],
-): BrowserNode[] {
+export function buildFavoriteNodes(favorites: readonly FavoriteNodeInput[]): BrowserNode[] {
   return favorites.map((fav): BrowserNode => {
     switch (fav.kind) {
       case "service":
@@ -645,11 +633,7 @@ export function flattenVisibleTree(
   expanded: ReadonlySet<string>,
 ): VisibleRow[] {
   const rows: VisibleRow[] = [];
-  const walk = (
-    list: readonly BrowserNode[],
-    depth: number,
-    parentId: string | null,
-  ): void => {
+  const walk = (list: readonly BrowserNode[], depth: number, parentId: string | null): void => {
     for (const node of list) {
       const isGroup = Boolean(node.children);
       const isExpanded = isGroup && expanded.has(node.id);
@@ -673,10 +657,7 @@ export function flattenVisibleTree(
  * @param query - The search text; whitespace-only is treated as empty.
  * @returns A new, pruned tree (never mutates the input).
  */
-export function filterBrowserTree(
-  nodes: readonly BrowserNode[],
-  query: string,
-): BrowserNode[] {
+export function filterBrowserTree(nodes: readonly BrowserNode[], query: string): BrowserNode[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return nodes.map((node) => ({ ...node }));
 
@@ -701,7 +682,5 @@ export function filterBrowserTree(
     };
   };
 
-  return nodes
-    .map(prune)
-    .filter((node): node is BrowserNode => node !== null);
+  return nodes.map(prune).filter((node): node is BrowserNode => node !== null);
 }

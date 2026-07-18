@@ -55,9 +55,7 @@ describe("store.addTileLayer", () => {
     assert.ok(layer, "expected the layer to be added to the store");
     assert.equal(layer.type, "xyz");
     assert.equal(layer.source.type, "raster");
-    assert.deepEqual(layer.source.tiles, [
-      "https://tiles.example.com/{z}/{x}/{y}.png",
-    ]);
+    assert.deepEqual(layer.source.tiles, ["https://tiles.example.com/{z}/{x}/{y}.png"]);
     assert.equal(layer.source.tileSize, 512);
     assert.equal(layer.source.attribution, "© Example");
     assert.deepEqual(layer.source.bounds, [166, -47, 178, -34]);
@@ -79,9 +77,7 @@ describe("store.addTileLayer", () => {
     assert.ok(layer);
     assert.equal(layer.type, "xyz");
     assert.equal(layer.source.tileSize, 256);
-    assert.deepEqual(layer.source.tiles, [
-      "https://tiles.example.com/topo/{z}/{x}/{y}.png",
-    ]);
+    assert.deepEqual(layer.source.tiles, ["https://tiles.example.com/topo/{z}/{x}/{y}.png"]);
     assert.equal(layer.visible, false);
     assert.equal(layer.opacity, 0.5);
     // Omitted options must not leave undefined keys on the source.
@@ -95,9 +91,7 @@ describe("store.addTileLayer", () => {
     });
     const layer = useAppStore.getState().layers.find((l) => l.id === id);
     assert.ok(layer);
-    assert.deepEqual(layer.source.tiles, [
-      "https://tiles.example.com/{z}/{x}/{y}.png",
-    ]);
+    assert.deepEqual(layer.source.tiles, ["https://tiles.example.com/{z}/{x}/{y}.png"]);
   });
 
   it("rejects a registration that sanitizes down to no tiles", () => {
@@ -171,9 +165,7 @@ describe("native raster tile sync", () => {
     assert.equal(addSource.args[0], `source-${layer.id}`);
     const sourceSpec = addSource.args[1] as Record<string, unknown>;
     assert.equal(sourceSpec.type, "raster");
-    assert.deepEqual(sourceSpec.tiles, [
-      "https://tiles.example.com/{z}/{x}/{y}.png",
-    ]);
+    assert.deepEqual(sourceSpec.tiles, ["https://tiles.example.com/{z}/{x}/{y}.png"]);
     assert.equal(sourceSpec.tileSize, 512);
     assert.equal(sourceSpec.attribution, "© Example");
     assert.deepEqual(sourceSpec.bounds, [166, -47, 178, -34]);

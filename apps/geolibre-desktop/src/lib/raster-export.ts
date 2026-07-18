@@ -25,10 +25,7 @@ export function rasterExportUrl(layer: GeoLibreLayer): string | null {
  * @returns True for raster/COG layers backed by a downloadable file.
  */
 export function canExportRasterLayer(layer: GeoLibreLayer): boolean {
-  return (
-    (layer.type === "cog" || layer.type === "raster") &&
-    rasterExportUrl(layer) !== null
-  );
+  return (layer.type === "cog" || layer.type === "raster") && rasterExportUrl(layer) !== null;
 }
 
 /**
@@ -57,9 +54,7 @@ export async function exportRasterLayer(
   return saveBinaryFileWithFallback(bytes, {
     defaultName: `${baseName}.tif`,
     filters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
-    browserTypes: [
-      { description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } },
-    ],
+    browserTypes: [{ description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } }],
     mimeType: "image/tiff",
   });
 }

@@ -276,10 +276,7 @@ function parseLatLonList(text: string | null | undefined): Position[] {
   return positions;
 }
 
-function coordinate2d(
-  longitude: string,
-  latitude: string,
-): Position | null {
+function coordinate2d(longitude: string, latitude: string): Position | null {
   return makeCoordinate(Number(longitude), Number(latitude));
 }
 
@@ -322,9 +319,7 @@ function itemProperties(item: Element): GeoJsonProperties {
   // values as text nodes (identify popup setDOMContent + textContent, attribute
   // table React children), so the markup is never parsed and needs no sanitizing.
   const description =
-    childText(item, "description") ??
-    childText(item, "summary") ??
-    childText(item, "content");
+    childText(item, "description") ?? childText(item, "summary") ?? childText(item, "content");
   if (description) properties.description = description;
 
   // Keep only http(s) links; a feed could carry a javascript:/data: href that
@@ -393,10 +388,7 @@ function itemAuthor(item: Element): string | undefined {
  */
 function itemCategories(item: Element): string | undefined {
   const categories = directChildren(item, "category")
-    .map(
-      (category) =>
-        category.getAttribute("term") ?? category.textContent?.trim() ?? "",
-    )
+    .map((category) => category.getAttribute("term") ?? category.textContent?.trim() ?? "")
     .filter(Boolean);
   return categories.length > 0 ? categories.join(", ") : undefined;
 }
@@ -404,9 +396,7 @@ function itemCategories(item: Element): string | undefined {
 /** Returns the direct child elements with the given (case-insensitive) name. */
 function directChildren(parent: Element, localName: string): Element[] {
   const wanted = localName.toLowerCase();
-  return Array.from(parent.children).filter(
-    (child) => child.localName.toLowerCase() === wanted,
-  );
+  return Array.from(parent.children).filter((child) => child.localName.toLowerCase() === wanted);
 }
 
 /** Returns the trimmed text of the first matching direct child, if any. */

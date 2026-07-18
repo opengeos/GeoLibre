@@ -1,9 +1,6 @@
 import { normalizeStyleLibraryEntries, useAppStore } from "@geolibre/core";
 import { useEffect } from "react";
-import {
-  loadStyleLibraryEntries,
-  persistStyleLibraryEntries,
-} from "../lib/style-library-store";
+import { loadStyleLibraryEntries, persistStyleLibraryEntries } from "../lib/style-library-store";
 
 /**
  * Load the app-level Style Manager library from IndexedDB into the store on
@@ -32,10 +29,7 @@ export function useStyleLibraryPersistence() {
           // Merge under any entry saved before this load resolved (in-memory
           // wins by id), so a fast first save is never wiped by the load.
           const current = useAppStore.getState().styleLibrary;
-          const merged = [
-            ...stored.filter((e) => !current.some((c) => c.id === e.id)),
-            ...current,
-          ];
+          const merged = [...stored.filter((e) => !current.some((c) => c.id === e.id)), ...current];
           // Enable persistence before the set so the merged result (and any
           // dedup done above) is written back immediately.
           loaded = true;

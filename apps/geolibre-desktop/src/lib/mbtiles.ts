@@ -22,9 +22,7 @@ export function mbtilesTileUrl(path: string): string {
   return `${MBTILES_PROTOCOL}://tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`;
 }
 
-export async function readMbtilesMetadata(
-  path: string,
-): Promise<MbtilesMetadata> {
+export async function readMbtilesMetadata(path: string): Promise<MbtilesMetadata> {
   if (!isTauri()) {
     throw new Error("MBTiles files require GeoLibre Desktop.");
   }
@@ -37,16 +35,10 @@ export function registerMbtilesProtocol(): void {
 
   addProtocol(MBTILES_PROTOCOL, async (request) => {
     const params = parseMbtilesTileRequest(request);
-    const bytes = await invoke<number[] | Uint8Array>(
-      "read_mbtiles_tile",
-      params,
-    );
+    const bytes = await invoke<number[] | Uint8Array>("read_mbtiles_tile", params);
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
-      data: array.buffer.slice(
-        array.byteOffset,
-        array.byteOffset + array.byteLength,
-      ),
+      data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),
     };
   });
   protocolRegistered = true;

@@ -1,9 +1,5 @@
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import {
-  createWeatherLayer,
-  type WeatherAnimationState,
-  type WeatherFrame,
-} from "./weather-layer";
+import { createWeatherLayer, type WeatherAnimationState, type WeatherFrame } from "./weather-layer";
 
 /**
  * Realtime clouds overlay — "clouds like Google Earth".
@@ -40,9 +36,7 @@ const FRAME_MS = 900;
 
 function utcDaysAgo(days: number): string {
   const now = new Date();
-  const d = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - days),
-  );
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - days));
   return d.toISOString().slice(0, 10);
 }
 

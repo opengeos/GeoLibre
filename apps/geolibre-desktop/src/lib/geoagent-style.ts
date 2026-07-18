@@ -93,10 +93,7 @@ const GEOAGENT_SELECT_FIXES = `
 }
 `;
 
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById(GEOAGENT_STYLE_ID)
-) {
+if (typeof document !== "undefined" && !document.getElementById(GEOAGENT_STYLE_ID)) {
   const style = document.createElement("style");
   style.id = GEOAGENT_STYLE_ID;
   style.textContent = GEOAGENT_SELECT_FIXES;
@@ -106,26 +103,18 @@ if (
 const closeGeoAgentSelectMenu = () => {
   document.querySelector(`.${GEOAGENT_SELECT_MENU_CLASS}`)?.remove();
   document
-    .querySelectorAll<HTMLButtonElement>(
-      `.${GEOAGENT_SELECT_PROXY_CLASS}.is-open`,
-    )
+    .querySelectorAll<HTMLButtonElement>(`.${GEOAGENT_SELECT_PROXY_CLASS}.is-open`)
     .forEach((button) => {
       button.classList.remove("is-open");
       button.setAttribute("aria-expanded", "false");
     });
 };
 
-const syncGeoAgentSelectProxy = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const syncGeoAgentSelectProxy = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   button.textContent = select.options[select.selectedIndex]?.text ?? "";
 };
 
-const openGeoAgentSelectMenu = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const openGeoAgentSelectMenu = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   closeGeoAgentSelectMenu();
   syncGeoAgentSelectProxy(select, button);
 
@@ -161,9 +150,7 @@ const openGeoAgentSelectMenu = (
     menu.appendChild(item);
   });
 
-  const items = Array.from(
-    menu.querySelectorAll<HTMLButtonElement>("button"),
-  );
+  const items = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
   menu.addEventListener("keydown", (event) => {
     const current = items.indexOf(document.activeElement as HTMLButtonElement);
     if (event.key === "ArrowDown") {
@@ -215,9 +202,7 @@ const enhanceGeoAgentSelect = (select: HTMLSelectElement) => {
     if (event.key === "Escape") closeGeoAgentSelectMenu();
   });
 
-  select.addEventListener("change", () =>
-    syncGeoAgentSelectProxy(select, button),
-  );
+  select.addEventListener("change", () => syncGeoAgentSelectProxy(select, button));
   select.classList.add("is-proxied");
   select.insertAdjacentElement("afterend", button);
 };

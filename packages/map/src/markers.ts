@@ -38,11 +38,7 @@ function markerSize(style: LayerStyle): number {
   return Math.min(MAX_MARKER_SIZE, Math.max(MIN_MARKER_SIZE, Math.round(size)));
 }
 
-function drawShape(
-  ctx: CanvasRenderingContext2D,
-  shape: MarkerShape,
-  size: number,
-): void {
+function drawShape(ctx: CanvasRenderingContext2D, shape: MarkerShape, size: number): void {
   const c = size / 2;
   // Leave a small inset so the stroke is not clipped at the tile edge.
   const r = c * 0.82;
@@ -139,10 +135,7 @@ function drawBuiltinMarker(
   return { image: ctx.getImageData(0, 0, px, px), pixelRatio: ratio };
 }
 
-function loadSvgMarker(
-  markup: string,
-  size: number,
-): Promise<GeneratedImageResult | null> {
+function loadSvgMarker(markup: string, size: number): Promise<GeneratedImageResult | null> {
   const src = resolveSvgSource(markup);
   if (!src) return Promise.resolve(null);
   const ratio = MARKER_PIXEL_RATIO;

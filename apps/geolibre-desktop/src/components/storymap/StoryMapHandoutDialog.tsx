@@ -1,18 +1,7 @@
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
-import type {
-  StoryActiveSlideMode,
-  StoryChapter,
-  StoryMap,
-} from "@geolibre/core";
+import type { StoryActiveSlideMode, StoryChapter, StoryMap } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -29,16 +18,8 @@ import {
 } from "@geolibre/ui";
 import { FileDown, Loader2 } from "lucide-react";
 import { captureMapImage } from "../../lib/print-layout-export";
-import {
-  PAPER_SIZES,
-  type Orientation,
-  type PaperSizeId,
-} from "../../lib/print-layout";
-import {
-  buildStoryMapHandoutPdf,
-  singleLine,
-  type HandoutChapter,
-} from "../../lib/storymap-pdf";
+import { PAPER_SIZES, type Orientation, type PaperSizeId } from "../../lib/print-layout";
+import { buildStoryMapHandoutPdf, singleLine, type HandoutChapter } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
 import {
@@ -174,11 +155,7 @@ function jumpAndWaitIdle(
     // timeout. The current frame is already rendered with tiles loaded, so
     // resolve on the next frame instead.
     const after = map.getCenter();
-    if (
-      before.lng === after.lng &&
-      before.lat === after.lat &&
-      map.areTilesLoaded()
-    ) {
+    if (before.lng === after.lng && before.lat === after.lat && map.areTilesLoaded()) {
       requestAnimationFrame(finish);
     }
     // Register after jumpTo so a pre-existing idle event isn't consumed before
@@ -279,9 +256,7 @@ export function StoryMapHandoutDialog({
   const [byline, setByline] = useState("");
   const [footer, setFooter] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(
-    null,
-  );
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Neutral status line (e.g. "Export cancelled"), distinct from an error.
   const [notice, setNotice] = useState<string | null>(null);
@@ -356,8 +331,7 @@ export function StoryMapHandoutDialog({
     // target. Duration 0 makes each change instant so the capture never grabs
     // a mid-fade frame.
     const effectsApplied = chapters.some(
-      (chapter) =>
-        chapter.onChapterEnter.length > 0 || chapter.onChapterExit.length > 0,
+      (chapter) => chapter.onChapterEnter.length > 0 || chapter.onChapterExit.length > 0,
     );
     // Reset to the store-backed layer styles first so the replay starts from
     // the same baseline as a fresh presentation, not whatever opacities a
@@ -390,11 +364,7 @@ export function StoryMapHandoutDialog({
             });
             continue;
           }
-          await jumpAndWaitIdle(
-            map,
-            slideLocation(screen, chapters),
-            () => abortRef.current,
-          );
+          await jumpAndWaitIdle(map, slideLocation(screen, chapters), () => abortRef.current);
           if (abortRef.current) break;
           const slideShot = captureMapImage(map);
           captures.push({
@@ -425,9 +395,7 @@ export function StoryMapHandoutDialog({
         if (abortRef.current) break;
         const shot = captureMapImage(map);
         // Load the chapter's own photo (if any) so it appears beside the map.
-        const photo = chapter.image
-          ? await loadChapterPhoto(chapter.image)
-          : null;
+        const photo = chapter.image ? await loadChapterPhoto(chapter.image) : null;
         captures.push({
           title: chapter.title,
           description: chapter.description,
@@ -497,19 +465,14 @@ export function StoryMapHandoutDialog({
   ]);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next: boolean) => !generating && onOpenChange(next)}
-    >
+    <Dialog open={open} onOpenChange={(next: boolean) => !generating && onOpenChange(next)}>
       <DialogContent className="flex max-h-[88vh] w-[min(92vw,34rem)] flex-col gap-0 p-0">
         <DialogHeader className="border-b px-5 py-4">
           <DialogTitle className="flex items-center gap-2">
             <FileDown className="h-4 w-4" />
             {t("storymap.handout.title")}
           </DialogTitle>
-          <DialogDescription>
-            {t("storymap.handout.description")}
-          </DialogDescription>
+          <DialogDescription>{t("storymap.handout.description")}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="min-h-0 flex-1">
@@ -522,15 +485,8 @@ export function StoryMapHandoutDialog({
                     total: screens.length,
                   })}
                 </h3>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs"
-                  onClick={toggleAll}
-                >
-                  {allSelected
-                    ? t("storymap.handout.selectNone")
-                    : t("storymap.handout.selectAll")}
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={toggleAll}>
+                  {allSelected ? t("storymap.handout.selectNone") : t("storymap.handout.selectAll")}
                 </Button>
               </div>
               <div className="space-y-1 rounded-md border p-2">
@@ -558,16 +514,10 @@ export function StoryMapHandoutDialog({
                       />
                       <span
                         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs ${
-                          isSlide
-                            ? "bg-primary/15 text-primary"
-                            : "bg-muted"
+                          isSlide ? "bg-primary/15 text-primary" : "bg-muted"
                         }`}
                       >
-                        {isSlide
-                          ? screen.position === "start"
-                            ? "▶"
-                            : "■"
-                          : screen.index + 1}
+                        {isSlide ? (screen.position === "start" ? "▶" : "■") : screen.index + 1}
                       </span>
                       <span className="truncate">{label}</span>
                     </label>
@@ -579,16 +529,11 @@ export function StoryMapHandoutDialog({
             <Separator />
 
             <div className="grid grid-cols-2 gap-3">
-              <Field
-                label={t("storymap.handout.paperSize")}
-                htmlFor="storymap-handout-paper-size"
-              >
+              <Field label={t("storymap.handout.paperSize")} htmlFor="storymap-handout-paper-size">
                 <Select
                   id="storymap-handout-paper-size"
                   value={paperSize}
-                  onChange={(e) =>
-                    setPaperSize(e.target.value as PaperSizeId)
-                  }
+                  onChange={(e) => setPaperSize(e.target.value as PaperSizeId)}
                 >
                   {PAPER_SIZES.filter((p) => p.group === "paper").map((p) => (
                     <option key={p.id} value={p.id}>
@@ -604,16 +549,10 @@ export function StoryMapHandoutDialog({
                 <Select
                   id="storymap-handout-orientation"
                   value={orientation}
-                  onChange={(e) =>
-                    setOrientation(e.target.value as Orientation)
-                  }
+                  onChange={(e) => setOrientation(e.target.value as Orientation)}
                 >
-                  <option value="portrait">
-                    {t("storymap.handout.portrait")}
-                  </option>
-                  <option value="landscape">
-                    {t("storymap.handout.landscape")}
-                  </option>
+                  <option value="portrait">{t("storymap.handout.portrait")}</option>
+                  <option value="landscape">{t("storymap.handout.landscape")}</option>
                 </Select>
               </Field>
             </div>
@@ -629,10 +568,7 @@ export function StoryMapHandoutDialog({
                 placeholder={t("storymap.handout.documentTitlePlaceholder")}
               />
             </Field>
-            <Field
-              label={t("storymap.handout.subtitle")}
-              htmlFor="storymap-handout-subtitle"
-            >
+            <Field label={t("storymap.handout.subtitle")} htmlFor="storymap-handout-subtitle">
               <Input
                 id="storymap-handout-subtitle"
                 value={subtitle}
@@ -640,10 +576,7 @@ export function StoryMapHandoutDialog({
                 placeholder={t("storymap.handout.subtitlePlaceholder")}
               />
             </Field>
-            <Field
-              label={t("storymap.handout.byline")}
-              htmlFor="storymap-handout-byline"
-            >
+            <Field label={t("storymap.handout.byline")} htmlFor="storymap-handout-byline">
               <Input
                 id="storymap-handout-byline"
                 value={byline}
@@ -651,10 +584,7 @@ export function StoryMapHandoutDialog({
                 placeholder={t("storymap.handout.bylinePlaceholder")}
               />
             </Field>
-            <Field
-              label={t("storymap.handout.footerText")}
-              htmlFor="storymap-handout-footer"
-            >
+            <Field label={t("storymap.handout.footerText")} htmlFor="storymap-handout-footer">
               <Input
                 id="storymap-handout-footer"
                 value={footer}
@@ -684,13 +614,9 @@ export function StoryMapHandoutDialog({
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                generating ? (abortRef.current = true) : onOpenChange(false)
-              }
+              onClick={() => (generating ? (abortRef.current = true) : onOpenChange(false))}
             >
-              {generating
-                ? t("storymap.handout.stop")
-                : t("common.cancel")}
+              {generating ? t("storymap.handout.stop") : t("common.cancel")}
             </Button>
             <Button
               size="sm"

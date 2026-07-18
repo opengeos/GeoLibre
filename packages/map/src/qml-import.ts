@@ -495,9 +495,7 @@ function readLabeling(labeling: unknown, warnings: string[]): Partial<LabelStyle
     // GeoLibre's single label config cannot represent; flag it rather than
     // dropping the labels silently.
     if (type && type !== "simple") {
-      warnings.push(
-        `The "${type}" labeling has no GeoLibre equivalent; labels were not imported.`,
-      );
+      warnings.push(`The "${type}" labeling has no GeoLibre equivalent; labels were not imported.`);
     }
     return null;
   }
@@ -513,9 +511,7 @@ function readLabeling(labeling: unknown, warnings: string[]): Partial<LabelStyle
     labels.field = field;
     labels.expression = "";
   } else if (field && isExpression) {
-    warnings.push(
-      "The label is a QGIS expression; enable labels and pick a field in GeoLibre.",
-    );
+    warnings.push("The label is a QGIS expression; enable labels and pick a field in GeoLibre.");
   }
 
   const textStyle = toArray(settings["text-style"])[0];
@@ -566,9 +562,7 @@ export function parseQml(xml: string): QmlImportResult {
 
   const qgis = isNode(root) ? root.qgis : undefined;
   if (!isNode(qgis)) {
-    warnings.push(
-      "This file is not a QGIS QML style (no <qgis> root); nothing was imported.",
-    );
+    warnings.push("This file is not a QGIS QML style (no <qgis> root); nothing was imported.");
     return { style: patch, labels, warnings, matchedRuleCount: 0 };
   }
 
@@ -583,9 +577,7 @@ export function parseQml(xml: string): QmlImportResult {
   if (labels) matchedRuleCount += 1;
 
   if (matchedRuleCount === 0) {
-    warnings.push(
-      "No renderer or labeling was found; nothing was imported.",
-    );
+    warnings.push("No renderer or labeling was found; nothing was imported.");
   }
 
   return { style: patch, labels, warnings, matchedRuleCount };
@@ -650,9 +642,7 @@ function classifyCategorized(
 ): number {
   const property = attr(renderer, "attr");
   const categoriesRoot = toArray(renderer.categories)[0];
-  const categories = isNode(categoriesRoot)
-    ? toArray(categoriesRoot.category)
-    : [];
+  const categories = isNode(categoriesRoot) ? toArray(categoriesRoot.category) : [];
   if (!property || categories.length === 0) return 0;
 
   const stops: VectorStyleStop[] = [];
@@ -715,14 +705,9 @@ function classifyGraduated(
 
 /** A rule zoom bound recovered from a QGIS scale denominator, or undefined
  * when the denominator is unusable or lies outside the renderable zoom range. */
-function zoomFromDenominator(
-  denominator: number | null,
-  bound: "min" | "max",
-): number | undefined {
+function zoomFromDenominator(denominator: number | null, bound: "min" | "max"): number | undefined {
   if (denominator === null || !(denominator > 0)) return undefined;
-  const zoom =
-    Math.round(Math.log2(OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / denominator) * 100) /
-    100;
+  const zoom = Math.round(Math.log2(OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / denominator) * 100) / 100;
   // A bound at (or beyond) the zoom extremes is no constraint at all.
   if (bound === "min") return zoom > MIN_LAYER_ZOOM ? zoom : undefined;
   return zoom < MAX_LAYER_ZOOM ? zoom : undefined;
@@ -730,10 +715,7 @@ function zoomFromDenominator(
 
 /** A per-rule numeric override: the rule symbol's value when it differs from
  * the base (first) symbol's, else undefined so the rule inherits the layer. */
-function numberOverride(
-  value: number | undefined,
-  base: number | undefined,
-): number | undefined {
+function numberOverride(value: number | undefined, base: number | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (base !== undefined && Math.abs(value - base) < 1e-9) return undefined;
   return value;
@@ -828,23 +810,15 @@ function classifyRules(
       if (!blankFilter) {
         const expression = qgisFilterToMapbox(filter);
         if (expression === null) {
-          warnings.push(
-            "A rule used a QGIS expression that could not be read; it was skipped.",
-          );
+          warnings.push("A rule used a QGIS expression that could not be read; it was skipped.");
           continue;
         }
         filterJson = JSON.stringify(expression);
       }
       const id = `qml-rule-${index}`;
       index += 1;
-      const minZoom = zoomFromDenominator(
-        toNum(attr(rule, "scalemaxdenom")),
-        "min",
-      );
-      const maxZoom = zoomFromDenominator(
-        toNum(attr(rule, "scalemindenom")),
-        "max",
-      );
+      const minZoom = zoomFromDenominator(toNum(attr(rule, "scalemaxdenom")), "min");
+      const maxZoom = zoomFromDenominator(toNum(attr(rule, "scalemindenom")), "max");
       vectorRules.push({
         id,
         label,
@@ -906,15 +880,10 @@ function literalValue(value: string): string | number {
  * Merge a parsed QML import over a base {@link LayerStyle}. Mirrors
  * {@link applySldImport}/{@link applyMapboxStyleImport}.
  */
-export function applyQmlImport(
-  base: LayerStyle,
-  result: QmlImportResult,
-): LayerStyle {
+export function applyQmlImport(base: LayerStyle, result: QmlImportResult): LayerStyle {
   return {
     ...base,
     ...result.style,
-    labels: result.labels
-      ? { ...base.labels, ...result.labels }
-      : base.labels,
+    labels: result.labels ? { ...base.labels, ...result.labels } : base.labels,
   };
 }

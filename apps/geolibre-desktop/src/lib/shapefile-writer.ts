@@ -141,9 +141,7 @@ function extend(box: Box, x: number, y: number): void {
 }
 
 function safeBox(box: Box): Box {
-  return Number.isFinite(box.minX)
-    ? box
-    : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  return Number.isFinite(box.minX) ? box : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 }
 
 /** Encode one geometry's Shapefile record content (without the 8-byte record
@@ -206,9 +204,7 @@ function encodeShape(
   extend(fileBox, drawn.minX, drawn.minY);
   extend(fileBox, drawn.maxX, drawn.maxY);
 
-  const content = new Uint8Array(
-    4 + 32 + 4 + 4 + numParts * 4 + flatPoints.length * 16,
-  );
+  const content = new Uint8Array(4 + 32 + 4 + 4 + numParts * 4 + flatPoints.length * 16);
   const view = new DataView(content.buffer);
   view.setInt32(0, shapeType, true);
   view.setFloat64(4, drawn.minX, true);
@@ -234,12 +230,7 @@ function encodeShape(
 
 /** Write the 100-byte .shp/.shx header. `fileWords` is the file length in
  * 16-bit words; `box` the dataset bounding box. */
-function writeMainHeader(
-  target: Uint8Array,
-  shapeType: number,
-  fileWords: number,
-  box: Box,
-): void {
+function writeMainHeader(target: Uint8Array, shapeType: number, fileWords: number, box: Box): void {
   const view = new DataView(target.buffer, target.byteOffset, 100);
   view.setInt32(0, 9994, false); // file code (big-endian)
   view.setInt32(24, fileWords, false); // file length in words (big-endian)
@@ -299,9 +290,7 @@ function dbfFieldName(key: string, taken: Set<string>): string {
   // Falling through means >999 fields share one 10-char prefix; returning a
   // name already in `taken` would write a duplicate DBF column. Fail loudly
   // instead of silently corrupting the file.
-  throw new Error(
-    `Cannot generate a unique DBF field name for "${key}" (>999 collisions).`,
-  );
+  throw new Error(`Cannot generate a unique DBF field name for "${key}" (>999 collisions).`);
 }
 
 function decimalPlaces(value: number): number {
@@ -355,8 +344,7 @@ function planField(key: string, name: string, values: unknown[]): DbfField {
   let length = 1;
   for (const value of values) {
     if (value == null) continue;
-    const text =
-      typeof value === "object" ? JSON.stringify(value) : String(value);
+    const text = typeof value === "object" ? JSON.stringify(value) : String(value);
     length = Math.max(length, TEXT_ENCODER.encode(text).length);
   }
   return { key, name, type: "C", length: Math.min(length, 254), decimals: 0 };
@@ -383,15 +371,13 @@ function encodeDbfValue(value: unknown, field: DbfField): Uint8Array {
 
   // Text: left-justified, truncated to the field byte length on a code-point
   // boundary so multi-byte characters are never cut mid-sequence.
-  const text =
-    typeof value === "object" ? JSON.stringify(value) : String(value);
+  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
   cell.set(encodeUtf8Truncated(text, field.length), 0);
   return cell;
 }
 
 function buildDbf(features: Feature[], fields: DbfField[]): Uint8Array {
-  const recordLength =
-    1 + fields.reduce((total, field) => total + field.length, 0);
+  const recordLength = 1 + fields.reduce((total, field) => total + field.length, 0);
   const headerLength = 32 + fields.length * 32 + 1;
   // Both are serialized as uint16; too many or too-wide attributes would
   // overflow and silently corrupt the .dbf, so fail fast instead.
@@ -458,8 +444,7 @@ export function writeShapefile(geojson: FeatureCollection): ShapefileParts {
   );
 
   // .shp: 100-byte header + per-record (8-byte header + content).
-  const shpSize =
-    100 + contents.reduce((total, content) => total + 8 + content.length, 0);
+  const shpSize = 100 + contents.reduce((total, content) => total + 8 + content.length, 0);
   const shp = new Uint8Array(shpSize);
   const shpView = new DataView(shp.buffer);
   const shxSize = 100 + contents.length * 8;

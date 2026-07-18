@@ -31,9 +31,7 @@ const OPTIONS = languageOptions(AVAILABLE_LANGUAGES);
  */
 export function useLanguage(): UseLanguageResult {
   const { i18n } = useTranslation();
-  const setDesktopSettings = useDesktopSettingsStore(
-    (s) => s.setDesktopSettings,
-  );
+  const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
 
   const setLanguage = useCallback(
     (code: string) => {
@@ -59,8 +57,7 @@ export function useLanguage(): UseLanguageResult {
 
   // i18n.language can be a full tag (e.g. `en-US`); reuse the shared resolver to
   // collapse it to a code we ship.
-  const language =
-    resolveLanguage(i18n.language, AVAILABLE_LANGUAGES) ?? DEFAULT_LANGUAGE;
+  const language = resolveLanguage(i18n.language, AVAILABLE_LANGUAGES) ?? DEFAULT_LANGUAGE;
 
   return { language, options: OPTIONS, setLanguage };
 }

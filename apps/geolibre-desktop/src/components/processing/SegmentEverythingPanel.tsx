@@ -63,10 +63,7 @@ function epsgFromGeoKeys(geoKeys: Record<string, unknown>): number | null {
 }
 
 /** Turn source-pixel mask polygons into a georeferenced FeatureCollection. */
-function masksToFeatureCollection(
-  masks: SegmentMask[],
-  raster: RasterData,
-): FeatureCollection {
+function masksToFeatureCollection(masks: SegmentMask[], raster: RasterData): FeatureCollection {
   const { originX, originY, resX, resY, flipX, flipY } = raster;
   // Honour the raster's resolution sign (flipX = east-to-west, flipY = south-up)
   // so mirrored/flipped GeoTIFFs are georeferenced correctly, not mislocated.
@@ -122,9 +119,7 @@ export function SegmentEverythingPanel({
   const [minSize, setMinSize] = useState(0.08); // percent of image area
   const [running, setRunning] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(
-    null,
-  );
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
 
@@ -145,8 +140,7 @@ export function SegmentEverythingPanel({
       if ((event.target as HTMLElement).closest("button")) return;
       event.preventDefault();
       const el = panelRef.current;
-      const parent =
-        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const parent = (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
       const pb = parent?.getBoundingClientRect();
       const eb = el?.getBoundingClientRect();
       const start: PanelPos = pos ?? {
@@ -163,12 +157,8 @@ export function SegmentEverythingPanel({
       const move = (m: PointerEvent) => {
         if (!panelRef.current) return;
         const bounds = parent?.getBoundingClientRect();
-        const maxX = bounds
-          ? bounds.width - w - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
-        const maxY = bounds
-          ? bounds.height - h - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
+        const maxX = bounds ? bounds.width - w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxY = bounds ? bounds.height - h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
         setPos({
           x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
           y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
@@ -257,33 +247,19 @@ export function SegmentEverythingPanel({
       const tagged = masksToFeatureCollection(masks, raster);
       const fc = await reprojectFeatureCollectionToWgs84(tagged);
       const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
-      const layer = useAppStore
-        .getState()
-        .layers.find((item) => item.id === layerId);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
-      setResultMessage(
-        t("segmentEverything.added", { count: masks.length }),
-      );
+      setResultMessage(t("segmentEverything.added", { count: masks.length }));
     } catch (err) {
       if (controller.signal.aborted) return;
-      setError(
-        err instanceof Error ? err.message : t("segmentEverything.error.failed"),
-      );
+      setError(err instanceof Error ? err.message : t("segmentEverything.error.failed"));
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       inferringRef.current = false;
       setRunning(false);
       setProgress(null);
     }
-  }, [
-    imageBytes,
-    pointsPerSide,
-    quality,
-    minSize,
-    addGeoJsonLayer,
-    mapControllerRef,
-    t,
-  ]);
+  }, [imageBytes, pointsPerSide, quality, minSize, addGeoJsonLayer, mapControllerRef, t]);
 
   if (!open) return null;
 
@@ -305,10 +281,7 @@ export function SegmentEverythingPanel({
         onPointerDown={handleDragStart}
       >
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <GripVertical
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <Shapes className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <span className="truncate">{t("segmentEverything.title")}</span>
         </div>
@@ -323,9 +296,7 @@ export function SegmentEverythingPanel({
       </div>
 
       <div className="flex flex-col overflow-auto p-3">
-        <p className="mb-2 text-xs text-muted-foreground">
-          {t("segmentEverything.description")}
-        </p>
+        <p className="mb-2 text-xs text-muted-foreground">{t("segmentEverything.description")}</p>
         <div className="flex flex-col gap-3">
           <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />

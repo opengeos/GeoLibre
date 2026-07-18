@@ -98,12 +98,8 @@ describe("right-panel registry", () => {
 
   it("fires onClose for the displaced panel when a new panel takes over", () => {
     const calls: string[] = [];
-    registerRightPanel(
-      testPanel({ id: "a", title: "A", onClose: () => calls.push("a:close") }),
-    );
-    registerRightPanel(
-      testPanel({ id: "b", title: "B", onOpen: () => calls.push("b:open") }),
-    );
+    registerRightPanel(testPanel({ id: "a", title: "A", onClose: () => calls.push("a:close") }));
+    registerRightPanel(testPanel({ id: "b", title: "B", onOpen: () => calls.push("b:open") }));
     openRightPanel("a");
     openRightPanel("b");
     assert.equal(getActiveRightPanel(), "b");
@@ -112,9 +108,7 @@ describe("right-panel registry", () => {
 
   it("defaults to right-of-style and honors a declared dock", () => {
     registerRightPanel(testPanel({ id: "r", title: "R" }));
-    registerRightPanel(
-      testPanel({ id: "l", title: "L", dock: "left-of-layers" }),
-    );
+    registerRightPanel(testPanel({ id: "l", title: "L", dock: "left-of-layers" }));
     openRightPanel("r");
     assert.equal(getActiveRightPanelDock(), "right-of-style");
     assert.equal(getRightPanelSnapshot().dock, "right-of-style");
@@ -242,9 +236,7 @@ describe("right-panel registry", () => {
         render: () => undefined,
       }),
     );
-    assert.throws(() =>
-      registerRightPanel({ id: "x", title: "", render: () => undefined }),
-    );
+    assert.throws(() => registerRightPanel({ id: "x", title: "", render: () => undefined }));
     assert.throws(() =>
       registerRightPanel({
         id: "x",

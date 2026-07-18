@@ -113,9 +113,7 @@ interface RasterToolsDialogProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
-export function RasterToolsDialog({
-  mapControllerRef,
-}: RasterToolsDialogProps): ReactElement {
+export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps): ReactElement {
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.rasterToolOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
@@ -125,9 +123,7 @@ export function RasterToolsDialog({
 
   const open = openTool !== null;
   const desktop = isTauri();
-  const [selectedId, setSelectedId] = useState<string>(
-    openTool ?? RASTER_TOOLS[0].id,
-  );
+  const [selectedId, setSelectedId] = useState<string>(openTool ?? RASTER_TOOLS[0].id);
   const [inputPath, setInputPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
   const [params, setParams] = useState<Record<string, unknown>>({});
@@ -147,15 +143,11 @@ export function RasterToolsDialog({
   // History trackers per dispatched sidecar job id (#1292). Entries stay after
   // finish (finish is idempotent); the map is capped (oldest evicted) so a
   // long session cannot grow it without bound.
-  const historyTrackersRef = useRef<Map<string, ProcessingRunTracker>>(
-    new Map(),
-  );
+  const historyTrackersRef = useRef<Map<string, ProcessingRunTracker>>(new Map());
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
-  const [engine, setEngine] = useState<RasterEngine>(
-    desktop ? "sidecar" : "client",
-  );
+  const [engine, setEngine] = useState<RasterEngine>(desktop ? "sidecar" : "client");
   const [clientInput, setClientInput] = useState<{
     name: string;
     bytes: ArrayBuffer;
@@ -169,10 +161,7 @@ export function RasterToolsDialog({
     bytes: ArrayBuffer;
   } | null>(null);
 
-  const tool = useMemo(
-    () => getRasterTool(selectedId) ?? RASTER_TOOLS[0],
-    [selectedId],
-  );
+  const tool = useMemo(() => getRasterTool(selectedId) ?? RASTER_TOOLS[0], [selectedId]);
   const groups = useMemo(groupedTools, []);
 
   // When the menu opens the dialog with a specific tool, preselect it.
@@ -185,9 +174,7 @@ export function RasterToolsDialog({
       // Raster tools are sidecar-only and the file pickers cannot resolve real
       // paths in a browser, so a pure web build cannot run them.
       setRuntimeAvailable(false);
-      setRuntimeMessage(
-        "Raster tools need the GeoLibre desktop app with a running sidecar.",
-      );
+      setRuntimeMessage("Raster tools need the GeoLibre desktop app with a running sidecar.");
       return;
     }
     setRuntimeAvailable(null);
@@ -198,9 +185,7 @@ export function RasterToolsDialog({
       setRuntimeMessage(status.message);
     } catch (err) {
       setRuntimeAvailable(false);
-      setRuntimeMessage(
-        err instanceof Error ? err.message : "Could not connect to sidecar.",
-      );
+      setRuntimeMessage(err instanceof Error ? err.message : "Could not connect to sidecar.");
     }
   }, [desktop]);
 
@@ -230,9 +215,7 @@ export function RasterToolsDialog({
     // A saved-project history entry can reference a tool that was renamed or
     // removed since; drop the request instead of leaving it pending forever.
     if (!getRasterTool(rerun.toolId)) {
-      setError(
-        t("processing.history.toolUnavailable", { toolId: rerun.toolId }),
-      );
+      setError(t("processing.history.toolUnavailable", { toolId: rerun.toolId }));
       setProcessingRerun(null);
       return;
     }
@@ -281,10 +264,7 @@ export function RasterToolsDialog({
     if (!job || RUNNING_JOB_STATUSES.has(job.status)) return;
     historyTrackersRef.current
       .get(job.id)
-      ?.finish(
-        job.status === "succeeded" ? "success" : "error",
-        job.error ?? undefined,
-      );
+      ?.finish(job.status === "succeeded" ? "success" : "error", job.error ?? undefined);
   }, [job]);
 
   // Keep the newest log lines in view as messages stream in. One effect per log
@@ -297,8 +277,7 @@ export function RasterToolsDialog({
   }, [clientLog.length]);
 
   const setParam = useCallback(
-    (id: string, value: unknown) =>
-      setParams((prev) => ({ ...prev, [id]: value })),
+    (id: string, value: unknown) => setParams((prev) => ({ ...prev, [id]: value })),
     [],
   );
 
@@ -312,9 +291,7 @@ export function RasterToolsDialog({
       // fields resolve correctly on the first render — before the effect that
       // seeds `params` from toolDefaults has run (avoids a one-frame flicker).
       const controller = tool.parameters.find((p) => p.id === vw.param);
-      const current = (params[vw.param] ?? controller?.default) as
-        | string
-        | undefined;
+      const current = (params[vw.param] ?? controller?.default) as string | undefined;
       if ("in" in vw) return current != null && vw.in.includes(current);
       return current == null || !vw.notIn.includes(current);
     },
@@ -351,9 +328,7 @@ export function RasterToolsDialog({
       await startGeoLibreSidecar();
       await checkRuntime();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start GeoLibre sidecar.",
-      );
+      setError(err instanceof Error ? err.message : "Could not start GeoLibre sidecar.");
     } finally {
       setStartingServer(false);
     }
@@ -411,9 +386,7 @@ export function RasterToolsDialog({
     () =>
       toolTakesRasterInput
         ? layers.filter((layer) =>
-            engine === "client"
-              ? canExportRasterLayer(layer)
-              : sidecarRasterUrl(layer) !== null,
+            engine === "client" ? canExportRasterLayer(layer) : sidecarRasterUrl(layer) !== null,
           )
         : [],
     [layers, engine, toolTakesRasterInput],
@@ -450,11 +423,7 @@ export function RasterToolsDialog({
         setClientLog([]);
       } catch (err) {
         if (controller.signal.aborted) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : t("toolbar.rasterTool.layerLoadError"),
-        );
+        setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
       } finally {
         if (!controller.signal.aborted) setResolvingLayer(false);
       }
@@ -490,11 +459,7 @@ export function RasterToolsDialog({
           expression: buildSpectralIndexExpression(params).expression,
         };
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : t("toolbar.rasterTool.invalidSpectralIndex"),
-        );
+        setError(err instanceof Error ? err.message : t("toolbar.rasterTool.invalidSpectralIndex"));
         return;
       }
     }
@@ -525,8 +490,7 @@ export function RasterToolsDialog({
       }
       setJob(nextJob);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Could not start raster tool.";
+      const message = err instanceof Error ? err.message : "Could not start raster tool.";
       tracker.finish("error", message);
       setError(message);
     }
@@ -580,11 +544,7 @@ export function RasterToolsDialog({
         ]);
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
-      const { raster: result, bytes } = runRasterToolClient(
-        tool.id,
-        raster,
-        params,
-      );
+      const { raster: result, bytes } = runRasterToolClient(tool.id, raster, params);
       setClientLog((prev) => [
         ...prev,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
@@ -603,16 +563,11 @@ export function RasterToolsDialog({
           // it explicitly for correct transparency of masked/edge cells.
           ...(result.nodata != null ? { nodata: result.nodata } : {}),
         });
-        setClientLog((prev) => [
-          ...prev,
-          t("toolbar.rasterTool.addedToMap", { name: outName }),
-        ]);
+        setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
         tracker.addOutputLayer(outName);
       } catch (mapError) {
         const mapMessage =
-          mapError instanceof Error
-            ? mapError.message
-            : t("toolbar.rasterTool.mapAddError");
+          mapError instanceof Error ? mapError.message : t("toolbar.rasterTool.mapAddError");
         setError(mapMessage);
         setClientLog((prev) => [
           ...prev,
@@ -625,8 +580,7 @@ export function RasterToolsDialog({
       }
       tracker.finish("success");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
+      const message = err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
       tracker.finish("error", message);
       setError(message);
       setClientLog((prev) => [...prev, message]);
@@ -646,22 +600,15 @@ export function RasterToolsDialog({
       await saveBinaryFileWithFallback(new Uint8Array(clientResult.bytes), {
         defaultName: clientResult.name,
         filters: tool.outputFilters,
-        browserTypes: [
-          { description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } },
-        ],
+        browserTypes: [{ description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } }],
         mimeType: "image/tiff",
       });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t("toolbar.rasterTool.saveError"),
-      );
+      setError(err instanceof Error ? err.message : t("toolbar.rasterTool.saveError"));
     }
   }, [clientResult, tool, t]);
 
-  const running =
-    Boolean(job && RUNNING_JOB_STATUSES.has(job.status)) || clientRunning;
+  const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status)) || clientRunning;
 
   return (
     <Dialog
@@ -679,8 +626,8 @@ export function RasterToolsDialog({
         <DialogHeader>
           <DialogTitle>Raster tools</DialogTitle>
           <DialogDescription>
-            Run common raster operations on the Python sidecar (rasterio/GDAL),
-            or in your browser when no sidecar is available.
+            Run common raster operations on the Python sidecar (rasterio/GDAL), or in your browser
+            when no sidecar is available.
           </DialogDescription>
         </DialogHeader>
 
@@ -700,8 +647,7 @@ export function RasterToolsDialog({
                       onClick={() => setSelectedId(entry.id)}
                       className={cn(
                         "w-full rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
-                        entry.id === selectedId &&
-                          "bg-accent font-medium text-accent-foreground",
+                        entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                       )}
                     >
                       {entry.name}
@@ -720,16 +666,10 @@ export function RasterToolsDialog({
             {tool.supportsClient && (
               <div className="flex flex-col gap-1">
                 <Label className="flex items-center gap-1.5 text-xs">
-                  <Server className="h-3.5 w-3.5" />{" "}
-                  {t("toolbar.rasterTool.engine")}
+                  <Server className="h-3.5 w-3.5" /> {t("toolbar.rasterTool.engine")}
                 </Label>
-                <Select
-                  value={engine}
-                  onChange={(e) => setEngine(e.target.value as RasterEngine)}
-                >
-                  <option value="client">
-                    {t("toolbar.rasterTool.engineClient")}
-                  </option>
+                <Select value={engine} onChange={(e) => setEngine(e.target.value as RasterEngine)}>
+                  <option value="client">{t("toolbar.rasterTool.engineClient")}</option>
                   <option value="sidecar" disabled={!desktop}>
                     {t("toolbar.rasterTool.engineSidecar")}
                   </option>
@@ -930,9 +870,7 @@ export function RasterToolsDialog({
                 </p>
                 <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
                   {job.messages.length === 0 ? (
-                    <span className="text-muted-foreground">
-                      No output yet.
-                    </span>
+                    <span className="text-muted-foreground">No output yet.</span>
                   ) : (
                     <>
                       {job.messages.map((line, index) => (
@@ -1044,9 +982,7 @@ function RasterParameterField({
           min={param.min}
           max={param.max}
           step={param.step}
-          onChange={(e) =>
-            onChange(e.target.value === "" ? undefined : Number(e.target.value))
-          }
+          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
         />
         {param.description ? (
           <p className="text-xs text-muted-foreground">{param.description}</p>

@@ -7,21 +7,8 @@ import {
 } from "@geolibre/plugins";
 import { type RasterData, readRasterData } from "@geolibre/processing";
 import { Button, Input, Select } from "@geolibre/ui";
-import {
-  FileDown,
-  ListChecks,
-  Paintbrush,
-  RefreshCw,
-  Table2,
-  X,
-} from "lucide-react";
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { FileDown, ListChecks, Paintbrush, RefreshCw, Table2, X } from "lucide-react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { createAppAPI } from "../../hooks/usePlugins";
@@ -41,10 +28,7 @@ import {
 } from "../../lib/raster-attribute-table";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { fetchableUrl } from "../../lib/url-utils";
-import {
-  PANEL_RESIZE_END_EVENT,
-  PANEL_RESIZE_START_EVENT,
-} from "../../lib/panel-resize";
+import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 
@@ -171,9 +155,7 @@ export function RasterAttributeTable({
   // The last decoded raster, so a band switch recounts the already-decoded
   // bands instead of re-downloading and re-decoding the whole file. Held only
   // while the panel is open on the same layer/source.
-  const rasterCacheRef = useRef<{ key: string; raster: RasterData } | null>(
-    null,
-  );
+  const rasterCacheRef = useRef<{ key: string; raster: RasterData } | null>(null);
 
   /**
    * Commits any buffered color edits immediately, in one store write against
@@ -286,16 +268,12 @@ export function RasterAttributeTable({
         // lookups depend only on the URL, so they run concurrently with (and
         // hide under) the main download.
         const ratPromise = fetchGdalRat(target, band, controller.signal);
-        const palettePromise = getPaletteLegend(target.id, url).catch(
-          () => null,
-        );
+        const palettePromise = getPaletteLegend(target.id, url).catch(() => null);
         // readRasterData decodes every band, so a band switch on the same
         // source reuses the cached decode instead of re-downloading the file.
         const cacheKey = `${target.id}|${url}`;
         let raster =
-          rasterCacheRef.current?.key === cacheKey
-            ? rasterCacheRef.current.raster
-            : null;
+          rasterCacheRef.current?.key === cacheKey ? rasterCacheRef.current.raster : null;
         if (!raster) {
           const response = await fetch(url, { signal: controller.signal });
           if (!response.ok) {
@@ -322,16 +300,11 @@ export function RasterAttributeTable({
         if (controller.signal.aborted) return;
         // Re-read the stored table from the live store (not the pre-await
         // snapshot) so label/color edits made during the scan survive.
-        const live = useAppStore
-          .getState()
-          .layers.find((l) => l.id === target.id);
+        const live = useAppStore.getState().layers.find((l) => l.id === target.id);
         const previous = live ? savedRasterAttributeTable(live) : null;
         const seeded = seedRatRows(counts, { rat, palette });
         const priorByValue = new Map(
-          (previous?.band === band ? previous.rows : []).map((row) => [
-            row.value,
-            row,
-          ]),
+          (previous?.band === band ? previous.rows : []).map((row) => [row.value, row]),
         );
         const rows = seeded.map((row) => {
           const prior = priorByValue.get(row.value);
@@ -345,11 +318,7 @@ export function RasterAttributeTable({
         patchLayerMetadata(target.id, { rasterAttributeTable: next });
       } catch (err) {
         if (controller.signal.aborted) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : t("rasterAttributeTable.readError"),
-        );
+        setError(err instanceof Error ? err.message : t("rasterAttributeTable.readError"));
       } finally {
         if (computeAbortRef.current === controller) {
           computeAbortRef.current = null;
@@ -432,17 +401,12 @@ export function RasterAttributeTable({
    * table at commit time so a deferred commit (throttled color, blur label)
    * can never revert an earlier one from a stale snapshot.
    */
-  function commitRowPatch(
-    value: number,
-    patch: Partial<RasterAttributeTableRow>,
-  ) {
+  function commitRowPatch(value: number, patch: Partial<RasterAttributeTableRow>) {
     if (!ratLayer) return;
     const live = liveLayer(ratLayer.id);
     const current = live ? savedRasterAttributeTable(live) : null;
     if (!current) return;
-    const rows = current.rows.map((row) =>
-      row.value === value ? { ...row, ...patch } : row,
-    );
+    const rows = current.rows.map((row) => (row.value === value ? { ...row, ...patch } : row));
     commitRows(ratLayer.id, current, rows, {
       colorsChanged: patch.color !== undefined,
     });
@@ -530,18 +494,15 @@ export function RasterAttributeTable({
   async function sendToLegend() {
     if (!ratLayer || !record) return;
     setError(null);
-    const opened = await openLegendPanelWithItems(
-      createAppAPI(mapControllerRef),
-      {
-        title: ratLayer.name,
-        items: record.rows.map((row) => ({
-          label: row.label,
-          color: row.color,
-          shape: "square" as const,
-        })),
-        legendPosition: "bottom-right",
-      },
-    );
+    const opened = await openLegendPanelWithItems(createAppAPI(mapControllerRef), {
+      title: ratLayer.name,
+      items: record.rows.map((row) => ({
+        label: row.label,
+        color: row.color,
+        shape: "square" as const,
+      })),
+      legendPosition: "bottom-right",
+    });
     if (!opened) setError(t("rasterAttributeTable.legendError"));
   }
 
@@ -550,21 +511,14 @@ export function RasterAttributeTable({
     setError(null);
     try {
       const csv = ratRowsToCsv(record.rows, record.pixelAreaM2);
-      await saveBinaryFileWithFallback(
-        new TextEncoder().encode(csv),
-        {
-          defaultName: `${sanitizeExportFileName(ratLayer.name)}_classes.csv`,
-          filters: [{ name: "CSV", extensions: ["csv"] }],
-          browserTypes: [
-            { description: "CSV", accept: { "text/csv": [".csv"] } },
-          ],
-          mimeType: "text/csv",
-        },
-      );
+      await saveBinaryFileWithFallback(new TextEncoder().encode(csv), {
+        defaultName: `${sanitizeExportFileName(ratLayer.name)}_classes.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+        browserTypes: [{ description: "CSV", accept: { "text/csv": [".csv"] } }],
+        mimeType: "text/csv",
+      });
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t("rasterAttributeTable.csvError"),
-      );
+      setError(err instanceof Error ? err.message : t("rasterAttributeTable.csvError"));
     }
   }
 
@@ -612,11 +566,8 @@ export function RasterAttributeTable({
   const rows = record?.rows ?? [];
   const totalCount = rows.reduce((sum, row) => sum + row.count, 0);
   const pixelAreaM2 = record?.pixelAreaM2 ?? null;
-  const maxAreaM2 = pixelAreaM2
-    ? Math.max(0, ...rows.map((row) => row.count * pixelAreaM2))
-    : 0;
-  const areaUnit: "m2" | "ha" | "km2" =
-    maxAreaM2 >= 1e6 ? "km2" : maxAreaM2 >= 1e4 ? "ha" : "m2";
+  const maxAreaM2 = pixelAreaM2 ? Math.max(0, ...rows.map((row) => row.count * pixelAreaM2)) : 0;
+  const areaUnit: "m2" | "ha" | "km2" = maxAreaM2 >= 1e6 ? "km2" : maxAreaM2 >= 1e4 ? "ha" : "m2";
   const bandCount = ratLayer ? bandCountOf(ratLayer) : 1;
 
   return (
@@ -636,9 +587,7 @@ export function RasterAttributeTable({
       />
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 md:flex-nowrap">
         <Table2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">
-          {t("rasterAttributeTable.title")}
-        </span>
+        <span className="text-sm font-semibold">{t("rasterAttributeTable.title")}</span>
         <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
           {ratLayer?.name ?? t("rasterAttributeTable.noRasterSelected")}
         </span>
@@ -648,9 +597,7 @@ export function RasterAttributeTable({
             className="h-7 w-auto py-0 text-xs"
             value={String(record?.band ?? currentBand(ratLayer))}
             disabled={computing}
-            onChange={(event) =>
-              void compute(ratLayer, Number(event.target.value))
-            }
+            onChange={(event) => void compute(ratLayer, Number(event.target.value))}
           >
             {Array.from({ length: bandCount }, (_, index) => (
               <option key={index + 1} value={String(index + 1)}>
@@ -660,17 +607,11 @@ export function RasterAttributeTable({
           </Select>
         ) : null}
         {error ? (
-          <span
-            className="max-w-64 truncate text-xs text-destructive"
-            title={error}
-          >
+          <span className="max-w-64 truncate text-xs text-destructive" title={error}>
             {error}
           </span>
         ) : notice ? (
-          <span
-            className="max-w-64 truncate text-xs text-muted-foreground"
-            title={notice}
-          >
+          <span className="max-w-64 truncate text-xs text-muted-foreground" title={notice}>
             {notice}
           </span>
         ) : null}
@@ -680,27 +621,17 @@ export function RasterAttributeTable({
           className="ms-auto h-7 px-2"
           disabled={!ratLayer || computing}
           title={t("rasterAttributeTable.recomputeTitle")}
-          onClick={() =>
-            ratLayer &&
-            void compute(ratLayer, record?.band ?? currentBand(ratLayer))
-          }
+          onClick={() => ratLayer && void compute(ratLayer, record?.band ?? currentBand(ratLayer))}
         >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${computing ? "animate-spin" : ""}`}
-          />
-          <span className="hidden sm:inline">
-            {t("rasterAttributeTable.buttons.recompute")}
-          </span>
+          <RefreshCw className={`h-3.5 w-3.5 ${computing ? "animate-spin" : ""}`} />
+          <span className="hidden sm:inline">{t("rasterAttributeTable.buttons.recompute")}</span>
         </Button>
         <Button
           variant="default"
           size="sm"
           className="h-7 px-2"
           disabled={
-            !record ||
-            rows.length === 0 ||
-            rows.length > MAX_RAT_SYMBOLOGY_CLASSES ||
-            computing
+            !record || rows.length === 0 || rows.length > MAX_RAT_SYMBOLOGY_CLASSES || computing
           }
           title={
             rows.length > MAX_RAT_SYMBOLOGY_CLASSES
@@ -712,9 +643,7 @@ export function RasterAttributeTable({
           onClick={applySymbology}
         >
           <Paintbrush className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">
-            {t("rasterAttributeTable.buttons.apply")}
-          </span>
+          <span className="hidden sm:inline">{t("rasterAttributeTable.buttons.apply")}</span>
         </Button>
         <Button
           variant="outline"
@@ -725,9 +654,7 @@ export function RasterAttributeTable({
           onClick={() => void seedFromPalette()}
         >
           <ListChecks className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">
-            {t("rasterAttributeTable.buttons.palette")}
-          </span>
+          <span className="hidden sm:inline">{t("rasterAttributeTable.buttons.palette")}</span>
         </Button>
         <Button
           variant="outline"
@@ -738,9 +665,7 @@ export function RasterAttributeTable({
           onClick={() => void sendToLegend()}
         >
           <Table2 className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">
-            {t("rasterAttributeTable.buttons.legend")}
-          </span>
+          <span className="hidden sm:inline">{t("rasterAttributeTable.buttons.legend")}</span>
         </Button>
         <Button
           variant="outline"
@@ -751,9 +676,7 @@ export function RasterAttributeTable({
           onClick={() => void exportCsv()}
         >
           <FileDown className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">
-            {t("rasterAttributeTable.buttons.csv")}
-          </span>
+          <span className="hidden sm:inline">{t("rasterAttributeTable.buttons.csv")}</span>
         </Button>
         <Button
           variant="ghost"
@@ -771,9 +694,7 @@ export function RasterAttributeTable({
             {t("rasterAttributeTable.noRasterSelected")}
           </p>
         ) : computing ? (
-          <p className="p-4 text-sm text-muted-foreground">
-            {t("rasterAttributeTable.computing")}
-          </p>
+          <p className="p-4 text-sm text-muted-foreground">{t("rasterAttributeTable.computing")}</p>
         ) : rows.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">
             {error ?? t("rasterAttributeTable.empty")}
@@ -808,13 +729,9 @@ export function RasterAttributeTable({
               {rows.map((row) => (
                 <tr key={row.value} className="border-b last:border-b-0">
                   <td className="px-3 py-1 font-mono">{row.value}</td>
+                  <td className="px-3 py-1 font-mono">{row.count.toLocaleString()}</td>
                   <td className="px-3 py-1 font-mono">
-                    {row.count.toLocaleString()}
-                  </td>
-                  <td className="px-3 py-1 font-mono">
-                    {totalCount > 0
-                      ? `${((row.count / totalCount) * 100).toFixed(1)}%`
-                      : "–"}
+                    {totalCount > 0 ? `${((row.count / totalCount) * 100).toFixed(1)}%` : "–"}
                   </td>
                   {pixelAreaM2 !== null ? (
                     <td className="px-3 py-1 font-mono">

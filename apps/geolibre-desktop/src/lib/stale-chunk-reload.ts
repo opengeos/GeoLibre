@@ -55,10 +55,7 @@ export interface StaleChunkReloadDeps {
  * - `suppressed-cooldown` - a reload happened too recently, so the failure is
  *   treated as a broken build and left to surface.
  */
-export type StaleChunkReloadOutcome =
-  | "reloaded"
-  | "deferred-unsaved"
-  | "suppressed-cooldown";
+export type StaleChunkReloadOutcome = "reloaded" | "deferred-unsaved" | "suppressed-cooldown";
 
 /**
  * Decides how to recover from a stale chunk. Reloads the page unless that would
@@ -76,9 +73,7 @@ export type StaleChunkReloadOutcome =
  * @param deps - Injected clock, persistence, reload, and dirty check, for testability.
  * @returns Which recovery path was taken.
  */
-export function reloadForStaleChunk(
-  deps: StaleChunkReloadDeps,
-): StaleChunkReloadOutcome {
+export function reloadForStaleChunk(deps: StaleChunkReloadDeps): StaleChunkReloadOutcome {
   // Never reload out from under unsaved work: it trips the beforeunload guard
   // and risks losing the user's map. This takes precedence over the cooldown.
   if (deps.hasUnsavedChanges()) {
@@ -111,9 +106,7 @@ export function reloadForStaleChunk(
  * @param options.enabled - Overrides the default gate (production web only).
  * @returns A cleanup function that removes the listener.
  */
-export function installStaleChunkReload(options?: {
-  enabled?: boolean;
-}): () => void {
+export function installStaleChunkReload(options?: { enabled?: boolean }): () => void {
   const enabled = options?.enabled ?? (import.meta.env.PROD && !isTauri());
   if (!enabled || typeof window === "undefined") {
     return () => {};

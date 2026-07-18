@@ -12,10 +12,7 @@
         },
         "geometry": {
           "type": "Point",
-          "coordinates": [
-            -8800000,
-            4200000
-          ]
+          "coordinates": [-8800000, 4200000]
         }
       }
     ]
@@ -25,18 +22,13 @@
   },
   "expect": {
     "featureCount": 1,
-    "geometryTypes": [
-      "Point"
-    ],
+    "geometryTypes": ["Point"],
     "geometry": [
       {
         "type": "Point",
-        "coordinates": [
-          -79.05174500251788,
-          35.26535092860737
-        ]
+        "coordinates": [-79.05174500251788, 35.26535092860737]
       }
     ],
-    "tolerance": 1e-06
+    "tolerance": 1e-6
   }
 }

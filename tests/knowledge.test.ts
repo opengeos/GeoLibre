@@ -74,9 +74,7 @@ describe("buildGeosearchUrl", () => {
     assert.equal(url.searchParams.get("origin"), "*");
   });
   it("clamps radius and limit to the API maxima", () => {
-    const url = new URL(
-      buildGeosearchUrl(0, 0, { radiusM: 999_999, limit: 999 }),
-    );
+    const url = new URL(buildGeosearchUrl(0, 0, { radiusM: 999_999, limit: 999 }));
     assert.equal(url.searchParams.get("gsradius"), "10000");
     assert.equal(url.searchParams.get("gslimit"), "50");
   });
@@ -156,15 +154,9 @@ describe("parseSummary", () => {
     assert.equal(summary.lang, "en");
   });
   it("synthesizes a content URL when the API omits one", () => {
-    const summary = parseSummary(
-      { title: "Some Place", extract: "…" },
-      "de",
-    );
+    const summary = parseSummary({ title: "Some Place", extract: "…" }, "de");
     assert.ok(summary);
-    assert.equal(
-      summary.contentUrl,
-      "https://de.wikipedia.org/wiki/Some_Place",
-    );
+    assert.equal(summary.contentUrl, "https://de.wikipedia.org/wiki/Some_Place");
     assert.equal(summary.thumbnailUrl, undefined);
     assert.equal(summary.lat, undefined);
   });
@@ -176,10 +168,7 @@ describe("parseSummary", () => {
 });
 
 describe("fetchArticleSummary", () => {
-  function withFetch<T>(
-    stub: () => Promise<unknown>,
-    run: () => Promise<T>,
-  ): Promise<T> {
+  function withFetch<T>(stub: () => Promise<unknown>, run: () => Promise<T>): Promise<T> {
     const original = globalThis.fetch;
     globalThis.fetch = stub as typeof globalThis.fetch;
     return run().finally(() => {

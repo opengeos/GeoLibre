@@ -23,10 +23,8 @@ import type {
 function fakeMap() {
   const sources = new Map<string, unknown>();
   const layers = new Map<string, unknown>();
-  const paintWrites: Array<{ layerId: string; name: string; value: unknown }> =
-    [];
-  const layoutWrites: Array<{ layerId: string; name: string; value: unknown }> =
-    [];
+  const paintWrites: Array<{ layerId: string; name: string; value: unknown }> = [];
+  const layoutWrites: Array<{ layerId: string; name: string; value: unknown }> = [];
   return {
     sources,
     layers,
@@ -101,9 +99,7 @@ const STORE_LAYER_ID = timelapseStoreLayerId("eox-s2cloudless");
 const FRAME_COUNT = 8; // 2018–2025
 
 function storeLayer() {
-  return useAppStore
-    .getState()
-    .layers.find((layer) => layer.id === STORE_LAYER_ID);
+  return useAppStore.getState().layers.find((layer) => layer.id === STORE_LAYER_ID);
 }
 
 describe("maplibreTimelapsePlugin", () => {
@@ -139,19 +135,13 @@ describe("maplibreTimelapsePlugin", () => {
     }
     // Exactly one frame (the active year) starts opaque.
     const opacities = [...map.layers.values()].map(
-      (spec) =>
-        (spec as { paint: Record<string, unknown> }).paint["raster-opacity"],
+      (spec) => (spec as { paint: Record<string, unknown> }).paint["raster-opacity"],
     );
     assert.equal(opacities.filter((value) => value === 1).length, 1);
-    assert.equal(
-      opacities.filter((value) => value === 0).length,
-      FRAME_COUNT - 1,
-    );
+    assert.equal(opacities.filter((value) => value === 0).length, FRAME_COUNT - 1);
 
     // Every source uses the year-suffixed EOX layer identifier.
-    const source2018 = map.sources.get(
-      "timelapse-source-s2cloudless-2018",
-    ) as { tiles: string[] };
+    const source2018 = map.sources.get("timelapse-source-s2cloudless-2018") as { tiles: string[] };
     assert.ok(source2018.tiles[0].includes("/s2cloudless-2018_3857/"));
 
     // One tidy store layer mirrors the whole stack.
@@ -160,17 +150,12 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(layer.metadata.sourceKind, TIMELAPSE_SOURCE_KIND);
     assert.equal(layer.metadata.customLayerType, "timelapse-frames");
     assert.equal(layer.metadata.externalNativeLayer, true);
-    assert.equal(
-      (layer.metadata.nativeLayerIds as string[]).length,
-      FRAME_COUNT,
-    );
+    assert.equal((layer.metadata.nativeLayerIds as string[]).length, FRAME_COUNT);
     assert.equal((layer.metadata.sourceIds as string[]).length, FRAME_COUNT);
     assert.equal(
       useAppStore
         .getState()
-        .layers.filter(
-          (item) => item.metadata.sourceKind === TIMELAPSE_SOURCE_KIND,
-        ).length,
+        .layers.filter((item) => item.metadata.sourceKind === TIMELAPSE_SOURCE_KIND).length,
       1,
     );
   });
@@ -227,14 +212,9 @@ describe("maplibreTimelapsePlugin", () => {
     // the switch resets playback to the oldest year (index 0 → 1983).
     const layers = useAppStore
       .getState()
-      .layers.filter(
-        (item) => item.metadata.sourceKind === TIMELAPSE_SOURCE_KIND,
-      );
+      .layers.filter((item) => item.metadata.sourceKind === TIMELAPSE_SOURCE_KIND);
     assert.equal(layers.length, 1);
-    assert.equal(
-      layers[0].id,
-      timelapseStoreLayerId(NASA_GIBS_WELD_PROVIDER_ID),
-    );
+    assert.equal(layers[0].id, timelapseStoreLayerId(NASA_GIBS_WELD_PROVIDER_ID));
     assert.equal(control.getFrameIndex(), 0);
     assert.equal(control.getState().year, 1983);
   });
@@ -383,9 +363,7 @@ describe("maplibreTimelapsePlugin", () => {
     map.paintWrites.length = 0;
     control.setFrameIndex(3);
 
-    const opacityWrites = map.paintWrites.filter(
-      (write) => write.name === "raster-opacity",
-    );
+    const opacityWrites = map.paintWrites.filter((write) => write.name === "raster-opacity");
     assert.equal(opacityWrites.length, 2);
     assert.deepEqual(opacityWrites[0], {
       layerId: "timelapse-layer-s2cloudless-2018",
@@ -422,9 +400,7 @@ describe("maplibreTimelapsePlugin", () => {
     map.layoutWrites.length = 0;
     useAppStore.getState().updateLayer(STORE_LAYER_ID, { visible: false });
 
-    const visibilityWrites = map.layoutWrites.filter(
-      (write) => write.name === "visibility",
-    );
+    const visibilityWrites = map.layoutWrites.filter((write) => write.name === "visibility");
     assert.equal(visibilityWrites.length, FRAME_COUNT);
     assert.ok(visibilityWrites.every((write) => write.value === "none"));
     assert.equal(control.isPlaying(), false);
@@ -432,9 +408,8 @@ describe("maplibreTimelapsePlugin", () => {
     map.layoutWrites.length = 0;
     useAppStore.getState().updateLayer(STORE_LAYER_ID, { visible: true });
     assert.equal(
-      map.layoutWrites.filter(
-        (write) => write.name === "visibility" && write.value === "visible",
-      ).length,
+      map.layoutWrites.filter((write) => write.name === "visibility" && write.value === "visible")
+        .length,
       FRAME_COUNT,
     );
   });
@@ -446,9 +421,7 @@ describe("maplibreTimelapsePlugin", () => {
     map.paintWrites.length = 0;
     useAppStore.getState().updateLayer(STORE_LAYER_ID, { opacity: 0.5 });
 
-    const writes = map.paintWrites.filter(
-      (write) => write.name === "raster-opacity",
-    );
+    const writes = map.paintWrites.filter((write) => write.name === "raster-opacity");
     assert.equal(writes.length, 1);
     assert.equal(writes[0].layerId, "timelapse-layer-s2cloudless-2018");
     assert.equal(writes[0].value, 0.5);
@@ -513,9 +486,7 @@ describe("maplibreTimelapsePlugin", () => {
     control.setSecondsPerYear(2);
     control.setLoop(false);
 
-    const persisted = JSON.parse(
-      JSON.stringify(plugin.getProjectState?.()),
-    ) as unknown;
+    const persisted = JSON.parse(JSON.stringify(plugin.getProjectState?.())) as unknown;
     plugin.deactivate(app);
 
     plugin.applyProjectState?.(app, persisted);

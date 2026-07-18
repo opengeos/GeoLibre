@@ -1,8 +1,4 @@
-import {
-  hasPathTraversal,
-  parseProject,
-  type GeoLibreProject,
-} from "@geolibre/core";
+import { hasPathTraversal, parseProject, type GeoLibreProject } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -32,11 +28,7 @@ import {
   type LargeVectorDataset,
 } from "./duckdb-vector-guard";
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
-import {
-  PHOTO_IMAGE_EXTENSIONS,
-  isPhotoDropFileName,
-  isPhotoFileName,
-} from "./geotagged-photos";
+import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./geotagged-photos";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import {
@@ -161,10 +153,7 @@ const VECTOR_FILE_DIALOG_EXTENSIONS = [
   "zip",
 ];
 
-const RESTORABLE_VECTOR_PATH = new RegExp(
-  `\\.(${VECTOR_FILE_DIALOG_EXTENSIONS.join("|")})$`,
-  "i",
-);
+const RESTORABLE_VECTOR_PATH = new RegExp(`\\.(${VECTOR_FILE_DIALOG_EXTENSIONS.join("|")})$`, "i");
 
 /**
  * Whether a path ends in a recognized vector extension. Used as a whitelist
@@ -213,9 +202,7 @@ export interface LocalDirectoryEntry {
  *   descendant of one).
  * @returns The directory's entries (folders and files).
  */
-export async function listDirectory(
-  path: string,
-): Promise<LocalDirectoryEntry[]> {
+export async function listDirectory(path: string): Promise<LocalDirectoryEntry[]> {
   if (!isTauri()) return [];
   const entries = await readDir(path);
   // Join with the parent's own separator style so a Windows path stays
@@ -315,9 +302,7 @@ export interface LoadedModel {
 export type LoadedLayer = LoadedVectorLayer | LoadedImageOverlay | LoadedModel;
 
 /** Narrow a {@link LoadedLayer} to its image-overlay variant. */
-export function isLoadedImageOverlay(
-  layer: LoadedLayer,
-): layer is LoadedImageOverlay {
+export function isLoadedImageOverlay(layer: LoadedLayer): layer is LoadedImageOverlay {
   return "kind" in layer && layer.kind === "image-overlay";
 }
 
@@ -327,9 +312,7 @@ export function isLoadedModel(layer: LoadedLayer): layer is LoadedModel {
 }
 
 /** Narrow a {@link LoadedLayer} to its vector variant. */
-export function isLoadedVectorLayer(
-  layer: LoadedLayer,
-): layer is LoadedVectorLayer {
+export function isLoadedVectorLayer(layer: LoadedLayer): layer is LoadedVectorLayer {
   return !("kind" in layer);
 }
 
@@ -390,8 +373,7 @@ function isGeoLibreProjectFile(path: string): boolean {
 
 function isVectorFileName(path: string): boolean {
   if (isGeoLibreProjectFile(path)) return false;
-  if (browserSafeFileName(path).toLowerCase().endsWith(".shp.xml"))
-    return false;
+  if (browserSafeFileName(path).toLowerCase().endsWith(".shp.xml")) return false;
   // Rasters are handled by the raster drop path, not the DuckDB vector loader.
   if (isRasterFileName(path)) return false;
   return !NON_VECTOR_SIDECAR_EXTENSIONS.includes(fileExtension(path));
@@ -406,9 +388,7 @@ function assertFeatureCollection(value: unknown): FeatureCollection {
   ) {
     return value as FeatureCollection;
   }
-  throw new Error(
-    "The selected file did not produce a GeoJSON FeatureCollection.",
-  );
+  throw new Error("The selected file did not produce a GeoJSON FeatureCollection.");
 }
 
 // DuckDB-wasm (pthreads build) can hand back a Uint8Array backed by a
@@ -420,9 +400,7 @@ function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
-function mergeFeatureCollections(
-  collections: FeatureCollection[],
-): FeatureCollection {
+function mergeFeatureCollections(collections: FeatureCollection[]): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: collections.flatMap((collection) => collection.features),
@@ -463,9 +441,7 @@ async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
  * @param path - Absolute local path to read.
  * @returns The file's raw bytes.
  */
-export async function readLocalFileBytes(
-  path: string,
-): Promise<Uint8Array<ArrayBuffer>> {
+export async function readLocalFileBytes(path: string): Promise<Uint8Array<ArrayBuffer>> {
   try {
     return await readFile(path);
   } catch (error) {
@@ -474,10 +450,7 @@ export async function readLocalFileBytes(
     // failure (a moved/deleted file, not a scope denial) is still diagnosable
     // even though the command's "Could not read local file" error is what
     // ultimately surfaces.
-    console.debug(
-      `[GeoLibre] fs read of "${path}" failed; retrying via read_local_file.`,
-      error,
-    );
+    console.debug(`[GeoLibre] fs read of "${path}" failed; retrying via read_local_file.`, error);
     const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
     return new Uint8Array(buffer);
   }
@@ -497,10 +470,7 @@ async function readLocalFileText(path: string): Promise<string> {
     return await readTextFile(path);
   } catch (error) {
     if (!isTauri()) throw error;
-    console.debug(
-      `[GeoLibre] fs read of "${path}" failed; retrying via read_local_file.`,
-      error,
-    );
+    console.debug(`[GeoLibre] fs read of "${path}" failed; retrying via read_local_file.`, error);
     const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
     // `fatal: true` matches `readTextFile`, which rejects on malformed UTF-8
     // rather than silently substituting U+FFFD: a corrupt KML/GPX/GeoJSON
@@ -511,11 +481,7 @@ async function readLocalFileText(path: string): Promise<string> {
 
 function parseGpxText(text: string): FeatureCollection {
   const result = parseGpxLayer(text);
-  return mergeFeatureCollections([
-    result.waypoints,
-    result.tracks,
-    result.routes,
-  ]);
+  return mergeFeatureCollections([result.waypoints, result.tracks, result.routes]);
 }
 
 function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
@@ -552,10 +518,7 @@ function isDelimitedTextFileName(path: string): boolean {
  * the Add Data dialog) when the file is empty or the auto-detected columns hold
  * no usable WGS84 coordinates (e.g. a CSV whose `x`/`y` columns are projected).
  */
-function parseDelimitedTextFile(
-  text: string,
-  path: string,
-): FeatureCollection | null {
+function parseDelimitedTextFile(text: string, path: string): FeatureCollection | null {
   const name = browserSafeFileName(path);
   const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
   const delimiter = detectDelimitedTextDelimiter(text);
@@ -602,10 +565,7 @@ function isMacOsMetadataEntry(entryName: string): boolean {
 /** The ESRI shape type from a `.shp` header (byte 32, little-endian), or -1. */
 export function shapefileShapeType(shp: Uint8Array): number {
   if (shp.byteLength < 36) return -1;
-  return new DataView(shp.buffer, shp.byteOffset, shp.byteLength).getInt32(
-    32,
-    true,
-  );
+  return new DataView(shp.buffer, shp.byteOffset, shp.byteLength).getInt32(32, true);
 }
 
 /** A zipped shapefile unzipped once: the DuckDB file, its raw sidecar bytes
@@ -673,10 +633,7 @@ export async function readShapefileZipForDuckDb(
  * encoding, mirroring `shp(zip)`. Requires the `.dbf`; without it the caller
  * falls back to DuckDB.
  */
-function parseShapefileComponents({
-  file,
-  sidecar,
-}: UnzippedShapefile): FeatureCollection {
+function parseShapefileComponents({ file, sidecar }: UnzippedShapefile): FeatureCollection {
   if (!sidecar.dbf) {
     throw new Error("Shapefile archive is missing its .dbf sidecar.");
   }
@@ -717,9 +674,7 @@ async function loadShapefileZip(
   }
 }
 
-function unzipArchive(
-  data: ArrayBuffer | Uint8Array,
-): Promise<Record<string, Uint8Array>> {
+function unzipArchive(data: ArrayBuffer | Uint8Array): Promise<Record<string, Uint8Array>> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   return new Promise<Record<string, Uint8Array>>((resolve, reject) => {
     unzip(bytes, (error, entries) => {
@@ -736,9 +691,7 @@ function toDuckDbVectorData(data: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(data);
 }
 
-function readKmlEntries(
-  entries: Record<string, Uint8Array>,
-): DuckDbVectorFile[] {
+function readKmlEntries(entries: Record<string, Uint8Array>): DuckDbVectorFile[] {
   const kmlEntries = Object.entries(entries)
     .filter(([entryName]) => entryName.toLowerCase().endsWith(".kml"))
     .sort(([leftName], [rightName]) => {
@@ -752,22 +705,16 @@ function readKmlEntries(
   }
 
   return kmlEntries.map(([entryName, data], index) => {
-    const entryBaseName =
-      browserSafeFileName(entryName) || `document-${index + 1}.kml`;
+    const entryBaseName = browserSafeFileName(entryName) || `document-${index + 1}.kml`;
     return {
-      name:
-        kmlEntries.length === 1
-          ? entryBaseName
-          : `${index + 1}-${entryBaseName}`,
+      name: kmlEntries.length === 1 ? entryBaseName : `${index + 1}-${entryBaseName}`,
       extension: "kml",
       data: toDuckDbVectorData(data),
     };
   });
 }
 
-async function readKmzKmlFiles(
-  data: ArrayBuffer | Uint8Array,
-): Promise<DuckDbVectorFile[]> {
+async function readKmzKmlFiles(data: ArrayBuffer | Uint8Array): Promise<DuckDbVectorFile[]> {
   return readKmlEntries(await unzipArchive(data));
 }
 
@@ -779,8 +726,7 @@ function bytesToDataUrl(bytes: Uint8Array, mime: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("Could not read overlay image."));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read overlay image."));
     reader.readAsDataURL(new Blob([bytes as BlobPart], { type: mime }));
   });
 }
@@ -820,12 +766,12 @@ function imageOverlayLayer(
  * @param overlays - The resolved overlays for one file, mutated in place.
  * @returns The same array, for chaining.
  */
-function sequenceTimeOverlays(
-  overlays: LoadedImageOverlay[],
-): LoadedImageOverlay[] {
+function sequenceTimeOverlays(overlays: LoadedImageOverlay[]): LoadedImageOverlay[] {
   const frames = overlays
     .filter(
-      (overlay): overlay is LoadedImageOverlay & {
+      (
+        overlay,
+      ): overlay is LoadedImageOverlay & {
         timeSpan: { begin: number; end: number | null };
       } => typeof overlay.timeSpan?.begin === "number",
     )
@@ -918,8 +864,7 @@ async function groundOverlaysFromKmz(
     // `folder/doc.kml` referencing `images/x.png` means `folder/images/x.png`),
     // then fall back to the global archive lookup.
     const data =
-      findArchiveEntry(entries, baseDir + overlay.href) ??
-      findArchiveEntry(entries, overlay.href);
+      findArchiveEntry(entries, baseDir + overlay.href) ?? findArchiveEntry(entries, overlay.href);
     if (!data) {
       console.warn(
         `Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`,
@@ -946,9 +891,7 @@ function isUnrenderableOverlayImage(href: string): boolean {
 }
 
 function warnUnrenderableOverlay(href: string): void {
-  console.warn(
-    `Skipping a KML ground overlay: browsers cannot render the TIFF image "${href}".`,
-  );
+  console.warn(`Skipping a KML ground overlay: browsers cannot render the TIFF image "${href}".`);
 }
 
 // Order overlays by KML `<drawOrder>` ascending. Layers added later render on
@@ -961,10 +904,7 @@ function sortByDrawOrder(overlays: KmlGroundOverlay[]): KmlGroundOverlay[] {
 // GroundOverlays in a standalone (non-archived) KML can only be resolved when
 // their href is an absolute URL; a relative path needs the sibling image files
 // a browser load does not have.
-function groundOverlaysFromKml(
-  text: string,
-  path: string,
-): LoadedImageOverlay[] {
+function groundOverlaysFromKml(text: string, path: string): LoadedImageOverlay[] {
   // Cheap prefilter so a KML with no overlays is not DOM-parsed a second time
   // (its placemarks are already parsed by the vector loader). Matched
   // case-insensitively, like kml.ts's element matching, so non-conformant
@@ -1002,12 +942,7 @@ const MAX_DAE_SOURCE_BYTES = 64 * 1024 * 1024;
 // disambiguates them so they are not all named identically. This resolves the
 // name once here at load time; `kmlModelDisplayName` (kml-model.ts) is the
 // downstream reader whose own fallback is only a defensive/test-time path.
-function kmlModelName(
-  model: KmlModel,
-  path: string,
-  index: number,
-  total: number,
-): string {
+function kmlModelName(model: KmlModel, path: string, index: number, total: number): string {
   const named = model.name?.trim();
   if (named) return named;
   const base = `${pathWithoutExtension(fileBaseName(path))} model`;
@@ -1074,12 +1009,11 @@ async function daeToGlbDataUrl(
     : undefined;
   try {
     const { convertDaeToGlb } = await import("./collada-to-glb");
-    const { glb, radiusMeters, verticalMinMeters, verticalMaxMeters } =
-      await convertDaeToGlb(
-        daeText,
-        modifier,
-        basePath,
-      );
+    const { glb, radiusMeters, verticalMinMeters, verticalMaxMeters } = await convertDaeToGlb(
+      daeText,
+      modifier,
+      basePath,
+    );
     if (glb.length > MAX_MODEL_GLB_BYTES) {
       console.warn(
         `Skipping a KML model: "${href}" converts to ${Math.round(glb.length / (1024 * 1024))} MB, over the ${Math.round(MAX_MODEL_GLB_BYTES / (1024 * 1024))} MB inline limit.`,
@@ -1121,8 +1055,7 @@ async function modelsFromKmz(
   for (const [index, { model, baseDir }] of parsed.entries()) {
     if (isHttpUrl(model.href)) {
       const converted = await fetchDaeAsGlbDataUrl(model.href);
-      if (converted)
-        models.push(kmlModelLayer(model, converted, path, index, total));
+      if (converted) models.push(kmlModelLayer(model, converted, path, index, total));
       continue;
     }
     const daeKey =
@@ -1148,8 +1081,7 @@ async function modelsFromKmz(
     const daeDir = archiveDirname(normalizeArchivePath(daeKey));
     const resolveTexture = (texturePath: string): Uint8Array | undefined => {
       const bytes =
-        findArchiveEntry(entries, daeDir + texturePath) ??
-        findArchiveEntry(entries, texturePath);
+        findArchiveEntry(entries, daeDir + texturePath) ?? findArchiveEntry(entries, texturePath);
       // Cap a single packaged texture (same limit as ground-overlay images) so
       // an oversized bundled image can't blow up the decode/GPU upload before
       // the GLB-size cap ever measures the result; skip it (untextured) instead.
@@ -1166,8 +1098,7 @@ async function modelsFromKmz(
       model.href,
       resolveTexture,
     );
-    if (converted)
-      models.push(kmlModelLayer(model, converted, path, index, total));
+    if (converted) models.push(kmlModelLayer(model, converted, path, index, total));
   }
   return models;
 }
@@ -1175,9 +1106,7 @@ async function modelsFromKmz(
 // Fetch an absolute-URL `.dae`, convert it to a GLB data URL. Textures resolve
 // against the mesh's URL directory (best effort; a CORS-blocked fetch is
 // skipped). Returns null on any failure.
-async function fetchDaeAsGlbDataUrl(
-  href: string,
-): Promise<{
+async function fetchDaeAsGlbDataUrl(href: string): Promise<{
   url: string;
   radiusMeters: number;
   verticalMinMeters: number;
@@ -1188,9 +1117,7 @@ async function fetchDaeAsGlbDataUrl(
     // (models are resolved sequentially), mirroring the texture-load timeout.
     const response = await fetch(href, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) {
-      console.warn(
-        `Skipping a KML model: fetching "${href}" returned ${response.status}.`,
-      );
+      console.warn(`Skipping a KML model: fetching "${href}" returned ${response.status}.`);
       return null;
     }
     // Best-effort size guard before buffering the whole body (mirrors the
@@ -1223,10 +1150,7 @@ async function fetchDaeAsGlbDataUrl(
 
 // Models in a standalone (non-archived) KML can only be resolved when the mesh
 // href is an absolute URL; a relative path needs the archive's packaged files.
-async function modelsFromKml(
-  text: string,
-  path: string,
-): Promise<LoadedModel[]> {
+async function modelsFromKml(text: string, path: string): Promise<LoadedModel[]> {
   // `(?:\w+:)?` so a namespace-prefixed `<kml:Model>` isn't skipped before
   // `parseKmlModels` (which matches by localName) runs.
   if (!/<(?:\w+:)?model[\s/>]/i.test(text)) return [];
@@ -1240,8 +1164,7 @@ async function modelsFromKml(
       continue;
     }
     const converted = await fetchDaeAsGlbDataUrl(model.href);
-    if (converted)
-      models.push(kmlModelLayer(model, converted, path, index, parsed.length));
+    if (converted) models.push(kmlModelLayer(model, converted, path, index, parsed.length));
   }
   return models;
 }
@@ -1370,10 +1293,7 @@ async function parseKmz(
   return mergeFeatureCollections(collections);
 }
 
-async function loadDuckDbVector(
-  file: DuckDbVectorFile,
-  options?: DuckDbVectorLoadOptions,
-) {
+async function loadDuckDbVector(file: DuckDbVectorFile, options?: DuckDbVectorLoadOptions) {
   const { loadDuckDbVectorFile } = await import("./duckdb-vector-loader");
   return loadDuckDbVectorFile(file, options);
 }
@@ -1409,13 +1329,10 @@ async function tryLoadNativeDuckDbVectorPath(
   let featureCountChecked = false;
   try {
     if (options?.onLargeDataset) {
-      const featureCount = await invoke<number>(
-        "count_native_vector_file_features",
-        {
-          path,
-          ...invokeOptions,
-        },
-      );
+      const featureCount = await invoke<number>("count_native_vector_file_features", {
+        path,
+        ...invokeOptions,
+      });
       await confirmLargeDataset(
         { name: browserSafeFileName(path), featureCount },
         options.onLargeDataset,
@@ -1441,10 +1358,7 @@ async function tryLoadNativeDuckDbVectorPath(
   }
 }
 
-function confirmPickedNativeVectorDataset({
-  name,
-  featureCount,
-}: LargeVectorDataset): boolean {
+function confirmPickedNativeVectorDataset({ name, featureCount }: LargeVectorDataset): boolean {
   return window.confirm(
     i18next.t("toolbar.item.largeVectorDesc", {
       name,
@@ -1477,9 +1391,7 @@ async function loadKmlFile(
  * lazy dynamic import instead of being pulled into this module's chunk.
  */
 function isVectorLoadCancelled(error: unknown): boolean {
-  return (
-    error instanceof Error && error.name === "VectorLoadCancelledError"
-  );
+  return error instanceof Error && error.name === "VectorLoadCancelledError";
 }
 
 async function fileToDuckDbVectorFile(file: File): Promise<DuckDbVectorFile> {
@@ -1563,9 +1475,7 @@ async function loadBrowserVectorFile(
   };
 }
 
-async function openVectorFileBrowser(
-  options?: DuckDbVectorLoadOptions,
-): Promise<{
+async function openVectorFileBrowser(options?: DuckDbVectorLoadOptions): Promise<{
   data: FeatureCollection;
   path: string;
 } | null> {
@@ -1589,9 +1499,7 @@ async function openVectorFileBrowser(
   });
 }
 
-async function openVectorFileTauri(
-  options?: DuckDbVectorLoadOptions,
-): Promise<{
+async function openVectorFileTauri(options?: DuckDbVectorLoadOptions): Promise<{
   data: FeatureCollection;
   path: string;
 } | null> {
@@ -1641,18 +1549,13 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
   if (!selected) return [];
   // `isVectorFileName` drops rasters, project files, and shapefile sidecars, so
   // a sidecar picked on its own never becomes its own (unreadable) layer.
-  const paths = (Array.isArray(selected) ? selected : [selected]).filter(
-    isVectorFileName,
-  );
+  const paths = (Array.isArray(selected) ? selected : [selected]).filter(isVectorFileName);
   const picked: PickedVectorFile[] = [];
   for (const path of paths) {
     // Read each pick independently so one unreadable file (e.g. moved between
     // pick and read, or an unreadable sidecar) does not abandon the rest.
     try {
-      const file = new File(
-        [toArrayBuffer(await readFile(path))],
-        browserSafeFileName(path),
-      );
+      const file = new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path));
       const companionFiles =
         fileExtension(path) === "shp"
           ? (await readShapefileSiblings(path)).map(
@@ -1684,9 +1587,7 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
  * @returns The file with its sidecars, or null off the desktop host or when it
  *   can no longer be read (moved or deleted).
  */
-export async function readVectorFileWithSidecars(
-  path: string,
-): Promise<{
+export async function readVectorFileWithSidecars(path: string): Promise<{
   file: File;
   companionFiles: File[];
   nativeData?: FeatureCollection;
@@ -1849,8 +1750,7 @@ async function loadTauriVectorFile(
       : options;
 
   try {
-    const siblingFiles =
-      extension === "shp" ? await readShapefileSiblings(path) : [];
+    const siblingFiles = extension === "shp" ? await readShapefileSiblings(path) : [];
     return {
       data: await loadDuckDbVector(
         {
@@ -1866,15 +1766,11 @@ async function loadTauriVectorFile(
   } catch (error) {
     if (isVectorLoadCancelled(error)) throw error;
     const detail = error instanceof Error ? error.message : "Unknown error";
-    throw new Error(
-      `Could not convert this vector file with DuckDB-WASM. ${detail}`,
-    );
+    throw new Error(`Could not convert this vector file with DuckDB-WASM. ${detail}`);
   }
 }
 
-async function readShapefileSiblings(
-  path: string,
-): Promise<DuckDbVectorFile[]> {
+async function readShapefileSiblings(path: string): Promise<DuckDbVectorFile[]> {
   // Read the sidecars through a Tauri command rather than the JS `fs` plugin:
   // `fs` can only read paths the user explicitly picked or dropped, so a sidecar
   // that was not selected (the whole point of auto-discovery) is forbidden. The
@@ -1941,9 +1837,7 @@ async function openProjectFileBrowser(): Promise<{
 export function browserSaveFallsBackToDownload(): boolean {
   if (isTauri()) return false;
   if (typeof window === "undefined") return false;
-  return (
-    typeof (window as BrowserFilePickerWindow).showSaveFilePicker !== "function"
-  );
+  return typeof (window as BrowserFilePickerWindow).showSaveFilePicker !== "function";
 }
 
 async function saveProjectFileBrowser(
@@ -2064,9 +1958,7 @@ async function saveBinaryFileBrowser(
   return fileName;
 }
 
-export async function openLocalDataFileWithFallback(
-  options: LocalDataFileOptions,
-): Promise<{
+export async function openLocalDataFileWithFallback(options: LocalDataFileOptions): Promise<{
   data?: ArrayBuffer;
   path: string;
   text?: string;
@@ -2077,9 +1969,7 @@ export async function openLocalDataFileWithFallback(
       filters: options.filters,
     });
     if (!selected || typeof selected !== "string") return null;
-    const data = options.readBinary
-      ? toArrayBuffer(await readFile(selected))
-      : undefined;
+    const data = options.readBinary ? toArrayBuffer(await readFile(selected)) : undefined;
     const text = options.readText ? await readTextFile(selected) : undefined;
     return { data, path: selected, text };
   }
@@ -2260,10 +2150,7 @@ export async function openRecentProjectFile(
     // Only a present Content-Length lets us guard up front. `Number(null)` is
     // 0, which would silently pass for chunked/CDN responses that omit it.
     const contentLength = response.headers.get("content-length");
-    if (
-      contentLength !== null &&
-      Number(contentLength) > MAX_PROJECT_URL_BYTES
-    ) {
+    if (contentLength !== null && Number(contentLength) > MAX_PROJECT_URL_BYTES) {
       throw new Error("Project file is too large to load (over 25 MB).");
     }
 
@@ -2278,9 +2165,7 @@ export async function openRecentProjectFile(
   }
 
   if (!isTauri()) {
-    throw new Error(
-      "Recent local projects can only be reopened in GeoLibre Desktop.",
-    );
+    throw new Error("Recent local projects can only be reopened in GeoLibre Desktop.");
   }
 
   let text: string;
@@ -2288,9 +2173,7 @@ export async function openRecentProjectFile(
     text = await invoke<string>("read_project_file", { path });
   } catch (error) {
     if (isFileMissingError(error)) {
-      throw new RecentProjectGoneError(
-        `Project file no longer exists: ${path}`,
-      );
+      throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
     }
     throw error;
   }
@@ -2320,10 +2203,7 @@ export async function saveProjectFile(
  * Falls back to the save dialog when not running in Tauri (the browser never
  * has a writable filesystem path) or when the path is an HTTP(S) URL.
  */
-export async function saveProjectFileToPath(
-  content: string,
-  path: string,
-): Promise<string | null> {
+export async function saveProjectFileToPath(content: string, path: string): Promise<string | null> {
   if (!isTauri() || isHttpUrl(path)) {
     return saveProjectFile(content, path);
   }
@@ -2337,10 +2217,7 @@ export async function saveProjectFileToPath(
  * {@link isTauri} and a real (non-URL) path; the Python Editor's in-place Save
  * uses this and falls back to a save dialog otherwise.
  */
-export async function writeTextFileToPath(
-  path: string,
-  content: string,
-): Promise<void> {
+export async function writeTextFileToPath(path: string, content: string): Promise<void> {
   await writeTextFile(path, content);
 }
 
@@ -2378,10 +2255,7 @@ export async function saveBinaryFileWithFallback(
   // dialog is confirmed), not on every cancelled attempt. arrayBuffer() can
   // reject (e.g. OOM, or an unavailable backing store); that propagates to the
   // caller's catch.
-  const bytes =
-    content instanceof Blob
-      ? new Uint8Array(await content.arrayBuffer())
-      : content;
+  const bytes = content instanceof Blob ? new Uint8Array(await content.arrayBuffer()) : content;
   await writeFile(path, bytes);
   return path;
 }
@@ -2419,9 +2293,7 @@ export async function openGeoJsonFileWithFallback(): Promise<{
   return openGeoJsonFileBrowser();
 }
 
-export async function openVectorFileWithFallback(
-  options?: DuckDbVectorLoadOptions,
-): Promise<{
+export async function openVectorFileWithFallback(options?: DuckDbVectorLoadOptions): Promise<{
   data: FeatureCollection;
   path: string;
 } | null> {
@@ -2440,10 +2312,7 @@ export async function loadDroppedVectorFiles(
   const filesByBaseName = new Map<string, File[]>();
   for (const file of droppedFileArray) {
     const baseName = pathWithoutExtension(file.name).toLowerCase();
-    filesByBaseName.set(baseName, [
-      ...(filesByBaseName.get(baseName) ?? []),
-      file,
-    ]);
+    filesByBaseName.set(baseName, [...(filesByBaseName.get(baseName) ?? []), file]);
   }
 
   const layers: LoadedLayer[] = [];
@@ -2458,9 +2327,7 @@ export async function loadDroppedVectorFiles(
 
     if (extension === "kmz") {
       try {
-        layers.push(
-          ...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)),
-        );
+        layers.push(...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)));
       } catch (error) {
         if (isVectorLoadCancelled(error)) continue;
         throw error;
@@ -2474,9 +2341,7 @@ export async function loadDroppedVectorFiles(
       // placemarks (which makes the vector load throw).
       const text = await file.text();
       const overlays = groundOverlaysFromKml(text, file.name);
-      const models = options?.skipModels
-        ? []
-        : await modelsFromKml(text, file.name);
+      const models = options?.skipModels ? [] : await modelsFromKml(text, file.name);
       // Overlays go under the placemarks (added first), matching the KMZ path.
       layers.push(...overlays, ...models);
       try {
@@ -2505,15 +2370,9 @@ export async function loadDroppedVectorFiles(
     const siblingFiles =
       extension === "shp"
         ? await Promise.all(
-            (
-              filesByBaseName.get(
-                pathWithoutExtension(file.name).toLowerCase(),
-              ) ?? []
-            )
+            (filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ?? [])
               .filter((candidate) =>
-                SHAPEFILE_SIDECAR_EXTENSIONS.includes(
-                  fileExtension(candidate.name),
-                ),
+                SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(candidate.name)),
               )
               .map(fileToDuckDbVectorFile),
           )
@@ -2545,9 +2404,7 @@ function fileBaseName(path: string): string {
 }
 
 /** Collect dropped browser File objects that are rasters the map can load. */
-export function loadDroppedRasterFiles(
-  droppedFiles: FileList | File[],
-): DroppedRaster[] {
+export function loadDroppedRasterFiles(droppedFiles: FileList | File[]): DroppedRaster[] {
   return Array.from(droppedFiles)
     .filter((file) => isRasterFileName(file.name))
     .map((file) => ({ name: file.name, source: file }));
@@ -2558,9 +2415,7 @@ export function loadDroppedRasterFiles(
  * There is no asset-protocol scope configured, so the bytes are read and wrapped
  * in a File, matching how local vector files are loaded.
  */
-export async function loadDroppedRasterPaths(
-  paths: string[],
-): Promise<DroppedRaster[]> {
+export async function loadDroppedRasterPaths(paths: string[]): Promise<DroppedRaster[]> {
   const rasterPaths = paths.filter(isRasterFileName);
   const rasters: DroppedRaster[] = [];
   for (const path of rasterPaths) {
@@ -2587,20 +2442,13 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
       filters: [{ name: "Images", extensions: [...PHOTO_IMAGE_EXTENSIONS] }],
     });
     if (!selected) return [];
-    const paths = (Array.isArray(selected) ? selected : [selected]).filter(
-      isPhotoFileName,
-    );
+    const paths = (Array.isArray(selected) ? selected : [selected]).filter(isPhotoFileName);
     const files: File[] = [];
     for (const path of paths) {
       // Read each pick independently so one unreadable file does not abandon the
       // rest of the selection.
       try {
-        files.push(
-          new File(
-            [toArrayBuffer(await readFile(path))],
-            browserSafeFileName(path),
-          ),
-        );
+        files.push(new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path)));
       } catch (error) {
         console.warn(`Could not read the selected image "${path}".`, error);
       }
@@ -2631,9 +2479,7 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
 export async function loadDroppedPhotoFiles(
   droppedFiles: FileList | File[],
 ): Promise<GeotaggedPhotoResult | null> {
-  const photos = Array.from(droppedFiles).filter((file) =>
-    isPhotoDropFileName(file.name),
-  );
+  const photos = Array.from(droppedFiles).filter((file) => isPhotoDropFileName(file.name));
   if (!photos.length) return null;
   const { loadGeotaggedPhotos } = await import("./geotagged-photos");
   return loadGeotaggedPhotos(photos);
@@ -2644,17 +2490,13 @@ export async function loadDroppedPhotoFiles(
  * layer from their EXIF GPS. Returns null when no auto-importable image was
  * dropped (TIFF is excluded and loaded as a raster instead).
  */
-export async function loadDroppedPhotoPaths(
-  paths: string[],
-): Promise<GeotaggedPhotoResult | null> {
+export async function loadDroppedPhotoPaths(paths: string[]): Promise<GeotaggedPhotoResult | null> {
   const photoPaths = paths.filter(isPhotoDropFileName);
   if (!photoPaths.length) return null;
   const files: File[] = [];
   for (const path of photoPaths) {
     try {
-      files.push(
-        new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path)),
-      );
+      files.push(new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path)));
     } catch (error) {
       console.warn(`Could not read dropped image "${path}".`, error);
     }
@@ -2689,9 +2531,7 @@ export async function loadDroppedVectorPaths(
     }
     if (extension === "kmz") {
       try {
-        layers.push(
-          ...(await loadKmzLayers(await readLocalFileBytes(path), path, options)),
-        );
+        layers.push(...(await loadKmzLayers(await readLocalFileBytes(path), path, options)));
       } catch (error) {
         if (isVectorLoadCancelled(error)) continue;
         const detail = error instanceof Error ? error.message : String(error);
@@ -2704,9 +2544,7 @@ export async function loadDroppedVectorPaths(
       // KML still contributes its overlays when the vector load throws.
       const kmlText = await readLocalFileText(path);
       const overlays = groundOverlaysFromKml(kmlText, path);
-      const models = options?.skipModels
-        ? []
-        : await modelsFromKml(kmlText, path);
+      const models = options?.skipModels ? [] : await modelsFromKml(kmlText, path);
       // Overlays go under the placemarks (added first), matching the KMZ path.
       layers.push(...overlays, ...models);
       try {
@@ -2771,9 +2609,7 @@ export function parseCsvHeaderLine(line: string): string[] {
  * Read the header column names of a CSV from a browser File or a desktop path.
  * Reads only the first line so large CSVs are not loaded into memory.
  */
-export async function readCsvHeaderColumns(
-  source: File | string,
-): Promise<string[]> {
+export async function readCsvHeaderColumns(source: File | string): Promise<string[]> {
   try {
     if (typeof source !== "string") {
       // Browser File: decode just the leading slice that holds the header.

@@ -45,9 +45,7 @@ def test_status_returns_availability_shape() -> None:
 
 
 def test_run_without_sedona_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sedona_ops, "sedonadb_import_error", lambda: "No module named 'sedona'"
-    )
+    monkeypatch.setattr(sedona_ops, "sedonadb_import_error", lambda: "No module named 'sedona'")
     with pytest.raises(HTTPException) as exc:
         sql_run(SqlRunRequest(sql="SELECT 1"))
     assert exc.value.status_code == 503
@@ -72,9 +70,7 @@ def test_scalar_query_returns_rows() -> None:
 
 @requires_sedona
 def test_geometry_query_returns_geojson() -> None:
-    result = sql_run(
-        SqlRunRequest(sql="SELECT ST_Point(1.0, 2.0) AS geometry")
-    )
+    result = sql_run(SqlRunRequest(sql="SELECT ST_Point(1.0, 2.0) AS geometry"))
     assert result["geometry_column"] == "geometry"
     assert result["geojson"]["type"] == "FeatureCollection"
     assert len(result["geojson"]["features"]) == 1
@@ -123,9 +119,5 @@ def test_run_rejects_oversized_layer(monkeypatch: pytest.MonkeyPatch) -> None:
         ],
     }
     with pytest.raises(HTTPException) as exc:
-        sql_run(
-            SqlRunRequest(
-                sql="SELECT 1", layers=[{"name": "big", "geojson": big}]
-            )
-        )
+        sql_run(SqlRunRequest(sql="SELECT 1", layers=[{"name": "big", "geojson": big}]))
     assert exc.value.status_code == 413

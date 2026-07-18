@@ -19,27 +19,22 @@ export interface WasmToolRequest {
 }
 
 /** The single message this worker posts back. */
-export type WasmToolResponse =
-  | { ok: true; result: ToolResult }
-  | { ok: false; error: string };
+export type WasmToolResponse = { ok: true; result: ToolResult } | { ok: false; error: string };
 
-worker.addEventListener(
-  "message",
-  async (event: MessageEvent<WasmToolRequest>) => {
-    const { tool, args, input } = event.data;
-    try {
-      // runTool compiles the bundled geolibre-cli.wasm on first use, in this
-      // worker's own module scope — a copy already compiled on the main thread
-      // is not shared with it.
-      const result = await runTool(tool, { args, input });
-      worker.postMessage({ ok: true, result } satisfies WasmToolResponse);
-    } catch (error) {
-      // A tool that merely exits non-zero resolves normally and is reported by
-      // the caller; reaching here means the runner itself threw.
-      worker.postMessage({
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      } satisfies WasmToolResponse);
-    }
-  },
-);
+worker.addEventListener("message", async (event: MessageEvent<WasmToolRequest>) => {
+  const { tool, args, input } = event.data;
+  try {
+    // runTool compiles the bundled geolibre-cli.wasm on first use, in this
+    // worker's own module scope — a copy already compiled on the main thread
+    // is not shared with it.
+    const result = await runTool(tool, { args, input });
+    worker.postMessage({ ok: true, result } satisfies WasmToolResponse);
+  } catch (error) {
+    // A tool that merely exits non-zero resolves normally and is reported by
+    // the caller; reaching here means the runner itself threw.
+    worker.postMessage({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    } satisfies WasmToolResponse);
+  }
+});

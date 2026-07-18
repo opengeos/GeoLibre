@@ -16,10 +16,7 @@ import {
   PINNED_FOLDERS_CHANGED_EVENT,
   readPinnedFolders,
 } from "../lib/browser-folders";
-import {
-  FAVORITES_CHANGED_EVENT,
-  readBrowserFavorites,
-} from "../lib/browser-favorites";
+import { FAVORITES_CHANGED_EVENT, readBrowserFavorites } from "../lib/browser-favorites";
 import { isTauri } from "../lib/tauri-io";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
@@ -69,10 +66,7 @@ export function useBrowserTree(): BrowserTreeState {
     window.addEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
     window.addEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
     return () => {
-      window.removeEventListener(
-        POSTGRES_CONNECTIONS_CHANGED_EVENT,
-        bumpConnections,
-      );
+      window.removeEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bumpConnections);
       window.removeEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
       window.removeEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
     };
@@ -85,12 +79,10 @@ export function useBrowserTree(): BrowserTreeState {
     // reports when it needs GeoLibre Desktop (Martin has no mobile build).
     // Kept in the saved list's order (most-recently-used first), deliberately
     // unlike the alphabetized Services list — this mirrors the Recent section.
-    const databaseConnections = readSavedPostgresConnections().map(
-      (connectionString) => ({
-        connectionString,
-        label: savedPostgresConnectionLabel(connectionString),
-      }),
-    );
+    const databaseConnections = readSavedPostgresConnections().map((connectionString) => ({
+      connectionString,
+      label: savedPostgresConnectionLabel(connectionString),
+    }));
     // The Files section is desktop-only: directory reading uses the fs plugin's
     // readDir, which only works within the scope the OS folder dialog grants, so
     // the section lists the user's pinned folders (localStorage, MRU-first) that

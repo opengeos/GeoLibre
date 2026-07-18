@@ -1,10 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type {
-  Feature,
-  FeatureCollection,
-  MultiPolygon,
-  Polygon,
-} from "geojson";
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type {
   GeoJSONSource,
   LngLat,
@@ -125,8 +120,7 @@ export const DEFAULT_OPENAERIALMAP_LABELS: OpenAerialMapLabels = {
   loadingMore: "Loading more…",
   noResults: "No imagery found in this area.",
   showing: (shown, total) => `Showing ${shown} of ${total} images.`,
-  searchError: (message) =>
-    `Could not reach OpenAerialMap: ${message}. Please try again.`,
+  searchError: (message) => `Could not reach OpenAerialMap: ${message}. Please try again.`,
   add: "Add",
   remove: "Remove",
   zoom: "Zoom",
@@ -150,8 +144,7 @@ export const DEFAULT_OPENAERIALMAP_LABELS: OpenAerialMapLabels = {
   coordEast: "East",
   coordNorth: "North",
   coordSearch: "Search this box",
-  bboxInvalid:
-    "Enter four valid coordinates with west < east and south < north.",
+  bboxInvalid: "Enter four valid coordinates with west < east and south < north.",
   footprintsLayer: "OpenAerialMap footprints",
   footprintUnavailable: "No tile service available for this image.",
   metadataHeading: "Image metadata",
@@ -199,12 +192,10 @@ const CSS = {
     "width:100%;box-sizing:border-box;padding:4px 6px;font-size:11px;" +
     "border-radius:4px;border:1px solid hsl(var(--border));" +
     "background:hsl(var(--background));color:hsl(var(--foreground));",
-  readout:
-    "font-size:10px;color:hsl(var(--muted-foreground));word-break:break-all;",
+  readout: "font-size:10px;color:hsl(var(--muted-foreground));word-break:break-all;",
   status: "font-size:11px;color:hsl(var(--muted-foreground));line-height:1.4;",
   results:
-    "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;" +
-    "overflow-y:auto;",
+    "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;" + "overflow-y:auto;",
   card:
     "display:flex;gap:8px;padding:6px;border-radius:6px;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--muted));" +
@@ -245,10 +236,7 @@ let onFootprintSelect: ((id: string) => void) | null = null;
 let footprintsRegistered = false;
 // Footprint feature per image id, so the selection outline can be redrawn from
 // an id without re-querying the results.
-const footprintById = new Map<
-  string,
-  Feature<Polygon | MultiPolygon, OamFootprintProps>
->();
+const footprintById = new Map<string, Feature<Polygon | MultiPolygon, OamFootprintProps>>();
 // Teardown for an open metadata dialog, so the panel/plugin can close it.
 let closeMetadataDialog: (() => void) | null = null;
 
@@ -319,8 +307,7 @@ async function fetchPage(
   // HTTP, which bypasses browser CORS and keeps the query on-device. (The
   // native fetch has no abort hook; a superseded result is ignored by the
   // caller's generation guard.)
-  const isTauri =
-    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   if (isTauri && appRef?.fetchArrayBuffer) {
     const url = buildSearchUrl({ bbox, page, limit: PAGE_SIZE });
     const buffer = await appRef.fetchArrayBuffer(url);
@@ -381,9 +368,7 @@ function downloadCog(image: OamImage): void {
 /** Formats an image's ground sample distance, e.g. "30.0 cm/px". */
 function resolutionText(image: OamImage): string | null {
   if (image.gsd == null) return null;
-  return image.gsd < 1
-    ? `${(image.gsd * 100).toFixed(1)} cm/px`
-    : `${image.gsd.toFixed(2)} m/px`;
+  return image.gsd < 1 ? `${(image.gsd * 100).toFixed(1)} cm/px` : `${image.gsd.toFixed(2)} m/px`;
 }
 
 /** Composes the "provider · date · resolution" subtitle line. */
@@ -548,11 +533,7 @@ function setSelectedFootprint(map: MapLibreMap, id: string | null): void {
   const source = map.getSource(SELECT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const feature = id ? footprintById.get(id) : undefined;
-  source.setData(
-    feature
-      ? { type: "FeatureCollection", features: [feature] }
-      : emptyCollection(),
-  );
+  source.setData(feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection());
 }
 
 /**
@@ -570,11 +551,7 @@ function removeFootprintLayers(map: MapLibreMap): void {
   // on the next sync. Also remove them directly so teardown is immediate and safe
   // even if that sync has not run yet (guarded by getLayer/getSource).
   unregisterFootprintLayer();
-  for (const layerId of [
-    SELECT_LINE_LAYER_ID,
-    FOOTPRINT_LINE_LAYER_ID,
-    FOOTPRINT_FILL_LAYER_ID,
-  ]) {
+  for (const layerId of [SELECT_LINE_LAYER_ID, FOOTPRINT_LINE_LAYER_ID, FOOTPRINT_FILL_LAYER_ID]) {
     if (map.getLayer(layerId)) map.removeLayer(layerId);
   }
   for (const sourceId of [SELECT_SOURCE_ID, FOOTPRINT_SOURCE_ID]) {
@@ -584,9 +561,7 @@ function removeFootprintLayers(map: MapLibreMap): void {
 }
 
 /** Builds a rectangle FeatureCollection from a bbox, or empty when null. */
-function boxCollection(
-  bbox: [number, number, number, number] | null,
-): FeatureCollection {
+function boxCollection(bbox: [number, number, number, number] | null): FeatureCollection {
   if (!bbox) return emptyCollection();
   const [w, s, e, n] = bbox;
   return {
@@ -641,10 +616,7 @@ function ensureDrawLayers(map: MapLibreMap): void {
 }
 
 /** Updates the drawn-box preview (or clears it when bbox is null). */
-function setDrawBox(
-  map: MapLibreMap,
-  bbox: [number, number, number, number] | null,
-): void {
+function setDrawBox(map: MapLibreMap, bbox: [number, number, number, number] | null): void {
   ensureDrawLayers(map);
   const source = map.getSource(DRAW_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData(boxCollection(bbox));
@@ -659,10 +631,7 @@ function removeDrawLayers(map: MapLibreMap): void {
 }
 
 /** Normalizes two drag corners into a [w, s, e, n] bbox. */
-function boxFromCorners(
-  a: LngLat,
-  b: LngLat,
-): [number, number, number, number] {
+function boxFromCorners(a: LngLat, b: LngLat): [number, number, number, number] {
   return [
     Math.min(a.lng, b.lng),
     Math.min(a.lat, b.lat),
@@ -730,11 +699,7 @@ function startDraw(
 // ---------------------------------------------------------------------------
 
 /** Appends a labelled row to a metadata definition list. */
-function addMetaRow(
-  list: HTMLElement,
-  label: string,
-  value: string | HTMLElement | null,
-): void {
+function addMetaRow(list: HTMLElement, label: string, value: string | HTMLElement | null): void {
   if (value == null || value === "") return;
   const row = document.createElement("div");
   row.style.cssText = "display:flex;flex-direction:column;gap:2px;";
@@ -792,16 +757,14 @@ function openMetadataModal(image: OamImage): void {
 
   const body = document.createElement("div");
   body.style.cssText =
-    "display:flex;flex-direction:column;gap:10px;padding:12px;" +
-    "overflow-y:auto;";
+    "display:flex;flex-direction:column;gap:10px;padding:12px;" + "overflow-y:auto;";
 
   if (image.thumbnailUrl) {
     const img = document.createElement("img");
     img.src = image.thumbnailUrl;
     img.alt = image.title;
     img.loading = "lazy";
-    img.style.cssText =
-      "width:100%;max-height:180px;object-fit:cover;border-radius:6px;";
+    img.style.cssText = "width:100%;max-height:180px;object-fit:cover;border-radius:6px;";
     img.addEventListener("error", () => img.remove());
     body.appendChild(img);
   }
@@ -820,11 +783,7 @@ function openMetadataModal(image: OamImage): void {
     labels.metaAcquired,
     acquired.length ? [...new Set(acquired)].join(" – ") : null,
   );
-  addMetaRow(
-    list,
-    labels.metaBounds,
-    image.bbox ? formatBbox(image.bbox) : null,
-  );
+  addMetaRow(list, labels.metaBounds, image.bbox ? formatBbox(image.bbox) : null);
   if (image.cogUrl) {
     const link = document.createElement("a");
     link.href = image.cogUrl;
@@ -941,15 +900,7 @@ function buildPanel(container: HTMLElement): () => void {
   moreButton.style.cssText = CSS.primaryButton;
   moreButton.hidden = true;
 
-  container.append(
-    modeBar,
-    viewControls,
-    drawControls,
-    bboxControls,
-    status,
-    results,
-    moreButton,
-  );
+  container.append(modeBar, viewControls, drawControls, bboxControls, status, results, moreButton);
 
   // Panel-local search state.
   let images: OamImage[] = [];
@@ -972,9 +923,7 @@ function buildPanel(container: HTMLElement): () => void {
 
   const setStatus = (text: string, isError = false): void => {
     status.textContent = text;
-    status.style.color = isError
-      ? "hsl(var(--destructive))"
-      : "hsl(var(--muted-foreground))";
+    status.style.color = isError ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))";
   };
 
   const computeAddedSignature = (): string =>
@@ -1012,9 +961,7 @@ function buildPanel(container: HTMLElement): () => void {
   const unsubscribe = useAppStore.subscribe(() => {
     if (
       footprintsRegistered &&
-      !useAppStore
-        .getState()
-        .layers.some((layer) => layer.id === FOOTPRINT_STORE_LAYER_ID)
+      !useAppStore.getState().layers.some((layer) => layer.id === FOOTPRINT_STORE_LAYER_ID)
     ) {
       // The host already dropped the footprint fill/line + source; clear the
       // selection outline we own and reset selection so a later search re-adds a
@@ -1024,8 +971,7 @@ function buildPanel(container: HTMLElement): () => void {
       selectedId = null;
       const map = appRef?.getMap?.();
       if (map) {
-        if (map.getLayer(SELECT_LINE_LAYER_ID))
-          map.removeLayer(SELECT_LINE_LAYER_ID);
+        if (map.getLayer(SELECT_LINE_LAYER_ID)) map.removeLayer(SELECT_LINE_LAYER_ID);
         if (map.getSource(SELECT_SOURCE_ID)) map.removeSource(SELECT_SOURCE_ID);
       }
     }
@@ -1139,14 +1085,7 @@ function buildPanel(container: HTMLElement): () => void {
     const east = Number(eastInput.value);
     const north = Number(northInput.value);
     if (![west, south, east, north].every(Number.isFinite)) return null;
-    if (
-      west < -180 ||
-      east > 180 ||
-      south < -90 ||
-      north > 90 ||
-      west >= east ||
-      south >= north
-    ) {
+    if (west < -180 || east > 180 || south < -90 || north > 90 || west >= east || south >= north) {
       return null;
     }
     return [west, south, east, north];
@@ -1162,8 +1101,7 @@ function buildPanel(container: HTMLElement): () => void {
     if (next !== "draw") stopDrawing();
     mode = next;
     for (const key of ["view", "draw", "bbox"] as SearchMode[]) {
-      modeButtons[key].style.cssText =
-        key === next ? CSS.modeButtonActive : CSS.modeButton;
+      modeButtons[key].style.cssText = key === next ? CSS.modeButtonActive : CSS.modeButton;
     }
     viewControls.hidden = next !== "view";
     drawControls.hidden = next !== "draw";
@@ -1215,8 +1153,9 @@ function buildPanel(container: HTMLElement): () => void {
       drawReadout.textContent = labels.drawnBox(formatBbox(drawn));
       // Mirror the drawn bounds into the coordinate inputs so the user can nudge
       // them and re-search from the Coordinates tab.
-      [westInput.value, southInput.value, eastInput.value, northInput.value] =
-        drawn.map((n) => n.toFixed(5));
+      [westInput.value, southInput.value, eastInput.value, northInput.value] = drawn.map((n) =>
+        n.toFixed(5),
+      );
       void runSearch(true, drawn);
     });
   });

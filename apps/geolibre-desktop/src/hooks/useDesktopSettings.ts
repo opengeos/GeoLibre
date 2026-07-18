@@ -201,23 +201,17 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
 
   const candidate = settings as Partial<DesktopSettings>;
   return {
-    additionalPluginDirectories: normalizeStringList(
-      candidate.additionalPluginDirectories,
-    ),
-    language:
-      typeof candidate.language === "string" ? candidate.language.trim() : "",
+    additionalPluginDirectories: normalizeStringList(candidate.additionalPluginDirectories),
+    language: typeof candidate.language === "string" ? candidate.language.trim() : "",
     layout: normalizeDesktopLayoutSettings(candidate.layout),
     // Apply the same scheme rule as project-file loading so stale or edited
     // localStorage values cannot smuggle in disallowed URL schemes.
     pluginManifestUrls: normalizeStringList(candidate.pluginManifestUrls).filter(
       isAllowedPluginManifestUrl,
     ),
-    shareToken:
-      typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
+    shareToken: typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
     cesiumIonToken:
-      typeof candidate.cesiumIonToken === "string"
-        ? candidate.cesiumIonToken.trim()
-        : "",
+      typeof candidate.cesiumIonToken === "string" ? candidate.cesiumIonToken.trim() : "",
     aiProviderEnv: normalizeEnvRecord(candidate.aiProviderEnv),
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
@@ -252,9 +246,7 @@ function normalizeThemeSettings(theme: unknown): ThemeSettings {
   // arbitrary string into the inline custom-color tokens.
   const candidate = theme as Partial<ThemeSettings>;
   return {
-    scheme: isThemeScheme(candidate.scheme)
-      ? candidate.scheme
-      : DEFAULT_THEME_SETTINGS.scheme,
+    scheme: isThemeScheme(candidate.scheme) ? candidate.scheme : DEFAULT_THEME_SETTINGS.scheme,
     // Normalize so the value bound to `<input type="color">` is exactly
     // `#rrggbb` lowercase (isHexColor already requires the leading `#`).
     customColor: isHexColor(candidate.customColor)
@@ -278,9 +270,7 @@ function normalizeUpdateSettings(updates: unknown): UpdateSettings {
         : DEFAULT_UPDATE_SETTINGS.checkOnStartup,
     notificationLevel:
       typeof candidate.notificationLevel === "string" &&
-      UPDATE_NOTIFICATION_LEVELS.includes(
-        candidate.notificationLevel as UpdateNotificationLevel,
-      )
+      UPDATE_NOTIFICATION_LEVELS.includes(candidate.notificationLevel as UpdateNotificationLevel)
         ? (candidate.notificationLevel as UpdateNotificationLevel)
         : DEFAULT_UPDATE_SETTINGS.notificationLevel,
   };
@@ -309,9 +299,7 @@ function normalizeUiProfileSettings(profile: unknown): UiProfileSettings {
         ? candidate.onboarded
         : DEFAULT_UI_PROFILE_SETTINGS.onboarded,
     locked:
-      typeof candidate.locked === "boolean"
-        ? candidate.locked
-        : DEFAULT_UI_PROFILE_SETTINGS.locked,
+      typeof candidate.locked === "boolean" ? candidate.locked : DEFAULT_UI_PROFILE_SETTINGS.locked,
     hiddenDataSources: normalizeStringList(candidate.hiddenDataSources),
     hiddenPlugins: normalizeStringList(candidate.hiddenPlugins),
     hiddenMenus: normalizeStringList(candidate.hiddenMenus),
@@ -319,9 +307,7 @@ function normalizeUiProfileSettings(profile: unknown): UiProfileSettings {
   };
 }
 
-function normalizeDesktopLayoutSettings(
-  layout: unknown,
-): DesktopLayoutSettings {
+function normalizeDesktopLayoutSettings(layout: unknown): DesktopLayoutSettings {
   if (!layout || typeof layout !== "object") {
     return DEFAULT_DESKTOP_LAYOUT_SETTINGS;
   }
@@ -365,10 +351,7 @@ function saveDesktopSettings(settings: DesktopSettings): void {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(
-      DESKTOP_SETTINGS_STORAGE_KEY,
-      JSON.stringify(settings),
-    );
+    window.localStorage.setItem(DESKTOP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // Persistence is best-effort; ignore quota or disabled-storage errors.
   }
@@ -376,8 +359,7 @@ function saveDesktopSettings(settings: DesktopSettings): void {
 
 export const useDesktopSettingsStore = create<DesktopSettingsState>((set) => ({
   desktopSettings: loadDesktopSettings(),
-  setDesktopSettings: (settings) =>
-    set({ desktopSettings: normalizeDesktopSettings(settings) }),
+  setDesktopSettings: (settings) => set({ desktopSettings: normalizeDesktopSettings(settings) }),
 }));
 
 export function useDesktopSettingsPersistence() {

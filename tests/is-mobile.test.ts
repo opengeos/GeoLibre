@@ -13,14 +13,8 @@ describe("isMobile", () => {
   });
 
   it("detects iPhone and iPad", () => {
-    assert.equal(
-      isMobile("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"),
-      true,
-    );
-    assert.equal(
-      isMobile("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)"),
-      true,
-    );
+    assert.equal(isMobile("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
+    assert.equal(isMobile("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)"), true);
   });
 
   it("is false for desktop browsers", () => {
@@ -30,14 +24,8 @@ describe("isMobile", () => {
       ),
       false,
     );
-    assert.equal(
-      isMobile("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1"),
-      false,
-    );
-    assert.equal(
-      isMobile("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120"),
-      false,
-    );
+    assert.equal(isMobile("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1"), false);
+    assert.equal(isMobile("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120"), false);
   });
 
   it("detects iPadOS 13+ reporting a desktop Macintosh UA (multi-touch)", () => {

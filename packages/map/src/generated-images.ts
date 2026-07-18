@@ -29,16 +29,9 @@ export function hashText(text: string): string {
     h1 = Math.imul(h1 ^ ch, 2654435761);
     h2 = Math.imul(h2 ^ ch, 1597334677);
   }
-  h1 =
-    Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^
-    Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 =
-    Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^
-    Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (
-    (h2 >>> 0).toString(16).padStart(8, "0") +
-    (h1 >>> 0).toString(16).padStart(8, "0")
-  );
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0");
 }
 
 // Remote SVG sources we have already warned about, so the console message below
@@ -113,10 +106,7 @@ const MAX_GENERATED_IMAGE_FACTORIES = 512;
  * cap is reached — safe because layer sync re-registers any id still in use, and
  * `styleimagemissing` re-fires if MapLibre later needs an evicted image.
  */
-export function registerGeneratedImage(
-  id: string,
-  factory: GeneratedImageFactory,
-): void {
+export function registerGeneratedImage(id: string, factory: GeneratedImageFactory): void {
   if (factories.has(id)) return;
   if (factories.size >= MAX_GENERATED_IMAGE_FACTORIES) {
     const oldest = factories.keys().next().value;

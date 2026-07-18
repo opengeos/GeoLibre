@@ -70,9 +70,7 @@ export function googleEarthUrl(lat: number, lng: number, zoom: number): string {
   const clampedLat = clamp(lat, -90, 90);
   const distance = Math.round(
     clamp(
-      (GOOGLE_EARTH_DISTANCE_AT_ZOOM_0 *
-        Math.cos((clampedLat * Math.PI) / 180)) /
-        2 ** zoom,
+      (GOOGLE_EARTH_DISTANCE_AT_ZOOM_0 * Math.cos((clampedLat * Math.PI) / 180)) / 2 ** zoom,
       GOOGLE_EARTH_MIN_DISTANCE,
       GOOGLE_EARTH_MAX_DISTANCE,
     ),

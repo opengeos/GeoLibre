@@ -1,15 +1,7 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 import type maplibregl from "maplibre-gl";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
 /**
  * Annotation layer plugin: lightweight cartographic decoration (free text,
@@ -48,12 +40,7 @@ const ELLIPSE_SEGMENTS = 72;
 const ARROWHEAD_LENGTH_PX = 16;
 const ARROWHEAD_HALF_WIDTH_PX = 8;
 
-type AnnotationTool =
-  | "text"
-  | "arrow"
-  | "rectangle"
-  | "ellipse"
-  | "freehand";
+type AnnotationTool = "text" | "arrow" | "rectangle" | "ellipse" | "freehand";
 
 // State is module-scope, so this plugin is a single-instance singleton (one
 // shared toolbar/editor across the app), matching the GeoEditor plugin. That is
@@ -115,10 +102,7 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
     appApi = null;
   },
   getMapControlPosition: () => annotationsPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     if (!toolbarControl) {
       annotationsPosition = position;
       return;
@@ -162,13 +146,7 @@ const TOOL_ICONS: Record<AnnotationTool, string> = {
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 6-9 9-9s2 5 4 5 2-3 5-3"/></svg>',
 };
 
-const TOOL_ORDER: AnnotationTool[] = [
-  "text",
-  "arrow",
-  "rectangle",
-  "ellipse",
-  "freehand",
-];
+const TOOL_ORDER: AnnotationTool[] = ["text", "arrow", "rectangle", "ellipse", "freehand"];
 
 const WIDTH_VALUES = [2, 3, 5] as const;
 
@@ -242,11 +220,8 @@ class AnnotationToolbarControl implements maplibregl.IControl {
 
   onAdd(): HTMLElement {
     const container = document.createElement("div");
-    container.className =
-      "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
-    this.relabelers = [
-      () => container.setAttribute("aria-label", labels.toolbar),
-    ];
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
+    this.relabelers = [() => container.setAttribute("aria-label", labels.toolbar)];
 
     for (const tool of TOOL_ORDER) {
       const button = document.createElement("button");
@@ -290,10 +265,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       this.relabel();
     });
     renderWidth();
-    this.applyLabel(
-      width,
-      () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`,
-    );
+    this.applyLabel(width, () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`);
     container.appendChild(width);
 
     const deleteLast = this.makeActionButton(
@@ -375,8 +347,7 @@ function setActiveTool(tool: AnnotationTool | null): void {
   if (!map) return;
   // Drag-based tools (rectangle/ellipse/freehand) own the pointer, so suspend
   // map panning while one is active and restore it otherwise.
-  const dragTool =
-    tool === "rectangle" || tool === "ellipse" || tool === "freehand";
+  const dragTool = tool === "rectangle" || tool === "ellipse" || tool === "freehand";
   if (dragTool) {
     map.dragPan.disable();
   } else {
@@ -481,11 +452,7 @@ function handleArrowClick(event: maplibregl.MapMouseEvent): void {
 
 function handleMouseDown(event: maplibregl.MapMouseEvent): void {
   if (!pluginActive) return;
-  if (
-    activeTool !== "rectangle" &&
-    activeTool !== "ellipse" &&
-    activeTool !== "freehand"
-  ) {
+  if (activeTool !== "rectangle" && activeTool !== "ellipse" && activeTool !== "freehand") {
     return;
   }
   // Only a primary (left) press starts a shape; mousedown fires for every
@@ -539,10 +506,7 @@ function handleMouseMove(event: maplibregl.MapMouseEvent): void {
 const FREEHAND_MIN_PIXELS = 4;
 
 /** True when the cursor has moved at least the sampling threshold from the last point. */
-function movedEnoughForFreehand(
-  map: maplibregl.Map,
-  lngLat: maplibregl.LngLat,
-): boolean {
+function movedEnoughForFreehand(map: maplibregl.Map, lngLat: maplibregl.LngLat): boolean {
   const last = freehandPath[freehandPath.length - 1];
   if (!last) return true;
   const a = map.project(lngLat);
@@ -735,18 +699,13 @@ function arrowFeatures(
   // Shrink the head for a short shaft so its base never sits behind the start
   // point (which would draw an inverted arrowhead the shaft punches through).
   const headLength = Math.min(ARROWHEAD_LENGTH_PX, length * 0.6);
-  const headHalfWidth =
-    ARROWHEAD_HALF_WIDTH_PX * (headLength / ARROWHEAD_LENGTH_PX);
+  const headHalfWidth = ARROWHEAD_HALF_WIDTH_PX * (headLength / ARROWHEAD_LENGTH_PX);
   const baseX = endPx.x - ux * headLength;
   const baseY = endPx.y - uy * headLength;
 
   const tip = toPos(end);
-  const left = toPos(
-    map.unproject([baseX + px * headHalfWidth, baseY + py * headHalfWidth]),
-  );
-  const right = toPos(
-    map.unproject([baseX - px * headHalfWidth, baseY - py * headHalfWidth]),
-  );
+  const left = toPos(map.unproject([baseX + px * headHalfWidth, baseY + py * headHalfWidth]));
+  const right = toPos(map.unproject([baseX - px * headHalfWidth, baseY - py * headHalfWidth]));
   const head: Feature = {
     type: "Feature",
     geometry: {
@@ -863,9 +822,7 @@ function polygonPreview(ring: Position[]): FeatureCollection {
 }
 
 function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
-  const existing = map.getSource(PREVIEW_SOURCE_ID) as
-    | maplibregl.GeoJSONSource
-    | undefined;
+  const existing = map.getSource(PREVIEW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   if (existing) {
     // The preview paint is data-driven (below), so the regenerated features —
     // which carry the current color/width — update the appearance on their own;
@@ -916,9 +873,7 @@ function isAnnotationLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.sourceKind === ANNOTATIONS_SOURCE_KIND;
 }
 
-function findAnnotationLayer(
-  layers: GeoLibreLayer[],
-): GeoLibreLayer | undefined {
+function findAnnotationLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined {
   if (annotationLayerId) {
     const tracked = layers.find((layer) => layer.id === annotationLayerId);
     // Verify the tracked layer is still an annotation layer: after a project
@@ -985,14 +940,11 @@ function deleteLastAnnotation(): void {
   if (!layer || !features || features.length === 0) return;
 
   const last = features[features.length - 1];
-  const groupId = (last.properties as Record<string, unknown> | null)
-    ?.annotationId;
+  const groupId = (last.properties as Record<string, unknown> | null)?.annotationId;
   let remaining: Feature[];
   if (typeof groupId === "string") {
     remaining = features.filter(
-      (feature) =>
-        (feature.properties as Record<string, unknown> | null)
-          ?.annotationId !== groupId,
+      (feature) => (feature.properties as Record<string, unknown> | null)?.annotationId !== groupId,
     );
   } else {
     remaining = features.slice(0, -1);

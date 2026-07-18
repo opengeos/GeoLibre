@@ -25,27 +25,17 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
 
   return (
     <>
-      <Dialog
-        open={consent.directionsNoticeOpen}
-        onOpenChange={consent.setDirectionsNoticeOpen}
-      >
+      <Dialog open={consent.directionsNoticeOpen} onOpenChange={consent.setDirectionsNoticeOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.directionsNoticeTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.directionsNoticeDesc")}
-            </DialogDescription>
+            <DialogDescription>{t("toolbar.item.directionsNoticeDesc")}</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => consent.setDirectionsNoticeOpen(false)}
-            >
+            <Button variant="outline" onClick={() => consent.setDirectionsNoticeOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={consent.confirmEnableDirections}>
-              {t("toolbar.item.continue")}
-            </Button>
+            <Button onClick={consent.confirmEnableDirections}>{t("toolbar.item.continue")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -55,18 +45,11 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {t("toolbar.item.reverseGeocodeNoticeTitle")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.reverseGeocodeNoticeDesc")}
-            </DialogDescription>
+            <DialogTitle>{t("toolbar.item.reverseGeocodeNoticeTitle")}</DialogTitle>
+            <DialogDescription>{t("toolbar.item.reverseGeocodeNoticeDesc")}</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => consent.setReverseGeocodeNoticeOpen(false)}
-            >
+            <Button variant="outline" onClick={() => consent.setReverseGeocodeNoticeOpen(false)}>
               {t("common.cancel")}
             </Button>
             <Button onClick={consent.confirmEnableReverseGeocode}>
@@ -86,9 +69,7 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.networkNoticeTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.networkNoticeDesc")}
-            </DialogDescription>
+            <DialogDescription>{t("toolbar.item.networkNoticeDesc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
@@ -111,9 +92,7 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
                 user's own server, so the block is irrelevant there. */}
             {usingDefaultRouting && (
               <div className="rounded-md border bg-muted/40 p-3">
-                <p className="font-medium">
-                  {t("toolbar.item.networkNoticePerformanceHeading")}
-                </p>
+                <p className="font-medium">{t("toolbar.item.networkNoticePerformanceHeading")}</p>
                 <p className="mt-1 text-muted-foreground">
                   {t("toolbar.item.networkNoticePerformance")}
                 </p>
@@ -124,9 +103,7 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
             <Button variant="outline" onClick={consent.dismissRoutingNotice}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={consent.confirmOpenNetworkTool}>
-              {t("toolbar.item.continue")}
-            </Button>
+            <Button onClick={consent.confirmOpenNetworkTool}>{t("toolbar.item.continue")}</Button>
           </div>
         </DialogContent>
       </Dialog>

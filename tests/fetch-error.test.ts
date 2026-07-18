@@ -51,13 +51,11 @@ describe("classifyFetchFailure", () => {
 
   it("classifies native DNS/connection error strings as network", () => {
     assert.equal(
-      classifyFetchFailure("Request failed: dns error: failed to lookup host")
-        .kind,
+      classifyFetchFailure("Request failed: dns error: failed to lookup host").kind,
       "network",
     );
     assert.equal(
-      classifyFetchFailure("Request failed: connection refused (os error 111)")
-        .kind,
+      classifyFetchFailure("Request failed: connection refused (os error 111)").kind,
       "network",
     );
   });
@@ -89,9 +87,7 @@ describe("classifyFetchFailure", () => {
   });
 
   it("leaves an unrecognized error as unknown with no hint", () => {
-    const result = classifyFetchFailure(
-      new Error("Request failed with status 500"),
-    );
+    const result = classifyFetchFailure(new Error("Request failed with status 500"));
     assert.equal(result.kind, "unknown");
     assert.equal(result.hint, null);
   });

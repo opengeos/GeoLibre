@@ -35,11 +35,7 @@ const PKG = "@mapbox/mapbox-gl-rtl-text";
 function resolveRtlTextDist(): string {
   const require = createRequire(import.meta.url);
   const entryDir = dirname(require.resolve(PKG));
-  for (
-    let parent = entryDir;
-    parent !== dirname(parent);
-    parent = dirname(parent)
-  ) {
+  for (let parent = entryDir; parent !== dirname(parent); parent = dirname(parent)) {
     const manifestPath = resolve(parent, "package.json");
     if (!existsSync(manifestPath)) continue;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -50,9 +46,7 @@ function resolveRtlTextDist(): string {
     if (!existsSync(dist)) break;
     return dist;
   }
-  throw new Error(
-    `copy-rtl-text: could not locate ${PKG}'s "main" bundle. Is it installed?`,
-  );
+  throw new Error(`copy-rtl-text: could not locate ${PKG}'s "main" bundle. Is it installed?`);
 }
 
 export function copyRtlText(destPath: string): Plugin {

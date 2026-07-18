@@ -5,10 +5,7 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
-import type {
-  DuckDbCapability,
-  ProcessingContext,
-} from "../packages/processing/src/types";
+import type { DuckDbCapability, ProcessingContext } from "../packages/processing/src/types";
 import {
   IDX_PROPERTY,
   TOPOLOGY_RULES,
@@ -44,7 +41,15 @@ const BOWTIE = {
   properties: { name: "bowtie" },
   geometry: {
     type: "Polygon",
-    coordinates: [[[0, 0], [2, 2], [2, 0], [0, 2], [0, 0]]],
+    coordinates: [
+      [
+        [0, 0],
+        [2, 2],
+        [2, 0],
+        [0, 2],
+        [0, 0],
+      ],
+    ],
   },
 } as const;
 
@@ -53,7 +58,15 @@ const SQUARE = {
   properties: { name: "square" },
   geometry: {
     type: "Polygon",
-    coordinates: [[[10, 0], [14, 0], [14, 4], [10, 4], [10, 0]]],
+    coordinates: [
+      [
+        [10, 0],
+        [14, 0],
+        [14, 4],
+        [10, 4],
+        [10, 0],
+      ],
+    ],
   },
 } as const;
 
@@ -126,10 +139,7 @@ function makeCtx(
 
 describe("topology helper functions", () => {
   it("finds the first coordinate of nested geometries", () => {
-    assert.deepEqual(
-      firstCoordinate({ type: "Point", coordinates: [1, 2] }),
-      [1, 2],
-    );
+    assert.deepEqual(firstCoordinate({ type: "Point", coordinates: [1, 2] }), [1, 2]);
     assert.deepEqual(firstCoordinate(BOWTIE.geometry), [0, 0]);
     assert.deepEqual(
       firstCoordinate({
@@ -139,10 +149,7 @@ describe("topology helper functions", () => {
       [5, 6],
     );
     assert.equal(firstCoordinate(null), null);
-    assert.equal(
-      firstCoordinate({ type: "GeometryCollection", geometries: [] }),
-      null,
-    );
+    assert.equal(firstCoordinate({ type: "GeometryCollection", geometries: [] }), null);
   });
 
   it("tags each feature with its index without mutating the input", () => {
@@ -166,23 +173,11 @@ describe("topology helper functions", () => {
 
   it("treats empty geometry as unusable", () => {
     assert.equal(isUsableGeometry(null), false);
-    assert.equal(
-      isUsableGeometry({ type: "Polygon", coordinates: [] }),
-      false,
-    );
-    assert.equal(
-      isUsableGeometry({ type: "GeometryCollection", geometries: [] }),
-      false,
-    );
+    assert.equal(isUsableGeometry({ type: "Polygon", coordinates: [] }), false);
+    assert.equal(isUsableGeometry({ type: "GeometryCollection", geometries: [] }), false);
     // Nested-empty shapes must count as empty, matching Shapely's is_empty.
-    assert.equal(
-      isUsableGeometry({ type: "Polygon", coordinates: [[]] }),
-      false,
-    );
-    assert.equal(
-      isUsableGeometry({ type: "MultiPolygon", coordinates: [[[]]] }),
-      false,
-    );
+    assert.equal(isUsableGeometry({ type: "Polygon", coordinates: [[]] }), false);
+    assert.equal(isUsableGeometry({ type: "MultiPolygon", coordinates: [[[]]] }), false);
     assert.equal(isUsableGeometry(BOWTIE.geometry), true);
   });
 
@@ -201,10 +196,7 @@ describe("topology helper functions", () => {
     });
     assert.deepEqual(custom, ["line_must_not_have_dangles"]);
     // Every rule id maps to a distinct param id.
-    assert.equal(
-      new Set(TOPOLOGY_RULES.map((rule) => rule.paramId)).size,
-      TOPOLOGY_RULES.length,
-    );
+    assert.equal(new Set(TOPOLOGY_RULES.map((rule) => rule.paramId)).size, TOPOLOGY_RULES.length);
   });
 });
 
@@ -220,16 +212,10 @@ describe("check-validity (fake DuckDB)", () => {
     assert.equal(added[0].name, "Validity errors");
     const marker = added[0].fc.features[0];
     assert.equal(marker.properties?.feature_index, 0);
-    assert.deepEqual(
-      marker.geometry,
-      { type: "Point", coordinates: [0, 0] },
-    );
+    assert.deepEqual(marker.geometry, { type: "Point", coordinates: [0, 0] });
     assert.match(logs.join("\n"), /Checked 2 feature\(s\): 1 invalid/);
     // Input features were index-tagged for the query, then released.
-    assert.equal(
-      duckdb.registered[0].features[0].properties?.[IDX_PROPERTY],
-      0,
-    );
+    assert.equal(duckdb.registered[0].features[0].properties?.[IDX_PROPERTY], 0);
     assert.equal(duckdb.released, 1);
   });
 
@@ -256,10 +242,7 @@ describe("check-validity (fake DuckDB)", () => {
 
   it("fails clearly without a DuckDB capability", async () => {
     const { ctx } = makeCtx(fcOf(SQUARE), {});
-    await assert.rejects(
-      async () => checkValidityTool.run(ctx),
-      /DuckDB-WASM/,
-    );
+    await assert.rejects(async () => checkValidityTool.run(ctx), /DuckDB-WASM/);
   });
 });
 
@@ -267,8 +250,22 @@ describe("fix-geometries (fake DuckDB)", () => {
   const FIXED = JSON.stringify({
     type: "MultiPolygon",
     coordinates: [
-      [[[0, 2], [1, 1], [0, 0], [0, 2]]],
-      [[[2, 0], [1, 1], [2, 2], [2, 0]]],
+      [
+        [
+          [0, 2],
+          [1, 1],
+          [0, 0],
+          [0, 2],
+        ],
+      ],
+      [
+        [
+          [2, 0],
+          [1, 1],
+          [2, 2],
+          [2, 0],
+        ],
+      ],
     ],
   });
 
@@ -335,7 +332,15 @@ describe("check-topology-rules (real geolibre-wasm)", () => {
       properties: { name: "overlaps-square" },
       geometry: {
         type: "Polygon",
-        coordinates: [[[12, 2], [16, 2], [16, 6], [12, 6], [12, 2]]],
+        coordinates: [
+          [
+            [12, 2],
+            [16, 2],
+            [16, 6],
+            [12, 6],
+            [12, 2],
+          ],
+        ],
       },
     };
     const { ctx, logs, added } = makeCtx(fcOf(SQUARE, overlapping), {});
@@ -346,10 +351,7 @@ describe("check-topology-rules (real geolibre-wasm)", () => {
     assert.equal(added[0].fc.features.length, 2);
     for (const violation of added[0].fc.features) {
       assert.equal(violation.geometry?.type, "Point");
-      assert.equal(
-        violation.properties?.RULE_TYPE,
-        "polygon_must_not_overlap",
-      );
+      assert.equal(violation.properties?.RULE_TYPE, "polygon_must_not_overlap");
       assert.equal(typeof violation.properties?.DETAIL, "string");
     }
     assert.match(logs.join("\n"), /2 violation\(s\)/);
@@ -362,7 +364,12 @@ describe("check-topology-rules (real geolibre-wasm)", () => {
       properties: {},
       geometry: {
         type: "LineString",
-        coordinates: [[0, 0], [4, 4], [4, 0], [0, 4]],
+        coordinates: [
+          [0, 0],
+          [4, 4],
+          [4, 0],
+          [0, 4],
+        ],
       },
     };
     const { ctx, added } = makeCtx(fcOf(selfCrossing), {
@@ -372,9 +379,7 @@ describe("check-topology-rules (real geolibre-wasm)", () => {
     });
     await checkTopologyRulesTool.run(ctx);
     assert.equal(added.length, 1);
-    const rules = new Set(
-      added[0].fc.features.map((f) => f.properties?.RULE_TYPE),
-    );
+    const rules = new Set(added[0].fc.features.map((f) => f.properties?.RULE_TYPE));
     assert.ok(rules.has("line_must_not_self_intersect"));
     assert.ok(rules.has("line_must_not_have_dangles"));
   });
@@ -439,7 +444,11 @@ describe("fix-topology (real geolibre-wasm)", () => {
       properties: { name: "main" },
       geometry: {
         type: "LineString",
-        coordinates: [[12, 10], [15, 10], [15, 14]],
+        coordinates: [
+          [12, 10],
+          [15, 10],
+          [15, 14],
+        ],
       },
     },
     {
@@ -447,7 +456,10 @@ describe("fix-topology (real geolibre-wasm)", () => {
       properties: { name: "nearmiss" },
       geometry: {
         type: "LineString",
-        coordinates: [[10, 10], [12, 10.0001]],
+        coordinates: [
+          [10, 10],
+          [12, 10.0001],
+        ],
       },
     },
   );
@@ -482,19 +494,34 @@ describe("fix-topology (real geolibre-wasm)", () => {
       {
         type: "Feature",
         properties: {},
-        geometry: { type: "LineString", coordinates: [[0, 0], [5, 0]] },
-      },
-      {
-        type: "Feature",
-        properties: {},
-        geometry: { type: "LineString", coordinates: [[5, 0], [5, 5]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [5, 0],
+          ],
+        },
       },
       {
         type: "Feature",
         properties: {},
         geometry: {
           type: "LineString",
-          coordinates: [[2, 0], [2.003, 0.003]],
+          coordinates: [
+            [5, 0],
+            [5, 5],
+          ],
+        },
+      },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [2, 0],
+            [2.003, 0.003],
+          ],
         },
       },
     );
@@ -514,12 +541,24 @@ describe("fix-topology (real geolibre-wasm)", () => {
       {
         type: "Feature",
         properties: {},
-        geometry: { type: "LineString", coordinates: [[0, 0], [5, 0]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [5, 0],
+          ],
+        },
       },
       {
         type: "Feature",
         properties: {},
-        geometry: { type: "LineString", coordinates: [[5, 0], [5, 5]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [5, 0],
+            [5, 5],
+          ],
+        },
       },
     );
     const { ctx, logs, added } = makeCtx(clean, { snapTolerance: 0.001 });
@@ -550,11 +589,19 @@ describe("fix-topology (real geolibre-wasm)", () => {
   it("still adds the fixed layer when the change report is unreadable", async () => {
     // exitCode 0 with a repaired output but no changes.json must not be
     // mistaken for "no fixable violations".
-    const fixed = JSON.stringify(fcOf({
-      type: "Feature",
-      properties: {},
-      geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
-    }));
+    const fixed = JSON.stringify(
+      fcOf({
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      }),
+    );
     setTopologyWasmRunner(async () => ({
       exitCode: 0,
       stdout: [],

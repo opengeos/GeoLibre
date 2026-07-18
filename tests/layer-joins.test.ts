@@ -54,11 +54,10 @@ function join(overrides: Partial<LayerJoin> = {}): LayerJoin {
   };
 }
 
-const resolveCensus = (id: string) =>
-  id === "census" ? census() : undefined;
+const resolveCensus = (id: string) => (id === "census" ? census() : undefined);
 
 describe("layerJoinKey", () => {
-  it("stringifies scalars so 5 and \"5\" join, and empty values never match", () => {
+  it('stringifies scalars so 5 and "5" join, and empty values never match', () => {
     assert.equal(layerJoinKey(5), "5");
     assert.equal(layerJoinKey("5"), "5");
     assert.equal(layerJoinKey(true), "true");
@@ -72,11 +71,7 @@ describe("layerJoinKey", () => {
 
 describe("applyLayerJoins", () => {
   it("left-joins matching rows and null-fills unmatched features", () => {
-    const { features, joins } = applyLayerJoins(
-      states().features,
-      [join()],
-      resolveCensus,
-    );
+    const { features, joins } = applyLayerJoins(states().features, [join()], resolveCensus);
     assert.deepEqual(features[0].properties, {
       name: "Alabama",
       density: 94,
@@ -119,15 +114,10 @@ describe("applyLayerJoins", () => {
   });
 
   it("skips a joined column whose output name collides with a base column", () => {
-    const { features, joins } = applyLayerJoins(
-      states().features,
-      [join()],
-      (id) =>
-        id === "census"
-          ? collection([
-              tableFeature({ state_name: "Alabama", density: 999, pop: 1 }),
-            ])
-          : undefined,
+    const { features, joins } = applyLayerJoins(states().features, [join()], (id) =>
+      id === "census"
+        ? collection([tableFeature({ state_name: "Alabama", density: 999, pop: 1 })])
+        : undefined,
     );
     // `density` exists on the base layer, so only `pop` is brought over.
     assert.deepEqual(joins[0].addedFields, ["pop"]);
@@ -176,19 +166,13 @@ describe("applyLayerJoins", () => {
       [pointFeature({ code: 5 })],
       [join({ targetField: "code", joinField: "code" })],
       (id) =>
-        id === "census"
-          ? collection([tableFeature({ code: "5", label: "five" })])
-          : undefined,
+        id === "census" ? collection([tableFeature({ code: "5", label: "five" })]) : undefined,
     );
     assert.equal(features[0].properties?.label, "five");
   });
 
   it("contributes nothing for a disabled join or a missing source", () => {
-    const disabled = applyLayerJoins(
-      states().features,
-      [join({ enabled: false })],
-      resolveCensus,
-    );
+    const disabled = applyLayerJoins(states().features, [join({ enabled: false })], resolveCensus);
     assert.deepEqual(disabled.features[0].properties, {
       name: "Alabama",
       density: 94,
@@ -246,9 +230,7 @@ describe("store integration", () => {
 
   it("setLayerJoins materializes joined columns and stats on the layer", () => {
     const { targetId, tableId } = addLayers();
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     const layer = layerById(targetId);
     assert.equal(layer.geojson?.features[0].properties?.pop, 5_000_000);
     assert.equal(layer.joins?.[0].stats?.matchedCount, 2);
@@ -259,9 +241,7 @@ describe("store integration", () => {
     const { targetId, tableId } = addLayers();
     const defs = [join({ joinLayerId: tableId })];
     useAppStore.getState().setLayerJoins(targetId, defs);
-    useAppStore
-      .getState()
-      .setLayerJoins(targetId, layerById(targetId).joins ?? defs);
+    useAppStore.getState().setLayerJoins(targetId, layerById(targetId).joins ?? defs);
     const joined = layerById(targetId);
     assert.deepEqual(Object.keys(joined.geojson?.features[0].properties ?? {}), [
       "name",
@@ -281,9 +261,7 @@ describe("store integration", () => {
 
   it("updating the join table's data refreshes joined columns on target layers", () => {
     const { targetId, tableId } = addLayers();
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     const updatedCensus = collection([
       tableFeature({ state_name: "Alabama", pop: 9, income: 9 }),
       tableFeature({ state_name: "Alaska", pop: 8, income: 8 }),
@@ -300,9 +278,7 @@ describe("store integration", () => {
 
   it("replacing the target layer's geojson re-applies its joins", () => {
     const { targetId, tableId } = addLayers();
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     // Simulate a file reload delivering raw base data (no joined columns).
     useAppStore.getState().updateLayer(targetId, {
       geojson: collection([pointFeature({ name: "Arizona", density: 57 })]),
@@ -316,13 +292,8 @@ describe("store integration", () => {
     // A joins the census table; C joins A and pulls A's joined column through.
     const chainedId = useAppStore
       .getState()
-      .addGeoJsonLayer(
-        "Chained",
-        collection([pointFeature({ state: "Alabama" })]),
-      );
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+      .addGeoJsonLayer("Chained", collection([pointFeature({ state: "Alabama" })]));
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     useAppStore.getState().setLayerJoins(chainedId, [
       join({
         id: "j2",
@@ -332,31 +303,20 @@ describe("store integration", () => {
         fields: ["pop"],
       }),
     ]);
-    assert.equal(
-      layerById(chainedId).geojson?.features[0].properties?.pop,
-      5_000_000,
-    );
+    assert.equal(layerById(chainedId).geojson?.features[0].properties?.pop, 5_000_000);
 
     // Detaching A's join must cascade: A no longer offers `pop`, so C's
     // subset request finds nothing and the pulled-through column disappears.
     useAppStore.getState().setLayerJoins(targetId, []);
-    assert.equal(
-      "pop" in (layerById(chainedId).geojson?.features[0].properties ?? {}),
-      false,
-    );
+    assert.equal("pop" in (layerById(chainedId).geojson?.features[0].properties ?? {}), false);
   });
 
   it("updating a join table refreshes multi-hop dependents in order", () => {
     const { targetId, tableId } = addLayers();
     const chainedId = useAppStore
       .getState()
-      .addGeoJsonLayer(
-        "Chained",
-        collection([pointFeature({ state: "Alabama" })]),
-      );
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+      .addGeoJsonLayer("Chained", collection([pointFeature({ state: "Alabama" })]));
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     useAppStore.getState().setLayerJoins(chainedId, [
       join({
         id: "j2",
@@ -369,9 +329,7 @@ describe("store integration", () => {
 
     // Editing the census table must flow census -> states -> chained.
     useAppStore.getState().updateLayer(tableId, {
-      geojson: collection([
-        tableFeature({ state_name: "Alabama", pop: 123, income: 1 }),
-      ]),
+      geojson: collection([tableFeature({ state_name: "Alabama", pop: 123, income: 1 })]),
     });
     assert.equal(layerById(targetId).geojson?.features[0].properties?.pop, 123);
     assert.equal(layerById(chainedId).geojson?.features[0].properties?.pop, 123);
@@ -379,10 +337,7 @@ describe("store integration", () => {
 
   it("refreshes same-level siblings in dependency order, not layer-panel order", () => {
     const store = useAppStore.getState();
-    const bId = store.addGeoJsonLayer(
-      "B",
-      collection([tableFeature({ k: "x", val: 1 })]),
-    );
+    const bId = store.addGeoJsonLayer("B", collection([tableFeature({ k: "x", val: 1 })]));
     const dId = store.addGeoJsonLayer("D", collection([pointFeature({ k: "x" })]));
     const eId = store.addGeoJsonLayer("E", collection([pointFeature({ k: "x" })]));
     // E joins B; D joins both B and E (pulling E's derived column through).
@@ -427,13 +382,8 @@ describe("store integration", () => {
 
   it("removing a join-source layer strips its columns from dependents", () => {
     const { targetId, tableId } = addLayers();
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
-    assert.equal(
-      layerById(targetId).geojson?.features[0].properties?.pop,
-      5_000_000,
-    );
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
+    assert.equal(layerById(targetId).geojson?.features[0].properties?.pop, 5_000_000);
     useAppStore.getState().removeLayer(tableId);
     const layer = layerById(targetId);
     assert.equal("pop" in (layer.geojson?.features[0].properties ?? {}), false);
@@ -443,9 +393,7 @@ describe("store integration", () => {
 
   it("takes a patch carrying both geojson and joins verbatim (external callers)", () => {
     const { targetId, tableId } = addLayers();
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     // An external caller (plugin) supplying already-derived state must not
     // trigger a re-derivation that would strip its custom columns.
     const externalJoins = [
@@ -463,9 +411,7 @@ describe("store integration", () => {
 
   it("loadProject re-resolves persisted joins against the loaded layers", () => {
     const { targetId, tableId } = addLayers();
-    useAppStore.getState().setLayerJoins(targetId, [
-      join({ joinLayerId: tableId }),
-    ]);
+    useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
     const snapshot = JSON.parse(
       JSON.stringify({
         version: 1,
@@ -483,9 +429,7 @@ describe("store integration", () => {
     // Stale saved output: the census table changed after the project was saved.
     const savedTable = snapshot.layers.find((l) => l.id === tableId);
     assert.ok(savedTable?.geojson);
-    savedTable.geojson.features = [
-      tableFeature({ state_name: "Alaska", pop: 42, income: 1 }),
-    ];
+    savedTable.geojson.features = [tableFeature({ state_name: "Alaska", pop: 42, income: 1 })];
 
     useAppStore.getState().loadProject(snapshot);
     const layer = layerById(targetId);
@@ -497,16 +441,11 @@ describe("store integration", () => {
   it("applyJoinsToLayer refuses a self-join", () => {
     const { targetId } = addLayers();
     const layer = layerById(targetId);
-    const result = applyJoinsToLayer(
-      layer,
-      useAppStore.getState().layers,
-      [join({ joinLayerId: targetId })],
-    );
+    const result = applyJoinsToLayer(layer, useAppStore.getState().layers, [
+      join({ joinLayerId: targetId }),
+    ]);
     assert.deepEqual(result.joins?.[0].addedFields, []);
-    assert.deepEqual(
-      result.geojson?.features[0].properties,
-      layer.geojson?.features[0].properties,
-    );
+    assert.deepEqual(result.geojson?.features[0].properties, layer.geojson?.features[0].properties);
   });
 
   it("reapplyLayerJoins passes layers without joins through by reference", () => {
@@ -539,9 +478,7 @@ function bareLayer(
 describe("join dependency graphs", () => {
   it("collectTransitiveJoinSourceIds follows chains and includes disabled joins", () => {
     const layers = [
-      bareLayer("a", { k: 1 }, [
-        { id: "j", joinLayerId: "b", targetField: "k", joinField: "k" },
-      ]),
+      bareLayer("a", { k: 1 }, [{ id: "j", joinLayerId: "b", targetField: "k", joinField: "k" }]),
       bareLayer("b", { k: 1 }, [
         {
           id: "j",
@@ -563,11 +500,7 @@ describe("join dependency graphs", () => {
     // A <-> B form a hand-edited cycle; C consumes A's pulled-through column.
     // C sits first in array order, so a naive fallback would refresh it
     // against A's stale saved output (bval = 1) instead of the fresh 2.
-    const cycleJoin = (
-      id: string,
-      joinLayerId: string,
-      field: string,
-    ): LayerJoin => ({
+    const cycleJoin = (id: string, joinLayerId: string, field: string): LayerJoin => ({
       id,
       joinLayerId,
       targetField: "k",
@@ -577,12 +510,8 @@ describe("join dependency graphs", () => {
     });
     const layers = [
       bareLayer("c", { k: "x", bval: 1 }, [cycleJoin("ca", "a", "bval")]),
-      bareLayer("a", { k: "x", aval: 10, bval: 1 }, [
-        cycleJoin("ab", "b", "bval"),
-      ]),
-      bareLayer("b", { k: "x", bval: 2, aval: 10 }, [
-        cycleJoin("ba", "a", "aval"),
-      ]),
+      bareLayer("a", { k: "x", aval: 10, bval: 1 }, [cycleJoin("ab", "b", "bval")]),
+      bareLayer("b", { k: "x", bval: 2, aval: 10 }, [cycleJoin("ba", "a", "aval")]),
     ];
     const result = reapplyLayerJoins(layers);
     const c = result.find((layer) => layer.id === "c");

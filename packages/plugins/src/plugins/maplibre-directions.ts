@@ -95,9 +95,7 @@ function notifyDirectionsState(): void {
  * @param listener Callback invoked on each change.
  * @returns An unsubscribe function.
  */
-export function subscribeDirectionsState(
-  listener: DirectionsStateListener,
-): () => void {
+export function subscribeDirectionsState(listener: DirectionsStateListener): () => void {
   directionsStateListeners.add(listener);
   return () => {
     directionsStateListeners.delete(listener);
@@ -244,14 +242,10 @@ export function extractDirectionsRouteMetrics(
   const canUseLegTotals = rawLegs.length > 0 && legs.length === rawLegs.length;
   const totalDistanceMeters =
     routeDistanceMeters ??
-    (canUseLegTotals
-      ? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0)
-      : null);
+    (canUseLegTotals ? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0) : null);
   const totalDurationSeconds =
     routeDurationSeconds ??
-    (canUseLegTotals
-      ? legs.reduce((sum, leg) => sum + leg.durationSeconds, 0)
-      : null);
+    (canUseLegTotals ? legs.reduce((sum, leg) => sum + leg.durationSeconds, 0) : null);
 
   if (
     totalDistanceMeters == null ||
@@ -277,9 +271,7 @@ function handleDirectionsFetchStart(): void {
   notifyDirectionsState();
 }
 
-function handleDirectionsFetchEnd(event: {
-  data: MapLibreGlDirectionsRoutingData;
-}): void {
+function handleDirectionsFetchEnd(event: { data: MapLibreGlDirectionsRoutingData }): void {
   clearRouteLoadingFallback();
   routeLoading = false;
   routeMetrics = extractDirectionsRouteMetrics(event.data.directions);
@@ -329,10 +321,7 @@ function attach(app: GeoLibreAppAPI): void {
       notifyDirectionsState();
     })
     .catch((error) => {
-      console.error(
-        "Directions plugin failed to load; it stays toggled on but inactive.",
-        error,
-      );
+      console.error("Directions plugin failed to load; it stays toggled on but inactive.", error);
     });
 }
 

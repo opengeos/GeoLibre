@@ -11,13 +11,7 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import type maplibregl from "maplibre-gl";
 
 /** The Protomaps basemap flavors we expose. */
-export const PROTOMAPS_FLAVORS = [
-  "light",
-  "dark",
-  "white",
-  "grayscale",
-  "black",
-] as const;
+export const PROTOMAPS_FLAVORS = ["light", "dark", "white", "grayscale", "black"] as const;
 
 export type ProtomapsFlavor = (typeof PROTOMAPS_FLAVORS)[number];
 
@@ -60,9 +54,7 @@ export function buildProtomapsBasemapStyle(
     sources: {
       protomaps: {
         type: "vector",
-        url: sourceUrl.startsWith("pmtiles://")
-          ? sourceUrl
-          : `pmtiles://${sourceUrl}`,
+        url: sourceUrl.startsWith("pmtiles://") ? sourceUrl : `pmtiles://${sourceUrl}`,
         attribution,
       },
     },

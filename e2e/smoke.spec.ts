@@ -4,9 +4,7 @@ import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 const FIXTURE_TEXT = readFixture("smoke.geojson");
 // Derived from the fixture so the expected row count can't drift if a feature
 // is added or removed.
-const FIXTURE_FEATURE_COUNT = (
-  JSON.parse(FIXTURE_TEXT) as { features: unknown[] }
-).features.length;
+const FIXTURE_FEATURE_COUNT = (JSON.parse(FIXTURE_TEXT) as { features: unknown[] }).features.length;
 
 test("loads a GeoJSON layer, opens the attribute table, and toggles visibility", async ({
   page,

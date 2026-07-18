@@ -8,11 +8,7 @@
 // `3d-tiles` layer with a distinct source kind so the main Layers panel manages
 // its visibility/opacity/removal, which this overlay reflects.
 
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
@@ -103,9 +99,7 @@ export function isArcgisI3sSceneLayerUrl(url: string): boolean {
  * @returns The service name, or null if it can't be extracted.
  */
 export function arcgisI3sSceneLayerName(url: string): string | null {
-  const match = url
-    .trim()
-    .match(/\/([^/?#]+)\/SceneServer(?:\/|$|\?|#)/i);
+  const match = url.trim().match(/\/([^/?#]+)\/SceneServer(?:\/|$|\?|#)/i);
   if (!match) return null;
   try {
     // A malformed percent-escape makes decodeURIComponent throw URIError; fall
@@ -118,10 +112,7 @@ export function arcgisI3sSceneLayerName(url: string): string | null {
 
 /** Whether a store layer is an ArcGIS I3S tileset layer. */
 export function isArcgisI3sTilesLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "3d-tiles" &&
-    layer.metadata.sourceKind === ARCGIS_I3S_SOURCE_KIND
-  );
+  return layer.type === "3d-tiles" && layer.metadata.sourceKind === ARCGIS_I3S_SOURCE_KIND;
 }
 
 /**
@@ -195,10 +186,7 @@ function ensureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   // rendered.
   i3sEnsureInFlight = runEnsureArcgisI3sTilesOverlay(app)
     .catch((error) => {
-      console.error(
-        "[GeoLibre] Failed to initialize the ArcGIS I3S overlay",
-        error,
-      );
+      console.error("[GeoLibre] Failed to initialize the ArcGIS I3S overlay", error);
     })
     .finally(() => {
       i3sEnsureInFlight = null;
@@ -206,9 +194,7 @@ function ensureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   return i3sEnsureInFlight;
 }
 
-async function runEnsureArcgisI3sTilesOverlay(
-  app: GeoLibreAppAPI,
-): Promise<void> {
+async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   i3sApp = app;
   if (!app.getDeckGL) return;
   i3sDeckGL ??= await app.getDeckGL();
@@ -246,9 +232,7 @@ async function runEnsureArcgisI3sTilesOverlay(
   i3sMountGaveUp = false;
   i3sStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
-      const currentIds = new Set(
-        state.layers.filter(isArcgisI3sTilesLayer).map(({ id }) => id),
-      );
+      const currentIds = new Set(state.layers.filter(isArcgisI3sTilesLayer).map(({ id }) => id));
       for (const layer of previous.layers) {
         if (isArcgisI3sTilesLayer(layer) && !currentIds.has(layer.id)) {
           i3sFlyToRequested.delete(layer.id);
@@ -277,9 +261,7 @@ function loadI3sLoader(): Promise<unknown> {
 function renderArcgisI3sTilesLayers(): void {
   if (!i3sOverlay || !i3sDeckGL || !i3sApp) return;
 
-  const layers = useAppStore
-    .getState()
-    .layers.filter(isArcgisI3sTilesLayer);
+  const layers = useAppStore.getState().layers.filter(isArcgisI3sTilesLayer);
 
   // Tear the overlay down once the last I3S layer is gone, so an empty deck.gl
   // overlay is not left attached for the rest of the session.
@@ -288,10 +270,7 @@ function renderArcgisI3sTilesLayers(): void {
       try {
         i3sApp.removeMapControl(i3sOverlay);
       } catch (error) {
-        console.warn(
-          "[GeoLibre] Failed to remove the empty ArcGIS I3S overlay",
-          error,
-        );
+        console.warn("[GeoLibre] Failed to remove the empty ArcGIS I3S overlay", error);
       }
       i3sOverlayMounted = false;
     }
@@ -333,11 +312,7 @@ function renderArcgisI3sTilesLayers(): void {
 }
 
 function scheduleI3sMountRetry(): void {
-  if (
-    i3sMountRetryScheduled ||
-    i3sMountGaveUp ||
-    typeof requestAnimationFrame === "undefined"
-  ) {
+  if (i3sMountRetryScheduled || i3sMountGaveUp || typeof requestAnimationFrame === "undefined") {
     return;
   }
   if (i3sMountRetries >= I3S_MAX_MOUNT_RETRIES) {
@@ -414,9 +389,7 @@ export function buildArcgisI3sTilesDeckLayer(
     // @loaders.gl Tileset3D calls this as (tile, message, url) — note the deck.gl
     // typings mislabel the order as (tile, url, message).
     onTileError: (_tile: unknown, message: string, tileUrl: string) =>
-      console.error(
-        `[GeoLibre] ArcGIS I3S tile failed to load: ${message} (${tileUrl})`,
-      ),
+      console.error(`[GeoLibre] ArcGIS I3S tile failed to load: ${message} (${tileUrl})`),
   });
 }
 
@@ -431,15 +404,13 @@ const COORDINATE_SYSTEM_STRINGS: Record<number, string> = {
 
 /** Coerce a tile's numeric content coordinateSystem to deck.gl's string form. */
 function normalizeI3sTileCoordinateSystem(tile: unknown): void {
-  const content = (tile as { content?: { coordinateSystem?: unknown } } | null)
-    ?.content;
+  const content = (tile as { content?: { coordinateSystem?: unknown } } | null)?.content;
   if (
     content &&
     typeof content.coordinateSystem === "number" &&
     content.coordinateSystem in COORDINATE_SYSTEM_STRINGS
   ) {
-    content.coordinateSystem =
-      COORDINATE_SYSTEM_STRINGS[content.coordinateSystem];
+    content.coordinateSystem = COORDINATE_SYSTEM_STRINGS[content.coordinateSystem];
   }
 }
 
@@ -454,10 +425,7 @@ const SUPPORTED_I3S_LAYER_TYPES = new Set(["3DObject", "IntegratedMesh"]);
  * @param url The Scene Layer URL, for context in the warning.
  * @param tileset The tileset object passed to `onTilesetLoad`.
  */
-function warnOnUnsupportedI3sSceneLayerType(
-  url: string,
-  tileset: unknown,
-): void {
+function warnOnUnsupportedI3sSceneLayerType(url: string, tileset: unknown): void {
   // @loaders.gl exposes the parsed SceneLayer under Tileset3D.tileset, but read
   // the top level too in case a future version surfaces layerType directly. If
   // neither is present the check just does nothing (the warning is best-effort).
@@ -466,10 +434,7 @@ function warnOnUnsupportedI3sSceneLayerType(
     tileset?: { layerType?: unknown };
   } | null;
   const layerType = header?.tileset?.layerType ?? header?.layerType;
-  if (
-    typeof layerType === "string" &&
-    !SUPPORTED_I3S_LAYER_TYPES.has(layerType)
-  ) {
+  if (typeof layerType === "string" && !SUPPORTED_I3S_LAYER_TYPES.has(layerType)) {
     console.warn(
       `[GeoLibre] ArcGIS I3S scene layer type "${layerType}" is not supported ` +
         "(only 3DObject and IntegratedMesh mesh layers render); this layer may " +
@@ -480,9 +445,8 @@ function warnOnUnsupportedI3sSceneLayerType(
 
 /** Read a tileset's cartographic center as an [lng, lat] pair, if present. */
 export function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
-  const center = (
-    tileset as { cartographicCenter?: [number, number, number] } | null
-  )?.cartographicCenter;
+  const center = (tileset as { cartographicCenter?: [number, number, number] } | null)
+    ?.cartographicCenter;
   if (
     !center ||
     typeof center[0] !== "number" ||
@@ -504,23 +468,14 @@ export function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
  * panel's "Zoom to layer" (MapController.fitLayer) works — an I3S layer has no
  * geojson or MapLibre source, so `metadata.center` is its only bounds hint.
  */
-export function persistI3sTilesetCenter(
-  layerId: string,
-  tileset: unknown,
-): void {
+export function persistI3sTilesetCenter(layerId: string, tileset: unknown): void {
   const center = i3sTilesetLngLat(tileset);
   if (!center) return;
-  const layer = useAppStore
-    .getState()
-    .layers.find(({ id }) => id === layerId);
+  const layer = useAppStore.getState().layers.find(({ id }) => id === layerId);
   if (!layer || !isArcgisI3sTilesLayer(layer)) return;
   // onTilesetLoad can fire more than once; skip the store write when unchanged.
   const existing = layer.metadata.center;
-  if (
-    Array.isArray(existing) &&
-    existing[0] === center[0] &&
-    existing[1] === center[1]
-  ) {
+  if (Array.isArray(existing) && existing[0] === center[0] && existing[1] === center[1]) {
     return;
   }
   useAppStore.getState().updateLayer(layerId, {
@@ -536,9 +491,7 @@ function flyToI3sTileset(layerId: string, tileset: unknown): void {
     zoom?: number;
   } | null;
   const center = info?.cartographicCenter;
-  const map = i3sApp.getMap?.() as
-    | { flyTo?: (opts: Record<string, unknown>) => void }
-    | undefined;
+  const map = i3sApp.getMap?.() as { flyTo?: (opts: Record<string, unknown>) => void } | undefined;
   // Only consume the fly-to request once we can actually fly, so a transient
   // missing map/flyTo doesn't permanently drop it.
   if (!center || !map?.flyTo) return;

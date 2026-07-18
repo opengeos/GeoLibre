@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import type { GeoLibreLayer } from "../packages/core/src/types";
-import {
-  CesiumLayerSync,
-  isCesiumSupportedLayerType,
-} from "../packages/map/src/cesium-layer-sync";
+import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
 
 // Verifies the store → Cesium reconciler against a fake Cesium namespace + viewer
 // (the real engine never loads here — its import in the module is type-only). It
@@ -65,8 +62,7 @@ function makeFakes() {
         calls.dataSourcesAdded.push(ds);
         return Promise.resolve(ds);
       },
-      remove: (ds: unknown, _destroy?: boolean) =>
-        calls.dataSourcesRemoved.push(ds),
+      remove: (ds: unknown, _destroy?: boolean) => calls.dataSourcesRemoved.push(ds),
     },
   };
 
@@ -333,9 +329,7 @@ describe("CesiumLayerSync", () => {
 
   it("renders a 3d-tiles layer as a primitive from its tileset url", async () => {
     const sync = newSync(f);
-    sync.sync([
-      mkLayer({ id: "t", type: "3d-tiles", source: { url: "https://tiles/root.json" } }),
-    ]);
+    sync.sync([mkLayer({ id: "t", type: "3d-tiles", source: { url: "https://tiles/root.json" } })]);
     await f.flush();
     assert.equal(f.calls.tilesetUrls[0], "https://tiles/root.json");
     assert.equal(f.calls.primitivesAdded.length, 1);
@@ -366,7 +360,12 @@ describe("CesiumLayerSync", () => {
 
   it("updates visibility in place without recreating the imagery layer", () => {
     const sync = newSync(f);
-    const base = mkLayer({ id: "x", type: "xyz", source: { tiles: ["u/{z}/{x}/{y}"] }, visible: true });
+    const base = mkLayer({
+      id: "x",
+      type: "xyz",
+      source: { tiles: ["u/{z}/{x}/{y}"] },
+      visible: true,
+    });
     sync.sync([base]);
     sync.sync([{ ...base, visible: false }]);
     assert.equal(f.calls.imageryAdded.length, 1); // created once
@@ -396,9 +395,7 @@ describe("CesiumLayerSync", () => {
     sync.sync([{ ...base, source: { ...base.source, maxzoom: 22 } }]);
     assert.equal(f.calls.imageryAdded.length, 2, "maxzoom change rebuilds");
     assert.equal(f.calls.urlProviders[1].maximumLevel, 22);
-    sync.sync([
-      { ...base, source: { ...base.source, minzoom: 5, maxzoom: 22 } },
-    ]);
+    sync.sync([{ ...base, source: { ...base.source, minzoom: 5, maxzoom: 22 } }]);
     assert.equal(f.calls.imageryAdded.length, 3, "minzoom change rebuilds");
     assert.equal(f.calls.urlProviders[2].minimumLevel, 5);
   });
@@ -414,7 +411,14 @@ describe("CesiumLayerSync", () => {
     for (const type of ["geojson", "xyz", "raster", "wms", "wmts", "3d-tiles"] as const) {
       assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), true, type);
     }
-    for (const type of ["pmtiles", "mbtiles", "zarr", "lidar", "gaussian-splat", "deckgl-viz"] as const) {
+    for (const type of [
+      "pmtiles",
+      "mbtiles",
+      "zarr",
+      "lidar",
+      "gaussian-splat",
+      "deckgl-viz",
+    ] as const) {
       assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), false, type);
     }
   });

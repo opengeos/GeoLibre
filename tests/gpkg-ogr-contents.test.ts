@@ -50,19 +50,17 @@ function buildGpkg(options: {
     db.run(
       "CREATE TABLE gpkg_ogr_contents (table_name TEXT NOT NULL PRIMARY KEY, feature_count INTEGER)",
     );
-    db.run(
-      "INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (:t, :c)",
-      { ":t": tableName, ":c": featureCount },
-    );
+    db.run("INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (:t, :c)", {
+      ":t": tableName,
+      ":c": featureCount,
+    });
   }
   const bytes = db.export();
   db.close();
   return bytes;
 }
 
-function readOgrContents(
-  bytes: Uint8Array,
-): Array<{ table_name: string; feature_count: number }> {
+function readOgrContents(bytes: Uint8Array): Array<{ table_name: string; feature_count: number }> {
   const db = new SQL.Database(bytes);
   try {
     const result = db.exec(
@@ -85,10 +83,7 @@ describe("looksLikeSqlite", () => {
 
   it("rejects non-SQLite buffers", () => {
     assert.equal(looksLikeSqlite(new Uint8Array([1, 2, 3, 4])), false);
-    assert.equal(
-      looksLikeSqlite(new TextEncoder().encode("not a database at all")),
-      false,
-    );
+    assert.equal(looksLikeSqlite(new TextEncoder().encode("not a database at all")), false);
   });
 });
 
@@ -98,9 +93,7 @@ describe("ensureGpkgFeatureCountSync", () => {
     const patched = ensureGpkgFeatureCountSync(SQL, original);
 
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "places", feature_count: 5 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "places", feature_count: 5 }]);
   });
 
   it("adds a row for every feature table", () => {
@@ -176,9 +169,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "swamps", feature_count: 5 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "swamps", feature_count: 5 }]);
   });
 
   it("counts a feature table registered only in gpkg_geometry_columns", () => {
@@ -203,9 +194,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "mounds", feature_count: 2 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "mounds", feature_count: 2 }]);
   });
 
   it("updates a NULL count for a table registered only in gpkg_geometry_columns", () => {
@@ -234,9 +223,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "mounds", feature_count: 4 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "mounds", feature_count: 4 }]);
   });
 
   it("matches table names case-insensitively and normalises to the canonical casing", () => {
@@ -263,9 +250,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "Places", feature_count: 3 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "Places", feature_count: 3 }]);
   });
 
   it("repairs a non-ASCII table name whose count is NULL", () => {
@@ -290,9 +275,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "Über", feature_count: 2 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "Über", feature_count: 2 }]);
   });
 
   it("deduplicates a table listed in both gpkg_contents and gpkg_geometry_columns", () => {
@@ -318,9 +301,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "lakes", feature_count: 3 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "lakes", feature_count: 3 }]);
   });
 
   it("recomputes a negative (dirty) feature_count", () => {
@@ -345,9 +326,7 @@ describe("ensureGpkgFeatureCountSync", () => {
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "swamps", feature_count: 2 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "swamps", feature_count: 2 }]);
   });
 
   it("skips an unreadable phantom table and still repairs the others", () => {
@@ -370,9 +349,7 @@ describe("ensureGpkgFeatureCountSync", () => {
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
     // ghost_table is silently skipped; real_table is repaired.
-    assert.deepEqual(readOgrContents(patched), [
-      { table_name: "real_table", feature_count: 2 },
-    ]);
+    assert.deepEqual(readOgrContents(patched), [{ table_name: "real_table", feature_count: 2 }]);
   });
 
   it("leaves a complete GeoPackage untouched", () => {

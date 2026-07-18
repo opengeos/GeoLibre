@@ -7,9 +7,7 @@ const FIXTURE_TEXT = readFixture("smoke.geojson");
 async function layerOrder(page: Page): Promise<string[]> {
   return page
     .locator('[data-testid="layer-row"]')
-    .evaluateAll((rows) =>
-      rows.map((r) => r.getAttribute("data-layer-name") ?? ""),
-    );
+    .evaluateAll((rows) => rows.map((r) => r.getAttribute("data-layer-name") ?? ""));
 }
 
 /**
@@ -19,9 +17,7 @@ async function layerOrder(page: Page): Promise<string[]> {
  * confirm-gated Remove — against two real layers, so a regression in reorder
  * math or in the removal confirm flow is caught.
  */
-test("reorders layers and removes one through the confirm dialog", async ({
-  page,
-}) => {
+test("reorders layers and removes one through the confirm dialog", async ({ page }) => {
   await waitForMap(page);
 
   // Two layers so reorder has something to swap.
@@ -33,24 +29,18 @@ test("reorders layers and removes one through the confirm dialog", async ({
   // Reorder: moving the lower of the two up must flip their relative order.
   // Asserting the swap (rather than a fixed direction) is agnostic to whether
   // the panel lists top-of-stack first or last.
-  const initial = (await layerOrder(page)).filter((n) =>
-    ["aaa", "bbb"].includes(n),
-  );
+  const initial = (await layerOrder(page)).filter((n) => ["aaa", "bbb"].includes(n));
   expect(initial).toHaveLength(2);
   const [top, bottom] = initial;
 
   await layerRow(page, bottom).locator('button[aria-label="Move up"]').click();
 
   await expect
-    .poll(async () =>
-      (await layerOrder(page)).filter((n) => ["aaa", "bbb"].includes(n)),
-    )
+    .poll(async () => (await layerOrder(page)).filter((n) => ["aaa", "bbb"].includes(n)))
     .toEqual([bottom, top]);
 
   // Remove one layer through the confirm dialog; the other must survive.
-  await layerRow(page, "aaa")
-    .locator('button[aria-label="Remove layer"]')
-    .click();
+  await layerRow(page, "aaa").locator('button[aria-label="Remove layer"]').click();
   const dialog = page.getByRole("dialog", { name: "Remove layer?" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Remove", exact: true }).click();

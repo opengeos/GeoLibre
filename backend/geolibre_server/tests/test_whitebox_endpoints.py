@@ -102,9 +102,7 @@ def test_run_job_does_not_leak_error(monkeypatch):
 
     monkeypatch.setattr(whitebox, "create_runtime_session", _boom)
     try:
-        whitebox._run_job(
-            job_id, whitebox.WhiteboxRunRequest(tool_id="noop")
-        )
+        whitebox._run_job(job_id, whitebox.WhiteboxRunRequest(tool_id="noop"))
         job = whitebox._JOBS[job_id]
         assert job.status == "failed"
         assert job.error == "Tool execution failed. See the sidecar logs for details."

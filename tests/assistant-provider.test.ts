@@ -123,13 +123,11 @@ describe("resolveProviderConfig", () => {
 describe("availableProviders", () => {
   it("lists only providers with a configured key, in preference order", () => {
     assert.deepEqual(availableProviders({}), []);
-    assert.deepEqual(
-      availableProviders({ OPENAI_API_KEY: "o", GEMINI_API_KEY: "g" }),
-      ["google", "openai"],
-    );
-    assert.deepEqual(availableProviders({ ANTHROPIC_API_KEY: "a" }), [
-      "anthropic",
+    assert.deepEqual(availableProviders({ OPENAI_API_KEY: "o", GEMINI_API_KEY: "g" }), [
+      "google",
+      "openai",
     ]);
+    assert.deepEqual(availableProviders({ ANTHROPIC_API_KEY: "a" }), ["anthropic"]);
   });
 });
 
@@ -158,8 +156,7 @@ describe("configForProvider", () => {
       "gpt-4.1",
     );
     assert.equal(
-      configForProvider("anthropic", undefined, { ANTHROPIC_API_KEY: "a" })
-        ?.modelId,
+      configForProvider("anthropic", undefined, { ANTHROPIC_API_KEY: "a" })?.modelId,
       "claude-opus-4-8",
     );
   });

@@ -37,10 +37,7 @@ import {
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
 // Paired with MapCanvas so it suspends pointer interaction while dragging.
-import {
-  PANEL_RESIZE_END_EVENT,
-  PANEL_RESIZE_START_EVENT,
-} from "../../lib/panel-resize";
+import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 
 const DEFAULT_PANEL_HEIGHT = 360;
 const MIN_PANEL_HEIGHT = 160;
@@ -158,19 +155,14 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [hasKey, setHasKey] = useState(() => hasProviderKey());
-  const [providers, setProviders] = useState<AssistantProviderId[]>(() =>
-    availableProviders(),
-  );
+  const [providers, setProviders] = useState<AssistantProviderId[]>(() => availableProviders());
   const [provider, setProvider] = useState<AssistantProviderId | null>(() => {
     const stored = loadStored(PROVIDER_STORAGE_KEY);
-    return stored &&
-      ASSISTANT_PROVIDER_IDS.includes(stored as AssistantProviderId)
+    return stored && ASSISTANT_PROVIDER_IDS.includes(stored as AssistantProviderId)
       ? (stored as AssistantProviderId)
       : null;
   });
-  const [model, setModel] = useState<string>(
-    () => loadStored(MODEL_STORAGE_KEY) ?? "",
-  );
+  const [model, setModel] = useState<string>(() => loadStored(MODEL_STORAGE_KEY) ?? "");
 
   // Queue of model-generated code snippets (run_python / run_maplibre_js)
   // awaiting the user's approval, each with the promise resolver its tool
@@ -233,10 +225,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             ? Promise.resolve(true)
             : new Promise<boolean>((resolve) => {
                 const id = (codeReqIdRef.current += 1);
-                commitQueue([
-                  ...codeQueueRef.current,
-                  { id, tool, code, resolve },
-                ]);
+                commitQueue([...codeQueueRef.current, { id, tool, code, resolve }]);
               }),
       }),
     [mapControllerRef, commitQueue],
@@ -273,9 +262,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // the stored choice has no key (e.g. its key was removed).
   useEffect(() => {
     if (providers.length === 0) return;
-    setProvider((current) =>
-      current && providers.includes(current) ? current : providers[0],
-    );
+    setProvider((current) => (current && providers.includes(current) ? current : providers[0]));
   }, [providers]);
 
   // Push the resolved provider/model into the session. Selecting null lets the
@@ -286,8 +273,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       return;
     }
     const models = PROVIDER_MODELS[provider];
-    const effectiveModel =
-      model && models.includes(model) ? model : defaultModelFor(provider);
+    const effectiveModel = model && models.includes(model) ? model : defaultModelFor(provider);
     if (effectiveModel !== model) setModel(effectiveModel);
     session.setSelection({ provider, model: effectiveModel });
   }, [provider, model, session]);
@@ -324,18 +310,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         if (event.type === "text") {
           setTurns((prev) =>
             prev.map((turn) =>
-              turn.id === assistantId
-                ? { ...turn, text: turn.text + event.text }
-                : turn,
+              turn.id === assistantId ? { ...turn, text: turn.text + event.text } : turn,
             ),
           );
         } else {
           const label = describeTool(event.name, event.input);
-          const detail = event.error
-            ? label
-              ? `${label} — ${event.error}`
-              : event.error
-            : label;
+          const detail = event.error ? (label ? `${label} — ${event.error}` : event.error) : label;
           const toolId = (turnIdRef.current += 1);
           setTurns((prev) => {
             const index = prev.findIndex((turn) => turn.id === assistantId);
@@ -367,8 +347,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       // Drop the assistant turn if it never produced text (e.g. tool-only run).
       setTurns((prev) =>
         prev.filter(
-          (turn) =>
-            !(turn.id === assistantId && turn.role === "assistant" && !turn.text),
+          (turn) => !(turn.id === assistantId && turn.role === "assistant" && !turn.text),
         ),
       );
       // Only clear the running state if no newer send has superseded this one
@@ -512,9 +491,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   className="h-8 w-auto text-xs"
                   value={provider}
                   disabled={running}
-                  onChange={(event) =>
-                    onProviderChange(event.target.value as AssistantProviderId)
-                  }
+                  onChange={(event) => onProviderChange(event.target.value as AssistantProviderId)}
                 >
                   {providers.map((id) => (
                     <option key={id} value={id}>
@@ -574,9 +551,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           <div className="mx-auto flex max-w-md flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-              <p className="font-medium text-foreground">
-                {t("assistant.setupTitle")}
-              </p>
+              <p className="font-medium text-foreground">{t("assistant.setupTitle")}</p>
             </div>
             <p className="text-muted-foreground">{t("assistant.setupStatus")}</p>
             <div className="rounded-md border bg-muted/40 p-2">
@@ -585,22 +560,15 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               </p>
               <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
                 {SETUP_PROVIDERS.map(({ id, envs }) => (
-                  <li
-                    key={id}
-                    className="flex items-start justify-between gap-3 text-xs"
-                  >
-                    <span className="shrink-0 text-foreground">
-                      {PROVIDER_LABELS[id]}
-                    </span>
+                  <li key={id} className="flex items-start justify-between gap-3 text-xs">
+                    <span className="shrink-0 text-foreground">{PROVIDER_LABELS[id]}</span>
                     {/* One chip per variable so a multi-credential provider
                         never reads as a single oddly-named env var. */}
                     <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-end font-mono text-[11px] text-muted-foreground">
                       {envs.map((name, index) => (
                         <span key={name} className="whitespace-nowrap">
                           {index > 0 ? (
-                            <span className="me-1 text-muted-foreground/60">
-                              +
-                            </span>
+                            <span className="me-1 text-muted-foreground/60">+</span>
                           ) : null}
                           <code>{name}</code>
                         </span>
@@ -634,10 +602,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             }
             if (turn.role === "error") {
               return (
-                <p
-                  key={turn.id}
-                  className="flex items-start gap-1.5 text-xs text-destructive"
-                >
+                <p key={turn.id} className="flex items-start gap-1.5 text-xs text-destructive">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>{turn.text}</span>
                 </p>
@@ -645,10 +610,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             }
             if (turn.role === "user") {
               return (
-                <div
-                  key={turn.id}
-                  className="whitespace-pre-wrap font-medium text-foreground"
-                >
+                <div key={turn.id} className="whitespace-pre-wrap font-medium text-foreground">
                   {`❯ ${turn.text}`}
                 </div>
               );
@@ -680,11 +642,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         // Keep the call to action pinned to the bottom so it is reachable even
         // when the provider list scrolls.
         <div className="border-t px-3 py-2">
-          <Button
-            size="sm"
-            className="w-full"
-            onClick={() => openSettingsSection("ai")}
-          >
+          <Button size="sm" className="w-full" onClick={() => openSettingsSection("ai")}>
             <Settings className="me-1 h-4 w-4" />
             {t("assistant.setupOpenSettings")}
           </Button>
@@ -705,12 +663,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             className="min-h-[2.5rem] flex-1 resize-none text-sm"
           />
           {running ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={stop}
-              title={t("assistant.stop")}
-            >
+            <Button size="sm" variant="outline" onClick={stop} title={t("assistant.stop")}>
               <Square className="me-1 h-4 w-4" />
               {t("assistant.stop")}
             </Button>
@@ -800,9 +753,7 @@ function CodeApprovalOverlay({
       >
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-500" />
-          <span className="text-sm font-semibold">
-            {t("assistant.codeApprovalTitle")}
-          </span>
+          <span className="text-sm font-semibold">{t("assistant.codeApprovalTitle")}</span>
         </div>
         <p className="text-xs text-muted-foreground">
           {t("assistant.codeApprovalBody", { language })}

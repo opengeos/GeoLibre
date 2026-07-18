@@ -38,10 +38,7 @@ describe("isArcgisI3sSceneLayerUrl", () => {
   });
 
   it("ignores surrounding whitespace", () => {
-    assert.equal(
-      isArcgisI3sSceneLayerUrl("  https://host/City/SceneServer  "),
-      true,
-    );
+    assert.equal(isArcgisI3sSceneLayerUrl("  https://host/City/SceneServer  "), true);
   });
 });
 
@@ -167,10 +164,7 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     // value rather than reference.
     const props = build();
     assert.deepEqual(props?.loadOptions, THREE_D_TILES_DECK_LOAD_OPTIONS);
-    assert.equal(
-      (props?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core.worker,
-      false,
-    );
+    assert.equal((props?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core.worker, false);
   });
 
   it("returns null when the deck.gl class or loader is missing", () => {
@@ -187,19 +181,14 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
 
 describe("i3sTilesetLngLat", () => {
   it("returns the [lng, lat] pair from a cartographic center", () => {
-    assert.deepEqual(i3sTilesetLngLat({ cartographicCenter: [10, 20, 30] }), [
-      10, 20,
-    ]);
+    assert.deepEqual(i3sTilesetLngLat({ cartographicCenter: [10, 20, 30] }), [10, 20]);
   });
 
   it("returns null for missing, malformed, or non-finite centers", () => {
     assert.equal(i3sTilesetLngLat(null), null);
     assert.equal(i3sTilesetLngLat({}), null);
     assert.equal(i3sTilesetLngLat({ cartographicCenter: [Number.NaN, 20] }), null);
-    assert.equal(
-      i3sTilesetLngLat({ cartographicCenter: ["a", "b"] as unknown as number[] }),
-      null,
-    );
+    assert.equal(i3sTilesetLngLat({ cartographicCenter: ["a", "b"] as unknown as number[] }), null);
   });
 
   it("rejects centers outside the valid lng/lat range", () => {
@@ -227,9 +216,7 @@ describe("persistI3sTilesetCenter", () => {
   it("writes the tileset center into layer.metadata.center", () => {
     seedI3sLayer();
     persistI3sTilesetCenter("i3s-1", { cartographicCenter: [-122.4, 37.8, 0] });
-    assert.deepEqual(useAppStore.getState().layers[0].metadata.center, [
-      -122.4, 37.8,
-    ]);
+    assert.deepEqual(useAppStore.getState().layers[0].metadata.center, [-122.4, 37.8]);
   });
 
   it("skips a redundant store write when the center is unchanged", () => {

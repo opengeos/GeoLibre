@@ -3,11 +3,7 @@ import { readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
-import type {
-  RollupLog,
-  RollupOptions,
-  WarningHandlerWithDefault,
-} from "rollup";
+import type { RollupLog, RollupOptions, WarningHandlerWithDefault } from "rollup";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
@@ -21,9 +17,8 @@ const EARTH_ENGINE_CONTROL_BUNDLE = "maplibre-gl-earth-engine/dist/";
 const EARTH_ENGINE_BROWSER_BUNDLE = "@google/earthengine/build/browser.js";
 const GIS_CHUNK_WARNING_LIMIT_KB = 14000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
-const APP_VERSION = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
-).version as string;
+const APP_VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"))
+  .version as string;
 
 // Vite resolves `mode` from the `--mode` CLI flag (defaulting to `development`
 // for `vite`/`vite dev` and `production` for `vite build`). This shim runs at
@@ -64,9 +59,7 @@ if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
 // then lets a runtime Settings override win over this build-time value.
 if (!process.env.VITE_CESIUM_TOKEN) {
   const cesiumToken =
-    process.env.CESIUM_TOKEN ||
-    FILE_ENV.VITE_CESIUM_TOKEN ||
-    FILE_ENV.CESIUM_TOKEN;
+    process.env.CESIUM_TOKEN || FILE_ENV.VITE_CESIUM_TOKEN || FILE_ENV.CESIUM_TOKEN;
   if (cesiumToken) {
     process.env.VITE_CESIUM_TOKEN = cesiumToken;
   }
@@ -135,11 +128,8 @@ const pgliteCdnRequire = createRequire(import.meta.url);
 // historical PGlite layout, if neither is declared.
 function esmEntry(manifest: Record<string, unknown>): string {
   if (typeof manifest.module === "string") return manifest.module;
-  const exportsRoot = (manifest.exports as Record<string, unknown> | undefined)?.[
-    "."
-  ];
-  const importEntry = (exportsRoot as Record<string, unknown> | undefined)
-    ?.import;
+  const exportsRoot = (manifest.exports as Record<string, unknown> | undefined)?.["."];
+  const importEntry = (exportsRoot as Record<string, unknown> | undefined)?.import;
   const importDefault =
     typeof importEntry === "string"
       ? importEntry
@@ -159,9 +149,7 @@ function findPackageManifest(
   let dir = path.dirname(startFile);
   while (dir !== path.dirname(dir)) {
     try {
-      const parsed = JSON.parse(
-        readFileSync(path.join(dir, "package.json"), "utf8"),
-      );
+      const parsed = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
       if (parsed.name === pkg) return { dir, manifest: parsed };
     } catch {
       // Not this directory's package.json; keep walking up.
@@ -219,10 +207,7 @@ const CEREUS_WASM_CDN_URL = cereusWasmCdnUrl();
 const GDAL_CDN = process.env.GEOLIBRE_GDAL_CDN !== "0";
 function gdal3CdnPaths(): { wasm: string; data: string } | null {
   if (!GDAL_CDN) return null;
-  const { manifest } = findPackageManifest(
-    pgliteCdnRequire.resolve("gdal3.js"),
-    "gdal3.js",
-  );
+  const { manifest } = findPackageManifest(pgliteCdnRequire.resolve("gdal3.js"), "gdal3.js");
   const base = `https://cdn.jsdelivr.net/npm/gdal3.js@${manifest.version}/dist/package`;
   return {
     wasm: `${base}/gdal3WebAssembly.wasm`,
@@ -297,10 +282,7 @@ function manualChunks(id: string): string | undefined {
   // groups them into this chunk; matching them explicitly keeps that intent
   // even if some future eager import would otherwise pull them onto the boot
   // graph.
-  if (
-    id.includes("/node_modules/cesium/") ||
-    id.includes("/node_modules/@cesium/")
-  )
+  if (id.includes("/node_modules/cesium/") || id.includes("/node_modules/@cesium/"))
     return "cesium";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:
@@ -309,10 +291,7 @@ function manualChunks(id: string): string | undefined {
   return undefined;
 }
 
-function onwarn(
-  warning: RollupLog,
-  defaultHandler: WarningHandlerWithDefault,
-): void {
+function onwarn(warning: RollupLog, defaultHandler: WarningHandlerWithDefault): void {
   if (
     warning.code === "EVAL" &&
     typeof warning.id === "string" &&
@@ -330,9 +309,7 @@ function onwarn(
   // for vendored files only; a real occurrence in our own source still warns.
   if (warning.code === "COMMONJS_VARIABLE_IN_ESM") {
     const file =
-      (typeof warning.id === "string" ? warning.id : undefined) ??
-      warning.loc?.file ??
-      "";
+      (typeof warning.id === "string" ? warning.id : undefined) ?? warning.loc?.file ?? "";
     if (file.includes("/node_modules/") || file.includes("\\node_modules\\")) {
       return;
     }
@@ -349,8 +326,7 @@ function wmsProxyPlugin(): Plugin {
         try {
           await proxyWmsRequest(req, res);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "WMS proxy request failed";
+          const message = error instanceof Error ? error.message : "WMS proxy request failed";
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end(message);
@@ -360,8 +336,7 @@ function wmsProxyPlugin(): Plugin {
         try {
           await proxyBinaryRequest(req, res, WFS_PROXY_PATH);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "WFS proxy request failed";
+          const message = error instanceof Error ? error.message : "WFS proxy request failed";
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end(message);
@@ -371,8 +346,7 @@ function wmsProxyPlugin(): Plugin {
         try {
           await proxyBinaryRequest(req, res, GPX_PROXY_PATH);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "GPX proxy request failed";
+          const message = error instanceof Error ? error.message : "GPX proxy request failed";
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end(message);
@@ -382,10 +356,7 @@ function wmsProxyPlugin(): Plugin {
         try {
           await proxyBinaryRequest(req, res, RASTER_PROXY_PATH);
         } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Raster proxy request failed";
+          const message = error instanceof Error ? error.message : "Raster proxy request failed";
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end(message);
@@ -412,10 +383,7 @@ function stripDuckDbWorkerSourcemapPlugin(): Plugin {
           "../../node_modules",
           decodedPath.slice(decodedPath.indexOf(DUCKDB_WORKER_PATH_PART) + 1),
         );
-        const source = readFileSync(workerFile, "utf8").replace(
-          DUCKDB_WORKER_SOURCE_MAP_RE,
-          "",
-        );
+        const source = readFileSync(workerFile, "utf8").replace(DUCKDB_WORKER_SOURCE_MAP_RE, "");
         res.statusCode = 200;
         res.setHeader("content-type", "application/javascript");
         res.end(source);
@@ -465,10 +433,7 @@ function selectiveJsMinifyPlugin(): Plugin {
   };
 }
 
-function shouldPreserveEarthEngineChunk(
-  fileName: string,
-  code: string,
-): boolean {
+function shouldPreserveEarthEngineChunk(fileName: string, code: string): boolean {
   return (
     fileName.includes("earth-engine") ||
     fileName.includes("maplibre-geoagent") ||
@@ -557,17 +522,13 @@ function cereusCdnLoaderPlugin(): Plugin {
 function duckdbWasmBundlesPlugin(): Plugin {
   const modulePath = path.resolve(
     __dirname,
-    IS_TAURI_BUILD
-      ? "src/lib/duckdb-wasm-bundles.tauri.ts"
-      : "src/lib/duckdb-wasm-bundles.ts",
+    IS_TAURI_BUILD ? "src/lib/duckdb-wasm-bundles.tauri.ts" : "src/lib/duckdb-wasm-bundles.ts",
   );
   return {
     name: "geolibre-duckdb-wasm-bundles",
     enforce: "pre",
     resolveId(source) {
-      return /(?:^|\/)duckdb-wasm-bundles(?:\.ts)?$/.test(source)
-        ? modulePath
-        : null;
+      return /(?:^|\/)duckdb-wasm-bundles(?:\.ts)?$/.test(source) ? modulePath : null;
     },
   };
 }
@@ -629,10 +590,7 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-async function proxyWmsRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> {
+async function proxyWmsRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   await proxyBinaryRequest(req, res, WMS_PROXY_PATH);
 }
 
@@ -655,8 +613,7 @@ async function proxyBinaryRequest(
   if (range) headers.set("range", range);
 
   const response = await fetch(target, { headers });
-  const contentType =
-    response.headers.get("content-type") ?? "application/octet-stream";
+  const contentType = response.headers.get("content-type") ?? "application/octet-stream";
   const body = Buffer.from(await response.arrayBuffer());
 
   res.statusCode = response.status;
@@ -866,15 +823,10 @@ export default defineConfig({
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
     copyVectorOps(
-      path.resolve(
-        __dirname,
-        "../../backend/geolibre_server/geolibre_server/vector_ops.py",
-      ),
+      path.resolve(__dirname, "../../backend/geolibre_server/geolibre_server/vector_ops.py"),
       path.resolve(__dirname, "src/lib/pyodide/vector_ops.generated.py"),
     ),
-    copyRtlText(
-      path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js"),
-    ),
+    copyRtlText(path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js")),
     copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
     react(),
     wmsProxyPlugin(),
@@ -989,14 +941,7 @@ export default defineConfig({
     // ("Cannot destructure property 'AnthropicModel' … is undefined"). Deduping
     // these forces resolution from this app's node_modules — where they are always
     // installed — so the build is deterministic across environments (see #331).
-    dedupe: [
-      "react",
-      "react-dom",
-      "maplibre-gl",
-      "@anthropic-ai/sdk",
-      "openai",
-      "@google/genai",
-    ],
+    dedupe: ["react", "react-dom", "maplibre-gl", "@anthropic-ai/sdk", "openai", "@google/genai"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
       module: path.resolve(__dirname, "./src/lib/browser-node-module.ts"),

@@ -16,7 +16,6 @@ import pytest
 from geolibre_server.app import ml
 from geolibre_server.app.runtime import RuntimeBootstrapError
 
-
 # --- fakes ----------------------------------------------------------------
 
 
@@ -194,10 +193,7 @@ def test_resolve_base_maps_bootstrap_error_to_503(monkeypatch):
 
 def test_redact_url_strips_credentials():
     """Credentials embedded in a samgeo-api URL are not surfaced to clients."""
-    assert (
-        ml._redact_url("http://user:pass@gpu-host:8000")
-        == "http://gpu-host:8000"
-    )
+    assert ml._redact_url("http://user:pass@gpu-host:8000") == "http://gpu-host:8000"
     # URLs without credentials are returned unchanged.
     assert ml._redact_url("http://127.0.0.1:8000") == "http://127.0.0.1:8000"
 

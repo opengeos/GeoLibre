@@ -18,13 +18,7 @@ import {
   PHOTO_PROPERTY,
   type AttributeFormConfig,
 } from "@geolibre/core";
-import type {
-  Feature,
-  FeatureCollection,
-  LineString,
-  Point,
-  Polygon,
-} from "geojson";
+import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 
 // Re-exported so existing importers (geotagged-photos, tests) keep a single
 // import site; the canonical definitions live in @geolibre/core's schema.
@@ -60,10 +54,7 @@ export const COLLECTION_SCHEMA_KEY = "collectionSchema";
 export const COLLECTION_GEOMETRY_KEY = "collectionGeometry";
 
 /** Property keys the tool manages itself; user fields must not reuse them. */
-export const RESERVED_PROPERTY_KEYS: readonly string[] = [
-  PHOTO_PROPERTY,
-  PHOTO_FULL_PROPERTY,
-];
+export const RESERVED_PROPERTY_KEYS: readonly string[] = [PHOTO_PROPERTY, PHOTO_FULL_PROPERTY];
 
 /**
  * Cap embedded photos so a capture session can't bloat the project JSON without
@@ -84,20 +75,13 @@ export function emptyFeatureCollection(): FeatureCollection {
 
 /** True when a layer is a field-collection target (geojson + tagged metadata). */
 export function isCollectionLayer(layer: CollectionLayerLike): boolean {
-  return (
-    layer.type === "geojson" &&
-    layer.metadata?.[FIELD_COLLECTION_FLAG] === true
-  );
+  return layer.type === "geojson" && layer.metadata?.[FIELD_COLLECTION_FLAG] === true;
 }
 
 /** Read a layer's stored collection schema, defaulting to an empty schema. */
 export function getSchema(layer: CollectionLayerLike): CollectionSchema {
   const raw = layer.metadata?.[COLLECTION_SCHEMA_KEY];
-  if (
-    raw &&
-    typeof raw === "object" &&
-    Array.isArray((raw as Partial<CollectionSchema>).fields)
-  ) {
+  if (raw && typeof raw === "object" && Array.isArray((raw as Partial<CollectionSchema>).fields)) {
     return raw as CollectionSchema;
   }
   return { fields: [] };
@@ -134,10 +118,7 @@ export function collectionMetadata(
  * Slugify a human label into a safe property key, made unique against `taken`.
  * Empty/symbol-only labels fall back to `field`, then `field_2`, `field_3`, …
  */
-export function slugifyKey(
-  label: string,
-  taken: Iterable<string> = [],
-): string {
+export function slugifyKey(label: string, taken: Iterable<string> = []): string {
   const base =
     label
       .trim()
@@ -201,10 +182,7 @@ export function parseOptions(text: string): string[] {
 }
 
 /** Normalize a raw form string into the typed value stored on the feature. */
-export function coerceValue(
-  type: FieldType,
-  raw: string,
-): string | number | null {
+export function coerceValue(type: FieldType, raw: string): string | number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   if (type === "number") {
@@ -279,9 +257,7 @@ export function buildPropertiesWithForm(
   for (const field of schema.fields) {
     const config = getAttributeFormField(form, field.key);
     const raw = values[field.key] ?? "";
-    const v = config
-      ? coerceAttributeFormValue(config, raw)
-      : coerceValue(field.type, raw);
+    const v = config ? coerceAttributeFormValue(config, raw) : coerceValue(field.type, raw);
     if (v !== null) props[field.key] = v;
   }
   return { ...props, ...extra };
@@ -351,30 +327,19 @@ export function buildGeometryFeature(
  * connecting line, and — for a polygon with enough vertices — the closed,
  * fillable ring so the user sees the finished shape before saving.
  */
-export function drawPreview(
-  geometry: GeometryType,
-  coords: Vertex[],
-): FeatureCollection {
-  const features: Feature[] = coords.map((c, i) =>
-    makePointFeature(c[0], c[1], { index: i }),
-  );
+export function drawPreview(geometry: GeometryType, coords: Vertex[]): FeatureCollection {
+  const features: Feature[] = coords.map((c, i) => makePointFeature(c[0], c[1], { index: i }));
   if (geometry === "polygon" && coords.length >= 3) {
     features.push(makePolygonFeature(coords, {}));
     // Close the dashed stroke so it matches the filled ring (back to the start).
     features.push(makeLineFeature([...coords, coords[0]], {}));
-  } else if (
-    (geometry === "line" || geometry === "polygon") &&
-    coords.length >= 2
-  ) {
+  } else if ((geometry === "line" || geometry === "polygon") && coords.length >= 2) {
     features.push(makeLineFeature(coords, {}));
   }
   return { type: "FeatureCollection", features };
 }
 
 /** Return a new FeatureCollection with `feature` appended (immutably). */
-export function appendFeature(
-  fc: FeatureCollection,
-  feature: Feature,
-): FeatureCollection {
+export function appendFeature(fc: FeatureCollection, feature: Feature): FeatureCollection {
   return { type: "FeatureCollection", features: [...fc.features, feature] };
 }

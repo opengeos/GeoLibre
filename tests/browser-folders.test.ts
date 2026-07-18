@@ -105,9 +105,7 @@ describe("pinned folders persistence", () => {
 
   it("dispatches a change event on write", () => {
     pinFolder("/a");
-    const events = (
-      globalThis as unknown as { window: { __events: Event[] } }
-    ).window.__events;
+    const events = (globalThis as unknown as { window: { __events: Event[] } }).window.__events;
     assert.ok(events.some((e) => (e as Event).type === PINNED_FOLDERS_CHANGED_EVENT));
   });
 

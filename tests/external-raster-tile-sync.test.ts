@@ -66,9 +66,7 @@ function makePopulatedMapStub(layerId: string) {
 // third-party plugin's generic raster registration — e.g. the GeoLibre D2S
 // plugin handing the host titiler XYZ tiles. It carries no GeoLibre-internal
 // sourceKind, which is exactly the case that previously rendered nothing.
-function d2sRasterStoreLayer(
-  patch: Partial<GeoLibreLayer> = {},
-): GeoLibreLayer {
+function d2sRasterStoreLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   const id = "d2s-raster-1";
   return {
     id,

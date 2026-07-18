@@ -21,22 +21,14 @@ describe("partitionProjectPluginManifestUrls", () => {
 
   it("trusts a project URL the user has already installed in settings", () => {
     const url = "https://plugins.example.com/plugin.json";
-    const { trusted, untrusted } = partitionProjectPluginManifestUrls(
-      [url],
-      [url],
-      [],
-    );
+    const { trusted, untrusted } = partitionProjectPluginManifestUrls([url], [url], []);
     assert.deepEqual(trusted, [url]);
     assert.deepEqual(untrusted, []);
   });
 
   it("trusts a project URL that ships as a bundled drop-in", () => {
     const url = "https://geolibre.app/plugins/demo/plugin.json";
-    const { trusted, untrusted } = partitionProjectPluginManifestUrls(
-      [url],
-      [],
-      [url],
-    );
+    const { trusted, untrusted } = partitionProjectPluginManifestUrls([url], [], [url]);
     assert.deepEqual(trusted, [url]);
     assert.deepEqual(untrusted, []);
   });
@@ -77,21 +69,13 @@ describe("partitionProjectPluginManifestUrls", () => {
 
   it("de-duplicates and trims project URLs", () => {
     const url = "https://plugins.example.com/plugin.json";
-    const { untrusted } = partitionProjectPluginManifestUrls(
-      [url, `  ${url}  `, url],
-      [],
-      [],
-    );
+    const { untrusted } = partitionProjectPluginManifestUrls([url, `  ${url}  `, url], [], []);
     assert.deepEqual(untrusted, [url]);
   });
 
   it("matches a trusted settings URL that carries surrounding whitespace", () => {
     const url = "https://plugins.example.com/plugin.json";
-    const { trusted, untrusted } = partitionProjectPluginManifestUrls(
-      [url],
-      [`  ${url}  `],
-      [],
-    );
+    const { trusted, untrusted } = partitionProjectPluginManifestUrls([url], [`  ${url}  `], []);
     assert.deepEqual(trusted, [url]);
     assert.deepEqual(untrusted, []);
   });

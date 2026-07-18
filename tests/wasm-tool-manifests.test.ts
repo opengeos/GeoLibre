@@ -44,10 +44,7 @@ const geolibreOnlyTool: WhiteboxTool = {
 
 describe("mergeWasmToolManifests", () => {
   it("replaces a catalog tool's params with the WASM manifest's", () => {
-    const merged = mergeWasmToolManifests(
-      [catalogReprojectVector],
-      [wasmReprojectVector],
-    );
+    const merged = mergeWasmToolManifests([catalogReprojectVector], [wasmReprojectVector]);
     const tool = merged.find((item) => item.id === "reproject_vector");
     assert.ok(tool, "reproject_vector should still be present");
     // The WASM binary's parameter names win, so args are built as `--epsg=...`.
@@ -78,10 +75,7 @@ describe("mergeWasmToolManifests", () => {
       "GeoLibre-only tool should be appended",
     );
     // The WASM whitebox match is consumed, not duplicated as a WASM-only entry.
-    assert.equal(
-      merged.filter((tool) => tool.id === "reproject_vector").length,
-      1,
-    );
+    assert.equal(merged.filter((tool) => tool.id === "reproject_vector").length, 1);
   });
 
   it("consumes a matched GeoLibre tool once and preserves its source", () => {
@@ -103,10 +97,7 @@ describe("mergeWasmToolManifests", () => {
       ],
     };
     const merged = mergeWasmToolManifests([catalogStub], [wasmTool]);
-    assert.equal(
-      merged.filter((tool) => tool.id === "write_geoparquet").length,
-      1,
-    );
+    assert.equal(merged.filter((tool) => tool.id === "write_geoparquet").length, 1);
     assert.deepEqual(
       merged[0].params?.map((param) => param.name),
       ["input", "compression"],
@@ -200,9 +191,7 @@ describe("mergeWasmToolManifests", () => {
     };
     const wasm: WhiteboxTool = {
       id: "some_tool",
-      params: [
-        { name: "input", data_kind: "raster", io_role: "input", required: true },
-      ],
+      params: [{ name: "input", data_kind: "raster", io_role: "input", required: true }],
     };
     const [tool] = mergeWasmToolManifests([catalog], [wasm]);
     assert.equal(tool.params?.[0]?.kind, undefined);
@@ -218,9 +207,7 @@ describe("mergeWasmToolManifests", () => {
     };
     const wasm: WhiteboxTool = {
       id: "some_tool",
-      params: [
-        { name: "output", data_kind: "vector", io_role: "output", required: true },
-      ],
+      params: [{ name: "output", data_kind: "vector", io_role: "output", required: true }],
     };
     const [tool] = mergeWasmToolManifests([catalog], [wasm]);
     // Kind stays unset so parameterKind resolves the WASM vector_out.
@@ -268,10 +255,7 @@ describe("fileOutputTargetExtension", () => {
     // The bug in #1074: a hardcoded ".dat" made vector_summary_statistics reject
     // its own output path. The user's ".csv" choice must reach the tool.
     assert.equal(fileOutputTargetExtension(tableOutput, "test.csv"), "csv");
-    assert.equal(
-      fileOutputTargetExtension(tableOutput, "/Users/me/report.JSON"),
-      "json",
-    );
+    assert.equal(fileOutputTargetExtension(tableOutput, "/Users/me/report.JSON"), "json");
   });
 
   it("defaults a table output to csv when no path is given", () => {

@@ -22,9 +22,7 @@ import {
 } from "@geolibre/core";
 import { buildPropertiesWithForm } from "../apps/geolibre-desktop/src/lib/field-collection";
 
-function fieldConfig(
-  patch: Partial<AttributeFormFieldConfig> = {},
-): AttributeFormFieldConfig {
+function fieldConfig(patch: Partial<AttributeFormFieldConfig> = {}): AttributeFormFieldConfig {
   return { field: "population", widget: "number", ...patch };
 }
 
@@ -65,10 +63,7 @@ describe("value map text parsing", () => {
 describe("widget value coercion", () => {
   it("coerces number and range widgets to numbers", () => {
     assert.equal(coerceAttributeFormValue(fieldConfig(), "42"), 42);
-    assert.equal(
-      coerceAttributeFormValue(fieldConfig({ widget: "range" }), "3.5"),
-      3.5,
-    );
+    assert.equal(coerceAttributeFormValue(fieldConfig({ widget: "range" }), "3.5"), 3.5);
   });
 
   it("keeps an unparsable numeric string verbatim so validation can flag it", () => {
@@ -143,25 +138,18 @@ describe("field validation", () => {
       required: true,
     });
     assert.equal(validateAttributeFormField(config, {}), null);
-    assert.equal(
-      validateAttributeFormField(config, { verified: false }),
-      null,
-    );
+    assert.equal(validateAttributeFormField(config, { verified: false }), null);
   });
 
   it("flags non-numeric values under number widgets", () => {
-    assert.deepEqual(
-      validateAttributeFormField(fieldConfig(), { population: "abc" }),
-      { code: "number" },
-    );
+    assert.deepEqual(validateAttributeFormField(fieldConfig(), { population: "abc" }), {
+      code: "number",
+    });
   });
 
   it("enforces min/max bounds, including one-sided bounds", () => {
     const bounded = fieldConfig({ min: 0, max: 100 });
-    assert.equal(
-      validateAttributeFormField(bounded, { population: 50 }),
-      null,
-    );
+    assert.equal(validateAttributeFormField(bounded, { population: 50 }), null);
     assert.deepEqual(validateAttributeFormField(bounded, { population: -1 }), {
       code: "range",
       min: 0,
@@ -194,10 +182,7 @@ describe("field validation", () => {
       constraintExpression: '[">", ["get", "population"], 0]',
       constraintDescription: "population must be > 0",
     });
-    assert.equal(
-      validateAttributeFormField(config, { population: 10 }),
-      null,
-    );
+    assert.equal(validateAttributeFormField(config, { population: 10 }), null);
     assert.deepEqual(validateAttributeFormField(config, { population: -5 }), {
       code: "constraint",
       message: "population must be > 0",
@@ -207,16 +192,11 @@ describe("field validation", () => {
   it("supports cross-field constraints", () => {
     const config = fieldConfig({
       field: "max_height",
-      constraintExpression:
-        '[">=", ["get", "max_height"], ["get", "min_height"]]',
+      constraintExpression: '[">=", ["get", "max_height"], ["get", "min_height"]]',
     });
+    assert.equal(validateAttributeFormField(config, { max_height: 10, min_height: 2 }), null);
     assert.equal(
-      validateAttributeFormField(config, { max_height: 10, min_height: 2 }),
-      null,
-    );
-    assert.equal(
-      validateAttributeFormField(config, { max_height: 1, min_height: 2 })
-        ?.code,
+      validateAttributeFormField(config, { max_height: 1, min_height: 2 })?.code,
       "constraint",
     );
   });
@@ -239,23 +219,14 @@ describe("conditional visibility", () => {
   });
 
   it("shows and hides based on the expression", () => {
-    assert.equal(
-      isAttributeFormFieldVisible(config, { type: "school" }),
-      true,
-    );
+    assert.equal(isAttributeFormFieldVisible(config, { type: "school" }), true);
     assert.equal(isAttributeFormFieldVisible(config, { type: "park" }), false);
   });
 
   it("fails open on empty or broken expressions", () => {
+    assert.equal(isAttributeFormFieldVisible(fieldConfig(), { type: "park" }), true);
     assert.equal(
-      isAttributeFormFieldVisible(fieldConfig(), { type: "park" }),
-      true,
-    );
-    assert.equal(
-      isAttributeFormFieldVisible(
-        fieldConfig({ visibilityExpression: "not json" }),
-        {},
-      ),
+      isAttributeFormFieldVisible(fieldConfig({ visibilityExpression: "not json" }), {}),
       true,
     );
   });
@@ -272,10 +243,7 @@ describe("conditional visibility", () => {
       ],
     };
     // Hidden (type != school): the missing required value does not block.
-    assert.equal(
-      validateAttributeFormValues(form, { type: "park" }).ok,
-      true,
-    );
+    assert.equal(validateAttributeFormValues(form, { type: "park" }).ok, true);
     // Visible: it does.
     const visible = validateAttributeFormValues(form, { type: "school" });
     assert.equal(visible.ok, false);
@@ -288,20 +256,11 @@ describe("form config helpers", () => {
     const form: AttributeFormConfig = {
       fields: [fieldConfig({ alias: "Population (2020)" })],
     };
-    assert.equal(
-      getAttributeFormField(form, "population")?.alias,
-      "Population (2020)",
-    );
+    assert.equal(getAttributeFormField(form, "population")?.alias, "Population (2020)");
     assert.equal(getAttributeFormField(form, "other"), undefined);
     assert.equal(getAttributeFormField(undefined, "population"), undefined);
-    assert.equal(
-      attributeFormFieldLabel(fieldConfig({ alias: " " })),
-      "population",
-    );
-    assert.equal(
-      attributeFormFieldLabel(fieldConfig({ alias: "Pop" })),
-      "Pop",
-    );
+    assert.equal(attributeFormFieldLabel(fieldConfig({ alias: " " })), "population");
+    assert.equal(attributeFormFieldLabel(fieldConfig({ alias: "Pop" })), "Pop");
   });
 });
 

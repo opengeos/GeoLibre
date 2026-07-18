@@ -9,10 +9,7 @@ import {
 describe("confirmLargeDataset", () => {
   it("does nothing when no callback is supplied", async () => {
     await assert.doesNotReject(
-      confirmLargeDataset(
-        { name: "huge.parquet", featureCount: 10_000_000 },
-        undefined,
-      ),
+      confirmLargeDataset({ name: "huge.parquet", featureCount: 10_000_000 }, undefined),
     );
   });
 
@@ -37,35 +34,26 @@ describe("confirmLargeDataset", () => {
         return true;
       },
     );
-    assert.deepEqual(seen, [
-      { name: "edge.fgb", featureCount: DUCKDB_VECTOR_FEATURE_WARN_COUNT },
-    ]);
+    assert.deepEqual(seen, [{ name: "edge.fgb", featureCount: DUCKDB_VECTOR_FEATURE_WARN_COUNT }]);
   });
 
   it("resolves when the user proceeds", async () => {
     await assert.doesNotReject(
-      confirmLargeDataset(
-        { name: "big.shp", featureCount: 2_000_000 },
-        () => true,
-      ),
+      confirmLargeDataset({ name: "big.shp", featureCount: 2_000_000 }, () => true),
     );
   });
 
   it("throws VectorLoadCancelledError when the user declines", async () => {
     await assert.rejects(
-      confirmLargeDataset(
-        { name: "big.shp", featureCount: 2_000_000 },
-        () => false,
-      ),
+      confirmLargeDataset({ name: "big.shp", featureCount: 2_000_000 }, () => false),
       VectorLoadCancelledError,
     );
   });
 
   it("awaits an async callback decision", async () => {
     await assert.rejects(
-      confirmLargeDataset(
-        { name: "big.shp", featureCount: 2_000_000 },
-        () => Promise.resolve(false),
+      confirmLargeDataset({ name: "big.shp", featureCount: 2_000_000 }, () =>
+        Promise.resolve(false),
       ),
       VectorLoadCancelledError,
     );

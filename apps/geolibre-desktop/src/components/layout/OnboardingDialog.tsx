@@ -1,10 +1,4 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@geolibre/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { useTranslation } from "react-i18next";
 import {
   EXPERIENCE_LEVELS,
@@ -27,9 +21,7 @@ interface OnboardingDialogProps {
 export function OnboardingDialog({ open, onClose }: OnboardingDialogProps) {
   const { t } = useTranslation();
   const { plugins } = usePluginRegistry();
-  const setDesktopSettings = useDesktopSettingsStore(
-    (state) => state.setDesktopSettings,
-  );
+  const setDesktopSettings = useDesktopSettingsStore((state) => state.setDesktopSettings);
 
   // Apply a level preset (or "show everything" when level is null) and mark
   // onboarding complete so the wizard does not reappear.

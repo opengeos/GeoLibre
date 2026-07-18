@@ -54,9 +54,7 @@ test("installs a plugin from an uploaded zip, persists it across reload, and uni
   await expect(page.getByTestId("map-canvas")).toBeVisible();
   // The Settings dropdown trigger is part of the toolbar; wait for it before
   // driving the menu.
-  await expect(
-    page.getByRole("button", { name: "Settings", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
 
   // 1. Install from file: the web path reads the uploaded bytes, unpacks and
   //    registers the plugin client-side, and persists it in IndexedDB.
@@ -72,13 +70,9 @@ test("installs a plugin from an uploaded zip, persists it across reload, and uni
   });
 
   // Success notice + the plugin appears in the "installed from file" list.
-  await expect(
-    dialog.getByText(`Installed plugin "${PLUGIN_ID}".`),
-  ).toBeVisible();
+  await expect(dialog.getByText(`Installed plugin "${PLUGIN_ID}".`)).toBeVisible();
   await expect(dialog.getByText(PLUGIN_NAME)).toBeVisible();
-  await expect(
-    dialog.getByRole("button", { name: `Uninstall ${PLUGIN_NAME}` }),
-  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: `Uninstall ${PLUGIN_NAME}` })).toBeVisible();
 
   // Close the dialog and confirm the plugin registered (it shows in the
   // toolbar's Plugins menu, which lists registered plugins by name).
@@ -99,12 +93,8 @@ test("installs a plugin from an uploaded zip, persists it across reload, and uni
   await expect(dialog.getByText(PLUGIN_NAME)).toBeVisible();
 
   // 3. Uninstall: removes it from IndexedDB and unregisters it.
-  await dialog
-    .getByRole("button", { name: `Uninstall ${PLUGIN_NAME}` })
-    .click();
-  await expect(
-    dialog.getByRole("button", { name: `Uninstall ${PLUGIN_NAME}` }),
-  ).toHaveCount(0);
+  await dialog.getByRole("button", { name: `Uninstall ${PLUGIN_NAME}` }).click();
+  await expect(dialog.getByRole("button", { name: `Uninstall ${PLUGIN_NAME}` })).toHaveCount(0);
 
   // It no longer appears in the Plugins menu either.
   await page.keyboard.press("Escape");

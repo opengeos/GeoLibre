@@ -2,14 +2,8 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { csvCell as quoteCsvCell } from "./csv";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import {
-  saveBinaryFileWithFallback,
-  saveTextFileWithFallback,
-} from "./tauri-io";
-import {
-  type BinaryVectorExportFormat,
-  exportBinaryVectorLayer,
-} from "./vector-exporter";
+import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
+import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
 
 export type VectorExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
 
@@ -48,10 +42,7 @@ function geojsonToCsv(geojson: FeatureCollection): string {
   const rows = geojson.features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
     const properties = feature.properties ?? {};
-    const values = [
-      featureId,
-      ...orderedKeys.map((key) => properties[key]),
-    ];
+    const values = [featureId, ...orderedKeys.map((key) => properties[key])];
     return values.map(csvCell).join(",");
   });
 
@@ -130,21 +121,20 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
   const longNames = fieldNames.filter((name) => name.length > 10);
   const warnings: string[] = [];
   if (longNames.length > 0) {
-    warnings.push(
-      `Shapefile truncates field names to 10 characters: ${longNames.join(", ")}`,
-    );
+    warnings.push(`Shapefile truncates field names to 10 characters: ${longNames.join(", ")}`);
   }
 
   // Normalise non-alphanumerics to "_" before truncating, exactly as the DBF
   // writer does, so collisions caused by character replacement are detected.
   const byTruncated = new Map<string, string[]>();
   for (const name of fieldNames) {
-    const key = name.replace(/[^0-9A-Za-z_]/g, "_").slice(0, 10).toLowerCase();
+    const key = name
+      .replace(/[^0-9A-Za-z_]/g, "_")
+      .slice(0, 10)
+      .toLowerCase();
     byTruncated.set(key, [...(byTruncated.get(key) ?? []), name]);
   }
-  const collisions = Array.from(byTruncated.values()).filter(
-    (group) => group.length > 1,
-  );
+  const collisions = Array.from(byTruncated.values()).filter((group) => group.length > 1);
   if (collisions.length > 0) {
     warnings.push(
       `Truncating to 10 characters produces duplicate field names: ${collisions
@@ -157,9 +147,7 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
   // geometries become attribute-only Null shapes, which is silent data loss.
   let fileFamily: ShapefileFamily | null = null;
   for (const feature of geojson.features) {
-    const family = feature.geometry
-      ? shapefileFamily(feature.geometry.type)
-      : null;
+    const family = feature.geometry ? shapefileFamily(feature.geometry.type) : null;
     if (family) {
       fileFamily = family;
       break;
@@ -170,9 +158,7 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
   let demoted = 0;
   if (fileFamily !== null) {
     for (const feature of geojson.features) {
-      const family = feature.geometry
-        ? shapefileFamily(feature.geometry.type)
-        : null;
+      const family = feature.geometry ? shapefileFamily(feature.geometry.type) : null;
       if (family && family !== fileFamily) demoted += 1;
     }
   }
@@ -192,9 +178,7 @@ async function exportTextLayer(
   baseName: string,
 ): Promise<string | null> {
   const isCsv = format === "csv";
-  const content = isCsv
-    ? geojsonToCsv(geojson)
-    : JSON.stringify(geojson, null, 2);
+  const content = isCsv ? geojsonToCsv(geojson) : JSON.stringify(geojson, null, 2);
   return saveTextFileWithFallback(content, {
     defaultName: `${baseName}.${isCsv ? "csv" : "geojson"}`,
     filters: [
@@ -257,9 +241,7 @@ export async function exportVectorLayer(
  * GeoJSON source rather than in `layer.geojson`, so callers read the data back
  * from the map. Tiles-mode (DuckDB) vector layers are excluded.
  */
-export function geojsonVectorSourceId(
-  layer: GeoLibreLayer | undefined,
-): string | null {
+export function geojsonVectorSourceId(layer: GeoLibreLayer | undefined): string | null {
   if (
     !layer ||
     layer.type !== "geojson" ||

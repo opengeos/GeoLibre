@@ -102,9 +102,7 @@ describe("kmlModelTranslation", () => {
 
   it("lowers kilometer-scale vertical models so their top aligns to the anchor", () => {
     assert.deepEqual(
-      kmlModelTranslation(
-        model({ verticalMinMeters: 0, verticalMaxMeters: 5_600 }),
-      ),
+      kmlModelTranslation(model({ verticalMinMeters: 0, verticalMaxMeters: 5_600 })),
       [0, 0, -5_600],
     );
   });

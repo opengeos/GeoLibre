@@ -14,13 +14,7 @@ import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import type { Feature, Geometry, Position } from "geojson";
 
 /** Length units, matching the Measure tool's `DistanceUnit` set. */
-export type DistanceUnit =
-  | "meters"
-  | "kilometers"
-  | "miles"
-  | "feet"
-  | "yards"
-  | "nautical-miles";
+export type DistanceUnit = "meters" | "kilometers" | "miles" | "feet" | "yards" | "nautical-miles";
 
 /** Area units, matching the Measure tool's `AreaUnit` set. */
 export type AreaUnit =
@@ -131,9 +125,7 @@ function collectBaseFamilies(
  * single "mixed") lets the Field Calculator offer only the metrics that apply —
  * a point+line layer gets Length, not a no-op Area.
  */
-export function detectGeometryFamilies(
-  features: Feature[],
-): Set<GeometryFamily> {
+export function detectGeometryFamilies(features: Feature[]): Set<GeometryFamily> {
   const families = new Set<GeometryFamily>();
   for (const feature of features) {
     collectBaseFamilies(feature.geometry, families);
@@ -168,9 +160,7 @@ function haversineMeters(a: Position, b: Position, radius: number): number {
   const lat2 = b[1] * DEG_TO_RAD;
   const dLat = lat2 - lat1;
   const dLon = (b[0] - a[0]) * DEG_TO_RAD;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * radius * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -198,10 +188,7 @@ function ringAreaMeters(ring: Position[], radius: number): number {
     const p1 = ring[i];
     const p2 = ring[(i + 1) % n];
     const dLon = ((p2[0] - p1[0] + 540) % 360) - 180;
-    total +=
-      dLon *
-      DEG_TO_RAD *
-      (2 + Math.sin(p1[1] * DEG_TO_RAD) + Math.sin(p2[1] * DEG_TO_RAD));
+    total += dLon * DEG_TO_RAD * (2 + Math.sin(p1[1] * DEG_TO_RAD) + Math.sin(p2[1] * DEG_TO_RAD));
   }
   return (total * radius * radius) / 2;
 }
@@ -226,8 +213,7 @@ function polygonPerimeterMeters(rings: Position[][], radius: number): number {
     // same Position instance for their first and last point.
     const first = ring[0];
     const last = ring.at(-1);
-    const isClosed =
-      !!last && first[0] === last[0] && first[1] === last[1];
+    const isClosed = !!last && first[0] === last[0] && first[1] === last[1];
     const closed = ring.length > 0 && !isClosed ? [...ring, first] : ring;
     total += lineLengthMeters(closed, radius);
   }
@@ -253,15 +239,9 @@ function lengthMeters(geometry: Geometry, radius: number): number {
     case "LineString":
       return lineLengthMeters(geometry.coordinates, radius);
     case "MultiLineString":
-      return geometry.coordinates.reduce(
-        (sum, line) => sum + lineLengthMeters(line, radius),
-        0,
-      );
+      return geometry.coordinates.reduce((sum, line) => sum + lineLengthMeters(line, radius), 0);
     case "GeometryCollection":
-      return geometry.geometries.reduce(
-        (sum, g) => sum + lengthMeters(g, radius),
-        0,
-      );
+      return geometry.geometries.reduce((sum, g) => sum + lengthMeters(g, radius), 0);
     default:
       return 0;
   }
@@ -290,10 +270,7 @@ function perimeterMeters(geometry: Geometry, radius: number): number {
         0,
       );
     case "GeometryCollection":
-      return geometry.geometries.reduce(
-        (sum, g) => sum + perimeterMeters(g, radius),
-        0,
-      );
+      return geometry.geometries.reduce((sum, g) => sum + perimeterMeters(g, radius), 0);
     default:
       return 0;
   }
@@ -317,15 +294,9 @@ function areaMeters(geometry: Geometry, radius: number): number {
     case "Polygon":
       return polygonAreaMeters(geometry.coordinates, radius);
     case "MultiPolygon":
-      return geometry.coordinates.reduce(
-        (sum, rings) => sum + polygonAreaMeters(rings, radius),
-        0,
-      );
+      return geometry.coordinates.reduce((sum, rings) => sum + polygonAreaMeters(rings, radius), 0);
     case "GeometryCollection":
-      return geometry.geometries.reduce(
-        (sum, g) => sum + areaMeters(g, radius),
-        0,
-      );
+      return geometry.geometries.reduce((sum, g) => sum + areaMeters(g, radius), 0);
     default:
       return 0;
   }

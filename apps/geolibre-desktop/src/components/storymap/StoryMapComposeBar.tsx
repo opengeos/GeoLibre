@@ -18,9 +18,7 @@ interface StoryMapComposeBarProps {
  * zooms, and tilts the real map, then saves the resulting camera straight into
  * the chapter and returns to the editor, or cancels to discard the changes.
  */
-export function StoryMapComposeBar({
-  mapControllerRef,
-}: StoryMapComposeBarProps) {
+export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps) {
   const { t } = useTranslation();
   const composingId = useAppStore((s) => s.ui.storymapComposingId);
   const storymap = useAppStore((s) => s.storymap);
@@ -28,9 +26,7 @@ export function StoryMapComposeBar({
   const setOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const updateChapter = useAppStore((s) => s.updateStoryChapter);
 
-  const chapter = composingId
-    ? storymap?.chapters.find((c) => c.id === composingId)
-    : undefined;
+  const chapter = composingId ? storymap?.chapters.find((c) => c.id === composingId) : undefined;
 
   // Disable Save while the camera is in motion. Entering compose flies to the
   // chapter's saved view, and capturing a mid-flight camera would overwrite the
@@ -112,19 +108,14 @@ export function StoryMapComposeBar({
         data-testid="storymap-compose-bar"
       >
         <div className="flex items-start gap-2">
-          <Frame
-            className="mt-0.5 h-4 w-4 shrink-0 text-primary"
-            aria-hidden="true"
-          />
+          <Frame className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="min-w-0">
             <p className="truncate font-medium">
               {t("storymap.composeMode.title")}
               {": "}
               {chapterTitle}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {t("storymap.composeMode.hint")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("storymap.composeMode.hint")}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

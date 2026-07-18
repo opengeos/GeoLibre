@@ -38,15 +38,8 @@ interface MirroredEntry {
  */
 export interface SwipeCogMirrorDeps {
   createControl: (map: MapLibreMap) => Promise<CogLayerControl | null>;
-  addLayer: (
-    control: CogLayerControl,
-    snapshot: SwipeCogRasterSnapshot,
-  ) => Promise<string | null>;
-  setOpacity: (
-    control: CogLayerControl,
-    mirrorLayerId: string,
-    opacity: number,
-  ) => void;
+  addLayer: (control: CogLayerControl, snapshot: SwipeCogRasterSnapshot) => Promise<string | null>;
+  setOpacity: (control: CogLayerControl, mirrorLayerId: string, opacity: number) => void;
   removeLayer: (control: CogLayerControl, mirrorLayerId: string) => void;
   clearLayers: (control: CogLayerControl) => void;
   removeControl: (map: MapLibreMap, control: CogLayerControl) => void;
@@ -55,8 +48,7 @@ export interface SwipeCogMirrorDeps {
 const DEFAULT_DEPS: SwipeCogMirrorDeps = {
   createControl: (map) => createSwipeCogMirrorControl(map),
   addLayer: (control, snapshot) => mirrorAddCogLayer(control, snapshot),
-  setOpacity: (control, id, opacity) =>
-    mirrorSetCogOpacity(control, id, opacity),
+  setOpacity: (control, id, opacity) => mirrorSetCogOpacity(control, id, opacity),
   removeLayer: (control, id) => mirrorRemoveCogLayer(control, id),
   clearLayers: (control) => clearMirrorCogLayers(control),
   removeControl: (map, control) => map.removeControl(control),
@@ -128,9 +120,7 @@ export class SwipeCogMirror {
   sync(desired: SwipeCogRasterSnapshot[]): Promise<void> {
     // Serialise: chain after any in-flight sync so their sequential adds (which
     // share the control's form state) never interleave.
-    this.syncChain = this.syncChain
-      .catch(() => {})
-      .then(() => this.reconcile(desired));
+    this.syncChain = this.syncChain.catch(() => {}).then(() => this.reconcile(desired));
     return this.syncChain;
   }
 

@@ -72,10 +72,7 @@ export function isEditableTarget(target: EventTarget | null): boolean {
  * and rejects the non-platform command modifier to avoid accidental matches.
  */
 export function matchesShortcut(
-  event: Pick<
-    KeyboardEvent,
-    "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey"
-  >,
+  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
   shortcut: Shortcut,
   isMac: boolean,
 ): boolean {

@@ -12,15 +12,9 @@ import {
   type VectorToolRequest,
   type VectorToolResult,
 } from "@geolibre/processing";
-import {
-  onPyodideProgress,
-  runVectorToolInPyodide,
-} from "../../lib/pyodide/pyodide-vector-loader";
+import { onPyodideProgress, runVectorToolInPyodide } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
-import {
-  beginProcessingRun,
-  type ProcessingRunTracker,
-} from "../../lib/processing-history";
+import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import {
   Button,
   Dialog,
@@ -36,14 +30,7 @@ import {
 import { ParameterField } from "./ParameterField";
 import { Loader2, Play, Server } from "lucide-react";
 import type { FeatureCollection } from "geojson";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
 interface VectorToolsDialogProps {
@@ -67,9 +54,7 @@ function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
   return groups;
 }
 
-export function VectorToolsDialog({
-  mapControllerRef,
-}: VectorToolsDialogProps): ReactElement {
+export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps): ReactElement {
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.vectorToolOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
@@ -79,9 +64,7 @@ export function VectorToolsDialog({
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
-  const [selectedId, setSelectedId] = useState<string>(
-    openTool ?? VECTOR_TOOLS[0].id,
-  );
+  const [selectedId, setSelectedId] = useState<string>(openTool ?? VECTOR_TOOLS[0].id);
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [engine, setEngine] = useState<Engine>("client");
   const [log, setLog] = useState<string[]>([]);
@@ -91,10 +74,7 @@ export function VectorToolsDialog({
   const logEndRef = useRef<HTMLDivElement>(null);
   const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
 
-  const tool = useMemo(
-    () => getVectorTool(selectedId) ?? VECTOR_TOOLS[0],
-    [selectedId],
-  );
+  const tool = useMemo(() => getVectorTool(selectedId) ?? VECTOR_TOOLS[0], [selectedId]);
 
   // One DuckDB capability per dialog instance; the H3 tools use it via ctx.
   const duckdb = useMemo(() => createDuckDbCapability(), []);
@@ -138,11 +118,7 @@ export function VectorToolsDialog({
     }
     if (rerun.toolId !== tool.id) return;
     setParams({ ...rerun.parameters });
-    if (
-      rerun.engine === "client" ||
-      rerun.engine === "sidecar" ||
-      rerun.engine === "pyodide"
-    ) {
+    if (rerun.engine === "client" || rerun.engine === "sidecar" || rerun.engine === "pyodide") {
       setEngine(rerun.engine);
     }
     setProcessingRerun(null);
@@ -249,9 +225,7 @@ export function VectorToolsDialog({
   // chosen in its `fieldSource` parameter (default "layer"). O(1) lookup.
   const fieldOptions = useCallback(
     (param: AlgorithmParameter): string[] => {
-      const sourceId = params[param.fieldSource ?? "layer"] as
-        | string
-        | undefined;
+      const sourceId = params[param.fieldSource ?? "layer"] as string | undefined;
       return (sourceId && fieldsByLayer.get(sourceId)) || [];
     },
     [fieldsByLayer, params],
@@ -298,9 +272,7 @@ export function VectorToolsDialog({
       }
       const layerId = addGeoJsonLayer(name, fc);
       runTrackerRef.current?.addOutputLayer(name);
-      const layer = useAppStore
-        .getState()
-        .layers.find((item) => item.id === layerId);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
     },
     [addGeoJsonLayer, appendLog, mapControllerRef],
@@ -341,13 +313,8 @@ export function VectorToolsDialog({
       for (const message of result.messages) appendLog(message);
       // The engine response is untyped JSON; verify it is a FeatureCollection
       // before handing it to the map.
-      const remoteResult = result.geojson as
-        | { type?: string; features?: unknown }
-        | null;
-      if (
-        remoteResult?.type === "FeatureCollection" &&
-        Array.isArray(remoteResult.features)
-      ) {
+      const remoteResult = result.geojson as { type?: string; features?: unknown } | null;
+      if (remoteResult?.type === "FeatureCollection" && Array.isArray(remoteResult.features)) {
         addResultLayer(tool.name, remoteResult as unknown as FeatureCollection);
         return null;
       }
@@ -395,14 +362,9 @@ export function VectorToolsDialog({
       } else if (engine === "pyodide") {
         // Progress phases (one-time runtime + GeoPandas download) stream into
         // the log; the subscription is dropped once the run finishes.
-        const unsubscribe = onPyodideProgress((phase) =>
-          appendLog(`${phase}...`),
-        );
+        const unsubscribe = onPyodideProgress((phase) => appendLog(`${phase}...`));
         try {
-          failure = await runRemoteEngine(
-            "in your browser (Pyodide)",
-            runVectorToolInPyodide,
-          );
+          failure = await runRemoteEngine("in your browser (Pyodide)", runVectorToolInPyodide);
         } finally {
           unsubscribe();
         }
@@ -493,8 +455,7 @@ export function VectorToolsDialog({
                       onClick={() => setSelectedId(entry.id)}
                       className={cn(
                         "w-full rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
-                        entry.id === selectedId &&
-                          "bg-accent font-medium text-accent-foreground",
+                        entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                       )}
                     >
                       {entry.name}
@@ -516,9 +477,7 @@ export function VectorToolsDialog({
                   param={param}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={
-                    param.type === "field" ? fieldOptions(param) : undefined
-                  }
+                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
                   onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))}
@@ -529,10 +488,7 @@ export function VectorToolsDialog({
                 <Label className="flex items-center gap-1.5 text-xs">
                   <Server className="h-3.5 w-3.5" /> Engine
                 </Label>
-                <Select
-                  value={engine}
-                  onChange={(e) => setEngine(e.target.value as Engine)}
-                >
+                <Select value={engine} onChange={(e) => setEngine(e.target.value as Engine)}>
                   {/* requiresSidecar tools (e.g. Reproject) have no working client
                       path, so don't let the user pick a dead-end engine. */}
                   <option value="client" disabled={tool.requiresSidecar}>
@@ -542,23 +498,19 @@ export function VectorToolsDialog({
                   <option value="pyodide">Python (Pyodide)</option>
                 </Select>
                 {engine === "sidecar" && sidecarAvailable === null ? (
-                  <p className="text-xs text-muted-foreground">
-                    Checking sidecar availability...
-                  </p>
+                  <p className="text-xs text-muted-foreground">Checking sidecar availability...</p>
                 ) : null}
                 {engine === "sidecar" && sidecarAvailable === false ? (
                   <p className="text-xs text-destructive">
-                    The GeoPandas sidecar is not available. Start the sidecar
-                    with the vector extra, or switch to
-                    {tool.requiresSidecar
-                      ? " Python (Pyodide)."
-                      : " the client engine."}
+                    The GeoPandas sidecar is not available. Start the sidecar with the vector extra,
+                    or switch to
+                    {tool.requiresSidecar ? " Python (Pyodide)." : " the client engine."}
                   </p>
                 ) : null}
                 {engine === "pyodide" ? (
                   <p className="text-xs text-muted-foreground">
-                    Runs GeoPandas in your browser. The first run downloads the
-                    Python runtime (one-time, needs an internet connection).
+                    Runs GeoPandas in your browser. The first run downloads the Python runtime
+                    (one-time, needs an internet connection).
                   </p>
                 ) : null}
               </div>
@@ -567,10 +519,7 @@ export function VectorToolsDialog({
             <div>
               <Button
                 onClick={handleRun}
-                disabled={
-                  running ||
-                  (engine === "sidecar" && sidecarAvailable !== true)
-                }
+                disabled={running || (engine === "sidecar" && sidecarAvailable !== true)}
                 className="gap-2"
               >
                 {running ? (
@@ -584,9 +533,7 @@ export function VectorToolsDialog({
 
             <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
               {log.length === 0 ? (
-                <span className="text-muted-foreground">
-                  Output will appear here.
-                </span>
+                <span className="text-muted-foreground">Output will appear here.</span>
               ) : (
                 log.map((line, index) => (
                   <div key={index} className="whitespace-pre-wrap">

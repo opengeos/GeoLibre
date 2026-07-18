@@ -12,11 +12,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { PropertyValueSpecification } from "maplibre-gl";
-import type {
-  VectorLayerInfo,
-  VectorLayerOptions,
-  VectorLayerStyle,
-} from "maplibre-gl-vector";
+import type { VectorLayerInfo, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
 
 export const VECTOR_SOURCE_KIND = "maplibre-gl-vector";
 
@@ -61,8 +57,7 @@ let storeSyncSuspended = 0;
  */
 export function isVectorControlStoreLayer(layer: GeoLibreLayer): boolean {
   return (
-    layer.metadata.sourceKind === VECTOR_SOURCE_KIND &&
-    layer.metadata.externalNativeLayer === true
+    layer.metadata.sourceKind === VECTOR_SOURCE_KIND && layer.metadata.externalNativeLayer === true
   );
 }
 
@@ -107,12 +102,9 @@ export function createVectorStoreLayer(
   // A desktop host echoes the absolute path a local file was read from, so the
   // layer can be re-read from disk on reopen; the browser only knows the file
   // name. Prefer the path, so it (not the bare name) is what gets persisted.
-  const localFilePath =
-    info.source.kind === "file" ? info.source.path : undefined;
+  const localFilePath = info.source.kind === "file" ? info.source.path : undefined;
   const sourcePath =
-    url ??
-    localFilePath ??
-    (info.source.kind === "file" ? info.source.fileName : undefined);
+    url ?? localFilePath ?? (info.source.kind === "file" ? info.source.fileName : undefined);
   return {
     id: info.id,
     name: info.name,
@@ -153,18 +145,12 @@ export function createVectorStoreLayer(
       // it. A browser-picked file has no path and so no flag.
       ...(localFilePath ? { localFileReloadable: true } : {}),
       vectorState: serializableVectorState(info),
-      ...(info.geometryType !== "unknown"
-        ? { geometryType: info.geometryType }
-        : {}),
-      ...(typeof info.featureCount === "number"
-        ? { featureCount: info.featureCount }
-        : {}),
+      ...(info.geometryType !== "unknown" ? { geometryType: info.geometryType } : {}),
+      ...(typeof info.featureCount === "number" ? { featureCount: info.featureCount } : {}),
       // Attribute field names, so the Style panel can populate the label field
       // (and other attribute-driven) dropdowns for a control-managed layer,
       // which has no layer.geojson to read property keys from.
-      ...(info.fields && info.fields.length > 0
-        ? { fields: [...info.fields] }
-        : {}),
+      ...(info.fields && info.fields.length > 0 ? { fields: [...info.fields] } : {}),
       ...(info.bbox ? { bounds: [...info.bbox] } : {}),
     },
     ...(sourcePath ? { sourcePath } : {}),
@@ -198,9 +184,7 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
 
     for (const info of infos) {
       const layer = createVectorStoreLayer(info, panelCollapsed);
-      const existing = useAppStore
-        .getState()
-        .layers.find((current) => current.id === layer.id);
+      const existing = useAppStore.getState().layers.find((current) => current.id === layer.id);
 
       if (!existing) {
         useAppStore.getState().addLayer(layer);
@@ -289,9 +273,7 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
           // A pointMode change makes the control rebuild its map layers, so the
           // new layer ids replace the old ones. Refresh nativeLayerIds/sourceIds
           // from the control so the core sync orders/toggles the new layers.
-          const updated = activeControl
-            .getLayers()
-            .find((info) => info.id === layer.id);
+          const updated = activeControl.getLayers().find((info) => info.id === layer.id);
           const metadataPatch: Record<string, unknown> = {
             ...current.metadata,
           };
@@ -306,11 +288,7 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
           // syncVectorLayersToStore, but the suspension around this push
           // suppresses it.)
           const vectorState = current.metadata.vectorState;
-          if (
-            vectorState &&
-            typeof vectorState === "object" &&
-            !Array.isArray(vectorState)
-          ) {
+          if (vectorState && typeof vectorState === "object" && !Array.isArray(vectorState)) {
             metadataPatch.vectorState = {
               ...(vectorState as Record<string, unknown>),
               style: nextStyle,
@@ -452,11 +430,7 @@ export function savedVectorState(
   // Formats are open-ended (any extension the spatial extension's GDAL
   // build reads), so no allowlist here; the control falls back to its own
   // detection for unknown names.
-  if (
-    typeof candidate.format === "string" &&
-    candidate.format &&
-    candidate.format.length <= 50
-  ) {
+  if (typeof candidate.format === "string" && candidate.format && candidate.format.length <= 50) {
     state.format = candidate.format;
   }
   const style = savedVectorStyle(candidate.style);
@@ -501,9 +475,7 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   // so a hand-edited project file cannot smuggle a multi-kilobyte (or deeply
   // nested) blob into a paint property. Real categorized/graduated expressions
   // are far under this cap, and MapLibre validates the expression contents.
-  const colorExpression = (
-    value: unknown,
-  ): value is PropertyValueSpecification<string> => {
+  const colorExpression = (value: unknown): value is PropertyValueSpecification<string> => {
     if (!Array.isArray(value) || value.length === 0) return false;
     try {
       return JSON.stringify(value).length <= MAX_COLOR_EXPRESSION_CHARS;
@@ -560,8 +532,7 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
     // colorExpression only enforces "a small, well-formed JSON array", which is
     // exactly the bound wanted for a height expression too; the name refers to
     // its first use, not a color-only constraint.
-    style.extrusionHeight =
-      candidate.extrusionHeight as VectorLayerStyle["extrusionHeight"];
+    style.extrusionHeight = candidate.extrusionHeight as VectorLayerStyle["extrusionHeight"];
   }
 
   // Attribute labels. The field name is length-capped like the color strings
@@ -646,9 +617,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     extrusionColor: style.extrusionColor,
     extrusionColorExpression: colorExpressionField(extrusionColorValue(style)),
     extrusionOpacity: style.extrusionOpacity,
-    extrusionHeight: extrusionHeightValue(
-      style,
-    ) as VectorLayerStyle["extrusionHeight"],
+    extrusionHeight: extrusionHeightValue(style) as VectorLayerStyle["extrusionHeight"],
     extrusionBase: style.extrusionBase,
     // Point renderer: GeoLibre's "single" maps to the control's "circle".
     pointMode:
@@ -670,10 +639,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     // controls, but for a control-managed layer they are no-ops; adding them
     // here later means also wiring the equality check, persistence, and the
     // upstream control option.
-    labelField:
-      style.labels.enabled && style.labels.field.trim() !== ""
-        ? style.labels.field
-        : "",
+    labelField: style.labels.enabled && style.labels.field.trim() !== "" ? style.labels.field : "",
     labelSize: style.labels.size,
     labelColor: style.labels.color,
     labelHaloColor: style.labels.haloColor,
@@ -694,9 +660,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
 function colorExpressionField(
   value: VectorColorValue,
 ): PropertyValueSpecification<string> | undefined {
-  return isVectorColorExpression(value)
-    ? (value as PropertyValueSpecification<string>)
-    : undefined;
+  return isVectorColorExpression(value) ? (value as PropertyValueSpecification<string>) : undefined;
 }
 
 /**
@@ -758,9 +722,7 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
       color: style.labelColor ?? defaults.color,
       haloColor: style.labelHaloColor ?? defaults.haloColor,
       haloWidth:
-        typeof style.labelHaloWidth === "number"
-          ? style.labelHaloWidth
-          : defaults.haloWidth,
+        typeof style.labelHaloWidth === "number" ? style.labelHaloWidth : defaults.haloWidth,
       placement: style.labelPlacement === "line" ? "line" : "point",
       allowOverlap: style.labelAllowOverlap ?? defaults.allowOverlap,
     };
@@ -777,10 +739,7 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
  * @param right - Second control style.
  * @returns True when every field matches.
  */
-function vectorStylesEqual(
-  left: VectorLayerStyle,
-  right: VectorLayerStyle,
-): boolean {
+function vectorStylesEqual(left: VectorLayerStyle, right: VectorLayerStyle): boolean {
   return (
     left.fillColor === right.fillColor &&
     left.fillOpacity === right.fillOpacity &&
@@ -824,9 +783,7 @@ function vectorStylesEqual(
   );
 }
 
-function vectorCustomLayerType(
-  geometryType: VectorLayerInfo["geometryType"],
-): string {
+function vectorCustomLayerType(geometryType: VectorLayerInfo["geometryType"]): string {
   switch (geometryType) {
     case "point":
       return "circle";
@@ -839,19 +796,14 @@ function vectorCustomLayerType(
   }
 }
 
-function vectorPanelCollapsedFromControl(
-  control: VectorSyncableControl,
-): boolean {
+function vectorPanelCollapsedFromControl(control: VectorSyncableControl): boolean {
   try {
     const collapsed = control.getState?.().collapsed;
     return typeof collapsed === "boolean" ? collapsed : true;
   } catch (error) {
     // getState is optional, so only a throwing implementation lands here;
     // surface it instead of letting it look like the method being absent.
-    console.warn(
-      "[GeoLibre] vectorPanelCollapsedFromControl: getState threw",
-      error,
-    );
+    console.warn("[GeoLibre] vectorPanelCollapsedFromControl: getState threw", error);
     return true;
   }
 }
@@ -860,10 +812,7 @@ function vectorPanelCollapsedFromControl(
 // the helper of the same name in raster-layer-sync.ts. JSON.stringify would
 // report a difference for semantically equal objects whose keys were built
 // in a different order, forcing a spurious updateLayer on every event.
-function recordsEqual(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): boolean {
+function recordsEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
     if (!valuesEqual(left[key], right[key])) return false;
@@ -889,9 +838,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function serializableVectorState(
-  info: VectorLayerInfo,
-): Record<string, unknown> {
+function serializableVectorState(info: VectorLayerInfo): Record<string, unknown> {
   // visible and opacity live on the top-level layer fields (the panel edits
   // them there); persisting copies here would leave two competing values in
   // a saved project file, so they are omitted.

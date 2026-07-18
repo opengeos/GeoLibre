@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildDates,
-  nasaTileUrl,
-} from "../packages/plugins/src/plugins/maplibre-clouds";
+import { buildDates, nasaTileUrl } from "../packages/plugins/src/plugins/maplibre-clouds";
 
 /** The number of scrub frames the plugin exposes (mirrors HISTORY_DAYS). */
 const HISTORY_DAYS = 10;
@@ -11,9 +8,7 @@ const HISTORY_DAYS = 10;
 /** `YYYY-MM-DD` for `daysAgo` complete UTC days back, computed independently. */
 function utcDaysAgo(daysAgo: number): string {
   const now = new Date();
-  const d = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo),
-  );
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo));
   return d.toISOString().slice(0, 10);
 }
 

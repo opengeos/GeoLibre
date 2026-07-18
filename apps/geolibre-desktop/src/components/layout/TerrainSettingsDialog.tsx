@@ -37,9 +37,7 @@ export interface TerrainSettingsDialogProps {
  * (the control lives outside React). The slider/number input applies changes
  * live via the map controller so the effect is visible while dragging.
  */
-export function TerrainSettingsDialog({
-  mapControllerRef,
-}: TerrainSettingsDialogProps) {
+export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialogProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
@@ -59,8 +57,7 @@ export function TerrainSettingsDialog({
       // too (not just via the exaggeration effect) so reopening after an
       // uncommitted/invalid draft was abandoned via Escape shows the real value.
       const value = clampExaggeration(
-        mapControllerRef.current?.getTerrainExaggeration() ??
-          DEFAULT_EXAGGERATION,
+        mapControllerRef.current?.getTerrainExaggeration() ?? DEFAULT_EXAGGERATION,
       );
       setExaggeration(value);
       setDraft(String(value));
@@ -122,16 +119,12 @@ export function TerrainSettingsDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{t("terrainSettings.title")}</DialogTitle>
-          <DialogDescription>
-            {t("terrainSettings.description")}
-          </DialogDescription>
+          <DialogDescription>{t("terrainSettings.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="terrain-exaggeration-input">
-                {t("terrainSettings.label")}
-              </Label>
+              <Label htmlFor="terrain-exaggeration-input">{t("terrainSettings.label")}</Label>
               <Input
                 id="terrain-exaggeration-input"
                 type="number"

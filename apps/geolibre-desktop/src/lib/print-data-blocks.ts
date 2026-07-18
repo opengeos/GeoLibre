@@ -27,9 +27,7 @@ export const DEFAULT_TABLE_ROWS = 10;
 export const DEFAULT_TABLE_COLUMNS = 4;
 
 /** Reduce a feature collection to the property-bag rows the builders consume. */
-export function layerRows(
-  collection: Pick<FeatureCollection, "features">,
-): ChartRow[] {
+export function layerRows(collection: Pick<FeatureCollection, "features">): ChartRow[] {
   return collection.features.map((feature) => ({
     properties: (feature.properties ?? {}) as Record<string, unknown>,
   }));
@@ -121,10 +119,7 @@ export interface TableBlockData {
  * stringify cells. Returns null when there are no rows or no columns, so the
  * dialog can skip the block entirely instead of drawing an empty panel.
  */
-export function buildTableBlock(
-  rows: ChartRow[],
-  config: TableBlockConfig,
-): TableBlockData | null {
+export function buildTableBlock(rows: ChartRow[], config: TableBlockConfig): TableBlockData | null {
   if (rows.length === 0 || config.columns.length === 0) return null;
   let ordered = rows;
   const { sortField } = config;
@@ -146,9 +141,7 @@ export function buildTableBlock(
   const shown = ordered.slice(0, limit);
   return {
     columns: config.columns,
-    rows: shown.map((row) =>
-      config.columns.map((column) => cellText(row.properties[column])),
-    ),
+    rows: shown.map((row) => config.columns.map((column) => cellText(row.properties[column]))),
     truncated: Math.max(0, ordered.length - shown.length),
   };
 }
@@ -171,10 +164,7 @@ export interface ChartBlockConfig {
  * included) and its categorical palette. Returns null when the configuration
  * is incomplete or no chartable data survives, so nothing is drawn.
  */
-export function buildChartBlock(
-  rows: ChartRow[],
-  config: ChartBlockConfig,
-): DataChartData | null {
+export function buildChartBlock(rows: ChartRow[], config: ChartBlockConfig): DataChartData | null {
   if (rows.length === 0) return null;
   if (config.type === "line") {
     if (!config.valueField) return null;
@@ -184,8 +174,7 @@ export function buildChartBlock(
   }
   if (!config.categoryField) return null;
   const aggregation = config.aggregation ?? "count";
-  const valueField =
-    aggregation === "count" ? null : (config.valueField ?? null);
+  const valueField = aggregation === "count" ? null : (config.valueField ?? null);
   if (aggregation !== "count" && !valueField) return null;
   if (config.type === "pie") {
     const pie = computePie(rows, config.categoryField, aggregation, valueField);

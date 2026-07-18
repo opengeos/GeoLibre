@@ -18,9 +18,7 @@ async function waitForMap(page: Page): Promise<void> {
   });
 }
 
-test("adds a glTF 3D model layer placed at a single coordinate", async ({
-  page,
-}) => {
+test("adds a glTF 3D model layer placed at a single coordinate", async ({ page }) => {
   await waitForMap(page);
 
   // Open Add Data -> 3D Model (glTF).
@@ -39,16 +37,12 @@ test("adds a glTF 3D model layer placed at a single coordinate", async ({
   await dialog.getByRole("button", { name: "Add layer" }).click();
 
   // The layer appears in the panel as a deck.gl (scenegraph) layer.
-  const row = page.locator(
-    '[data-testid="layer-row"][data-layer-name="3D model (glTF)"]',
-  );
+  const row = page.locator('[data-testid="layer-row"][data-layer-name="3D model (glTF)"]');
   await expect(row).toBeVisible();
   await expect(dialog).toBeHidden();
 });
 
-test("blocks single-location placement without a valid coordinate", async ({
-  page,
-}) => {
+test("blocks single-location placement without a valid coordinate", async ({ page }) => {
   await waitForMap(page);
 
   await page.getByRole("button", { name: "Add Data" }).click();
@@ -62,8 +56,6 @@ test("blocks single-location placement without a valid coordinate", async ({
   // coordinate 0).
   await dialog.getByLabel("Longitude").fill("");
   await dialog.getByRole("button", { name: "Add layer" }).click();
-  await expect(
-    dialog.getByText("Enter a valid longitude and latitude."),
-  ).toBeVisible();
+  await expect(dialog.getByText("Enter a valid longitude and latitude.")).toBeVisible();
   await expect(dialog).toBeVisible();
 });

@@ -53,10 +53,7 @@ describe("appendQuery", () => {
       appendQuery("https://x.test/wms?foo=1", [["BAR", "2"]]),
       "https://x.test/wms?foo=1&BAR=2",
     );
-    assert.equal(
-      appendQuery("https://x.test/wms?", [["BAR", "2"]]),
-      "https://x.test/wms?BAR=2",
-    );
+    assert.equal(appendQuery("https://x.test/wms?", [["BAR", "2"]]), "https://x.test/wms?BAR=2");
   });
 
   it("leaves the bbox placeholder unescaped", () => {
@@ -147,14 +144,8 @@ describe("normalizeWmsVersion", () => {
 
 describe("wmsVersionFromEndpoint", () => {
   it("reads the VERSION parameter from a pasted service URL", () => {
-    assert.equal(
-      wmsVersionFromEndpoint("https://data.geopf.fr/wms-r?VERSION=1.3.0"),
-      "1.3.0",
-    );
-    assert.equal(
-      wmsVersionFromEndpoint("https://x.test/wms?version=1.1.1&foo=1"),
-      "1.1.1",
-    );
+    assert.equal(wmsVersionFromEndpoint("https://data.geopf.fr/wms-r?VERSION=1.3.0"), "1.3.0");
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms?version=1.1.1&foo=1"), "1.1.1");
     assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=1.0.0"), "1.1.1");
     // Any 1.x value is bucketed the same way normalizeWmsVersion buckets it.
     assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=1.2.0"), "1.1.1");
@@ -211,9 +202,7 @@ describe("createWmsGetCapabilitiesUrl", () => {
   });
 
   it("strips stale operation params on a relative endpoint too", () => {
-    const url = createWmsGetCapabilitiesUrl(
-      "/geoserver/wms?REQUEST=GetMap&LAYERS=a&token=abc",
-    );
+    const url = createWmsGetCapabilitiesUrl("/geoserver/wms?REQUEST=GetMap&LAYERS=a&token=abc");
     // Relative form is preserved (no scheme/host injected).
     assert.ok(url.startsWith("/geoserver/wms?"));
     const params = new URLSearchParams(url.slice(url.indexOf("?")));
@@ -225,9 +214,7 @@ describe("createWmsGetCapabilitiesUrl", () => {
 
 describe("createWfsGetCapabilitiesUrl", () => {
   it("appends SERVICE, REQUEST, and the version when given", () => {
-    const url = new URL(
-      createWfsGetCapabilitiesUrl("https://x.test/wfs", "2.0.0"),
-    );
+    const url = new URL(createWfsGetCapabilitiesUrl("https://x.test/wfs", "2.0.0"));
     assert.equal(url.searchParams.get("SERVICE"), "WFS");
     assert.equal(url.searchParams.get("REQUEST"), "GetCapabilities");
     assert.equal(url.searchParams.get("VERSION"), "2.0.0");
@@ -263,10 +250,7 @@ describe("stripOgcOperationParams", () => {
 
   it("keeps non-operation params like an auth token", () => {
     assert.equal(
-      stripOgcOperationParams(
-        "https://x.test/wms?REQUEST=GetMap&LAYERS=a&token=abc",
-        "WMS",
-      ),
+      stripOgcOperationParams("https://x.test/wms?REQUEST=GetMap&LAYERS=a&token=abc", "WMS"),
       "https://x.test/wms?token=abc",
     );
   });
@@ -294,9 +278,7 @@ describe("number parsing helpers", () => {
 
 describe("parseVideoCorner", () => {
   it("parses a longitude, latitude pair", () => {
-    assert.deepEqual(parseVideoCorner("-122.5, 37.5", "top-left"), [
-      -122.5, 37.5,
-    ]);
+    assert.deepEqual(parseVideoCorner("-122.5, 37.5", "top-left"), [-122.5, 37.5]);
   });
 
   it("rejects malformed or out-of-range corners", () => {
@@ -338,9 +320,7 @@ describe("savedPostgresConnectionLabel", () => {
 
   it("masks every password occurrence, not just the first", () => {
     assert.equal(
-      savedPostgresConnectionLabel(
-        "host=a password=one application_name=x password=two",
-      ),
+      savedPostgresConnectionLabel("host=a password=one application_name=x password=two"),
       "host=a password=**** application_name=x password=****",
     );
   });
@@ -411,9 +391,7 @@ describe("geoJsonToPointRows", () => {
         },
       ],
     };
-    assert.deepEqual(geoJsonToPointRows(fc), [
-      { name: "Z", lng: -122, lat: 37 },
-    ]);
+    assert.deepEqual(geoJsonToPointRows(fc), [{ name: "Z", lng: -122, lat: 37 }]);
   });
 });
 
@@ -482,11 +460,7 @@ describe("serviceRequestErrorMessage", () => {
 
   it("maps a native TLS error string to the localized network message", () => {
     assert.equal(
-      serviceRequestErrorMessage(
-        "Request failed: invalid peer certificate",
-        fakeT,
-        "fallback",
-      ),
+      serviceRequestErrorMessage("Request failed: invalid peer certificate", fakeT, "fallback"),
       "addData.common.networkFailure",
     );
   });

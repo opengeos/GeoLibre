@@ -58,8 +58,7 @@ function renderColormapProps(
     layer: unknown,
   ) => (data: unknown) => { renderPipeline: PipelineModule[] } | null;
   const result = renderTileFor({ id: layerId, state: { mode: "single" } })({});
-  return result?.renderPipeline.find((mod) => mod.module?.name === "colormap")
-    ?.props;
+  return result?.renderPipeline.find((mod) => mod.module?.name === "colormap")?.props;
 }
 
 function rasterLayer(

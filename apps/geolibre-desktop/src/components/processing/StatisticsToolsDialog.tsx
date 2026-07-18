@@ -19,19 +19,9 @@ import {
 } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
 import { Loader2, Play } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  beginProcessingRun,
-  type ProcessingRunTracker,
-} from "../../lib/processing-history";
+import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import { ParameterField } from "./ParameterField";
 
 interface StatisticsToolsDialogProps {
@@ -51,9 +41,7 @@ function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
     value === undefined ||
     value === "" ||
     value === null ||
-    (param.type === "number" &&
-      typeof value === "number" &&
-      Number.isNaN(value))
+    (param.type === "number" && typeof value === "number" && Number.isNaN(value))
   );
 }
 
@@ -78,9 +66,7 @@ export function StatisticsToolsDialog({
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
-  const [selectedId, setSelectedId] = useState<string>(
-    openTool ?? STATISTICS_TOOLS[0].id,
-  );
+  const [selectedId, setSelectedId] = useState<string>(openTool ?? STATISTICS_TOOLS[0].id);
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -88,10 +74,7 @@ export function StatisticsToolsDialog({
   const logEndRef = useRef<HTMLDivElement>(null);
   const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
 
-  const tool = useMemo(
-    () => getStatisticsTool(selectedId) ?? STATISTICS_TOOLS[0],
-    [selectedId],
-  );
+  const tool = useMemo(() => getStatisticsTool(selectedId) ?? STATISTICS_TOOLS[0], [selectedId]);
 
   // When the menu opens the dialog with a specific tool, preselect it.
   useEffect(() => {
@@ -180,9 +163,7 @@ export function StatisticsToolsDialog({
 
   const fieldOptions = useCallback(
     (param: AlgorithmParameter): string[] => {
-      const sourceId = params[param.fieldSource ?? "layer"] as
-        | string
-        | undefined;
+      const sourceId = params[param.fieldSource ?? "layer"] as string | undefined;
       return (sourceId && fieldsByLayer.get(sourceId)) || [];
     },
     [fieldsByLayer, params],
@@ -196,9 +177,7 @@ export function StatisticsToolsDialog({
       }
       const layerId = addGeoJsonLayer(name, fc);
       runTrackerRef.current?.addOutputLayer(name);
-      const layer = useAppStore
-        .getState()
-        .layers.find((item) => item.id === layerId);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
     },
     [addGeoJsonLayer, appendLog, mapControllerRef],
@@ -233,16 +212,12 @@ export function StatisticsToolsDialog({
   );
 
   // All required parameters; used for the asterisk legend condition.
-  const requiredParams = useMemo(
-    () => tool.parameters.filter((param) => param.required),
-    [tool],
-  );
+  const requiredParams = useMemo(() => tool.parameters.filter((param) => param.required), [tool]);
   // Visible required params that are still unset — disables the Run button.
   const missingRequired = useMemo(
     () =>
       requiredParams.some(
-        (param) =>
-          isParamVisible(param) && isValueEmpty(param, params[param.id]),
+        (param) => isParamVisible(param) && isValueEmpty(param, params[param.id]),
       ),
     [requiredParams, isParamVisible, params],
   );
@@ -292,15 +267,7 @@ export function StatisticsToolsDialog({
     } finally {
       setRunning(false);
     }
-  }, [
-    tool,
-    params,
-    layers,
-    appendLog,
-    addResultLayer,
-    mapControllerRef,
-    isParamVisible,
-  ]);
+  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible]);
 
   // Auto-run for a History "Re-run": kick off handleRun on the render after the
   // pre-fill effect committed the recorded parameters. The ref always points at
@@ -342,8 +309,7 @@ export function StatisticsToolsDialog({
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
                     "w-full rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
-                    entry.id === selectedId &&
-                      "bg-accent font-medium text-accent-foreground",
+                    entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                   )}
                 >
                   {entry.name}
@@ -363,9 +329,7 @@ export function StatisticsToolsDialog({
                   param={param}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={
-                    param.type === "field" ? fieldOptions(param) : undefined
-                  }
+                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
                   onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))}
@@ -381,11 +345,7 @@ export function StatisticsToolsDialog({
             ) : null}
 
             <div>
-              <Button
-                onClick={handleRun}
-                disabled={running || missingRequired}
-                className="gap-2"
-              >
+              <Button onClick={handleRun} disabled={running || missingRequired} className="gap-2">
                 {running ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -397,9 +357,7 @@ export function StatisticsToolsDialog({
 
             <ScrollArea className="h-32 rounded-md border bg-muted/30 p-2 font-mono text-xs">
               {log.length === 0 ? (
-                <span className="text-muted-foreground">
-                  {t("statistics.outputPlaceholder")}
-                </span>
+                <span className="text-muted-foreground">{t("statistics.outputPlaceholder")}</span>
               ) : (
                 log.map((line, index) => (
                   <div key={index} className="whitespace-pre-wrap">

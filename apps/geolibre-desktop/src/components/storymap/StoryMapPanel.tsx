@@ -1,11 +1,4 @@
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
@@ -128,66 +121,60 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   // top-left corner (style overrides the transform) so the bottom-right corner
   // tracks the cursor 1:1, like a normal window resize. The previous "grow from
   // the centre at 2x the delta" made the whole dialog jump outward (#918).
-  const startDialogResize = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      const el = dialogRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startW = rect.width;
-      const startH = rect.height;
-      const left = rect.left;
-      const top = rect.top;
-      let next = { width: startW, height: startH, left, top };
-      let frame: number | null = null;
-      const prevCursor = document.body.style.cursor;
-      const prevSelect = document.body.style.userSelect;
-      document.body.style.cursor = "nwse-resize";
-      document.body.style.userSelect = "none";
+  const startDialogResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const el = dialogRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = rect.width;
+    const startH = rect.height;
+    const left = rect.left;
+    const top = rect.top;
+    let next = { width: startW, height: startH, left, top };
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "nwse-resize";
+    document.body.style.userSelect = "none";
 
-      const onMove = (e: PointerEvent) => {
-        next = {
-          left,
-          top,
-          width: Math.max(
-            360,
-            Math.min(window.innerWidth - left - 8, startW + (e.clientX - startX)),
-          ),
-          height: Math.max(
-            320,
-            Math.min(window.innerHeight - top - 8, startH + (e.clientY - startY)),
-          ),
-        };
-        if (frame !== null) return;
-        frame = window.requestAnimationFrame(() => {
-          frame = null;
-          setDialogSize(next);
-        });
+    const onMove = (e: PointerEvent) => {
+      next = {
+        left,
+        top,
+        width: Math.max(360, Math.min(window.innerWidth - left - 8, startW + (e.clientX - startX))),
+        height: Math.max(
+          320,
+          Math.min(window.innerHeight - top - 8, startH + (e.clientY - startY)),
+        ),
       };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onUp);
-        if (frame !== null) window.cancelAnimationFrame(frame);
-        document.body.style.cursor = prevCursor;
-        document.body.style.userSelect = prevSelect;
-        resizeCleanupRef.current = null;
-      };
-      const onUp = () => {
-        cleanup();
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
         setDialogSize(next);
-      };
-      resizeCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onUp);
-    },
-    [],
-  );
+      });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      resizeCleanupRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setDialogSize(next);
+    };
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
 
   // Tear down an in-progress resize drag if the dialog unmounts mid-drag.
   useEffect(() => () => resizeCleanupRef.current?.(), []);
@@ -353,10 +340,8 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 const isHttpUrl = (value: unknown): value is string =>
                   typeof value === "string" && /^https?:\/\//i.test(value);
                 const hasTiles =
-                  Array.isArray(layer.source.tiles) &&
-                  layer.source.tiles.some(isHttpUrl);
-                const hasEmbeddableUrl =
-                  layer.type === "raster" && isHttpUrl(layer.source.url);
+                  Array.isArray(layer.source.tiles) && layer.source.tiles.some(isHttpUrl);
+                const hasEmbeddableUrl = layer.type === "raster" && isHttpUrl(layer.source.url);
                 if (hasTiles || hasEmbeddableUrl) {
                   return layer;
                 }
@@ -383,9 +368,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           .replace(/^-+|-+$/g, "") || "story-map";
       // Let the user name the file before it downloads in browsers without a
       // native save picker, instead of always saving "<slug>.html" (#921).
-      const defaultName = await promptDownloadNameIfNeeded(`${slug}.html`, [
-        "html",
-      ]);
+      const defaultName = await promptDownloadNameIfNeeded(`${slug}.html`, ["html"]);
       if (defaultName === null) return;
       await saveTextFileWithFallback(html, {
         defaultName,
@@ -399,19 +382,9 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         mimeType: "text/html",
       });
     } catch (error) {
-      setExportError(
-        error instanceof Error ? error.message : String(error),
-      );
+      setExportError(error instanceof Error ? error.message : String(error));
     }
-  }, [
-    basemapStyleUrl,
-    chapters.length,
-    layers,
-    mapControllerRef,
-    projection,
-    story,
-    t,
-  ]);
+  }, [basemapStyleUrl, chapters.length, layers, mapControllerRef, projection, story, t]);
 
   const handleExportData = useCallback(
     async (format: "json" | "csv") => {
@@ -424,14 +397,9 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           .replace(/^-+|-+$/g, "") || "story-map";
       try {
         const content =
-          format === "json"
-            ? serializeStoryMapJson(story)
-            : serializeStoryMapCsv(story);
+          format === "json" ? serializeStoryMapJson(story) : serializeStoryMapCsv(story);
         const mimeType = format === "json" ? "application/json" : "text/csv";
-        const defaultName = await promptDownloadNameIfNeeded(
-          `${slug}.${format}`,
-          [format],
-        );
+        const defaultName = await promptDownloadNameIfNeeded(`${slug}.${format}`, [format]);
         if (defaultName === null) return;
         await saveTextFileWithFallback(content, {
           defaultName,
@@ -471,15 +439,11 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           : file.name.toLowerCase().endsWith(".json")
             ? false
             : importFormatRef.current === "csv";
-        const imported = isCsv
-          ? parseStoryMapCsv(text, storymap)
-          : parseStoryMapJson(text);
+        const imported = isCsv ? parseStoryMapCsv(text, storymap) : parseStoryMapJson(text);
         setStorymap(imported);
         setExpandedId(null);
       } catch (error) {
-        setExportError(
-          error instanceof Error ? error.message : String(error),
-        );
+        setExportError(error instanceof Error ? error.message : String(error));
       }
     },
     [setStorymap, storymap],
@@ -487,219 +451,208 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   return (
     <>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
-        ref={dialogRef}
-        // A definite height (not just max-height) is what lets the inner
-        // ScrollArea size and scroll: under max-height alone the viewport's
-        // percentage height never resolves, so the body overflowed and the
-        // footer was clipped until the user manually resized (#918). max-w-none
-        // lets the dialog reach its intended width instead of the dialog
-        // primitive's default max-w-lg.
-        className="flex h-[88vh] w-[min(92vw,46rem)] max-w-none flex-col gap-0 p-0"
-        style={
-          dialogSize
-            ? {
-                left: dialogSize.left,
-                top: dialogSize.top,
-                width: dialogSize.width,
-                height: dialogSize.height,
-                // The dialog primitive centres itself with the CSS `translate`
-                // property (not `transform`), so cancel that to pin the
-                // top-left corner we measured (#918).
-                translate: "none",
-                transform: "none",
-                maxWidth: "none",
-                maxHeight: "none",
-              }
-            : undefined
-        }
-        bodyClassName="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden p-0"
-        resizeHandle={
-          <div
-            role="separator"
-            aria-label={t("storymap.resizeDialog")}
-            title={t("storymap.resizeDialog")}
-            onPointerDown={startDialogResize}
-            className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
-          >
-            <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
-              <path
-                d="M11 15L15 11M6 15L15 6"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-        }
-      >
-        <DialogHeader className="border-b px-5 py-4">
-          <DialogTitle className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            {t("storymap.title")}
-          </DialogTitle>
-          <DialogDescription>{t("storymap.description")}</DialogDescription>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          ref={dialogRef}
+          // A definite height (not just max-height) is what lets the inner
+          // ScrollArea size and scroll: under max-height alone the viewport's
+          // percentage height never resolves, so the body overflowed and the
+          // footer was clipped until the user manually resized (#918). max-w-none
+          // lets the dialog reach its intended width instead of the dialog
+          // primitive's default max-w-lg.
+          className="flex h-[88vh] w-[min(92vw,46rem)] max-w-none flex-col gap-0 p-0"
+          style={
+            dialogSize
+              ? {
+                  left: dialogSize.left,
+                  top: dialogSize.top,
+                  width: dialogSize.width,
+                  height: dialogSize.height,
+                  // The dialog primitive centres itself with the CSS `translate`
+                  // property (not `transform`), so cancel that to pin the
+                  // top-left corner we measured (#918).
+                  translate: "none",
+                  transform: "none",
+                  maxWidth: "none",
+                  maxHeight: "none",
+                }
+              : undefined
+          }
+          bodyClassName="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden p-0"
+          resizeHandle={
+            <div
+              role="separator"
+              aria-label={t("storymap.resizeDialog")}
+              title={t("storymap.resizeDialog")}
+              onPointerDown={startDialogResize}
+              className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+            >
+              <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
+                <path
+                  d="M11 15L15 11M6 15L15 6"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          }
+        >
+          <DialogHeader className="border-b px-5 py-4">
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              {t("storymap.title")}
+            </DialogTitle>
+            <DialogDescription>{t("storymap.description")}</DialogDescription>
+          </DialogHeader>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,.csv,application/json,text/csv,text/plain"
-          className="hidden"
-          onChange={(e) => void handleImportFile(e)}
-        />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.csv,application/json,text/csv,text/plain"
+            className="hidden"
+            onChange={(e) => void handleImportFile(e)}
+          />
 
-        {/* Force the Radix viewport's inner wrapper to `display:block`
+          {/* Force the Radix viewport's inner wrapper to `display:block`
             (it defaults to `display:table; min-width:100%`, which sizes to the
             content's intrinsic width and spawns a spurious horizontal scrollbar
             that, with the vertical one, covered the chapter action buttons —
             #775). `!block` overrides the inline style. */}
-        <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
-          {/* Pad the content (not the ScrollArea root) so the overlay
+          <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
+            {/* Pad the content (not the ScrollArea root) so the overlay
               scrollbar sits in the right gutter instead of over the content. */}
-          <div className="px-5 py-4">
-          <StorySettings story={story} onChange={updateSettings} t={t} />
+            <div className="px-5 py-4">
+              <StorySettings story={story} onChange={updateSettings} t={t} />
 
-          <Separator className="my-4" />
+              <Separator className="my-4" />
 
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">
-              {t("storymap.chapters", { count: chapters.length })}
-            </h3>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">
+                  {t("storymap.chapters", { count: chapters.length })}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        <Upload className="me-1 h-4 w-4" />
+                        {t("storymap.import")}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => triggerImport("json")}>
+                        {t("storymap.importJson")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => triggerImport("csv")}>
+                        {t("storymap.importCsv")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" disabled={chapters.length === 0}>
+                        <Download className="me-1 h-4 w-4" />
+                        {t("storymap.exportData")}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => void handleExportData("json")}>
+                        {t("storymap.exportJson")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => void handleExportData("csv")}>
+                        {t("storymap.exportCsv")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button size="sm" variant="outline" onClick={handleAddChapter}>
+                    <Plus className="me-1 h-4 w-4" />
+                    {t("storymap.addChapter")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!hasStoryContent}
+                    title={t("storymap.resetTitle")}
+                    onClick={handleReset}
+                  >
+                    <RotateCcw className="me-1 h-4 w-4" />
+                    {t("storymap.reset")}
+                  </Button>
+                </div>
+              </div>
+
+              {chapters.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                  <p>{t("storymap.empty")}</p>
+                  <Button size="sm" variant="secondary" onClick={handleLoadSample}>
+                    <Sparkles className="me-1 h-4 w-4" />
+                    {t("storymap.loadSample")}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {chapters.map((chapter, index) => (
+                    <ChapterCard
+                      key={chapter.id}
+                      chapter={chapter}
+                      index={index}
+                      total={chapters.length}
+                      expanded={expandedId === chapter.id}
+                      layers={layers}
+                      t={t}
+                      onToggle={() =>
+                        setExpandedId((id) => (id === chapter.id ? null : chapter.id))
+                      }
+                      onUpdate={(patch) => updateChapter(chapter.id, patch)}
+                      onRemove={() => removeChapter(chapter.id)}
+                      onMove={(direction) =>
+                        moveChapter(chapter.id, direction === "up" ? index - 1 : index + 1)
+                      }
+                      onCaptureView={() => handleCaptureView(chapter.id)}
+                      onPreview={() => handlePreview(chapter)}
+                      onCompose={() => handleCompose(chapter)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          <div className="flex items-center justify-between gap-2 border-t px-5 py-3">
+            <div className="min-h-[1.25rem] text-xs text-destructive">{exportError}</div>
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    <Upload className="me-1 h-4 w-4" />
-                    {t("storymap.import")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => triggerImport("json")}>
-                    {t("storymap.importJson")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => triggerImport("csv")}>
-                    {t("storymap.importCsv")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={chapters.length === 0}>
-                    <Download className="me-1 h-4 w-4" />
-                    {t("storymap.exportData")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => void handleExportData("json")}>
-                    {t("storymap.exportJson")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void handleExportData("csv")}>
-                    {t("storymap.exportCsv")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button size="sm" variant="outline" onClick={handleAddChapter}>
-                <Plus className="me-1 h-4 w-4" />
-                {t("storymap.addChapter")}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={chapters.length === 0}
+                onClick={() => void handleExport()}
+              >
+                <Download className="me-1 h-4 w-4" />
+                {t("storymap.exportHtml")}
               </Button>
               <Button
-                size="sm"
                 variant="outline"
-                disabled={!hasStoryContent}
-                title={t("storymap.resetTitle")}
-                onClick={handleReset}
+                size="sm"
+                disabled={chapters.length === 0}
+                onClick={() => setHandoutOpen(true)}
               >
-                <RotateCcw className="me-1 h-4 w-4" />
-                {t("storymap.reset")}
+                <FileDown className="me-1 h-4 w-4" />
+                {t("storymap.handout.button")}
+              </Button>
+              <Button size="sm" disabled={chapters.length === 0} onClick={handlePresent}>
+                <Play className="me-1 h-4 w-4" />
+                {t("storymap.present")}
               </Button>
             </div>
           </div>
-
-          {chapters.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              <p>{t("storymap.empty")}</p>
-              <Button size="sm" variant="secondary" onClick={handleLoadSample}>
-                <Sparkles className="me-1 h-4 w-4" />
-                {t("storymap.loadSample")}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {chapters.map((chapter, index) => (
-                <ChapterCard
-                  key={chapter.id}
-                  chapter={chapter}
-                  index={index}
-                  total={chapters.length}
-                  expanded={expandedId === chapter.id}
-                  layers={layers}
-                  t={t}
-                  onToggle={() =>
-                    setExpandedId((id) =>
-                      id === chapter.id ? null : chapter.id,
-                    )
-                  }
-                  onUpdate={(patch) => updateChapter(chapter.id, patch)}
-                  onRemove={() => removeChapter(chapter.id)}
-                  onMove={(direction) =>
-                    moveChapter(
-                      chapter.id,
-                      direction === "up" ? index - 1 : index + 1,
-                    )
-                  }
-                  onCaptureView={() => handleCaptureView(chapter.id)}
-                  onPreview={() => handlePreview(chapter)}
-                  onCompose={() => handleCompose(chapter)}
-                />
-              ))}
-            </div>
-          )}
-          </div>
-        </ScrollArea>
-
-        <div className="flex items-center justify-between gap-2 border-t px-5 py-3">
-          <div className="min-h-[1.25rem] text-xs text-destructive">
-            {exportError}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={chapters.length === 0}
-              onClick={() => void handleExport()}
-            >
-              <Download className="me-1 h-4 w-4" />
-              {t("storymap.exportHtml")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={chapters.length === 0}
-              onClick={() => setHandoutOpen(true)}
-            >
-              <FileDown className="me-1 h-4 w-4" />
-              {t("storymap.handout.button")}
-            </Button>
-            <Button
-              size="sm"
-              disabled={chapters.length === 0}
-              onClick={handlePresent}
-            >
-              <Play className="me-1 h-4 w-4" />
-              {t("storymap.present")}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-    <StoryMapHandoutDialog
-      open={handoutOpen}
-      onOpenChange={setHandoutOpen}
-      story={story}
-      mapControllerRef={mapControllerRef}
-    />
+        </DialogContent>
+      </Dialog>
+      <StoryMapHandoutDialog
+        open={handoutOpen}
+        onOpenChange={setHandoutOpen}
+        story={story}
+        mapControllerRef={mapControllerRef}
+      />
     </>
   );
 }
@@ -719,29 +672,18 @@ function StorySettings({
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={t("storymap.field.title")}>
-          <Input
-            value={story.title}
-            onChange={(e) => onChange({ title: e.target.value })}
-          />
+          <Input value={story.title} onChange={(e) => onChange({ title: e.target.value })} />
         </Field>
         <Field label={t("storymap.field.subtitle")}>
-          <Input
-            value={story.subtitle}
-            onChange={(e) => onChange({ subtitle: e.target.value })}
-          />
+          <Input value={story.subtitle} onChange={(e) => onChange({ subtitle: e.target.value })} />
         </Field>
         <Field label={t("storymap.field.byline")}>
-          <Input
-            value={story.byline}
-            onChange={(e) => onChange({ byline: e.target.value })}
-          />
+          <Input value={story.byline} onChange={(e) => onChange({ byline: e.target.value })} />
         </Field>
         <Field label={t("storymap.field.theme")}>
           <Select
             value={story.theme}
-            onChange={(e) =>
-              onChange({ theme: e.target.value as StoryMap["theme"] })
-            }
+            onChange={(e) => onChange({ theme: e.target.value as StoryMap["theme"] })}
           >
             <option value="dark">{t("storymap.theme.dark")}</option>
             <option value="light">{t("storymap.theme.light")}</option>
@@ -749,10 +691,7 @@ function StorySettings({
         </Field>
       </div>
       <Field label={t("storymap.field.footer")}>
-        <Input
-          value={story.footer}
-          onChange={(e) => onChange({ footer: e.target.value })}
-        />
+        <Input value={story.footer} onChange={(e) => onChange({ footer: e.target.value })} />
       </Field>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
         <label className="flex items-center gap-2">
@@ -794,12 +733,8 @@ function StorySettings({
           >
             <option value="top-left">{t("storymap.inset.topLeft")}</option>
             <option value="top-right">{t("storymap.inset.topRight")}</option>
-            <option value="bottom-left">
-              {t("storymap.inset.bottomLeft")}
-            </option>
-            <option value="bottom-right">
-              {t("storymap.inset.bottomRight")}
-            </option>
+            <option value="bottom-left">{t("storymap.inset.bottomLeft")}</option>
+            <option value="bottom-right">{t("storymap.inset.bottomRight")}</option>
           </Select>
         ) : null}
         <label className="flex items-center gap-2">
@@ -927,9 +862,7 @@ function ChapterCard({
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-xs">
             {index + 1}
           </span>
-          <span className="truncate">
-            {chapter.title || t("storymap.untitledChapter")}
-          </span>
+          <span className="truncate">{chapter.title || t("storymap.untitledChapter")}</span>
         </button>
         <Button
           variant="ghost"
@@ -983,10 +916,7 @@ function ChapterCard({
       {expanded ? (
         <div className="space-y-3 border-t px-3 py-3">
           <Field label={t("storymap.field.chapterTitle")}>
-            <Input
-              value={chapter.title}
-              onChange={(e) => onUpdate({ title: e.target.value })}
-            />
+            <Input value={chapter.title} onChange={(e) => onUpdate({ title: e.target.value })} />
           </Field>
           <Field label={t("storymap.field.description")}>
             <Textarea
@@ -999,9 +929,7 @@ function ChapterCard({
             <Input
               placeholder={t("storymap.field.imagePlaceholder")}
               value={chapter.image ?? ""}
-              onChange={(e) =>
-                onUpdate({ image: e.target.value || undefined })
-              }
+              onChange={(e) => onUpdate({ image: e.target.value || undefined })}
             />
           </Field>
 
@@ -1050,9 +978,7 @@ function ChapterCard({
               <input
                 type="checkbox"
                 checked={chapter.rotateAnimation}
-                onChange={(e) =>
-                  onUpdate({ rotateAnimation: e.target.checked })
-                }
+                onChange={(e) => onUpdate({ rotateAnimation: e.target.checked })}
               />
               {t("storymap.field.rotate")}
             </label>
@@ -1061,25 +987,15 @@ function ChapterCard({
           <div className="rounded-md bg-muted/50 px-3 py-2 text-xs">
             <div className="mb-2 flex items-center justify-between">
               <span className="font-mono">
-                {center[0].toFixed(4)}, {center[1].toFixed(4)} · z
-                {zoom.toFixed(1)} · p{pitch.toFixed(0)} · b{bearing.toFixed(0)}
+                {center[0].toFixed(4)}, {center[1].toFixed(4)} · z{zoom.toFixed(1)} · p
+                {pitch.toFixed(0)} · b{bearing.toFixed(0)}
               </span>
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7"
-                  onClick={onCaptureView}
-                >
+                <Button size="sm" variant="outline" className="h-7" onClick={onCaptureView}>
                   <Crosshair className="me-1 h-3.5 w-3.5" />
                   {t("storymap.captureView")}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7"
-                  onClick={onCompose}
-                >
+                <Button size="sm" variant="outline" className="h-7" onClick={onCompose}>
                   <Frame className="me-1 h-3.5 w-3.5" />
                   {t("storymap.composeOnMap")}
                 </Button>
@@ -1215,13 +1131,7 @@ function LayerEffectsEditor({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>

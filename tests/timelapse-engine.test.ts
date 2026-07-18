@@ -96,10 +96,7 @@ describe("normalizeTimelapseProjectState", () => {
   });
 
   it("snaps the speed and never keeps a playing flag", () => {
-    const state = normalizeTimelapseProjectState(
-      { secondsPerYear: 0.4, playing: true },
-      frames,
-    );
+    const state = normalizeTimelapseProjectState({ secondsPerYear: 0.4, playing: true }, frames);
     assert.equal(state?.secondsPerYear, 0.5);
     assert.ok(state && !("playing" in state));
   });
@@ -120,10 +117,7 @@ describe("normalizeTimelapseProjectState", () => {
       secondsPerYear: 2,
       loop: false,
     };
-    const state = normalizeTimelapseProjectState(
-      JSON.parse(JSON.stringify(original)),
-      frames,
-    );
+    const state = normalizeTimelapseProjectState(JSON.parse(JSON.stringify(original)), frames);
     assert.deepEqual(state, original);
   });
 });

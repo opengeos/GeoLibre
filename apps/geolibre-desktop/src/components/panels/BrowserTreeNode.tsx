@@ -196,9 +196,7 @@ export function BrowserTreeNode({
             </span>
           ) : null}
           {typeof node.count === "number" && node.count > 0 ? (
-            <span className="ms-auto shrink-0 text-xs text-muted-foreground">
-              {node.count}
-            </span>
+            <span className="ms-auto shrink-0 text-xs text-muted-foreground">{node.count}</span>
           ) : null}
         </button>
         {favoritable ? (
@@ -225,9 +223,7 @@ export function BrowserTreeNode({
             tabIndex={node.id === activeRowId ? 0 : -1}
             onClick={() => onToggleFavorite(node)}
           >
-            <Star
-              className={cn("h-3.5 w-3.5", favorited && "fill-current")}
-            />
+            <Star className={cn("h-3.5 w-3.5", favorited && "fill-current")} />
           </button>
         ) : null}
         {removePath ? (

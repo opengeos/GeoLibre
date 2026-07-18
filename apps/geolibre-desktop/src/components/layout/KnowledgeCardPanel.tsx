@@ -1,11 +1,5 @@
 import { Button } from "@geolibre/ui";
-import {
-  BookOpen,
-  ExternalLink,
-  Loader2,
-  MapPin,
-  X,
-} from "lucide-react";
+import { BookOpen, ExternalLink, Loader2, MapPin, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -56,12 +50,7 @@ function formatDistance(distanceM: number): string {
  * The panel owns its fetch lifecycle keyed on `place`: each new place aborts
  * the previous requests so a fast series of clicks never renders stale content.
  */
-export function KnowledgeCardPanel({
-  place,
-  lang,
-  onClose,
-  onFlyTo,
-}: KnowledgeCardPanelProps) {
+export function KnowledgeCardPanel({ place, lang, onClose, onFlyTo }: KnowledgeCardPanelProps) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<CardStatus>("loading");
   const [summary, setSummary] = useState<WikiSummary | null>(null);
@@ -100,9 +89,7 @@ export function KnowledgeCardPanel({
           // Degrade a failed title lookup to null (like the fallback below) so
           // a transient 5xx doesn't discard an already-resolved nearby list;
           // execution then falls through to the nearest-article fallback.
-          main = await fetchArticleSummary(place.title, { lang, signal }).catch(
-            () => null,
-          );
+          main = await fetchArticleSummary(place.title, { lang, signal }).catch(() => null);
         }
         const places = await nearbyPromise;
         if (signal.aborted) return;
@@ -188,9 +175,7 @@ export function KnowledgeCardPanel({
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            {summary?.title ?? t("knowledgeCard.title")}
-          </span>
+          <span className="truncate">{summary?.title ?? t("knowledgeCard.title")}</span>
         </div>
         <button
           type="button"
@@ -209,9 +194,7 @@ export function KnowledgeCardPanel({
             {t("knowledgeCard.loading")}
           </div>
         ) : status === "error" ? (
-          <div className="px-3 py-6 text-xs text-destructive">
-            {t("knowledgeCard.error")}
-          </div>
+          <div className="px-3 py-6 text-xs text-destructive">{t("knowledgeCard.error")}</div>
         ) : summary ? (
           <div className="flex flex-col gap-2 px-3 py-3">
             {summary.thumbnailUrl ? (
@@ -223,9 +206,7 @@ export function KnowledgeCardPanel({
               />
             ) : null}
             {summary.description ? (
-              <p className="text-xs italic text-muted-foreground">
-                {summary.description}
-              </p>
+              <p className="text-xs italic text-muted-foreground">{summary.description}</p>
             ) : null}
             <p className="whitespace-pre-line text-xs leading-relaxed text-foreground">
               {summary.extract}
@@ -244,9 +225,7 @@ export function KnowledgeCardPanel({
           // Only truly empty when there is neither a summary nor any neighbour;
           // if the primary summary failed but nearby places loaded, fall through
           // to the list below instead of a contradictory "nothing found".
-          <div className="px-3 py-6 text-xs text-muted-foreground">
-            {t("knowledgeCard.empty")}
-          </div>
+          <div className="px-3 py-6 text-xs text-muted-foreground">{t("knowledgeCard.empty")}</div>
         ) : null}
 
         {/* Only show the list once the content has settled: while a hop is

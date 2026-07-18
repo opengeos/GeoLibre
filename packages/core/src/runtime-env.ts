@@ -62,9 +62,7 @@ export function getSpatialExtensionPath(
  *   injectable for testing.
  * @returns The trimmed API key, or undefined when unset.
  */
-export function getProtomapsApiKey(
-  env?: Record<string, string | undefined>,
-): string | undefined {
+export function getProtomapsApiKey(env?: Record<string, string | undefined>): string | undefined {
   const runtimeEnv = env ?? getRuntimeEnvironment();
   const trimmed = runtimeEnv.VITE_PROTOMAPS_API_KEY?.trim();
   return trimmed || undefined;
@@ -85,13 +83,10 @@ export function getProtomapsApiKey(
  *   injectable for testing.
  * @returns The trimmed API key, or undefined when unset.
  */
-export function getGoogleMapsApiKey(
-  env?: Record<string, string | undefined>,
-): string | undefined {
+export function getGoogleMapsApiKey(env?: Record<string, string | undefined>): string | undefined {
   const runtimeEnv = env ?? getRuntimeEnvironment();
   const trimmed =
-    runtimeEnv.VITE_GOOGLE_MAPS_API_KEY?.trim() ||
-    runtimeEnv.GOOGLE_MAPS_API_KEY?.trim();
+    runtimeEnv.VITE_GOOGLE_MAPS_API_KEY?.trim() || runtimeEnv.GOOGLE_MAPS_API_KEY?.trim();
   return trimmed || undefined;
 }
 
@@ -110,12 +105,9 @@ export function getGoogleMapsApiKey(
  *   injectable for testing.
  * @returns The trimmed token, or undefined when unset.
  */
-export function getCesiumIonToken(
-  env?: Record<string, string | undefined>,
-): string | undefined {
+export function getCesiumIonToken(env?: Record<string, string | undefined>): string | undefined {
   const runtimeEnv = env ?? getRuntimeEnvironment();
-  const trimmed =
-    runtimeEnv.VITE_CESIUM_TOKEN?.trim() || runtimeEnv.CESIUM_TOKEN?.trim();
+  const trimmed = runtimeEnv.VITE_CESIUM_TOKEN?.trim() || runtimeEnv.CESIUM_TOKEN?.trim();
   return trimmed || undefined;
 }
 

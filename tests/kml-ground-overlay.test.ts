@@ -7,13 +7,9 @@ import {
   normalizeArchivePath,
 } from "../apps/geolibre-desktop/src/lib/kml-overlays";
 
-const bytes = (label: string): Uint8Array =>
-  new TextEncoder().encode(label);
+const bytes = (label: string): Uint8Array => new TextEncoder().encode(label);
 
-function assertCornersClose(
-  actual: [number, number][],
-  expected: [number, number][],
-): void {
+function assertCornersClose(actual: [number, number][], expected: [number, number][]): void {
   assert.equal(actual.length, expected.length);
   actual.forEach(([lng, lat], index) => {
     const [expLng, expLat] = expected[index];
@@ -54,10 +50,8 @@ describe("latLonBoxCorners", () => {
 
   it("preserves the box center under any rotation", () => {
     const corners = latLonBoxCorners(20, 10, 40, 20, 37);
-    const meanLng =
-      corners.reduce((sum, [lng]) => sum + lng, 0) / corners.length;
-    const meanLat =
-      corners.reduce((sum, [, lat]) => sum + lat, 0) / corners.length;
+    const meanLng = corners.reduce((sum, [lng]) => sum + lng, 0) / corners.length;
+    const meanLat = corners.reduce((sum, [, lat]) => sum + lat, 0) / corners.length;
     assert.ok(Math.abs(meanLng - 30) < 1e-9, `center lng was ${meanLng}`);
     assert.ok(Math.abs(meanLat - 15) < 1e-9, `center lat was ${meanLat}`);
   });
@@ -92,7 +86,10 @@ describe("findArchiveEntry", () => {
   });
 
   it("falls back to a unique basename match", () => {
-    assert.equal(findArchiveEntry(entries, "somewhere/else/overlay.png"), entries["files/overlay.png"]);
+    assert.equal(
+      findArchiveEntry(entries, "somewhere/else/overlay.png"),
+      entries["files/overlay.png"],
+    );
   });
 
   it("does not guess when a basename is ambiguous", () => {

@@ -1,9 +1,5 @@
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import {
-  createWeatherLayer,
-  type WeatherAnimationState,
-  type WeatherFrame,
-} from "./weather-layer";
+import { createWeatherLayer, type WeatherAnimationState, type WeatherFrame } from "./weather-layer";
 
 /**
  * Realtime precipitation (weather radar) overlay.
@@ -91,8 +87,7 @@ function isTrustedRainviewerHost(host: string): boolean {
     const url = new URL(host);
     return (
       url.protocol === "https:" &&
-      (url.hostname === "rainviewer.com" ||
-        url.hostname.endsWith(".rainviewer.com"))
+      (url.hostname === "rainviewer.com" || url.hostname.endsWith(".rainviewer.com"))
     );
   } catch {
     return false;
@@ -104,35 +99,32 @@ function isTrustedRainviewerHost(host: string): boolean {
  * A missing/untrusted `host` (see {@link isTrustedRainviewerHost}) or no frames
  * yields an empty list. Exported for unit testing.
  */
-export function radarFramesFromResponse(
-  data: RainViewerResponse,
-): WeatherFrame[] {
-  const host =
-    typeof data.host === "string" && isTrustedRainviewerHost(data.host)
-      ? data.host
-      : "";
+export function radarFramesFromResponse(data: RainViewerResponse): WeatherFrame[] {
+  const host = typeof data.host === "string" && isTrustedRainviewerHost(data.host) ? data.host : "";
   const past = Array.isArray(data.radar?.past) ? data.radar.past : [];
   if (!host || past.length === 0) return [];
-  return past
-    .filter(
-      (f): f is RainViewerFrame =>
-        !!f && typeof f.path === "string" && typeof f.time === "number",
-    )
-    // `path` is also untrusted: validate the combined `host + path` still
-    // resolves to a rainviewer.com host, so a crafted path (e.g. "@evil.example/…"
-    // making the validated host the userinfo) can't redirect tile requests.
-    .filter((f) => isTrustedRainviewerHost(`${host}${f.path}`))
-    // Sort oldest → newest so the engine's "newest = last" contract holds even
-    // if the API ever returns `past` out of order (it's currently ordered).
-    .sort((a, b) => a.time - b.time)
-    .map((f) => {
-      const label = formatTime(f.time);
-      return {
-        tileUrl: `${host}${f.path}/${RAINVIEWER_TILE_SIZE}/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
-        label,
-        metadata: precipitationMetadata(f.time, label),
-      };
-    });
+  return (
+    past
+      .filter(
+        (f): f is RainViewerFrame =>
+          !!f && typeof f.path === "string" && typeof f.time === "number",
+      )
+      // `path` is also untrusted: validate the combined `host + path` still
+      // resolves to a rainviewer.com host, so a crafted path (e.g. "@evil.example/…"
+      // making the validated host the userinfo) can't redirect tile requests.
+      .filter((f) => isTrustedRainviewerHost(`${host}${f.path}`))
+      // Sort oldest → newest so the engine's "newest = last" contract holds even
+      // if the API ever returns `past` out of order (it's currently ordered).
+      .sort((a, b) => a.time - b.time)
+      .map((f) => {
+        const label = formatTime(f.time);
+        return {
+          tileUrl: `${host}${f.path}/${RAINVIEWER_TILE_SIZE}/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
+          label,
+          metadata: precipitationMetadata(f.time, label),
+        };
+      })
+  );
 }
 
 /**

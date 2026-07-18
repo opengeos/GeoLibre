@@ -39,9 +39,7 @@ export function PhotosSource() {
   const [summary, setSummary] = useState<GeotaggedPhotoResult | null>(null);
   // Set when a single photo had no GPS: holds the map center the photo would be
   // placed at, switching the dialog to the manual-placement prompt.
-  const [manualCenter, setManualCenter] = useState<[number, number] | null>(
-    null,
-  );
+  const [manualCenter, setManualCenter] = useState<[number, number] | null>(null);
 
   const handleChoosePhotos = async () => {
     source.setError(null);
@@ -65,16 +63,13 @@ export function PhotosSource() {
       // A single photo with no GPS pivots to manual placement instead of a hard
       // stop; multiple no-GPS photos still report the original error.
       if (selectedFiles.length === 1) {
-        const center =
-          source.shell.mapControllerRef.current?.readView().center ?? null;
+        const center = source.shell.mapControllerRef.current?.readView().center ?? null;
         if (center) {
           setManualCenter([center[0], center[1]]);
           return;
         }
       }
-      throw new Error(
-        t("addData.photos.errorNoGps", { count: result.total }),
-      );
+      throw new Error(t("addData.photos.errorNoGps", { count: result.total }));
     }
 
     const layer = {
@@ -126,18 +121,15 @@ export function PhotosSource() {
     // original placement collection (not the current store value) so repeated
     // moves can't accumulate floating-point drift.
     let unsubscribe = () => {};
-    const dispose = source.shell.mapControllerRef.current?.startManualPlacement(
-      manualCenter,
-      {
-        hint: t("addData.photos.manualHint"),
-        doneLabel: t("common.done"),
-        onMove: (lngLat) =>
-          updateLayer(layer.id, {
-            geojson: relocatePhotoFeatures(result.featureCollection, lngLat),
-          }),
-        onDone: () => unsubscribe(),
-      },
-    );
+    const dispose = source.shell.mapControllerRef.current?.startManualPlacement(manualCenter, {
+      hint: t("addData.photos.manualHint"),
+      doneLabel: t("common.done"),
+      onMove: (lngLat) =>
+        updateLayer(layer.id, {
+          geojson: relocatePhotoFeatures(result.featureCollection, lngLat),
+        }),
+      onDone: () => unsubscribe(),
+    });
     // If the user deletes the layer before finishing placement, the pin and its
     // popup would otherwise linger on the map. Watch the store and dispose them
     // when the layer disappears. (This dialog closes right after, so the
@@ -188,12 +180,8 @@ export function PhotosSource() {
     return (
       <form className="space-y-4" onSubmit={handleManualPlace}>
         <div className="space-y-2 rounded-md border border-border p-3 text-sm">
-          <p className="font-medium text-foreground">
-            {t("addData.photos.manualPromptTitle")}
-          </p>
-          <p className="text-muted-foreground">
-            {t("addData.photos.manualPromptBody")}
-          </p>
+          <p className="font-medium text-foreground">{t("addData.photos.manualPromptTitle")}</p>
+          <p className="text-muted-foreground">{t("addData.photos.manualPromptBody")}</p>
           <p className="text-xs text-muted-foreground">
             {t("addData.photos.manualPromptCenter", {
               lng: formatCoordinate(manualCenter[0]),
@@ -201,9 +189,7 @@ export function PhotosSource() {
             })}
           </p>
         </div>
-        {source.error ? (
-          <p className="text-sm text-destructive">{source.error}</p>
-        ) : null}
+        {source.error ? <p className="text-sm text-destructive">{source.error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button
             type="button"
@@ -239,11 +225,7 @@ export function PhotosSource() {
         <div className="space-y-1.5">
           <Label>{t("addData.photos.chooseLabel")}</Label>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleChoosePhotos}
-            >
+            <Button type="button" variant="outline" onClick={handleChoosePhotos}>
               <Images className="me-2 h-3.5 w-3.5" />
               {t("addData.photos.choosePhotos")}
             </Button>
@@ -256,9 +238,7 @@ export function PhotosSource() {
             </span>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {t("addData.photos.hint")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("addData.photos.hint")}</p>
       </div>
     </AddDataSourceForm>
   );

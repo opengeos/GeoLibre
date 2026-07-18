@@ -7,9 +7,7 @@ import { zipSync, strToU8 } from "fflate";
 (globalThis as { self?: unknown }).self ??= globalThis;
 
 type ShapefileShapeType = (shp: Uint8Array) => number;
-type ReadShapefileZipForDuckDb = (
-  data: ArrayBuffer | Uint8Array,
-) => Promise<{
+type ReadShapefileZipForDuckDb = (data: ArrayBuffer | Uint8Array) => Promise<{
   file: { name: string; extension: string; siblingFiles?: { name: string }[] };
   sidecar: Record<string, Uint8Array>;
   isMultiPatch: boolean;
@@ -54,10 +52,11 @@ describe("readShapefileZipForDuckDb", () => {
     assert.ok(result);
     assert.equal(result.isMultiPatch, true);
     assert.equal(result.file.name, "buildings.shp");
-    assert.deepEqual(
-      result.file.siblingFiles?.map((s) => s.name).sort(),
-      ["buildings.dbf", "buildings.prj", "buildings.shx"],
-    );
+    assert.deepEqual(result.file.siblingFiles?.map((s) => s.name).sort(), [
+      "buildings.dbf",
+      "buildings.prj",
+      "buildings.shx",
+    ]);
   });
 
   it("does not flag a non-MultiPatch (Polygon) shapefile", async () => {
@@ -82,10 +81,10 @@ describe("readShapefileZipForDuckDb", () => {
     assert.ok(result);
     assert.equal(result.isMultiPatch, true);
     // Only the real sidecars register; no AppleDouble shadows leak in.
-    assert.deepEqual(
-      result.file.siblingFiles?.map((s) => s.name).sort(),
-      ["buildings.dbf", "buildings.shx"],
-    );
+    assert.deepEqual(result.file.siblingFiles?.map((s) => s.name).sort(), [
+      "buildings.dbf",
+      "buildings.shx",
+    ]);
   });
 
   it("handles a shapefile nested in a subdirectory", async () => {
@@ -99,10 +98,10 @@ describe("readShapefileZipForDuckDb", () => {
     assert.ok(result);
     assert.equal(result.file.name, "roads.shp");
     // The unrelated readme is not a sidecar; only the shapefile components.
-    assert.deepEqual(
-      result.file.siblingFiles?.map((s) => s.name).sort(),
-      ["roads.dbf", "roads.shx"],
-    );
+    assert.deepEqual(result.file.siblingFiles?.map((s) => s.name).sort(), [
+      "roads.dbf",
+      "roads.shx",
+    ]);
   });
 
   it("returns null when the archive contains no .shp", async () => {

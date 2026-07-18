@@ -12,9 +12,7 @@ type ShpModule = {
 };
 
 let shp: ShpModule;
-let writeShapefile: (
-  geojson: FeatureCollection,
-) => {
+let writeShapefile: (geojson: FeatureCollection) => {
   shp: Uint8Array;
   shx: Uint8Array;
   dbf: Uint8Array;
@@ -25,16 +23,11 @@ let writeShapefile: (
 before(async () => {
   // parseShp / parseDbf / combine are named exports in shpjs.
   shp = (await import("shpjs")) as unknown as ShpModule;
-  ({ writeShapefile } = await import(
-    "../apps/geolibre-desktop/src/lib/shapefile-writer"
-  ));
+  ({ writeShapefile } = await import("../apps/geolibre-desktop/src/lib/shapefile-writer"));
 });
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 /** Round-trip a FeatureCollection through the writer and shpjs reader. */
@@ -48,12 +41,10 @@ function roundTrip(geojson: FeatureCollection): FeatureCollection {
 /** Collect every coordinate pair, rounded, sorted — for order-insensitive compare. */
 function coordKey(geometry: Geometry): string {
   const out: string[] = [];
-  const visit = (p: Position) =>
-    out.push(`${Number(p[0]).toFixed(5)},${Number(p[1]).toFixed(5)}`);
+  const visit = (p: Position) => out.push(`${Number(p[0]).toFixed(5)},${Number(p[1]).toFixed(5)}`);
   const walk = (g: Geometry) => {
     if (g.type === "Point") visit(g.coordinates);
-    else if (g.type === "LineString" || g.type === "MultiPoint")
-      g.coordinates.forEach(visit);
+    else if (g.type === "LineString" || g.type === "MultiPoint") g.coordinates.forEach(visit);
     else if (g.type === "Polygon" || g.type === "MultiLineString")
       g.coordinates.forEach((part) => part.forEach(visit));
     else if (g.type === "MultiPolygon")

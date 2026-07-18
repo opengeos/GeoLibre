@@ -34,11 +34,11 @@ export interface ExpressionFunctionCategory {
   functions: ExpressionFunctionDoc[];
 }
 
-const fn = (
-  name: string,
-  snippet: string,
-  docKey: string,
-): ExpressionFunctionDoc => ({ name, snippet, docKey });
+const fn = (name: string, snippet: string, docKey: string): ExpressionFunctionDoc => ({
+  name,
+  snippet,
+  docKey,
+});
 
 /**
  * The curated function reference, grouped by category. Snippets are valid,
@@ -65,11 +65,7 @@ export const EXPRESSION_FUNCTION_CATEGORIES: ExpressionFunctionCategory[] = [
   {
     key: "decision",
     functions: [
-      fn(
-        "case",
-        '["case", ["==", ["get", "field"], "value"], "#ff0000", "#cccccc"]',
-        "caseOp",
-      ),
+      fn("case", '["case", ["==", ["get", "field"], "value"], "#ff0000", "#cccccc"]', "caseOp"),
       fn(
         "match",
         '["match", ["get", "field"], "a", "#2563eb", "b", "#16a34a", "#94a3b8"]',
@@ -82,16 +78,8 @@ export const EXPRESSION_FUNCTION_CATEGORIES: ExpressionFunctionCategory[] = [
       fn(">=", '[">=", ["get", "field"], 0]', "gte"),
       fn("<", '["<", ["get", "field"], 0]', "lt"),
       fn("<=", '["<=", ["get", "field"], 0]', "lte"),
-      fn(
-        "all",
-        '["all", [">", ["get", "field"], 0], ["<", ["get", "field"], 100]]',
-        "all",
-      ),
-      fn(
-        "any",
-        '["any", ["==", ["get", "field"], "a"], ["==", ["get", "field"], "b"]]',
-        "any",
-      ),
+      fn("all", '["all", [">", ["get", "field"], 0], ["<", ["get", "field"], 100]]', "all"),
+      fn("any", '["any", ["==", ["get", "field"], "a"], ["==", ["get", "field"], "b"]]', "any"),
       fn("!", '["!", ["has", "field"]]', "not"),
     ],
   },
@@ -295,10 +283,7 @@ function compileMapExpression(
     };
   }
 
-  const substituted = substituteExpressionVariables(
-    parsed,
-    options.variables ?? [],
-  ) as unknown[];
+  const substituted = substituteExpressionVariables(parsed, options.variables ?? []) as unknown[];
   const compiled = createExpression(
     substituted,
     options.expectedType ? propertySpecFor(options.expectedType) : undefined,
@@ -404,15 +389,12 @@ export function evaluateMapExpression(
     // and (b) feeds the app's diagnostics console interceptor from inside a
     // React render, which can re-render the panel and re-evaluate in an
     // endless loop. Throwing lets the catch below surface the message.
-    const value = expression.evaluateWithoutErrorHandling(
-      { zoom: options.zoom ?? 0 },
-      {
-        type: geometryType,
-        properties: feature?.properties ?? {},
-        ...(feature?.id !== undefined ? { id: feature.id } : {}),
-        geometry: feature?.geometry,
-      } as never,
-    );
+    const value = expression.evaluateWithoutErrorHandling({ zoom: options.zoom ?? 0 }, {
+      type: geometryType,
+      properties: feature?.properties ?? {},
+      ...(feature?.id !== undefined ? { id: feature.id } : {}),
+      geometry: feature?.geometry,
+    } as never);
     return { kind: "value", value };
   } catch (error) {
     return {
@@ -466,15 +448,12 @@ export function compileFeatureExpression(
     ok: true,
     errors: [],
     evaluate: (feature) =>
-      expression.evaluateWithoutErrorHandling(
-        { zoom },
-        {
-          type: feature.geometry?.type ?? "Unknown",
-          properties: feature.properties ?? {},
-          ...(feature.id !== undefined ? { id: feature.id } : {}),
-          geometry: feature.geometry,
-        } as never,
-      ),
+      expression.evaluateWithoutErrorHandling({ zoom }, {
+        type: feature.geometry?.type ?? "Unknown",
+        properties: feature.properties ?? {},
+        ...(feature.id !== undefined ? { id: feature.id } : {}),
+        geometry: feature.geometry,
+      } as never),
   };
 }
 
@@ -524,15 +503,12 @@ export function matchFeaturesByExpression(
     try {
       // Same rationale as evaluateMapExpression: evaluateWithoutErrorHandling
       // so runtime failures throw instead of feeding console.warn.
-      const value = expression.evaluateWithoutErrorHandling(
-        { zoom: options.zoom ?? 0 },
-        {
-          type: feature.geometry?.type ?? "Unknown",
-          properties: feature.properties ?? {},
-          ...(feature.id !== undefined ? { id: feature.id } : {}),
-          geometry: feature.geometry,
-        } as never,
-      );
+      const value = expression.evaluateWithoutErrorHandling({ zoom: options.zoom ?? 0 }, {
+        type: feature.geometry?.type ?? "Unknown",
+        properties: feature.properties ?? {},
+        ...(feature.id !== undefined ? { id: feature.id } : {}),
+        geometry: feature.geometry,
+      } as never);
       if (value === true) ids.push(featureSelectionId(feature, index));
     } catch {
       errorCount += 1;
@@ -567,8 +543,7 @@ export function formatExpressionPreviewValue(value: unknown): string {
     // Style-spec colors are premultiplied floats in [0, 1]; undo the
     // premultiplication so the displayed rgba matches the authored color.
     const alpha = color.a;
-    const channel = (component: number) =>
-      Math.round((alpha === 0 ? 0 : component / alpha) * 255);
+    const channel = (component: number) => Math.round((alpha === 0 ? 0 : component / alpha) * 255);
     return `rgba(${channel(color.r)}, ${channel(color.g)}, ${channel(color.b)}, ${Number(alpha.toFixed(3))})`;
   }
   try {
@@ -579,12 +554,7 @@ export function formatExpressionPreviewValue(value: unknown): string {
 }
 
 /** Attribute field types the builder badges fields with. */
-export type ExpressionFieldType =
-  | "string"
-  | "number"
-  | "boolean"
-  | "mixed"
-  | "unknown";
+export type ExpressionFieldType = "string" | "number" | "boolean" | "mixed" | "unknown";
 
 /**
  * Infers a display type for each named field by scanning feature properties:
@@ -606,9 +576,7 @@ export function inferFieldTypes(
       if (value === null || value === undefined) continue;
       const valueType = typeof value;
       const fieldType: ExpressionFieldType =
-        valueType === "string" ||
-        valueType === "number" ||
-        valueType === "boolean"
+        valueType === "string" || valueType === "number" || valueType === "boolean"
           ? valueType
           : "mixed";
       if (result[name] === "unknown") result[name] = fieldType;

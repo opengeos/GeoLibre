@@ -127,10 +127,14 @@ describe("raster-client compute", () => {
 
   it("evaluates single-input band math (NDVI)", () => {
     // Two bands: A1 (red), A2 (nir).
-    const raster = makeRaster([
-      [1, 2],
-      [3, 6],
-    ], 2, 1);
+    const raster = makeRaster(
+      [
+        [1, 2],
+        [3, 6],
+      ],
+      2,
+      1,
+    );
     const out = rasterCalc(raster, { expression: "(A2 - A1) / (A2 + A1)" });
     assert.ok(Math.abs(out.bands[0][0] - (3 - 1) / (3 + 1)) < 1e-6);
     assert.ok(Math.abs(out.bands[0][1] - (6 - 2) / (6 + 2)) < 1e-6);
@@ -152,10 +156,7 @@ describe("raster-client compute", () => {
       /unsupported identifiers/,
     );
     // Letter-free "JSFuck"-style payloads must be blocked by the char allowlist.
-    assert.throws(
-      () => rasterCalc(raster, { expression: "[]+[]" }),
-      /unsupported characters/,
-    );
+    assert.throws(() => rasterCalc(raster, { expression: "[]+[]" }), /unsupported characters/);
   });
 
   it("allows numeric literals including scientific notation", () => {

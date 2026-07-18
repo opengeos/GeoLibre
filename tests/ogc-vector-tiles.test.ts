@@ -12,22 +12,13 @@ import {
 
 describe("hasTilePlaceholders", () => {
   it("recognizes a MapLibre {z}/{x}/{y} template", () => {
-    assert.equal(
-      hasTilePlaceholders("https://ex.com/tiles/{z}/{y}/{x}?f=mvt"),
-      true,
-    );
+    assert.equal(hasTilePlaceholders("https://ex.com/tiles/{z}/{y}/{x}?f=mvt"), true);
     assert.equal(hasTilePlaceholders("https://ex.com/{Z}/{X}/{Y}.pbf"), true);
   });
 
   it("treats TileJSON and OGC matrix templates as non-templates", () => {
-    assert.equal(
-      hasTilePlaceholders("https://ex.com/tiles/WebMercatorQuad?f=tilejson"),
-      false,
-    );
-    assert.equal(
-      hasTilePlaceholders("https://ex.com/{tileMatrix}/{tileRow}/{tileCol}"),
-      false,
-    );
+    assert.equal(hasTilePlaceholders("https://ex.com/tiles/WebMercatorQuad?f=tilejson"), false);
+    assert.equal(hasTilePlaceholders("https://ex.com/{tileMatrix}/{tileRow}/{tileCol}"), false);
   });
 });
 
@@ -64,11 +55,7 @@ describe("styleSourceLayers", () => {
   };
 
   it("collects distinct source-layer names in first-seen order", () => {
-    assert.deepEqual(styleSourceLayers(style), [
-      "roads",
-      "buildings",
-      "elsewhere",
-    ]);
+    assert.deepEqual(styleSourceLayers(style), ["roads", "buildings", "elsewhere"]);
   });
 
   it("filters to a single source when an id is given", () => {
@@ -103,10 +90,7 @@ describe("tileJsonConfig", () => {
   });
 
   it("keeps only a finite [lng, lat(, zoom)] center", () => {
-    assert.deepEqual(
-      tileJsonConfig({ center: [5, 52, 8] }, "u").center,
-      [5, 52, 8],
-    );
+    assert.deepEqual(tileJsonConfig({ center: [5, 52, 8] }, "u").center, [5, 52, 8]);
     assert.equal(tileJsonConfig({ center: [5, Infinity] }, "u").center, undefined);
     assert.equal(tileJsonConfig({ center: [1, 2, 3, 4] }, "u").center, undefined);
   });
@@ -167,9 +151,7 @@ describe("resolveOgcVectorTiles (bounds fallback)", () => {
         vector_layers: [{ id: "roads" }],
       },
       "https://ex.com/ogc/v1/collections?f=json": {
-        collections: [
-          { extent: { spatial: { bbox: [[3, 50, 7, 53]], crs: "CRS84" } } },
-        ],
+        collections: [{ extent: { spatial: { bbox: [[3, 50, 7, 53]], crs: "CRS84" } } }],
       },
     };
     const original = globalThis.fetch;

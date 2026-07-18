@@ -12,9 +12,7 @@ import { removeTrailingJsonCommas } from "./expressions";
 export type VectorColorValue = string | unknown[];
 
 /** Whether a color value is a data-driven expression rather than a flat color. */
-export function isVectorColorExpression(
-  value: VectorColorValue,
-): value is unknown[] {
+export function isVectorColorExpression(value: VectorColorValue): value is unknown[] {
   return Array.isArray(value);
 }
 
@@ -285,18 +283,12 @@ export function parseJsonExpression(expression: string): unknown[] | null {
  *   expression fallback.
  * @returns A flat color string or a MapLibre color expression.
  */
-export function vectorColorExpression(
-  style: LayerStyle,
-  fallbackColor: string,
-): VectorColorValue {
+export function vectorColorExpression(style: LayerStyle, fallbackColor: string): VectorColorValue {
   const mode = styleValue(style, "vectorStyleMode");
   if (mode === "single") return fallbackColor;
 
   if (mode === "expression") {
-    return (
-      parseJsonExpression(styleValue(style, "vectorStyleExpression")) ??
-      fallbackColor
-    );
+    return parseJsonExpression(styleValue(style, "vectorStyleExpression")) ?? fallbackColor;
   }
 
   if (mode === "rule-based") {
@@ -323,10 +315,7 @@ export function vectorColorExpression(
   const stops = styleValue(style, "vectorStyleStops")
     .map((stop) => ({
       color: stop.color,
-      value:
-        typeof stop.value === "number"
-          ? stop.value
-          : Number.parseFloat(stop.value),
+      value: typeof stop.value === "number" ? stop.value : Number.parseFloat(stop.value),
     }))
     .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
@@ -388,8 +377,7 @@ export function effectiveVectorRules(style: LayerStyle): {
   elseRule: VectorRule | null;
 } {
   const all = styleValue(style, "vectorRules");
-  const elseRule =
-    all.find((rule) => rule.isElse && rule.enabled !== false) ?? null;
+  const elseRule = all.find((rule) => rule.isElse && rule.enabled !== false) ?? null;
   const byId = new Map<string, VectorRule>();
   for (const rule of all) {
     if (!rule.isElse) byId.set(rule.id, rule);
@@ -399,11 +387,7 @@ export function effectiveVectorRules(style: LayerStyle): {
   // the QML exporter), not as its own group.
   const groupIds = new Set<string>();
   for (const rule of byId.values()) {
-    if (
-      rule.parentId &&
-      rule.parentId !== rule.id &&
-      byId.has(rule.parentId)
-    ) {
+    if (rule.parentId && rule.parentId !== rule.id && byId.has(rule.parentId)) {
       groupIds.add(rule.parentId);
     }
   }
@@ -425,10 +409,7 @@ export function effectiveVectorRules(style: LayerStyle): {
     const seen = new Set([rule.id]);
     // A self-referencing parentId means "no parent" (a normal top-level
     // rule), matching the editor's tree walk and the QML exporter.
-    let parent =
-      rule.parentId && rule.parentId !== rule.id
-        ? byId.get(rule.parentId)
-        : undefined;
+    let parent = rule.parentId && rule.parentId !== rule.id ? byId.get(rule.parentId) : undefined;
     while (parent) {
       if (seen.has(parent.id) || parent.enabled === false) {
         dropped = true;
@@ -457,9 +438,7 @@ export function effectiveVectorRules(style: LayerStyle): {
       // same convention as the initial parent resolution above); advancing to
       // itself would trip the cycle guard and wrongly drop the whole subtree.
       parent =
-        parent.parentId && parent.parentId !== parent.id
-          ? byId.get(parent.parentId)
-          : undefined;
+        parent.parentId && parent.parentId !== parent.id ? byId.get(parent.parentId) : undefined;
     }
     if (dropped) continue;
     if (minZoom !== undefined && maxZoom !== undefined && minZoom >= maxZoom) {
@@ -474,16 +453,13 @@ export function effectiveVectorRules(style: LayerStyle): {
       ...(minZoom !== undefined ? { minZoom } : {}),
       ...(maxZoom !== undefined ? { maxZoom } : {}),
       ...(isHexColor(rule.strokeColor) ? { strokeColor: rule.strokeColor } : {}),
-      ...(typeof rule.strokeWidth === "number" &&
-      Number.isFinite(rule.strokeWidth)
+      ...(typeof rule.strokeWidth === "number" && Number.isFinite(rule.strokeWidth)
         ? { strokeWidth: rule.strokeWidth }
         : {}),
-      ...(typeof rule.fillOpacity === "number" &&
-      Number.isFinite(rule.fillOpacity)
+      ...(typeof rule.fillOpacity === "number" && Number.isFinite(rule.fillOpacity)
         ? { fillOpacity: rule.fillOpacity }
         : {}),
-      ...(typeof rule.circleRadius === "number" &&
-      Number.isFinite(rule.circleRadius)
+      ...(typeof rule.circleRadius === "number" && Number.isFinite(rule.circleRadius)
         ? { circleRadius: rule.circleRadius }
         : {}),
     });
@@ -575,8 +551,7 @@ function zoomWrappedRuleValue(
   const activeAt = (segmentStart: number) =>
     rules.filter(
       (rule) =>
-        (rule.minZoom ?? -Infinity) <= segmentStart &&
-        segmentStart < (rule.maxZoom ?? Infinity),
+        (rule.minZoom ?? -Infinity) <= segmentStart && segmentStart < (rule.maxZoom ?? Infinity),
     );
   const expression: unknown[] = ["step", ["zoom"], build(activeAt(-Infinity))];
   for (const zoom of breaks) {
@@ -606,25 +581,16 @@ export function ruleBasedColorExpression(
   fallbackColor: string,
 ): VectorColorValue {
   const { rules, elseRule } = effectiveVectorRules(style);
-  const elseColor =
-    elseRule && isHexColor(elseRule.color) ? elseRule.color : fallbackColor;
+  const elseColor = elseRule && isHexColor(elseRule.color) ? elseRule.color : fallbackColor;
   if (rules.length === 0) return elseColor;
   return zoomWrappedRuleValue(rules, (active) => {
     if (active.length === 0) return elseColor;
-    return [
-      "case",
-      ...active.flatMap((rule) => [rule.filter, rule.color]),
-      elseColor,
-    ];
+    return ["case", ...active.flatMap((rule) => [rule.filter, rule.color]), elseColor];
   }) as VectorColorValue;
 }
 
 /** The per-rule override fields a paint channel can read. */
-type VectorRuleOverrideKey =
-  | "strokeColor"
-  | "strokeWidth"
-  | "fillOpacity"
-  | "circleRadius";
+type VectorRuleOverrideKey = "strokeColor" | "strokeWidth" | "fillOpacity" | "circleRadius";
 
 /**
  * Build a paint value honoring per-rule symbol overrides for one field: a
@@ -646,20 +612,13 @@ function ruleOverrideValue(
   if (styleValue(style, "vectorStyleMode") !== "rule-based") return fallback;
   const { rules, elseRule } = effectiveVectorRules(style);
   const elseOverride = readRuleOverride(elseRule ?? undefined, key);
-  if (
-    elseOverride === undefined &&
-    !rules.some((rule) => rule[key] !== undefined)
-  ) {
+  if (elseOverride === undefined && !rules.some((rule) => rule[key] !== undefined)) {
     return fallback;
   }
   const elseValue = elseOverride ?? fallback;
   return zoomWrappedRuleValue(rules, (active) => {
     if (active.length === 0) return elseValue;
-    return [
-      "case",
-      ...active.flatMap((rule) => [rule.filter, rule[key] ?? fallback]),
-      elseValue,
-    ];
+    return ["case", ...active.flatMap((rule) => [rule.filter, rule[key] ?? fallback]), elseValue];
   });
 }
 
@@ -672,9 +631,7 @@ function readRuleOverride(
   if (key === "strokeColor") {
     return isHexColor(value) ? (value as string) : undefined;
   }
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -699,9 +656,7 @@ export function vectorStrokeWidthValue(
   style: LayerStyle,
   fallback: number | unknown[],
 ): number | unknown[] {
-  return ruleOverrideValue(style, "strokeWidth", fallback) as
-    | number
-    | unknown[];
+  return ruleOverrideValue(style, "strokeWidth", fallback) as number | unknown[];
 }
 
 /**
@@ -713,11 +668,8 @@ export function vectorFillOpacityValue(
   style: LayerStyle,
   fallback: number | unknown[],
 ): number | unknown[] {
-  return ruleOverrideValue(style, "fillOpacity", fallback) as
-    | number
-    | unknown[];
+  return ruleOverrideValue(style, "fillOpacity", fallback) as number | unknown[];
 }
-
 
 /** The validated proportional (graduated) size configuration of a layer. */
 export interface ProportionalSizeRange {
@@ -739,9 +691,7 @@ export interface ProportionalSizeRange {
  * @param style - The layer style.
  * @returns The validated range, or `null` when proportional sizing is off.
  */
-export function proportionalSizeRange(
-  style: LayerStyle,
-): ProportionalSizeRange | null {
+export function proportionalSizeRange(style: LayerStyle): ProportionalSizeRange | null {
   if (!styleValue(style, "proportionalSizeEnabled")) return null;
   const property = styleValue(style, "proportionalSizeProperty").trim();
   if (!property) return null;
@@ -764,9 +714,7 @@ export function proportionalSizeRange(
  * @param style - The layer style.
  * @returns The `interpolate` expression, or `null`.
  */
-export function proportionalRadiusExpression(
-  style: LayerStyle,
-): unknown[] | null {
+export function proportionalRadiusExpression(style: LayerStyle): unknown[] | null {
   const range = proportionalSizeRange(style);
   if (!range) return null;
   return [
@@ -801,9 +749,7 @@ export function circleRadiusValue(style: LayerStyle): number | unknown[] {
 
 /** The layer-level circle radius before per-rule overrides. */
 function baseCircleRadiusValue(style: LayerStyle): number | unknown[] {
-  return (
-    proportionalRadiusExpression(style) ?? styleValue(style, "circleRadius")
-  );
+  return proportionalRadiusExpression(style) ?? styleValue(style, "circleRadius");
 }
 
 /** Fill color value for a polygon layer (fallback: the layer fill color). */
@@ -840,11 +786,7 @@ export function vectorCircleColorValue(style: LayerStyle): VectorColorValue {
 export function vectorLineColorValue(style: LayerStyle): VectorColorValue {
   const strokeColor = styleValue(style, "strokeColor");
   if (styleValue(style, "vectorStyleMode") === "rule-based") {
-    return withSimpleStyleColor(
-      style,
-      "stroke",
-      ruleBasedLineColorExpression(style),
-    );
+    return withSimpleStyleColor(style, "stroke", ruleBasedLineColorExpression(style));
   }
   const vectorColor = vectorColorExpression(style, strokeColor);
   const resolved =
@@ -852,12 +794,7 @@ export function vectorLineColorValue(style: LayerStyle): VectorColorValue {
       ? strokeColor
       : styleValue(style, "vectorStyleMode") === "expression"
         ? vectorColor
-        : [
-            "case",
-            ["==", ["geometry-type"], "Polygon"],
-            strokeColor,
-            vectorColor,
-          ];
+        : ["case", ["==", ["geometry-type"], "Polygon"], strokeColor, vectorColor];
   return withSimpleStyleColor(style, "stroke", resolved);
 }
 
@@ -872,15 +809,11 @@ export function vectorLineColorValue(style: LayerStyle): VectorColorValue {
 function ruleBasedLineColorExpression(style: LayerStyle): VectorColorValue {
   const strokeColor = styleValue(style, "strokeColor");
   const { rules, elseRule } = effectiveVectorRules(style);
-  const elseColor =
-    elseRule && isHexColor(elseRule.color) ? elseRule.color : strokeColor;
+  const elseColor = elseRule && isHexColor(elseRule.color) ? elseRule.color : strokeColor;
   const elseOutline =
-    (readRuleOverride(elseRule ?? undefined, "strokeColor") as
-      | string
-      | undefined) ?? strokeColor;
+    (readRuleOverride(elseRule ?? undefined, "strokeColor") as string | undefined) ?? strokeColor;
   const hasOutlineOverride =
-    rules.some((rule) => rule.strokeColor !== undefined) ||
-    elseOutline !== strokeColor;
+    rules.some((rule) => rule.strokeColor !== undefined) || elseOutline !== strokeColor;
   if (rules.length === 0 && elseColor === strokeColor && !hasOutlineOverride) {
     return strokeColor;
   }
@@ -888,32 +821,20 @@ function ruleBasedLineColorExpression(style: LayerStyle): VectorColorValue {
     const colorValue: unknown =
       active.length === 0
         ? elseColor
-        : [
-            "case",
-            ...active.flatMap((rule) => [rule.filter, rule.color]),
-            elseColor,
-          ];
+        : ["case", ...active.flatMap((rule) => [rule.filter, rule.color]), elseColor];
     const outlineValue: unknown = !hasOutlineOverride
       ? strokeColor
       : active.length === 0
         ? elseOutline
         : [
             "case",
-            ...active.flatMap((rule) => [
-              rule.filter,
-              rule.strokeColor ?? strokeColor,
-            ]),
+            ...active.flatMap((rule) => [rule.filter, rule.strokeColor ?? strokeColor]),
             elseOutline,
           ];
     if (colorValue === strokeColor && outlineValue === strokeColor) {
       return strokeColor;
     }
-    return [
-      "case",
-      ["==", ["geometry-type"], "Polygon"],
-      outlineValue,
-      colorValue,
-    ];
+    return ["case", ["==", ["geometry-type"], "Polygon"], outlineValue, colorValue];
   }) as VectorColorValue;
 }
 

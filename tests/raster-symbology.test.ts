@@ -47,20 +47,13 @@ describe("percentileFromHistogram", () => {
   });
 
   it("returns min for an empty histogram", () => {
-    assert.equal(
-      percentileFromHistogram({ min: 5, max: 9, histogram: [] }, 0.5),
-      5,
-    );
+    assert.equal(percentileFromHistogram({ min: 5, max: 9, histogram: [] }, 0.5), 5);
   });
 });
 
 describe("computeRasterBreaks", () => {
   it("produces classCount+1 evenly spaced equal-interval edges", () => {
-    const breaks = computeRasterBreaks(
-      "equal-interval",
-      { min: 0, max: 100, histogram: [] },
-      4,
-    );
+    const breaks = computeRasterBreaks("equal-interval", { min: 0, max: 100, histogram: [] }, 4);
     assert.deepEqual(breaks, [0, 25, 50, 75, 100]);
   });
 
@@ -79,12 +72,7 @@ describe("computeRasterBreaks", () => {
   });
 
   it("falls back to equal-interval when manual edges are the wrong length", () => {
-    const breaks = computeRasterBreaks(
-      "manual",
-      { min: 0, max: 10, histogram: [] },
-      2,
-      [1, 2],
-    );
+    const breaks = computeRasterBreaks("manual", { min: 0, max: 10, histogram: [] }, 2, [1, 2]);
     assert.deepEqual(breaks, [0, 5, 10]);
   });
 
@@ -105,19 +93,14 @@ describe("buildSteppedColormapRgba", () => {
     assert.equal(rgba[127 * 4], 68);
     assert.equal(rgba[128 * 4], 253);
     // Last column -> class 1.
-    assert.deepEqual(
-      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
-      [253, 231, 37],
-    );
+    assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [253, 231, 37]);
   });
 
   it("reverses the class colors when requested", () => {
     const rgba = buildSteppedColormapRgba([0, 1, 2], "viridis", true);
     // Reversed: first column is now the last class color.
     assert.deepEqual([rgba[0], rgba[1], rgba[2]], [253, 231, 37]);
-    assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [
-      68, 1, 84,
-    ]);
+    assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [68, 1, 84]);
   });
 
   it("renders a single flat color when the range is degenerate", () => {
@@ -128,15 +111,9 @@ describe("buildSteppedColormapRgba", () => {
 
   it("uses custom colors over the named ramp when supplied", () => {
     // Two custom classes: pure red then pure blue, ignoring "viridis".
-    const rgba = buildSteppedColormapRgba([0, 1, 2], "viridis", false, [
-      "#ff0000",
-      "#0000ff",
-    ]);
+    const rgba = buildSteppedColormapRgba([0, 1, 2], "viridis", false, ["#ff0000", "#0000ff"]);
     assert.deepEqual([rgba[0], rgba[1], rgba[2]], [255, 0, 0]);
-    assert.deepEqual(
-      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
-      [0, 0, 255],
-    );
+    assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [0, 0, 255]);
   });
 });
 
@@ -146,20 +123,14 @@ describe("buildContinuousColormapRgba", () => {
     assert.equal(rgba.length, 256 * 4);
     // Endpoints are the anchor colors; the middle is a midpoint gray.
     assert.deepEqual([rgba[0], rgba[1], rgba[2]], [0, 0, 0]);
-    assert.deepEqual(
-      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
-      [255, 255, 255],
-    );
+    assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [255, 255, 255]);
     assert.ok(rgba[128 * 4] > 0 && rgba[128 * 4] < 255);
   });
 
   it("flips the gradient when reversed", () => {
     const rgba = buildContinuousColormapRgba(["#000000", "#ffffff"], true);
     assert.deepEqual([rgba[0], rgba[1], rgba[2]], [255, 255, 255]);
-    assert.deepEqual(
-      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
-      [0, 0, 0],
-    );
+    assert.deepEqual([rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]], [0, 0, 0]);
   });
 });
 
@@ -213,10 +184,7 @@ describe("savedRasterSymbology", () => {
       classCount: 5,
     };
     // One class (two edges) is below the two-class minimum.
-    assert.equal(
-      savedRasterSymbology(layerWith({ ...base, breaks: [0, 1] })),
-      null,
-    );
+    assert.equal(savedRasterSymbology(layerWith({ ...base, breaks: [0, 1] })), null);
     // 258 edges would be 257 classes, past RASTER_MAX_STORED_CLASSES.
     assert.equal(
       savedRasterSymbology(

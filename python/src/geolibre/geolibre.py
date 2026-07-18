@@ -241,13 +241,9 @@ class Map(anywidget.AnyWidget):
             **kwargs: Forwarded to ``anywidget.AnyWidget``.
         """
         if layout not in _VALID_LAYOUTS:
-            raise ValueError(
-                f"layout must be one of {sorted(_VALID_LAYOUTS)}, got {layout!r}"
-            )
+            raise ValueError(f"layout must be one of {sorted(_VALID_LAYOUTS)}, got {layout!r}")
         if theme not in _VALID_THEMES:
-            raise ValueError(
-                f"theme must be one of {sorted(_VALID_THEMES)}, got {theme!r}"
-            )
+            raise ValueError(f"theme must be one of {sorted(_VALID_THEMES)}, got {theme!r}")
         super().__init__(**kwargs)
         self.height = height
         self.layout = layout
@@ -335,9 +331,7 @@ class Map(anywidget.AnyWidget):
 
     # -- scripting RPC ---------------------------------------------------
 
-    def _on_custom_msg(
-        self, _widget: Any, content: Any, _buffers: Any
-    ) -> None:
+    def _on_custom_msg(self, _widget: Any, content: Any, _buffers: Any) -> None:
         """Handle out-of-band messages from the app (results and events).
 
         Args:
@@ -372,9 +366,7 @@ class Map(anywidget.AnyWidget):
                 )
 
     @staticmethod
-    def _wait_for_result(
-        slot: dict[str, Any], method: str, timeout: float
-    ) -> None:
+    def _wait_for_result(slot: dict[str, Any], method: str, timeout: float) -> None:
         """Block the kernel until a result slot resolves or the timeout elapses.
 
         Jupyter comms are asynchronous, so the kernel must keep processing
@@ -469,14 +461,10 @@ class Map(anywidget.AnyWidget):
         finally:
             self._pending.pop(request_id, None)
         if not slot["ok"]:
-            raise RuntimeError(
-                slot["error"] or f"GeoLibre command {method!r} failed"
-            )
+            raise RuntimeError(slot["error"] or f"GeoLibre command {method!r} failed")
         return slot["value"]
 
-    def on(
-        self, event: str, callback: Callable[[Any], None]
-    ) -> Callable[[], None]:
+    def on(self, event: str, callback: Callable[[Any], None]) -> Callable[[], None]:
         """Register a callback for an app event.
 
         Events are delivered when the map is displayed and the user interacts
@@ -505,15 +493,11 @@ class Map(anywidget.AnyWidget):
         """Register a callback fired when the user clicks the map."""
         return self.on("click", callback)
 
-    def on_selection_change(
-        self, callback: Callable[[Any], None]
-    ) -> Callable[[], None]:
+    def on_selection_change(self, callback: Callable[[Any], None]) -> Callable[[], None]:
         """Register a callback fired when the selected layer/feature changes."""
         return self.on("selection-change", callback)
 
-    def on_layer_change(
-        self, callback: Callable[[Any], None]
-    ) -> Callable[[], None]:
+    def on_layer_change(self, callback: Callable[[Any], None]) -> Callable[[], None]:
         """Register a callback fired when layers are added or removed."""
         return self.on("layer-change", callback)
 
@@ -573,9 +557,7 @@ class Map(anywidget.AnyWidget):
         timeout: float = 10.0,
     ) -> None:
         """Fit the camera to ``[west, south, east, north]``."""
-        self.request(
-            "fitBounds", {"bounds": [float(b) for b in bounds]}, timeout=timeout
-        )
+        self.request("fitBounds", {"bounds": [float(b) for b in bounds]}, timeout=timeout)
 
     def identify(
         self,
@@ -602,9 +584,7 @@ class Map(anywidget.AnyWidget):
             params["layerId"] = layer_id
         return self.request("identify", params, timeout=timeout)
 
-    def get_features(
-        self, layer_id: str, *, timeout: float = 10.0
-    ) -> list[Feature]:
+    def get_features(self, layer_id: str, *, timeout: float = 10.0) -> list[Feature]:
         """Return a layer's features as :class:`Feature` (GeoJSON) objects.
 
         Reads the live store, so features added or edited in the UI are
@@ -618,9 +598,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             A list of :class:`Feature` objects (each also a plain GeoJSON dict).
         """
-        features = self.request(
-            "getLayerFeatures", {"layerId": layer_id}, timeout=timeout
-        )
+        features = self.request("getLayerFeatures", {"layerId": layer_id}, timeout=timeout)
         return [Feature(f) for f in features or []]
 
     @staticmethod
@@ -745,9 +723,7 @@ class Map(anywidget.AnyWidget):
             timeout=timeout,
         )
 
-    def to_image(
-        self, path: str | None = None, *, timeout: float = 30.0
-    ) -> bytes | None:
+    def to_image(self, path: str | None = None, *, timeout: float = 30.0) -> bytes | None:
         """Capture the current map view as a PNG.
 
         Args:
@@ -872,9 +848,7 @@ class Map(anywidget.AnyWidget):
                 return Layer(self, layer_id)
         raise ValueError(f"No layer with id {layer_id!r}")
 
-    def _mutate_layer(
-        self, layer_id: str, mutate: Callable[[dict[str, Any]], None]
-    ) -> None:
+    def _mutate_layer(self, layer_id: str, mutate: Callable[[dict[str, Any]], None]) -> None:
         """Apply an in-place mutation to one layer through the project trait."""
 
         def _apply(project: dict[str, Any]) -> None:
@@ -908,14 +882,10 @@ class Map(anywidget.AnyWidget):
             very large layers, prefer a tile/COG source the app fetches directly.
         """
         source_url = (
-            data
-            if isinstance(data, str) and data.startswith(("http://", "https://"))
-            else None
+            data if isinstance(data, str) and data.startswith(("http://", "https://")) else None
         )
         fc = _project.load_featurecollection(data)
-        return self._add_layer(
-            _project.geojson_layer(name, fc, source_url=source_url, **style)
-        )
+        return self._add_layer(_project.geojson_layer(name, fc, source_url=source_url, **style))
 
     # -- markers ---------------------------------------------------------
 
@@ -988,9 +958,7 @@ class Map(anywidget.AnyWidget):
             else:
                 pair = list(entry)
                 if len(pair) != 2:
-                    raise ValueError(
-                        f"Point must be a (lng, lat) pair; got {entry!r}"
-                    )
+                    raise ValueError(f"Point must be a (lng, lat) pair; got {entry!r}")
                 features.append(Map._point_feature(pair[0], pair[1]))
         return {"type": "FeatureCollection", "features": features}
 
@@ -1143,9 +1111,7 @@ class Map(anywidget.AnyWidget):
                 is not supported.
         """
         source_url = (
-            data
-            if isinstance(data, str) and data.startswith(("http://", "https://"))
-            else None
+            data if isinstance(data, str) and data.startswith(("http://", "https://")) else None
         )
         fc = _project.load_featurecollection(data)
         features = fc.get("features", [])
@@ -1155,9 +1121,7 @@ class Map(anywidget.AnyWidget):
             if isinstance(feature, dict)
         ]
         if all(value is None for value in values):
-            raise ValueError(
-                f"Column {column!r} not found in any feature's properties"
-            )
+            raise ValueError(f"Column {column!r} not found in any feature's properties")
 
         def _is_numeric(value: Any) -> bool:
             try:
@@ -1189,9 +1153,7 @@ class Map(anywidget.AnyWidget):
         # Caller overrides win over the computed symbology.
         choropleth_style.update(style)
         return self._add_layer(
-            _project.geojson_layer(
-                name, fc, source_url=source_url, **choropleth_style
-            )
+            _project.geojson_layer(name, fc, source_url=source_url, **choropleth_style)
         )
 
     # leafmap-style alias: add the data with optional column-driven symbology.
@@ -1342,9 +1304,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        return self.add_cog(
-            url, name, bands=bands, colormap=colormap, rescale=rescale, **style
-        )
+        return self.add_cog(url, name, bands=bands, colormap=colormap, rescale=rescale, **style)
 
     def add_wms(
         self,
@@ -1410,9 +1370,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        return self._add_layer(
-            _project.wmts_layer(name, url, tile_size=tile_size, **style)
-        )
+        return self._add_layer(_project.wmts_layer(name, url, tile_size=tile_size, **style))
 
     def add_wfs(
         self,
@@ -1527,11 +1485,7 @@ class Map(anywidget.AnyWidget):
         if hasattr(data, "__geo_interface__"):
             # The object is inlined as GeoJSON; none of the vector-control
             # options apply, so flag them rather than dropping them silently.
-            if (
-                render_mode != "geojson"
-                or data_format is not None
-                or source_layer is not None
-            ):
+            if render_mode != "geojson" or data_format is not None or source_layer is not None:
                 warnings.warn(
                     "render_mode, data_format, and source_layer are ignored for "
                     "__geo_interface__ objects; they only apply to remote URLs.",
@@ -1703,9 +1657,7 @@ class Map(anywidget.AnyWidget):
             The id of the added layer.
         """
         url_list = [urls] if isinstance(urls, str) else list(urls)
-        return self._add_layer(
-            _project.video_layer(name, url_list, coordinates, **style)
-        )
+        return self._add_layer(_project.video_layer(name, url_list, coordinates, **style))
 
     def remove_layer(self, layer_id: str) -> None:
         """Remove a layer by id.
@@ -1715,9 +1667,7 @@ class Map(anywidget.AnyWidget):
         """
 
         def _drop(p: dict[str, Any]) -> None:
-            p["layers"] = [
-                layer for layer in p["layers"] if layer.get("id") != layer_id
-            ]
+            p["layers"] = [layer for layer in p["layers"] if layer.get("id") != layer_id]
 
         self._update_project(_drop)
 
@@ -1803,8 +1753,7 @@ class Map(anywidget.AnyWidget):
                 ids.append(entry)
             else:
                 raise ValueError(
-                    "Layer reference must be a layer id string or a Layer; got "
-                    f"{entry!r}"
+                    f"Layer reference must be a layer id string or a Layer; got {entry!r}"
                 )
         return ids
 
@@ -1842,8 +1791,7 @@ class Map(anywidget.AnyWidget):
         """
         if orientation not in _VALID_ORIENTATIONS:
             raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, "
-                f"got {orientation!r}"
+                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
             )
         if control_position not in _VALID_CONTROL_POSITIONS:
             raise ValueError(
@@ -1940,14 +1888,10 @@ class Map(anywidget.AnyWidget):
         """
         if position not in _VALID_CONTROL_POSITIONS:
             raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, "
-                f"got {position!r}"
+                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
             )
         if shape not in _VALID_LEGEND_SHAPES:
-            raise ValueError(
-                f"shape must be one of {sorted(_VALID_LEGEND_SHAPES)}, "
-                f"got {shape!r}"
-            )
+            raise ValueError(f"shape must be one of {sorted(_VALID_LEGEND_SHAPES)}, got {shape!r}")
 
         # The three ways to supply entries are mutually exclusive; reject a
         # combination rather than silently letting one win by check order.
@@ -1975,22 +1919,17 @@ class Map(anywidget.AnyWidget):
                 raise ValueError("labels and colors must be provided together")
             if len(labels) != len(colors):
                 raise ValueError(
-                    "labels and colors must have the same length "
-                    f"({len(labels)} != {len(colors)})"
+                    f"labels and colors must have the same length ({len(labels)} != {len(colors)})"
                 )
             pairs = [(str(label), str(color)) for label, color in zip(labels, colors)]
         else:
             raise ValueError(
-                "Provide legend entries via builtin=, legend_dict=, or "
-                "labels= and colors=."
+                "Provide legend entries via builtin=, legend_dict=, or labels= and colors=."
             )
         if not pairs:
             raise ValueError("Legend has no items")
 
-        items = [
-            {"label": label, "color": color, "shape": shape}
-            for label, color in pairs
-        ]
+        items = [{"label": label, "color": color, "shape": shape} for label, color in pairs]
         entry = _project.legend_gui_entry(title or "Legend", items, position)
         self._update_components_state(
             "legend",
@@ -2035,13 +1974,11 @@ class Map(anywidget.AnyWidget):
         """
         if orientation not in _VALID_ORIENTATIONS:
             raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, "
-                f"got {orientation!r}"
+                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
             )
         if position not in _VALID_CONTROL_POSITIONS:
             raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, "
-                f"got {position!r}"
+                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
             )
         vmin_f, vmax_f = float(vmin), float(vmax)
         # The app's normalizer only fixes vmin == vmax; an inverted range would
@@ -2093,9 +2030,7 @@ class Map(anywidget.AnyWidget):
             **kwargs: Forwarded to :meth:`add_colorbar` (e.g. ``units``,
                 ``orientation``, ``position``).
         """
-        self.add_colorbar(
-            colormap=colormap, vmin=vmin, vmax=vmax, label=label, **kwargs
-        )
+        self.add_colorbar(colormap=colormap, vmin=vmin, vmax=vmax, label=label, **kwargs)
 
     # -- project I/O -----------------------------------------------------
 
@@ -2139,9 +2074,7 @@ class Map(anywidget.AnyWidget):
                         f"Project source is not valid JSON nor an existing file: {text}"
                     ) from exc
                 except json.JSONDecodeError as exc:
-                    raise ValueError(
-                        f"Invalid project JSON in file {text}: {exc}"
-                    ) from exc
+                    raise ValueError(f"Invalid project JSON in file {text}: {exc}") from exc
         # Validate the required keys up front (matching parseProject in
         # @geolibre/core) so an invalid project raises here instead of failing
         # silently in the app and only surfacing through the `error` trait.
@@ -2149,9 +2082,7 @@ class Map(anywidget.AnyWidget):
             raise ValueError("Project must be a JSON object")
         missing = {"version", "name", "mapView"} - project.keys()
         if missing:
-            raise ValueError(
-                f"Invalid project: missing required keys {sorted(missing)}"
-            )
+            raise ValueError(f"Invalid project: missing required keys {sorted(missing)}")
         # Presence isn't enough: set_center et al. index into mapView, so a
         # non-dict here would surface as a confusing TypeError later.
         if not isinstance(project.get("mapView"), dict):
@@ -2260,9 +2191,7 @@ class Layer:
 
     @visible.setter
     def visible(self, value: bool) -> None:
-        self._map._mutate_layer(
-            self._id, lambda layer: layer.update(visible=bool(value))
-        )
+        self._map._mutate_layer(self._id, lambda layer: layer.update(visible=bool(value)))
 
     @property
     def opacity(self) -> float:
@@ -2271,9 +2200,7 @@ class Layer:
 
     @opacity.setter
     def opacity(self, value: float) -> None:
-        self._map._mutate_layer(
-            self._id, lambda layer: layer.update(opacity=float(value))
-        )
+        self._map._mutate_layer(self._id, lambda layer: layer.update(opacity=float(value)))
 
     @property
     def style(self) -> dict[str, Any]:

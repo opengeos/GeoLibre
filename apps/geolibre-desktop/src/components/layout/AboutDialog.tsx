@@ -120,11 +120,7 @@ export function AboutDialog({
       setLatestVersion(release.version);
       setLatestNotes(release.notes);
       setLatestUrl(release.url);
-      setUpdateStatus(
-        compareVersions(APP_VERSION, release.version) < 0
-          ? "available"
-          : "current",
-      );
+      setUpdateStatus(compareVersions(APP_VERSION, release.version) < 0 ? "available" : "current");
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("Failed to check for updates", error);
@@ -174,9 +170,7 @@ export function AboutDialog({
             aria-label={t("about.trigger")}
           >
             <Info className={iconClassName ?? "h-3.5 w-3.5 sm:me-1"} />
-            {showLabels ? (
-              <span className="hidden sm:inline">{t("about.trigger")}</span>
-            ) : null}
+            {showLabels ? <span className="hidden sm:inline">{t("about.trigger")}</span> : null}
           </Button>
         </DialogTrigger>
       ) : null}
@@ -206,9 +200,7 @@ export function AboutDialog({
               >
                 <span className="inline-flex items-center gap-2">
                   <RefreshCw
-                    className={`h-3.5 w-3.5 ${
-                      updateStatus === "checking" ? "animate-spin" : ""
-                    }`}
+                    className={`h-3.5 w-3.5 ${updateStatus === "checking" ? "animate-spin" : ""}`}
                   />
                   {updateStatus === "checking"
                     ? t("about.checking")
@@ -266,13 +258,9 @@ export function AboutDialog({
                   ) : null}
                   {updateStatus === "error" ? (
                     <div className="space-y-2">
-                      <div className="text-foreground">
-                        {t("updates.error.message")}
-                      </div>
+                      <div className="text-foreground">{t("updates.error.message")}</div>
                       {updateError ? (
-                        <div className="text-xs text-muted-foreground">
-                          {updateError}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{updateError}</div>
                       ) : null}
                       {/* Group the hint with its button and divide it from the error
                           message above so the two muted lines do not read as one. */}

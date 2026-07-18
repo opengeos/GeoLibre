@@ -53,10 +53,7 @@ test("persists a story map across save and reopen", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Save", exact: true }).click();
   // Browsers without the File System Access picker (deleted above) prompt for a
   // file name before downloading; accept the pre-filled default and confirm.
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Save", exact: true })
-    .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click();
   const download = await downloadPromise;
   const downloadPath = await download.path();
   expect(downloadPath).toBeTruthy();
@@ -92,9 +89,9 @@ test("persists a story map across save and reopen", async ({ page }) => {
   await expect(dialog.getByText("San Francisco, California")).toBeVisible();
   // First non-file input is the story Title field (the panel's hidden import
   // file input would otherwise match first).
-  await expect(
-    dialog.locator('input:not([type="file"])').first(),
-  ).toHaveValue("A Tour of Five Cities");
+  await expect(dialog.locator('input:not([type="file"])').first()).toHaveValue(
+    "A Tour of Five Cities",
+  );
 });
 
 /**
@@ -102,9 +99,7 @@ test("persists a story map across save and reopen", async ({ page }) => {
  * by default), not 2D Mercator. #921: with no native save picker, exporting
  * must prompt for a file name first instead of auto-downloading a default.
  */
-test("exports the story as a globe HTML page after a name prompt", async ({
-  page,
-}) => {
+test("exports the story as a globe HTML page after a name prompt", async ({ page }) => {
   await page.addInitScript(() => {
     delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
   });
@@ -113,9 +108,7 @@ test("exports the story as a globe HTML page after a name prompt", async ({
 
   const dialog = await openStoryMapPanel(page);
   await dialog.getByRole("button", { name: "Load sample story" }).click();
-  await expect(
-    dialog.getByRole("heading", { name: "Chapters (5)" }),
-  ).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Chapters (5)" })).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "Export HTML" }).click();
@@ -145,9 +138,7 @@ test("returns to the editor after exiting a presentation", async ({ page }) => {
 
   const dialog = await openStoryMapPanel(page);
   await dialog.getByRole("button", { name: "Load sample story" }).click();
-  await expect(
-    dialog.getByRole("heading", { name: "Chapters (5)" }),
-  ).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Chapters (5)" })).toBeVisible();
 
   // Enter the presentation; the editor dialog closes.
   await dialog.getByRole("button", { name: "Present" }).click();
@@ -155,7 +146,5 @@ test("returns to the editor after exiting a presentation", async ({ page }) => {
 
   // Exit the presentation; the editor must reopen (#918).
   await page.getByRole("button", { name: "Exit" }).click();
-  await expect(
-    page.getByRole("dialog").getByRole("heading", { name: "Story Map" }),
-  ).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Story Map" })).toBeVisible();
 });

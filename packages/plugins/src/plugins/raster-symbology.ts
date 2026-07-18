@@ -81,10 +81,7 @@ export type RasterBandStats = {
  */
 export function clampRasterClassCount(value: number): number {
   if (!Number.isFinite(value)) return RASTER_MIN_CLASSES;
-  return Math.min(
-    RASTER_MAX_CLASSES,
-    Math.max(RASTER_MIN_CLASSES, Math.round(value)),
-  );
+  return Math.min(RASTER_MAX_CLASSES, Math.max(RASTER_MIN_CLASSES, Math.round(value)));
 }
 
 /**
@@ -96,10 +93,7 @@ export function clampRasterClassCount(value: number): number {
  * @param p - The percentile in [0, 1].
  * @returns The value at percentile `p`.
  */
-export function percentileFromHistogram(
-  stats: RasterBandStats,
-  p: number,
-): number {
+export function percentileFromHistogram(stats: RasterBandStats, p: number): number {
   const { min, max, histogram } = stats;
   const bins = histogram.length;
   if (bins === 0 || max <= min) return min;
@@ -140,9 +134,7 @@ export function computeRasterBreaks(
   const edgeCount = count + 1;
 
   if (method === "manual") {
-    const edges = (manualBreaks ?? [])
-      .map((value) => Number(value))
-      .filter(Number.isFinite);
+    const edges = (manualBreaks ?? []).map((value) => Number(value)).filter(Number.isFinite);
     if (edges.length === edgeCount) return [...edges].sort((a, b) => a - b);
     // Fall back to an even spread across whatever range we can infer so the
     // editor always starts from a sensible, correctly sized set of edges.
@@ -176,10 +168,7 @@ export function computeRasterBreaks(
  * @param customColors - Optional user-defined anchor colors.
  * @returns The anchor colors to interpolate.
  */
-export function rampBaseColors(
-  ramp: string,
-  customColors?: readonly string[],
-): readonly string[] {
+export function rampBaseColors(ramp: string, customColors?: readonly string[]): readonly string[] {
   return customColors && customColors.length >= RASTER_MIN_CUSTOM_COLORS
     ? customColors
     : getVectorColorRamp(ramp).colors;
@@ -215,8 +204,7 @@ export function buildSteppedColormapRgba(
   const max = breaks[breaks.length - 1];
   const span = max - min;
   // Normalized interior edges in [0, 1]; degenerate (min === max) → single class.
-  const normalizedEdges =
-    span > 0 ? breaks.map((edge) => (edge - min) / span) : null;
+  const normalizedEdges = span > 0 ? breaks.map((edge) => (edge - min) / span) : null;
 
   for (let column = 0; column < width; column += 1) {
     const t = column / (width - 1);
@@ -230,9 +218,7 @@ export function buildSteppedColormapRgba(
         }
       }
     }
-    const color = parseHexColor(
-      orderedColors[classIndex] ?? orderedColors.at(-1) ?? "#000000",
-    );
+    const color = parseHexColor(orderedColors[classIndex] ?? orderedColors.at(-1) ?? "#000000");
     const offset = column * 4;
     rgba[offset] = color.r;
     rgba[offset + 1] = color.g;
@@ -282,9 +268,7 @@ export function buildContinuousColormapRgba(
  * @param layer - A store layer created by `createRasterStoreLayer`.
  * @returns The validated symbology, or null when absent / malformed.
  */
-export function savedRasterSymbology(
-  layer: GeoLibreLayer,
-): RasterSymbology | null {
+export function savedRasterSymbology(layer: GeoLibreLayer): RasterSymbology | null {
   const raw = layer.metadata.rasterSymbology;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const candidate = raw as Record<string, unknown>;
@@ -315,9 +299,7 @@ export function savedRasterSymbology(
     !Array.isArray(candidate.breaks) ||
     candidate.breaks.length < RASTER_MIN_CLASSES + 1 ||
     candidate.breaks.length > RASTER_MAX_STORED_CLASSES + 1 ||
-    !candidate.breaks.every(
-      (value) => typeof value === "number" && Number.isFinite(value),
-    )
+    !candidate.breaks.every((value) => typeof value === "number" && Number.isFinite(value))
   ) {
     return null;
   }

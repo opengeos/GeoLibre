@@ -10,10 +10,9 @@ import type {
 
 /** Average area (km^2) of an H3 cell at each resolution 0..15 (official values). */
 export const H3_AVG_AREA_KM2: number[] = [
-  4_357_449.416078381, 609_788.441794133, 86_801.780398997, 12_393.434655088,
-  1_770.347654491, 252.903858182, 36.129062164, 5.16129336, 0.737327598,
-  0.105332513, 0.015047502, 0.002149643, 0.000307092, 0.00004387, 0.000006267,
-  0.000000895,
+  4_357_449.416078381, 609_788.441794133, 86_801.780398997, 12_393.434655088, 1_770.347654491,
+  252.903858182, 36.129062164, 5.16129336, 0.737327598, 0.105332513, 0.015047502, 0.002149643,
+  0.000307092, 0.00004387, 0.000006267, 0.000000895,
 ];
 
 /** Soft target used when auto-suggesting a resolution. */
@@ -112,13 +111,7 @@ export function buildGridFromSourceSql(sourceSql: string, res: number): string {
 export type H3AggOp = "count" | "sum" | "mean" | "min" | "max";
 
 /** Valid aggregate operations, used to validate the `aggOp` parameter. */
-export const H3_AGG_OPS: readonly H3AggOp[] = [
-  "count",
-  "sum",
-  "mean",
-  "min",
-  "max",
-];
+export const H3_AGG_OPS: readonly H3AggOp[] = ["count", "sum", "mean", "min", "max"];
 
 const AGG_FN: Record<Exclude<H3AggOp, "count">, string> = {
   sum: "sum",
@@ -132,15 +125,9 @@ const AGG_FN: Record<Exclude<H3AggOp, "count">, string> = {
  * cells. `op` is one of count/sum/mean/min/max; a field is required for all but
  * count. Both `POINT` and `MULTIPOINT` geometries are binned (by centroid).
  */
-export function buildBinSql(
-  sourceSql: string,
-  res: number,
-  op: H3AggOp,
-  field?: string,
-): string {
+export function buildBinSql(sourceSql: string, res: number, op: H3AggOp, field?: string): string {
   const fn = op === "count" ? undefined : AGG_FN[op];
-  const aggSelect =
-    fn && field ? `, ${fn}(CAST(${sqlIdent(field)} AS DOUBLE)) AS value` : "";
+  const aggSelect = fn && field ? `, ${fn}(CAST(${sqlIdent(field)} AS DOUBLE)) AS value` : "";
   const aggOut = fn && field ? ", value" : "";
   // ST_Centroid handles both POINT (centroid is the point itself) and
   // MULTIPOINT, so MultiPoint features are binned by their centroid rather than
@@ -158,9 +145,7 @@ export function buildBinSql(
 }
 
 /** Build a FeatureCollection from rows carrying `h3`, optional `count`/`value`, and `geojson`. */
-export function rowsToFeatureCollection(
-  rows: Record<string, unknown>[],
-): FeatureCollection {
+export function rowsToFeatureCollection(rows: Record<string, unknown>[]): FeatureCollection {
   const features = [];
   for (const row of rows) {
     const raw = row.geojson;
@@ -185,8 +170,7 @@ export function rowsToFeatureCollection(
   return { type: "FeatureCollection", features };
 }
 
-const NO_DUCKDB =
-  "This tool requires DuckDB-WASM, which is unavailable in this environment.";
+const NO_DUCKDB = "This tool requires DuckDB-WASM, which is unavailable in this environment.";
 
 function requireDuckDb(ctx: ProcessingContext): DuckDbCapability {
   if (!ctx.duckdb) throw new Error(NO_DUCKDB);
@@ -196,10 +180,7 @@ function requireDuckDb(ctx: ProcessingContext): DuckDbCapability {
 // Mirrors the same helper in vector-tools.ts and registry.ts; intentionally
 // duplicated because vector-tools.ts imports from this file, so importing the
 // other direction would create a cycle. Keep the three copies in sync.
-function getLayer(
-  ctx: ProcessingContext,
-  paramId = "layer",
-): GeoLibreLayer | undefined {
+function getLayer(ctx: ProcessingContext, paramId = "layer"): GeoLibreLayer | undefined {
   const id = ctx.parameters[paramId] as string | undefined;
   return ctx.layers.find((l) => l.id === id);
 }
@@ -216,9 +197,7 @@ function numberParam(ctx: ProcessingContext, id: string): number {
  * Logs a clear error and returns null when any value is missing or the box is
  * degenerate (west >= east or south >= north).
  */
-function bboxFromParams(
-  ctx: ProcessingContext,
-): [number, number, number, number] | null {
+function bboxFromParams(ctx: ProcessingContext): [number, number, number, number] | null {
   const west = numberParam(ctx, "west");
   const south = numberParam(ctx, "south");
   const east = numberParam(ctx, "east");
@@ -235,10 +214,7 @@ function bboxFromParams(
 }
 
 /** Parse the `resolution` param, or auto-suggest from area. Logs + returns null on bad input. */
-function resolveResolution(
-  ctx: ProcessingContext,
-  areaKm2: number,
-): number | null {
+function resolveResolution(ctx: ProcessingContext, areaKm2: number): number | null {
   const raw = ctx.parameters.resolution;
   if (raw === undefined || raw === null || raw === "") {
     const suggested = suggestResolution(areaKm2);
@@ -366,9 +342,7 @@ export const createH3GridTool: ProcessingAlgorithm = {
       }
       if (source === "polyfill") {
         const hasPolygon = layer.geojson.features.some(
-          (f) =>
-            f.geometry?.type === "Polygon" ||
-            f.geometry?.type === "MultiPolygon",
+          (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
         );
         if (!hasPolygon) {
           ctx.log(
@@ -502,9 +476,7 @@ export const binPointsTool: ProcessingAlgorithm = {
         );
         return;
       }
-      ctx.log(
-        `Binned points into ${fc.features.length} H3 cell(s) at resolution ${res}`,
-      );
+      ctx.log(`Binned points into ${fc.features.length} H3 cell(s) at resolution ${res}`);
       ctx.addResultLayer?.(`H3 bins (res ${res})`, fc);
     } finally {
       await registered.release();

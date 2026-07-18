@@ -9,11 +9,7 @@ import {
 import { buildXyzLayer } from "../apply-service";
 import { DEFAULT_XYZ_URL } from "../constants";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
-import {
-  serviceFieldBoolean,
-  serviceFieldString,
-  type ServiceFields,
-} from "../service-library";
+import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function XyzSource() {
@@ -78,9 +74,7 @@ export function XyzSource() {
             <Input
               id="xyz-url"
               placeholder={
-                xyzShortUrl
-                  ? t("addData.xyz.shortUrlPlaceholder")
-                  : t("addData.xyz.urlPlaceholder")
+                xyzShortUrl ? t("addData.xyz.shortUrlPlaceholder") : t("addData.xyz.urlPlaceholder")
               }
               value={xyzUrl}
               onChange={(event) => setXyzUrl(event.target.value)}
@@ -105,9 +99,7 @@ export function XyzSource() {
           {t("addData.xyz.shortUrl")}
         </label>
         <SampleDataSelect
-          samples={[
-            { label: t("addData.xyz.sampleLabel"), value: { url: DEFAULT_XYZ_URL } },
-          ]}
+          samples={[{ label: t("addData.xyz.sampleLabel"), value: { url: DEFAULT_XYZ_URL } }]}
           onSelect={applyFields}
         />
       </div>

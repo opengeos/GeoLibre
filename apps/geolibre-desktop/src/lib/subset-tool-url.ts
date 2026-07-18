@@ -1,10 +1,6 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 
-import {
-  normalizeSubdomains,
-  rasterSubsetKind,
-  type RasterSubsetKind,
-} from "./raster-subset-kind";
+import { normalizeSubdomains, rasterSubsetKind, type RasterSubsetKind } from "./raster-subset-kind";
 import { fetchableUrl } from "./url-utils";
 
 /**
@@ -58,16 +54,11 @@ function httpUrl(value: unknown): string | null {
  * @param layers - The store's current layers.
  * @returns The subset of `layers` that can fill this tool's `url` field.
  */
-export function layersForSubsetUrl(
-  toolId: string,
-  layers: GeoLibreLayer[],
-): GeoLibreLayer[] {
+export function layersForSubsetUrl(toolId: string, layers: GeoLibreLayer[]): GeoLibreLayer[] {
   const kind = subsetUrlToolKind(toolId);
   if (!kind) return [];
   return layers.filter(
-    (layer) =>
-      rasterSubsetKind(layer) === kind &&
-      subsetUrlFieldValues(toolId, layer) !== null,
+    (layer) => rasterSubsetKind(layer) === kind && subsetUrlFieldValues(toolId, layer) !== null,
   );
 }
 

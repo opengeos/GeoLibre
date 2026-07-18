@@ -10,10 +10,7 @@ import { fileURLToPath } from "node:url";
 // the shared template (description, keywords, screenshot, etc.) by re-rendering
 // each with the version/date it declares and asserting an exact match. The
 // check is version-agnostic, so it only fails on real template drift.
-const repoRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const script = path.join(repoRoot, "scripts", "render-linux-metainfo.sh");
 
 const files = ["packaging/linux/org.geolibre.desktop.metainfo.xml"];
@@ -22,9 +19,7 @@ describe("render-linux-metainfo.sh committed copies", () => {
   for (const file of files) {
     it(`${file} is in sync with the template`, () => {
       const committed = readFileSync(path.join(repoRoot, file), "utf8");
-      const release = committed.match(
-        /<release version="([^"]+)" date="([^"]+)"/,
-      );
+      const release = committed.match(/<release version="([^"]+)" date="([^"]+)"/);
       assert.ok(release, `no <release> element found in ${file}`);
       const [, version, date] = release;
       const rendered = execFileSync("bash", [script], {

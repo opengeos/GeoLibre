@@ -1,8 +1,4 @@
-import {
-  collapseRightPanel,
-  getRightPanel,
-  openRightPanel,
-} from "@geolibre/plugins";
+import { collapseRightPanel, getRightPanel, openRightPanel } from "@geolibre/plugins";
 import { cn } from "@geolibre/ui";
 import { PanelRight } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -104,10 +100,7 @@ export function SharedSidebar({
   // panel at a time. `forceBuiltinCollapsed` gates this too (it only gates, never
   // clears the opt-in, so the panel restores when the trigger lifts).
   const builtinExpanded =
-    builtinVisible &&
-    !pluginExpanded &&
-    builtinOptedIn &&
-    !forceBuiltinCollapsed;
+    builtinVisible && !pluginExpanded && builtinOptedIn && !forceBuiltinCollapsed;
 
   // Switching back to the plugin forgets the built-in opt-in, so a later collapse
   // of the plugin lands on the shared rail (both collapsed) rather than

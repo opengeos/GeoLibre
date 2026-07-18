@@ -63,8 +63,7 @@ export class TerrainControl implements maplibregl.IControl {
     // English fallback for when no translated label is supplied. The map package
     // is i18n-agnostic, so this necessarily duplicates the `terrainSettings.
     // controlLabel` string in the app's en.json — keep the two in sync.
-    this.label =
-      options.label ?? "Toggle terrain (double-click for exaggeration)";
+    this.label = options.label ?? "Toggle terrain (double-click for exaggeration)";
     this.onOpenSettings = options.onOpenSettings;
   }
 
@@ -75,8 +74,7 @@ export class TerrainControl implements maplibregl.IControl {
     this.map = map;
 
     const container = document.createElement("div");
-    container.className =
-      "maplibregl-ctrl maplibregl-ctrl-group geolibre-terrain-ctrl";
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-terrain-ctrl";
 
     const button = document.createElement("button");
     button.type = "button";

@@ -16,13 +16,7 @@
 // python/src/geolibre/static/app/.
 
 import { spawnSync } from "node:child_process";
-import {
-  cpSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -66,8 +60,7 @@ const assetsDir = resolve(distDir, "assets");
 // `pglite-<alnum-hash>.js` so it does not spuriously match a `pglite-loader-*`
 // chunk (the `-` in `loader` breaks the `\w+` run) should Rollup ever split the
 // statically-imported loader module into its own chunk.
-const pgliteAssetRe =
-  /^(?:postgis\.tar|pglite|initdb).*\.(?:gz|wasm|data)$|^pglite-\w+\.js$/;
+const pgliteAssetRe = /^(?:postgis\.tar|pglite|initdb).*\.(?:gz|wasm|data)$|^pglite-\w+\.js$/;
 const leaked = readdirSync(assetsDir).filter((name) => pgliteAssetRe.test(name));
 if (leaked.length > 0) {
   console.error(

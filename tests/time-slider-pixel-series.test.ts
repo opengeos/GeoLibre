@@ -17,10 +17,7 @@ describe("downsampleSteps", () => {
   });
 
   it("downsamples to the cap, preserving the endpoints", () => {
-    const steps = Array.from(
-      { length: 100 },
-      (_, i) => new Date(2000 + i, 0, 1),
-    );
+    const steps = Array.from({ length: 100 }, (_, i) => new Date(2000 + i, 0, 1));
     const result = downsampleSteps(steps, 5);
     assert.equal(result.truncated, true);
     assert.equal(result.steps.length, 5);
@@ -152,9 +149,7 @@ describe("seriesToFeatureCollection", () => {
   };
 
   it("emits one feature per (location, source, step, band) in long format", () => {
-    const collection = seriesToFeatureCollection([
-      { label: "Point 1", result },
-    ]);
+    const collection = seriesToFeatureCollection([{ label: "Point 1", result }]);
     // 2 bands for step 1, plus a single placeholder row for the empty step 2.
     assert.equal(collection.features.length, 3);
     for (const feature of collection.features) {
@@ -164,9 +159,7 @@ describe("seriesToFeatureCollection", () => {
   });
 
   it("carries the label, date, source, band, value, and nodata flag", () => {
-    const collection = seriesToFeatureCollection([
-      { label: "Point 1", result },
-    ]);
+    const collection = seriesToFeatureCollection([{ label: "Point 1", result }]);
     assert.deepEqual(collection.features[0].properties, {
       label: "Point 1",
       lng: -122.5,

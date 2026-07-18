@@ -59,10 +59,7 @@ function emit(): void {
  * `ownerPluginId` is injected by the host (the PluginManager scopes each
  * plugin's app API to its id); plugins call this with a single argument.
  */
-export function registerToolbarMenu(
-  menu: GeoLibreToolbarMenu,
-  ownerPluginId?: string,
-): () => void {
+export function registerToolbarMenu(menu: GeoLibreToolbarMenu, ownerPluginId?: string): () => void {
   if (!menu || typeof menu.id !== "string" || menu.id.length === 0) {
     throw new Error("registerToolbarMenu requires a menu with a non-empty id.");
   }

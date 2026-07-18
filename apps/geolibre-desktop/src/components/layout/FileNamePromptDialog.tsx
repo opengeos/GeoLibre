@@ -45,9 +45,7 @@ export function FileNamePromptDialog() {
         </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="file-name-prompt-input">
-              {t("fileNamePrompt.label")}
-            </Label>
+            <Label htmlFor="file-name-prompt-input">{t("fileNamePrompt.label")}</Label>
             <Input
               id="file-name-prompt-input"
               autoFocus
@@ -57,9 +55,7 @@ export function FileNamePromptDialog() {
               value={value}
               // Strip path separators so a typed name like "2024/bookmarks"
               // isn't silently truncated to "bookmarks" by the browser saver.
-              onChange={(event) =>
-                setValue(event.target.value.replace(/[/\\]/g, ""))
-              }
+              onChange={(event) => setValue(event.target.value.replace(/[/\\]/g, ""))}
             />
           </div>
           <div className="flex justify-end gap-2">

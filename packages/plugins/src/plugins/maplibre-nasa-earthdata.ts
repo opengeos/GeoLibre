@@ -7,11 +7,7 @@ import {
   type NasaEarthdataEventHandler,
 } from "maplibre-gl-nasa-earthdata";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -43,20 +39,13 @@ let controlEventHandler: NasaEarthdataEventHandler | null = null;
 const gibsLayerCache = new Map<string, GibsLayer>();
 
 function instanceKey(entry: WebServiceLayerEntry): string {
-  return (
-    stringMetadata(entry.metadata?.nasaKey) ??
-    entry.id.slice(NATIVE_ID_PREFIX.length)
-  );
+  return stringMetadata(entry.metadata?.nasaKey) ?? entry.id.slice(NATIVE_ID_PREFIX.length);
 }
 
-function addedLayerStateFromStoreLayer(
-  layer: GeoLibreLayer,
-): AddedLayerState | null {
+function addedLayerStateFromStoreLayer(layer: GeoLibreLayer): AddedLayerState | null {
   const key =
     stringMetadata(layer.metadata.nasaKey) ??
-    (layer.id.startsWith(NATIVE_ID_PREFIX)
-      ? layer.id.slice(NATIVE_ID_PREFIX.length)
-      : undefined);
+    (layer.id.startsWith(NATIVE_ID_PREFIX) ? layer.id.slice(NATIVE_ID_PREFIX.length) : undefined);
   if (!key) return null;
   // Instance keys for time-enabled layers are `<gibsId>@<date>`.
   const gibsId = stringMetadata(layer.metadata.nasaLayerId) ?? key.split("@")[0];
@@ -102,9 +91,7 @@ const nasaEarthdataAdapter: WebServiceAdapter<NasaEarthdataControl> = {
       const id = `${NATIVE_ID_PREFIX}${added.key}`;
       const gibs = gibsLayerCache.get(added.id);
       const native = readNativeRasterSource(map, id);
-      const tiles =
-        native?.tiles ??
-        (gibs ? [buildTileUrl(gibs, added.date)] : storeTiles(id));
+      const tiles = native?.tiles ?? (gibs ? [buildTileUrl(gibs, added.date)] : storeTiles(id));
       if (!tiles || tiles.length === 0) continue;
       entries.push({
         id,
@@ -140,15 +127,10 @@ const nasaEarthdataAdapter: WebServiceAdapter<NasaEarthdataControl> = {
     control.setLayerVisibility(instanceKey(entry), visible);
   },
   adopt: (control, layers) => {
-    const existingKeys = new Set(
-      control.getState().addedLayers.map((added) => added.key),
-    );
+    const existingKeys = new Set(control.getState().addedLayers.map((added) => added.key));
     const restored = layers
       .map(addedLayerStateFromStoreLayer)
-      .filter(
-        (state): state is AddedLayerState =>
-          state !== null && !existingKeys.has(state.key),
-      );
+      .filter((state): state is AddedLayerState => state !== null && !existingKeys.has(state.key));
     if (restored.length === 0) return;
     // setState reconciles addedLayers against the map, deferring until the
     // GIBS capabilities have loaded when necessary.
@@ -161,9 +143,7 @@ const nasaEarthdataAdapter: WebServiceAdapter<NasaEarthdataControl> = {
 // Tile URL recorded in the store layer, used when neither the native source
 // nor the catalog cache is available yet (e.g. right after a project load).
 function storeTiles(layerId: string): string[] | null {
-  const layer = useAppStore
-    .getState()
-    .layers.find((candidate) => candidate.id === layerId);
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
   const tileUrl = layer ? stringMetadata(layer.metadata.tileUrl) : undefined;
   return tileUrl ? [tileUrl] : null;
 }
@@ -176,9 +156,7 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   version: "0.1.4",
   activate: (app: GeoLibreAppAPI) => {
     if (!nasaEarthdataControl) {
-      nasaEarthdataControl = new NasaEarthdataControl(
-        getNasaEarthdataControlOptions(),
-      );
+      nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
     }
 
     const added = app.addMapControl(nasaEarthdataControl, nasaEarthdataPosition);
@@ -196,10 +174,7 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
     nasaEarthdataControl = null;
   },
   getMapControlPosition: () => nasaEarthdataPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     nasaEarthdataPosition = position;
     if (!nasaEarthdataControl) return;
     app.removeMapControl(nasaEarthdataControl);

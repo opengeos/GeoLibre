@@ -29,9 +29,7 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
     });
 
     void fetchProjectFromUrl(projectUrl, { signal: abortController.signal })
-      .then((project) =>
-        resolveProjectXyzLayers(project, abortController.signal),
-      )
+      .then((project) => resolveProjectXyzLayers(project, abortController.signal))
       .then((project) => {
         if (abortController.signal.aborted) return;
         // A `?url=` deep link is reloaded on every visit, so treat it as
@@ -50,10 +48,7 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
       .catch((error: unknown) => {
         if (abortController.signal.aborted) return;
         setState({
-          error:
-            error instanceof Error
-              ? error.message
-              : "Could not load the project URL.",
+          error: error instanceof Error ? error.message : "Could not load the project URL.",
           message: null,
           status: "error",
         });

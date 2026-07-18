@@ -68,9 +68,7 @@ export async function stopMartinServer(): Promise<void> {
   await invoke("stop_martin_server");
 }
 
-export async function fetchMartinCatalog(
-  server: MartinServerInfo,
-): Promise<MartinSourceSummary[]> {
+export async function fetchMartinCatalog(server: MartinServerInfo): Promise<MartinSourceSummary[]> {
   const response = await fetch(`${server.baseUrl}/catalog`);
   if (!response.ok) {
     throw new Error(`Martin catalog request failed with status ${response.status}.`);
@@ -98,10 +96,7 @@ export async function fetchMartinTileJson(
   return (await response.json()) as MartinTileJson;
 }
 
-export function martinTileJsonUrl(
-  server: MartinServerInfo,
-  sourceId: string,
-): string {
+export function martinTileJsonUrl(server: MartinServerInfo, sourceId: string): string {
   return `${server.baseUrl}/${encodeURIComponent(sourceId)}`;
 }
 
@@ -113,8 +108,5 @@ function assertTauri(): void {
 
 function isVectorTileContentType(contentType: string): boolean {
   const normalized = contentType.toLowerCase();
-  return (
-    normalized.includes("protobuf") ||
-    normalized.includes("mapbox-vector-tile")
-  );
+  return normalized.includes("protobuf") || normalized.includes("mapbox-vector-tile");
 }

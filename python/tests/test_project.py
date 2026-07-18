@@ -66,9 +66,7 @@ def test_tile_layer_shape():
 
 
 def test_cog_layer_restore_shape():
-    layer = project.cog_layer(
-        "DEM", "https://e/dem.tif", bands=[1, 2, 3], colormap="terrain"
-    )
+    layer = project.cog_layer("DEM", "https://e/dem.tif", bands=[1, 2, 3], colormap="terrain")
     assert layer["type"] == "cog"
     assert layer["source"] == {"type": "raster", "url": "https://e/dem.tif"}
     md = layer["metadata"]
@@ -126,19 +124,17 @@ def test_wms_layer_version_defaults_to_1_1_1():
     assert "CRS=" not in tile
     assert layer["source"]["version"] == "1.1.1"
     # An unrecognized version falls back rather than emitting a bad request.
-    assert project.wms_layer("x", "https://e/wms", "a", version="2.0")[
-        "source"
-    ]["version"] == "1.1.1"
+    assert (
+        project.wms_layer("x", "https://e/wms", "a", version="2.0")["source"]["version"] == "1.1.1"
+    )
     # A None from an untyped caller must not raise.
-    assert project.wms_layer("x", "https://e/wms", "a", version=None)[
-        "source"
-    ]["version"] == "1.1.1"
+    assert (
+        project.wms_layer("x", "https://e/wms", "a", version=None)["source"]["version"] == "1.1.1"
+    )
 
 
 def test_wms_layer_transparent_false():
-    layer = project.wms_layer(
-        "x", "https://e/wms", "a", transparent=False, tile_size=512
-    )
+    layer = project.wms_layer("x", "https://e/wms", "a", transparent=False, tile_size=512)
     tile = layer["source"]["tiles"][0]
     assert "TRANSPARENT=FALSE" in tile
     assert "WIDTH=512" in tile
@@ -156,9 +152,7 @@ def test_append_query_keeps_fragment_after_query():
 
 def test_vector_tiles_layer_warns_on_both_source_layer_args():
     with pytest.warns(UserWarning, match="source_layer is ignored"):
-        project.vector_tiles_layer(
-            "VT", "https://e/t.json", source_layers=["a"], source_layer="b"
-        )
+        project.vector_tiles_layer("VT", "https://e/t.json", source_layers=["a"], source_layer="b")
 
 
 def test_wmts_layer_shape():
@@ -215,9 +209,7 @@ def test_vector_layer_invalid_render_mode():
 
 
 def test_vector_tiles_layer_shape():
-    layer = project.vector_tiles_layer(
-        "VT", "https://e/tiles.json", source_layers=["a", "b"]
-    )
+    layer = project.vector_tiles_layer("VT", "https://e/tiles.json", source_layers=["a", "b"])
     assert layer["type"] == "vector-tiles"
     assert layer["source"] == {
         "type": "vector",
@@ -227,9 +219,7 @@ def test_vector_tiles_layer_shape():
 
 
 def test_pmtiles_layer_vector_shape():
-    layer = project.pmtiles_layer(
-        "P", "https://e/tiles.pmtiles", source_layers=["roads"]
-    )
+    layer = project.pmtiles_layer("P", "https://e/tiles.pmtiles", source_layers=["roads"])
     assert layer["type"] == "pmtiles"
     assert layer["source"]["type"] == "vector"
     assert layer["source"]["tileType"] == "vector"
@@ -305,9 +295,7 @@ def test_video_layer_rejects_non_https():
 
 def test_video_layer_rejects_non_string_url():
     with pytest.raises(ValueError, match="non-empty string"):
-        project.video_layer(
-            "Vid", ["https://e/a.mp4", None], [[0, 0], [1, 0], [1, 1], [0, 1]]
-        )
+        project.video_layer("Vid", ["https://e/a.mp4", None], [[0, 0], [1, 0], [1, 1], [0, 1]])
 
 
 def test_load_featurecollection_passthrough():

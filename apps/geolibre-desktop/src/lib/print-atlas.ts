@@ -45,10 +45,7 @@ const ATTR_TOKEN = /\{atlas\.attr:([^{}]+)\}/g;
  * (and null/undefined values) resolve to an empty string; text without tokens
  * passes through unchanged.
  */
-export function substituteAtlasTokens(
-  text: string,
-  ctx: AtlasTokenContext,
-): string {
+export function substituteAtlasTokens(text: string, ctx: AtlasTokenContext): string {
   if (!text) return text;
   return text
     .replace(/\{atlas\.name\}/g, ctx.name)
@@ -72,10 +69,7 @@ export function stripAtlasTokens(text: string): string {
     .trim();
 }
 
-function walkPositions(
-  coords: unknown,
-  visit: (pos: Position) => void,
-): void {
+function walkPositions(coords: unknown, visit: (pos: Position) => void): void {
   if (!Array.isArray(coords)) return;
   if (typeof coords[0] === "number") {
     visit(coords as Position);
@@ -89,9 +83,7 @@ function walkPositions(
  * (GeometryCollections included). Returns `null` for empty or missing
  * geometries so callers can skip features that cannot produce a page.
  */
-export function geometryBounds(
-  geometry: Geometry | null | undefined,
-): AtlasBounds | null {
+export function geometryBounds(geometry: Geometry | null | undefined): AtlasBounds | null {
   if (!geometry) return null;
   let w = Infinity;
   let s = Infinity;
@@ -170,10 +162,7 @@ export function expandBounds(
   s = Math.max(-85, Math.min(85, s));
   n = Math.max(-85, Math.min(85, n));
   if (n - s < minSpanDeg) {
-    const cy = Math.max(
-      -85 + minSpanDeg / 2,
-      Math.min(85 - minSpanDeg / 2, (s + n) / 2),
-    );
+    const cy = Math.max(-85 + minSpanDeg / 2, Math.min(85 - minSpanDeg / 2, (s + n) / 2));
     s = cy - minSpanDeg / 2;
     n = cy + minSpanDeg / 2;
   }
@@ -205,9 +194,7 @@ export function listAtlasFields(
   return fields;
 }
 
-export type AtlasFilterPredicate = (
-  properties: Record<string, unknown>,
-) => boolean;
+export type AtlasFilterPredicate = (properties: Record<string, unknown>) => boolean;
 
 /** A single parsed `field op value` comparison. */
 interface FilterCondition {
@@ -217,15 +204,11 @@ interface FilterCondition {
   numericValue: number | null;
 }
 
-const CONDITION_RE =
-  /^(.+?)\s*(==|!=|>=|<=|=|>|<)\s*(.+)$|^(.+?)\s+(contains)\s+(.+)$/i;
+const CONDITION_RE = /^(.+?)\s*(==|!=|>=|<=|=|>|<)\s*(.+)$|^(.+?)\s+(contains)\s+(.+)$/i;
 
 function unquote(raw: string): string {
   const v = raw.trim();
-  if (
-    (v.startsWith('"') && v.endsWith('"')) ||
-    (v.startsWith("'") && v.endsWith("'"))
-  ) {
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
     return v.slice(1, -1);
   }
   return v;
@@ -282,9 +265,7 @@ function splitConditions(expr: string): string[] {
  * words. Equality compares numerically when both sides are numbers, otherwise
  * as strings; ordering comparisons require numbers on both sides.
  */
-export function parseAtlasFilter(
-  expression: string,
-): AtlasFilterPredicate | null {
+export function parseAtlasFilter(expression: string): AtlasFilterPredicate | null {
   const expr = expression.trim();
   if (!expr) return () => true;
   const parts = splitConditions(expr);
@@ -305,8 +286,7 @@ export function parseAtlasFilter(
       numericValue: value !== "" && Number.isFinite(num) ? num : null,
     });
   }
-  return (properties) =>
-    conditions.every((c) => matchCondition(c, properties[c.field]));
+  return (properties) => conditions.every((c) => matchCondition(c, properties[c.field]));
 }
 
 function matchCondition(c: FilterCondition, raw: unknown): boolean {
@@ -315,9 +295,7 @@ function matchCondition(c: FilterCondition, raw: unknown): boolean {
   if (raw === null || raw === undefined) return c.op === "!=";
   const asNum = typeof raw === "number" ? raw : Number(raw);
   const bothNumeric =
-    c.numericValue !== null &&
-    Number.isFinite(asNum) &&
-    String(raw).trim() !== "";
+    c.numericValue !== null && Number.isFinite(asNum) && String(raw).trim() !== "";
   switch (c.op) {
     case "=":
       return bothNumeric ? asNum === c.numericValue : String(raw) === c.value;
@@ -427,10 +405,7 @@ export function buildAtlasPages(
   if (sortField) {
     const sign = sortDescending ? -1 : 1;
     pages.sort((a, b) => {
-      const cmp = compareValues(
-        a.properties[sortField],
-        b.properties[sortField],
-      );
+      const cmp = compareValues(a.properties[sortField], b.properties[sortField]);
       // Missing values stay last in both directions: compareValues already
       // pushed them to the end, so only flip the sign for present-vs-present.
       const aMissing =
@@ -457,9 +432,7 @@ function haversineMeters(a: Position, b: Position): number {
   const dLng = toRad(b[0] - a[0]);
   const la1 = toRad(a[1]);
   const la2 = toRad(b[1]);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -498,9 +471,7 @@ function lineParts(geometry: Geometry | null | undefined): Position[][] {
  * the same traversal {@link buildLineAtlasPages} uses (GeometryCollections
  * included), so UI counts can never disagree with the page builder.
  */
-export function hasLineGeometry(
-  geometry: Geometry | null | undefined,
-): boolean {
+export function hasLineGeometry(geometry: Geometry | null | undefined): boolean {
   return lineParts(geometry).length > 0;
 }
 
@@ -597,8 +568,7 @@ export function buildLineAtlasPages(
   const pages: Omit<AtlasPage, "index">[] = [];
   for (
     let featureIndex = 0;
-    featureIndex < collection.features.length &&
-    pages.length < MAX_LINE_ATLAS_PAGES;
+    featureIndex < collection.features.length && pages.length < MAX_LINE_ATLAS_PAGES;
     featureIndex++
   ) {
     const feature = collection.features[featureIndex];
@@ -647,14 +617,8 @@ export function buildLineAtlasPages(
  * pattern, sanitize the result for the filesystem, and fall back to the page
  * number when everything sanitizes away.
  */
-export function atlasEntryName(
-  pattern: string,
-  ctx: AtlasTokenContext,
-): string {
-  const substituted = substituteAtlasTokens(
-    pattern || "{atlas.pagenumber}-{atlas.name}",
-    ctx,
-  );
+export function atlasEntryName(pattern: string, ctx: AtlasTokenContext): string {
+  const substituted = substituteAtlasTokens(pattern || "{atlas.pagenumber}-{atlas.name}", ctx);
   const cleaned = substituted
     .trim()
     .replace(/[^\p{L}\p{N} ._-]+/gu, "")

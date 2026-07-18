@@ -1,13 +1,5 @@
-import {
-  resolveThreeDTilesRequestHeaders,
-  type GeoLibreLayer,
-} from "@geolibre/core";
-import type {
-  Cesium3DTileset,
-  DataSource,
-  ImageryLayer,
-  Viewer,
-} from "cesium";
+import { resolveThreeDTilesRequestHeaders, type GeoLibreLayer } from "@geolibre/core";
+import type { Cesium3DTileset, DataSource, ImageryLayer, Viewer } from "cesium";
 
 // Reconciles the store's `GeoLibreLayer[]` onto a Cesium globe, mirroring what
 // MapController.syncLayers does for MapLibre. M3 covers the layer kinds where
@@ -58,11 +50,7 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
  * globe pane. See the module header for the supported kinds.
  */
 export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "geojson" ||
-    layer.type === "3d-tiles" ||
-    IMAGERY_TYPES.has(layer.type)
-  );
+  return layer.type === "geojson" || layer.type === "3d-tiles" || IMAGERY_TYPES.has(layer.type);
 }
 
 /** Whether this layer can render on the globe now (kind supported + data ready). */
@@ -72,9 +60,7 @@ function isSupported(layer: GeoLibreLayer): boolean {
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
   // Mirror createImagery's real capability: WMS builds from source.url, but
   // xyz/raster/wmts need a tile template — a url alone would render nothing.
-  return layer.type === "wms"
-    ? Boolean(str(layer.source.url))
-    : Boolean(firstTile(layer));
+  return layer.type === "wms" ? Boolean(str(layer.source.url)) : Boolean(firstTile(layer));
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
@@ -90,12 +76,7 @@ function entryKind(layer: GeoLibreLayer): EntryKind {
 // alpha instead of reloading the whole GeoJsonDataSource on every tick.
 function styleSignature(layer: GeoLibreLayer): string {
   const style = layer.style ?? {};
-  return [
-    style.fillColor,
-    style.strokeColor,
-    style.strokeWidth,
-    style.markerColor,
-  ].join("|");
+  return [style.fillColor, style.strokeColor, style.strokeWidth, style.markerColor].join("|");
 }
 
 /**
@@ -110,10 +91,7 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
   if (prev.type !== next.type) return true;
   switch (entryKind(next)) {
     case "geojson":
-      return (
-        prev.geojson !== next.geojson ||
-        styleSignature(prev) !== styleSignature(next)
-      );
+      return prev.geojson !== next.geojson || styleSignature(prev) !== styleSignature(next);
     case "imagery":
       return (
         firstTile(prev) !== firstTile(next) ||
@@ -276,9 +254,7 @@ export class CesiumLayerSync {
     if (!layer.geojson) return;
     const style = layer.style ?? {};
     const fill = Cesium.Color.fromCssColorString(style.fillColor ?? "#3b82f6");
-    const stroke = Cesium.Color.fromCssColorString(
-      style.strokeColor ?? "#1e40af",
-    );
+    const stroke = Cesium.Color.fromCssColorString(style.strokeColor ?? "#1e40af");
     // Fold the layer + fill opacity into the fill colour (a GeoJsonDataSource has
     // no global alpha). A later opacity change re-applies this alpha in place
     // (applyGeoJsonStyle) rather than reloading the whole data source.
@@ -288,9 +264,7 @@ export class CesiumLayerSync {
         stroke,
         strokeWidth: style.strokeWidth ?? 2,
         fill: fill.withAlpha(fillAlpha),
-        markerColor: Cesium.Color.fromCssColorString(
-          style.markerColor ?? "#3b82f6",
-        ),
+        markerColor: Cesium.Color.fromCssColorString(style.markerColor ?? "#3b82f6"),
         clampToGround: true,
       });
       if (entry.cancelled) return;
@@ -322,9 +296,7 @@ export class CesiumLayerSync {
       layer.source.requestHeaders as Record<string, string> | undefined,
     );
     const resource =
-      headers && Object.keys(headers).length
-        ? new Cesium.Resource({ url, headers })
-        : url;
+      headers && Object.keys(headers).length ? new Cesium.Resource({ url, headers }) : url;
     try {
       const tileset = await Cesium.Cesium3DTileset.fromUrl(resource, {});
       if (entry.cancelled) {
@@ -344,24 +316,10 @@ export class CesiumLayerSync {
   private applyTilesetAltitude(tileset: Cesium3DTileset, offset: number): void {
     if (!Number.isFinite(offset) || offset === 0) return;
     const { Cesium } = this;
-    const carto = Cesium.Cartographic.fromCartesian(
-      tileset.boundingSphere.center,
-    );
-    const surface = Cesium.Cartesian3.fromRadians(
-      carto.longitude,
-      carto.latitude,
-      0,
-    );
-    const target = Cesium.Cartesian3.fromRadians(
-      carto.longitude,
-      carto.latitude,
-      offset,
-    );
-    const translation = Cesium.Cartesian3.subtract(
-      target,
-      surface,
-      new Cesium.Cartesian3(),
-    );
+    const carto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+    const surface = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 0);
+    const target = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, offset);
+    const translation = Cesium.Cartesian3.subtract(target, surface, new Cesium.Cartesian3());
     tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
   }
 
@@ -401,12 +359,10 @@ export class CesiumLayerSync {
     if (entry.appliedAlpha === key) return;
     entry.appliedAlpha = key;
     const { Cesium } = this;
-    const fill = Cesium.Color.fromCssColorString(
-      style.fillColor ?? "#3b82f6",
-    ).withAlpha(fillAlpha);
-    const stroke = Cesium.Color.fromCssColorString(
-      style.strokeColor ?? "#1e40af",
-    ).withAlpha(opacity);
+    const fill = Cesium.Color.fromCssColorString(style.fillColor ?? "#3b82f6").withAlpha(fillAlpha);
+    const stroke = Cesium.Color.fromCssColorString(style.strokeColor ?? "#1e40af").withAlpha(
+      opacity,
+    );
     // Point pins keep their baked-in colour; multiplying by white+alpha only
     // fades them.
     const marker = Cesium.Color.WHITE.withAlpha(opacity);

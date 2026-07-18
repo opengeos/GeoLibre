@@ -56,10 +56,7 @@ describe("DesktopSettings.aiProviderEnv persistence", () => {
 
   it("tolerates a non-record aiProviderEnv", () => {
     for (const bad of [null, "nope", 7, ["ANTHROPIC_API_KEY"]]) {
-      assert.deepEqual(
-        normalizeDesktopSettings({ aiProviderEnv: bad }).aiProviderEnv,
-        {},
-      );
+      assert.deepEqual(normalizeDesktopSettings({ aiProviderEnv: bad }).aiProviderEnv, {});
     }
   });
 

@@ -8,15 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import type maplibregl from "maplibre-gl";
-import {
-  BookOpen,
-  Braces,
-  Crosshair,
-  Earth,
-  MapIcon,
-  MapPin,
-  ZoomIn,
-} from "lucide-react";
+import { BookOpen, Braces, Crosshair, Earth, MapIcon, MapPin, ZoomIn } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
@@ -163,9 +155,7 @@ export function MapContextMenu({
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
     const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
-    void openExternalLink(
-      googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }),
-    );
+    void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
@@ -179,11 +169,7 @@ export function MapContextMenu({
     // a fresh anchor at the cursor. The key is tied to `menu` (not `open`), so a
     // normal close leaves the key stable and Radix can play its exit animation;
     // only the next right-click forces the remount that repositions the popup.
-    <DropdownMenu
-      key={menu?.id ?? "init"}
-      open={open}
-      onOpenChange={setOpen}
-    >
+    <DropdownMenu key={menu?.id ?? "init"} open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <span
           aria-hidden
@@ -203,9 +189,7 @@ export function MapContextMenu({
           title={t("mapContextMenu.copyCoordinatesHint")}
         >
           <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            {menu ? formatCoords(menu.lat, menu.lng) : ""}
-          </span>
+          <span className="truncate">{menu ? formatCoords(menu.lat, menu.lng) : ""}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">

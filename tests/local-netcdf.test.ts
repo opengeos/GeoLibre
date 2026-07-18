@@ -19,7 +19,7 @@ function fixture(name: string): ArrayBuffer {
 /** Decode a JSON metadata value from the store. */
 async function readJson(
   store: KerchunkReferenceStore,
-  key: string
+  key: string,
 ): Promise<Record<string, unknown>> {
   const bytes = await store.get(key);
   assert.ok(bytes, `missing key ${key}`);
@@ -27,15 +27,10 @@ async function readJson(
 }
 
 /** Decode a store chunk as a little-endian float32 array. */
-async function readFloat32(
-  store: KerchunkReferenceStore,
-  key: string
-): Promise<number[]> {
+async function readFloat32(store: KerchunkReferenceStore, key: string): Promise<number[]> {
   const chunk = await store.get(key);
   assert.ok(chunk, `missing key ${key}`);
-  return Array.from(
-    new Float32Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 4)
-  );
+  return Array.from(new Float32Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 4));
 }
 
 /** A small 2x3 float32 grid with 2 lat rows and 3 lon columns. */
@@ -85,11 +80,7 @@ describe("buildInlineZarrRefs", () => {
     // Single chunk for a 2-D array is keyed "0.0".
     const chunk = await store.get("air/0.0");
     assert.ok(chunk);
-    const values = new Float32Array(
-      chunk.buffer,
-      chunk.byteOffset,
-      chunk.byteLength / 4
-    );
+    const values = new Float32Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 4);
     assert.deepEqual(Array.from(values), [1, 2, 3, 4, 5, 6]);
   });
 
@@ -101,20 +92,12 @@ describe("buildInlineZarrRefs", () => {
     assert.deepEqual(latAttrs._ARRAY_DIMENSIONS, ["lat"]);
     const latChunk = await store.get("lat/0");
     assert.ok(latChunk);
-    const lat = new Float64Array(
-      latChunk.buffer,
-      latChunk.byteOffset,
-      latChunk.byteLength / 8
-    );
+    const lat = new Float64Array(latChunk.buffer, latChunk.byteOffset, latChunk.byteLength / 8);
     assert.deepEqual(Array.from(lat), [10, 20]);
 
     const lonChunk = await store.get("lon/0");
     assert.ok(lonChunk);
-    const lon = new Float64Array(
-      lonChunk.buffer,
-      lonChunk.byteOffset,
-      lonChunk.byteLength / 8
-    );
+    const lon = new Float64Array(lonChunk.buffer, lonChunk.byteOffset, lonChunk.byteLength / 8);
     assert.deepEqual(Array.from(lon), [0, 1, 2]);
   });
 
@@ -151,11 +134,7 @@ describe("buildInlineZarrRefs", () => {
     // Split at lon >= 180: columns [180,270] move to the front as [-180,-90].
     const lonChunk = await store.get("lon/0");
     assert.ok(lonChunk);
-    const lon = new Float64Array(
-      lonChunk.buffer,
-      lonChunk.byteOffset,
-      lonChunk.byteLength / 8
-    );
+    const lon = new Float64Array(lonChunk.buffer, lonChunk.byteOffset, lonChunk.byteLength / 8);
     assert.deepEqual(Array.from(lon), [-180, -90, 0, 90]);
 
     // Data columns follow the same permutation: [30,40,10,20].
@@ -164,7 +143,7 @@ describe("buildInlineZarrRefs", () => {
     const values = new Float32Array(
       dataChunk.buffer,
       dataChunk.byteOffset,
-      dataChunk.byteLength / 4
+      dataChunk.byteLength / 4,
     );
     assert.deepEqual(Array.from(values), [30, 40, 10, 20]);
   });
@@ -184,18 +163,14 @@ describe("buildInlineZarrRefs", () => {
     const store = new KerchunkReferenceStore(buildInlineZarrRefs(grid));
     const lonChunk = await store.get("lon/0");
     assert.ok(lonChunk);
-    const lon = new Float64Array(
-      lonChunk.buffer,
-      lonChunk.byteOffset,
-      lonChunk.byteLength / 8
-    );
+    const lon = new Float64Array(lonChunk.buffer, lonChunk.byteOffset, lonChunk.byteLength / 8);
     assert.deepEqual(Array.from(lon), [-135, -45, 45, 135]);
     const dataChunk = await store.get("air/0.0");
     assert.ok(dataChunk);
     const values = new Float32Array(
       dataChunk.buffer,
       dataChunk.byteOffset,
-      dataChunk.byteLength / 4
+      dataChunk.byteLength / 4,
     );
     assert.deepEqual(Array.from(values), [10, 20, 30, 40]);
   });
@@ -220,18 +195,14 @@ describe("buildInlineZarrRefs", () => {
     const values = new Float32Array(
       dataChunk.buffer,
       dataChunk.byteOffset,
-      dataChunk.byteLength / 4
+      dataChunk.byteLength / 4,
     );
     assert.deepEqual(Array.from(values), [10, 20, 30, 40]);
 
     // The longitude coordinate must also be left untouched (no roll).
     const lonChunk = await store.get("lon/0");
     assert.ok(lonChunk);
-    const lon = new Float64Array(
-      lonChunk.buffer,
-      lonChunk.byteOffset,
-      lonChunk.byteLength / 8
-    );
+    const lon = new Float64Array(lonChunk.buffer, lonChunk.byteOffset, lonChunk.byteLength / 8);
     assert.deepEqual(Array.from(lon), [0, 90, NaN, 270]);
   });
 
@@ -245,11 +216,7 @@ describe("buildInlineZarrRefs", () => {
     const store = new KerchunkReferenceStore(refs);
     const chunk = await store.get("air/0.0");
     assert.ok(chunk);
-    const values = new Int16Array(
-      chunk.buffer,
-      chunk.byteOffset,
-      chunk.byteLength / 2
-    );
+    const values = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 2);
     assert.deepEqual(Array.from(values), [1, 2, 3, 4, 5, 6]);
   });
 });
@@ -280,10 +247,7 @@ describe("openLocalNetcdf (NetCDF-3)", () => {
       assert.equal(zarray.dtype, "<f4");
       assert.equal(zarray.fill_value, -9999);
 
-      assert.deepEqual(
-        await readFloat32(store, "temp/0.0"),
-        [11, 12, 13, 14, 15, 16]
-      );
+      assert.deepEqual(await readFloat32(store, "temp/0.0"), [11, 12, 13, 14, 15, 16]);
       assert.deepEqual(await readFloat32(store, "lat/0"), [10, 20]);
     } finally {
       file.close();
@@ -295,10 +259,7 @@ describe("openLocalNetcdf (NetCDF-3)", () => {
     try {
       const { refs } = file.buildLayerRefs("temp");
       const store = new KerchunkReferenceStore(refs);
-      assert.deepEqual(
-        await readFloat32(store, "temp/0.0"),
-        [1, 2, 3, 4, 5, 6]
-      );
+      assert.deepEqual(await readFloat32(store, "temp/0.0"), [1, 2, 3, 4, 5, 6]);
     } finally {
       file.close();
     }
@@ -309,10 +270,7 @@ describe("openLocalNetcdf (NetCDF-3)", () => {
     // mis-read as WGS84 degrees.
     const file = await openLocalNetcdf(fixture("sample-nc3-xy.nc"));
     try {
-      assert.throws(
-        () => file.buildLayerRefs("data"),
-        /latitude\/longitude coordinate/i
-      );
+      assert.throws(() => file.buildLayerRefs("data"), /latitude\/longitude coordinate/i);
     } finally {
       file.close();
     }

@@ -58,12 +58,7 @@ export function VideoSource() {
     if (urls.some((url) => !/^https:\/\//i.test(url))) {
       throw new Error(t("addData.video.errorHttps"));
     }
-    const coordinates: [
-      [number, number],
-      [number, number],
-      [number, number],
-      [number, number],
-    ] = [
+    const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
       parseCorner(videoTopLeft, t("addData.video.cornerTopLeft")),
       parseCorner(videoTopRight, t("addData.video.cornerTopRight")),
       parseCorner(videoBottomRight, t("addData.video.cornerBottomRight")),
@@ -119,9 +114,7 @@ export function VideoSource() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="video-webm-url">
-            {t("addData.video.fallbackUrl")}
-          </Label>
+          <Label htmlFor="video-webm-url">{t("addData.video.fallbackUrl")}</Label>
           <Input
             id="video-webm-url"
             placeholder={t("addData.video.fallbackUrlPlaceholder")}
@@ -139,9 +132,7 @@ export function VideoSource() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="video-top-right">
-              {t("addData.video.topRight")}
-            </Label>
+            <Label htmlFor="video-top-right">{t("addData.video.topRight")}</Label>
             <Input
               id="video-top-right"
               value={videoTopRight}
@@ -149,9 +140,7 @@ export function VideoSource() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="video-bottom-right">
-              {t("addData.video.bottomRight")}
-            </Label>
+            <Label htmlFor="video-bottom-right">{t("addData.video.bottomRight")}</Label>
             <Input
               id="video-bottom-right"
               value={videoBottomRight}
@@ -159,9 +148,7 @@ export function VideoSource() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="video-bottom-left">
-              {t("addData.video.bottomLeft")}
-            </Label>
+            <Label htmlFor="video-bottom-left">{t("addData.video.bottomLeft")}</Label>
             <Input
               id="video-bottom-left"
               value={videoBottomLeft}
@@ -169,9 +156,7 @@ export function VideoSource() {
             />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {t("addData.video.cornersNote")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("addData.video.cornersNote")}</p>
         <SampleDataSelect
           samples={[
             {

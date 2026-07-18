@@ -106,10 +106,7 @@ export function serializeStoryMapCsv(storymap: StoryMap): string {
  * @returns A normalized story map.
  * @throws If the CSV has no data rows or no valid chapters.
  */
-export function parseStoryMapCsv(
-  text: string,
-  base?: StoryMap | null,
-): StoryMap {
+export function parseStoryMapCsv(text: string, base?: StoryMap | null): StoryMap {
   const rows = parseCsvRows(text);
   if (rows.length < 2) {
     throw new Error("The CSV has no chapter rows.");

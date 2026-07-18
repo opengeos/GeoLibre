@@ -193,10 +193,7 @@ export class CollabConnection {
   // frame with code "not-found"/"forbidden") so we don't retry a dead session
   // forever.
   private scheduleReconnect(): void {
-    const delay = Math.min(
-      RECONNECT_MAX_MS,
-      RECONNECT_MIN_MS * 2 ** this.attempt,
-    );
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_MIN_MS * 2 ** this.attempt);
     this.attempt += 1;
     // Jitter avoids a thundering herd when a relay restarts and every client
     // reconnects at once.

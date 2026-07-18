@@ -42,13 +42,7 @@ export interface RasterTool {
   id: RasterToolId;
   name: string;
   description: string;
-  group:
-    | "Terrain"
-    | "Reproject"
-    | "Clip"
-    | "Raster to Vector"
-    | "Vector to Raster"
-    | "Analysis";
+  group: "Terrain" | "Reproject" | "Clip" | "Raster to Vector" | "Vector to Raster" | "Analysis";
   /** Raster output writes a GeoTIFF; vector output writes a GeoJSON. */
   outputKind: "raster" | "vector";
   defaultOutputName: string;
@@ -71,18 +65,10 @@ export interface RasterTool {
   parameters: AlgorithmParameter[];
 }
 
-const GEOTIFF_INPUT: FileFilter[] = [
-  { name: "GeoTIFF", extensions: ["tif", "tiff"] },
-];
-const GEOTIFF_OUTPUT: FileFilter[] = [
-  { name: "GeoTIFF", extensions: ["tif", "tiff"] },
-];
-const GEOJSON_OUTPUT: FileFilter[] = [
-  { name: "GeoJSON", extensions: ["geojson", "json"] },
-];
-const GEOJSON_INPUT: FileFilter[] = [
-  { name: "GeoJSON", extensions: ["geojson", "json"] },
-];
+const GEOTIFF_INPUT: FileFilter[] = [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }];
+const GEOTIFF_OUTPUT: FileFilter[] = [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }];
+const GEOJSON_OUTPUT: FileFilter[] = [{ name: "GeoJSON", extensions: ["geojson", "json"] }];
+const GEOJSON_INPUT: FileFilter[] = [{ name: "GeoJSON", extensions: ["geojson", "json"] }];
 
 const RESAMPLING_OPTIONS = [
   { value: "nearest", label: "Nearest neighbour" },
@@ -93,8 +79,7 @@ const RESAMPLING_OPTIONS = [
 export const hillshadeTool: RasterTool = {
   id: "hillshade",
   name: "Hillshade",
-  description:
-    "Compute a shaded-relief (hillshade) raster from an elevation model.",
+  description: "Compute a shaded-relief (hillshade) raster from an elevation model.",
   group: "Terrain",
   outputKind: "raster",
   defaultOutputName: "hillshade.tif",
@@ -166,8 +151,7 @@ export const slopeTool: RasterTool = {
 export const aspectTool: RasterTool = {
   id: "aspect",
   name: "Aspect",
-  description:
-    "Compute aspect (compass direction of the steepest slope) from an elevation model.",
+  description: "Compute aspect (compass direction of the steepest slope) from an elevation model.",
   group: "Terrain",
   outputKind: "raster",
   defaultOutputName: "aspect.tif",
@@ -290,8 +274,7 @@ export const clipMaskTool: RasterTool = {
 export const polygonizeTool: RasterTool = {
   id: "polygonize",
   name: "Polygonize",
-  description:
-    "Convert a raster band into vector polygons grouped by pixel value.",
+  description: "Convert a raster band into vector polygons grouped by pixel value.",
   group: "Raster to Vector",
   outputKind: "vector",
   defaultOutputName: "polygons.geojson",
@@ -657,8 +640,7 @@ export const mosaicTool: RasterTool = {
 export const focalStatisticsTool: RasterTool = {
   id: "focal",
   name: "Focal statistics",
-  description:
-    "Apply a moving-window (neighbourhood) statistic to a raster band.",
+  description: "Apply a moving-window (neighbourhood) statistic to a raster band.",
   group: "Analysis",
   outputKind: "raster",
   defaultOutputName: "focal.tif",

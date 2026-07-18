@@ -1,9 +1,4 @@
-import {
-  normalizeHexColor,
-  styleValue,
-  type FillPattern,
-  type LayerStyle,
-} from "@geolibre/core";
+import { normalizeHexColor, styleValue, type FillPattern, type LayerStyle } from "@geolibre/core";
 import {
   hashText,
   registerGeneratedImage,
@@ -26,15 +21,10 @@ const BUILTIN_PATTERNS: ReadonlySet<FillPattern> = new Set([
 ]);
 
 function patternColor(style: LayerStyle): string {
-  return (
-    normalizeHexColor(styleValue(style, "fillPatternColor")) ?? "#1e40af"
-  );
+  return normalizeHexColor(styleValue(style, "fillPatternColor")) ?? "#1e40af";
 }
 
-function drawBuiltinPattern(
-  pattern: FillPattern,
-  color: string,
-): GeneratedImageResult | null {
+function drawBuiltinPattern(pattern: FillPattern, color: string): GeneratedImageResult | null {
   const ratio = PATTERN_PIXEL_RATIO;
   const size = PATTERN_TILE_SIZE * ratio;
   const canvas = document.createElement("canvas");

@@ -16,9 +16,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   timeout: 60_000,
   expect: { timeout: 15_000 },
-  reporter: process.env.CI
-    ? [["list"], ["html", { open: "never" }]]
-    : [["list"]],
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL: BASE_URL,
     // Seed the first-launch UI-profile onboarding (issue #500) as already

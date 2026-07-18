@@ -11,17 +11,11 @@ describe("getCesiumIonToken", () => {
   });
 
   it("returns the trimmed VITE_ token when set", () => {
-    assert.equal(
-      getCesiumIonToken({ VITE_CESIUM_TOKEN: "  ion.jwt.token  " }),
-      "ion.jwt.token",
-    );
+    assert.equal(getCesiumIonToken({ VITE_CESIUM_TOKEN: "  ion.jwt.token  " }), "ion.jwt.token");
   });
 
   it("falls back to the bare CESIUM_TOKEN", () => {
-    assert.equal(
-      getCesiumIonToken({ CESIUM_TOKEN: "  bare-token  " }),
-      "bare-token",
-    );
+    assert.equal(getCesiumIonToken({ CESIUM_TOKEN: "  bare-token  " }), "bare-token");
   });
 
   it("prefers VITE_CESIUM_TOKEN over the bare name", () => {

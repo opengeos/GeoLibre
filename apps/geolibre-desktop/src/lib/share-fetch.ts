@@ -38,12 +38,7 @@ export function resetShareFetch(): void {
 /** The request URL's host, or null when it cannot be parsed. */
 function requestHost(input: RequestInfo | URL): string | null {
   try {
-    const href =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
+    const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     return new URL(href).host;
   } catch {
     return null;

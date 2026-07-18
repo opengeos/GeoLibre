@@ -122,7 +122,5 @@ export function addFavorite(favorite: BrowserFavorite): BrowserFavorite[] {
 
 /** Remove a favorite by node id. */
 export function removeFavorite(id: string): BrowserFavorite[] {
-  return writeBrowserFavorites(
-    readBrowserFavorites().filter((fav) => fav.id !== id),
-  );
+  return writeBrowserFavorites(readBrowserFavorites().filter((fav) => fav.id !== id));
 }

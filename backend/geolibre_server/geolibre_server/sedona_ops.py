@@ -139,9 +139,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
                 raise ValueError(f"Invalid layer name: {name!r}")
             features = geojson.get("features") or []
             if len(features) > MAX_FEATURES:
-                raise SqlInputTooLarge(
-                    f"Layer '{name}' exceeds the {MAX_FEATURES}-feature limit"
-                )
+                raise SqlInputTooLarge(f"Layer '{name}' exceeds the {MAX_FEATURES}-feature limit")
             if not features:
                 # An empty layer registers no usable view; skip it rather than
                 # fail the whole query (from_features rejects an empty list).

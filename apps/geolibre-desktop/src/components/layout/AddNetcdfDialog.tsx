@@ -29,8 +29,7 @@ import { SampleDataSelect } from "./add-data/shared";
 // Cloud-Optimized NetCDF and served from Source Cooperative (CORS-enabled,
 // range-request capable). The reference uses a relative chunk URL, so it
 // resolves against the manifest's own location.
-const SAMPLE_URL =
-  "https://data.source.coop/giswqs/opengeos/netcdf/air-temperature.kerchunk.json";
+const SAMPLE_URL = "https://data.source.coop/giswqs/opengeos/netcdf/air-temperature.kerchunk.json";
 
 // Extensions accepted for a local file: classic NetCDF-3 (.nc/.cdf, via
 // netcdfjs) and HDF5-backed NetCDF-4/HDF5 (.nc/.nc4/.h5/.hdf5, via h5wasm).
@@ -53,11 +52,7 @@ interface AddNetcdfDialogProps {
  * both cases the user picks a renderable variable (and any leading dimension
  * index), and the layer renders through the shared Zarr control.
  */
-export function AddNetcdfDialog({
-  open,
-  appApi,
-  onOpenChange,
-}: AddNetcdfDialogProps) {
+export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<"url" | "file">("url");
   const [url, setUrl] = useState("");
@@ -157,9 +152,7 @@ export function AddNetcdfDialog({
       const vars = listKerchunkVariables(refs);
       if (gen !== opGen.current) return; // dialog was closed/reopened
       if (vars.length === 0) {
-        throw new Error(
-          "No renderable (2-D or higher) variables found in the reference."
-        );
+        throw new Error("No renderable (2-D or higher) variables found in the reference.");
       }
       setLoadedRefs(refs);
       applyLoadedVariables(vars);
@@ -296,9 +289,7 @@ export function AddNetcdfDialog({
             <Boxes className="h-4 w-4" />
             {t("addData.netcdf.title")}
           </DialogTitle>
-          <DialogDescription>
-            {t("addData.netcdf.description")}
-          </DialogDescription>
+          <DialogDescription>{t("addData.netcdf.description")}</DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -308,9 +299,7 @@ export function AddNetcdfDialog({
               i18n catalog and remains English pre-existing debt, out of scope
               for this change. */}
           <div className="space-y-1.5">
-            <Label htmlFor="netcdf-source">
-              {t("addData.netcdf.sourceLabel")}
-            </Label>
+            <Label htmlFor="netcdf-source">{t("addData.netcdf.sourceLabel")}</Label>
             <Select
               id="netcdf-source"
               value={source}
@@ -329,9 +318,7 @@ export function AddNetcdfDialog({
           {source === "url" ? (
             <>
               <SampleDataSelect
-                samples={[
-                  { label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL },
-                ]}
+                samples={[{ label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL }]}
                 onSelect={(sampleUrl) => {
                   invalidateLoadedSource();
                   setUrl(sampleUrl);
@@ -359,8 +346,8 @@ export function AddNetcdfDialog({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Choose a sample dataset above, or paste your own kerchunk
-                  reference URL, then click Load variables.
+                  Choose a sample dataset above, or paste your own kerchunk reference URL, then
+                  click Load variables.
                 </p>
               </div>
             </>
@@ -377,15 +364,11 @@ export function AddNetcdfDialog({
                 {loadingVars
                   ? t("addData.netcdf.readingFile")
                   : fileName
-                  ? t("addData.netcdf.chooseDifferentFile")
-                  : t("addData.common.chooseFile")}
+                    ? t("addData.netcdf.chooseDifferentFile")
+                    : t("addData.common.chooseFile")}
               </Button>
-              {fileName && (
-                <p className="text-xs text-muted-foreground">{fileName}</p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {t("addData.netcdf.localFileHelp")}
-              </p>
+              {fileName && <p className="text-xs text-muted-foreground">{fileName}</p>}
+              <p className="text-xs text-muted-foreground">{t("addData.netcdf.localFileHelp")}</p>
             </div>
           )}
 
@@ -450,9 +433,7 @@ export function AddNetcdfDialog({
           )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
-          {status && !error && (
-            <p className="text-sm text-muted-foreground">{status}</p>
-          )}
+          {status && !error && <p className="text-sm text-muted-foreground">{status}</p>}
 
           <div className="flex justify-end gap-2">
             <Button

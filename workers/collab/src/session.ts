@@ -45,11 +45,7 @@ function sanitizeView(v: unknown): CollabView | null {
     pitch: finite(o.pitch) ? o.pitch : 0,
   };
   const bbox = o.bbox;
-  if (
-    Array.isArray(bbox) &&
-    bbox.length === 4 &&
-    bbox.every((n) => finite(n))
-  ) {
+  if (Array.isArray(bbox) && bbox.length === 4 && bbox.every((n) => finite(n))) {
     view.bbox = [bbox[0], bbox[1], bbox[2], bbox[3]];
   }
   return view;
@@ -194,8 +190,7 @@ export class CollabSession extends DurableObject<Env> {
         mode?: CollaborationMode;
         hostToken?: string;
       };
-      const mode: CollaborationMode =
-        body.mode === "view-only" ? "view-only" : "co-edit";
+      const mode: CollaborationMode = body.mode === "view-only" ? "view-only" : "co-edit";
       await this.ctx.storage.put({
         mode,
         hostToken: body.hostToken ?? "",
@@ -227,10 +222,7 @@ export class CollabSession extends DurableObject<Env> {
     return new Response("Not found", { status: 404 });
   }
 
-  async webSocketMessage(
-    ws: WebSocket,
-    raw: string | ArrayBuffer,
-  ): Promise<void> {
+  async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     if (typeof raw !== "string") {
       this.send(ws, {
         type: "error",
@@ -273,12 +265,7 @@ export class CollabSession extends DurableObject<Env> {
       case "snapshot":
         // Pass the accurate UTF-8 byte length (raw.length counts UTF-16 code
         // units, which undercounts multi-byte characters).
-        await this.handleSnapshot(
-          ws,
-          attachment,
-          message,
-          ENCODER.encode(raw).length,
-        );
+        await this.handleSnapshot(ws, attachment, message, ENCODER.encode(raw).length);
         break;
       case "presence":
         this.handlePresence(attachment, message);
@@ -307,10 +294,7 @@ export class CollabSession extends DurableObject<Env> {
     // handler, so exclude it explicitly from both the participant list and the
     // empty-session check (otherwise the leaver lingers and the cleanup alarm
     // is never scheduled when the last participant leaves).
-    this.broadcast(
-      { type: "participants", participants: this.participants(ws) },
-      ws,
-    );
+    this.broadcast({ type: "participants", participants: this.participants(ws) }, ws);
     const remaining = this.ctx.getWebSockets().filter((s) => s !== ws);
     if (remaining.length === 0) {
       await this.ctx.storage.setAlarm(Date.now() + EMPTY_SESSION_TTL_MS);
@@ -351,9 +335,7 @@ export class CollabSession extends DurableObject<Env> {
     ]);
 
     const role: CollaborationRole =
-      message.hostToken && storedToken && message.hostToken === storedToken
-        ? "host"
-        : "guest";
+      message.hostToken && storedToken && message.hostToken === storedToken ? "host" : "guest";
 
     const attachment: SocketAttachment = {
       // Assign the id server-side instead of trusting the client's, so a
@@ -363,8 +345,8 @@ export class CollabSession extends DurableObject<Env> {
       // Guard against a non-string displayName (JSON.parse won't enforce the
       // type) so a crafted frame can't crash the handler on `.slice`.
       displayName:
-        (typeof message.displayName === "string" ? message.displayName : "")
-          .slice(0, 60) || "Guest",
+        (typeof message.displayName === "string" ? message.displayName : "").slice(0, 60) ||
+        "Guest",
       // Only accept a hex color; fall back to neutral grey so a hostile value
       // never reaches peers (defense-in-depth with the client's DOM rendering).
       // Guard the type first: `.test()` coerces a non-string (number/array) to a
@@ -405,8 +387,7 @@ export class CollabSession extends DurableObject<Env> {
     message: Extract<ClientMessage, { type: "snapshot" }>,
     byteLength: number,
   ): Promise<void> {
-    const mode =
-      (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
+    const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
     // A host-set per-participant override takes precedence over the session
     // default, so a single guest can be pinned to view-only (or granted edit) in
     // an otherwise co-edit (or view-only) session (#754, Part 3).
@@ -425,8 +406,7 @@ export class CollabSession extends DurableObject<Env> {
       this.send(ws, {
         type: "error",
         code: "too-large",
-        message:
-          "Project is too large to sync live. Share it via URL instead.",
+        message: "Project is too large to sync live. Share it via URL instead.",
       });
       return;
     }
@@ -533,8 +513,7 @@ export class CollabSession extends DurableObject<Env> {
     // disconnect already broadcasts an updated roster, so the host's view (and
     // the now-absent toggle) reconciles on its own; no error frame needed.
     if (!target) return;
-    const targetAttachment =
-      target.deserializeAttachment() as SocketAttachment | null;
+    const targetAttachment = target.deserializeAttachment() as SocketAttachment | null;
     if (!targetAttachment || targetAttachment.role === "host") return;
     // Coerce to a strict boolean: `message` is untrusted JSON (the static type
     // is erased at runtime), so a crafted `"canEdit": 1` must not store a
@@ -555,18 +534,13 @@ export class CollabSession extends DurableObject<Env> {
     // Chat is open to everyone in the session, including view-only guests; only
     // project edits are gated. Reject an empty or non-string body.
     const text =
-      typeof message.text === "string"
-        ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH)
-        : "";
+      typeof message.text === "string" ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH) : "";
     if (!text) return;
     // Per-socket rate limit: silently drop a burst that arrives faster than the
     // floor so one client can't flood the storage-op budget / fan-out. The last
     // accepted timestamp rides on the attachment, so it survives a hibernation.
     const now = Date.now();
-    if (
-      attachment.lastChatTs !== undefined &&
-      now - attachment.lastChatTs < MIN_CHAT_INTERVAL_MS
-    ) {
+    if (attachment.lastChatTs !== undefined && now - attachment.lastChatTs < MIN_CHAT_INTERVAL_MS) {
       return;
     }
     attachment.lastChatTs = now;
@@ -635,7 +609,7 @@ export class CollabSession extends DurableObject<Env> {
           role: a.role,
           // Normalize the attachment's `undefined` (follow session mode) to the
           // wire's `null`; the host is always an editor with no override.
-          editOverride: a.role === "host" ? null : a.editOverride ?? null,
+          editOverride: a.role === "host" ? null : (a.editOverride ?? null),
         });
       }
     }
@@ -643,10 +617,7 @@ export class CollabSession extends DurableObject<Env> {
   }
 
   private broadcastParticipants(except?: WebSocket): void {
-    this.broadcast(
-      { type: "participants", participants: this.participants() },
-      except,
-    );
+    this.broadcast({ type: "participants", participants: this.participants() }, except);
   }
 
   private send(ws: WebSocket, message: ServerMessage): void {

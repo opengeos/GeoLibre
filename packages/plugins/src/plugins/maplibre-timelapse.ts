@@ -21,11 +21,7 @@
  * this plugin owns their visibility/paint by subscribing to the store.
  */
 
-import {
-  DEFAULT_LAYER_STYLE,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type {
   GeoLibreAppAPI,
@@ -403,10 +399,7 @@ export class TimelapseControl {
           type: "raster",
           source: sourceId,
           paint: {
-            "raster-opacity":
-              index === this.frameIndex && snapshot.visible
-                ? snapshot.opacity
-                : 0,
+            "raster-opacity": index === this.frameIndex && snapshot.visible ? snapshot.opacity : 0,
             // No per-tile fade and no opacity transition: a year swap must be
             // instant and atomic, or playback (and especially recorded frames)
             // shows a blend of two years.
@@ -419,9 +412,7 @@ export class TimelapseControl {
     }
     this.stackPresent = true;
     if (!snapshot.exists) {
-      useAppStore
-        .getState()
-        .addLayer(createTimelapseStoreLayer(this.provider, this.frames));
+      useAppStore.getState().addLayer(createTimelapseStoreLayer(this.provider, this.frames));
     }
     this.armTilesReadyGate();
   }
@@ -536,10 +527,7 @@ export class TimelapseControl {
    * The ordering-only sync path never touches visibility/paint, so the plugin
    * applies the store layer's `visible`/`opacity` to its native layers itself.
    */
-  onStoreLayerChange(
-    previous: StoreLayerSnapshot,
-    next: StoreLayerSnapshot,
-  ): void {
+  onStoreLayerChange(previous: StoreLayerSnapshot, next: StoreLayerSnapshot): void {
     if (!next.exists) {
       // Panel delete: layer-sync removed the native layers/sources; mirror
       // that here (guarded, so it is also correct headless) and stop playback.
@@ -554,11 +542,7 @@ export class TimelapseControl {
       for (const frame of this.frames) {
         const layerId = frameLayerId(frame);
         if (map.getLayer(layerId)) {
-          map.setLayoutProperty(
-            layerId,
-            "visibility",
-            next.visible ? "visible" : "none",
-          );
+          map.setLayoutProperty(layerId, "visibility", next.visible ? "visible" : "none");
         }
       }
       if (!next.visible) this.pause();
@@ -913,9 +897,7 @@ export class TimelapseControl {
       option.selected = step === this.secondsPerYear;
       speedSelect.appendChild(option);
     }
-    speedSelect.addEventListener("change", () =>
-      this.setSecondsPerYear(Number(speedSelect.value)),
-    );
+    speedSelect.addEventListener("change", () => this.setSecondsPerYear(Number(speedSelect.value)));
     this.speedSelect = speedSelect;
     speedLabel.appendChild(speedSelect);
     const loopLabel = document.createElement("label");
@@ -926,9 +908,7 @@ export class TimelapseControl {
     const loopCheckbox = document.createElement("input");
     loopCheckbox.type = "checkbox";
     loopCheckbox.checked = this.loop;
-    loopCheckbox.addEventListener("change", () =>
-      this.setLoop(loopCheckbox.checked),
-    );
+    loopCheckbox.addEventListener("change", () => this.setLoop(loopCheckbox.checked));
     loopLabel.appendChild(loopCheckbox);
     const loopText = document.createTextNode(labels.loop);
     loopLabel.appendChild(loopText);
@@ -1071,15 +1051,10 @@ export class TimelapseControl {
       this.badge.textContent = this.stackPresent ? (frame?.label ?? "") : "";
     }
     if (this.playButton) {
-      this.playButton.textContent = this.playing
-        ? `⏸ ${labels.pause}`
-        : `▶ ${labels.play}`;
+      this.playButton.textContent = this.playing ? `⏸ ${labels.pause}` : `▶ ${labels.play}`;
       this.playButton.disabled =
-        this.recording ||
-        this.frames.length < 2 ||
-        (!this.tilesReady && !this.playing);
-      this.playButton.title =
-        !this.tilesReady && !this.playing ? labels.loadingTiles : "";
+        this.recording || this.frames.length < 2 || (!this.tilesReady && !this.playing);
+      this.playButton.title = !this.tilesReady && !this.playing ? labels.loadingTiles : "";
     }
     if (this.recordButton) {
       this.recordButton.textContent = this.recording
@@ -1088,10 +1063,8 @@ export class TimelapseControl {
       // Gate Record like Play — but never disable it mid-recording, when the
       // same button is the Stop control.
       this.recordButton.disabled =
-        !this.recording &&
-        (this.frames.length < 2 || !this.stackPresent || !this.tilesReady);
-      this.recordButton.title =
-        !this.tilesReady && !this.recording ? labels.loadingTiles : "";
+        !this.recording && (this.frames.length < 2 || !this.stackPresent || !this.tilesReady);
+      this.recordButton.title = !this.tilesReady && !this.recording ? labels.loadingTiles : "";
     }
     if (this.slider) this.slider.disabled = this.recording;
     // Switching providers mid-recording would tear down the layers the export
@@ -1212,10 +1185,7 @@ export async function recordTimelapseCycle({
 
   const savedFrameIndex = control.getFrameIndex();
   const frames = control.frames;
-  const secondsPerYear = Math.max(
-    RECORD_MIN_SECONDS_PER_YEAR,
-    control.getState().secondsPerYear,
-  );
+  const secondsPerYear = Math.max(RECORD_MIN_SECONDS_PER_YEAR, control.getState().secondsPerYear);
 
   const drawFrame = (): void => {
     ctx.drawImage(mapCanvas, 0, 0, out.width, out.height);
@@ -1282,11 +1252,7 @@ export async function recordTimelapseCycle({
 }
 
 /** Bounded wait for the map's next `idle` (fully rendered) event. */
-function waitForIdle(
-  map: MapLibreMap,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<void> {
+function waitForIdle(map: MapLibreMap, timeoutMs: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (): void => {
@@ -1388,8 +1354,7 @@ function syncPanelRegistration(): void {
   floatingPanelRegistration.title = labels.title;
   floatingPanelRegistration.position = timelapsePosition;
   if (unregisterPanel && appRef) {
-    unregisterPanel =
-      appRef.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
+    unregisterPanel = appRef.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
   }
 }
 
@@ -1443,8 +1408,7 @@ function activateWithFrames(
   });
   floatingPanelRegistration.title = labels.title;
   floatingPanelRegistration.position = timelapsePosition;
-  unregisterPanel =
-    app.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
+  unregisterPanel = app.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
   app.openFloatingPanel?.(TIMELAPSE_PANEL_ID);
 }
 
@@ -1458,9 +1422,7 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
     const frames = provider.listFrames();
     if (Array.isArray(frames)) return activateWithFrames(app, provider, frames);
     return frames.then((resolved) =>
-      activationSession === session
-        ? activateWithFrames(app, provider, resolved)
-        : false,
+      activationSession === session ? activateWithFrames(app, provider, resolved) : false,
     );
   },
   deactivate: (_app: GeoLibreAppAPI) => {
@@ -1482,19 +1444,13 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
   // The floating card is freely draggable; the position submenu in the
   // Plugins menu just picks which corner it opens at.
   getMapControlPosition: () => timelapsePosition,
-  setMapControlPosition: (
-    _app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (_app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     timelapsePosition = position;
     syncPanelRegistration();
   },
-  getProjectState: () =>
-    timelapseControl?.getState() ?? savedState ?? undefined,
+  getProjectState: () => timelapseControl?.getState() ?? savedState ?? undefined,
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
-    const frames = timelapseControl
-      ? timelapseControl.frames
-      : syncFramesForNormalization(state);
+    const frames = timelapseControl ? timelapseControl.frames : syncFramesForNormalization(state);
     const next = normalizeTimelapseProjectState(state, frames);
     const current = timelapseControl?.getState() ?? savedState;
     if (JSON.stringify(next) === JSON.stringify(current ?? null)) return false;
@@ -1521,12 +1477,8 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
  */
 function syncFramesForNormalization(state: unknown): TimelapseFrame[] {
   const providerId =
-    state && typeof state === "object"
-      ? (state as Record<string, unknown>).providerId
-      : undefined;
-  const provider = getTimelapseProvider(
-    typeof providerId === "string" ? providerId : undefined,
-  );
+    state && typeof state === "object" ? (state as Record<string, unknown>).providerId : undefined;
+  const provider = getTimelapseProvider(typeof providerId === "string" ? providerId : undefined);
   const frames = provider.listFrames();
   return Array.isArray(frames) ? frames : [];
 }

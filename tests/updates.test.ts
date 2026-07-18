@@ -95,27 +95,21 @@ describe("fetchLatestRelease", () => {
     const release = await fetchLatestRelease();
     assert.equal(release.version, "v1.6.0");
     assert.equal(release.notes, "notes");
-    assert.equal(
-      release.url,
-      "https://github.com/opengeos/GeoLibre/releases/tag/v1.6.0",
-    );
+    assert.equal(release.url, "https://github.com/opengeos/GeoLibre/releases/tag/v1.6.0");
   });
 
   it("falls back to the downloads page for a non-GitHub html_url", async () => {
     stubFetch(
-      new Response(
-        JSON.stringify({ tag_name: "v1.6.0", html_url: "http://evil.example" }),
-        { status: 200 },
-      ),
+      new Response(JSON.stringify({ tag_name: "v1.6.0", html_url: "http://evil.example" }), {
+        status: 200,
+      }),
     );
     const release = await fetchLatestRelease();
     assert.equal(release.url, UPDATE_URL);
   });
 
   it("falls back to the downloads page when html_url is absent", async () => {
-    stubFetch(
-      new Response(JSON.stringify({ tag_name: "v1.6.0" }), { status: 200 }),
-    );
+    stubFetch(new Response(JSON.stringify({ tag_name: "v1.6.0" }), { status: 200 }));
     const release = await fetchLatestRelease();
     assert.equal(release.url, UPDATE_URL);
     assert.equal(release.notes, "");

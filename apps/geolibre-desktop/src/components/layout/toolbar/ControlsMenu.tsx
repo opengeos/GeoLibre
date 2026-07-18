@@ -36,23 +36,13 @@ import {
   DropdownMenuTrigger,
   Slider,
 } from "@geolibre/ui";
-import {
-  Clapperboard,
-  ClipboardList,
-  LocateFixed,
-  SlidersHorizontal,
-  Video,
-} from "lucide-react";
+import { Clapperboard, ClipboardList, LocateFixed, SlidersHorizontal, Video } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
-import {
-  MAP_CONTROL_ITEMS,
-  type ToolbarChrome,
-  type ToolbarMapControl,
-} from "./constants";
+import { MAP_CONTROL_ITEMS, type ToolbarChrome, type ToolbarMapControl } from "./constants";
 
 interface ControlsMenuProps {
   chrome: ToolbarChrome;
@@ -142,9 +132,7 @@ export function ControlsMenu({
   // Whether the first group (built-in controls + atmosphere/routing toggles) has
   // any visible item, so the separator below it isn't left orphaned.
   const anyTopControls =
-    MAP_CONTROL_ITEMS.some((control) =>
-      show(`controls.mapControl.${control.id}`),
-    ) ||
+    MAP_CONTROL_ITEMS.some((control) => show(`controls.mapControl.${control.id}`)) ||
     show("controls.atmosphereEffects") ||
     show("controls.clouds") ||
     show("controls.spinGlobe") ||
@@ -184,17 +172,14 @@ export function ControlsMenu({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {MAP_CONTROL_ITEMS.filter((control) =>
-            show(`controls.mapControl.${control.id}`),
-          ).map((control) => (
-            <DropdownMenuItem
-              key={control.id}
-              onClick={() => onToggleMapControl(control.id)}
-            >
-              {t(control.labelKey)}
-              {controlsVisible[control.id] ? " ✓" : ""}
-            </DropdownMenuItem>
-          ))}
+          {MAP_CONTROL_ITEMS.filter((control) => show(`controls.mapControl.${control.id}`)).map(
+            (control) => (
+              <DropdownMenuItem key={control.id} onClick={() => onToggleMapControl(control.id)}>
+                {t(control.labelKey)}
+                {controlsVisible[control.id] ? " ✓" : ""}
+              </DropdownMenuItem>
+            ),
+          )}
           {show("controls.atmosphereEffects") && (
             <AtmosphereEffectsSubmenu
               active={effectsActive}
@@ -214,10 +199,7 @@ export function ControlsMenu({
             />
           )}
           {show("controls.sun") && (
-            <DropdownMenuItem
-              title={t("toolbar.item.sunTooltip")}
-              onSelect={panels.sun.toggle}
-            >
+            <DropdownMenuItem title={t("toolbar.item.sunTooltip")} onSelect={panels.sun.toggle}>
               {t("toolbar.item.sun")}
               {panels.sun.visible ? " ✓" : ""}
             </DropdownMenuItem>
@@ -352,25 +334,16 @@ export function ControlsMenu({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.spinGlobeBoundsTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.spinGlobeBoundsDesc")}
-            </DialogDescription>
+            <DialogDescription>{t("toolbar.item.spinGlobeBoundsDesc")}</DialogDescription>
           </DialogHeader>
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            <p className="text-muted-foreground">
-              {t("toolbar.item.spinGlobeBoundsHint")}
-            </p>
+            <p className="text-muted-foreground">{t("toolbar.item.spinGlobeBoundsHint")}</p>
           </div>
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setSpinGlobeNoticeOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setSpinGlobeNoticeOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={confirmSpinGlobe}>
-              {t("toolbar.item.spinGlobeBoundsUnlock")}
-            </Button>
+            <Button onClick={confirmSpinGlobe}>{t("toolbar.item.spinGlobeBoundsUnlock")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -458,10 +431,7 @@ function AtmosphereEffectsSubmenu({
         <DropdownMenuSeparator />
         {/* Stop key events from reaching the menu's roving-focus/typeahead
             handlers so sliders respond to arrow keys and the color inputs work. */}
-        <div
-          className="space-y-3 px-2 py-1.5"
-          onKeyDown={(e) => e.stopPropagation()}
-        >
+        <div className="space-y-3 px-2 py-1.5" onKeyDown={(e) => e.stopPropagation()}>
           <ColorRow
             label={t("toolbar.atmosphere.haloColor")}
             value={settings.haloColor}
@@ -658,9 +628,7 @@ function WeatherLayerSubmenu({
                 controller.togglePlaying();
               }}
             >
-              {anim.playing
-                ? t("toolbar.item.weatherPause")
-                : t("toolbar.item.weatherPlay")}
+              {anim.playing ? t("toolbar.item.weatherPause") : t("toolbar.item.weatherPlay")}
             </DropdownMenuItem>
             {/* Stop key events from reaching the menu's roving-focus/typeahead
                 handlers so the slider responds to arrow keys. */}

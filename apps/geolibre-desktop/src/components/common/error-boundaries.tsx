@@ -1,8 +1,4 @@
-import {
-  Button,
-  ErrorBoundary,
-  type ErrorBoundaryFallbackProps,
-} from "@geolibre/ui";
+import { Button, ErrorBoundary, type ErrorBoundaryFallbackProps } from "@geolibre/ui";
 import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import type { ErrorInfo, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,11 +15,7 @@ import { appendDiagnostic } from "../../lib/diagnostics";
  * each error shows up twice in the Diagnostics panel in dev mode. Production
  * builds (where React does not re-throw) record it once.
  */
-function reportBoundaryError(
-  label: string,
-  error: Error,
-  info?: ErrorInfo,
-): void {
+function reportBoundaryError(label: string, error: Error, info?: ErrorInfo): void {
   appendDiagnostic({
     category: "runtime",
     level: "error",
@@ -57,8 +49,8 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
           <div className="space-y-1">
             <h1 className="text-lg font-semibold">Something went wrong</h1>
             <p className="max-w-md text-sm text-muted-foreground">
-              GeoLibre hit an unexpected error and could not continue. Your work
-              may be unsaved — try recovering before reloading.
+              GeoLibre hit an unexpected error and could not continue. Your work may be unsaved —
+              try recovering before reloading.
             </p>
             <p className="max-w-md break-words font-mono text-xs text-muted-foreground/80">
               {/* Non-Error throws (common from plugin code) have no .message. */}
@@ -133,13 +125,7 @@ export function SectionErrorBoundary({
  * diagnostics. Use it so a faulty overlay can never take down the surrounding
  * UI it shares a subtree with.
  */
-export function SilentErrorBoundary({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+export function SilentErrorBoundary({ label, children }: { label: string; children: ReactNode }) {
   return (
     <ErrorBoundary
       onError={(error, info) => reportBoundaryError(label, error, info)}

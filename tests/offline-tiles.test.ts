@@ -117,10 +117,7 @@ describe("expandTileUrl", () => {
 
   it("resolves {s} to the first subdomain", () => {
     assert.equal(
-      expandTileUrl("https://{s}.h/{z}/{x}/{y}", { z: 1, x: 0, y: 0 }, [
-        "a",
-        "b",
-      ]),
+      expandTileUrl("https://{s}.h/{z}/{x}/{y}", { z: 1, x: 0, y: 0 }, ["a", "b"]),
       "https://a.h/1/0/0",
     );
   });
@@ -175,10 +172,7 @@ describe("warmUrls", () => {
     return ((_url: string, init?: { signal?: AbortSignal }) =>
       new Promise<Response>((resolve, reject) => {
         const signal = init?.signal;
-        const timer = setTimeout(
-          () => resolve(new Response("ok", { status: 200 })),
-          delayMs,
-        );
+        const timer = setTimeout(() => resolve(new Response("ok", { status: 200 })), delayMs);
         const onAbort = () => {
           clearTimeout(timer);
           reject(new DOMException("aborted", "AbortError"));

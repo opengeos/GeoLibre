@@ -28,20 +28,11 @@ const contentsDir = resolve(liteDir, "files");
 // canonical copy under the backend (so the desktop launcher bundles/copies the
 // same files); stage them into the JupyterLite contents here so the web kernel
 // gets `import geolibre` and the same starter notebook.
-const notebookClientSrc = resolve(
-  repoRoot,
-  "backend/geolibre_server/notebook_client.py",
-);
+const notebookClientSrc = resolve(repoRoot, "backend/geolibre_server/notebook_client.py");
 const notebookClientDest = resolve(contentsDir, "geolibre.py");
-const welcomeSrc = resolve(
-  repoRoot,
-  "backend/geolibre_server/notebook_examples/Welcome.ipynb",
-);
+const welcomeSrc = resolve(repoRoot, "backend/geolibre_server/notebook_examples/Welcome.ipynb");
 const welcomeDest = resolve(contentsDir, "Welcome.ipynb");
-const outputDir = resolve(
-  repoRoot,
-  "apps/geolibre-desktop/public/jupyterlite",
-);
+const outputDir = resolve(repoRoot, "apps/geolibre-desktop/public/jupyterlite");
 
 const isWin = process.platform === "win32";
 
@@ -100,16 +91,7 @@ rmSync(outputDir, { recursive: true, force: true });
 
 const result = spawnSync(
   "jupyter",
-  [
-    "lite",
-    "build",
-    "--lite-dir",
-    liteDir,
-    "--contents",
-    contentsDir,
-    "--output-dir",
-    outputDir,
-  ],
+  ["lite", "build", "--lite-dir", liteDir, "--contents", contentsDir, "--output-dir", outputDir],
   {
     cwd: repoRoot,
     shell: isWin,

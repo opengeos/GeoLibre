@@ -11,12 +11,7 @@
  * images.
  */
 import jsPDF from "jspdf";
-import {
-  pageMm,
-  resolvePageSize,
-  type Orientation,
-  type PaperSizeId,
-} from "./print-layout";
+import { pageMm, resolvePageSize, type Orientation, type PaperSizeId } from "./print-layout";
 
 /** An image to embed: a canvas (app) or a PNG/JPEG data URL (tests), plus its
  * natural pixel dimensions so the aspect ratio can be preserved. */
@@ -152,18 +147,16 @@ export function htmlToPlainText(html: string): string {
 
 /** Reduce HTML/multi-line text to a single line of plain text for headers. */
 export function singleLine(value: string): string {
-  return htmlToPlainText(value).replace(/\s*\n\s*/g, " ").trim();
+  return htmlToPlainText(value)
+    .replace(/\s*\n\s*/g, " ")
+    .trim();
 }
 
 /**
  * Append an ellipsis to a line, trimming trailing words until it (plus the
  * ellipsis) fits within `maxWidth`, so a truncated description ends in "…".
  */
-function truncateWithEllipsis(
-  pdf: jsPDF,
-  line: string,
-  maxWidth: number,
-): string {
+function truncateWithEllipsis(pdf: jsPDF, line: string, maxWidth: number): string {
   const words = line.trimEnd().split(/\s+/);
   while (words.length > 0) {
     const candidate = words.join(" ") + "…";
@@ -212,9 +205,7 @@ function drawImageCover(
   boxH: number,
 ): void {
   const scale =
-    image.width > 0 && image.height > 0
-      ? Math.max(boxW / image.width, boxH / image.height)
-      : 1;
+    image.width > 0 && image.height > 0 ? Math.max(boxW / image.width, boxH / image.height) : 1;
   const w = image.width > 0 ? image.width * scale : boxW;
   const h = image.height > 0 ? image.height * scale : boxH;
   pdf.addImage(
@@ -339,14 +330,7 @@ function drawChapterPage(
       // half-width column and vertically centered within the band.
       const colWidth = (contentWidth - gap) / 2;
       drawImageInBox(pdf, chapter.map, MARGIN_MM, y, colWidth, imageBandHeight);
-      drawImageInBox(
-        pdf,
-        chapter.photo,
-        MARGIN_MM + colWidth + gap,
-        y,
-        colWidth,
-        imageBandHeight,
-      );
+      drawImageInBox(pdf, chapter.photo, MARGIN_MM + colWidth + gap, y, colWidth, imageBandHeight);
     } else {
       // No photo: the map view spans the full content width.
       drawImageInBox(pdf, chapter.map, MARGIN_MM, y, contentWidth, imageBandHeight);
@@ -354,9 +338,7 @@ function drawChapterPage(
     y += imageBandHeight + 5;
   }
 
-  const description = chapter.description
-    ? htmlToPlainText(chapter.description)
-    : "";
+  const description = chapter.description ? htmlToPlainText(chapter.description) : "";
   if (description) {
     const size = 10;
     pdf.setFont("helvetica", "normal");
@@ -428,8 +410,7 @@ export function buildStoryMapHandoutPdf(
   const { widthMm, heightMm } = pageMm(size);
   // Keep jsPDF's page orientation consistent with the resolved dimensions;
   // pixel presets are stored portrait-first, so the format array is the truth.
-  const orientation: Orientation =
-    widthMm >= heightMm ? "landscape" : "portrait";
+  const orientation: Orientation = widthMm >= heightMm ? "landscape" : "portrait";
   const pdf = new jsPDF({
     orientation,
     unit: "mm",
@@ -438,15 +419,7 @@ export function buildStoryMapHandoutPdf(
 
   chapters.forEach((chapter, index) => {
     if (index > 0) pdf.addPage([widthMm, heightMm], orientation);
-    drawChapterPage(
-      pdf,
-      chapter,
-      options,
-      index + 1,
-      chapters.length,
-      widthMm,
-      heightMm,
-    );
+    drawChapterPage(pdf, chapter, options, index + 1, chapters.length, widthMm, heightMm);
   });
 
   return new Uint8Array(pdf.output("arraybuffer"));

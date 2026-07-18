@@ -187,10 +187,7 @@ export {
   defaultRasterSymbology,
   savedRasterSymbology,
 } from "./plugins/raster-symbology";
-export {
-  RASTER_SOURCE_KIND,
-  getRasterBandStats,
-} from "./plugins/raster-symbology-texture";
+export { RASTER_SOURCE_KIND, getRasterBandStats } from "./plugins/raster-symbology-texture";
 export {
   disposeAllPaletteLegends,
   disposePaletteLegend,
@@ -270,10 +267,7 @@ export {
   sunEquatorialPosition,
   sunPositionAt,
 } from "./plugins/maplibre-sun";
-export {
-  DECK_VIZ_PLUGIN_ID,
-  maplibreDeckGlVizPlugin,
-} from "./plugins/maplibre-deckgl-viz";
+export { DECK_VIZ_PLUGIN_ID, maplibreDeckGlVizPlugin } from "./plugins/maplibre-deckgl-viz";
 export { restoreDeckViz } from "./plugins/deckgl-viz/overlay";
 export { countAtlasDroppedDiagrams } from "./plugins/deckgl-viz/diagrams";
 export { ensureMercatorProjection } from "./plugins/map-projection-utils";
@@ -416,10 +410,7 @@ export {
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
-export type {
-  WeatherAnimationState,
-  WeatherLayerController,
-} from "./plugins/weather-layer";
+export type { WeatherAnimationState, WeatherLayerController } from "./plugins/weather-layer";
 export {
   maplibreCloudsPlugin,
   CLOUDS_PLUGIN_ID,

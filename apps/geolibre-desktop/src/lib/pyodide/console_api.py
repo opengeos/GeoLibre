@@ -143,8 +143,7 @@ class _GeoLibre:
         """Return the live viewport bounds as ``[west, south, east, north]``."""
         return _to_py(_js.getBounds())
 
-    def fly_to(self, lng=None, lat=None, *, zoom=None, bearing=None,
-               pitch=None, duration=None):
+    def fly_to(self, lng=None, lat=None, *, zoom=None, bearing=None, pitch=None, duration=None):
         """Animate the camera; only the provided fields change."""
         params = {}
         if lng is not None and lat is not None:
@@ -219,9 +218,7 @@ class _GeoLibre:
 
     async def run_algorithm(self, algorithm_id, parameters=None):
         """Run a processing algorithm and add its result layers (async)."""
-        result = await _js.runAlgorithm(
-            _to_js({"id": algorithm_id, "params": parameters or {}})
-        )
+        result = await _js.runAlgorithm(_to_js({"id": algorithm_id, "params": parameters or {}}))
         return _to_py(result)
 
     # -- export / packages ---------------------------------------------

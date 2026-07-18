@@ -1,12 +1,8 @@
-import type { LngLat } from '../elevation/geometry';
-import type { UnitSystem } from '../elevation/format';
+import type { LngLat } from "../elevation/geometry";
+import type { UnitSystem } from "../elevation/format";
 
 /** Corner of the map the control can dock to. */
-export type ControlPosition =
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right';
+export type ControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 /** File-type hints for a host save dialog / browser download. */
 export interface ExportFileOptions {

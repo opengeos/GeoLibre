@@ -106,9 +106,7 @@ def vector_run(request: VectorToolRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Vector tool %s failed", request.tool_id)
-        raise HTTPException(
-            status_code=400, detail=f"Vector tool failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"Vector tool failed: {exc}") from exc
 
     return {"geojson": geojson, "messages": messages}
 
@@ -150,9 +148,7 @@ def _validate_write_path(path: str) -> Path:
             detail="Path is outside the allowed directories",
         )
     if not os.access(resolved, os.W_OK):
-        raise HTTPException(
-            status_code=403, detail=f"Source file is not writable: {path}"
-        )
+        raise HTTPException(status_code=403, detail=f"Source file is not writable: {path}")
     return resolved
 
 
@@ -199,9 +195,7 @@ def _write_geojson(target: Path, geojson: dict) -> int:
     return len(gdf)
 
 
-def _write_geopackage(
-    target: Path, geojson: dict, layer: Optional[str]
-) -> tuple[int, str]:
+def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tuple[int, str]:
     """Overwrite one layer of a GeoPackage in place, preserving the others.
 
     Resolves the target table (the given ``layer``, or the sole feature layer of
@@ -225,11 +219,7 @@ def _write_geopackage(
     names = list(layers["name"])
     # Layers with a geometry type are the writable feature tables; aspatial
     # attribute tables (geometry_type is None) are never a write target.
-    spatial = [
-        name
-        for name, geom in zip(names, layers["geometry_type"])
-        if geom is not None
-    ]
+    spatial = [name for name, geom in zip(names, layers["geometry_type"]) if geom is not None]
     if layer:
         if layer not in names:
             raise HTTPException(
@@ -308,9 +298,7 @@ def vector_write(request: WriteVectorRequest):
         raise
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Write-back to %s failed", target)
-        raise HTTPException(
-            status_code=400, detail=f"Write-back failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"Write-back failed: {exc}") from exc
 
     return {
         "path": str(target),

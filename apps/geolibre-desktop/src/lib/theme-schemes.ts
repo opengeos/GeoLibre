@@ -17,13 +17,7 @@
  * without a `THEME_SCHEMES` entry is a compile error (the array is typed against
  * the derived id), so persisted values can't silently fall back to the default.
  */
-const PRESET_SCHEME_IDS = [
-  "blue",
-  "violet",
-  "emerald",
-  "rose",
-  "amber",
-] as const;
+const PRESET_SCHEME_IDS = ["blue", "violet", "emerald", "rose", "amber"] as const;
 
 type PresetScheme = (typeof PRESET_SCHEME_IDS)[number];
 
@@ -87,10 +81,7 @@ const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 /** Type guard for persisted/tampered scheme values. */
 export function isThemeScheme(value: unknown): value is ThemeScheme {
-  return (
-    value === "custom" ||
-    (PRESET_SCHEME_IDS as readonly string[]).includes(value as string)
-  );
+  return value === "custom" || (PRESET_SCHEME_IDS as readonly string[]).includes(value as string);
 }
 
 /** Whether `value` is a 3- or 6-digit hex color with a leading `#`. */
@@ -173,9 +164,7 @@ export function foregroundForHex(hex: string): string {
 
   const linearize = (value: number) => {
     const channel = value / 255;
-    return channel <= 0.04045
-      ? channel / 12.92
-      : ((channel + 0.055) / 1.055) ** 2.4;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
   };
   const luminance =
     0.2126 * linearize(parseInt(digits.slice(0, 2), 16)) +
@@ -185,17 +174,11 @@ export function foregroundForHex(hex: string): string {
   const contrastWithWhite = 1.05 / (luminance + 0.05);
   const contrastWithBlack = (luminance + 0.05) / 0.05;
   // White text, or the palette's near-black foreground.
-  return contrastWithWhite >= contrastWithBlack
-    ? "0 0% 100%"
-    : "222.2 47.4% 11.2%";
+  return contrastWithWhite >= contrastWithBlack ? "0 0% 100%" : "222.2 47.4% 11.2%";
 }
 
 /** Accent tokens the custom scheme overrides inline (cleared on other schemes). */
-const CUSTOM_TOKEN_PROPERTIES = [
-  "--primary",
-  "--primary-foreground",
-  "--ring",
-] as const;
+const CUSTOM_TOKEN_PROPERTIES = ["--primary", "--primary-foreground", "--ring"] as const;
 
 /**
  * Apply (or clear) the active accent scheme on the document root.
@@ -208,10 +191,7 @@ const CUSTOM_TOKEN_PROPERTIES = [
  * @param scheme - The accent scheme to activate.
  * @param customColor - The hex color backing the "custom" scheme.
  */
-export function applyThemeScheme(
-  scheme: ThemeScheme,
-  customColor?: string,
-): void {
+export function applyThemeScheme(scheme: ThemeScheme, customColor?: string): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
 

@@ -109,32 +109,9 @@ export function extractStyleLibraryStyle(
  */
 const STYLE_ENUM_VALUES: Partial<Record<keyof LayerStyle, readonly string[]>> = {
   strokeWidthUnit: ["pixels", "meters"],
-  vectorStyleMode: [
-    "single",
-    "graduated",
-    "categorized",
-    "rule-based",
-    "expression",
-  ],
-  fillPattern: [
-    "none",
-    "hatch",
-    "cross-hatch",
-    "horizontal",
-    "vertical",
-    "dots",
-    "svg",
-  ],
-  markerShape: [
-    "circle",
-    "square",
-    "triangle",
-    "diamond",
-    "star",
-    "cross",
-    "pin",
-    "custom",
-  ],
+  vectorStyleMode: ["single", "graduated", "categorized", "rule-based", "expression"],
+  fillPattern: ["none", "hatch", "cross-hatch", "horizontal", "vertical", "dots", "svg"],
+  markerShape: ["circle", "square", "triangle", "diamond", "star", "cross", "pin", "custom"],
   pointRenderer: ["single", "heatmap", "cluster"],
   // Union of the graduated and categorized schemes the Style panel offers.
   vectorStyleClassificationScheme: [
@@ -189,9 +166,7 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
       if (given && typeof given === "object" && !Array.isArray(given)) {
         const givenLabels = given as Record<string, unknown>;
         const labels: Record<string, unknown> = {};
-        for (const labelKey of Object.keys(
-          DEFAULT_LAYER_STYLE.labels,
-        ) as (keyof LabelStyle)[]) {
+        for (const labelKey of Object.keys(DEFAULT_LAYER_STYLE.labels) as (keyof LabelStyle)[]) {
           const labelFallback = DEFAULT_LAYER_STYLE.labels[labelKey];
           const labelGiven = givenLabels[labelKey];
           const labelAllowed = LABEL_ENUM_VALUES[labelKey];
@@ -247,17 +222,13 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
           // symbol overrides) carry through only when well-typed; a malformed
           // optional field is dropped rather than the whole rule.
           const optionalNumber = (value: unknown) =>
-            typeof value === "number" && Number.isFinite(value)
-              ? value
-              : undefined;
+            typeof value === "number" && Number.isFinite(value) ? value : undefined;
           // Out-of-domain numbers are dropped (the rule inherits the layer
           // value) rather than clamped, so a nonsense hand-edited value never
           // silently becomes a different-but-valid override.
           const optionalInRange = (value: unknown, min: number, max: number) => {
             const parsed = optionalNumber(value);
-            return parsed !== undefined && parsed >= min && parsed <= max
-              ? parsed
-              : undefined;
+            return parsed !== undefined && parsed >= min && parsed <= max ? parsed : undefined;
           };
           const optionalString = (value: unknown) =>
             typeof value === "string" ? value : undefined;
@@ -265,17 +236,9 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
           const maxZoom = optionalInRange(rule.maxZoom, 0, 24);
           const parentId = optionalString(rule.parentId);
           const strokeColor = optionalString(rule.strokeColor);
-          const strokeWidth = optionalInRange(
-            rule.strokeWidth,
-            0,
-            Number.POSITIVE_INFINITY,
-          );
+          const strokeWidth = optionalInRange(rule.strokeWidth, 0, Number.POSITIVE_INFINITY);
           const fillOpacity = optionalInRange(rule.fillOpacity, 0, 1);
-          const circleRadius = optionalInRange(
-            rule.circleRadius,
-            0,
-            Number.POSITIVE_INFINITY,
-          );
+          const circleRadius = optionalInRange(rule.circleRadius, 0, Number.POSITIVE_INFINITY);
           return [
             {
               id: rule.id,
@@ -322,11 +285,7 @@ function restrictStylePatchToKind(
 ): Partial<LayerStyle> {
   if (kind === "style") return style;
   const allowed: readonly (keyof LayerStyle)[] =
-    kind === "symbol"
-      ? SYMBOL_STYLE_KEYS
-      : kind === "ramp"
-        ? RAMP_STYLE_KEYS
-        : ["labels"];
+    kind === "symbol" ? SYMBOL_STYLE_KEYS : kind === "ramp" ? RAMP_STYLE_KEYS : ["labels"];
   const out: Partial<LayerStyle> = {};
   for (const key of allowed) {
     if (key in style) {
@@ -346,9 +305,7 @@ function restrictStylePatchToKind(
  * @param value - The raw `styleLibrary` / bundle `entries` value.
  * @returns Normalized, de-duplicated entries (empty when none survive).
  */
-export function normalizeStyleLibraryEntries(
-  value: unknown,
-): StyleLibraryEntry[] {
+export function normalizeStyleLibraryEntries(value: unknown): StyleLibraryEntry[] {
   if (!Array.isArray(value)) return [];
   const entries: StyleLibraryEntry[] = [];
   const seen = new Set<string>();
@@ -358,15 +315,10 @@ export function normalizeStyleLibraryEntries(
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
     if (!id || !name || seen.has(id)) continue;
-    const kind = STYLE_LIBRARY_ENTRY_KINDS.includes(
-      candidate.kind as StyleLibraryEntryKind,
-    )
+    const kind = STYLE_LIBRARY_ENTRY_KINDS.includes(candidate.kind as StyleLibraryEntryKind)
       ? (candidate.kind as StyleLibraryEntryKind)
       : "style";
-    const style = restrictStylePatchToKind(
-      sanitizeLayerStylePatch(candidate.style),
-      kind,
-    );
+    const style = restrictStylePatchToKind(sanitizeLayerStylePatch(candidate.style), kind);
     if (Object.keys(style).length === 0) continue;
     seen.add(id);
     const tags = Array.isArray(candidate.tags)
@@ -385,8 +337,7 @@ export function normalizeStyleLibraryEntries(
       kind,
       tags,
       style,
-      updatedAt:
-        typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
+      updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
     });
   }
   return entries;
@@ -439,9 +390,7 @@ export function parseStyleLibrary(json: string): StyleLibraryEntry[] {
     // Refuse bundles from a newer format rather than misreading them with v1
     // semantics (e.g. coercing kinds this version does not know to "style").
     // Bare arrays stay accepted for hand-authored files.
-    if (
-      (parsed as { version?: unknown }).version !== STYLE_LIBRARY_BUNDLE_VERSION
-    ) {
+    if ((parsed as { version?: unknown }).version !== STYLE_LIBRARY_BUNDLE_VERSION) {
       throw new Error("Unsupported style library version.");
     }
     rawEntries = (parsed as { entries?: unknown }).entries;

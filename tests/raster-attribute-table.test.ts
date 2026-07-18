@@ -81,10 +81,7 @@ describe("MAX_RAT_SYMBOLOGY_CLASSES", () => {
 
 describe("gdalAuxXmlUrl", () => {
   it("appends .aux.xml to the path, keeping any query string", () => {
-    assert.equal(
-      gdalAuxXmlUrl("https://host/data/lc.tif"),
-      "https://host/data/lc.tif.aux.xml",
-    );
+    assert.equal(gdalAuxXmlUrl("https://host/data/lc.tif"), "https://host/data/lc.tif.aux.xml");
     assert.equal(
       gdalAuxXmlUrl("https://host/data/lc.tif?X-Amz-Signature=abc&x=1"),
       "https://host/data/lc.tif.aux.xml?X-Amz-Signature=abc&x=1",
@@ -304,9 +301,7 @@ describe("savedRasterAttributeTable", () => {
       rows: [row(2, 5), row(1, 3)],
       pixelAreaM2: 900,
     };
-    const saved = savedRasterAttributeTable(
-      layerWith({ rasterAttributeTable: record }),
-    );
+    const saved = savedRasterAttributeTable(layerWith({ rasterAttributeTable: record }));
     assert.ok(saved);
     assert.equal(saved.band, 1);
     assert.equal(saved.pixelAreaM2, 900);
@@ -337,9 +332,7 @@ describe("savedRasterAttributeTable", () => {
     assert.ok(saved);
     assert.equal(saved.rows.length, 1);
     assert.equal(
-      savedRasterAttributeTable(
-        layerWith({ rasterAttributeTable: { band: 1, rows: [] } }),
-      ),
+      savedRasterAttributeTable(layerWith({ rasterAttributeTable: { band: 1, rows: [] } })),
       null,
     );
     assert.equal(savedRasterAttributeTable(layerWith({})), null);
@@ -368,11 +361,7 @@ describe("categoricalSymbologyFromRows", () => {
     assert.equal(result.symbology.classified, true);
     assert.equal(result.symbology.method, "manual");
     assert.equal(result.symbology.classCount, 3);
-    assert.deepEqual(result.symbology.customColors, [
-      "#ff0000",
-      "#00ff00",
-      "#0000ff",
-    ]);
+    assert.deepEqual(result.symbology.customColors, ["#ff0000", "#00ff00", "#0000ff"]);
     assert.deepEqual(result.symbology.breaks, [0.5, 1.5, 3, 4.5]);
     assert.deepEqual(result.rescale, [[0.5, 4.5]]);
   });
@@ -387,10 +376,7 @@ describe("categoricalSymbologyFromRows", () => {
 
   it("rejects empty and oversized tables", () => {
     assert.equal(categoricalSymbologyFromRows([]), null);
-    const many = Array.from(
-      { length: MAX_RAT_SYMBOLOGY_CLASSES + 1 },
-      (_, i) => row(i, 1),
-    );
+    const many = Array.from({ length: MAX_RAT_SYMBOLOGY_CLASSES + 1 }, (_, i) => row(i, 1));
     assert.equal(categoricalSymbologyFromRows(many), null);
   });
 
@@ -402,9 +388,7 @@ describe("categoricalSymbologyFromRows", () => {
     );
     const result = categoricalSymbologyFromRows(rows);
     assert.ok(result);
-    const saved = savedRasterSymbology(
-      layerWith({ rasterSymbology: result.symbology }),
-    );
+    const saved = savedRasterSymbology(layerWith({ rasterSymbology: result.symbology }));
     assert.ok(saved, "stored categorical symbology must validate");
     assert.equal(saved.classCount, 16);
     assert.equal(saved.breaks.length, 17);
@@ -415,10 +399,7 @@ describe("categoricalSymbologyFromRows", () => {
 describe("ratRowsToCsv", () => {
   it("writes header, percents and areas with RFC 4180 quoting", () => {
     const csv = ratRowsToCsv(
-      [
-        row(1, 75, { label: 'Water, "deep"' }),
-        row(2, 25, { label: "Forest" }),
-      ],
+      [row(1, 75, { label: 'Water, "deep"' }), row(2, 25, { label: "Forest" })],
       100,
     );
     const lines = csv.split("\n");
@@ -433,11 +414,8 @@ describe("ratRowsToCsv", () => {
   });
 
   it("neutralizes spreadsheet formulas in labels", () => {
-    const csv = ratRowsToCsv(
-      [row(1, 1, { label: "=HYPERLINK(\"http://evil\")" })],
-      null,
-    );
+    const csv = ratRowsToCsv([row(1, 1, { label: '=HYPERLINK("http://evil")' })], null);
     const label = csv.split("\n")[1].split(",").slice(4).join(",");
-    assert.equal(label, "\"'=HYPERLINK(\"\"http://evil\"\")\"");
+    assert.equal(label, '"\'=HYPERLINK(""http://evil"")"');
   });
 });

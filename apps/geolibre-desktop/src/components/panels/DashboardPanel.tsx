@@ -1,9 +1,5 @@
 import type { DashboardWidget } from "@geolibre/core";
-import {
-  MAX_DASHBOARD_COLUMNS,
-  MIN_DASHBOARD_COLUMNS,
-  useAppStore,
-} from "@geolibre/core";
+import { MAX_DASHBOARD_COLUMNS, MIN_DASHBOARD_COLUMNS, useAppStore } from "@geolibre/core";
 import { Button, Select } from "@geolibre/ui";
 import {
   ChevronLeft,
@@ -16,25 +12,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { isChartableLayer, useLayerChartData } from "../../hooks/useLayerChartData";
-import {
-  ChartView,
-  computeChart,
-  type ChartSpec,
-} from "./charts/chart-view";
+import { ChartView, computeChart, type ChartSpec } from "./charts/chart-view";
 import { WidgetEditorDialog } from "./WidgetEditorDialog";
-import {
-  PANEL_RESIZE_END_EVENT,
-  PANEL_RESIZE_START_EVENT,
-} from "../../lib/panel-resize";
+import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 
 const MIN_DASHBOARD_HEIGHT = 160;
 const MAX_DASHBOARD_HEIGHT = 720;
@@ -229,9 +212,7 @@ export function DashboardPanel() {
                 aria-label={t("dashboard.columns")}
                 className="h-8 w-16"
                 value={String(columns)}
-                onChange={(event) =>
-                  setDashboardColumns(Number(event.target.value))
-                }
+                onChange={(event) => setDashboardColumns(Number(event.target.value))}
               >
                 {columnOptions.map((n) => (
                   <option key={n} value={n}>
@@ -255,21 +236,15 @@ export function DashboardPanel() {
               }
             >
               <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">
-                {t("dashboard.addWidget")}
-              </span>
+              <span className="hidden sm:inline">{t("dashboard.addWidget")}</span>
             </Button>
           ) : null}
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            aria-label={
-              isCollapsed ? t("dashboard.expand") : t("dashboard.collapse")
-            }
-            title={
-              isCollapsed ? t("dashboard.expand") : t("dashboard.collapse")
-            }
+            aria-label={isCollapsed ? t("dashboard.expand") : t("dashboard.collapse")}
+            title={isCollapsed ? t("dashboard.expand") : t("dashboard.collapse")}
             onClick={() => setIsCollapsed((c) => !c)}
           >
             {isCollapsed ? (
@@ -296,9 +271,7 @@ export function DashboardPanel() {
           {widgets.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
               <p className="text-sm text-muted-foreground">
-                {chartableLayers.length === 0
-                  ? t("dashboard.emptyNoLayers")
-                  : t("dashboard.empty")}
+                {chartableLayers.length === 0 ? t("dashboard.emptyNoLayers") : t("dashboard.empty")}
               </p>
             </div>
           ) : (
@@ -355,10 +328,7 @@ function WidgetCard({
 }) {
   const { t } = useTranslation();
   const data = useLayerChartData(widget.layerId);
-  const result = useMemo(
-    () => computeChart(data.rows, widgetToSpec(widget)),
-    [data.rows, widget],
-  );
+  const result = useMemo(() => computeChart(data.rows, widgetToSpec(widget)), [data.rows, widget]);
   // A readable title from the widget's chart type and fields when untitled.
   const defaultWidgetTitle = (): string => {
     switch (widget.type) {

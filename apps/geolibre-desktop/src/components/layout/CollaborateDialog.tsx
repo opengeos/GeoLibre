@@ -42,11 +42,7 @@ interface CollaborateDialogProps {
  * Reads live session state from the store and drives it through the
  * {@link CollaborationApi} provided by `useCollaboration`.
  */
-export function CollaborateDialog({
-  open,
-  onOpenChange,
-  api,
-}: CollaborateDialogProps) {
+export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialogProps) {
   const { t } = useTranslation();
   const collaboration = useAppStore((s) => s.collaboration);
   const isActive = collaboration.isActive;
@@ -242,17 +238,13 @@ export function CollaborateDialog({
             {invited ? (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">
-                    {t("collaborate.invitedHeading")}
-                  </p>
+                  <p className="text-sm font-medium">{t("collaborate.invitedHeading")}</p>
                   <p className="text-sm text-muted-foreground">
                     {t("collaborate.invitedDescription")}
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="collab-code">
-                    {t("collaborate.sessionCode")}
-                  </Label>
+                  <Label htmlFor="collab-code">{t("collaborate.sessionCode")}</Label>
                   <Input
                     id="collab-code"
                     value={code}
@@ -290,25 +282,17 @@ export function CollaborateDialog({
             ) : (
               <>
                 <div className="space-y-2 rounded-md border p-3">
-                  <p className="text-sm font-medium">
-                    {t("collaborate.startHeading")}
-                  </p>
+                  <p className="text-sm font-medium">{t("collaborate.startHeading")}</p>
                   <div className="space-y-1.5">
                     <Label htmlFor="collab-mode">{t("collaborate.mode")}</Label>
                     <Select
                       id="collab-mode"
                       value={mode}
-                      onChange={(e) =>
-                        setMode(e.target.value as CollaborationMode)
-                      }
+                      onChange={(e) => setMode(e.target.value as CollaborationMode)}
                       disabled={busy}
                     >
-                      <option value="co-edit">
-                        {t("collaborate.modeCoEdit")}
-                      </option>
-                      <option value="view-only">
-                        {t("collaborate.modeViewOnly")}
-                      </option>
+                      <option value="co-edit">{t("collaborate.modeCoEdit")}</option>
+                      <option value="view-only">{t("collaborate.modeViewOnly")}</option>
                     </Select>
                   </div>
                   <Button
@@ -327,9 +311,7 @@ export function CollaborateDialog({
                 </div>
 
                 <div className="space-y-2 rounded-md border p-3">
-                  <p className="text-sm font-medium">
-                    {t("collaborate.joinHeading")}
-                  </p>
+                  <p className="text-sm font-medium">{t("collaborate.joinHeading")}</p>
                   <div className="flex gap-2">
                     <Input
                       value={code}
@@ -395,16 +377,12 @@ function ActiveSession({
         {collaboration.connecting ? (
           <>
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            <span className="text-muted-foreground">
-              {t("collaborate.reconnecting")}
-            </span>
+            <span className="text-muted-foreground">{t("collaborate.reconnecting")}</span>
           </>
         ) : (
           <>
             <span className="h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-muted-foreground">
-              {t("collaborate.connected")}
-            </span>
+            <span className="text-muted-foreground">{t("collaborate.connected")}</span>
           </>
         )}
       </div>
@@ -474,17 +452,17 @@ function ActiveSession({
                 title={t("collaborate.scanToJoin")}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t("collaborate.scanToJoin")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("collaborate.scanToJoin")}</p>
           </div>
         )}
       </div>
 
       <div className="space-y-1.5">
-        <Label>{t("collaborate.participants", {
-          count: collaboration.participants.length,
-        })}</Label>
+        <Label>
+          {t("collaborate.participants", {
+            count: collaboration.participants.length,
+          })}
+        </Label>
         <ul className="space-y-1">
           {collaboration.participants.map((p) => (
             <CollaborationParticipantRow
@@ -522,11 +500,7 @@ function ActiveSession({
           <Button
             type="button"
             variant="outline"
-            onClick={() =>
-              onSetMode(
-                collaboration.mode === "co-edit" ? "view-only" : "co-edit",
-              )
-            }
+            onClick={() => onSetMode(collaboration.mode === "co-edit" ? "view-only" : "co-edit")}
           >
             {collaboration.mode === "co-edit"
               ? t("collaborate.switchToViewOnly")

@@ -489,7 +489,19 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
 
   const bandCount = input.bands.length;
   const argNames = ["A", ...input.bands.map((_, i) => `A${i + 1}`)];
-  const helperNames = ["where", "clip", "log", "exp", "sqrt", "abs", "minimum", "maximum", "sin", "cos", "tan"];
+  const helperNames = [
+    "where",
+    "clip",
+    "log",
+    "exp",
+    "sqrt",
+    "abs",
+    "minimum",
+    "maximum",
+    "sin",
+    "cos",
+    "tan",
+  ];
   let fn: (...args: number[]) => number;
   try {
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -629,11 +641,7 @@ function aggregate(values: number[], stat: FocalStatistic): number {
 }
 
 /** Wrap a computed single-band array in a {@link RasterData}, keeping geo info. */
-function singleBandResult(
-  input: RasterData,
-  band: Float32Array,
-  nodata: number,
-): RasterData {
+function singleBandResult(input: RasterData, band: Float32Array, nodata: number): RasterData {
   return { ...input, bands: [band], nodata };
 }
 

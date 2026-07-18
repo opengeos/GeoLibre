@@ -5,12 +5,7 @@
  * anchor placement, value extraction, and size scaling. The canvas drawing and
  * deck.gl layer construction live in `@geolibre/plugins`.
  */
-import type {
-  Feature,
-  FeatureCollection,
-  Geometry,
-  Position,
-} from "geojson";
+import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import { styleValue, type LayerStyle } from "./types";
 
 /**
@@ -137,14 +132,10 @@ function ringCentroid(ring: Position[]): [number, number] | null {
   return [cx / (6 * area), cy / (6 * area)];
 }
 
-function finitePosition(
-  position: Position | undefined,
-): [number, number] | null {
+function finitePosition(position: Position | undefined): [number, number] | null {
   if (!position) return null;
   const [lng, lat] = position;
-  return Number.isFinite(lng) && Number.isFinite(lat)
-    ? [lng as number, lat as number]
-    : null;
+  return Number.isFinite(lng) && Number.isFinite(lat) ? [lng as number, lat as number] : null;
 }
 
 /**
@@ -154,9 +145,7 @@ function finitePosition(
  *
  * @param geometry - The feature geometry (may be null for null-geometry rows).
  */
-export function diagramAnchor(
-  geometry: Geometry | null | undefined,
-): [number, number] | null {
+export function diagramAnchor(geometry: Geometry | null | undefined): [number, number] | null {
   if (!geometry) return null;
   switch (geometry.type) {
     case "Point":
@@ -219,10 +208,7 @@ function readValue(feature: Feature, property: string): number {
  * @param geojson - The layer's feature collection.
  * @param style - The layer style carrying the diagram configuration.
  */
-export function collectDiagramData(
-  geojson: FeatureCollection,
-  style: LayerStyle,
-): DiagramData {
+export function collectDiagramData(geojson: FeatureCollection, style: LayerStyle): DiagramData {
   const properties = styleValue(style, "diagramFields")
     .map((field) => field.property)
     .filter((property) => property !== "");
@@ -237,10 +223,7 @@ export function collectDiagramData(
   let visited = 0;
 
   for (const feature of geojson.features) {
-    if (
-      data.length >= MAX_DIAGRAM_FEATURES ||
-      visited >= MAX_DIAGRAM_SCAN_FEATURES
-    ) {
+    if (data.length >= MAX_DIAGRAM_FEATURES || visited >= MAX_DIAGRAM_SCAN_FEATURES) {
       truncated = true;
       break;
     }
@@ -289,8 +272,5 @@ export function diagramPixelSize(
   const size = Math.max(4, styleValue(style, "diagramSize"));
   if (styleValue(style, "diagramSizeMode") === "fixed") return size;
   if (maxSizeValue <= 0 || datum.sizeValue <= 0) return MIN_DIAGRAM_SIZE;
-  return Math.max(
-    MIN_DIAGRAM_SIZE,
-    size * Math.sqrt(datum.sizeValue / maxSizeValue),
-  );
+  return Math.max(MIN_DIAGRAM_SIZE, size * Math.sqrt(datum.sizeValue / maxSizeValue));
 }

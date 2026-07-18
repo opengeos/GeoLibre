@@ -84,7 +84,13 @@ describe("geometry-measure", () => {
 
     const perimeterM = measurePerimeter(SMALL_BOX, "meters");
     const sideM = measureLength(
-      { type: "LineString", coordinates: [[0, 0], [0.01, 0]] },
+      {
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [0.01, 0],
+        ],
+      },
       "meters",
     );
     // Four ~equal sides near the equator.
@@ -172,10 +178,10 @@ describe("geometry-measure", () => {
     // A collection reports every base family it contains.
     const feature = (geometry: Geometry) =>
       ({ type: "Feature", geometry, properties: {} }) as const;
-    assert.deepEqual(
-      [...detectGeometryFamilies([feature(collection)])].sort(),
-      ["line", "polygon"],
-    );
+    assert.deepEqual([...detectGeometryFamilies([feature(collection)])].sort(), [
+      "line",
+      "polygon",
+    ]);
     assert.deepEqual(
       [
         ...detectGeometryFamilies([
@@ -197,19 +203,10 @@ describe("geometry-measure", () => {
   it("detects the set of present geometry families", () => {
     const feature = (geometry: Geometry) =>
       ({ type: "Feature", geometry, properties: {} }) as const;
-    assert.deepEqual([...detectGeometryFamilies([feature(SMALL_BOX)])], [
-      "polygon",
-    ]);
-    assert.deepEqual([...detectGeometryFamilies([feature(EQUATOR_SEGMENT)])], [
-      "line",
-    ]);
+    assert.deepEqual([...detectGeometryFamilies([feature(SMALL_BOX)])], ["polygon"]);
+    assert.deepEqual([...detectGeometryFamilies([feature(EQUATOR_SEGMENT)])], ["line"]);
     assert.deepEqual(
-      [
-        ...detectGeometryFamilies([
-          feature(SMALL_BOX),
-          feature(EQUATOR_SEGMENT),
-        ]),
-      ].sort(),
+      [...detectGeometryFamilies([feature(SMALL_BOX), feature(EQUATOR_SEGMENT)])].sort(),
       ["line", "polygon"],
     );
     assert.equal(detectGeometryFamilies([]).size, 0);
@@ -270,8 +267,8 @@ describe("geometry helpers in the field calculator", () => {
       "number",
     );
     assert.ok(result && "patch" in result);
-    const written = (result.patch.geojson as FeatureCollection).features[0]
-      .properties?.len_km as number;
+    const written = (result.patch.geojson as FeatureCollection).features[0].properties
+      ?.len_km as number;
     assert.ok(Math.abs(written - 111.19) < 0.2, `got ${written}`);
   });
 });

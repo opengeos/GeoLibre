@@ -24,12 +24,7 @@ function getMetadataFieldNames(metadata: Record<string, unknown>): string[] {
         names.add(field);
         continue;
       }
-      if (
-        field &&
-        typeof field === "object" &&
-        "name" in field &&
-        typeof field.name === "string"
-      ) {
+      if (field && typeof field === "object" && "name" in field && typeof field.name === "string") {
         names.add(field.name);
       }
     }

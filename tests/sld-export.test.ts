@@ -53,7 +53,14 @@ function polygons(): FeatureCollection {
         properties: {},
         geometry: {
           type: "Polygon",
-          coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]],
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
         },
       },
     ],
@@ -86,10 +93,7 @@ describe("buildSld", () => {
   });
 
   it("writes a PointSymbolizer with a circle mark sized to the diameter", () => {
-    const { sld } = buildSld(
-      layer({ style: style({ circleRadius: 8 }) }),
-      points(),
-    );
+    const { sld } = buildSld(layer({ style: style({ circleRadius: 8 }) }), points());
     assert.match(compact(sld), /<PointSymbolizer><Graphic><Mark>/);
     assert.match(sld, /<WellKnownName>circle<\/WellKnownName>/);
     // circleRadius 8 → diameter 16.
@@ -130,7 +134,10 @@ describe("buildSld", () => {
       }),
       polygons(),
     );
-    assert.match(compact(sld), /<ogc:PropertyIsEqualTo><ogc:PropertyName>type<\/ogc:PropertyName><ogc:Literal>park<\/ogc:Literal>/);
+    assert.match(
+      compact(sld),
+      /<ogc:PropertyIsEqualTo><ogc:PropertyName>type<\/ogc:PropertyName><ogc:Literal>park<\/ogc:Literal>/,
+    );
     assert.match(compact(sld), /<ogc:Literal>lake<\/ogc:Literal>/);
     assert.match(sld, /<ElseFilter\/>/);
     // The else rule carries the fallback color.
@@ -152,7 +159,13 @@ describe("buildSld", () => {
         {
           type: "Feature",
           properties: {},
-          geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
         },
       ],
     };
@@ -315,11 +328,7 @@ describe("buildSld", () => {
             {
               id: "r1",
               label: "",
-              filter: JSON.stringify([
-                "in",
-                ["get", "t"],
-                ["literal", ["a", "b"]],
-              ]),
+              filter: JSON.stringify(["in", ["get", "t"], ["literal", ["a", "b"]]]),
               color: "#ff0000",
               isElse: false,
             },
@@ -337,15 +346,9 @@ describe("buildSld", () => {
   });
 
   it("warns for heatmap and cluster point renderers", () => {
-    const heat = buildSld(
-      layer({ style: style({ pointRenderer: "heatmap" }) }),
-      points(),
-    );
+    const heat = buildSld(layer({ style: style({ pointRenderer: "heatmap" }) }), points());
     assert.ok(heat.warnings.some((w) => /heatmap/.test(w)));
-    const cluster = buildSld(
-      layer({ style: style({ pointRenderer: "cluster" }) }),
-      points(),
-    );
+    const cluster = buildSld(layer({ style: style({ pointRenderer: "cluster" }) }), points());
     assert.ok(cluster.warnings.some((w) => /cluster/.test(w)));
   });
 
@@ -364,8 +367,14 @@ describe("buildSld", () => {
       }),
       polygons(),
     );
-    assert.match(compact(sld), /<ogc:PropertyIsGreaterThanOrEqualTo><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>0<\/ogc:Literal>/);
-    assert.match(compact(sld), /<ogc:PropertyIsLessThan><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>100<\/ogc:Literal>/);
+    assert.match(
+      compact(sld),
+      /<ogc:PropertyIsGreaterThanOrEqualTo><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>0<\/ogc:Literal>/,
+    );
+    assert.match(
+      compact(sld),
+      /<ogc:PropertyIsLessThan><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>100<\/ogc:Literal>/,
+    );
     assert.ok(warnings.some((w) => /discrete SLD class breaks/.test(w)));
   });
 
@@ -388,7 +397,10 @@ describe("buildSld", () => {
       }),
       polygons(),
     );
-    assert.match(compact(sld), /<ogc:PropertyIsGreaterThan><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>1000<\/ogc:Literal>/);
+    assert.match(
+      compact(sld),
+      /<ogc:PropertyIsGreaterThan><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>1000<\/ogc:Literal>/,
+    );
     assert.match(sld, /<ElseFilter\/>/);
   });
 
@@ -399,7 +411,13 @@ describe("buildSld", () => {
         {
           type: "Feature",
           properties: {},
-          geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
         },
       ],
     };
@@ -467,10 +485,7 @@ describe("buildSld", () => {
     const full = buildSld(layer(), polygons()).sld;
     assert.doesNotMatch(full, /ScaleDenominator/);
 
-    const { sld } = buildSld(
-      layer({ style: style({ minZoom: 4, maxZoom: 12 }) }),
-      polygons(),
-    );
+    const { sld } = buildSld(layer({ style: style({ minZoom: 4, maxZoom: 12 }) }), polygons());
     const minAtZoom12 = OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** 12;
     assert.match(sld, /<MinScaleDenominator>/);
     assert.match(sld, /<MaxScaleDenominator>/);
@@ -478,10 +493,7 @@ describe("buildSld", () => {
   });
 
   it("warns for meters-scaled and proportional (data-driven) sizing", () => {
-    const meters = buildSld(
-      layer({ style: style({ strokeWidthUnit: "meters" }) }),
-      polygons(),
-    );
+    const meters = buildSld(layer({ style: style({ strokeWidthUnit: "meters" }) }), polygons());
     assert.ok(meters.warnings.some((w) => /map units \(meters\)/.test(w)));
     const proportional = buildSld(
       layer({
@@ -492,9 +504,7 @@ describe("buildSld", () => {
       }),
       points(),
     );
-    assert.ok(
-      proportional.warnings.some((w) => /Proportional .*symbol size/.test(w)),
-    );
+    assert.ok(proportional.warnings.some((w) => /Proportional .*symbol size/.test(w)));
   });
 
   it("does not crash on an invalid (non-string) stop color", () => {

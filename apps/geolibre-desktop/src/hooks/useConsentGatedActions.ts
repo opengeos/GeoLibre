@@ -1,8 +1,5 @@
 import { type NetworkToolKind, useAppStore } from "@geolibre/core";
-import {
-  DIRECTIONS_PLUGIN_ID,
-  REVERSE_GEOCODE_PLUGIN_ID,
-} from "@geolibre/plugins";
+import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins";
 import { useState } from "react";
 import {
   hasReverseGeocodeConsent,
@@ -31,11 +28,9 @@ export function useConsentGatedActions({
 }: UseConsentGatedActionsOptions) {
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const [directionsNoticeOpen, setDirectionsNoticeOpen] = useState(false);
-  const [reverseGeocodeNoticeOpen, setReverseGeocodeNoticeOpen] =
-    useState(false);
+  const [reverseGeocodeNoticeOpen, setReverseGeocodeNoticeOpen] = useState(false);
   const [routingNoticeOpen, setRoutingNoticeOpen] = useState(false);
-  const [pendingNetworkTool, setPendingNetworkTool] =
-    useState<NetworkToolKind | null>(null);
+  const [pendingNetworkTool, setPendingNetworkTool] = useState<NetworkToolKind | null>(null);
 
   // Show a one-time consent notice the first time routing is enabled, since it
   // sends the user's waypoints to a public third-party server.
@@ -46,8 +41,7 @@ export function useConsentGatedActions({
     }
     let acknowledged = false;
     try {
-      acknowledged =
-        localStorage.getItem("geolibre:directions-osrm-notice") === "1";
+      acknowledged = localStorage.getItem("geolibre:directions-osrm-notice") === "1";
     } catch {
       // localStorage unavailable (private mode): fall back to showing the notice.
     }

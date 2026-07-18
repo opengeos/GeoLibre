@@ -1,26 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  getProtomapsApiKey,
-  getProtomapsStyleUrl,
-  PROTOMAPS_BASEMAPS,
-} from "@geolibre/core";
+import { getProtomapsApiKey, getProtomapsStyleUrl, PROTOMAPS_BASEMAPS } from "@geolibre/core";
 
 describe("getProtomapsApiKey", () => {
   it("returns undefined when env is missing or empty", () => {
     assert.equal(getProtomapsApiKey({}), undefined);
     assert.equal(getProtomapsApiKey({ VITE_PROTOMAPS_API_KEY: "" }), undefined);
-    assert.equal(
-      getProtomapsApiKey({ VITE_PROTOMAPS_API_KEY: "   " }),
-      undefined,
-    );
+    assert.equal(getProtomapsApiKey({ VITE_PROTOMAPS_API_KEY: "   " }), undefined);
   });
 
   it("returns the trimmed key when set", () => {
-    assert.equal(
-      getProtomapsApiKey({ VITE_PROTOMAPS_API_KEY: "  abc123  " }),
-      "abc123",
-    );
+    assert.equal(getProtomapsApiKey({ VITE_PROTOMAPS_API_KEY: "  abc123  " }), "abc123");
   });
 });
 
@@ -48,10 +38,7 @@ describe("getProtomapsStyleUrl", () => {
       const url = getProtomapsStyleUrl(basemap.flavor, {
         VITE_PROTOMAPS_API_KEY: "key",
       });
-      assert.equal(
-        url,
-        `https://api.protomaps.com/styles/v5/${basemap.flavor}/en.json?key=key`,
-      );
+      assert.equal(url, `https://api.protomaps.com/styles/v5/${basemap.flavor}/en.json?key=key`);
     }
   });
 });

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   createGeoAgentStoreLayer,
   geoAgentStoreLayerId,
@@ -16,15 +12,11 @@ import {
   type GeoAgentOverlayRecord,
 } from "../packages/plugins/src/plugins/geoagent-layer-sync";
 
-function overlayMap(
-  ...overlays: GeoAgentOverlayRecord[]
-): Map<string, GeoAgentOverlayRecord> {
+function overlayMap(...overlays: GeoAgentOverlayRecord[]): Map<string, GeoAgentOverlayRecord> {
   return new Map(overlays.map((overlay) => [overlay.name, overlay]));
 }
 
-function geojsonOverlay(
-  patch: Partial<GeoAgentOverlayRecord> = {},
-): GeoAgentOverlayRecord {
+function geojsonOverlay(patch: Partial<GeoAgentOverlayRecord> = {}): GeoAgentOverlayRecord {
   return {
     kind: "geojson",
     name: "Rivers",
@@ -36,9 +28,7 @@ function geojsonOverlay(
   };
 }
 
-function geeOverlay(
-  patch: Partial<GeoAgentOverlayRecord> = {},
-): GeoAgentOverlayRecord {
+function geeOverlay(patch: Partial<GeoAgentOverlayRecord> = {}): GeoAgentOverlayRecord {
   return {
     kind: "gee",
     name: "NDVI",
@@ -80,10 +70,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.type, "geojson");
     assert.equal(layer.visible, true);
     assert.equal(layer.metadata.externalNativeLayer, true);
-    assert.deepEqual(layer.metadata.nativeLayerIds, [
-      "rivers-fill",
-      "rivers-line",
-    ]);
+    assert.deepEqual(layer.metadata.nativeLayerIds, ["rivers-fill", "rivers-line"]);
     assert.deepEqual(layer.metadata.sourceIds, ["rivers-source"]);
     assert.equal(layer.metadata.sourceKind, "geoagent-overlay");
     assert.equal(layer.metadata.geoAgentOverlayName, "Rivers");
@@ -108,10 +95,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.metadata.identifiable, false);
     assert.equal(layer.metadata.tileType, "raster");
     assert.equal(layer.metadata.geoAgentOverlayKind, "gee");
-    assert.equal(
-      layer.metadata.tileUrl,
-      "https://earthengine.googleapis.com/tiles/{z}/{x}/{y}",
-    );
+    assert.equal(layer.metadata.tileUrl, "https://earthengine.googleapis.com/tiles/{z}/{x}/{y}");
     assert.deepEqual(layer.metadata.nativeLayerIds, ["ndvi"]);
   });
 
@@ -135,10 +119,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
       assert.equal(layer.metadata.identifiable, false);
       assert.equal(layer.metadata.tileType, "raster");
       assert.equal(layer.metadata.geoAgentOverlayKind, kind);
-      assert.equal(
-        layer.metadata.tileUrl,
-        `https://tiles.example.com/${kind}/{z}/{x}/{y}.png`,
-      );
+      assert.equal(layer.metadata.tileUrl, `https://tiles.example.com/${kind}/{z}/{x}/{y}.png`);
     }
   });
 
@@ -152,9 +133,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
     const layers = useAppStore.getState().layers;
     assert.equal(layers.length, 2);
     assert.ok(layers.some((layer) => layer.id === "unrelated"));
-    assert.ok(
-      layers.some((layer) => layer.id === geoAgentStoreLayerId("NDVI")),
-    );
+    assert.ok(layers.some((layer) => layer.id === geoAgentStoreLayerId("NDVI")));
   });
 
   it("skips markers and internal overlays", () => {
@@ -202,10 +181,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.name, "My Rivers");
     assert.equal(layer.visible, false);
     assert.equal(layer.opacity, 0.5);
-    assert.deepEqual(layer.metadata.nativeLayerIds, [
-      "rivers-fill-2",
-      "rivers-line-2",
-    ]);
+    assert.deepEqual(layer.metadata.nativeLayerIds, ["rivers-fill-2", "rivers-line-2"]);
     assert.deepEqual(layer.metadata.sourceIds, ["rivers-source-2"]);
   });
 
@@ -224,9 +200,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
         },
       ],
     };
-    syncGeoAgentOverlaysToStore(
-      overlayMap(geojsonOverlay({ data: updatedData })),
-    );
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay({ data: updatedData })));
 
     const layer = useAppStore.getState().layers[0];
     assert.equal(layer.geojson, updatedData);
@@ -426,8 +400,7 @@ describe("syncGeoAgentOverlaysToStore", () => {
     const paint: Array<[string, string, unknown]> = [];
     wireGeoAgentStoreSync({
       map: {
-        getLayer: (id: string) =>
-          id === "buildings-3d" ? { type: "fill-extrusion" } : undefined,
+        getLayer: (id: string) => (id === "buildings-3d" ? { type: "fill-extrusion" } : undefined),
         setLayoutProperty: (id: string, property: string, value: unknown) => {
           layout.push([id, property, value]);
         },

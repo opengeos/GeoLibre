@@ -1,10 +1,7 @@
 import type { MapController } from "@geolibre/map";
 import consoleApiSource from "./console_api.py?raw";
 import { getPyodideIndexUrl, isDefaultPyodideIndexUrl } from "./pyodide-config";
-import {
-  createScriptingHandlers,
-  type ScriptingDeps,
-} from "../scripting/scriptingApi";
+import { createScriptingHandlers, type ScriptingDeps } from "../scripting/scriptingApi";
 
 // Main-thread Pyodide runtime backing the in-app Python Console. Unlike the
 // vector-tools worker (pyodide-vector-loader.ts), this runs on the main thread on
@@ -116,10 +113,7 @@ async function injectScript(
   // Bound the fetch so a hung or misconfigured mirror surfaces an error (and
   // the caller's memo reset enables a retry) instead of an infinite spinner.
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    SCRIPT_FETCH_TIMEOUT_MS,
-  );
+  const timeout = setTimeout(() => controller.abort(), SCRIPT_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(scriptUrl, { signal: controller.signal });
     // The timeout only guards against a dead/unresponsive mirror, which is
@@ -131,17 +125,12 @@ async function injectScript(
     }
     source = await response.arrayBuffer();
   } catch (cause) {
-    throw new Error(
-      `Failed to load the Pyodide runtime script from ${scriptUrl}.`,
-      { cause },
-    );
+    throw new Error(`Failed to load the Pyodide runtime script from ${scriptUrl}.`, { cause });
   } finally {
     // Idempotent; covers a fetch that rejects before the clear above.
     clearTimeout(timeout);
   }
-  const blobUrl = URL.createObjectURL(
-    new Blob([source], { type: "text/javascript" }),
-  );
+  const blobUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
   try {
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement("script");
@@ -166,11 +155,7 @@ async function injectScript(
       // message as a load failure accordingly.
       script.onerror = () => {
         script.remove();
-        reject(
-          new Error(
-            `Failed to load the injected Pyodide runtime script from ${scriptUrl}.`,
-          ),
-        );
+        reject(new Error(`Failed to load the injected Pyodide runtime script from ${scriptUrl}.`));
       };
       document.head.appendChild(script);
     });
@@ -276,20 +261,14 @@ export function initConsoleRuntime(deps: ScriptingDeps): Promise<PyodideAPI> {
 // `append` closure. Chaining each run after the previous keeps captures isolated.
 let runQueue: Promise<unknown> = Promise.resolve();
 
-export function runConsoleCode(
-  deps: ScriptingDeps,
-  source: string,
-): Promise<ConsoleRunResult> {
+export function runConsoleCode(deps: ScriptingDeps, source: string): Promise<ConsoleRunResult> {
   const result = runQueue.then(() => runConsoleCodeImpl(deps, source));
   // Keep the chain alive even if a run rejects (it shouldn't — impl catches).
   runQueue = result.catch(() => undefined);
   return result;
 }
 
-async function runConsoleCodeImpl(
-  deps: ScriptingDeps,
-  source: string,
-): Promise<ConsoleRunResult> {
+async function runConsoleCodeImpl(deps: ScriptingDeps, source: string): Promise<ConsoleRunResult> {
   const pyodide = await initConsoleRuntime(deps);
   let output = "";
   const append = (text: string) => {
@@ -308,11 +287,7 @@ async function runConsoleCodeImpl(
       // Destroy the proxy even if toString() throws, or it leaks the underlying
       // Python object and its JS reference.
       try {
-        append(
-          typeof proxy.toString === "function"
-            ? proxy.toString()
-            : String(result),
-        );
+        append(typeof proxy.toString === "function" ? proxy.toString() : String(result));
       } finally {
         if (typeof proxy.destroy === "function") proxy.destroy();
       }
@@ -354,8 +329,6 @@ export async function completeConsoleCode(
 }
 
 /** Convenience for the panel: pull a controller accessor into the deps shape. */
-export function consoleDeps(
-  getController: () => MapController | null,
-): ScriptingDeps {
+export function consoleDeps(getController: () => MapController | null): ScriptingDeps {
   return { getController };
 }

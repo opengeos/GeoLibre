@@ -1,20 +1,13 @@
 /// <reference path="../earthengine.d.ts" />
 
-import type {
-  GeoAgentControl,
-  GeoAgentControlOptions,
-} from "maplibre-gl-geoagent";
+import type { GeoAgentControl, GeoAgentControlOptions } from "maplibre-gl-geoagent";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   authenticateWithOAuth,
   renderEeLayer,
   type VisualizeOptions,
 } from "maplibre-gl-earth-engine";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   removeGeoAgentStoreLayers,
   syncGeoAgentOverlaysToStore,
@@ -42,10 +35,7 @@ type GeoAgentControlInternals = {
   options?: GeoAgentControlOptions;
   tools?: {
     __geolibreToolRunnerPatched?: boolean;
-    addGeeRasterOverlay?: (overlay: {
-      name: string;
-      url: string;
-    }) => Promise<void>;
+    addGeeRasterOverlay?: (overlay: { name: string; url: string }) => Promise<void>;
     map?: MapLibreMap;
     overlays?: Map<string, GeoAgentOverlayRecord>;
     publishEarthEngineState?: () => void;
@@ -116,10 +106,7 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
     removeGeoAgentStoreLayers();
   },
   getMapControlPosition: () => geoAgentPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     geoAgentPosition = position;
     if (!geoAgentControl) {
       // Only kick off a mount if one is not already in flight. A mount started
@@ -274,8 +261,7 @@ async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
     accessToken: accessToken || undefined,
     oauthClientId,
     projectId,
-    tokenExpiresIn:
-      earthEngine.tokenExpiresIn ?? earthEngineTokenExpiresInOverride,
+    tokenExpiresIn: earthEngine.tokenExpiresIn ?? earthEngineTokenExpiresInOverride,
     tokenType: earthEngine.tokenType || earthEngineTokenTypeOverride,
   });
 
@@ -283,8 +269,7 @@ async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
   tools.removeOverlay?.(layerName);
   clearEarthEngineFunctionInfo();
   const layerBaseId = geoAgentSlug(layerName);
-  const sourceId =
-    tools.uniqueSourceId?.(`${layerBaseId}-source`) ?? `${layerBaseId}-source`;
+  const sourceId = tools.uniqueSourceId?.(`${layerBaseId}-source`) ?? `${layerBaseId}-source`;
   const layerId = tools.uniqueLayerBaseId?.(layerBaseId, [""]) ?? layerBaseId;
   const result = await renderEeLayer(tools.map, assetId, vis, sourceId, layerId);
 
@@ -323,15 +308,11 @@ async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
 
 function isEarthEngineToolCommand(command: string): boolean {
   return (
-    command === "initialize_earth_engine" ||
-    command.startsWith("gee_") ||
-    command.includes("_gee_")
+    command === "initialize_earth_engine" || command.startsWith("gee_") || command.includes("_gee_")
   );
 }
 
-function geoAgentEarthEngineOptions(): NonNullable<
-  GeoAgentControlOptions["earthEngine"]
-> {
+function geoAgentEarthEngineOptions(): NonNullable<GeoAgentControlOptions["earthEngine"]> {
   const control = geoAgentControl as unknown as GeoAgentControlInternals | null;
   return {
     ...GEOAGENT_OPTIONS.earthEngine,
@@ -353,15 +334,11 @@ function stringArg(args: Record<string, unknown>, key: string): string {
 function numberArg(args: Record<string, unknown>, key: string): number | undefined {
   const value = args[key];
   const numberValue =
-    typeof value === "number" || typeof value === "string"
-      ? Number(value)
-      : Number.NaN;
+    typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(numberValue) ? numberValue : undefined;
 }
 
-function geoAgentVisualizeOptions(
-  args: Record<string, unknown>,
-): VisualizeOptions {
+function geoAgentVisualizeOptions(args: Record<string, unknown>): VisualizeOptions {
   const vis: VisualizeOptions = {};
   const bands = stringArg(args, "bands") || stringArg(args, "band");
   const palette = stringArg(args, "palette");
@@ -394,15 +371,9 @@ function projectValue(envValue: unknown): string {
 
 function enhanceEarthEngineSignIn(): void {
   const details = document.querySelector<HTMLElement>(".geoagent-earth-engine");
-  const status = details?.querySelector<HTMLElement>(
-    ".geoagent-earth-engine-status",
-  );
-  const clientIdInput = details?.querySelector<HTMLInputElement>(
-    ".geoagent-ee-client-id",
-  );
-  const projectIdInput = details?.querySelector<HTMLInputElement>(
-    ".geoagent-ee-project-id",
-  );
+  const status = details?.querySelector<HTMLElement>(".geoagent-earth-engine-status");
+  const clientIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-client-id");
+  const projectIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-project-id");
   if (
     !details ||
     !status ||
@@ -424,10 +395,7 @@ function enhanceEarthEngineSignIn(): void {
     status.textContent = "Opening Google sign-in...";
     try {
       await authenticateEarthEngine(oauthClientId);
-      await applyEarthEngineAccessToken(
-        oauthClientId,
-        projectValue(projectIdInput.value),
-      );
+      await applyEarthEngineAccessToken(oauthClientId, projectValue(projectIdInput.value));
       void closeTauriOauthPopups();
       status.textContent = "Earth Engine sign-in complete.";
     } catch (error) {
@@ -470,17 +438,13 @@ async function earthEngineAccessToken(): Promise<string> {
   if (shouldUseTauriEarthEngineOAuth()) return "";
   installEarthEngineFunctionInfoFallback();
   const { default: earthEngine } = await import("@google/earthengine");
-  return (earthEngine.data?.getAuthToken?.() ?? "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
+  return (earthEngine.data?.getAuthToken?.() ?? "").replace(/^Bearer\s+/i, "").trim();
 }
 
 async function authenticateEarthEngine(oauthClientId: string): Promise<void> {
   const token = await authenticateEarthEngineForGeoLibre(oauthClientId);
   if (token?.accessToken) {
-    earthEngineAccessTokenOverride = token.accessToken
-      .replace(/^Bearer\s+/i, "")
-      .trim();
+    earthEngineAccessTokenOverride = token.accessToken.replace(/^Bearer\s+/i, "").trim();
     earthEngineTokenTypeOverride = token.tokenType || "Bearer";
     earthEngineTokenExpiresInOverride = token.expiresIn || 3600;
   }

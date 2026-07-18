@@ -51,11 +51,7 @@ const order = (parent: FakeNode) => parent.children.map((c) => c.id);
 
 // The helper is typed against the DOM's Element; FakeNode implements the members
 // it actually uses, so cast through unknown at the call boundary.
-const call = (
-  parent: FakeNode | null,
-  anchor: FakeNode | null,
-  refreshed: FakeNode | null,
-) =>
+const call = (parent: FakeNode | null, anchor: FakeNode | null, refreshed: FakeNode | null) =>
   restoreControlOrder(
     parent as unknown as Element | null,
     anchor as unknown as Element | null,

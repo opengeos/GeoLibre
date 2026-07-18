@@ -84,8 +84,7 @@ export function ProjectMenu({
     show("project.share") ||
     show("project.exportHtml") ||
     (collaborationEnabled && show("project.collaborate"));
-  const showPrintGroup =
-    show("project.printLayout") || show("project.offlineRegion");
+  const showPrintGroup = show("project.printLayout") || show("project.offlineRegion");
 
   return (
     <DropdownMenu>
@@ -132,75 +131,65 @@ export function ProjectMenu({
           </DropdownMenuSub>
         )}
         {show("project.openRecent") && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
-            <History className="h-3.5 w-3.5" />
-            {t("toolbar.item.openRecent")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-80">
-            {recentProjects.length === 0 ? (
-              <DropdownMenuItem disabled>
-                {t("toolbar.item.noRecentProjects")}
-              </DropdownMenuItem>
-            ) : (
-              recentProjects.map((project) => {
-                const openedAt = formatRecentProjectTime(project.openedAt);
-                const label = project.name || projectPathLabel(project.path);
-                return (
-                  <DropdownMenuItem
-                    key={project.path}
-                    className="flex items-start justify-between gap-2"
-                    onSelect={() => onOpenRecent(project.path)}
-                    title={project.path}
-                  >
-                    <span className="flex min-w-0 flex-col items-start gap-0.5">
-                      <span
-                        className="max-w-full truncate font-medium"
-                        title={label}
-                      >
-                        {label}
-                      </span>
-                      <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
-                        <History className="h-3 w-3 shrink-0" />
-                        <span
-                          className="break-all text-start leading-snug"
-                          title={project.path}
-                        >
-                          {openedAt
-                            ? `${openedAt} - ${project.path}`
-                            : project.path}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
+              <History className="h-3.5 w-3.5" />
+              {t("toolbar.item.openRecent")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-80">
+              {recentProjects.length === 0 ? (
+                <DropdownMenuItem disabled>{t("toolbar.item.noRecentProjects")}</DropdownMenuItem>
+              ) : (
+                recentProjects.map((project) => {
+                  const openedAt = formatRecentProjectTime(project.openedAt);
+                  const label = project.name || projectPathLabel(project.path);
+                  return (
+                    <DropdownMenuItem
+                      key={project.path}
+                      className="flex items-start justify-between gap-2"
+                      onSelect={() => onOpenRecent(project.path)}
+                      title={project.path}
+                    >
+                      <span className="flex min-w-0 flex-col items-start gap-0.5">
+                        <span className="max-w-full truncate font-medium" title={label}>
+                          {label}
+                        </span>
+                        <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
+                          <History className="h-3 w-3 shrink-0" />
+                          <span className="break-all text-start leading-snug" title={project.path}>
+                            {openedAt ? `${openedAt} - ${project.path}` : project.path}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t("toolbar.item.removeFromRecent", {
-                        name: label,
-                      })}
-                      className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
-                      onClick={(event) => {
-                        // Keep the menu open and prevent the row's onSelect
-                        // (which would reopen the project) from firing.
-                        event.stopPropagation();
-                        event.preventDefault();
-                        forgetRecentProject(project.path);
-                      }}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </DropdownMenuItem>
-                );
-              })
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={recentProjects.length === 0}
-              onSelect={clearRecentProjects}
-            >
-              {t("toolbar.item.clearRecentProjects")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+                      <button
+                        type="button"
+                        aria-label={t("toolbar.item.removeFromRecent", {
+                          name: label,
+                        })}
+                        className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                        onClick={(event) => {
+                          // Keep the menu open and prevent the row's onSelect
+                          // (which would reopen the project) from firing.
+                          event.stopPropagation();
+                          event.preventDefault();
+                          forgetRecentProject(project.path);
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={recentProjects.length === 0}
+                onSelect={clearRecentProjects}
+              >
+                {t("toolbar.item.clearRecentProjects")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         )}
         {showSaveGroup && <DropdownMenuSeparator />}
         {show("project.save") && (

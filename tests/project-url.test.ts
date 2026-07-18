@@ -15,8 +15,7 @@ const VALID_PROJECT_JSON = JSON.stringify({
 
 /** A `fetchImpl` that returns the given body with a 200 OK response. */
 function okFetch(body: string): typeof fetch {
-  return (async () =>
-    new Response(body, { status: 200 })) as unknown as typeof fetch;
+  return (async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
 }
 
 describe("fetchProjectFromUrl", () => {

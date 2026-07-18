@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState } from "maplibre-gl-raster";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
@@ -45,8 +41,7 @@ let storeSyncSuspended = 0;
  */
 export function isRasterControlStoreLayer(layer: GeoLibreLayer): boolean {
   return (
-    layer.metadata.sourceKind === RASTER_SOURCE_KIND &&
-    layer.metadata.externalNativeLayer === true
+    layer.metadata.sourceKind === RASTER_SOURCE_KIND && layer.metadata.externalNativeLayer === true
   );
 }
 
@@ -75,10 +70,8 @@ export function createRasterStoreLayer(
   // can read the bytes back. This covers every File-add path - drag-and-drop,
   // the Add Data > Raster Layer panel's own drop zone, and tool outputs - since
   // they all funnel through the control's addRaster.
-  const localBytesUrl =
-    info.source.kind === "file" ? info.source.objectUrl : undefined;
-  const sourcePath =
-    url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
+  const localBytesUrl = info.source.kind === "file" ? info.source.objectUrl : undefined;
+  const sourcePath = url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
   return {
     id: info.id,
     name: info.name,
@@ -117,12 +110,7 @@ export function createRasterStoreLayer(
       ...(localBytesUrl ? { localBytesUrl } : {}),
       ...(info.bounds
         ? {
-            bounds: [
-              info.bounds.west,
-              info.bounds.south,
-              info.bounds.east,
-              info.bounds.north,
-            ],
+            bounds: [info.bounds.west, info.bounds.south, info.bounds.east, info.bounds.north],
           }
         : {}),
       ...(info.error ? { error: info.error.message } : {}),
@@ -181,9 +169,7 @@ export function syncRasterLayersToStoreWithOptions(
 
     for (const info of infos) {
       const layer = createRasterStoreLayer(info, panelCollapsed, options);
-      const existing = useAppStore
-        .getState()
-        .layers.find((current) => current.id === layer.id);
+      const existing = useAppStore.getState().layers.find((current) => current.id === layer.id);
 
       if (!existing) {
         useAppStore.getState().addLayer(layer);
@@ -201,9 +187,7 @@ export function syncRasterLayersToStoreWithOptions(
         }
       }
       const metadata =
-        Object.keys(preserved).length > 0
-          ? { ...layer.metadata, ...preserved }
-          : layer.metadata;
+        Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
 
       if (
         existing.visible !== layer.visible ||
@@ -328,9 +312,7 @@ function rasterStateRecord(layer: GeoLibreLayer): Record<string, unknown> {
     : {};
 }
 
-function serializeBandNames(
-  bandNames: Map<number, string> | null,
-): [number, string][] | null {
+function serializeBandNames(bandNames: Map<number, string> | null): [number, string][] | null {
   return bandNames ? [...bandNames.entries()] : null;
 }
 
@@ -408,19 +390,13 @@ export function resetRasterStoreSyncSuspension(): void {
  * @param layer - A store layer created by createRasterStoreLayer.
  * @returns The state overrides to replay through RasterControl.addRaster.
  */
-export function savedRasterState(
-  layer: GeoLibreLayer,
-): Partial<RasterLayerState> {
+export function savedRasterState(layer: GeoLibreLayer): Partial<RasterLayerState> {
   const raw = layer.metadata.rasterState;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const candidate = raw as Record<string, unknown>;
   const state: Partial<RasterLayerState> = {};
 
-  if (
-    candidate.mode === "rgb" ||
-    candidate.mode === "single" ||
-    candidate.mode === "index"
-  ) {
+  if (candidate.mode === "rgb" || candidate.mode === "single" || candidate.mode === "index") {
     state.mode = candidate.mode;
   }
   // The normalized-difference preset id (index mode). The control tolerates
@@ -431,9 +407,7 @@ export function savedRasterState(
   if (
     Array.isArray(candidate.bands) &&
     candidate.bands.length > 0 &&
-    candidate.bands.every(
-      (band) => typeof band === "number" && Number.isInteger(band) && band > 0,
-    )
+    candidate.bands.every((band) => typeof band === "number" && Number.isInteger(band) && band > 0)
   ) {
     state.bands = candidate.bands as number[];
   }
@@ -447,9 +421,7 @@ export function savedRasterState(
         (range) =>
           Array.isArray(range) &&
           range.length === 2 &&
-          range.every(
-            (value) => typeof value === "number" && Number.isFinite(value),
-          ),
+          range.every((value) => typeof value === "number" && Number.isFinite(value)),
       ))
   ) {
     state.rescale = candidate.rescale as [number, number][] | null;
@@ -491,19 +463,14 @@ export function savedRasterState(
   return state;
 }
 
-function rasterPanelCollapsedFromControl(
-  control: RasterSyncableControl,
-): boolean {
+function rasterPanelCollapsedFromControl(control: RasterSyncableControl): boolean {
   try {
     const collapsed = control.getState?.().collapsed;
     return typeof collapsed === "boolean" ? collapsed : true;
   } catch (error) {
     // getState is optional, so only a throwing implementation lands here;
     // surface it instead of letting it look like the method being absent.
-    console.warn(
-      "[GeoLibre] rasterPanelCollapsedFromControl: getState threw",
-      error,
-    );
+    console.warn("[GeoLibre] rasterPanelCollapsedFromControl: getState threw", error);
     return true;
   }
 }
@@ -512,10 +479,7 @@ function rasterPanelCollapsedFromControl(
 // the helper of the same name in maplibre-3d-tiles.ts. JSON.stringify would
 // report a difference for semantically equal objects whose keys were built
 // in a different order, forcing a spurious updateLayer on every event.
-function recordsEqual(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): boolean {
+function recordsEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
     if (!valuesEqual(left[key], right[key])) return false;
@@ -541,9 +505,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function serializableRasterState(
-  state: RasterLayerState,
-): Record<string, unknown> {
+function serializableRasterState(state: RasterLayerState): Record<string, unknown> {
   // visible and opacity live on the top-level layer fields (the panel edits
   // them there); persisting copies here would leave two competing values in
   // a saved project file, so they are omitted.

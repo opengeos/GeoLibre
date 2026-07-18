@@ -9,12 +9,7 @@ import {
   type MbtilesMetadata,
 } from "../../../../lib/mbtiles";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
-import {
-  createBaseLayer,
-  errorMessage,
-  fileNameFromPath,
-  layerNameFromPath,
-} from "../helpers";
+import { createBaseLayer, errorMessage, fileNameFromPath, layerNameFromPath } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function MbtilesSource() {
@@ -57,8 +52,7 @@ export function MbtilesSource() {
 
   const handleSubmit = source.runSubmit(() => {
     const name = source.layerName.trim() || defaultName;
-    if (!selectedMbtiles)
-      throw new Error(t("addData.mbtiles.errorChooseFile"));
+    if (!selectedMbtiles) throw new Error(t("addData.mbtiles.errorChooseFile"));
     registerMbtilesProtocol();
 
     const { metadata, path } = selectedMbtiles;
@@ -112,11 +106,7 @@ export function MbtilesSource() {
     >
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleChooseMbtilesFile}
-          >
+          <Button type="button" variant="outline" onClick={handleChooseMbtilesFile}>
             <FileUp className="me-2 h-3.5 w-3.5" />
             {t("addData.common.chooseFile")}
           </Button>
@@ -144,9 +134,7 @@ export function MbtilesSource() {
         )}
         {selectedMbtiles?.metadata.tileType === "vector" && (
           <div className="space-y-1.5">
-            <Label htmlFor="mbtiles-source-layers">
-              {t("addData.mbtiles.sourceLayers")}
-            </Label>
+            <Label htmlFor="mbtiles-source-layers">{t("addData.mbtiles.sourceLayers")}</Label>
             <Input
               id="mbtiles-source-layers"
               placeholder={t("addData.mbtiles.sourceLayersPlaceholder")}

@@ -11,9 +11,7 @@ import {
 } from "../packages/processing/src/wasm-convert";
 
 const fixture = (name: string) =>
-  new Uint8Array(
-    readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))),
-  );
+  new Uint8Array(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))));
 
 // The same tiny 32x32 Int16 GeoTIFF cog-convert.test.ts uses.
 const stripedTiff = fixture("striped.tif");
@@ -30,10 +28,7 @@ async function makeRgbTiff(): Promise<Uint8Array> {
   await initWasm({
     module_or_path: readFileSync(
       fileURLToPath(
-        new URL(
-          "../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm",
-          import.meta.url,
-        ),
+        new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
       ),
     ),
   });
@@ -97,12 +92,7 @@ describe("wasm-convert", () => {
     // file scheme.
     await initConvertTools(
       readFileSync(
-        fileURLToPath(
-          new URL(
-            "../node_modules/geolibre-wasm/geolibre-cli.wasm",
-            import.meta.url,
-          ),
-        ),
+        fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre-cli.wasm", import.meta.url)),
       ),
     );
     rgbTiff = await makeRgbTiff();
@@ -158,10 +148,7 @@ describe("wasm-convert", () => {
     // than by throwing, so the wrapper has to turn that into a real Error.
     it("surfaces the tool's own message when the output format is unsupported", async () => {
       await assert.rejects(
-        convertVectorWithWasm(
-          { name: "points.geojson", data: pointsGeoJson },
-          "points.pmtiles",
-        ),
+        convertVectorWithWasm({ name: "points.geojson", data: pointsGeoJson }, "points.pmtiles"),
         /unsupported output path|unsupported vector format/i,
       );
     });
@@ -270,10 +257,7 @@ describe("wasm-convert", () => {
 
     it("rejects a vector input, which write_pmtiles cannot render", async () => {
       await assert.rejects(
-        renderRasterToPmtiles(
-          { name: "points.geojson", data: pointsGeoJson },
-          "points.pmtiles",
-        ),
+        renderRasterToPmtiles({ name: "points.geojson", data: pointsGeoJson }, "points.pmtiles"),
         /unknown raster format/i,
       );
     });
@@ -357,11 +341,9 @@ describe("wasm-convert", () => {
       assert.ok(hasMagic(atCap.data, PMTILES_MAGIC));
 
       await assert.rejects(
-        tileVectorToPmtiles(
-          { name: "points.geojson", data: pointsGeoJson },
-          "over.pmtiles",
-          { maxZoom: MAX_VECTOR_PMTILES_ZOOM + 1 },
-        ),
+        tileVectorToPmtiles({ name: "points.geojson", data: pointsGeoJson }, "over.pmtiles", {
+          maxZoom: MAX_VECTOR_PMTILES_ZOOM + 1,
+        }),
         /max_zoom must be <= 18/i,
       );
     });

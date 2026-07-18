@@ -25,10 +25,7 @@ describe("pluginAssetUrlFromSource", () => {
 
   it("resolves against a tauri:// manifest URL (desktop bundled build)", () => {
     assert.equal(
-      pluginAssetUrlFromSource(
-        "tauri://localhost/plugins/x/plugin.json",
-        "dist/sample-data",
-      ),
+      pluginAssetUrlFromSource("tauri://localhost/plugins/x/plugin.json", "dist/sample-data"),
       "tauri://localhost/plugins/x/dist/sample-data",
     );
   });
@@ -49,20 +46,14 @@ describe("pluginAssetUrlFromSource", () => {
 
   it("rejects paths that escape the plugin directory", () => {
     assert.equal(
-      pluginAssetUrlFromSource(
-        "https://geolibre.app/plugins/x/plugin.json",
-        "../secrets",
-      ),
+      pluginAssetUrlFromSource("https://geolibre.app/plugins/x/plugin.json", "../secrets"),
       null,
     );
   });
 
   it("rejects absolute paths", () => {
     assert.equal(
-      pluginAssetUrlFromSource(
-        "https://geolibre.app/plugins/x/plugin.json",
-        "/etc/passwd",
-      ),
+      pluginAssetUrlFromSource("https://geolibre.app/plugins/x/plugin.json", "/etc/passwd"),
       null,
     );
   });
@@ -72,10 +63,7 @@ describe("pluginAssetUrlFromSource", () => {
     // it to ".." and the resolved URL lands outside the plugin directory, so
     // the directory-containment guard still rejects it.
     assert.equal(
-      pluginAssetUrlFromSource(
-        "https://geolibre.app/plugins/x/plugin.json",
-        "%2e%2e/secrets",
-      ),
+      pluginAssetUrlFromSource("https://geolibre.app/plugins/x/plugin.json", "%2e%2e/secrets"),
       null,
     );
   });

@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   PluginControl,
   type PluginControlOptions,
@@ -66,10 +62,7 @@ function earthEngineOptions(): Omit<PluginControlOptions, "position"> {
     panelWidth: 420,
     // Evaluated when the control is first created (not at module load) so a
     // deep link or storage value present at open time is picked up.
-    projectId: projectValue(
-      importMetaEnv().VITE_GEE_PROJECT_ID,
-      STORAGE_PREFIX,
-    ),
+    projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID, STORAGE_PREFIX),
     storagePrefix: STORAGE_PREFIX,
     title: "Earth Engine",
   };
@@ -116,17 +109,12 @@ export function subscribeEarthEnginePanel(listener: () => void): () => void {
   return () => earthEnginePanelListeners.delete(listener);
 }
 
-async function openStandaloneEarthEngineControl(
-  app: GeoLibreAppAPI,
-): Promise<boolean> {
+async function openStandaloneEarthEngineControl(app: GeoLibreAppAPI): Promise<boolean> {
   earthEngineControl ??= new GeoLibreEarthEngineControl(earthEngineOptions());
   wireEarthEngineLayerSync(earthEngineControl);
 
   if (!earthEngineControlMounted) {
-    const added = app.addMapControl(
-      earthEngineControl,
-      EARTH_ENGINE_CONTROL_POSITION,
-    );
+    const added = app.addMapControl(earthEngineControl, EARTH_ENGINE_CONTROL_POSITION);
     if (!added) {
       earthEngineControl = null;
       earthEngineControlMounted = false;
@@ -140,18 +128,14 @@ async function openStandaloneEarthEngineControl(
     showEarthEngineControl(earthEngineControl);
     earthEngineControl?.expand();
     wireEarthEngineCloseButton(earthEngineControl);
-    if (earthEngineControl)
-      syncEarthEngineControlLayersToStore(earthEngineControl);
+    if (earthEngineControl) syncEarthEngineControlLayersToStore(earthEngineControl);
   }, 0);
   preloadEarthEngineAuthLibrary();
   return true;
 }
 
 class GeoLibreEarthEngineControl extends PluginControl {
-  async authenticate(
-    projectId?: string,
-    oauthClientId?: string,
-  ): Promise<void> {
+  async authenticate(projectId?: string, oauthClientId?: string): Promise<void> {
     const isTauriAuth = shouldUseTauriEarthEngineOAuth();
     if (isTauriAuth) {
       const activeOAuthClientId = oauthClientIdValue(
@@ -214,9 +198,7 @@ function activeOAuthClientIdFromControl(control: PluginControl): string {
   );
 }
 
-function tokenFromControlOptions(
-  control: PluginControl,
-): TauriEarthEngineOAuthToken | null {
+function tokenFromControlOptions(control: PluginControl): TauriEarthEngineOAuthToken | null {
   const options = (control as unknown as EarthEngineControlInternals)._options;
   if (!options?.accessToken) return null;
 
@@ -261,8 +243,7 @@ function wireEarthEngineLayerSync(control: PluginControl): void {
     };
   }
 
-  const originalApplyLayerVisibility =
-    methods._applyLayerVisibility?.bind(control);
+  const originalApplyLayerVisibility = methods._applyLayerVisibility?.bind(control);
   if (originalApplyLayerVisibility) {
     methods._applyLayerVisibility = (layer) => {
       originalApplyLayerVisibility(layer);
@@ -348,9 +329,7 @@ function syncEarthEngineControlLayersToStore(control: PluginControl): void {
 
     for (const controlLayer of controlLayers) {
       const layer = createEarthEngineStoreLayer(controlLayer);
-      const existing = useAppStore
-        .getState()
-        .layers.find((current) => current.id === layer.id);
+      const existing = useAppStore.getState().layers.find((current) => current.id === layer.id);
 
       if (existing) {
         if (
@@ -378,9 +357,7 @@ function syncEarthEngineControlLayersToStore(control: PluginControl): void {
   }
 }
 
-function createEarthEngineStoreLayer(
-  controlLayer: EarthEngineLoadedLayer,
-): GeoLibreLayer {
+function createEarthEngineStoreLayer(controlLayer: EarthEngineLoadedLayer): GeoLibreLayer {
   return {
     id: controlLayer.id,
     name: controlLayer.name,
@@ -418,26 +395,16 @@ function isEarthEngineStoreLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
-function earthEngineControlLayers(
-  control: PluginControl,
-): EarthEngineLoadedLayer[] {
+function earthEngineControlLayers(control: PluginControl): EarthEngineLoadedLayer[] {
   const layers = (control as unknown as EarthEngineControlInternals)._layers;
   return Array.isArray(layers) ? layers : [];
 }
 
-function removeEarthEngineControlLayer(
-  control: PluginControl,
-  layerId: string,
-): void {
-  (control as unknown as EarthEngineControlMethods)._removeManagedLayer?.(
-    layerId,
-  );
+function removeEarthEngineControlLayer(control: PluginControl, layerId: string): void {
+  (control as unknown as EarthEngineControlMethods)._removeManagedLayer?.(layerId);
 }
 
-function applyEarthEngineLayerOpacity(
-  control: PluginControl,
-  layer: EarthEngineLoadedLayer,
-): void {
+function applyEarthEngineLayerOpacity(control: PluginControl, layer: EarthEngineLoadedLayer): void {
   (control as unknown as EarthEngineControlMethods)._applyLayerOpacity?.(layer);
 }
 
@@ -445,9 +412,7 @@ function applyEarthEngineLayerVisibility(
   control: PluginControl,
   layer: EarthEngineLoadedLayer,
 ): void {
-  (control as unknown as EarthEngineControlMethods)._applyLayerVisibility?.(
-    layer,
-  );
+  (control as unknown as EarthEngineControlMethods)._applyLayerVisibility?.(layer);
 }
 
 function renderEarthEngineLayersList(control: PluginControl): void {
@@ -457,9 +422,7 @@ function renderEarthEngineLayersList(control: PluginControl): void {
 function wireEarthEngineCloseButton(control: PluginControl | null): void {
   const panel = earthEnginePanelElement(control);
   applyEarthEnginePanelClass(panel);
-  const closeButton = panel?.querySelector<HTMLElement>(
-    ".plugin-control-close",
-  );
+  const closeButton = panel?.querySelector<HTMLElement>(".plugin-control-close");
   if (!closeButton || closeButton.dataset.geolibreCloseWired === "true") {
     return;
   }
@@ -489,15 +452,11 @@ function applyEarthEnginePanelClass(panel: HTMLElement | undefined): void {
   panel?.classList.add(EARTH_ENGINE_PANEL_CLASS);
 }
 
-function earthEngineContainerElement(
-  control: PluginControl | null,
-): HTMLElement | undefined {
+function earthEngineContainerElement(control: PluginControl | null): HTMLElement | undefined {
   return (control as unknown as EarthEngineControlInternals | null)?._container;
 }
 
-function earthEnginePanelElement(
-  control: PluginControl | null,
-): HTMLElement | undefined {
+function earthEnginePanelElement(control: PluginControl | null): HTMLElement | undefined {
   return (control as unknown as EarthEngineControlInternals | null)?._panel;
 }
 

@@ -3,10 +3,7 @@ import maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
-import type {
-  GeoJSONSource,
-  Map as MapLibreMap,
-} from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 
 const VIEWPORT_SOURCE_ID = "__geolibre_collab_viewports";
@@ -56,9 +53,7 @@ export function RemoteCursorsOverlay({
   // Remove everything on unmount.
   useEffect(
     () => () =>
-      safely(() =>
-        clearAll(mapControllerRef.current?.getMap() ?? null, markersRef.current),
-      ),
+      safely(() => clearAll(mapControllerRef.current?.getMap() ?? null, markersRef.current)),
     [mapControllerRef],
   );
 
@@ -118,9 +113,7 @@ function renderPresence(
   // it once the style is loaded; markers above are DOM and always safe.
   if (map.isStyleLoaded()) {
     ensureViewportLayer(map);
-    const source = map.getSource(VIEWPORT_SOURCE_ID) as
-      | GeoJSONSource
-      | undefined;
+    const source = map.getSource(VIEWPORT_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(viewportCollection(presence));
   }
 }
@@ -232,10 +225,7 @@ function createCursorSvg(color: string): SVGSVGElement {
   return svg;
 }
 
-function clearAll(
-  map: MapLibreMap | null,
-  markers: Map<string, maplibregl.Marker>,
-): void {
+function clearAll(map: MapLibreMap | null, markers: Map<string, maplibregl.Marker>): void {
   for (const marker of markers.values()) marker.remove();
   markers.clear();
   if (map) {

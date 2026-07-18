@@ -162,9 +162,7 @@ export function buildWmsLayer(params: WmsLayerParams): GeoLibreLayer {
 }
 
 /** Reads the WMS fields from a saved entry, mirroring `WmsSource.applyFields`. */
-export function wmsFieldsToParams(
-  entry: ServiceLibraryEntry,
-): WmsLayerParams {
+export function wmsFieldsToParams(entry: ServiceLibraryEntry): WmsLayerParams {
   const { fields } = entry;
   const endpoint = serviceFieldString(fields, "endpoint");
   // A saved service predating the version field falls back to the endpoint's
@@ -215,9 +213,7 @@ export function buildWmtsLayer(params: WmtsLayerParams): GeoLibreLayer {
 }
 
 /** Reads the WMTS fields from a saved entry, mirroring `WmtsSource.applyFields`. */
-export function wmtsFieldsToParams(
-  entry: ServiceLibraryEntry,
-): WmtsLayerParams {
+export function wmtsFieldsToParams(entry: ServiceLibraryEntry): WmtsLayerParams {
   return {
     name: entry.name,
     url: serviceFieldString(entry.fields, "url"),
@@ -244,17 +240,10 @@ export function wfsFieldsToRequest(entry: ServiceLibraryEntry): WfsRequest {
   return {
     // Strip leftover operation params (a pasted GetCapabilities URL) so the
     // GetFeature request is not built with a conflicting duplicate REQUEST.
-    endpoint: stripOgcOperationParams(
-      serviceFieldString(fields, "endpoint").trim(),
-      "WFS",
-    ),
+    endpoint: stripOgcOperationParams(serviceFieldString(fields, "endpoint").trim(), "WFS"),
     typeName: serviceFieldString(fields, "typeName").trim(),
     version: serviceFieldString(fields, "version", "2.0.0"),
-    outputFormat: serviceFieldString(
-      fields,
-      "outputFormat",
-      "application/json",
-    ).trim(),
+    outputFormat: serviceFieldString(fields, "outputFormat", "application/json").trim(),
     srsName: serviceFieldString(fields, "srsName", "EPSG:4326").trim(),
     maxFeatures: maxFeatures || undefined,
   };
@@ -318,20 +307,13 @@ export interface ArcGISOptions {
 }
 
 /** Reads the ArcGIS fields from a saved entry, mirroring `ArcGISSource`. */
-export function arcgisFieldsToOptions(
-  entry: ServiceLibraryEntry,
-): ArcGISOptions {
+export function arcgisFieldsToOptions(entry: ServiceLibraryEntry): ArcGISOptions {
   const { fields } = entry;
   return {
     name: entry.name,
     layerType:
-      serviceFieldString(fields, "layerType") === "vector-tile"
-        ? "vector-tile"
-        : "feature",
-    sourceType:
-      serviceFieldString(fields, "sourceType") === "portal-item"
-        ? "portal-item"
-        : "url",
+      serviceFieldString(fields, "layerType") === "vector-tile" ? "vector-tile" : "feature",
+    sourceType: serviceFieldString(fields, "sourceType") === "portal-item" ? "portal-item" : "url",
     url: serviceFieldString(fields, "url").trim() || undefined,
     itemId: serviceFieldString(fields, "itemId").trim() || undefined,
     portalUrl: serviceFieldString(fields, "portalUrl").trim() || undefined,

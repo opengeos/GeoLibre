@@ -154,12 +154,7 @@ function rgba({ r, g, b }: Rgb, alpha: number): string {
 }
 
 /** Clamp `value` into `[min, max]`, falling back to `fallback` if non-finite. */
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
 }
@@ -180,9 +175,7 @@ export function normalizeEffectsSettings(
     return hex.startsWith("#") ? hex : `#${hex}`;
   };
   return {
-    haloColor: isHex(candidate.haloColor)
-      ? withHash(candidate.haloColor)
-      : base.haloColor,
+    haloColor: isHex(candidate.haloColor) ? withHash(candidate.haloColor) : base.haloColor,
     haloExtent: clampNumber(
       candidate.haloExtent,
       HALO_EXTENT_MIN,
@@ -195,9 +188,7 @@ export function normalizeEffectsSettings(
       HALO_OPACITY_MAX,
       base.haloOpacity,
     ),
-    spaceColor: isHex(candidate.spaceColor)
-      ? withHash(candidate.spaceColor)
-      : base.spaceColor,
+    spaceColor: isHex(candidate.spaceColor) ? withHash(candidate.spaceColor) : base.spaceColor,
   };
 }
 
@@ -279,10 +270,7 @@ function getGeoglifyGlobeCircle(map: MapLibreMap): GlobeCircle {
         Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRad),
         Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(sampleLat),
       );
-    const projected = map.project([
-      (sampleLng * 180) / Math.PI,
-      (sampleLat * 180) / Math.PI,
-    ]);
+    const projected = map.project([(sampleLng * 180) / Math.PI, (sampleLat * 180) / Math.PI]);
     if (Number.isFinite(projected.x) && Number.isFinite(projected.y)) {
       points.push(projected);
     }
@@ -295,10 +283,7 @@ function getGeoglifyGlobeCircle(map: MapLibreMap): GlobeCircle {
       x: projectedCenter.x,
       y: projectedCenter.y,
       radius: Math.max(
-        Math.hypot(
-          projectedCenter.x - projectedEdge.x,
-          projectedCenter.y - projectedEdge.y,
-        ),
+        Math.hypot(projectedCenter.x - projectedEdge.x, projectedCenter.y - projectedEdge.y),
         1,
       ),
     };
@@ -336,9 +321,7 @@ function getGeoglifyGlobeCircle(map: MapLibreMap): GlobeCircle {
  * ∇ = 0; this solves for the center rather than assuming it. Returns null for a
  * degenerate (non-elliptical) fit — collinear or fewer than five points.
  */
-export function fitEllipse(
-  pts: ReadonlyArray<readonly [number, number]>,
-): GlobeEllipse | null {
+export function fitEllipse(pts: ReadonlyArray<readonly [number, number]>): GlobeEllipse | null {
   if (pts.length < 5) return null;
 
   // Shift origin to the sample bounding-box center: it lies inside the ellipse,
@@ -484,10 +467,8 @@ class EffectsEngine {
     this.mapRoot = this.mapCanvas.closest(".maplibregl-map");
     this.previousMapCanvasZIndex = this.mapCanvas.style.zIndex;
     this.controlContainer =
-      this.mapRoot?.querySelector<HTMLElement>(".maplibregl-control-container") ??
-      null;
-    this.previousControlContainerZIndex =
-      this.controlContainer?.style.zIndex ?? "";
+      this.mapRoot?.querySelector<HTMLElement>(".maplibregl-control-container") ?? null;
+    this.previousControlContainerZIndex = this.controlContainer?.style.zIndex ?? "";
     this.overlayStyle = this.ensureOverlayStyle();
     this.spaceCanvas = this.createCanvas(0);
     this.starsCanvas = this.createCanvas(1);
@@ -612,12 +593,7 @@ class EffectsEngine {
     this.height = mapCanvas.clientHeight;
     this.dpr = window.devicePixelRatio || 1;
 
-    for (const ctx of [
-      this.spaceCtx,
-      this.starsCtx,
-      this.cometCtx,
-      this.haloCtx,
-    ]) {
+    for (const ctx of [this.spaceCtx, this.starsCtx, this.cometCtx, this.haloCtx]) {
       const canvas = ctx.canvas;
       canvas.style.width = `${this.width}px`;
       canvas.style.height = `${this.height}px`;
@@ -709,13 +685,9 @@ class EffectsEngine {
     if (!this.starfield) return;
     const center = this.map.getCenter();
     const offsetX =
-      ((center.lng - this.starfieldOriginLng) /
-        STARFIELD_LNG_PERIOD_DEGREES) *
-      this.width;
+      ((center.lng - this.starfieldOriginLng) / STARFIELD_LNG_PERIOD_DEGREES) * this.width;
     const offsetY =
-      ((center.lat - this.starfieldOriginLat) /
-        STARFIELD_LAT_PERIOD_DEGREES) *
-      this.height;
+      ((center.lat - this.starfieldOriginLat) / STARFIELD_LAT_PERIOD_DEGREES) * this.height;
     const wrappedX = ((offsetX % this.width) + this.width) % this.width;
     const wrappedY = ((offsetY % this.height) + this.height) % this.height;
     const field = this.starfield;
@@ -725,13 +697,7 @@ class EffectsEngine {
     ctx.drawImage(field, wrappedX, wrappedY, this.width, this.height);
     ctx.drawImage(field, wrappedX - this.width, wrappedY, this.width, this.height);
     ctx.drawImage(field, wrappedX, wrappedY - this.height, this.width, this.height);
-    ctx.drawImage(
-      field,
-      wrappedX - this.width,
-      wrappedY - this.height,
-      this.width,
-      this.height,
-    );
+    ctx.drawImage(field, wrappedX - this.width, wrappedY - this.height, this.width, this.height);
   }
 
   private updateAndDrawComets(): void {
@@ -926,11 +892,7 @@ function detachEngine(): void {
  * after restoring plugin state — mirroring `restoreRasterLayers` — to bridge
  * that gap. Idempotent: safe to call on every project load / map reinit.
  */
-export function restoreEffects(
-  app: GeoLibreAppAPI,
-  active: boolean,
-  settings?: unknown,
-): void {
+export function restoreEffects(app: GeoLibreAppAPI, active: boolean, settings?: unknown): void {
   // Apply the project's saved appearance (or defaults when absent) before
   // attaching. restoreProjectState only invokes applyProjectState when the
   // project actually carries effects settings, so a project saved with the

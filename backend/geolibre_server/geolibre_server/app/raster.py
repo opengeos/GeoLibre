@@ -1378,9 +1378,7 @@ _EXTRA_INPUTS: dict[str, list[tuple[str, str, set[str], bool]]] = {
 }
 
 
-def _validate_extra_input(
-    path: str, label: str, allowed_extensions: set[str] | None = None
-) -> str:
+def _validate_extra_input(path: str, label: str, allowed_extensions: set[str] | None = None) -> str:
     """Validate a secondary input file path (e.g. a clip mask)."""
     if not path.strip():
         raise HTTPException(status_code=400, detail=f"{label} is required")
@@ -1397,10 +1395,7 @@ def _validate_extra_input(
         # json.load fail inside the job with an opaque error.
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"{label} must be one of {sorted(allowed_extensions)}, "
-                f"got '{source.suffix}'"
-            ),
+            detail=(f"{label} must be one of {sorted(allowed_extensions)}, got '{source.suffix}'"),
         )
     return str(source.resolve())
 
@@ -1421,8 +1416,7 @@ def _check_raster_import(python_executable: str) -> None:
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeBootstrapError(
-            f"{python_executable}: import timed out after "
-            f"{RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
+            f"{python_executable}: import timed out after {RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
         ) from exc
     if completed.returncode != 0:
         detail = (
@@ -1466,9 +1460,7 @@ def raster_run(request: RasterToolRequest):
     """
     script = _RASTER_TOOL_SCRIPTS.get(request.tool_id)
     if script is None:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown raster tool: {request.tool_id}"
-        )
+        raise HTTPException(status_code=400, detail=f"Unknown raster tool: {request.tool_id}")
 
     input_path, output_path = _validate_paths(request.input_path, request.output_path)
     params: dict[str, Any] = {

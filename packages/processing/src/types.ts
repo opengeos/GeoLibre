@@ -1,14 +1,7 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 
-export type ParameterType =
-  | "layer"
-  | "number"
-  | "string"
-  | "boolean"
-  | "select"
-  | "field"
-  | "path";
+export type ParameterType = "layer" | "number" | "string" | "boolean" | "select" | "field" | "path";
 
 /** A single geometry family used to filter layer pickers. */
 export type GeometryFamily = "point" | "line" | "polygon";
@@ -45,9 +38,7 @@ export interface AlgorithmParameter {
    * ignore it. A hidden parameter is also skipped during required validation.
    * `in` and `notIn` are mutually exclusive.
    */
-  visibleWhen?:
-    | { param: string; in: string[] }
-    | { param: string; notIn: string[] };
+  visibleWhen?: { param: string; in: string[] } | { param: string; notIn: string[] };
   /** File-dialog filters for `type: "path"` (a native file picker field). */
   fileFilters?: { name: string; extensions: string[] }[];
 }

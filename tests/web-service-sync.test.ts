@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   createStoreLayer,
   createWebServiceStoreSync,
@@ -18,9 +14,7 @@ import {
 
 const KIND = "test-service";
 
-function makeEntry(
-  patch: Partial<WebServiceLayerEntry> = {},
-): WebServiceLayerEntry {
+function makeEntry(patch: Partial<WebServiceLayerEntry> = {}): WebServiceLayerEntry {
   return {
     id: "svc-layer-1",
     name: "Service Layer 1",
@@ -64,22 +58,16 @@ function makeAdapter(): {
     listActive: (control) => control.entries.map((entry) => ({ ...entry })),
     removeFromControl: (control, entry) => {
       calls.push({ method: "removeFromControl", args: [entry.id] });
-      control.entries = control.entries.filter(
-        (candidate) => candidate.id !== entry.id,
-      );
+      control.entries = control.entries.filter((candidate) => candidate.id !== entry.id);
     },
     setControlOpacity: (control, entry, opacity) => {
       calls.push({ method: "setControlOpacity", args: [entry.id, opacity] });
-      const target = control.entries.find(
-        (candidate) => candidate.id === entry.id,
-      );
+      const target = control.entries.find((candidate) => candidate.id === entry.id);
       if (target) target.opacity = opacity;
     },
     setControlVisibility: (control, entry, visible) => {
       calls.push({ method: "setControlVisibility", args: [entry.id, visible] });
-      const target = control.entries.find(
-        (candidate) => candidate.id === entry.id,
-      );
+      const target = control.entries.find((candidate) => candidate.id === entry.id);
       if (target) target.visible = visible;
     },
     adopt: (control, layers) => {
@@ -143,9 +131,7 @@ describe("createStoreLayer", () => {
     assert.equal(layer.type, "wms");
     assert.equal(layer.visible, false);
     assert.equal(layer.opacity, 0.5);
-    assert.deepEqual(layer.source.tiles, [
-      "https://example.com/{z}/{x}/{y}.png",
-    ]);
+    assert.deepEqual(layer.source.tiles, ["https://example.com/{z}/{x}/{y}.png"]);
     assert.equal(layer.source.tileSize, 512);
     assert.equal(layer.source.attribution, "Test");
     assert.equal(layer.metadata.externalNativeLayer, true);
@@ -153,10 +139,7 @@ describe("createStoreLayer", () => {
     assert.deepEqual(layer.metadata.nativeLayerIds, ["svc-layer-1"]);
     assert.deepEqual(layer.metadata.sourceIds, ["svc-layer-1"]);
     assert.equal(layer.metadata.sourceKind, KIND);
-    assert.equal(
-      layer.metadata.tileUrl,
-      "https://example.com/{z}/{x}/{y}.png",
-    );
+    assert.equal(layer.metadata.tileUrl, "https://example.com/{z}/{x}/{y}.png");
     assert.equal(layer.metadata.extra, "value");
     assert.equal(layer.sourcePath, "https://example.com/{z}/{x}/{y}.png");
   });
@@ -164,14 +147,8 @@ describe("createStoreLayer", () => {
 
 describe("layerTypeForTiles", () => {
   it("flags bbox templates as wms and xyz templates as raster", () => {
-    assert.equal(
-      layerTypeForTiles(["https://example.com/wms?bbox={bbox-epsg-3857}"]),
-      "wms",
-    );
-    assert.equal(
-      layerTypeForTiles(["https://example.com/{z}/{x}/{y}.png"]),
-      "raster",
-    );
+    assert.equal(layerTypeForTiles(["https://example.com/wms?bbox={bbox-epsg-3857}"]), "wms");
+    assert.equal(layerTypeForTiles(["https://example.com/{z}/{x}/{y}.png"]), "raster");
   });
 });
 
@@ -193,9 +170,7 @@ describe("readNativeRasterSource", () => {
 
     const native = readNativeRasterSource(map, "svc-layer-1");
     assert.ok(native);
-    assert.deepEqual(native.tiles, [
-      "https://example.com/native/{z}/{x}/{y}.png",
-    ]);
+    assert.deepEqual(native.tiles, ["https://example.com/native/{z}/{x}/{y}.png"]);
     assert.deepEqual(native.source, {
       tileSize: 256,
       maxzoom: 9,
@@ -204,13 +179,13 @@ describe("readNativeRasterSource", () => {
   });
 
   it("unwraps dev-proxied WMS tile templates before they are persisted", () => {
-    const original =
-      "https://example.com/wms?service=WMS&bbox={bbox-epsg-3857}";
+    const original = "https://example.com/wms?service=WMS&bbox={bbox-epsg-3857}";
     // Mimic the real dev proxy: encode the URL but keep the bbox placeholder
     // literal so MapLibre can substitute it per tile.
-    const proxied = `/__geolibre_wms_proxy?url=${encodeURIComponent(
-      original,
-    ).replaceAll("%7Bbbox-epsg-3857%7D", "{bbox-epsg-3857}")}`;
+    const proxied = `/__geolibre_wms_proxy?url=${encodeURIComponent(original).replaceAll(
+      "%7Bbbox-epsg-3857%7D",
+      "{bbox-epsg-3857}",
+    )}`;
     const map = {
       getStyle: () => ({
         sources: {
@@ -320,10 +295,7 @@ describe("createWebServiceStoreSync", () => {
 
     useAppStore.getState().removeLayer("svc-layer-1");
 
-    assert.equal(
-      calls.filter((call) => call.method === "removeFromControl").length,
-      1,
-    );
+    assert.equal(calls.filter((call) => call.method === "removeFromControl").length, 1);
     assert.equal(control.entries.length, 0);
     assert.equal(storeLayer("svc-layer-1"), undefined);
   });
@@ -348,10 +320,10 @@ describe("createWebServiceStoreSync", () => {
 
     useAppStore.getState().updateLayer("svc-layer-1", { opacity: 0.7 });
 
-    assert.deepEqual(
-      calls.filter((call) => call.method === "setControlOpacity").pop()?.args,
-      ["svc-layer-1", 0.7],
-    );
+    assert.deepEqual(calls.filter((call) => call.method === "setControlOpacity").pop()?.args, [
+      "svc-layer-1",
+      0.7,
+    ]);
     assert.equal(control.entries[0].opacity, 0.7);
 
     // An unrelated control event must not revert the panel-set value.
@@ -367,11 +339,10 @@ describe("createWebServiceStoreSync", () => {
 
     useAppStore.getState().updateLayer("svc-layer-1", { visible: false });
 
-    assert.deepEqual(
-      calls.filter((call) => call.method === "setControlVisibility").pop()
-        ?.args,
-      ["svc-layer-1", false],
-    );
+    assert.deepEqual(calls.filter((call) => call.method === "setControlVisibility").pop()?.args, [
+      "svc-layer-1",
+      false,
+    ]);
     assert.equal(control.entries[0].visible, false);
     control.fire();
     assert.equal(storeLayer("svc-layer-1")?.visible, false);

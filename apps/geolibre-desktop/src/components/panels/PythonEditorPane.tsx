@@ -1,13 +1,5 @@
 import { Button, Textarea } from "@geolibre/ui";
-import {
-  Eraser,
-  FilePlus,
-  FolderOpen,
-  Loader2,
-  Play,
-  Save,
-  SaveAll,
-} from "lucide-react";
+import { Eraser, FilePlus, FolderOpen, Loader2, Play, Save, SaveAll } from "lucide-react";
 import {
   type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -112,10 +104,7 @@ export function PythonEditorPane({
   const runEditor = () => {
     const ta = textareaRef.current;
     const hasSelection = !!ta && ta.selectionStart !== ta.selectionEnd;
-    const source =
-      hasSelection && ta
-        ? code.slice(ta.selectionStart, ta.selectionEnd)
-        : code;
+    const source = hasSelection && ta ? code.slice(ta.selectionStart, ta.selectionEnd) : code;
     if (!source.trim()) return;
     const name = filePath ? basename(filePath) : t("pythonConsole.untitled");
     runScript(source, hasSelection ? `${name} (selection)` : name);
@@ -139,9 +128,7 @@ export function PythonEditorPane({
     const path = await saveTextFileWithFallback(code, {
       defaultName: filePath ? basename(filePath) : "script.py",
       filters: PY_FILTERS,
-      browserTypes: [
-        { description: "Python", accept: { "text/x-python": [".py"] } },
-      ],
+      browserTypes: [{ description: "Python", accept: { "text/x-python": [".py"] } }],
       mimeType: "text/x-python",
     });
     if (path) {

@@ -23,14 +23,7 @@ interface AttributeFormSectionProps {
   layer: GeoLibreLayer;
 }
 
-const WIDGETS: AttributeFormWidget[] = [
-  "text",
-  "number",
-  "range",
-  "checkbox",
-  "date",
-  "valueMap",
-];
+const WIDGETS: AttributeFormWidget[] = ["text", "number", "range", "checkbox", "date", "valueMap"];
 
 /** Blank designer draft; `field` empty means "no field picked yet". */
 interface FieldDraft {
@@ -100,16 +93,12 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
   const projectName = useAppStore((s) => s.projectName);
   const setLayerAttributeForm = useAppStore((s) => s.setLayerAttributeForm);
 
-  const configs = useMemo(
-    () => layer.attributeForm?.fields ?? [],
-    [layer.attributeForm],
-  );
+  const configs = useMemo(() => layer.attributeForm?.fields ?? [], [layer.attributeForm]);
   // Feature properties plus any Field Collection schema keys, so a freshly
   // created (still empty) collection layer can be configured before its first
   // capture. Keyed on the data/schema pieces only, so unrelated style edits
   // to the layer do not repeat the O(features) property scan.
-  const { type: layerType, metadata: layerMetadata, geojson: layerGeojson } =
-    layer;
+  const { type: layerType, metadata: layerMetadata, geojson: layerGeojson } = layer;
   const fieldNames = useMemo(() => {
     const source = {
       type: layerType,
@@ -122,17 +111,12 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
       a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
     );
   }, [layerType, layerMetadata, layerGeojson]);
-  const features = useMemo(
-    () => layer.geojson?.features ?? [],
-    [layer.geojson],
-  );
+  const features = useMemo(() => layer.geojson?.features ?? [], [layer.geojson]);
 
   const [draft, setDraft] = useState<FieldDraft | null>(null);
   // Field name the open form is editing, or null when adding a new one.
   const [editingField, setEditingField] = useState<string | null>(null);
-  const [builderTarget, setBuilderTarget] = useState<
-    "constraint" | "visibility" | null
-  >(null);
+  const [builderTarget, setBuilderTarget] = useState<"constraint" | "visibility" | null>(null);
 
   // Camera snapshot for the modal Expression Builder, taken per render of the
   // (rarely-open) form rather than via a mapView subscription — see the
@@ -155,9 +139,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
   const availableFields = useMemo(
     () =>
       fieldNames.filter(
-        (name) =>
-          name === editingField ||
-          !configs.some((config) => config.field === name),
+        (name) => name === editingField || !configs.some((config) => config.field === name),
       ),
     [fieldNames, configs, editingField],
   );
@@ -203,8 +185,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     !minMaxInvalid &&
     constraintValidation?.ok !== false &&
     visibilityValidation?.ok !== false &&
-    (draft.widget !== "valueMap" ||
-      parseValueMapText(draft.valueMapText).length > 0);
+    (draft.widget !== "valueMap" || parseValueMapText(draft.valueMapText).length > 0);
 
   const closeForm = () => {
     setDraft(null);
@@ -219,9 +200,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
       widget: draft.widget,
       ...(draft.alias.trim() ? { alias: draft.alias.trim() } : {}),
       ...(draft.required ? { required: true } : {}),
-      ...(draft.widget === "valueMap"
-        ? { valueMap: parseValueMapText(draft.valueMapText) }
-        : {}),
+      ...(draft.widget === "valueMap" ? { valueMap: parseValueMapText(draft.valueMapText) } : {}),
       ...(draft.widget === "number" || draft.widget === "range"
         ? {
             ...(numberOrUndefined(draft.min) !== undefined
@@ -232,34 +211,27 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
               : {}),
           }
         : {}),
-      ...(draft.widget === "range" &&
-      numberOrUndefined(draft.step) !== undefined
+      ...(draft.widget === "range" && numberOrUndefined(draft.step) !== undefined
         ? { step: numberOrUndefined(draft.step) }
         : {}),
       ...(draft.constraintExpression.trim()
         ? { constraintExpression: draft.constraintExpression.trim() }
         : {}),
-      ...(draft.constraintExpression.trim() &&
-      draft.constraintDescription.trim()
+      ...(draft.constraintExpression.trim() && draft.constraintDescription.trim()
         ? { constraintDescription: draft.constraintDescription.trim() }
         : {}),
       ...(draft.visibilityExpression.trim()
         ? { visibilityExpression: draft.visibilityExpression.trim() }
         : {}),
     };
-    const others = configs.filter(
-      (entry) => entry.field !== (editingField ?? draft.field),
-    );
+    const others = configs.filter((entry) => entry.field !== (editingField ?? draft.field));
     setLayerAttributeForm(layer.id, { fields: [...others, config] });
     closeForm();
   };
 
   const removeConfig = (field: string) => {
     const remaining = configs.filter((entry) => entry.field !== field);
-    setLayerAttributeForm(
-      layer.id,
-      remaining.length ? { fields: remaining } : undefined,
-    );
+    setLayerAttributeForm(layer.id, remaining.length ? { fields: remaining } : undefined);
   };
 
   const update = (patch: Partial<FieldDraft>) => {
@@ -311,13 +283,9 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
 
   return (
     <div className="space-y-3" data-testid="attribute-form-section">
-      <p className="text-sm font-semibold">
-        {t("style.attributeForm.heading")}
-      </p>
+      <p className="text-sm font-semibold">{t("style.attributeForm.heading")}</p>
       {configs.length === 0 && !draft && (
-        <p className="text-xs text-muted-foreground">
-          {t("style.attributeForm.empty")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("style.attributeForm.empty")}</p>
       )}
       {configs.map((config) => (
         <div
@@ -356,21 +324,15 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
           <p className="truncate text-xs text-muted-foreground">
             {config.field} · {t(`style.attributeForm.widget.${config.widget}`)}
             {config.required ? ` · ${t("style.attributeForm.requiredTag")}` : ""}
-            {config.constraintExpression
-              ? ` · ${t("style.attributeForm.constraintTag")}`
-              : ""}
-            {config.visibilityExpression
-              ? ` · ${t("style.attributeForm.visibilityTag")}`
-              : ""}
+            {config.constraintExpression ? ` · ${t("style.attributeForm.constraintTag")}` : ""}
+            {config.visibilityExpression ? ` · ${t("style.attributeForm.visibilityTag")}` : ""}
           </p>
         </div>
       ))}
       {draft ? (
         <div className="space-y-2 rounded-md border border-input p-2">
           <div className="space-y-1">
-            <Label htmlFor={`af-field-${layer.id}`}>
-              {t("style.attributeForm.field")}
-            </Label>
+            <Label htmlFor={`af-field-${layer.id}`}>{t("style.attributeForm.field")}</Label>
             <Select
               id={`af-field-${layer.id}`}
               value={draft.field}
@@ -386,15 +348,11 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor={`af-widget-${layer.id}`}>
-              {t("style.attributeForm.widgetLabel")}
-            </Label>
+            <Label htmlFor={`af-widget-${layer.id}`}>{t("style.attributeForm.widgetLabel")}</Label>
             <Select
               id={`af-widget-${layer.id}`}
               value={draft.widget}
-              onChange={(event) =>
-                update({ widget: event.target.value as AttributeFormWidget })
-              }
+              onChange={(event) => update({ widget: event.target.value as AttributeFormWidget })}
             >
               {WIDGETS.map((widget) => (
                 <option key={widget} value={widget}>
@@ -404,9 +362,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor={`af-alias-${layer.id}`}>
-              {t("style.attributeForm.alias")}
-            </Label>
+            <Label htmlFor={`af-alias-${layer.id}`}>{t("style.attributeForm.alias")}</Label>
             <Input
               id={`af-alias-${layer.id}`}
               value={draft.alias}
@@ -424,18 +380,14 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
           </label>
           {draft.widget === "valueMap" && (
             <div className="space-y-1">
-              <Label htmlFor={`af-valuemap-${layer.id}`}>
-                {t("style.attributeForm.valueMap")}
-              </Label>
+              <Label htmlFor={`af-valuemap-${layer.id}`}>{t("style.attributeForm.valueMap")}</Label>
               <Textarea
                 id={`af-valuemap-${layer.id}`}
                 rows={3}
                 className="font-mono text-xs"
                 value={draft.valueMapText}
                 placeholder={t("style.attributeForm.valueMapPlaceholder")}
-                onChange={(event) =>
-                  update({ valueMapText: event.target.value })
-                }
+                onChange={(event) => update({ valueMapText: event.target.value })}
               />
               <p className="text-xs text-muted-foreground">
                 {t("style.attributeForm.valueMapHint")}
@@ -445,9 +397,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
           {(draft.widget === "number" || draft.widget === "range") && (
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1">
-                <Label htmlFor={`af-min-${layer.id}`}>
-                  {t("style.attributeForm.min")}
-                </Label>
+                <Label htmlFor={`af-min-${layer.id}`}>{t("style.attributeForm.min")}</Label>
                 <Input
                   id={`af-min-${layer.id}`}
                   type="number"
@@ -456,9 +406,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor={`af-max-${layer.id}`}>
-                  {t("style.attributeForm.max")}
-                </Label>
+                <Label htmlFor={`af-max-${layer.id}`}>{t("style.attributeForm.max")}</Label>
                 <Input
                   id={`af-max-${layer.id}`}
                   type="number"
@@ -468,9 +416,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
               </div>
               {draft.widget === "range" && (
                 <div className="space-y-1">
-                  <Label htmlFor={`af-step-${layer.id}`}>
-                    {t("style.attributeForm.step")}
-                  </Label>
+                  <Label htmlFor={`af-step-${layer.id}`}>{t("style.attributeForm.step")}</Label>
                   <Input
                     id={`af-step-${layer.id}`}
                     type="number"
@@ -482,15 +428,9 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
             </div>
           )}
           {minMaxInvalid && (
-            <p className="text-xs text-destructive">
-              {t("style.attributeForm.minMaxInvalid")}
-            </p>
+            <p className="text-xs text-destructive">{t("style.attributeForm.minMaxInvalid")}</p>
           )}
-          {expressionRow(
-            "constraint",
-            draft.constraintExpression,
-            constraintValidation,
-          )}
+          {expressionRow("constraint", draft.constraintExpression, constraintValidation)}
           {draft.constraintExpression.trim() !== "" && (
             <div className="space-y-1">
               <Label htmlFor={`af-constraint-desc-${layer.id}`}>
@@ -499,20 +439,12 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
               <Input
                 id={`af-constraint-desc-${layer.id}`}
                 value={draft.constraintDescription}
-                placeholder={t(
-                  "style.attributeForm.constraintDescriptionPlaceholder",
-                )}
-                onChange={(event) =>
-                  update({ constraintDescription: event.target.value })
-                }
+                placeholder={t("style.attributeForm.constraintDescriptionPlaceholder")}
+                onChange={(event) => update({ constraintDescription: event.target.value })}
               />
             </div>
           )}
-          {expressionRow(
-            "visibility",
-            draft.visibilityExpression,
-            visibilityValidation,
-          )}
+          {expressionRow("visibility", draft.visibilityExpression, visibilityValidation)}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={closeForm}>
               {t("style.attributeForm.cancel")}
@@ -528,11 +460,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
           size="sm"
           onClick={() => setDraft(emptyDraft())}
           disabled={availableFields.length === 0}
-          title={
-            availableFields.length === 0
-              ? t("style.attributeForm.noFields")
-              : undefined
-          }
+          title={availableFields.length === 0 ? t("style.attributeForm.noFields") : undefined}
         >
           <Plus className="me-1 h-3.5 w-3.5" />
           {t("style.attributeForm.configureField")}
@@ -547,9 +475,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
           targetLabel={t(`style.attributeForm.${builderTarget}Expression`)}
           context="filter"
           initialExpression={
-            builderTarget === "constraint"
-              ? draft.constraintExpression
-              : draft.visibilityExpression
+            builderTarget === "constraint" ? draft.constraintExpression : draft.visibilityExpression
           }
           features={features}
           fieldNames={fieldNames}

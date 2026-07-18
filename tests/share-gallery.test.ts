@@ -34,10 +34,7 @@ function rawProject(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function fakeFetch(
-  status: number,
-  body: unknown,
-): { fn: typeof fetch; calls: string[] } {
+function fakeFetch(status: number, body: unknown): { fn: typeof fetch; calls: string[] } {
   const calls: string[] = [];
   const fn = (async (url: string) => {
     calls.push(url);
@@ -52,10 +49,7 @@ function fakeFetch(
 
 describe("resolveThumbnailUrl", () => {
   it("resolves a site-relative path against the base host", () => {
-    assert.equal(
-      resolveThumbnailUrl("/api/thumbnails/x", BASE),
-      `${BASE}/api/thumbnails/x`,
-    );
+    assert.equal(resolveThumbnailUrl("/api/thumbnails/x", BASE), `${BASE}/api/thumbnails/x`);
   });
 
   it("passes through an already-absolute URL", () => {
@@ -83,10 +77,7 @@ describe("fetchSharedProjects", () => {
     assert.equal(projects[0].title, "My Map");
     assert.equal(projects[0].views, 7);
     assert.deepEqual(projects[0].tags, ["water", "ocean"]);
-    assert.equal(
-      projects[0].thumbnailUrl,
-      `${BASE}/api/thumbnails/abc-123?v=1`,
-    );
+    assert.equal(projects[0].thumbnailUrl, `${BASE}/api/thumbnails/abc-123?v=1`);
   });
 
   it("sends limit and offset as query params", async () => {
@@ -124,9 +115,7 @@ describe("fetchSharedProjects", () => {
   });
 
   it("reports hasMore when a full page is returned", async () => {
-    const full = Array.from({ length: 3 }, (_, i) =>
-      rawProject({ id: `id-${i}` }),
-    );
+    const full = Array.from({ length: 3 }, (_, i) => rawProject({ id: `id-${i}` }));
     const { fn } = fakeFetch(200, { projects: full });
     const result = await fetchSharedProjects({
       baseUrl: BASE,
@@ -174,10 +163,7 @@ describe("fetchSharedProjects", () => {
     const { fn } = fakeFetch(500, null);
     await assert.rejects(
       () => fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn }),
-      (err: unknown) =>
-        err instanceof GalleryError &&
-        err.code === "http" &&
-        err.status === 500,
+      (err: unknown) => err instanceof GalleryError && err.code === "http" && err.status === 500,
     );
   });
 
@@ -194,8 +180,7 @@ describe("fetchSharedProjects", () => {
       }) as Response) as unknown as typeof fetch;
     await assert.rejects(
       () => fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn }),
-      (err: unknown) =>
-        err instanceof GalleryError && err.code === "invalid-response",
+      (err: unknown) => err instanceof GalleryError && err.code === "invalid-response",
     );
   });
 
@@ -217,9 +202,10 @@ describe("fetchSharedProjects", () => {
 
 // A routing fake: maps a URL path to a {status, body} response and records the
 // Authorization header each call carried.
-function routedFetch(
-  routes: Record<string, { status: number; body: unknown }>,
-): { fn: typeof fetch; auth: (string | null)[] } {
+function routedFetch(routes: Record<string, { status: number; body: unknown }>): {
+  fn: typeof fetch;
+  auth: (string | null)[];
+} {
   const auth: (string | null)[] = [];
   const fn = (async (url: string, init: RequestInit = {}) => {
     const path = new URL(url).pathname;
@@ -269,8 +255,7 @@ describe("fetchMyProjects", () => {
     });
     await assert.rejects(
       () => fetchMyProjects({ token: "glb_tok", baseUrl: BASE, fetchImpl: fn }),
-      (err: unknown) =>
-        err instanceof GalleryError && err.code === "username-required",
+      (err: unknown) => err instanceof GalleryError && err.code === "username-required",
     );
   });
 
@@ -280,8 +265,7 @@ describe("fetchMyProjects", () => {
     });
     await assert.rejects(
       () => fetchMyProjects({ token: "bad", baseUrl: BASE, fetchImpl: fn }),
-      (err: unknown) =>
-        err instanceof GalleryError && err.code === "unauthorized",
+      (err: unknown) => err instanceof GalleryError && err.code === "unauthorized",
     );
   });
 });
@@ -314,18 +298,12 @@ describe("projectOpenToken", () => {
   // gallery card failed to open this way.
   for (const visibility of ["public", "unlisted"]) {
     it(`sends no token for ${visibility} projects, which need no auth`, () => {
-      assert.equal(
-        projectOpenToken({ visibility }, "glb_tok"),
-        undefined,
-      );
+      assert.equal(projectOpenToken({ visibility }, "glb_tok"), undefined);
     });
   }
 
   it("sends the token for private projects, which are owner-only", () => {
-    assert.equal(
-      projectOpenToken({ visibility: "private" }, "glb_tok"),
-      "glb_tok",
-    );
+    assert.equal(projectOpenToken({ visibility: "private" }, "glb_tok"), "glb_tok");
   });
 
   it("sends nothing when there is no token to send", () => {

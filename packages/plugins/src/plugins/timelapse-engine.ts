@@ -3,10 +3,7 @@
  * DOM/MapLibre so it can be unit tested directly.
  */
 
-import {
-  EOX_S2CLOUDLESS_PROVIDER_ID,
-  type TimelapseFrame,
-} from "./timelapse-providers";
+import { EOX_S2CLOUDLESS_PROVIDER_ID, type TimelapseFrame } from "./timelapse-providers";
 
 /** Allowed playback cadences, in seconds spent on each year. */
 export const TIMELAPSE_SPEED_STEPS = [0.25, 0.5, 1, 2, 3] as const;
@@ -18,11 +15,7 @@ export const DEFAULT_SECONDS_PER_YEAR = 1;
  * The next frame to show after `current`, or `null` when playback should stop
  * (past the last frame with looping off, or nothing to step through).
  */
-export function nextFrameIndex(
-  current: number,
-  count: number,
-  loop: boolean,
-): number | null {
+export function nextFrameIndex(current: number, count: number, loop: boolean): number | null {
   if (count <= 1) return null;
   const next = current + 1;
   if (next < count) return next;
@@ -45,10 +38,7 @@ export function clampSecondsPerYear(value: unknown): number {
 }
 
 /** The frame index whose year matches, clamped into range (default 0). */
-export function frameIndexForYear(
-  frames: readonly TimelapseFrame[],
-  year: unknown,
-): number {
+export function frameIndexForYear(frames: readonly TimelapseFrame[], year: unknown): number {
   if (typeof year !== "number" || !Number.isFinite(year)) return 0;
   const index = frames.findIndex((frame) => frame.year === year);
   if (index >= 0) return index;
@@ -86,9 +76,7 @@ export function normalizeTimelapseProjectState(
   // available yet at project-restore time), keep the persisted year verbatim —
   // the control clamps it against the real frames when the plugin activates.
   const fallbackYear =
-    typeof candidate.year === "number" && Number.isFinite(candidate.year)
-      ? candidate.year
-      : 0;
+    typeof candidate.year === "number" && Number.isFinite(candidate.year) ? candidate.year : 0;
   return {
     providerId:
       typeof candidate.providerId === "string" && candidate.providerId

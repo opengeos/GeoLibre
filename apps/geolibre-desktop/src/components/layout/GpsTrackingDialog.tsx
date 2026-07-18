@@ -87,10 +87,7 @@ function loadStoredSettings(): GpsTrackingSettings {
 
 function storeSettings(settings: GpsTrackingSettings): void {
   try {
-    window.localStorage.setItem(
-      GPS_SETTINGS_STORAGE_KEY,
-      JSON.stringify(settings),
-    );
+    window.localStorage.setItem(GPS_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // Best-effort persistence; the session keeps the in-memory values.
   }
@@ -239,10 +236,7 @@ export function GpsTrackingDialog({
     settingsRef.current = settings;
   }, [settings]);
 
-  const getMap = useCallback(
-    () => mapControllerRef.current?.getMap() ?? null,
-    [mapControllerRef],
-  );
+  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
 
   const handleFix = useCallback(
     (fix: GpsFix) => {
@@ -293,8 +287,7 @@ export function GpsTrackingDialog({
           markerRef.current.setLngLat([fix.lng, fix.lat]);
         }
         if (markerArrowRef.current) {
-          markerArrowRef.current.style.display =
-            fix.heading != null ? "block" : "none";
+          markerArrowRef.current.style.display = fix.heading != null ? "block" : "none";
         }
         if (fix.heading != null) markerRef.current.setRotation(fix.heading);
 
@@ -497,8 +490,7 @@ export function GpsTrackingDialog({
                   accept: { "application/geo+json": [".geojson", ".json"] },
                 },
           ],
-          mimeType:
-            format === "gpx" ? "application/gpx+xml" : "application/geo+json",
+          mimeType: format === "gpx" ? "application/gpx+xml" : "application/geo+json",
         });
         setNotice(path ? t("gps.trackExported") : t("gps.exportCancelled"));
       } catch {
@@ -585,11 +577,7 @@ export function GpsTrackingDialog({
                       />
                       {t("gps.follow")}
                     </label>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={handleStop}
-                    >
+                    <Button variant="outline" className="w-full" onClick={handleStop}>
                       <Square className="me-2 h-4 w-4" />
                       {t("gps.stop")}
                     </Button>
@@ -622,11 +610,7 @@ export function GpsTrackingDialog({
                     </Button>
                   )}
                   {recording === "recording" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => changeRecording("paused")}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => changeRecording("paused")}>
                       <Pause className="me-1 h-3.5 w-3.5" />
                       {t("gps.pause")}
                     </Button>
@@ -666,11 +650,7 @@ export function GpsTrackingDialog({
                         <Download className="me-1 h-3.5 w-3.5" />
                         {t("gps.exportGeojson")}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleDiscardTrack}
-                      >
+                      <Button size="sm" variant="ghost" onClick={handleDiscardTrack}>
                         <Trash2 className="me-1 h-3.5 w-3.5" />
                         {t("gps.discard")}
                       </Button>
@@ -725,9 +705,7 @@ export function GpsTrackingDialog({
                     onChange={(v) => updateSettings({ maxAccuracyM: v })}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("gps.settingsHint")}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("gps.settingsHint")}</p>
               </div>
 
               {(notice ?? error) && (
@@ -770,9 +748,7 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
       {fix.altitude != null && <span>{Math.round(fix.altitude)} m ASL</span>}
       {fix.speed != null && <span>{formatSpeedKmh(fix.speed)} km/h</span>}
       {fix.heading != null && <span>{Math.round(fix.heading)}°</span>}
-      <span className="text-muted-foreground">
-        {new Date(fix.timestamp).toLocaleTimeString()}
-      </span>
+      <span className="text-muted-foreground">{new Date(fix.timestamp).toLocaleTimeString()}</span>
     </div>
   );
 }
@@ -837,8 +813,7 @@ function FloatingPanel({
         <LocateFixed className="h-4 w-4 shrink-0 text-primary" />
         {fix ? (
           <span>
-            {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)} ±
-            {Math.round(fix.accuracy)} m
+            {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)} ±{Math.round(fix.accuracy)} m
           </span>
         ) : (
           <span className="text-muted-foreground">{t("gps.waitingForFix")}</span>
@@ -860,31 +835,16 @@ function FloatingPanel({
           {t("gps.capturePoint")}
         </Button>
         {recording === "recording" && (
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={t("gps.pause")}
-            onClick={onPause}
-          >
+          <Button size="sm" variant="outline" aria-label={t("gps.pause")} onClick={onPause}>
             <Pause className="h-3.5 w-3.5" />
           </Button>
         )}
         {recording === "paused" && (
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={t("gps.resume")}
-            onClick={onResume}
-          >
+          <Button size="sm" variant="outline" aria-label={t("gps.resume")} onClick={onResume}>
             <Play className="h-3.5 w-3.5" />
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label={t("gps.openDialog")}
-          onClick={onOpen}
-        >
+        <Button size="sm" variant="ghost" aria-label={t("gps.openDialog")} onClick={onOpen}>
           <Maximize2 className="h-3.5 w-3.5" />
         </Button>
       </div>

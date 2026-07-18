@@ -1,16 +1,9 @@
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../../types";
 import { ElevationProfileControl } from "./core/ElevationProfileControl";
 import type { ElevationProfileState } from "./core/types";
 import type { LngLat } from "./elevation/geometry";
 import type { UnitSystem } from "./elevation/format";
-import {
-  ELEVATION_LINE_PARAM,
-  maybeHandleDeepLink,
-} from "./utils/deep-link";
+import { ELEVATION_LINE_PARAM, maybeHandleDeepLink } from "./utils/deep-link";
 
 /**
  * Elevation Profile plugin.
@@ -44,8 +37,7 @@ function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
     // the desktop (and a browser download on the web); the control falls back
     // to a download when the host does not provide it.
     exportTextFile: app.exportTextFile
-      ? (filename, content, options) =>
-          app.exportTextFile?.(filename, content, options)
+      ? (filename, content, options) => app.exportTextFile?.(filename, content, options)
       : undefined,
   });
   if (pendingState) next.setState(pendingState);
@@ -78,11 +70,7 @@ function isPluginState(value: unknown): value is Partial<ElevationProfileState> 
   ) {
     return false;
   }
-  if (
-    "line" in candidate &&
-    candidate.line !== null &&
-    !isLngLatArray(candidate.line)
-  ) {
+  if ("line" in candidate && candidate.line !== null && !isLngLatArray(candidate.line)) {
     return false;
   }
   return true;

@@ -1,8 +1,4 @@
-import {
-  featureSelectionId,
-  type SelectionMode,
-  useAppStore,
-} from "@geolibre/core";
+import { featureSelectionId, type SelectionMode, useAppStore } from "@geolibre/core";
 import {
   MAX_CLIENT_PAIRS,
   matchFeaturesByLocation,
@@ -20,13 +16,12 @@ import {
 } from "./selection-dialog-shared";
 
 /** Predicates in display order with their i18n label keys. */
-const PREDICATES: Array<{ value: SelectLocationPredicate; labelKey: ParseKeys }> =
-  [
-    { value: "intersects", labelKey: "selection.predicateIntersects" },
-    { value: "within", labelKey: "selection.predicateWithin" },
-    { value: "contains", labelKey: "selection.predicateContains" },
-    { value: "disjoint", labelKey: "selection.predicateDisjoint" },
-  ];
+const PREDICATES: Array<{ value: SelectLocationPredicate; labelKey: ParseKeys }> = [
+  { value: "intersects", labelKey: "selection.predicateIntersects" },
+  { value: "within", labelKey: "selection.predicateWithin" },
+  { value: "contains", labelKey: "selection.predicateContains" },
+  { value: "disjoint", labelKey: "selection.predicateDisjoint" },
+];
 
 /** Outcome of the last "Select features" run, shown inline. */
 interface SelectionSummary {
@@ -57,8 +52,7 @@ export function SelectByLocationDialog(): ReactElement | null {
 
   const [targetLayerId, setTargetLayerId] = useState<string | null>(null);
   const [referenceLayerId, setReferenceLayerId] = useState<string | null>(null);
-  const [predicate, setPredicate] =
-    useState<SelectLocationPredicate>("intersects");
+  const [predicate, setPredicate] = useState<SelectLocationPredicate>("intersects");
   const [mode, setMode] = useState<SelectionMode>("new");
   const [summary, setSummary] = useState<SelectionSummary | null>(null);
 
@@ -69,11 +63,7 @@ export function SelectByLocationDialog(): ReactElement | null {
     setSummary(null);
     setTargetLayerId((current) => {
       const eligible = selectableVectorLayers(useAppStore.getState().layers);
-      const candidates = [
-        preselectedLayerId,
-        current,
-        useAppStore.getState().selectedLayerId,
-      ];
+      const candidates = [preselectedLayerId, current, useAppStore.getState().selectedLayerId];
       for (const id of candidates) {
         if (id && eligible.some((layer) => layer.id === id)) return id;
       }
@@ -81,8 +71,7 @@ export function SelectByLocationDialog(): ReactElement | null {
     });
   }, [open, preselectedLayerId]);
 
-  const targetLayer =
-    eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
+  const targetLayer = eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
   // Comparing a layer to itself is degenerate (every feature intersects
   // itself), so the reference list excludes the target.
   const referenceOptions = useMemo(
@@ -90,9 +79,7 @@ export function SelectByLocationDialog(): ReactElement | null {
     [eligibleLayers, targetLayerId],
   );
   const referenceLayer =
-    referenceOptions.find((layer) => layer.id === referenceLayerId) ??
-    referenceOptions[0] ??
-    null;
+    referenceOptions.find((layer) => layer.id === referenceLayerId) ?? referenceOptions[0] ?? null;
 
   const targetFeatures = targetLayer?.geojson?.features ?? [];
   const referenceFeatures = referenceLayer?.geojson?.features ?? [];
@@ -104,8 +91,7 @@ export function SelectByLocationDialog(): ReactElement | null {
   const pairs = useMemo(
     () =>
       (targetLayer?.geojson?.features ?? []).filter((f) => f.geometry).length *
-      (referenceLayer?.geojson?.features ?? []).filter((f) => f.geometry)
-        .length,
+      (referenceLayer?.geojson?.features ?? []).filter((f) => f.geometry).length,
     [targetLayer, referenceLayer],
   );
   const tooManyPairs = pairs > MAX_CLIENT_PAIRS;
@@ -113,8 +99,7 @@ export function SelectByLocationDialog(): ReactElement | null {
   // The combine modes only make sense when the target layer holds the live
   // selection; otherwise remove/intersect would always yield an empty
   // selection, so the mode dropdown falls back to "new".
-  const targetHoldsSelection =
-    targetLayerId === selectedLayerId && selectionCount > 0;
+  const targetHoldsSelection = targetLayerId === selectedLayerId && selectionCount > 0;
   const effectiveMode = targetHoldsSelection ? mode : "new";
 
   const runSelection = () => {
@@ -145,19 +130,13 @@ export function SelectByLocationDialog(): ReactElement | null {
       defaultPositionClass="start-9 top-9"
     >
       <div>
-        <p className="mb-3 text-xs text-muted-foreground">
-          {t("selection.byLocationDescription")}
-        </p>
+        <p className="mb-3 text-xs text-muted-foreground">{t("selection.byLocationDescription")}</p>
         {eligibleLayers.length < 2 ? (
-          <p className="text-sm text-muted-foreground">
-            {t("selection.needTwoLayers")}
-          </p>
+          <p className="text-sm text-muted-foreground">{t("selection.needTwoLayers")}</p>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="select-location-layer">
-                {t("selection.targetLayer")}
-              </Label>
+              <Label htmlFor="select-location-layer">{t("selection.targetLayer")}</Label>
               <Select
                 id="select-location-layer"
                 value={targetLayerId ?? ""}
@@ -174,15 +153,11 @@ export function SelectByLocationDialog(): ReactElement | null {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="select-location-predicate">
-                {t("selection.predicate")}
-              </Label>
+              <Label htmlFor="select-location-predicate">{t("selection.predicate")}</Label>
               <Select
                 id="select-location-predicate"
                 value={predicate}
-                onChange={(event) =>
-                  setPredicate(event.target.value as SelectLocationPredicate)
-                }
+                onChange={(event) => setPredicate(event.target.value as SelectLocationPredicate)}
               >
                 {PREDICATES.map((entry) => (
                   <option key={entry.value} value={entry.value}>
@@ -192,9 +167,7 @@ export function SelectByLocationDialog(): ReactElement | null {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="select-location-reference">
-                {t("selection.referenceLayer")}
-              </Label>
+              <Label htmlFor="select-location-reference">{t("selection.referenceLayer")}</Label>
               <Select
                 id="select-location-reference"
                 value={referenceLayer?.id ?? ""}
@@ -224,11 +197,7 @@ export function SelectByLocationDialog(): ReactElement | null {
               </p>
             )}
             {summary && (
-              <p
-                className="text-sm text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
+              <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
                 {t("selection.summary", {
                   selected: summary.selected,
                   total: summary.total,

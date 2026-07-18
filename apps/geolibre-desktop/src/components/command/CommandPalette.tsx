@@ -7,12 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  type Command,
-  filterCommands,
-  formatShortcut,
-  isMacPlatform,
-} from "../../lib/commands";
+import { type Command, filterCommands, formatShortcut, isMacPlatform } from "../../lib/commands";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -25,11 +20,7 @@ interface CommandPaletteProps {
  * registry. Type to filter, navigate with arrow keys, and press Enter to run
  * the highlighted command.
  */
-export function CommandPalette({
-  open,
-  commands,
-  onOpenChange,
-}: CommandPaletteProps) {
+export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -37,10 +28,7 @@ export function CommandPalette({
   const listboxId = "command-palette-listbox";
   const optionId = (command: Command) => `command-option-${command.id}`;
 
-  const filtered = useMemo(
-    () => filterCommands(commands, query),
-    [commands, query],
-  );
+  const filtered = useMemo(() => filterCommands(commands, query), [commands, query]);
   const activeCommand = filtered[activeIndex];
 
   // Reset the query each time the palette opens so it always starts fresh.
@@ -53,9 +41,7 @@ export function CommandPalette({
 
   // Keep the highlight within bounds as the filtered list shrinks/grows.
   useEffect(() => {
-    setActiveIndex((index) =>
-      filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1),
-    );
+    setActiveIndex((index) => (filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1)));
   }, [filtered.length]);
 
   // Scroll the highlighted row into view as the user navigates.
@@ -74,15 +60,11 @@ export function CommandPalette({
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index) =>
-        filtered.length === 0 ? 0 : (index + 1) % filtered.length,
-      );
+      setActiveIndex((index) => (filtered.length === 0 ? 0 : (index + 1) % filtered.length));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((index) =>
-        filtered.length === 0
-          ? 0
-          : (index - 1 + filtered.length) % filtered.length,
+        filtered.length === 0 ? 0 : (index - 1 + filtered.length) % filtered.length,
       );
     } else if (event.key === "Home") {
       event.preventDefault();
@@ -113,9 +95,7 @@ export function CommandPalette({
             aria-label="Search commands"
             aria-expanded={true}
             aria-controls={listboxId}
-            aria-activedescendant={
-              activeCommand ? optionId(activeCommand) : undefined
-            }
+            aria-activedescendant={activeCommand ? optionId(activeCommand) : undefined}
             className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             placeholder="Search commands…"
             value={query}
@@ -157,19 +137,13 @@ export function CommandPalette({
                     aria-selected={isActive}
                     data-active={isActive}
                     className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm ${
-                      isActive
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground"
+                      isActive ? "bg-accent text-accent-foreground" : "text-foreground"
                     }`}
                     onMouseMove={() => setActiveIndex(index)}
                     onClick={() => runCommand(command)}
                   >
-                    {Icon ? (
-                      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : null}
-                    <span className="min-w-0 flex-1 truncate">
-                      {command.title}
-                    </span>
+                    {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
+                    <span className="min-w-0 flex-1 truncate">{command.title}</span>
                     {command.shortcut ? (
                       <kbd className="shrink-0 rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                         {formatShortcut(command.shortcut, isMac)}

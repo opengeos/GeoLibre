@@ -59,12 +59,7 @@ import {
 } from "../../lib/tauri-io";
 import { openExternalLink } from "../../lib/open-external";
 
-type ManageSection =
-  | "all"
-  | "installed"
-  | "not-installed"
-  | "upgradeable"
-  | "settings";
+type ManageSection = "all" | "installed" | "not-installed" | "upgradeable" | "settings";
 
 type RegistryState =
   | { status: "loading" }
@@ -79,8 +74,7 @@ const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
 
 // Module-level store bindings so useSyncExternalStore sees a stable subscribe /
 // snapshot identity and doesn't re-subscribe on every render.
-const subscribeToPluginManager = (listener: () => void) =>
-  getPluginManager().subscribe(listener);
+const subscribeToPluginManager = (listener: () => void) => getPluginManager().subscribe(listener);
 const getPluginManagerVersion = () => getPluginManager().getVersion();
 
 interface ManagePluginsDialogProps {
@@ -96,9 +90,7 @@ export function ManagePluginsDialog({
 }: ManagePluginsDialogProps) {
   const { t } = useTranslation();
   const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
-  const setDesktopSettings = useDesktopSettingsStore(
-    (s) => s.setDesktopSettings,
-  );
+  const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
 
   const [section, setSection] = useState<ManageSection>("all");
   const [registry, setRegistry] = useState<RegistryState>({
@@ -160,8 +152,7 @@ export function ManagePluginsDialog({
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const timedOut =
-          error instanceof DOMException && error.name === "AbortError";
+        const timedOut = error instanceof DOMException && error.name === "AbortError";
         setRegistry({
           status: "error",
           message: timedOut
@@ -217,11 +208,7 @@ export function ManagePluginsDialog({
   const isUpgradeable = useCallback(
     (entry: PluginRegistryEntry) => {
       const loaded = loadedVersions.get(entry.id);
-      return (
-        isInstalled(entry) &&
-        loaded !== undefined &&
-        isNewerVersion(entry.version, loaded)
-      );
+      return isInstalled(entry) && loaded !== undefined && isNewerVersion(entry.version, loaded);
     },
     [isInstalled, loadedVersions],
   );
@@ -231,8 +218,7 @@ export function ManagePluginsDialog({
   // or failed. Used to show a "Loading…" state instead of a premature
   // "Installed" confirmation.
   const isLoadPending = useCallback(
-    (entry: PluginRegistryEntry) =>
-      isInstalled(entry) && !loadedVersions.has(entry.id),
+    (entry: PluginRegistryEntry) => isInstalled(entry) && !loadedVersions.has(entry.id),
     [isInstalled, loadedVersions],
   );
 
@@ -243,9 +229,7 @@ export function ManagePluginsDialog({
       const current = useDesktopSettingsStore.getState().desktopSettings;
       setDesktopSettings({
         ...current,
-        pluginManifestUrls: mergeStringLists(current.pluginManifestUrls, [
-          url.trim(),
-        ]),
+        pluginManifestUrls: mergeStringLists(current.pluginManifestUrls, [url.trim()]),
       });
     },
     [setDesktopSettings],
@@ -257,9 +241,7 @@ export function ManagePluginsDialog({
       const current = useDesktopSettingsStore.getState().desktopSettings;
       setDesktopSettings({
         ...current,
-        pluginManifestUrls: current.pluginManifestUrls.filter(
-          (entry) => entry.trim() !== trimmed,
-        ),
+        pluginManifestUrls: current.pluginManifestUrls.filter((entry) => entry.trim() !== trimmed),
       });
     },
     [setDesktopSettings],
@@ -274,8 +256,7 @@ export function ManagePluginsDialog({
       } catch (error: unknown) {
         setActionError({
           id: entry.id,
-          message:
-            error instanceof Error ? error.message : "Could not update plugin.",
+          message: error instanceof Error ? error.message : "Could not update plugin.",
         });
       } finally {
         setBusyId(null);
@@ -291,10 +272,9 @@ export function ManagePluginsDialog({
       const current = useDesktopSettingsStore.getState().desktopSettings;
       setDesktopSettings({
         ...current,
-        additionalPluginDirectories: mergeStringLists(
-          current.additionalPluginDirectories,
-          [trimmed],
-        ),
+        additionalPluginDirectories: mergeStringLists(current.additionalPluginDirectories, [
+          trimmed,
+        ]),
       });
       setNewDirectory("");
       setSettingsError(null);
@@ -321,9 +301,7 @@ export function ManagePluginsDialog({
       if (path) addDirectory(path);
     } catch (error) {
       setSettingsError(
-        error instanceof Error
-          ? error.message
-          : "Could not open the directory picker.",
+        error instanceof Error ? error.message : "Could not open the directory picker.",
       );
     }
   }, [addDirectory]);
@@ -361,9 +339,7 @@ export function ManagePluginsDialog({
         await refreshWebPlugins();
       }
     } catch (error) {
-      setInstallError(
-        error instanceof Error ? error.message : "Could not install the plugin.",
-      );
+      setInstallError(error instanceof Error ? error.message : "Could not install the plugin.");
     } finally {
       setInstalling(false);
     }
@@ -377,11 +353,7 @@ export function ManagePluginsDialog({
         await uninstallPluginArchiveFromFile(id, mapControllerRef);
         await refreshWebPlugins();
       } catch (error) {
-        setInstallError(
-          error instanceof Error
-            ? error.message
-            : "Could not uninstall the plugin.",
-        );
+        setInstallError(error instanceof Error ? error.message : "Could not uninstall the plugin.");
       }
     },
     [mapControllerRef, refreshWebPlugins],
@@ -391,9 +363,7 @@ export function ManagePluginsDialog({
     const trimmed = newManifestUrl.trim();
     if (!trimmed) return;
     if (!isAllowedPluginManifestUrl(trimmed)) {
-      setSettingsError(
-        "Manifest URLs must use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1].",
-      );
+      setSettingsError("Manifest URLs must use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1].");
       return;
     }
     installUrl(trimmed);
@@ -401,12 +371,8 @@ export function ManagePluginsDialog({
     setSettingsError(null);
   }, [newManifestUrl, installUrl]);
 
-  const entries =
-    registry.status === "ready" ? registry.entries : EMPTY_ENTRIES;
-  const installedCount = useMemo(
-    () => entries.filter(isInstalled).length,
-    [entries, isInstalled],
-  );
+  const entries = registry.status === "ready" ? registry.entries : EMPTY_ENTRIES;
+  const installedCount = useMemo(() => entries.filter(isInstalled).length, [entries, isInstalled]);
   const upgradeableCount = useMemo(
     () => entries.filter(isUpgradeable).length,
     [entries, isUpgradeable],
@@ -430,26 +396,28 @@ export function ManagePluginsDialog({
       [entry.name, entry.id, entry.description, ...(entry.categories ?? [])]
         .filter((field): field is string => Boolean(field))
         .some((field) => field.toLowerCase().includes(term));
-    return entries
-      .filter((entry) => {
-        if (!matches(entry)) return false;
-        switch (section) {
-          case "installed":
-            return isInstalled(entry);
-          case "not-installed":
-            return !isInstalled(entry);
-          case "upgradeable":
-            return isUpgradeable(entry);
-          default:
-            return true;
-        }
-      })
-      // Locale-aware, case-insensitive sort; plugin id breaks name ties.
-      .sort(
-        (a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
-          a.id.localeCompare(b.id),
-      );
+    return (
+      entries
+        .filter((entry) => {
+          if (!matches(entry)) return false;
+          switch (section) {
+            case "installed":
+              return isInstalled(entry);
+            case "not-installed":
+              return !isInstalled(entry);
+            case "upgradeable":
+              return isUpgradeable(entry);
+            default:
+              return true;
+          }
+        })
+        // Locale-aware, case-insensitive sort; plugin id breaks name ties.
+        .sort(
+          (a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+            a.id.localeCompare(b.id),
+        )
+    );
   }, [entries, isInstalled, isUpgradeable, query, section]);
 
   return (
@@ -461,8 +429,7 @@ export function ManagePluginsDialog({
         <DialogHeader className="border-b px-6 pb-4 pt-6">
           <DialogTitle>Manage Plugins</DialogTitle>
           <DialogDescription>
-            Browse, install, update, and remove external GeoLibre plugins.{" "}
-            Plugins are listed in the{" "}
+            Browse, install, update, and remove external GeoLibre plugins. Plugins are listed in the{" "}
             <a
               href="https://plugins.geolibre.app"
               target="_blank"
@@ -562,12 +529,7 @@ export function ManagePluginsDialog({
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div className="space-y-2">
                       <p>{registry.message}</p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={refresh}
-                      >
+                      <Button type="button" size="sm" variant="outline" onClick={refresh}>
                         <RefreshCw className="h-3.5 w-3.5" />
                         Retry
                       </Button>
@@ -587,10 +549,7 @@ export function ManagePluginsDialog({
                 {registry.status === "ready" &&
                   visibleEntries.map((entry) => {
                     const installed = isInstalled(entry);
-                    const compatible = satisfiesMinVersion(
-                      APP_VERSION,
-                      entry.minGeoLibreVersion,
-                    );
+                    const compatible = satisfiesMinVersion(APP_VERSION, entry.minGeoLibreVersion);
                     const updateAvailable = isUpgradeable(entry);
                     const loadPending = isLoadPending(entry);
                     const loadIssue = externalLoadIssues.get(entry.manifestUrl);
@@ -601,9 +560,7 @@ export function ManagePluginsDialog({
                       >
                         <div className="min-w-0 space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">
-                              {entry.name}
-                            </span>
+                            <span className="truncate text-sm font-medium">{entry.name}</span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               v{entry.version}
                             </span>
@@ -626,17 +583,12 @@ export function ManagePluginsDialog({
                             ) : null}
                           </div>
                           {entry.description ? (
-                            <p className="text-xs text-muted-foreground">
-                              {entry.description}
-                            </p>
+                            <p className="text-xs text-muted-foreground">{entry.description}</p>
                           ) : null}
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                             {entry.author ? <span>by {entry.author}</span> : null}
                             {(entry.categories ?? []).map((category) => (
-                              <span
-                                key={category}
-                                className="rounded-full border px-1.5 py-0.5"
-                              >
+                              <span key={category} className="rounded-full border px-1.5 py-0.5">
                                 {category}
                               </span>
                             ))}
@@ -652,9 +604,7 @@ export function ManagePluginsDialog({
                             ) : null}
                           </div>
                           {actionError?.id === entry.id ? (
-                            <p className="text-[11px] text-destructive">
-                              {actionError.message}
-                            </p>
+                            <p className="text-[11px] text-destructive">{actionError.message}</p>
                           ) : null}
                           {installed && loadIssue ? (
                             <p className="text-[11px] text-destructive">
@@ -679,9 +629,7 @@ export function ManagePluginsDialog({
                             </Button>
                           ) : confirmRemoveId === entry.id ? (
                             <>
-                              <span className="text-xs text-muted-foreground">
-                                Remove?
-                              </span>
+                              <span className="text-xs text-muted-foreground">Remove?</span>
                               <Button
                                 type="button"
                                 size="sm"
@@ -817,10 +765,9 @@ function SettingsTab({
   return (
     <div className="space-y-5">
       <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-        GeoLibre always scans its app data plugins directory. Install a packaged
-        plugin (.zip) from a file, or add additional local directories
-        (desktop-only). Manifest URLs (including marketplace installs) are loaded
-        over the network; changes here apply immediately.
+        GeoLibre always scans its app data plugins directory. Install a packaged plugin (.zip) from
+        a file, or add additional local directories (desktop-only). Manifest URLs (including
+        marketplace installs) are loaded over the network; changes here apply immediately.
       </div>
 
       <div className="space-y-3">
@@ -849,26 +796,17 @@ function SettingsTab({
               : "Load a packaged plugin archive; it is stored in your browser and reloads on your next visit."}
           </p>
         </div>
-        {installError ? (
-          <p className="text-xs text-destructive">{installError}</p>
-        ) : null}
+        {installError ? <p className="text-xs text-destructive">{installError}</p> : null}
         {installNotice ? (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400">
-            {installNotice}
-          </p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">{installNotice}</p>
         ) : null}
         {installedFromFile.length > 0 ? (
           <div className="space-y-2">
             {installedFromFile.map((plugin) => (
-              <div
-                key={plugin.id}
-                className="flex items-center gap-2 rounded-md border p-2"
-              >
+              <div key={plugin.id} className="flex items-center gap-2 rounded-md border p-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-xs font-medium">
-                      {plugin.name}
-                    </span>
+                    <span className="truncate text-xs font-medium">{plugin.name}</span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       v{plugin.version}
                     </span>
@@ -935,13 +873,8 @@ function SettingsTab({
         ) : (
           <div className="space-y-2">
             {directories.map((directory) => (
-              <div
-                key={directory}
-                className="flex items-center gap-2 rounded-md border p-2"
-              >
-                <span className="min-w-0 flex-1 truncate text-xs">
-                  {directory}
-                </span>
+              <div key={directory} className="flex items-center gap-2 rounded-md border p-2">
+                <span className="min-w-0 flex-1 truncate text-xs">{directory}</span>
                 <Button
                   type="button"
                   size="icon"
@@ -991,10 +924,7 @@ function SettingsTab({
         ) : (
           <div className="space-y-2">
             {manifestUrls.map((url) => (
-              <div
-                key={url}
-                className="flex items-center gap-2 rounded-md border p-2"
-              >
+              <div key={url} className="flex items-center gap-2 rounded-md border p-2">
                 <span className="min-w-0 flex-1 truncate text-xs">{url}</span>
                 <Button
                   type="button"

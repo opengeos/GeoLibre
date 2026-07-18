@@ -12,9 +12,7 @@ describe("object-detection ORT version", () => {
     // bump that forgets to update the constant.
     const pkg = JSON.parse(
       readFileSync(
-        fileURLToPath(
-          new URL("../packages/processing/package.json", import.meta.url),
-        ),
+        fileURLToPath(new URL("../packages/processing/package.json", import.meta.url)),
         "utf8",
       ),
     ) as { dependencies: Record<string, string> };

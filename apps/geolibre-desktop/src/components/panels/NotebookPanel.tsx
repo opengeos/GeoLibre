@@ -1,12 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { Button } from "@geolibre/ui";
-import {
-  Loader2,
-  NotebookPen,
-  PanelRightClose,
-  PanelRightOpen,
-  X,
-} from "lucide-react";
+import { Loader2, NotebookPen, PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -62,11 +56,7 @@ interface NotebookPanelProps {
  *   notebook scripting bridge so notebook cells can drive the map.
  * @param themeMode - The app's current theme, mirrored into the notebook.
  */
-export function NotebookPanel({
-  onResizeStart,
-  mapControllerRef,
-  themeMode,
-}: NotebookPanelProps) {
+export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: NotebookPanelProps) {
   const { t } = useTranslation();
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
@@ -178,11 +168,7 @@ export function NotebookPanel({
       )}
       {/* A single iframe that stays mounted across collapse (only hidden) so the
           live kernel and notebook state are preserved. */}
-      <div
-        className={
-          isCollapsed ? "hidden" : "relative min-h-0 flex-1"
-        }
-      >
+      <div className={isCollapsed ? "hidden" : "relative min-h-0 flex-1"}>
         {error ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center px-4 text-center text-xs text-destructive">
             {error}

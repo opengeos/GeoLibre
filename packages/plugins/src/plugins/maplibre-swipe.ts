@@ -6,11 +6,7 @@ import {
   type SwipeLayerSide,
   type SwipeState,
 } from "maplibre-gl-swipe";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   getCogRasterMainVisibility,
@@ -118,9 +114,7 @@ function reconcileCogSwipe(): void {
 
   if (cogMirror) {
     void cogMirror.sync(
-      rasters.filter(
-        (raster) => raster.visible && onComparison(sideFor(raster)),
-      ),
+      rasters.filter((raster) => raster.visible && onComparison(sideFor(raster))),
     );
   }
 
@@ -164,9 +158,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
   name: "Layer Swipe",
   version: "0.9.1",
   activate: (app: GeoLibreAppAPI) => {
-    swipeControl = new SwipeControl(
-      getSwipeControlOptions(app, savedSwipeState ?? undefined),
-    );
+    swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
 
     const added = app.addMapControl(swipeControl, swipeControlPosition);
     if (!added) {
@@ -189,9 +181,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
       const previousState = swipeControl.getState();
       savedSwipeState = previousState;
       app.removeMapControl(swipeControl);
-      swipeControl = new SwipeControl(
-        getSwipeControlOptions(app, previousState),
-      );
+      swipeControl = new SwipeControl(getSwipeControlOptions(app, previousState));
       app.addMapControl(swipeControl, swipeControlPosition);
       expandSwipeControl(previousState);
     });
@@ -211,10 +201,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     swipeControl = null;
   },
   getMapControlPosition: () => swipeControlPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     swipeControlPosition = position;
     if (!swipeControl) return;
     const currentState = swipeControl.getState();
@@ -237,9 +224,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     if (!swipeControl) return true;
 
     app.removeMapControl(swipeControl);
-    swipeControl = new SwipeControl(
-      getSwipeControlOptions(app, savedSwipeState ?? undefined),
-    );
+    swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
     const added = app.addMapControl(swipeControl, swipeControlPosition);
     if (!added) {
       swipeControl = null;
@@ -294,8 +279,7 @@ function normalizeSwipeProjectState(state: unknown): SwipeState | null {
   const candidate = state as Partial<SwipeState>;
 
   return {
-    orientation:
-      candidate.orientation === "horizontal" ? "horizontal" : "vertical",
+    orientation: candidate.orientation === "horizontal" ? "horizontal" : "vertical",
     position: normalizePosition(candidate.position),
     collapsed: normalizeBoolean(candidate.collapsed, false),
     active: normalizeBoolean(candidate.active, true),

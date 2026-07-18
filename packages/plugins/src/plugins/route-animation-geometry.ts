@@ -60,9 +60,7 @@ export function bearingBetween(a: LngLat, b: LngLat): number {
   const lat2 = toRadians(b[1]);
   const dLng = toRadians(b[0] - a[0]);
   const y = Math.sin(dLng) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
   const bearing = toDegrees(Math.atan2(y, x));
   return (bearing + 360) % 360;
 }
@@ -108,9 +106,7 @@ export function flattenToRoute(
   return empty;
 }
 
-function routeFromGeometry(
-  geometry: Geometry | null | undefined,
-): RouteWithElevation {
+function routeFromGeometry(geometry: Geometry | null | undefined): RouteWithElevation {
   if (!geometry) return { coords: [], elevations: [] };
   if (geometry.type === "LineString") {
     return splitPositions(geometry.coordinates);
@@ -127,9 +123,7 @@ function splitPositions(positions: number[][]): RouteWithElevation {
   for (const position of positions) {
     coords.push([position[0], position[1]]);
     elevations.push(
-      typeof position[2] === "number" && Number.isFinite(position[2])
-        ? position[2]
-        : 0,
+      typeof position[2] === "number" && Number.isFinite(position[2]) ? position[2] : 0,
     );
   }
   return { coords, elevations };

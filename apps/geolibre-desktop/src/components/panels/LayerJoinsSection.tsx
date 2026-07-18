@@ -57,13 +57,8 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
   // null means "all fields" (the checkbox list untouched); a Set is the subset.
   const [draftFields, setDraftFields] = useState<Set<string> | null>(null);
 
-  const targetFieldNames = useMemo(
-    () => getAttributePropertyNames(layer),
-    [layer],
-  );
-  const draftJoinLayer = candidateLayers.find(
-    (candidate) => candidate.id === draftJoinLayerId,
-  );
+  const targetFieldNames = useMemo(() => getAttributePropertyNames(layer), [layer]);
+  const draftJoinLayer = candidateLayers.find((candidate) => candidate.id === draftJoinLayerId);
   const joinFieldNames = useMemo(
     () => (draftJoinLayer ? getAttributePropertyNames(draftJoinLayer) : []),
     [draftJoinLayer],
@@ -91,20 +86,15 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
     subsetFieldNames.every((name) => !draftFields.has(name));
 
   const addJoin = () => {
-    if (!draftJoinLayerId || !draftTargetField || !draftJoinField || subsetEmpty)
-      return;
+    if (!draftJoinLayerId || !draftTargetField || !draftJoinField || subsetEmpty) return;
     const subset =
-      draftFields === null
-        ? undefined
-        : subsetFieldNames.filter((name) => draftFields.has(name));
+      draftFields === null ? undefined : subsetFieldNames.filter((name) => draftFields.has(name));
     const join: LayerJoin = {
       id: newJoinId(),
       joinLayerId: draftJoinLayerId,
       targetField: draftTargetField,
       joinField: draftJoinField,
-      ...(subset && subset.length < subsetFieldNames.length
-        ? { fields: subset }
-        : {}),
+      ...(subset && subset.length < subsetFieldNames.length ? { fields: subset } : {}),
       ...(draftPrefix.trim() ? { prefix: draftPrefix.trim() } : {}),
     };
     setLayerJoins(layer.id, [...joins, join]);
@@ -142,13 +132,9 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
         <p className="text-xs text-muted-foreground">{t("style.joins.empty")}</p>
       )}
       {joins.map((join) => {
-        const joinLayer = layers.find(
-          (candidate) => candidate.id === join.joinLayerId,
-        );
+        const joinLayer = layers.find((candidate) => candidate.id === join.joinLayerId);
         const stats = join.stats;
-        const total = stats
-          ? stats.matchedCount + stats.unmatchedTargetCount
-          : 0;
+        const total = stats ? stats.matchedCount + stats.unmatchedTargetCount : 0;
         return (
           <div
             key={join.id}
@@ -210,9 +196,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
       {formOpen ? (
         <div className="space-y-2 rounded-md border border-input p-2">
           <div className="space-y-1">
-            <Label htmlFor={`join-layer-${layer.id}`}>
-              {t("style.joins.joinLayer")}
-            </Label>
+            <Label htmlFor={`join-layer-${layer.id}`}>{t("style.joins.joinLayer")}</Label>
             <Select
               id={`join-layer-${layer.id}`}
               value={draftJoinLayerId}
@@ -231,9 +215,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor={`join-field-${layer.id}`}>
-              {t("style.joins.joinField")}
-            </Label>
+            <Label htmlFor={`join-field-${layer.id}`}>{t("style.joins.joinField")}</Label>
             <Select
               id={`join-field-${layer.id}`}
               value={draftJoinField}
@@ -254,9 +236,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor={`target-field-${layer.id}`}>
-              {t("style.joins.targetField")}
-            </Label>
+            <Label htmlFor={`target-field-${layer.id}`}>{t("style.joins.targetField")}</Label>
             <Select
               id={`target-field-${layer.id}`}
               value={draftTargetField}
@@ -275,16 +255,11 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
               <Label>{t("style.joins.fields")}</Label>
               <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-input p-2">
                 {subsetFieldNames.map((name) => (
-                  <label
-                    key={name}
-                    className="flex items-center gap-2 text-xs"
-                  >
+                  <label key={name} className="flex items-center gap-2 text-xs">
                     <input
                       type="checkbox"
                       checked={draftFields === null || draftFields.has(name)}
-                      onChange={(event) =>
-                        toggleDraftField(name, event.target.checked)
-                      }
+                      onChange={(event) => toggleDraftField(name, event.target.checked)}
                     />
                     <span className="truncate">{name}</span>
                   </label>
@@ -293,9 +268,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
             </div>
           )}
           <div className="space-y-1">
-            <Label htmlFor={`join-prefix-${layer.id}`}>
-              {t("style.joins.prefix")}
-            </Label>
+            <Label htmlFor={`join-prefix-${layer.id}`}>{t("style.joins.prefix")}</Label>
             <Input
               id={`join-prefix-${layer.id}`}
               value={draftPrefix}
@@ -316,12 +289,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
             </Button>
             <Button
               size="sm"
-              disabled={
-                !draftJoinLayerId ||
-                !draftTargetField ||
-                !draftJoinField ||
-                subsetEmpty
-              }
+              disabled={!draftJoinLayerId || !draftTargetField || !draftJoinField || subsetEmpty}
               onClick={addJoin}
             >
               {t("style.joins.add")}
@@ -334,11 +302,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
           size="sm"
           onClick={() => setFormOpen(true)}
           disabled={candidateLayers.length === 0}
-          title={
-            candidateLayers.length === 0
-              ? t("style.joins.noCandidates")
-              : undefined
-          }
+          title={candidateLayers.length === 0 ? t("style.joins.noCandidates") : undefined}
         >
           <Plus className="me-1 h-3.5 w-3.5" />
           {t("style.joins.addJoin")}

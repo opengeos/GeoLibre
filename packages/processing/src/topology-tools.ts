@@ -14,26 +14,14 @@
 //   (whitebox-wasm#9/#10 made endpoint/dangle fixes real); the gaps rule still
 //   has no automatic fix, so `fix-topology` does not offer it (see
 //   FIXABLE_TOPOLOGY_RULES).
-import type {
-  Feature,
-  FeatureCollection,
-  Geometry,
-  Position,
-} from "geojson";
+import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type {
-  DuckDbCapability,
-  ProcessingAlgorithm,
-  ProcessingContext,
-} from "./types";
+import type { DuckDbCapability, ProcessingAlgorithm, ProcessingContext } from "./types";
 
 // Mirrors the same helper in vector-tools.ts, h3-tools.ts and registry.ts;
 // intentionally duplicated because vector-tools.ts imports from this file, so
 // importing the other direction would create a cycle. Keep the copies in sync.
-function getLayer(
-  ctx: ProcessingContext,
-  paramId = "layer",
-): GeoLibreLayer | undefined {
+function getLayer(ctx: ProcessingContext, paramId = "layer"): GeoLibreLayer | undefined {
   const id = ctx.parameters[paramId] as string | undefined;
   return ctx.layers.find((l) => l.id === id);
 }
@@ -51,8 +39,7 @@ function requireFeatures(ctx: ProcessingContext): FeatureCollection | null {
   return layer.geojson;
 }
 
-const NO_DUCKDB =
-  "This tool requires DuckDB-WASM, which is unavailable in this environment.";
+const NO_DUCKDB = "This tool requires DuckDB-WASM, which is unavailable in this environment.";
 
 function requireDuckDb(ctx: ProcessingContext): DuckDbCapability {
   if (!ctx.duckdb) throw new Error(NO_DUCKDB);
@@ -197,18 +184,14 @@ export const checkValidityTool: ProcessingAlgorithm = {
     "Find features with invalid geometry (GEOS rules: self-intersecting rings, holes outside shells, ...) and mark them on the map",
   group: "Data quality",
   supportsSidecar: true,
-  parameters: [
-    { id: "layer", label: "Input layer", type: "layer", required: true },
-  ],
+  parameters: [{ id: "layer", label: "Input layer", type: "layer", required: true }],
   run: async (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
     const rows = await queryValidity(ctx, fc, false);
     // Mirror the sidecar's definition of "without geometry" (null OR empty),
     // so the two engines report the same counts for the same layer.
-    const missingGeometry = fc.features.filter(
-      (f) => !isUsableGeometry(f.geometry),
-    ).length;
+    const missingGeometry = fc.features.filter((f) => !isUsableGeometry(f.geometry)).length;
     const markers: Feature[] = [];
     let invalid = 0;
     for (const row of rows) {
@@ -232,9 +215,7 @@ export const checkValidityTool: ProcessingAlgorithm = {
     const checked = fc.features.length - missingGeometry;
     // Rows can be dropped by queryValidity (unparseable payloads) or omitted
     // by the reader; surface the gap instead of silently understating counts.
-    const evaluated = rows.filter((row) =>
-      isUsableGeometry(fc.features[row.idx].geometry),
-    ).length;
+    const evaluated = rows.filter((row) => isUsableGeometry(fc.features[row.idx].geometry)).length;
     if (evaluated < checked) {
       ctx.log(
         `Warning: ${checked - evaluated} feature(s) could not be evaluated and are not counted as invalid`,
@@ -263,9 +244,7 @@ export const fixGeometriesTool: ProcessingAlgorithm = {
     "Repair invalid geometries with ST_MakeValid (GEOS); valid features pass through untouched",
   group: "Data quality",
   supportsSidecar: true,
-  parameters: [
-    { id: "layer", label: "Input layer", type: "layer", required: true },
-  ],
+  parameters: [{ id: "layer", label: "Input layer", type: "layer", required: true }],
   run: async (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
@@ -289,9 +268,7 @@ export const fixGeometriesTool: ProcessingAlgorithm = {
     }
     ctx.log(
       `Fixed ${fixed} invalid geometr${fixed === 1 ? "y" : "ies"}` +
-        (unfixable
-          ? `; ${unfixable} could not be repaired and were left unchanged`
-          : ""),
+        (unfixable ? `; ${unfixable} could not be repaired and were left unchanged` : ""),
     );
     ctx.addResultLayer?.("Fixed geometries", {
       type: "FeatureCollection",
@@ -445,9 +422,7 @@ export const checkTopologyRulesTool: ProcessingAlgorithm = {
       input: { "input.geojson": encoder.encode(JSON.stringify(fc)) },
     });
     if (exitCode !== 0) {
-      ctx.log(
-        `Error: topology check failed — ${stdout.join(" ") || `exit code ${exitCode}`}`,
-      );
+      ctx.log(`Error: topology check failed — ${stdout.join(" ") || `exit code ${exitCode}`}`);
       return;
     }
     let report: TopologyRuleReport = {};
@@ -527,9 +502,7 @@ interface TopologyChangeReport {
 }
 
 /** Fixable rule ids selected by the tool's boolean parameters. Exported for tests. */
-export function selectedFixableRuleIds(
-  parameters: Record<string, unknown>,
-): string[] {
+export function selectedFixableRuleIds(parameters: Record<string, unknown>): string[] {
   return FIXABLE_TOPOLOGY_RULES.filter((rule) => {
     const value = parameters[rule.paramId];
     return value === undefined ? rule.default : Boolean(value);
@@ -568,8 +541,7 @@ export const fixTopologyTool: ProcessingAlgorithm = {
       label: "Preview only (dry run)",
       type: "boolean",
       default: false,
-      description:
-        "Report the fixes that would be applied without creating a repaired layer.",
+      description: "Report the fixes that would be applied without creating a repaired layer.",
     },
   ],
   run: async (ctx) => {
@@ -599,9 +571,7 @@ export const fixTopologyTool: ProcessingAlgorithm = {
       input: { "input.geojson": encoder.encode(JSON.stringify(fc)) },
     });
     if (exitCode !== 0) {
-      ctx.log(
-        `Error: topology fix failed — ${stdout.join(" ") || `exit code ${exitCode}`}`,
-      );
+      ctx.log(`Error: topology fix failed — ${stdout.join(" ") || `exit code ${exitCode}`}`);
       return;
     }
     let report: TopologyChangeReport | null = null;
@@ -611,9 +581,7 @@ export const fixTopologyTool: ProcessingAlgorithm = {
       // Missing/malformed change report: the run itself succeeded, so fall
       // through and still deliver the output layer rather than discarding a
       // possibly real fix behind a "no violations" message.
-      ctx.log(
-        "Warning: the change report could not be read; fix details are unavailable",
-      );
+      ctx.log("Warning: the change report could not be read; fix details are unavailable");
     }
     if (report) {
       const total = report.total_changes ?? 0;

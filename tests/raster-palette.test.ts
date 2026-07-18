@@ -41,11 +41,7 @@ type TileArray =
 // Minimal stand-in for maplibre-gl-raster's loaded GeoTIFF: one overview level
 // whose single tile decodes to the given array. buildPaletteLegend only reads
 // cachedTags, nodata, overviews, tileCount and fetchTile off it.
-function fakeTiff(options: {
-  colorMap?: Uint16Array;
-  nodata?: number | null;
-  tile?: TileArray;
-}) {
+function fakeTiff(options: { colorMap?: Uint16Array; nodata?: number | null; tile?: TileArray }) {
   const level = {
     tileCount: { x: 1, y: 1 },
     fetchTile: async () => ({ array: options.tile }),

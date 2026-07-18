@@ -189,9 +189,7 @@ describe("normalizeProcessingHistory", () => {
 
   it("caps a hand-edited list at MAX_PROCESSING_HISTORY keeping the newest", () => {
     const runs = normalizeProcessingHistory(
-      Array.from({ length: MAX_PROCESSING_HISTORY + 10 }, (_, i) =>
-        makeRun({ id: `run-${i}` }),
-      ),
+      Array.from({ length: MAX_PROCESSING_HISTORY + 10 }, (_, i) => makeRun({ id: `run-${i}` })),
     );
     assert.equal(runs?.length, MAX_PROCESSING_HISTORY);
     assert.equal(runs?.[0].id, "run-10");

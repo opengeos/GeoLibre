@@ -57,10 +57,7 @@ describe("isShareableTitle", () => {
 
   it("rejects a title longer than the max length", () => {
     assert.equal(isShareableTitle("a".repeat(MAX_PROJECT_TITLE_LENGTH)), true);
-    assert.equal(
-      isShareableTitle("a".repeat(MAX_PROJECT_TITLE_LENGTH + 1)),
-      false,
-    );
+    assert.equal(isShareableTitle("a".repeat(MAX_PROJECT_TITLE_LENGTH + 1)), false);
   });
 });
 
@@ -78,32 +75,17 @@ describe("resolveShareBaseUrl", () => {
   });
 
   it("accepts HTTP only on loopback hosts", () => {
-    assert.equal(
-      resolveShareBaseUrl("http://localhost:8787"),
-      "http://localhost:8787",
-    );
-    assert.equal(
-      resolveShareBaseUrl("http://127.0.0.1:8787"),
-      "http://127.0.0.1:8787",
-    );
+    assert.equal(resolveShareBaseUrl("http://localhost:8787"), "http://localhost:8787");
+    assert.equal(resolveShareBaseUrl("http://127.0.0.1:8787"), "http://127.0.0.1:8787");
   });
 
   it("rejects plaintext HTTP to non-loopback hosts", () => {
-    assert.equal(
-      resolveShareBaseUrl("http://internal.corp"),
-      DEFAULT_SHARE_BASE_URL,
-    );
+    assert.equal(resolveShareBaseUrl("http://internal.corp"), DEFAULT_SHARE_BASE_URL);
   });
 
   it("rejects loopback-lookalike hosts that a prefix check would allow", () => {
-    assert.equal(
-      resolveShareBaseUrl("http://localhost.evil.com"),
-      DEFAULT_SHARE_BASE_URL,
-    );
-    assert.equal(
-      resolveShareBaseUrl("http://127.0.0.1.evil.com"),
-      DEFAULT_SHARE_BASE_URL,
-    );
+    assert.equal(resolveShareBaseUrl("http://localhost.evil.com"), DEFAULT_SHARE_BASE_URL);
+    assert.equal(resolveShareBaseUrl("http://127.0.0.1.evil.com"), DEFAULT_SHARE_BASE_URL);
   });
 
   it("falls back to production for an unparseable override", () => {
@@ -113,10 +95,7 @@ describe("resolveShareBaseUrl", () => {
 
 describe("uploadProjectToShare", () => {
   it("rejects when no token is provided", async () => {
-    await assert.rejects(
-      () => uploadProjectToShare({ ...baseArgs, token: "  " }),
-      /token/i,
-    );
+    await assert.rejects(() => uploadProjectToShare({ ...baseArgs, token: "  " }), /token/i);
   });
 
   it("POSTs the project with a bearer token and returns the URLs", async () => {
@@ -209,10 +188,7 @@ describe("uploadProjectToShare", () => {
     const fn = (async () => {
       throw new DOMException("The operation timed out.", "TimeoutError");
     }) as unknown as typeof fetch;
-    await assert.rejects(
-      () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
-      /timed out/i,
-    );
+    await assert.rejects(() => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }), /timed out/i);
   });
 
   it("re-throws AbortError without wrapping it", async () => {

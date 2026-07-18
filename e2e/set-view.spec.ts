@@ -18,9 +18,7 @@ async function waitForMap(page: Page): Promise<void> {
  * future change drops `noValidate`, the browser would reject the value here and
  * this test would fail with the dialog still open.
  */
-test("submits a fractional zoom the native validator would reject", async ({
-  page,
-}) => {
+test("submits a fractional zoom the native validator would reject", async ({ page }) => {
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
@@ -43,12 +41,8 @@ test("submits a fractional zoom the native validator would reject", async ({
 
   // Confirm both fields genuinely trip native validation, so the assertion
   // below proves the dialog submits despite it (not that the values are benign).
-  expect(await zoom.evaluate((z: HTMLInputElement) => z.validity.stepMismatch)).toBe(
-    true,
-  );
-  expect(
-    await pitch.evaluate((p: HTMLInputElement) => p.validity.stepMismatch),
-  ).toBe(true);
+  expect(await zoom.evaluate((z: HTMLInputElement) => z.validity.stepMismatch)).toBe(true);
+  expect(await pitch.evaluate((p: HTMLInputElement) => p.validity.stepMismatch)).toBe(true);
 
   await dialog.getByRole("button", { name: "Go", exact: true }).click();
 
@@ -63,9 +57,7 @@ test("submits a fractional zoom the native validator would reject", async ({
  * between bad input and `flyTo`, so out-of-range input must still be rejected
  * with the dialog's own message and the dialog kept open.
  */
-test("rejects out-of-range input via the dialog's own validation", async ({
-  page,
-}) => {
+test("rejects out-of-range input via the dialog's own validation", async ({ page }) => {
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
@@ -119,12 +111,11 @@ test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => 
   // decimal without waiting on the map. Exact match so "DD" does not also pick
   // up the "DDM" radio.
   await dialog.getByRole("radio", { name: "DD", exact: true }).click();
-  expect(
-    Number(await dialog.locator("#set-view-longitude").inputValue()),
-  ).toBeCloseTo(-98.468972, 4);
-  expect(
-    Number(await dialog.locator("#set-view-latitude").inputValue()),
-  ).toBeCloseTo(42.145833, 4);
+  expect(Number(await dialog.locator("#set-view-longitude").inputValue())).toBeCloseTo(
+    -98.468972,
+    4,
+  );
+  expect(Number(await dialog.locator("#set-view-latitude").inputValue())).toBeCloseTo(42.145833, 4);
 
   // The converted coordinate submits like any other DD value.
   await dialog.getByRole("button", { name: "Go", exact: true }).click();
@@ -136,9 +127,7 @@ test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => 
  * (DDM). Like the DMS toggle, switching DDM -> DD converts the entry in place,
  * and the converted value submits like any other DD coordinate.
  */
-test("accepts a center entered in degrees and decimal minutes", async ({
-  page,
-}) => {
+test("accepts a center entered in degrees and decimal minutes", async ({ page }) => {
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
@@ -160,12 +149,8 @@ test("accepts a center entered in degrees and decimal minutes", async ({
 
   // Toggling to DD converts the DDM entry synchronously.
   await dialog.getByRole("radio", { name: "DD", exact: true }).click();
-  expect(
-    Number(await dialog.locator("#set-view-longitude").inputValue()),
-  ).toBeCloseTo(-98.469, 3);
-  expect(
-    Number(await dialog.locator("#set-view-latitude").inputValue()),
-  ).toBeCloseTo(42.145833, 4);
+  expect(Number(await dialog.locator("#set-view-longitude").inputValue())).toBeCloseTo(-98.469, 3);
+  expect(Number(await dialog.locator("#set-view-latitude").inputValue())).toBeCloseTo(42.145833, 4);
 
   await dialog.getByRole("button", { name: "Go", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -178,9 +163,7 @@ test("accepts a center entered in degrees and decimal minutes", async ({
  * keystroke). After processing a valid string the longitude/latitude fields
  * reflect it and the camera submits.
  */
-test("fills the fields from a pasted string only after Process input", async ({
-  page,
-}) => {
+test("fills the fields from a pasted string only after Process input", async ({ page }) => {
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
@@ -206,9 +189,7 @@ test("fills the fields from a pasted string only after Process input", async ({
   // reads a bare pair as lat, lon, so this resolves to lon -97.5, lat 35.4).
   await dialog.getByRole("button", { name: "Process input" }).click();
   expect(Number(await longitude.inputValue())).toBeCloseTo(-97.5, 4);
-  expect(
-    Number(await dialog.locator("#set-view-latitude").inputValue()),
-  ).toBeCloseTo(35.4, 4);
+  expect(Number(await dialog.locator("#set-view-latitude").inputValue())).toBeCloseTo(35.4, 4);
 
   await dialog.locator("#set-view-zoom").fill("5");
   await dialog.getByRole("button", { name: "Go", exact: true }).click();

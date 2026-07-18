@@ -55,9 +55,7 @@ interface VectorSourceLike {
  */
 export function hasTilePlaceholders(url: string): boolean {
   const lower = url.toLowerCase();
-  return (
-    lower.includes("{z}") && lower.includes("{x}") && lower.includes("{y}")
-  );
+  return lower.includes("{z}") && lower.includes("{x}") && lower.includes("{y}");
 }
 
 /** A `[west, south, east, north]` tuple, if `value` looks like one. */
@@ -75,9 +73,7 @@ function asBounds(value: unknown): [number, number, number, number] | undefined 
 /** Non-empty string tile templates from an unknown `tiles` value. */
 function asTiles(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const tiles = value.filter(
-    (tile): tile is string => typeof tile === "string" && tile.length > 0,
-  );
+  const tiles = value.filter((tile): tile is string => typeof tile === "string" && tile.length > 0);
   return tiles.length > 0 ? tiles : undefined;
 }
 
@@ -106,9 +102,8 @@ export function unionCollectionBounds(
   let north = -Infinity;
   let found = false;
   for (const collection of collections) {
-    const spatial = (
-      collection as { extent?: { spatial?: { crs?: unknown; bbox?: unknown } } }
-    )?.extent?.spatial;
+    const spatial = (collection as { extent?: { spatial?: { crs?: unknown; bbox?: unknown } } })
+      ?.extent?.spatial;
     if (!spatial || !isLonLatCrs(spatial.crs)) continue;
     // `bbox` is an array of boxes; the first is the overall extent. A box that
     // crosses the antimeridian (west > east) is not handled: the plain min/max
@@ -182,14 +177,8 @@ export function firstVectorSource(
   style: StyleLike,
 ): { id: string; source: VectorSourceLike } | null {
   if (!style.sources || typeof style.sources !== "object") return null;
-  for (const [id, source] of Object.entries(
-    style.sources as Record<string, unknown>,
-  )) {
-    if (
-      source &&
-      typeof source === "object" &&
-      (source as VectorSourceLike).type === "vector"
-    ) {
+  for (const [id, source] of Object.entries(style.sources as Record<string, unknown>)) {
+    if (source && typeof source === "object" && (source as VectorSourceLike).type === "vector") {
       return { id, source: source as VectorSourceLike };
     }
   }
@@ -213,11 +202,7 @@ export function styleSourceLayers(style: StyleLike, sourceId?: string): string[]
     const entry = layer as { "source-layer"?: unknown; source?: unknown };
     if (sourceId !== undefined && entry.source !== sourceId) continue;
     const sourceLayer = entry["source-layer"];
-    if (
-      typeof sourceLayer === "string" &&
-      sourceLayer.length > 0 &&
-      !seen.has(sourceLayer)
-    ) {
+    if (typeof sourceLayer === "string" && sourceLayer.length > 0 && !seen.has(sourceLayer)) {
       seen.add(sourceLayer);
       result.push(sourceLayer);
     }
@@ -231,9 +216,7 @@ function vectorLayerIds(tilejson: Record<string, unknown>): string[] {
   if (!Array.isArray(layers)) return [];
   return layers
     .map((layer) =>
-      layer && typeof layer === "object"
-        ? (layer as { id?: unknown }).id
-        : undefined,
+      layer && typeof layer === "object" ? (layer as { id?: unknown }).id : undefined,
     )
     .filter((id): id is string => typeof id === "string" && id.length > 0);
 }
@@ -275,10 +258,7 @@ export function tileJsonConfig(
  * works: an uppercase-placeholder template would otherwise be requested
  * verbatim and silently fail to load. */
 function normalizeTilePlaceholders(url: string): string {
-  return url
-    .replace(/\{z\}/gi, "{z}")
-    .replace(/\{x\}/gi, "{x}")
-    .replace(/\{y\}/gi, "{y}");
+  return url.replace(/\{z\}/gi, "{z}").replace(/\{x\}/gi, "{x}").replace(/\{y\}/gi, "{y}");
 }
 
 /** A promise that rejects when the signal aborts, with its abort reason. Used to
@@ -334,12 +314,8 @@ async function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown>
       throw normalizeFetchError(error);
     }
   }
-  const isDev = Boolean(
-    (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV,
-  );
-  const fetchUrl = isDev
-    ? `${OGC_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+  const isDev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
+  const fetchUrl = isDev ? `${OGC_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
   let response: Response;
   try {
     response = await fetch(fetchUrl, { signal: abort });
@@ -378,9 +354,7 @@ export async function resolveOgcVectorTiles(input: {
   // and the best-effort collections lookup) so a merely-slow host cannot make
   // the sequential lookups add up to several times the intended 30s.
   const deadline = AbortSignal.timeout(30_000);
-  const signal = input.signal
-    ? AbortSignal.any([input.signal, deadline])
-    : deadline;
+  const signal = input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
 
   // The TileJSON and style documents are independent, so fetch them together
   // rather than back to back (the built-in sample fills in both). A raw tile
@@ -420,9 +394,7 @@ export async function resolveOgcVectorTiles(input: {
         if (typeof vector.source.url === "string") {
           config.url = vector.source.url;
         } else {
-          config.tiles = asTiles(vector.source.tiles)?.map(
-            normalizeTilePlaceholders,
-          );
+          config.tiles = asTiles(vector.source.tiles)?.map(normalizeTilePlaceholders);
         }
       }
       // ...but always fill a missing zoom range / bounds from the style, even
@@ -455,11 +427,7 @@ export async function resolveOgcVectorTiles(input: {
   if (!config.bounds) {
     const reference = tilesUrl || config.url || config.tiles?.[0];
     if (reference && !hasTilePlaceholders(reference) && reference.includes("/tiles/")) {
-      config.bounds = await fetchOgcCollectionsBounds(
-        reference,
-        signal,
-        input.signal,
-      );
+      config.bounds = await fetchOgcCollectionsBounds(reference, signal, input.signal);
     }
   }
 

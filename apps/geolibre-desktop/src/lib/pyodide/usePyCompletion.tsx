@@ -85,8 +85,7 @@ export function usePyCompletion({
     if (ta) ta.setSelectionRange(pos, pos);
   }, [code, textareaRef]);
 
-  const close = () =>
-    setCompletion((c) => (c.open ? { ...c, open: false } : c));
+  const close = () => setCompletion((c) => (c.open ? { ...c, open: false } : c));
 
   const applyCompletion = (candidate: string, prefix: string, cursor: number) => {
     // Clamp against the current `code` in case it changed since the candidates
@@ -123,9 +122,7 @@ export function usePyCompletion({
     }
   };
 
-  const tryKey = (
-    event: ReactKeyboardEvent<HTMLTextAreaElement>,
-  ): boolean => {
+  const tryKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (completion.open) {
       const n = completion.candidates.length;
       if (event.key === "ArrowDown") {
@@ -174,9 +171,7 @@ export function usePyCompletion({
           role="option"
           aria-selected={i === completion.index}
           className={`block w-full px-3 py-1 text-start font-mono text-xs ${
-            i === completion.index
-              ? "bg-accent text-accent-foreground"
-              : "hover:bg-accent/50"
+            i === completion.index ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
           }`}
           // Keep focus in the textarea so the caret update applies.
           onMouseDown={(event) => {

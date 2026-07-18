@@ -194,8 +194,7 @@ function bearingBetween(a: [number, number], b: [number, number]): number {
   const lat2 = (b[1] * Math.PI) / 180;
   const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
   const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+    Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
   return normalizeBearing((Math.atan2(y, x) * 180) / Math.PI);
 }
 
@@ -204,9 +203,7 @@ function distanceMeters(a: [number, number], b: [number, number]): number {
   const lat2 = (b[1] * Math.PI) / 180;
   const dLat = lat2 - lat1;
   const dLon = ((b[0] - a[0]) * Math.PI) / 180;
-  const hav =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const hav = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
 }
 
@@ -222,9 +219,7 @@ function collectLineStrings(geometry: Geometry | null): [number, number][][] {
   if (!geometry) return [];
   switch (geometry.type) {
     case "LineString":
-      return [
-        geometry.coordinates.filter(isFiniteLngLat).map((p) => [p[0], p[1]]),
-      ];
+      return [geometry.coordinates.filter(isFiniteLngLat).map((p) => [p[0], p[1]])];
     case "MultiLineString":
       return geometry.coordinates.map((line) =>
         line.filter(isFiniteLngLat).map((p) => [p[0], p[1]]),
@@ -319,20 +314,12 @@ function clampNumber(value: number, min: number, max: number): number {
 
 /** Clamp a hold duration (ms) into the supported range. */
 function clampHoldMs(value: number): number {
-  return clampNumber(
-    Math.round(value),
-    MIN_HOLD_SECONDS * 1000,
-    MAX_HOLD_SECONDS * 1000,
-  );
+  return clampNumber(Math.round(value), MIN_HOLD_SECONDS * 1000, MAX_HOLD_SECONDS * 1000);
 }
 
 /** Clamp a transition duration (ms) into the supported range. */
 function clampTransitionMs(value: number): number {
-  return clampNumber(
-    Math.round(value),
-    MIN_SEGMENT_SECONDS * 1000,
-    MAX_SEGMENT_SECONDS * 1000,
-  );
+  return clampNumber(Math.round(value), MIN_SEGMENT_SECONDS * 1000, MAX_SEGMENT_SECONDS * 1000);
 }
 
 /** Round to a fixed number of decimals, matching the capture precision. */
@@ -355,10 +342,7 @@ function normalizeBearing(bearing: number): number {
  * session-local keyframe ids are dropped; {@link parseTourConfig} regenerates
  * them on load.
  */
-export function serializeTourConfig(
-  keyframes: readonly TourKeyframe[],
-  fps: number,
-): string {
+export function serializeTourConfig(keyframes: readonly TourKeyframe[], fps: number): string {
   const config: TourConfig = {
     type: TOUR_CONFIG_TYPE,
     version: TOUR_CONFIG_VERSION,
@@ -366,13 +350,11 @@ export function serializeTourConfig(
     // Drop the id; clamp hold and transition on write too (mirroring
     // parseKeyframe) so save/load is symmetric and a programmatic caller can't
     // persist an out-of-range value.
-    keyframes: keyframes.map(
-      ({ id: _id, holdMs, transitionMs, ...rest }) => ({
-        ...rest,
-        holdMs: clampHoldMs(holdMs),
-        transitionMs: clampTransitionMs(transitionMs),
-      }),
-    ),
+    keyframes: keyframes.map(({ id: _id, holdMs, transitionMs, ...rest }) => ({
+      ...rest,
+      holdMs: clampHoldMs(holdMs),
+      transitionMs: clampTransitionMs(transitionMs),
+    })),
   };
   return `${JSON.stringify(config, null, 2)}\n`;
 }
@@ -383,10 +365,7 @@ function num(value: unknown, fallback = 0): number {
 }
 
 /** The camera portion of a keyframe, shared by the v1 and v2 parse paths. */
-type ParsedCamera = Pick<
-  TourKeyframeData,
-  "center" | "zoom" | "pitch" | "bearing"
->;
+type ParsedCamera = Pick<TourKeyframeData, "center" | "zoom" | "pitch" | "bearing">;
 
 /**
  * Validate a single keyframe's structure and normalize its camera to MapLibre's
@@ -434,9 +413,7 @@ function parseKeyframe(raw: unknown): TourKeyframeData {
   return {
     ...camera,
     holdMs: clampHoldMs(num(kf.holdMs, DEFAULT_HOLD_SECONDS * 1000)),
-    transitionMs: clampTransitionMs(
-      num(kf.transitionMs, DEFAULT_SEGMENT_SECONDS * 1000),
-    ),
+    transitionMs: clampTransitionMs(num(kf.transitionMs, DEFAULT_SEGMENT_SECONDS * 1000)),
   };
 }
 
@@ -542,9 +519,7 @@ export function parseTourConfig(text: string): ParsedTourConfig {
   // absence of v2 fields means a hand-edited file mixing both formats is read as
   // v2 (keeping its persisted holds) rather than silently migrated to defaults.
   const hasField = (name: string) =>
-    rawKeyframes.some(
-      (kf) => kf !== null && typeof kf === "object" && name in kf,
-    );
+    rawKeyframes.some((kf) => kf !== null && typeof kf === "object" && name in kf);
   const isLegacy =
     obj.version === 1 ||
     (obj.version === undefined &&
@@ -571,9 +546,7 @@ export function isTourRecordingSupported(): boolean {
     typeof MediaRecorder !== "undefined" &&
     typeof HTMLCanvasElement !== "undefined" &&
     typeof HTMLCanvasElement.prototype.captureStream === "function" &&
-    pickSupportedMimeType(TOUR_MIME_CANDIDATES, (t) =>
-      MediaRecorder.isTypeSupported(t),
-    ) !== null
+    pickSupportedMimeType(TOUR_MIME_CANDIDATES, (t) => MediaRecorder.isTypeSupported(t)) !== null
   );
 }
 
@@ -702,8 +675,9 @@ export async function recordTour({
   if (keyframes.length < 2) {
     throw new Error("A tour needs at least two keyframes.");
   }
-  const mimeType = pickSupportedMimeType(TOUR_MIME_CANDIDATES, (t) =>
-    typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
+  const mimeType = pickSupportedMimeType(
+    TOUR_MIME_CANDIDATES,
+    (t) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
   );
   // mimeType is null when MediaRecorder is undefined (the callback returns false
   // for every candidate), so this also covers the no-MediaRecorder case.
@@ -776,10 +750,7 @@ export async function recordTour({
   const pump = () => {
     map.triggerRepaint();
     if (startedAt && totalMs > 0) {
-      const percent = Math.min(
-        100,
-        Math.round(((performance.now() - startedAt) / totalMs) * 100),
-      );
+      const percent = Math.min(100, Math.round(((performance.now() - startedAt) / totalMs) * 100));
       if (percent !== lastPercent) {
         lastPercent = percent;
         onProgress?.(percent / 100);

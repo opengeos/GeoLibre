@@ -135,6 +135,5 @@ export const PROVIDER_DOCS_URL: Partial<Record<AssistantProviderId, string>> = {
   anthropic: "https://console.anthropic.com/settings/keys",
   openai: "https://platform.openai.com/api-keys",
   ollama: "https://ollama.com/download",
-  bedrock:
-    "https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html",
+  bedrock: "https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html",
 };

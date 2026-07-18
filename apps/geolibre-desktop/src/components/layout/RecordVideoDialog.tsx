@@ -52,8 +52,7 @@ const DEFAULT_FILE_NAME = "map-recording";
 // NOT the `*-gui-control` authoring editors -- we burn the info in, not the
 // editor chrome. These class names mirror maplibre-gl-components internals; see
 // CLAUDE.md and re-check them when that package is bumped.
-const MAP_PANEL_SELECTOR =
-  ".maplibre-gl-html-control, .maplibre-gl-legend, .maplibre-gl-colorbar";
+const MAP_PANEL_SELECTOR = ".maplibre-gl-html-control, .maplibre-gl-legend, .maplibre-gl-colorbar";
 // Hoisted so the save path doesn't recompile it on every call (and to satisfy
 // the e18e/prefer-static-regex lint rule).
 const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
@@ -63,12 +62,7 @@ const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
 const RECORDING_SUPPORTED = isMapRecordingSupported();
 
 /** Clamp a number into a range, returning the fallback when not finite. */
-function clamp(
-  value: number,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
+function clamp(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
 }
@@ -107,9 +101,7 @@ export function RecordVideoDialog({
   // Optional title/source caption burned into every frame (see recordMapCanvas).
   const [captionTitle, setCaptionTitle] = useState("");
   const [captionText, setCaptionText] = useState("");
-  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
-    DEFAULT_CAPTION_POSITION,
-  );
+  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(DEFAULT_CAPTION_POSITION);
   // Burn the on-map info panels (HTML control, legend, colorbar) into the video
   // (they are DOM, so they are rasterized and composited rather than captured
   // from the canvas). Offered only when at least one such panel is on the map.
@@ -134,8 +126,7 @@ export function RecordVideoDialog({
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const busy =
-    status === "preparing" || status === "recording" || status === "saving";
+  const busy = status === "preparing" || status === "recording" || status === "saving";
   // Also frozen in "ready": a finished take is held, so mode/region editing is
   // locked until it is saved or discarded, matching the tour recorder.
   const editingFrozen = busy || status === "ready";
@@ -171,10 +162,7 @@ export function RecordVideoDialog({
     );
     const y = Math.max(
       0,
-      Math.min(
-        event.clientY - dragOffset.current.y,
-        window.innerHeight - height,
-      ),
+      Math.min(event.clientY - dragOffset.current.y, window.innerHeight - height),
     );
     setPos({ x, y });
   };
@@ -234,9 +222,7 @@ export function RecordVideoDialog({
     // user opted in. Queried live so a panel added/removed since the dialog
     // opened is reflected (the checkbox availability tracks this too).
     const domOverlays = includePanels
-      ? Array.from(
-          map.getContainer().querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR),
-        )
+      ? Array.from(map.getContainer().querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR))
       : null;
     try {
       const rec = await recordMapCanvas({
@@ -296,8 +282,7 @@ export function RecordVideoDialog({
     // tile/marker churn. A control's own internal DOM updates (e.g. legend
     // swatches) can still fire the callback, but refresh() is a cheap querySelector
     // and React bails on an unchanged value, so the extra calls are harmless.
-    const controlContainer =
-      container?.querySelector(".maplibregl-control-container") ?? container;
+    const controlContainer = container?.querySelector(".maplibregl-control-container") ?? container;
     if (!controlContainer) {
       setPanelsAvailable(false);
       setIncludePanels(false);
@@ -321,8 +306,7 @@ export function RecordVideoDialog({
     clearResultMessages();
     try {
       const ext = pendingRec.extension;
-      const base =
-        fileName.trim().replace(VIDEO_EXTENSION_RE, "") || DEFAULT_FILE_NAME;
+      const base = fileName.trim().replace(VIDEO_EXTENSION_RE, "") || DEFAULT_FILE_NAME;
       const fileType = t("recordVideo.videoFileType");
       const name = await saveBinaryFileWithFallback(pendingRec.blob, {
         defaultName: `${base}.${ext}`,
@@ -372,13 +356,7 @@ export function RecordVideoDialog({
           region is chosen, and during a region recording. */}
       <RegionSelectOverlay
         mapControllerRef={mapControllerRef}
-        mode={
-          selecting
-            ? "select"
-            : mode === "region" && region
-            ? "frame"
-            : "hidden"
-        }
+        mode={selecting ? "select" : mode === "region" && region ? "frame" : "hidden"}
         region={region}
         onSelect={handleRegionSelected}
         onCancel={() => setSelecting(false)}
@@ -403,9 +381,7 @@ export function RecordVideoDialog({
           className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2"
         >
           <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 text-sm font-semibold">
-            {t("recordVideo.title")}
-          </span>
+          <span className="flex-1 text-sm font-semibold">{t("recordVideo.title")}</span>
           <button
             type="button"
             aria-label={t("common.close")}
@@ -418,9 +394,7 @@ export function RecordVideoDialog({
         </div>
 
         <div className="flex flex-col gap-3 p-3">
-          <p className="text-xs text-muted-foreground">
-            {t("recordVideo.hint")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("recordVideo.hint")}</p>
 
           {!RECORDING_SUPPORTED && (
             <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-muted-foreground">
@@ -460,11 +434,11 @@ export function RecordVideoDialog({
                 {selecting
                   ? t("recordVideo.drawHint")
                   : region
-                  ? t("recordVideo.regionChosen", {
-                      width: Math.round(region.width),
-                      height: Math.round(region.height),
-                    })
-                  : t("recordVideo.noRegion")}
+                    ? t("recordVideo.regionChosen", {
+                        width: Math.round(region.width),
+                        height: Math.round(region.height),
+                      })
+                    : t("recordVideo.noRegion")}
               </p>
             )}
           </div>
@@ -484,11 +458,7 @@ export function RecordVideoDialog({
               onChange={(e) => {
                 setFpsText(e.target.value);
                 const next = Number(e.target.value);
-                if (
-                  Number.isFinite(next) &&
-                  next >= MIN_FPS &&
-                  next <= MAX_FPS
-                ) {
+                if (Number.isFinite(next) && next >= MIN_FPS && next <= MAX_FPS) {
                   setFps(next);
                 }
               }}
@@ -504,9 +474,7 @@ export function RecordVideoDialog({
               panel) can't be recorded, so this text is drawn onto the frames
               directly, letting the user annotate the video itself. */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="record-video-caption-title">
-              {t("recordVideo.caption")}
-            </Label>
+            <Label htmlFor="record-video-caption-title">{t("recordVideo.caption")}</Label>
             <Input
               id="record-video-caption-title"
               disabled={editingFrozen}
@@ -531,9 +499,7 @@ export function RecordVideoDialog({
                 aria-label={t("recordVideo.captionPosition")}
                 disabled={editingFrozen}
                 value={captionPosition}
-                onChange={(e) =>
-                  setCaptionPosition(e.target.value as CaptionPosition)
-                }
+                onChange={(e) => setCaptionPosition(e.target.value as CaptionPosition)}
               >
                 {CAPTION_POSITIONS.map((position) => (
                   <option key={position} value={position}>
@@ -585,9 +551,7 @@ export function RecordVideoDialog({
             </div>
           ) : status === "ready" ? (
             <div className="flex flex-col gap-2 rounded-md border border-border/60 p-2">
-              <p className="text-xs text-muted-foreground">
-                {t("recordVideo.recordingReady")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("recordVideo.recordingReady")}</p>
               <div className="flex items-center gap-2">
                 <Label htmlFor="record-video-name" className="sr-only">
                   {t("recordVideo.fileNameLabel")}
@@ -606,11 +570,7 @@ export function RecordVideoDialog({
                   <Download className="me-1.5 h-3.5 w-3.5" />
                   {t("recordVideo.saveVideo")}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={discardRecording}
-                >
+                <Button type="button" variant="outline" onClick={discardRecording}>
                   <Trash2 className="me-1.5 h-3.5 w-3.5" />
                   {t("recordVideo.discard")}
                 </Button>
@@ -628,9 +588,7 @@ export function RecordVideoDialog({
               onClick={startRecording}
             >
               <Video className="me-1.5 h-3.5 w-3.5" />
-              {status === "saving"
-                ? t("recordVideo.savingStatus")
-                : t("recordVideo.record")}
+              {status === "saving" ? t("recordVideo.savingStatus") : t("recordVideo.record")}
             </Button>
           )}
 
@@ -641,9 +599,7 @@ export function RecordVideoDialog({
             </p>
           )}
           {saveCancelled && (
-            <p className="text-xs text-muted-foreground">
-              {t("recordVideo.saveCancelled")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("recordVideo.saveCancelled")}</p>
           )}
           {error && (
             <p className="rounded-md border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-500">

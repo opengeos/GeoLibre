@@ -71,9 +71,7 @@ export function useViewportHistory(
 
   const syncNav = useCallback(() => {
     const canGoBack = indexRef.current > 0;
-    const canGoForward =
-      indexRef.current >= 0 &&
-      indexRef.current < historyRef.current.length - 1;
+    const canGoForward = indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
     setNav((prev) =>
       prev.canGoBack === canGoBack && prev.canGoForward === canGoForward
         ? prev

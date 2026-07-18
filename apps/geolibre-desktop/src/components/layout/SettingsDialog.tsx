@@ -11,11 +11,7 @@ import {
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
-import {
-  closeRightPanel,
-  collapseRightPanel,
-  openRightPanel,
-} from "@geolibre/plugins";
+import { closeRightPanel, collapseRightPanel, openRightPanel } from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -91,11 +87,7 @@ import { BROWSER_PANEL_ID } from "../../hooks/useRegisterBrowserPanel";
 import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
-import {
-  THEME_SCHEMES,
-  normalizeHexColor,
-  type ThemeScheme,
-} from "../../lib/theme-schemes";
+import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
@@ -280,9 +272,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
   };
 }
 
-function normalizeBounds(
-  bounds: MapPreferences["bounds"],
-): MapPreferences["bounds"] {
+function normalizeBounds(bounds: MapPreferences["bounds"]): MapPreferences["bounds"] {
   const west = clamp(bounds[0], -180, 180);
   const south = clamp(bounds[1], -85, 85);
   const east = clamp(bounds[2], -180, 180);
@@ -303,9 +293,7 @@ function roundCoordinate(value: number): number {
   return Number(value.toFixed(6));
 }
 
-function normalizePreferences(
-  preferences: ProjectPreferences,
-): ProjectPreferences {
+function normalizePreferences(preferences: ProjectPreferences): ProjectPreferences {
   const minZoom = clamp(preferences.map.minZoom, 0, 24);
   const maxZoom = Math.max(minZoom, clamp(preferences.map.maxZoom, 0, 24));
   return {
@@ -347,9 +335,7 @@ function normalizeGeocodingPreferences(
 
 // Returned as a code (not a message) so the user-facing string is resolved
 // through i18n at the call site, where `t` is in scope.
-type EnvironmentValidationError =
-  | { kind: "pattern" }
-  | { kind: "duplicate"; name: string };
+type EnvironmentValidationError = { kind: "pattern" } | { kind: "duplicate"; name: string };
 
 function validateEnvironmentVariables(
   variables: RuntimeEnvironmentVariable[],
@@ -383,22 +369,15 @@ export function SettingsDialog({
   onToggleThemeMode,
 }: SettingsDialogProps) {
   const { t } = useTranslation();
-  const {
-    language,
-    options: languageOptions,
-    setLanguage,
-  } = useLanguage();
+  const { language, options: languageOptions, setLanguage } = useLanguage();
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
   const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
-  const setDesktopSettings = useDesktopSettingsStore(
-    (s) => s.setDesktopSettings,
-  );
+  const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
   // Visibility of the Settings dropdown items under the active UI profile. The
   // Language/Layout/Interface entries are always shown so the profile UI stays
   // reachable.
-  const showSettingsItem = (id: string) =>
-    isMenuItemVisible(desktopSettings.uiProfile, id);
+  const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
   // The Browser is a dockable right panel (open/close via the registry), not a
@@ -418,9 +397,7 @@ export function SettingsDialog({
   };
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
-  const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(
-    null,
-  );
+  const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(null);
   const shareTokenInputRef = useRef<HTMLInputElement>(null);
   // The native color input in the Appearance pane. The accent-color dropdown's
   // "Custom" entry deep-links here so picking a custom color is reachable
@@ -453,23 +430,20 @@ export function SettingsDialog({
     ? section
     : // "interface" has no gate, so it is always a valid, visible fallback.
       (SECTION_ITEMS.find((item) => isSectionVisible(item.id))?.id ?? "interface");
-  const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(
-    () => clonePreferences(preferences),
+  const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(() =>
+    clonePreferences(preferences),
   );
-  const [draftDesktopSettings, setDraftDesktopSettings] =
-    useState<DraftDesktopSettings>(() => cloneDesktopSettings(desktopSettings));
+  const [draftDesktopSettings, setDraftDesktopSettings] = useState<DraftDesktopSettings>(() =>
+    cloneDesktopSettings(desktopSettings),
+  );
   const [error, setError] = useState<string | null>(null);
   // Live map projection, captured when the dialog opens. The Globe projection
   // lets the map drift slightly past restricted bounds, so we warn users to
   // switch to Mercator before capturing the current view (see #505).
-  const [liveProjection, setLiveProjection] = useState<MapProjection | null>(
-    null,
-  );
+  const [liveProjection, setLiveProjection] = useState<MapProjection | null>(null);
   // Ids of variables whose value is temporarily revealed; values are masked
   // by default so secrets are not shown on screen.
-  const [revealedValueIds, setRevealedValueIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [revealedValueIds, setRevealedValueIds] = useState<Set<string>>(() => new Set());
   const enabledVariableCount = useMemo(
     () =>
       draftPreferences.environmentVariables.filter(
@@ -498,9 +472,7 @@ export function SettingsDialog({
   // project file. Non-empty entries only, matching the live runtime projection.
   const draftAiEnv = useMemo(() => {
     const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(
-      draftDesktopSettings.aiProviderEnv,
-    )) {
+    for (const [key, value] of Object.entries(draftDesktopSettings.aiProviderEnv)) {
       const name = key.trim();
       if (name && value) env[name] = value;
     }
@@ -528,10 +500,7 @@ export function SettingsDialog({
   // project GOOGLE_API_KEY row shadows the whole Google OS alias group).
   const scopedOsEnv = useMemo(
     () =>
-      scopeOsEnvToProject(
-        osEnv,
-        new Set([...Object.keys(draftEnv), ...Object.keys(draftAiEnv)]),
-      ),
+      scopeOsEnvToProject(osEnv, new Set([...Object.keys(draftEnv), ...Object.keys(draftAiEnv)])),
     [osEnv, draftEnv, draftAiEnv],
   );
   // Merge OS env under the drafts so a provider configured purely via a system
@@ -566,9 +535,7 @@ export function SettingsDialog({
       setCustomColorDraft(null);
       return;
     }
-    const seededPreferences = clonePreferences(
-      useAppStore.getState().preferences,
-    );
+    const seededPreferences = clonePreferences(useAppStore.getState().preferences);
     setDraftPreferences(seededPreferences);
     setDraftDesktopSettings(
       cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
@@ -590,10 +557,7 @@ export function SettingsDialog({
     const seededEnv = {
       ...scopeOsEnvToProject(
         readOsEnv(),
-        new Set([
-          ...Object.keys(seededProjectEnv),
-          ...Object.keys(seededAiEnv),
-        ]),
+        new Set([...Object.keys(seededProjectEnv), ...Object.keys(seededAiEnv)]),
       ),
       ...seededAiEnv,
       ...seededProjectEnv,
@@ -627,8 +591,7 @@ export function SettingsDialog({
       let sectionShown = false;
       if (requested) {
         const gate = SECTION_GATE[requested];
-        const profile =
-          useDesktopSettingsStore.getState().desktopSettings.uiProfile;
+        const profile = useDesktopSettingsStore.getState().desktopSettings.uiProfile;
         sectionShown = !gate || isMenuItemVisible(profile, gate);
         if (sectionShown) setSection(requested);
       }
@@ -772,9 +735,7 @@ export function SettingsDialog({
       }
       return {
         ...current,
-        environmentVariables: current.environmentVariables.filter(
-          (v) => !keys.includes(v.key),
-        ),
+        environmentVariables: current.environmentVariables.filter((v) => !keys.includes(v.key)),
       };
     });
     setError(null);
@@ -803,10 +764,7 @@ export function SettingsDialog({
     setError(null);
   };
 
-  const updateEnvironmentVariable = (
-    index: number,
-    patch: Partial<RuntimeEnvironmentVariable>,
-  ) => {
+  const updateEnvironmentVariable = (index: number, patch: Partial<RuntimeEnvironmentVariable>) => {
     setDraftPreferences((current) => ({
       ...current,
       environmentVariables: current.environmentVariables.map((variable, i) =>
@@ -831,9 +789,7 @@ export function SettingsDialog({
   const removeEnvironmentVariable = (index: number) => {
     setDraftPreferences((current) => ({
       ...current,
-      environmentVariables: current.environmentVariables.filter(
-        (_, i) => i !== index,
-      ),
+      environmentVariables: current.environmentVariables.filter((_, i) => i !== index),
     }));
     setError(null);
   };
@@ -859,9 +815,7 @@ export function SettingsDialog({
     updateMapPreferences(DEFAULT_PROJECT_PREFERENCES.map);
   };
 
-  const updateGeocoding = (
-    patch: Partial<ProjectPreferences["geocoding"]>,
-  ) => {
+  const updateGeocoding = (patch: Partial<ProjectPreferences["geocoding"]>) => {
     setDraftPreferences((current) => ({
       ...current,
       geocoding: { ...current.geocoding, ...patch },
@@ -1109,9 +1063,7 @@ export function SettingsDialog({
 
   const saveSettings = () => {
     const normalized = normalizePreferences(draftPreferences);
-    const validationError = validateEnvironmentVariables(
-      normalized.environmentVariables,
-    );
+    const validationError = validateEnvironmentVariables(normalized.environmentVariables);
     if (validationError) {
       setError(
         validationError.kind === "duplicate"
@@ -1185,9 +1137,7 @@ export function SettingsDialog({
             aria-label={t("settings.title")}
           >
             <Settings className={iconClassName} />
-            {showLabels ? (
-              <span className="hidden sm:inline">{t("settings.title")}</span>
-            ) : null}
+            {showLabels ? <span className="hidden sm:inline">{t("settings.title")}</span> : null}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
@@ -1199,15 +1149,9 @@ export function SettingsDialog({
               {t("language.label")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-44">
-              <DropdownMenuRadioGroup
-                value={language}
-                onValueChange={setLanguage}
-              >
+              <DropdownMenuRadioGroup value={language} onValueChange={setLanguage}>
                 {languageOptions.map((option) => (
-                  <DropdownMenuRadioItem
-                    key={option.code}
-                    value={option.code}
-                  >
+                  <DropdownMenuRadioItem key={option.code} value={option.code}>
                     {option.nativeName === option.englishName
                       ? option.nativeName
                       : `${option.nativeName} (${option.englishName})`}
@@ -1279,9 +1223,7 @@ export function SettingsDialog({
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={browserPanelOpen}
-                onCheckedChange={(checked: boolean) =>
-                  toggleBrowserPanel(checked === true)
-                }
+                onCheckedChange={(checked: boolean) => toggleBrowserPanel(checked === true)}
                 onSelect={(event: Event) => event.preventDefault()}
               >
                 {t("settings.layout.showBrowserPanel")}
@@ -1312,9 +1254,7 @@ export function SettingsDialog({
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={desktopSettings.theme.scheme}
-                onValueChange={(value: string) =>
-                  updateSavedThemeScheme(value as ThemeScheme)
-                }
+                onValueChange={(value: string) => updateSavedThemeScheme(value as ThemeScheme)}
               >
                 {THEME_SCHEMES.map((scheme) => (
                   <DropdownMenuRadioItem
@@ -1464,9 +1404,7 @@ export function SettingsDialog({
             </DropdownMenuItem>
           )}
           {showSettingsItem("settings.styleManager") && (
-            <DropdownMenuItem
-              onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}
-            >
+            <DropdownMenuItem onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}>
               <Palette className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.styleManager")}
             </DropdownMenuItem>
@@ -1484,9 +1422,7 @@ export function SettingsDialog({
           </DialogHeader>
           <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
             <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-e">
-              {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(
-                renderSectionButton,
-              )}
+              {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(renderSectionButton)}
             </nav>
             <div className="min-h-0 overflow-y-auto p-6">
               {effectiveSection === "map" ? (
@@ -1497,12 +1433,7 @@ export function SettingsDialog({
                         {t("settings.map.constraintsTitle")}
                       </h3>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={resetMapPreferences}
-                    >
+                    <Button type="button" size="sm" variant="outline" onClick={resetMapPreferences}>
                       <RotateCcw className="h-3.5 w-3.5" />
                       {t("common.reset")}
                     </Button>
@@ -1561,10 +1492,7 @@ export function SettingsDialog({
                           disabled={!draftPreferences.map.restrictBounds}
                           value={draftPreferences.map.bounds[index as number]}
                           onChange={(event) =>
-                            updateBoundsValue(
-                              index as number,
-                              event.target.valueAsNumber,
-                            )
+                            updateBoundsValue(index as number, event.target.valueAsNumber)
                           }
                         />
                       </div>
@@ -1578,9 +1506,7 @@ export function SettingsDialog({
                   ) : null}
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-min-zoom">
-                        {t("settings.map.minZoom")}
-                      </Label>
+                      <Label htmlFor="settings-min-zoom">{t("settings.map.minZoom")}</Label>
                       <Input
                         id="settings-min-zoom"
                         type="number"
@@ -1596,9 +1522,7 @@ export function SettingsDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-max-zoom">
-                        {t("settings.map.maxZoom")}
-                      </Label>
+                      <Label htmlFor="settings-max-zoom">{t("settings.map.maxZoom")}</Label>
                       <Input
                         id="settings-max-zoom"
                         type="number"
@@ -1614,9 +1538,7 @@ export function SettingsDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-max-pitch">
-                        {t("settings.map.maxPitch")}
-                      </Label>
+                      <Label htmlFor="settings-max-pitch">{t("settings.map.maxPitch")}</Label>
                       <Input
                         id="settings-max-pitch"
                         type="number"
@@ -1646,9 +1568,7 @@ export function SettingsDialog({
                     {t("settings.map.renderWorldCopies")}
                   </label>
                   <div className="space-y-1.5">
-                    <Label htmlFor="settings-ellipsoid">
-                      {t("settings.map.ellipsoid")}
-                    </Label>
+                    <Label htmlFor="settings-ellipsoid">{t("settings.map.ellipsoid")}</Label>
                     <Select
                       id="settings-ellipsoid"
                       value={draftPreferences.map.ellipsoidId}
@@ -1669,9 +1589,7 @@ export function SettingsDialog({
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="settings-scale-unit">
-                      {t("settings.map.scaleUnit")}
-                    </Label>
+                    <Label htmlFor="settings-scale-unit">{t("settings.map.scaleUnit")}</Label>
                     <Select
                       id="settings-scale-unit"
                       value={draftPreferences.map.scaleUnit}
@@ -1681,15 +1599,9 @@ export function SettingsDialog({
                         })
                       }
                     >
-                      <option value="metric">
-                        {t("settings.map.scaleUnitMetric")}
-                      </option>
-                      <option value="imperial">
-                        {t("settings.map.scaleUnitImperial")}
-                      </option>
-                      <option value="nautical">
-                        {t("settings.map.scaleUnitNautical")}
-                      </option>
+                      <option value="metric">{t("settings.map.scaleUnitMetric")}</option>
+                      <option value="imperial">{t("settings.map.scaleUnitImperial")}</option>
+                      <option value="nautical">{t("settings.map.scaleUnitNautical")}</option>
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {t("settings.map.scaleUnitHint")}
@@ -1701,19 +1613,12 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">
-                        {t("settings.layout.title")}
-                      </h3>
+                      <h3 className="text-sm font-semibold">{t("settings.layout.title")}</h3>
                       <p className="text-xs text-muted-foreground">
                         {t("settings.layout.description")}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={resetLayoutSettings}
-                    >
+                    <Button type="button" size="sm" variant="outline" onClick={resetLayoutSettings}>
                       <RotateCcw className="h-3.5 w-3.5" />
                       {t("common.reset")}
                     </Button>
@@ -1788,9 +1693,7 @@ export function SettingsDialog({
                         className="h-4 w-4"
                         type="checkbox"
                         checked={browserPanelOpen}
-                        onChange={(event) =>
-                          toggleBrowserPanel(event.target.checked)
-                        }
+                        onChange={(event) => toggleBrowserPanel(event.target.checked)}
                       />
                       <FolderTree className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showBrowserPanel")}</span>
@@ -1806,9 +1709,7 @@ export function SettingsDialog({
               {effectiveSection === "appearance" ? (
                 <div className="space-y-5">
                   <div>
-                    <h3 className="text-sm font-semibold">
-                      {t("settings.appearance.title")}
-                    </h3>
+                    <h3 className="text-sm font-semibold">{t("settings.appearance.title")}</h3>
                     <p className="text-xs text-muted-foreground">
                       {t("settings.appearance.description")}
                     </p>
@@ -1834,16 +1735,12 @@ export function SettingsDialog({
                             }}
                             className={cn(
                               "flex items-center gap-2.5 rounded-md border p-3 text-sm transition-colors",
-                              active
-                                ? "border-primary ring-2 ring-ring"
-                                : "hover:bg-accent",
+                              active ? "border-primary ring-2 ring-ring" : "hover:bg-accent",
                             )}
                           >
                             <ModeIcon className="h-5 w-5 shrink-0" />
                             <span>{t(`settings.appearance.mode.${mode}`)}</span>
-                            {active ? (
-                              <Check className="ms-auto h-4 w-4 text-primary" />
-                            ) : null}
+                            {active ? <Check className="ms-auto h-4 w-4 text-primary" /> : null}
                           </button>
                         );
                       })}
@@ -1855,8 +1752,7 @@ export function SettingsDialog({
                     </h4>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {THEME_SCHEMES.map((scheme) => {
-                        const active =
-                          desktopSettings.theme.scheme === scheme.id;
+                        const active = desktopSettings.theme.scheme === scheme.id;
                         return (
                           <button
                             key={scheme.id}
@@ -1865,9 +1761,7 @@ export function SettingsDialog({
                             onClick={() => updateSavedThemeScheme(scheme.id)}
                             className={cn(
                               "flex items-center gap-2.5 rounded-md border p-3 text-sm transition-colors",
-                              active
-                                ? "border-primary ring-2 ring-ring"
-                                : "hover:bg-accent",
+                              active ? "border-primary ring-2 ring-ring" : "hover:bg-accent",
                             )}
                           >
                             <span
@@ -1876,17 +1770,13 @@ export function SettingsDialog({
                               style={{ backgroundColor: scheme.swatch }}
                             />
                             <span>{t(scheme.labelKey)}</span>
-                            {active ? (
-                              <Check className="ms-auto h-4 w-4 text-primary" />
-                            ) : null}
+                            {active ? <Check className="ms-auto h-4 w-4 text-primary" /> : null}
                           </button>
                         );
                       })}
                       <button
                         type="button"
-                        aria-pressed={
-                          desktopSettings.theme.scheme === "custom"
-                        }
+                        aria-pressed={desktopSettings.theme.scheme === "custom"}
                         onClick={() => updateSavedThemeScheme("custom")}
                         className={cn(
                           "flex items-center gap-2.5 rounded-md border p-3 text-sm transition-colors",
@@ -1915,9 +1805,7 @@ export function SettingsDialog({
                           type="color"
                           className="h-8 w-12 shrink-0 cursor-pointer rounded border bg-transparent p-0.5"
                           value={desktopSettings.theme.customColor}
-                          onChange={(event) =>
-                            updateSavedThemeCustomColor(event.target.value)
-                          }
+                          onChange={(event) => updateSavedThemeCustomColor(event.target.value)}
                           aria-label={t("settings.appearance.customColor")}
                         />
                         <span>{t("settings.appearance.customColor")}</span>
@@ -1931,10 +1819,7 @@ export function SettingsDialog({
                           spellCheck={false}
                           autoComplete="off"
                           className="ms-auto w-24 rounded border bg-transparent px-2 py-1 text-end font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
-                          value={
-                            customColorDraft ??
-                            desktopSettings.theme.customColor
-                          }
+                          value={customColorDraft ?? desktopSettings.theme.customColor}
                           // The field already holds a full `#rrggbb`, so select
                           // all on focus to let the user type a replacement.
                           onFocus={(event) => event.target.select()}
@@ -1945,9 +1830,7 @@ export function SettingsDialog({
                           // without a brittle maxLength that has to guess how
                           // much surrounding whitespace to allow.
                           onChange={(event) =>
-                            setCustomColorDraft(
-                              event.target.value.replace(/\s/g, "").slice(0, 7),
-                            )
+                            setCustomColorDraft(event.target.value.replace(/\s/g, "").slice(0, 7))
                           }
                           onBlur={commitCustomColorDraft}
                           onKeyDown={(event) => {
@@ -1985,9 +1868,7 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">
-                        {t("settings.interface.title")}
-                      </h3>
+                      <h3 className="text-sm font-semibold">{t("settings.interface.title")}</h3>
                       <p className="text-xs text-muted-foreground">
                         {t("settings.interface.description")}
                       </p>
@@ -2015,9 +1896,7 @@ export function SettingsDialog({
                     <div className="flex flex-wrap gap-2">
                       {INTERFACE_PROFILES.map((option) => {
                         const active =
-                          activeInterfaceProfile(
-                            draftDesktopSettings.uiProfile,
-                          ) === option;
+                          activeInterfaceProfile(draftDesktopSettings.uiProfile) === option;
                         return (
                           <Button
                             key={option}
@@ -2059,34 +1938,29 @@ export function SettingsDialog({
                           {t(DATA_SOURCE_SECTION_LABEL_KEYS[sectionId])}
                         </h5>
                         <div className="grid gap-1.5 sm:grid-cols-2">
-                          {DATA_SOURCE_CATALOG.filter(
-                            (entry) => entry.section === sectionId,
-                          ).map((entry) => (
-                            <label
-                              key={entry.id}
-                              className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
-                            >
-                              <input
-                                className="h-4 w-4"
-                                type="checkbox"
-                                checked={
-                                  !draftDesktopSettings.uiProfile.hiddenDataSources.includes(
-                                    entry.id,
-                                  )
-                                }
-                                disabled={
-                                  draftDesktopSettings.uiProfile.locked
-                                }
-                                onChange={(event) =>
-                                  toggleDataSourceHidden(
-                                    entry.id,
-                                    event.target.checked,
-                                  )
-                                }
-                              />
-                              <span>{t(entry.labelKey)}</span>
-                            </label>
-                          ))}
+                          {DATA_SOURCE_CATALOG.filter((entry) => entry.section === sectionId).map(
+                            (entry) => (
+                              <label
+                                key={entry.id}
+                                className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                              >
+                                <input
+                                  className="h-4 w-4"
+                                  type="checkbox"
+                                  checked={
+                                    !draftDesktopSettings.uiProfile.hiddenDataSources.includes(
+                                      entry.id,
+                                    )
+                                  }
+                                  disabled={draftDesktopSettings.uiProfile.locked}
+                                  onChange={(event) =>
+                                    toggleDataSourceHidden(entry.id, event.target.checked)
+                                  }
+                                />
+                                <span>{t(entry.labelKey)}</span>
+                              </label>
+                            ),
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2106,13 +1980,9 @@ export function SettingsDialog({
                               className="h-4 w-4"
                               type="checkbox"
                               checked={
-                                !draftDesktopSettings.uiProfile.hiddenPlugins.includes(
-                                  plugin.id,
-                                )
+                                !draftDesktopSettings.uiProfile.hiddenPlugins.includes(plugin.id)
                               }
-                              disabled={
-                                draftDesktopSettings.uiProfile.locked
-                              }
+                              disabled={draftDesktopSettings.uiProfile.locked}
                               onChange={(event) =>
                                 togglePluginHidden(plugin.id, event.target.checked)
                               }
@@ -2136,17 +2006,9 @@ export function SettingsDialog({
                           <input
                             className="h-4 w-4"
                             type="checkbox"
-                            checked={
-                              !draftDesktopSettings.uiProfile.hiddenMenus.includes(
-                                menu.id,
-                              )
-                            }
-                            disabled={
-                              draftDesktopSettings.uiProfile.locked
-                            }
-                            onChange={(event) =>
-                              toggleMenuHidden(menu.id, event.target.checked)
-                            }
+                            checked={!draftDesktopSettings.uiProfile.hiddenMenus.includes(menu.id)}
+                            disabled={draftDesktopSettings.uiProfile.locked}
+                            onChange={(event) => toggleMenuHidden(menu.id, event.target.checked)}
                           />
                           <span>{t(menu.labelKey)}</span>
                         </label>
@@ -2159,31 +2021,27 @@ export function SettingsDialog({
                         {t(group.labelKey)}
                       </h4>
                       <div className="grid gap-1.5 sm:grid-cols-2">
-                        {MENU_ITEM_CATALOG.filter(
-                          (entry) => entry.menuId === group.menuId,
-                        ).map((entry) => (
-                          <label
-                            key={entry.id}
-                            className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
-                          >
-                            <input
-                              className="h-4 w-4"
-                              type="checkbox"
-                              checked={
-                                !draftDesktopSettings.uiProfile.hiddenMenuItems.includes(
-                                  entry.id,
-                                )
-                              }
-                              disabled={
-                                draftDesktopSettings.uiProfile.locked
-                              }
-                              onChange={(event) =>
-                                toggleMenuItemHidden(entry.id, event.target.checked)
-                              }
-                            />
-                            <span>{t(entry.labelKey)}</span>
-                          </label>
-                        ))}
+                        {MENU_ITEM_CATALOG.filter((entry) => entry.menuId === group.menuId).map(
+                          (entry) => (
+                            <label
+                              key={entry.id}
+                              className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                            >
+                              <input
+                                className="h-4 w-4"
+                                type="checkbox"
+                                checked={
+                                  !draftDesktopSettings.uiProfile.hiddenMenuItems.includes(entry.id)
+                                }
+                                disabled={draftDesktopSettings.uiProfile.locked}
+                                onChange={(event) =>
+                                  toggleMenuItemHidden(entry.id, event.target.checked)
+                                }
+                              />
+                              <span>{t(entry.labelKey)}</span>
+                            </label>
+                          ),
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2192,25 +2050,19 @@ export function SettingsDialog({
               {effectiveSection === "geocoding" ? (
                 <div className="space-y-5">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-semibold">
-                      {t("settings.geocoding.title")}
-                    </h3>
+                    <h3 className="text-sm font-semibold">{t("settings.geocoding.title")}</h3>
                     <p className="text-xs text-muted-foreground">
                       {t("settings.geocoding.description")}
                     </p>
                   </div>
                   {(() => {
-                    const provider = getGeocodingProvider(
-                      draftPreferences.geocoding.providerId,
-                    );
+                    const provider = getGeocodingProvider(draftPreferences.geocoding.providerId);
                     const apiKeyId = `geocoding-api-key-${provider.id}`;
                     const apiKeyRevealed = revealedValueIds.has(apiKeyId);
                     return (
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <Label className="text-xs">
-                            {t("settings.geocoding.provider")}
-                          </Label>
+                          <Label className="text-xs">{t("settings.geocoding.provider")}</Label>
                           <Select
                             value={provider.id}
                             onChange={(event) =>
@@ -2250,20 +2102,11 @@ export function SettingsDialog({
                                 type={apiKeyRevealed ? "text" : "password"}
                                 autoComplete="off"
                                 spellCheck={false}
-                                value={
-                                  draftPreferences.geocoding.apiKeys[
-                                    provider.id
-                                  ] ?? ""
-                                }
+                                value={draftPreferences.geocoding.apiKeys[provider.id] ?? ""}
                                 onChange={(event) =>
-                                  updateGeocodingApiKey(
-                                    provider.id,
-                                    event.target.value,
-                                  )
+                                  updateGeocodingApiKey(provider.id, event.target.value)
                                 }
-                                placeholder={t(
-                                  "settings.geocoding.apiKeyPlaceholder",
-                                )}
+                                placeholder={t("settings.geocoding.apiKeyPlaceholder")}
                               />
                               <Button
                                 type="button"
@@ -2286,17 +2129,12 @@ export function SettingsDialog({
                         ) : null}
 
                         <div className="space-y-1.5">
-                          <Label
-                            className="text-xs"
-                            htmlFor="geocoding-forward"
-                          >
+                          <Label className="text-xs" htmlFor="geocoding-forward">
                             {t("settings.geocoding.forwardEndpoint")}
                           </Label>
                           <Input
                             id="geocoding-forward"
-                            value={
-                              draftPreferences.geocoding.forwardEndpoint ?? ""
-                            }
+                            value={draftPreferences.geocoding.forwardEndpoint ?? ""}
                             onChange={(event) =>
                               updateGeocoding({
                                 forwardEndpoint: event.target.value,
@@ -2307,17 +2145,12 @@ export function SettingsDialog({
                         </div>
 
                         <div className="space-y-1.5">
-                          <Label
-                            className="text-xs"
-                            htmlFor="geocoding-reverse"
-                          >
+                          <Label className="text-xs" htmlFor="geocoding-reverse">
                             {t("settings.geocoding.reverseEndpoint")}
                           </Label>
                           <Input
                             id="geocoding-reverse"
-                            value={
-                              draftPreferences.geocoding.reverseEndpoint ?? ""
-                            }
+                            value={draftPreferences.geocoding.reverseEndpoint ?? ""}
                             onChange={(event) =>
                               updateGeocoding({
                                 reverseEndpoint: event.target.value,
@@ -2335,12 +2168,8 @@ export function SettingsDialog({
                             id="geocoding-email"
                             type="email"
                             value={draftPreferences.geocoding.email ?? ""}
-                            onChange={(event) =>
-                              updateGeocoding({ email: event.target.value })
-                            }
-                            placeholder={t(
-                              "settings.geocoding.emailPlaceholder",
-                            )}
+                            onChange={(event) => updateGeocoding({ email: event.target.value })}
+                            placeholder={t("settings.geocoding.emailPlaceholder")}
                           />
                           <p className="text-xs text-muted-foreground">
                             {t("settings.geocoding.emailHint")}
@@ -2354,12 +2183,8 @@ export function SettingsDialog({
               {effectiveSection === "ai" ? (
                 <div className="space-y-5">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-semibold">
-                      {t("settings.ai.title")}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.ai.description")}
-                    </p>
+                    <h3 className="text-sm font-semibold">{t("settings.ai.title")}</h3>
+                    <p className="text-xs text-muted-foreground">{t("settings.ai.description")}</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs" htmlFor="settings-ai-provider">
@@ -2368,11 +2193,7 @@ export function SettingsDialog({
                     <Select
                       id="settings-ai-provider"
                       value={aiProvider}
-                      onChange={(event) =>
-                        setAiProvider(
-                          event.target.value as AssistantProviderId,
-                        )
-                      }
+                      onChange={(event) => setAiProvider(event.target.value as AssistantProviderId)}
                     >
                       {ASSISTANT_PROVIDER_IDS.map((id) => (
                         <option key={id} value={id}>
@@ -2382,9 +2203,7 @@ export function SettingsDialog({
                         </option>
                       ))}
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.ai.providerHint")}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t("settings.ai.providerHint")}</p>
                   </div>
                   {configuredProviders.has(aiProvider) ? (
                     <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
@@ -2406,9 +2225,7 @@ export function SettingsDialog({
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{t("settings.ai.secretsNote")}</span>
                   </div>
-                  {PROVIDER_FIELDS[aiProvider].some(
-                    (field) => osFieldEnvName(field) !== null,
-                  ) ? (
+                  {PROVIDER_FIELDS[aiProvider].some((field) => osFieldEnvName(field) !== null) ? (
                     <div className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
                       <Terminal className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{t("settings.ai.osEnvNote")}</span>
@@ -2418,15 +2235,11 @@ export function SettingsDialog({
                     {PROVIDER_FIELDS[aiProvider].map((field) => {
                       const revealed = revealedValueIds.has(field.envKey);
                       const osEnvName = osFieldEnvName(field);
-                      const fromOsEnv =
-                        getProviderField(field) === "" && osEnvName !== null;
+                      const fromOsEnv = getProviderField(field) === "" && osEnvName !== null;
                       return (
                         <div key={field.envKey} className="space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
-                            <Label
-                              className="text-xs"
-                              htmlFor={`settings-ai-${field.envKey}`}
-                            >
+                            <Label className="text-xs" htmlFor={`settings-ai-${field.envKey}`}>
                               {t(field.labelKey)}
                               {field.required ? null : (
                                 <span className="ms-1 font-normal text-muted-foreground">
@@ -2441,15 +2254,11 @@ export function SettingsDialog({
                           <div className="flex items-center gap-2">
                             <Input
                               id={`settings-ai-${field.envKey}`}
-                              type={
-                                field.secret && !revealed ? "password" : "text"
-                              }
+                              type={field.secret && !revealed ? "password" : "text"}
                               autoComplete="off"
                               spellCheck={false}
                               value={getProviderField(field)}
-                              onChange={(event) =>
-                                setProviderField(field, event.target.value)
-                              }
+                              onChange={(event) => setProviderField(field, event.target.value)}
                               placeholder={
                                 fromOsEnv
                                   ? t("settings.ai.osEnvPlaceholder")
@@ -2461,9 +2270,7 @@ export function SettingsDialog({
                                 type="button"
                                 size="icon"
                                 variant="ghost"
-                                onClick={() =>
-                                  toggleValueVisibility(field.envKey)
-                                }
+                                onClick={() => toggleValueVisibility(field.envKey)}
                                 aria-label={
                                   revealed
                                     ? t("settings.ai.hideValue", {
@@ -2514,9 +2321,7 @@ export function SettingsDialog({
               {effectiveSection === "environment" ? (
                 <div className="space-y-5">
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold">
-                      {t("settings.env.tokenTitle")}
-                    </h3>
+                    <h3 className="text-sm font-semibold">{t("settings.env.tokenTitle")}</h3>
                     <p className="text-xs text-muted-foreground">
                       <Trans
                         i18nKey="settings.env.tokenDescription"
@@ -2546,9 +2351,7 @@ export function SettingsDialog({
                     </p>
                   </div>
                   <div className="space-y-2 border-t pt-5">
-                    <h3 className="text-sm font-semibold">
-                      {t("settings.env.cesiumTokenTitle")}
-                    </h3>
+                    <h3 className="text-sm font-semibold">{t("settings.env.cesiumTokenTitle")}</h3>
                     <p className="text-xs text-muted-foreground">
                       <Trans
                         i18nKey="settings.env.cesiumTokenDescription"
@@ -2570,9 +2373,7 @@ export function SettingsDialog({
                       autoComplete="new-password"
                       placeholder={t("settings.env.cesiumTokenPlaceholder")}
                       value={draftDesktopSettings.cesiumIonToken}
-                      onChange={(event) =>
-                        updateCesiumIonToken(event.target.value)
-                      }
+                      onChange={(event) => updateCesiumIonToken(event.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
                       {t("settings.env.cesiumTokenStorageNote")}
@@ -2580,9 +2381,7 @@ export function SettingsDialog({
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t pt-5">
                     <div>
-                      <h3 className="text-sm font-semibold">
-                        {t("settings.env.variablesTitle")}
-                      </h3>
+                      <h3 className="text-sm font-semibold">{t("settings.env.variablesTitle")}</h3>
                       <p className="text-xs text-muted-foreground">
                         {t("settings.env.variablesCount", {
                           count: enabledVariableCount,
@@ -2609,12 +2408,9 @@ export function SettingsDialog({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {draftPreferences.environmentVariables.map(
-                        (variable, index) => {
-                          const variableName =
-                            variable.key ||
-                            t("settings.env.variableFallback");
-                          return (
+                      {draftPreferences.environmentVariables.map((variable, index) => {
+                        const variableName = variable.key || t("settings.env.variableFallback");
+                        return (
                           <div
                             key={variable.id}
                             className="grid grid-cols-[1.25rem_minmax(7rem,1fr)_minmax(7rem,1fr)_2rem_2rem] items-center gap-2"
@@ -2645,11 +2441,7 @@ export function SettingsDialog({
                             <Input
                               aria-label={t("settings.env.valueAria")}
                               placeholder={t("settings.env.valuePlaceholder")}
-                              type={
-                                revealedValueIds.has(variable.id)
-                                  ? "text"
-                                  : "password"
-                              }
+                              type={revealedValueIds.has(variable.id) ? "text" : "password"}
                               autoComplete="off"
                               value={variable.value}
                               onChange={(event) =>
@@ -2693,9 +2485,8 @@ export function SettingsDialog({
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          );
-                        },
-                      )}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2704,19 +2495,12 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">
-                        {t("settings.updates.title")}
-                      </h3>
+                      <h3 className="text-sm font-semibold">{t("settings.updates.title")}</h3>
                       <p className="text-xs text-muted-foreground">
                         {t("settings.updates.description")}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={resetUpdateSettings}
-                    >
+                    <Button type="button" size="sm" variant="outline" onClick={resetUpdateSettings}>
                       <RotateCcw className="h-3.5 w-3.5" />
                       {t("common.reset")}
                     </Button>
@@ -2733,9 +2517,7 @@ export function SettingsDialog({
                       }
                     />
                     <span className="space-y-1">
-                      <span className="block">
-                        {t("settings.updates.checkOnStartup")}
-                      </span>
+                      <span className="block">{t("settings.updates.checkOnStartup")}</span>
                       <span className="block text-xs text-muted-foreground">
                         {t("settings.updates.checkOnStartupHint")}
                       </span>
@@ -2748,9 +2530,7 @@ export function SettingsDialog({
                     <Select
                       id="settings-update-level"
                       value={draftDesktopSettings.updates.notificationLevel}
-                      disabled={
-                        !draftDesktopSettings.updates.checkOnStartup
-                      }
+                      disabled={!draftDesktopSettings.updates.checkOnStartup}
                       onChange={(event) =>
                         updateDraftUpdateSettings({
                           // The options are generated from
@@ -2779,16 +2559,10 @@ export function SettingsDialog({
             </div>
           </div>
           {error ? (
-            <div className="border-t px-6 py-2 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="border-t px-6 py-2 text-sm text-destructive">{error}</div>
           ) : null}
           <div className="flex justify-end gap-2 border-t px-6 py-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("common.cancel")}
             </Button>
             <Button type="button" onClick={saveSettings}>

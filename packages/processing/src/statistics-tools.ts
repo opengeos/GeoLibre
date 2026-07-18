@@ -34,41 +34,28 @@ const WEIGHTS_TYPE_OPTIONS = [
   { value: "distance", label: "Distance band" },
 ];
 
-function getLayer(
-  ctx: ProcessingContext,
-  paramId = "layer",
-): GeoLibreLayer | undefined {
+function getLayer(ctx: ProcessingContext, paramId = "layer"): GeoLibreLayer | undefined {
   const layerId = ctx.parameters[paramId] as string | undefined;
   return ctx.layers.find((layer) => layer.id === layerId);
 }
 
 /** Great-circle distance between two lon/lat points, in kilometres. */
-function haversineKm(
-  lon1: number,
-  lat1: number,
-  lon2: number,
-  lat2: number,
-): number {
+function haversineKm(lon1: number, lat1: number, lon2: number, lat2: number): number {
   const toRad = Math.PI / 180;
   const dLat = (lat2 - lat1) * toRad;
   const dLon = (lon2 - lon1) * toRad;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * toRad) *
-      Math.cos(lat2 * toRad) *
-      Math.sin(dLon / 2) ** 2;
+    Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
   return 2 * activeMeanRadiusKm() * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
 /** Standard-normal CDF via an Abramowitz-Stegun erf approximation. */
 function normalCdf(z: number): number {
-  const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
+  const t = 1 / (1 + (0.3275911 * Math.abs(z)) / Math.SQRT2);
   const y =
     1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t -
-      0.284496736) *
-      t +
-      0.254829592) *
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
       t *
       Math.exp(-(z * z) / 2);
   const cdfAbs = 0.5 * (1 + y);
@@ -84,9 +71,7 @@ function twoSidedP(z: number): number {
  * Representative lon/lat for each feature (centroid for non-point geometries).
  * Returns null entries for features whose geometry can't be located.
  */
-function featureCoords(
-  features: Feature[],
-): ([number, number] | null)[] {
+function featureCoords(features: Feature[]): ([number, number] | null)[] {
   return features.map((feature) => {
     const geometry = feature.geometry;
     if (!geometry) return null;
@@ -113,10 +98,7 @@ interface NumericSample {
   values: number[];
 }
 
-function collectNumericSample(
-  features: Feature[],
-  field: string,
-): NumericSample {
+function collectNumericSample(features: Feature[], field: string): NumericSample {
   const coords = featureCoords(features);
   const out: NumericSample = { features: [], coords: [], values: [] };
   features.forEach((feature, index) => {
@@ -145,18 +127,11 @@ function buildNeighbors(
     const distances: { j: number; d: number }[] = [];
     for (let j = 0; j < n; j++) {
       if (j === i) continue;
-      const d = haversineKm(
-        coords[i][0],
-        coords[i][1],
-        coords[j][0],
-        coords[j][1],
-      );
+      const d = haversineKm(coords[i][0], coords[i][1], coords[j][0], coords[j][1]);
       distances.push({ j, d });
     }
     if (type === "distance") {
-      neighbors.push(
-        distances.filter((entry) => entry.d <= thresholdKm).map((e) => e.j),
-      );
+      neighbors.push(distances.filter((entry) => entry.d <= thresholdKm).map((e) => e.j));
     } else {
       distances.sort((a, b) => a.d - b.d);
       neighbors.push(distances.slice(0, k).map((e) => e.j));
@@ -443,26 +418,20 @@ export const localMoransITool: ProcessingAlgorithm = {
       if (permutations - larger < larger) larger = permutations - larger;
       const pSim = (larger + 1) / (permutations + 1);
 
-      const quadrant =
-        z[i] > 0 ? (lag > 0 ? 1 : 4) : lag > 0 ? 2 : 3;
+      const quadrant = z[i] > 0 ? (lag > 0 ? 1 : 4) : lag > 0 ? 2 : 3;
       const isSig = pSim <= 0.05;
       if (isSig) significant++;
 
       props[`${field}_lisa_I`] = Number(localI.toFixed(6));
       props[`${field}_lisa_p`] = Number(pSim.toFixed(4));
       props[`${field}_lisa_q`] = quadrant;
-      props[`${field}_lisa_cluster`] = isSig
-        ? QUADRANT_LABEL[quadrant]
-        : "Not significant";
+      props[`${field}_lisa_cluster`] = isSig ? QUADRANT_LABEL[quadrant] : "Not significant";
     }
 
     ctx.log(
       `Local Moran's I for "${field}": ${significant} of ${n} features significant (p ≤ 0.05).`,
     );
-    ctx.addResultLayer?.(
-      `${layer.name} — LISA (${field})`,
-      featureCollection(out),
-    );
+    ctx.addResultLayer?.(`${layer.name} — LISA (${field})`, featureCollection(out));
   },
 };
 
@@ -472,11 +441,9 @@ export const localMoransITool: ProcessingAlgorithm = {
 function giBin(zScore: number): { bin: number; label: string } {
   const abs = Math.abs(zScore);
   const sign = zScore >= 0 ? "Hot spot" : "Cold spot";
-  if (abs >= 2.576)
-    return { bin: zScore >= 0 ? 3 : -3, label: `${sign} 99%` };
+  if (abs >= 2.576) return { bin: zScore >= 0 ? 3 : -3, label: `${sign} 99%` };
   if (abs >= 1.96) return { bin: zScore >= 0 ? 2 : -2, label: `${sign} 95%` };
-  if (abs >= 1.645)
-    return { bin: zScore >= 0 ? 1 : -1, label: `${sign} 90%` };
+  if (abs >= 1.645) return { bin: zScore >= 0 ? 1 : -1, label: `${sign} 90%` };
   return { bin: 0, label: "Not significant" };
 }
 
@@ -537,8 +504,7 @@ export const getisOrdTool: ProcessingAlgorithm = {
       let sumWx = 0;
       for (const j of members) sumWx += x[j];
       const numerator = sumWx - mean * w;
-      const denominator =
-        s * Math.sqrt((n * w - w * w) / (n - 1)) || Number.NaN;
+      const denominator = s * Math.sqrt((n * w - w * w) / (n - 1)) || Number.NaN;
       const zScore = numerator / denominator;
       const props = out[i].properties as Record<string, unknown>;
       if (!Number.isFinite(zScore)) {
@@ -561,10 +527,7 @@ export const getisOrdTool: ProcessingAlgorithm = {
     ctx.log(
       `Getis-Ord Gi* for "${field}": ${counts.hot} hot-spot, ${counts.cold} cold-spot features (n=${n}).`,
     );
-    ctx.addResultLayer?.(
-      `${layer.name} — Gi* (${field})`,
-      featureCollection(out),
-    );
+    ctx.addResultLayer?.(`${layer.name} — Gi* (${field})`, featureCollection(out));
   },
 };
 
@@ -600,9 +563,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
       return;
     }
     if (n > MAX_WEIGHTS_FEATURES) {
-      ctx.log(
-        `Error: ${n} points exceeds the ${MAX_WEIGHTS_FEATURES}-point limit.`,
-      );
+      ctx.log(`Error: ${n} points exceeds the ${MAX_WEIGHTS_FEATURES}-point limit.`);
       return;
     }
 
@@ -612,12 +573,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
       let nearest = Infinity;
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
-        const d = haversineKm(
-          coords[i][0],
-          coords[i][1],
-          coords[j][0],
-          coords[j][1],
-        );
+        const d = haversineKm(coords[i][0], coords[i][1], coords[j][0], coords[j][1]);
         if (d < nearest) nearest = d;
       }
       sumNn += nearest * 1000;
@@ -647,11 +603,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
     const zScore = (observedMean - expectedMean) / se;
     const p = twoSidedP(zScore);
     const pattern =
-      p > 0.05
-        ? "random (no significant pattern)"
-        : ratio < 1
-          ? "clustered"
-          : "dispersed";
+      p > 0.05 ? "random (no significant pattern)" : ratio < 1 ? "clustered" : "dispersed";
 
     ctx.log(`Average nearest neighbor (n=${n}):`);
     ctx.log(`  Observed mean distance: ${observedMean.toFixed(2)} m`);
@@ -668,8 +620,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
 export const kernelDensityTool: ProcessingAlgorithm = {
   id: "kernel-density",
   name: "Kernel density (heatmap)",
-  description:
-    "Estimate a density surface from points as a grid of cells, using a quartic kernel.",
+  description: "Estimate a density surface from points as a grid of cells, using a quartic kernel.",
   group: "Spatial Statistics",
   parameters: [
     {
@@ -808,9 +759,7 @@ export const kernelDensityTool: ProcessingAlgorithm = {
     }
 
     if (!cells.length) {
-      ctx.log(
-        "No density produced — every cell is empty. Increase the bandwidth.",
-      );
+      ctx.log("No density produced — every cell is empty. Increase the bandwidth.");
       return;
     }
     // Add a normalized 0..1 density for easy styling.

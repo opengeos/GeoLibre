@@ -32,10 +32,7 @@ describe("parseTimeValue", () => {
 
   it("parses ISO date and datetime strings", () => {
     assert.equal(parseTimeValue("2015-06-01"), Date.parse("2015-06-01"));
-    assert.equal(
-      parseTimeValue("2015-06-01T10:00:00Z"),
-      Date.parse("2015-06-01T10:00:00Z"),
-    );
+    assert.equal(parseTimeValue("2015-06-01T10:00:00Z"), Date.parse("2015-06-01T10:00:00Z"));
   });
 
   it("parses numeric strings and rejects non-dates", () => {
@@ -75,19 +72,13 @@ describe("detectValueKind", () => {
     assert.equal(detectValueKind([1_600_000_000_000, 1_700_000_000_000]), "epochMs");
     assert.equal(detectValueKind([1_600_000_000, 1_700_000_000]), "epochS");
     assert.equal(detectValueKind(["2015-06-01", "2016-06-01"]), "isoDate");
-    assert.equal(
-      detectValueKind(["2015-06-01T10:00:00Z", "2016-06-01T10:00:00Z"]),
-      "isoDateTime",
-    );
+    assert.equal(detectValueKind(["2015-06-01T10:00:00Z", "2016-06-01T10:00:00Z"]), "isoDateTime");
   });
 
   it("does not classify a mixed numeric/string sample as epoch", () => {
     // A 50/50 epoch-number vs ISO-string sample must not become epoch, which
     // would coerce the ISO strings to NaN and silently drop them.
-    assert.equal(
-      detectValueKind([1_600_000_000_000, "2016-06-01T10:00:00Z"]),
-      "isoDateTime",
-    );
+    assert.equal(detectValueKind([1_600_000_000_000, "2016-06-01T10:00:00Z"]), "isoDateTime");
     assert.equal(detectValueKind([1_600_000_000, "2016-06-01"]), "isoDate");
     // An empty / unknown sample falls back to the safe string comparison.
     assert.equal(detectValueKind([]), "isoDateTime");
@@ -120,10 +111,7 @@ describe("detectTimeProperties", () => {
 
 describe("buildTimeBinding", () => {
   it("computes the extent, value kind, and default window", () => {
-    const fc = pointFeatures([
-      { date: "2015-06-01" },
-      { date: "2020-06-01" },
-    ]);
+    const fc = pointFeatures([{ date: "2015-06-01" }, { date: "2020-06-01" }]);
     const binding = buildTimeBinding(fc, "date");
     assert.ok(binding);
     assert.equal(binding?.valueKind, "isoDate");
@@ -155,35 +143,23 @@ describe("buildTimeBinding", () => {
 describe("addGranularityUnits", () => {
   it("advances by calendar units in UTC", () => {
     const base = new Date("2015-06-15T00:00:00Z");
-    assert.equal(
-      addGranularityUnits(base, "year", 1).toISOString(),
-      "2016-06-15T00:00:00.000Z",
-    );
-    assert.equal(
-      addGranularityUnits(base, "month", 2).toISOString(),
-      "2015-08-15T00:00:00.000Z",
-    );
-    assert.equal(
-      addGranularityUnits(base, "day", -1).toISOString(),
-      "2015-06-14T00:00:00.000Z",
-    );
+    assert.equal(addGranularityUnits(base, "year", 1).toISOString(), "2016-06-15T00:00:00.000Z");
+    assert.equal(addGranularityUnits(base, "month", 2).toISOString(), "2015-08-15T00:00:00.000Z");
+    assert.equal(addGranularityUnits(base, "day", -1).toISOString(), "2015-06-14T00:00:00.000Z");
   });
 
   it("clamps the day at month-end boundaries instead of rolling over", () => {
     assert.equal(
-      addGranularityUnits(new Date("2015-01-31T00:00:00Z"), "month", 1)
-        .toISOString(),
+      addGranularityUnits(new Date("2015-01-31T00:00:00Z"), "month", 1).toISOString(),
       "2015-02-28T00:00:00.000Z",
     );
     assert.equal(
-      addGranularityUnits(new Date("2024-02-29T00:00:00Z"), "year", 1)
-        .toISOString(),
+      addGranularityUnits(new Date("2024-02-29T00:00:00Z"), "year", 1).toISOString(),
       "2025-02-28T00:00:00.000Z",
     );
     // Month overflow folds into the year.
     assert.equal(
-      addGranularityUnits(new Date("2015-12-15T00:00:00Z"), "month", 2)
-        .toISOString(),
+      addGranularityUnits(new Date("2015-12-15T00:00:00Z"), "month", 2).toISOString(),
       "2016-02-15T00:00:00.000Z",
     );
   });
@@ -213,16 +189,8 @@ describe("buildTimeFilter", () => {
     const filter = buildTimeFilter(binding, new Date("2016-01-01T00:00:00Z"));
     assert.deepEqual(filter, [
       "all",
-      [
-        ">=",
-        ["slice", ["to-string", ["get", "date"]], 0, 19],
-        "2016-01-01T00:00:00",
-      ],
-      [
-        "<",
-        ["slice", ["to-string", ["get", "date"]], 0, 19],
-        "2017-01-01T00:00:00",
-      ],
+      [">=", ["slice", ["to-string", ["get", "date"]], 0, 19], "2016-01-01T00:00:00"],
+      ["<", ["slice", ["to-string", ["get", "date"]], 0, 19], "2017-01-01T00:00:00"],
     ]);
   });
 

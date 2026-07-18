@@ -5,11 +5,7 @@ import {
   type ProcessingModel,
   type ProcessingModelStep,
 } from "@geolibre/core";
-import type {
-  DuckDbCapability,
-  ProcessingAlgorithm,
-  ProcessingContext,
-} from "./types";
+import type { DuckDbCapability, ProcessingAlgorithm, ProcessingContext } from "./types";
 import { getVectorTool } from "./vector-tools";
 
 /** Synthetic layer-id prefix for a pipeline step's chained input. */
@@ -157,9 +153,7 @@ export async function runModel(
       parameters[step.inputParam ?? "layer"] = inputLayerId;
     }
 
-    host.log(
-      `Running step ${index + 1}/${model.steps.length}: ${tool.name}...`,
-    );
+    host.log(`Running step ${index + 1}/${model.steps.length}: ${tool.name}...`);
     let output: FeatureCollection | null = null;
     try {
       output = await runAlgorithmCapture(tool, parameters, { ...host, layers });

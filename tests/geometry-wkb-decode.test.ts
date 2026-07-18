@@ -10,33 +10,78 @@ import { decodeWkb, encodeWkb } from "../apps/geolibre-desktop/src/lib/geometry-
  */
 const GEOMETRIES: Geometry[] = [
   { type: "Point", coordinates: [-85.6, 42.9] },
-  { type: "LineString", coordinates: [[-85.6, 42.9], [-85.5, 43.0], [-85.4, 43.1]] },
+  {
+    type: "LineString",
+    coordinates: [
+      [-85.6, 42.9],
+      [-85.5, 43.0],
+      [-85.4, 43.1],
+    ],
+  },
   {
     type: "Polygon",
     coordinates: [
-      [[-85.6, 42.9], [-85.5, 42.9], [-85.5, 43.0], [-85.6, 43.0], [-85.6, 42.9]],
+      [
+        [-85.6, 42.9],
+        [-85.5, 42.9],
+        [-85.5, 43.0],
+        [-85.6, 43.0],
+        [-85.6, 42.9],
+      ],
     ],
   },
-  { type: "MultiPoint", coordinates: [[-85.6, 42.9], [-85.5, 43.0]] },
+  {
+    type: "MultiPoint",
+    coordinates: [
+      [-85.6, 42.9],
+      [-85.5, 43.0],
+    ],
+  },
   {
     type: "MultiLineString",
     coordinates: [
-      [[-85.6, 42.9], [-85.5, 43.0]],
-      [[-85.4, 43.1], [-85.3, 43.2]],
+      [
+        [-85.6, 42.9],
+        [-85.5, 43.0],
+      ],
+      [
+        [-85.4, 43.1],
+        [-85.3, 43.2],
+      ],
     ],
   },
   {
     type: "MultiPolygon",
     coordinates: [
-      [[[-85.6, 42.9], [-85.5, 42.9], [-85.5, 43.0], [-85.6, 42.9]]],
-      [[[-85.4, 42.8], [-85.3, 42.8], [-85.3, 42.9], [-85.4, 42.8]]],
+      [
+        [
+          [-85.6, 42.9],
+          [-85.5, 42.9],
+          [-85.5, 43.0],
+          [-85.6, 42.9],
+        ],
+      ],
+      [
+        [
+          [-85.4, 42.8],
+          [-85.3, 42.8],
+          [-85.3, 42.9],
+          [-85.4, 42.8],
+        ],
+      ],
     ],
   },
   {
     type: "GeometryCollection",
     geometries: [
       { type: "Point", coordinates: [-85.6, 42.9] },
-      { type: "LineString", coordinates: [[-85.6, 42.9], [-85.5, 43.0]] },
+      {
+        type: "LineString",
+        coordinates: [
+          [-85.6, 42.9],
+          [-85.5, 43.0],
+        ],
+      },
     ],
   },
 ];
@@ -52,9 +97,8 @@ describe("decodeWkb", () => {
   it("reads big-endian WKB", () => {
     // Hand-encode POINT(1 2) big-endian: 00, type 00000001, x=1.0, y=2.0.
     const bytes = new Uint8Array([
-      0x00, 0x00, 0x00, 0x00, 0x01,
-      0x3f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x01, 0x3f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]);
     assert.deepEqual(decodeWkb(bytes), { type: "Point", coordinates: [1, 2] });
   });

@@ -96,11 +96,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     isSpinGlobePanelVisible,
     isSpinGlobePanelVisible,
   );
-  const sunVisible = useSyncExternalStore(
-    subscribeSunPanel,
-    isSunPanelVisible,
-    isSunPanelVisible,
-  );
+  const sunVisible = useSyncExternalStore(subscribeSunPanel, isSunPanelVisible, isSunPanelVisible);
   const routeAnimationVisible = useSyncExternalStore(
     subscribeRouteAnimationPanel,
     isRouteAnimationPanelVisible,

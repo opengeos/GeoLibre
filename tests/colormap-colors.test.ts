@@ -8,10 +8,7 @@ import {
 
 describe("colormapColors", () => {
   it("returns a built-in ramp's exact colors synchronously", () => {
-    assert.deepEqual(
-      colormapColors("viridis"),
-      getVectorColorRamp("viridis").colors,
-    );
+    assert.deepEqual(colormapColors("viridis"), getVectorColorRamp("viridis").colors);
   });
 
   it("returns null for a sprite colormap that has not been sampled", () => {
@@ -22,10 +19,7 @@ describe("colormapColors", () => {
 
 describe("warmColormapColors", () => {
   it("resolves a built-in ramp immediately to its colors", async () => {
-    assert.deepEqual(
-      await warmColormapColors("plasma"),
-      getVectorColorRamp("plasma").colors,
-    );
+    assert.deepEqual(await warmColormapColors("plasma"), getVectorColorRamp("plasma").colors);
   });
 
   it("yields null when sampling is unavailable (no DOM canvas)", async () => {

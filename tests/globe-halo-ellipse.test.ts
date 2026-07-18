@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  fitEllipse,
-  type GlobeEllipse,
-} from "../packages/plugins/src/plugins/maplibre-effects";
+import { fitEllipse, type GlobeEllipse } from "../packages/plugins/src/plugins/maplibre-effects";
 
 /**
  * Sample `n` boundary points by casting rays at uniform angles from `from` (an
@@ -45,10 +42,7 @@ function ellipsePoints(
 }
 
 /** Largest absolute residual: how far each point sits off the fitted ellipse. */
-function maxResidual(
-  e: GlobeEllipse,
-  pts: Array<[number, number]>,
-): number {
+function maxResidual(e: GlobeEllipse, pts: Array<[number, number]>): number {
   const cos = Math.cos(e.angle);
   const sin = Math.sin(e.angle);
   let worst = 0;

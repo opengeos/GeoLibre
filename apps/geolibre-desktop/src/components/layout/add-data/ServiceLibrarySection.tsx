@@ -74,9 +74,7 @@ export function ServiceLibrarySection({
   onApply,
 }: ServiceLibrarySectionProps) {
   const { t } = useTranslation();
-  const [userEntries, setUserEntries] = useState<ServiceLibraryEntry[]>(() =>
-    readUserServices(),
-  );
+  const [userEntries, setUserEntries] = useState<ServiceLibraryEntry[]>(() => readUserServices());
   const [selectedId, setSelectedId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -86,15 +84,9 @@ export function ServiceLibrarySection({
   const importInputRef = useRef<HTMLInputElement>(null);
   const categoryListId = `service-categories-${kind}`;
 
-  const entries = useMemo(
-    () => listServices(kind, userEntries),
-    [kind, userEntries],
-  );
+  const entries = useMemo(() => listServices(kind, userEntries), [kind, userEntries]);
   const groups = useMemo(() => groupByCategory(entries), [entries]);
-  const categories = useMemo(
-    () => serviceCategories(entries),
-    [entries],
-  );
+  const categories = useMemo(() => serviceCategories(entries), [entries]);
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
   const canDeleteSelected = Boolean(selectedEntry && !selectedEntry.builtin);
 
@@ -128,8 +120,7 @@ export function ServiceLibrarySection({
     // Update the selected entry in place when it's a user-owned service;
     // otherwise (nothing or a built-in selected) mint a new one.
     const entry = createServiceEntry({
-      id:
-        selectedEntry && !selectedEntry.builtin ? selectedEntry.id : undefined,
+      id: selectedEntry && !selectedEntry.builtin ? selectedEntry.id : undefined,
       name,
       category: saveCategory,
       kind,
@@ -145,9 +136,7 @@ export function ServiceLibrarySection({
   // The save-form inputs live inside AddDataSourceForm's <form>, so a bare
   // Enter would submit it (adding a layer). Intercept Enter to save instead;
   // forms can't be nested, so this is the keyboard path for the save form.
-  const handleSaveFieldKeyDown = (
-    event: KeyboardEvent<HTMLInputElement>,
-  ) => {
+  const handleSaveFieldKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
       handleSave();
@@ -159,9 +148,7 @@ export function ServiceLibrarySection({
     persist(removeServiceEntry(userEntries, selectedEntry.id));
     setSelectedId("");
     setError(null);
-    setNotice(
-      t("addData.serviceLibrary.removed", { name: selectedEntry.name }),
-    );
+    setNotice(t("addData.serviceLibrary.removed", { name: selectedEntry.name }));
   };
 
   const handleExport = async () => {
@@ -171,17 +158,11 @@ export function ServiceLibrarySection({
       await saveTextFileWithFallback(serializeUserServices(userEntries), {
         defaultName: "geolibre-service-library.json",
         filters: [{ name: "JSON", extensions: ["json"] }],
-        browserTypes: [
-          { description: "JSON", accept: { "application/json": [".json"] } },
-        ],
+        browserTypes: [{ description: "JSON", accept: { "application/json": [".json"] } }],
         mimeType: "application/json",
       });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t("addData.serviceLibrary.errorExport"),
-      );
+      setError(err instanceof Error ? err.message : t("addData.serviceLibrary.errorExport"));
     }
   };
 
@@ -236,12 +217,7 @@ export function ServiceLibrarySection({
           {t("addData.serviceLibrary.title")}
         </span>
         <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={openSaveForm}
-          >
+          <Button type="button" size="sm" variant="ghost" onClick={openSaveForm}>
             <Save className="me-1.5 h-3.5 w-3.5" />
             {t("addData.serviceLibrary.saveCurrent")}
           </Button>
@@ -281,9 +257,7 @@ export function ServiceLibrarySection({
             value={selectedId}
             onChange={(event) => handleSelect(event.target.value)}
           >
-            <option value="">
-              {t("addData.serviceLibrary.loadPlaceholder")}
-            </option>
+            <option value="">{t("addData.serviceLibrary.loadPlaceholder")}</option>
             {groups.map((group) => (
               <optgroup
                 key={group.label}
@@ -316,9 +290,7 @@ export function ServiceLibrarySection({
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {t("addData.serviceLibrary.empty")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("addData.serviceLibrary.empty")}</p>
       )}
 
       {isSaving ? (
@@ -355,12 +327,7 @@ export function ServiceLibrarySection({
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setIsSaving(false)}
-            >
+            <Button type="button" size="sm" variant="ghost" onClick={() => setIsSaving(false)}>
               {t("common.cancel")}
             </Button>
             <Button type="button" size="sm" onClick={handleSave}>
@@ -372,9 +339,7 @@ export function ServiceLibrarySection({
       ) : null}
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      {notice ? (
-        <p className="text-xs text-muted-foreground">{notice}</p>
-      ) : null}
+      {notice ? <p className="text-xs text-muted-foreground">{notice}</p> : null}
 
       <input
         ref={importInputRef}

@@ -15,13 +15,7 @@ function rows(...properties: Record<string, unknown>[]): ChartRow[] {
 
 describe("summarizeColumn", () => {
   it("summarizes a numeric field with a histogram", () => {
-    const data = rows(
-      { pop: 10 },
-      { pop: 20 },
-      { pop: 30 },
-      { pop: 40 },
-      { pop: null },
-    );
+    const data = rows({ pop: 10 }, { pop: 20 }, { pop: 30 }, { pop: 40 }, { pop: null });
     const summary = summarizeColumn(data, "pop");
     assert.ok(summary);
     assert.equal(summary.key, "pop");
@@ -38,12 +32,7 @@ describe("summarizeColumn", () => {
   });
 
   it("summarizes a text field with top values and no histogram", () => {
-    const data = rows(
-      { kind: "a" },
-      { kind: "a" },
-      { kind: "b" },
-      { kind: "" },
-    );
+    const data = rows({ kind: "a" }, { kind: "a" }, { kind: "b" }, { kind: "" });
     const summary = summarizeColumn(data, "kind");
     assert.ok(summary);
     assert.equal(summary.stats.kind, "text");
@@ -56,9 +45,7 @@ describe("summarizeColumn", () => {
   });
 
   it("lists up to COLUMN_EXPLORER_TOP_VALUES distinct text values", () => {
-    const data = rows(
-      ...Array.from({ length: 20 }, (_, i) => ({ id: `v${i}` })),
-    );
+    const data = rows(...Array.from({ length: 20 }, (_, i) => ({ id: `v${i}` })));
     const summary = summarizeColumn(data, "id");
     assert.ok(summary);
     if (summary.stats.kind === "text") {

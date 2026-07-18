@@ -17,12 +17,10 @@ const storage = new Map<string, string>();
   },
 };
 
-type ErrorBoundaryModule =
-  typeof import("../packages/ui/src/components/error-boundary");
+type ErrorBoundaryModule = typeof import("../packages/ui/src/components/error-boundary");
 type BoundariesModule =
   typeof import("../apps/geolibre-desktop/src/components/common/error-boundaries");
-type DiagnosticsModule =
-  typeof import("../apps/geolibre-desktop/src/lib/diagnostics");
+type DiagnosticsModule = typeof import("../apps/geolibre-desktop/src/lib/diagnostics");
 
 let ErrorBoundary: ErrorBoundaryModule["ErrorBoundary"];
 let resetKeysChanged: ErrorBoundaryModule["resetKeysChanged"];
@@ -31,15 +29,12 @@ let clearDiagnostics: DiagnosticsModule["clearDiagnostics"];
 let getDiagnosticsSnapshot: DiagnosticsModule["getDiagnosticsSnapshot"];
 
 before(async () => {
-  ({ ErrorBoundary, resetKeysChanged } = await import(
-    "../packages/ui/src/components/error-boundary"
-  ));
-  ({ reportBoundaryError } = await import(
-    "../apps/geolibre-desktop/src/components/common/error-boundaries"
-  ));
-  ({ clearDiagnostics, getDiagnosticsSnapshot } = await import(
-    "../apps/geolibre-desktop/src/lib/diagnostics"
-  ));
+  ({ ErrorBoundary, resetKeysChanged } =
+    await import("../packages/ui/src/components/error-boundary"));
+  ({ reportBoundaryError } =
+    await import("../apps/geolibre-desktop/src/components/common/error-boundaries"));
+  ({ clearDiagnostics, getDiagnosticsSnapshot } =
+    await import("../apps/geolibre-desktop/src/lib/diagnostics"));
 });
 
 describe("ErrorBoundary derived state", () => {

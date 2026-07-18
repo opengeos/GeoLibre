@@ -39,9 +39,7 @@ const EMBED_ENABLED_VALUES = new Set(["1", "true"]);
  *   Injectable for tests, where the Vite env does not exist.
  * @returns True when the onboarding wizard should not be shown.
  */
-export function shouldSuppressOnboarding(
-  env: OnboardingEnv = importMetaEnv(),
-): boolean {
+export function shouldSuppressOnboarding(env: OnboardingEnv = importMetaEnv()): boolean {
   return (
     welcomeDisabledByEnv(env) ||
     hasProjectDeepLinkIntent() ||
@@ -59,10 +57,7 @@ export function shouldSuppressOnboarding(
  */
 function welcomeDisabledByEnv(env: OnboardingEnv): boolean {
   const value = env?.VITE_WELCOME_DISABLED;
-  return (
-    typeof value === "string" &&
-    WELCOME_DISABLED_ENV_VALUES.has(value.trim().toLowerCase())
-  );
+  return typeof value === "string" && WELCOME_DISABLED_ENV_VALUES.has(value.trim().toLowerCase());
 }
 
 /**
@@ -107,7 +102,5 @@ function embeddedByParam(): boolean {
 function welcomeDisabledByParam(): boolean {
   if (typeof window === "undefined") return false;
   const value = new URLSearchParams(window.location.search).get("welcome");
-  return (
-    value !== null && WELCOME_DISABLED_VALUES.has(value.trim().toLowerCase())
-  );
+  return value !== null && WELCOME_DISABLED_VALUES.has(value.trim().toLowerCase());
 }

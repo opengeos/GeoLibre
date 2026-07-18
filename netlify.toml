@@ -10,15 +10,15 @@
 #   - VITE_GEE_OAUTH_CLIENT_ID  (Google Earth Engine OAuth client ID)
 
 [build]
-  # Mirrors the steps previously run in .github/workflows/netlify-preview.yml:
-  #   docs deps -> jupyterlite deps -> frontend deps -> web demo build -> docs
-  #   build -> bundle demo
-  # The jupyterlite deps let the web build's `prebuild` hook generate the
-  # self-hosted JupyterLite site (apps/.../public/jupyterlite/, served in the
-  # Notebook panel); without them that step skips and the panel 404s.
-  # The two trailing test -f checks guard against a silently empty/misplaced
-  # demo copy and a missing JupyterLite build.
-  command = """python -m pip install -r requirements-docs.txt \
+# Mirrors the steps previously run in .github/workflows/netlify-preview.yml:
+#   docs deps -> jupyterlite deps -> frontend deps -> web demo build -> docs
+#   build -> bundle demo
+# The jupyterlite deps let the web build's `prebuild` hook generate the
+# self-hosted JupyterLite site (apps/.../public/jupyterlite/, served in the
+# Notebook panel); without them that step skips and the panel 404s.
+# The two trailing test -f checks guard against a silently empty/misplaced
+# demo copy and a missing JupyterLite build.
+command = """python -m pip install -r requirements-docs.txt \
     && python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt \
     && npm ci \
     && npm run build -w geolibre-desktop \
@@ -27,12 +27,12 @@
     && cp -R apps/geolibre-desktop/dist/. site/demo/ \
     && test -f site/demo/index.html \
     && test -f site/demo/jupyterlite/lab/index.html"""
-  publish = "site"
+publish = "site"
 
 [build.environment]
-  NODE_VERSION = "22"
-  PYTHON_VERSION = "3.12"
-  # Emit relative asset paths so the demo works when served from /demo/.
-  GEOLIBRE_APP_BASE = "./"
-  # vite build exhausts Node's default ~2 GB heap; raise the limit.
-  NODE_OPTIONS = "--max-old-space-size=4096"
+NODE_VERSION = "22"
+PYTHON_VERSION = "3.12"
+# Emit relative asset paths so the demo works when served from /demo/.
+GEOLIBRE_APP_BASE = "./"
+# vite build exhausts Node's default ~2 GB heap; raise the limit.
+NODE_OPTIONS = "--max-old-space-size=4096"

@@ -17,11 +17,7 @@ import {
   type WmsLayerOption,
 } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
-import {
-  serviceFieldBoolean,
-  serviceFieldString,
-  type ServiceFields,
-} from "../service-library";
+import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 /**
@@ -49,9 +45,7 @@ export function WmsSource() {
   const [wmsLayers, setWmsLayers] = useState(wmsFormCache?.layers ?? "");
   const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
   const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");
-  const [wmsTransparent, setWmsTransparent] = useState(
-    wmsFormCache?.transparent ?? true,
-  );
+  const [wmsTransparent, setWmsTransparent] = useState(wmsFormCache?.transparent ?? true);
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
   const [wmsVersion, setWmsVersion] = useState(wmsFormCache?.version ?? "1.1.1");
   // True while the version has an explicit source — the selector, a pasted
@@ -59,17 +53,13 @@ export function WmsSource() {
   // auto-detection only fills the version in when no explicit source exists.
   // Mirrored in a ref so the async retrieve handler reads the value current at
   // response time, not the one captured when the button was clicked.
-  const [versionTouched, setVersionTouched] = useState(
-    wmsFormCache?.versionTouched ?? false,
-  );
+  const [versionTouched, setVersionTouched] = useState(wmsFormCache?.versionTouched ?? false);
   const versionTouchedRef = useRef(versionTouched);
   const markVersionTouched = (touched: boolean) => {
     versionTouchedRef.current = touched;
     setVersionTouched(touched);
   };
-  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(
-    wmsFormCache?.options ?? [],
-  );
+  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(wmsFormCache?.options ?? []);
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const layerListId = useId();
@@ -131,8 +121,7 @@ export function WmsSource() {
     const controller = new AbortController();
     retrieveAbortRef.current = controller;
     const token = ++retrieveTokenRef.current;
-    const isStale = () =>
-      token !== retrieveTokenRef.current || controller.signal.aborted;
+    const isStale = () => token !== retrieveTokenRef.current || controller.signal.aborted;
     setIsRetrieving(true);
     setRetrieveError(null);
     try {
@@ -161,9 +150,7 @@ export function WmsSource() {
     } catch (error) {
       if (isStale()) return;
       setLayerOptions([]);
-      setRetrieveError(
-        serviceRequestErrorMessage(error, t, t("addData.wms.retrieveError")),
-      );
+      setRetrieveError(serviceRequestErrorMessage(error, t, t("addData.wms.retrieveError")));
     } finally {
       if (token === retrieveTokenRef.current) setIsRetrieving(false);
     }
@@ -272,15 +259,11 @@ export function WmsSource() {
                 // must not clobber a manual selection.
                 const detected = wmsVersionFromEndpoint(value);
                 const serviceChanged =
-                  value.trim().split(/[?#]/)[0] !==
-                  previous.trim().split(/[?#]/)[0];
+                  value.trim().split(/[?#]/)[0] !== previous.trim().split(/[?#]/)[0];
                 if (serviceChanged) {
                   setWmsVersion(detected ?? "1.1.1");
                   markVersionTouched(detected != null);
-                } else if (
-                  detected &&
-                  detected !== wmsVersionFromEndpoint(previous)
-                ) {
+                } else if (detected && detected !== wmsVersionFromEndpoint(previous)) {
                   setWmsVersion(detected);
                   markVersionTouched(true);
                 }
@@ -307,19 +290,13 @@ export function WmsSource() {
               ) : (
                 <ListTree className="me-2 h-3.5 w-3.5" />
               )}
-              {isRetrieving
-                ? t("addData.wms.retrieving")
-                : t("addData.wms.retrieveLayers")}
+              {isRetrieving ? t("addData.wms.retrieving") : t("addData.wms.retrieveLayers")}
             </Button>
           </div>
-          {retrieveError ? (
-            <p className="text-xs text-destructive">{retrieveError}</p>
-          ) : null}
+          {retrieveError ? <p className="text-xs text-destructive">{retrieveError}</p> : null}
           {layerOptions.length > 0 ? (
             <div className="space-y-1.5">
-              <Label htmlFor={layerListId}>
-                {t("addData.wms.retrievedLayers")}
-              </Label>
+              <Label htmlFor={layerListId}>{t("addData.wms.retrievedLayers")}</Label>
               {/* A picker that lists every retrieved layer and fills the Layers
                   field below on select. Its own value stays empty (an action
                   menu, like Load sample data), so it always shows the full list

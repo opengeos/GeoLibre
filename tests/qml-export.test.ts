@@ -46,7 +46,17 @@ function polygons(): FeatureCollection {
       {
         type: "Feature",
         properties: {},
-        geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
+        },
       },
     ],
   };
@@ -70,7 +80,10 @@ describe("buildQml", () => {
     assert.match(compact(qml), /<layer class="SimpleFill"/);
     // #ff0000 at 0.6 opacity → 255,0,0,153.
     assert.match(compact(qml), /<Option name="color" type="QString" value="255,0,0,153"\/>/);
-    assert.match(compact(qml), /<Option name="outline_color" type="QString" value="0,255,0,255"\/>/);
+    assert.match(
+      compact(qml),
+      /<Option name="outline_color" type="QString" value="0,255,0,255"\/>/,
+    );
   });
 
   it("uses a SimpleMarker for points, sized from the circle diameter", () => {

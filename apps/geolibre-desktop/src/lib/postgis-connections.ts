@@ -43,10 +43,7 @@ export function prunePostgisConnections(liveLayerIds: Iterable<string>): void {
 }
 
 /** Remember the connection string an editable PostGIS layer was loaded with. */
-export function registerPostgisConnection(
-  layerId: string,
-  connection: string,
-): void {
+export function registerPostgisConnection(layerId: string, connection: string): void {
   ensurePruneSubscription();
   connectionsByLayerId.set(layerId, connection);
 }
@@ -66,14 +63,11 @@ export function unregisterPostgisConnection(layerId: string): void {
  * Sent with a save so the sidecar scopes deletions to rows this session
  * actually read, leaving concurrently inserted rows alone.
  */
-export function postgisBaselineKeys(
-  layer: GeoLibreLayer,
-): Array<string | number> | undefined {
+export function postgisBaselineKeys(layer: GeoLibreLayer): Array<string | number> | undefined {
   const keys = layer.metadata.postgisBaselineKeys;
   if (!Array.isArray(keys)) return undefined;
   return keys.filter(
-    (key): key is string | number =>
-      typeof key === "string" || typeof key === "number",
+    (key): key is string | number => typeof key === "string" || typeof key === "number",
   );
 }
 
@@ -81,15 +75,10 @@ export function postgisBaselineKeys(
  * The primary-key values carried by a freshly read PostGIS FeatureCollection
  * (the /postgis/read endpoint sets each row's key as `feature.id`).
  */
-export function postgisFeatureKeys(
-  geojson: FeatureCollection,
-): Array<string | number> {
+export function postgisFeatureKeys(geojson: FeatureCollection): Array<string | number> {
   return geojson.features
     .map((feature) => feature.id)
-    .filter(
-      (id): id is string | number =>
-        typeof id === "string" || typeof id === "number",
-    );
+    .filter((id): id is string | number => typeof id === "string" || typeof id === "number");
 }
 
 /**

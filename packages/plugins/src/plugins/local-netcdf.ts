@@ -132,10 +132,7 @@ export interface LocalNetcdfFile {
   /** Renderable variables (numeric, 2-D or higher), sorted by name. */
   listVariables(): LocalNetcdfVariable[];
   /** Build a self-contained Zarr v2 store for one 2-D slice of a variable. */
-  buildLayerRefs(
-    variable: string,
-    selector?: Record<string, number>
-  ): LocalNetcdfLayerRefs;
+  buildLayerRefs(variable: string, selector?: Record<string, number>): LocalNetcdfLayerRefs;
   /** Release backend resources (e.g. the WASM filesystem entry). */
   close(): void;
 }
@@ -182,7 +179,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
   private constructor(
     private readonly mod: H5wasmModule,
     private readonly file: H5File,
-    private readonly fsPath: string
+    private readonly fsPath: string,
   ) {}
 
   /**
@@ -218,7 +215,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
       throw new Error(
         `Could not read the file as HDF5/NetCDF-4. (${
           err instanceof Error ? err.message : String(err)
-        })`
+        })`,
       );
     }
   }
@@ -271,10 +268,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  buildLayerRefs(
-    variable: string,
-    selector: Record<string, number> = {}
-  ): LocalNetcdfLayerRefs {
+  buildLayerRefs(variable: string, selector: Record<string, number> = {}): LocalNetcdfLayerRefs {
     const ds = tryGet(this.file, variable);
     if (!isDataset(ds)) {
       throw new Error(`Variable "${variable}" not found in the file.`);
@@ -330,7 +324,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
   private readCoordinates(
     ny: number,
     nx: number,
-    variable: string
+    variable: string,
   ): { lat: Coordinate; lon: Coordinate } {
     const lat = this.readCoordinate(LAT_NAMES, ny, variable, LAT_RANGE);
     const lon = this.readCoordinate(LON_NAMES, nx, variable, LON_RANGE);
@@ -349,13 +343,11 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     names: string[],
     length: number,
     variablePath: string,
-    range: readonly [number, number]
+    range: readonly [number, number],
   ): Coordinate | null {
     const slash = variablePath.lastIndexOf("/");
     const group = slash >= 0 ? variablePath.slice(0, slash) : "";
-    const candidates = group
-      ? [...names.map((name) => `${group}/${name}`), ...names]
-      : names;
+    const candidates = group ? [...names.map((name) => `${group}/${name}`), ...names] : names;
     for (const path of candidates) {
       const entity = tryGet(this.file, path);
       if (!isDataset(entity)) continue;
@@ -367,7 +359,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
         !isTrustedCoordinate(
           baseName,
           h5StringAttr(entity, "units"),
-          h5StringAttr(entity, "standard_name")
+          h5StringAttr(entity, "standard_name"),
         )
       ) {
         continue;
@@ -379,7 +371,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
         h5ZarrDtype(entity.metadata),
         h5NumericAttr(entity, "scale_factor"),
         h5NumericAttr(entity, "add_offset"),
-        range
+        range,
       );
       if (accepted) return accepted;
     }
@@ -401,7 +393,7 @@ class Netcdf3File implements LocalNetcdfFile {
       throw new Error(
         `Could not read the file as NetCDF-3. (${
           err instanceof Error ? err.message : String(err)
-        })`
+        })`,
       );
     }
   }
@@ -437,10 +429,7 @@ class Netcdf3File implements LocalNetcdfFile {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  buildLayerRefs(
-    variable: string,
-    selector: Record<string, number> = {}
-  ): LocalNetcdfLayerRefs {
+  buildLayerRefs(variable: string, selector: Record<string, number> = {}): LocalNetcdfLayerRefs {
     const v = this.variables().find((x) => x.name === variable);
     if (!v) throw new Error(`Variable "${variable}" not found in the file.`);
     const shape = this.shape(v);
@@ -480,8 +469,7 @@ class Netcdf3File implements LocalNetcdfFile {
         lon: lon.data,
         lonDtype: lon.dtype,
         fillValue: normalizeFillValue(
-          nc3NumericAttr(v, "_FillValue", true) ??
-            nc3NumericAttr(v, "missing_value", true)
+          nc3NumericAttr(v, "_FillValue", true) ?? nc3NumericAttr(v, "missing_value", true),
         ),
         scaleFactor: nc3NumericAttr(v, "scale_factor"),
         addOffset: nc3NumericAttr(v, "add_offset"),
@@ -493,7 +481,7 @@ class Netcdf3File implements LocalNetcdfFile {
   private readCoordinate(
     names: string[],
     length: number,
-    range: readonly [number, number]
+    range: readonly [number, number],
   ): Coordinate | null {
     for (const name of names) {
       const v = this.variables().find((x) => x.name === name);
@@ -503,11 +491,7 @@ class Netcdf3File implements LocalNetcdfFile {
       const info = NC3_DTYPES[v.type];
       if (!info) continue;
       if (
-        !isTrustedCoordinate(
-          name,
-          nc3StringAttr(v, "units"),
-          nc3StringAttr(v, "standard_name")
-        )
+        !isTrustedCoordinate(name, nc3StringAttr(v, "units"), nc3StringAttr(v, "standard_name"))
       ) {
         continue;
       }
@@ -517,7 +501,7 @@ class Netcdf3File implements LocalNetcdfFile {
         info.dtype,
         nc3NumericAttr(v, "scale_factor"),
         nc3NumericAttr(v, "add_offset"),
-        range
+        range,
       );
       if (accepted) return accepted;
     }
@@ -533,9 +517,7 @@ class Netcdf3File implements LocalNetcdfFile {
  * @returns An open {@link LocalNetcdfFile}.
  * @throws If the file is neither a readable NetCDF-3 nor HDF5/NetCDF-4 file.
  */
-export async function openLocalNetcdf(
-  buffer: ArrayBuffer
-): Promise<LocalNetcdfFile> {
+export async function openLocalNetcdf(buffer: ArrayBuffer): Promise<LocalNetcdfFile> {
   const head = new Uint8Array(buffer.slice(0, HDF5_MAGIC.length));
   if (isNetcdf3Signature(head)) return Netcdf3File.open(buffer);
   if (isHdf5Signature(head)) return Hdf5NetcdfFile.open(buffer);
@@ -586,7 +568,7 @@ function acceptCoordinate(
   nativeDtype: string,
   scale: number | undefined,
   offset: number | undefined,
-  range: readonly [number, number]
+  range: readonly [number, number],
 ): Coordinate | null {
   const { data, dtype }: Coordinate =
     scale !== undefined || offset !== undefined
@@ -609,7 +591,7 @@ function acceptCoordinate(
 function isTrustedCoordinate(
   name: string,
   units: string | undefined,
-  standardName: string | undefined
+  standardName: string | undefined,
 ): boolean {
   if (!GENERIC_COORD_NAMES.has(name.toLowerCase())) return true;
   if (units && /degree/i.test(units)) return true;
@@ -676,9 +658,7 @@ export function buildInlineZarrRefs(grid: InlineZarrGrid): KerchunkRefs {
   // The coordinate arrays are always written under the fixed keys `lat`/`lon`,
   // so a data variable literally named `lat`/`lon` would collide with them.
   if (grid.variable === "lat" || grid.variable === "lon") {
-    throw new Error(
-      `Variable name "${grid.variable}" collides with a coordinate array.`
-    );
+    throw new Error(`Variable name "${grid.variable}" collides with a coordinate array.`);
   }
   const refs: KerchunkRefs = { ".zgroup": '{"zarr_format":2}' };
 
@@ -723,9 +703,7 @@ export function buildInlineZarrRefs(grid: InlineZarrGrid): KerchunkRefs {
  * @param grid The grid to inspect.
  * @returns The rolled data and longitude, or null if no roll is needed.
  */
-function rollLongitude(
-  grid: InlineZarrGrid
-): { data: TypedArrayLike; lon: Float64Array } | null {
+function rollLongitude(grid: InlineZarrGrid): { data: TypedArrayLike; lon: Float64Array } | null {
   const { nx, ny, lon } = grid;
   let min = Infinity;
   let max = -Infinity;
@@ -785,11 +763,7 @@ interface ZarrArraySpec {
  * reference map. The chunk spans the whole array (chunks == shape), so the key
  * is `name/0`, `name/0.0`, ... depending on rank.
  */
-function writeZarrArray(
-  refs: KerchunkRefs,
-  name: string,
-  spec: ZarrArraySpec
-): void {
+function writeZarrArray(refs: KerchunkRefs, name: string, spec: ZarrArraySpec): void {
   refs[`${name}/.zarray`] = JSON.stringify({
     zarr_format: 2,
     shape: spec.shape,
@@ -841,9 +815,7 @@ function isRenderableH5Dtype(meta: H5Metadata): boolean {
  * matches the `<`-prefixed Zarr dtypes we emit, so no byte-swapping is needed.
  */
 function typedArrayBytes(arr: TypedArrayLike): Uint8Array {
-  return new Uint8Array(
-    arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength)
-  );
+  return new Uint8Array(arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength));
 }
 
 /** Encode bytes as base64 in chunks (avoids String.fromCharCode arg limits). */
@@ -897,11 +869,7 @@ function h5FillValue(ds: H5Dataset): number | string | null {
  * Read a numeric NetCDF-3 attribute. When `allowNonFinite` is set, NaN/Infinity
  * pass through (for fill values); otherwise only finite numbers are returned.
  */
-function nc3NumericAttr(
-  v: Nc3Variable,
-  name: string,
-  allowNonFinite = false
-): number | undefined {
+function nc3NumericAttr(v: Nc3Variable, name: string, allowNonFinite = false): number | undefined {
   const value = v.attributes.find((a) => a.name === name)?.value;
   if (typeof value !== "number") return undefined;
   return allowNonFinite || Number.isFinite(value) ? value : undefined;
@@ -921,21 +889,14 @@ function unwrapScalar(value: unknown): unknown {
 }
 
 /** Apply `value * scale + offset` to every element, into a new Float64Array. */
-function applyScale(
-  arr: TypedArrayLike,
-  scale: number,
-  offset: number
-): Float64Array {
+function applyScale(arr: TypedArrayLike, scale: number, offset: number): Float64Array {
   const out = new Float64Array(arr.length);
   for (let i = 0; i < arr.length; i++) out[i] = Number(arr[i]) * scale + offset;
   return out;
 }
 
 /** Whether every value in the array is finite and falls within `[min, max]`. */
-function valuesWithin(
-  arr: TypedArrayLike,
-  [min, max]: readonly [number, number]
-): boolean {
+function valuesWithin(arr: TypedArrayLike, [min, max]: readonly [number, number]): boolean {
   for (let i = 0; i < arr.length; i++) {
     const v = Number(arr[i]);
     if (!Number.isFinite(v) || v < min || v > max) return false;

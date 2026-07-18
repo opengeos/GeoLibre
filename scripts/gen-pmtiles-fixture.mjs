@@ -13,22 +13,13 @@ const { initTools, runTool } = await import(
   new URL("node_modules/geolibre-wasm/tools.mjs", root).href
 );
 await initTools(
-  readFileSync(
-    fileURLToPath(new URL("node_modules/geolibre-wasm/geolibre-cli.wasm", root)),
-  ),
+  readFileSync(fileURLToPath(new URL("node_modules/geolibre-wasm/geolibre-cli.wasm", root))),
 );
 
 const result = await runTool("write_pmtiles", {
-  args: [
-    "--input=/work/dem.tif",
-    "--output=/work/mini.pmtiles",
-    "--min_zoom=0",
-    "--max_zoom=4",
-  ],
+  args: ["--input=/work/dem.tif", "--output=/work/mini.pmtiles", "--min_zoom=0", "--max_zoom=4"],
   input: {
-    "dem.tif": readFileSync(
-      fileURLToPath(new URL("tests/fixtures/striped.tif", root)),
-    ),
+    "dem.tif": readFileSync(fileURLToPath(new URL("tests/fixtures/striped.tif", root))),
   },
 });
 if (result.exitCode !== 0 || !result.files["mini.pmtiles"]) {

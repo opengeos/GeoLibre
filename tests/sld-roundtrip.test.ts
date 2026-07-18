@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type LayerStyle,
-  type VectorRule,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type LayerStyle, type VectorRule } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { buildSld, type SldExportableLayer } from "../packages/map/src/sld-export";
 import { applySldImport, parseSld } from "../packages/map/src/sld-import";
@@ -31,8 +27,24 @@ function fc(geometry: Geometry): FeatureCollection {
     geometry === "point"
       ? { type: "Point", coordinates: [0, 0] }
       : geometry === "line"
-        ? { type: "LineString", coordinates: [[0, 0], [1, 1]] }
-        : { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
+        ? {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          }
+        : {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+          };
   return {
     type: "FeatureCollection",
     features: [{ type: "Feature", properties: {}, geometry: geom }],
@@ -266,10 +278,7 @@ describe("SLD round-trip (style → SLD → style)", () => {
     });
     const out = roundTrip(input, "point");
     assert.equal(out.vectorStyleMode, "rule-based");
-    assert.equal(
-      out.vectorRules[0].filter,
-      JSON.stringify(["==", ["get", "flag"], true]),
-    );
+    assert.equal(out.vectorRules[0].filter, JSON.stringify(["==", ["get", "flag"], true]));
   });
 
   it("round-trips a circle marker as a plain circle without corrupting the stroke", () => {

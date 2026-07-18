@@ -14,15 +14,13 @@ const storage = new Map<string, string>();
   removeEventListener: () => {},
 };
 
-type NativeHttpModule =
-  typeof import("../apps/geolibre-desktop/src/lib/native-http");
+type NativeHttpModule = typeof import("../apps/geolibre-desktop/src/lib/native-http");
 let nativeHttpSuccessRecord: NativeHttpModule["nativeHttpSuccessRecord"];
 let nativeHttpFailureRecord: NativeHttpModule["nativeHttpFailureRecord"];
 
 before(async () => {
-  ({ nativeHttpSuccessRecord, nativeHttpFailureRecord } = await import(
-    "../apps/geolibre-desktop/src/lib/native-http"
-  ));
+  ({ nativeHttpSuccessRecord, nativeHttpFailureRecord } =
+    await import("../apps/geolibre-desktop/src/lib/native-http"));
 });
 
 describe("nativeHttpSuccessRecord", () => {

@@ -18,10 +18,7 @@ import {
   registerPMTilesArchive,
   unregisterPMTilesArchive,
 } from "@geolibre/map";
-import {
-  extractPmtiles,
-  type PmtilesExtractProgress,
-} from "@geolibre/processing";
+import { extractPmtiles, type PmtilesExtractProgress } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import {
   Check,
@@ -128,23 +125,13 @@ function fmtCoord(value: number): string {
 }
 
 /** Order two corners into a `[west, south, east, north]` box. */
-function orderBbox(
-  a: [number, number],
-  b: [number, number],
-): [number, number, number, number] {
-  return [
-    Math.min(a[0], b[0]),
-    Math.min(a[1], b[1]),
-    Math.max(a[0], b[0]),
-    Math.max(a[1], b[1]),
-  ];
+function orderBbox(a: [number, number], b: [number, number]): [number, number, number, number] {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
  * missing, out of the valid lng/lat range, or the box is degenerate. */
-function parseBbox(
-  coords: CoordFields,
-): [number, number, number, number] | null {
+function parseBbox(coords: CoordFields): [number, number, number, number] | null {
   const west = Number(coords.west);
   const south = Number(coords.south);
   const east = Number(coords.east);
@@ -204,10 +191,8 @@ function isProtomapsCompatible(sourceLayers: string[]): boolean {
  * bare "./basemaps-assets" from a relative base would break labels and icons,
  * while a bare "/basemaps-assets" would 404 under a sub-path. `document.baseURI`
  * turns the base-relative path into an absolute one that honours both. */
-const BASEMAP_ASSETS_BASE = new URL(
-  `${import.meta.env.BASE_URL}basemaps-assets`,
-  document.baseURI,
-).href;
+const BASEMAP_ASSETS_BASE = new URL(`${import.meta.env.BASE_URL}basemaps-assets`, document.baseURI)
+  .href;
 
 // Tracks the in-memory archive (and style-registry id) backing the currently
 // applied styled offline basemap. A styled basemap is not a GeoLibreLayer, so
@@ -278,11 +263,7 @@ function baseNameFromUrl(url: string): string {
  * is non-modal so the map stays interactive for drawing, mirroring the Raster
  * Subset panel.
  */
-export function BasemapExtractPanel({
-  open,
-  onClose,
-  mapControllerRef,
-}: BasemapExtractPanelProps) {
+export function BasemapExtractPanel({ open, onClose, mapControllerRef }: BasemapExtractPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((state) => state.addLayer);
   const setBasemapStyleUrl = useAppStore((state) => state.setBasemapStyleUrl);
@@ -294,9 +275,7 @@ export function BasemapExtractPanel({
   const basemapStyleUrl = useAppStore((state) => state.basemapStyleUrl);
   const isLiveOfflineBasemap = useCallback(
     (id: string) =>
-      basemapStyleUrl?.startsWith(
-        `${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`,
-      ) ?? false,
+      basemapStyleUrl?.startsWith(`${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`) ?? false,
     [basemapStyleUrl],
   );
 
@@ -321,13 +300,8 @@ export function BasemapExtractPanel({
 
   // The device-local catalogue of extracted basemaps, kept in sync so a new
   // extract (or a rename/delete elsewhere) refreshes the "Saved basemaps" list.
-  const [savedBasemaps, setSavedBasemaps] = useState<OfflineBasemap[]>(() =>
-    loadOfflineBasemaps(),
-  );
-  useEffect(
-    () => subscribeOfflineBasemaps(() => setSavedBasemaps(loadOfflineBasemaps())),
-    [],
-  );
+  const [savedBasemaps, setSavedBasemaps] = useState<OfflineBasemap[]>(() => loadOfflineBasemaps());
+  useEffect(() => subscribeOfflineBasemaps(() => setSavedBasemaps(loadOfflineBasemaps())), []);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -372,9 +346,7 @@ export function BasemapExtractPanel({
     const map = mapControllerRef.current?.getMap();
     if (!map) return;
     const b = map.getBounds();
-    setCoords(
-      coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]),
-    );
+    setCoords(coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]));
   }, [mapControllerRef]);
 
   // Reset every field whenever the panel opens (seeding the bbox from the
@@ -557,8 +529,7 @@ export function BasemapExtractPanel({
       if ((event.target as HTMLElement).closest("button")) return;
       event.preventDefault();
       const el = panelRef.current;
-      const parent =
-        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const parent = (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
       const pb = parent?.getBoundingClientRect();
       const eb = el?.getBoundingClientRect();
       const start: PanelPos = pos ?? {
@@ -575,12 +546,8 @@ export function BasemapExtractPanel({
       const move = (m: PointerEvent) => {
         if (!panelRef.current) return;
         const bounds = parent?.getBoundingClientRect();
-        const maxX = bounds
-          ? bounds.width - w - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
-        const maxY = bounds
-          ? bounds.height - h - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
+        const maxX = bounds ? bounds.width - w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxY = bounds ? bounds.height - h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
         setPos({
           x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
           y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
@@ -603,73 +570,63 @@ export function BasemapExtractPanel({
   // Resize from the bottom-end grip. Pins the top-start corner so the panel
   // grows toward the grip, clamped to a usable minimum and the room to the
   // viewport edge. Mirrors the Processing dialog's resize.
-  const handleResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.stopPropagation();
-      const el = panelRef.current;
-      if (!el) return;
-      const parent =
-        (el.offsetParent as HTMLElement | null) ?? el.parentElement ?? null;
-      const pb = parent?.getBoundingClientRect();
-      const eb = el.getBoundingClientRect();
-      const left = eb.left - (pb?.left ?? 0);
-      const top = eb.top - (pb?.top ?? 0);
-      // Pin the top-start corner (parent-relative) so the panel grows toward the
-      // grip without jumping.
-      setPos({ x: left, y: top });
-      resizeStart.current = {
-        x: event.clientX,
-        y: event.clientY,
-        w: eb.width,
-        h: eb.height,
-        left,
-        top,
-        parentW: pb?.width ?? window.innerWidth,
-        parentH: pb?.height ?? window.innerHeight,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-    },
-    [],
-  );
+  const handleResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    const el = panelRef.current;
+    if (!el) return;
+    const parent = (el.offsetParent as HTMLElement | null) ?? el.parentElement ?? null;
+    const pb = parent?.getBoundingClientRect();
+    const eb = el.getBoundingClientRect();
+    const left = eb.left - (pb?.left ?? 0);
+    const top = eb.top - (pb?.top ?? 0);
+    // Pin the top-start corner (parent-relative) so the panel grows toward the
+    // grip without jumping.
+    setPos({ x: left, y: top });
+    resizeStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      w: eb.width,
+      h: eb.height,
+      left,
+      top,
+      parentW: pb?.width ?? window.innerWidth,
+      parentH: pb?.height ?? window.innerHeight,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
 
-  const handleResizeMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const start = resizeStart.current;
-      if (!start) return;
-      // In an RTL layout the grip renders on the physical left, so the drag
-      // delta is inverted and the room to the edge is measured to the left. Pin
-      // the physical right edge by shifting `pos.x` as the width changes.
-      const isRtl = document.documentElement.dir === "rtl";
-      const availW = isRtl
-        ? start.left + start.w - PANEL_MARGIN
-        : start.parentW - start.left - PANEL_MARGIN;
-      const availH = start.parentH - start.top - PANEL_MARGIN;
-      const deltaX = event.clientX - start.x;
-      const newW = clamp(
-        start.w + (isRtl ? -deltaX : deltaX),
-        Math.min(PANEL_MIN_W, availW),
-        Math.max(PANEL_MIN_W, availW),
-      );
-      if (isRtl) setPos({ x: start.left + start.w - newW, y: start.top });
-      setSize({
-        w: newW,
-        h: clamp(
-          start.h + (event.clientY - start.y),
-          Math.min(PANEL_MIN_H, availH),
-          Math.max(PANEL_MIN_H, availH),
-        ),
-      });
-    },
-    [],
-  );
+  const handleResizeMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = resizeStart.current;
+    if (!start) return;
+    // In an RTL layout the grip renders on the physical left, so the drag
+    // delta is inverted and the room to the edge is measured to the left. Pin
+    // the physical right edge by shifting `pos.x` as the width changes.
+    const isRtl = document.documentElement.dir === "rtl";
+    const availW = isRtl
+      ? start.left + start.w - PANEL_MARGIN
+      : start.parentW - start.left - PANEL_MARGIN;
+    const availH = start.parentH - start.top - PANEL_MARGIN;
+    const deltaX = event.clientX - start.x;
+    const newW = clamp(
+      start.w + (isRtl ? -deltaX : deltaX),
+      Math.min(PANEL_MIN_W, availW),
+      Math.max(PANEL_MIN_W, availW),
+    );
+    if (isRtl) setPos({ x: start.left + start.w - newW, y: start.top });
+    setSize({
+      w: newW,
+      h: clamp(
+        start.h + (event.clientY - start.y),
+        Math.min(PANEL_MIN_H, availH),
+        Math.max(PANEL_MIN_H, availH),
+      ),
+    });
+  }, []);
 
-  const handleResizeEnd = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      resizeStart.current = null;
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    },
-    [],
-  );
+  const handleResizeEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    resizeStart.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }, []);
 
   const minZoomValue = Number(minZoom);
   const maxZoomValue = Number(maxZoom);
@@ -740,9 +697,7 @@ export function BasemapExtractPanel({
       // (roads/water/labels) in the chosen flavor; anything else is added as a
       // flat single-symbology overlay layer.
       const asStyledBasemap =
-        flavor !== "" &&
-        info.tileType === "vector" &&
-        isProtomapsCompatible(info.sourceLayers);
+        flavor !== "" && info.tileType === "vector" && isProtomapsCompatible(info.sourceLayers);
 
       if (asStyledBasemap) {
         const style = buildProtomapsBasemapStyle({
@@ -776,11 +731,7 @@ export function BasemapExtractPanel({
           },
           metadata: {
             externalNativeLayer: true,
-            nativeLayerIds: pmtilesNativeLayerIds(
-              layerId,
-              info.tileType,
-              info.sourceLayers,
-            ),
+            nativeLayerIds: pmtilesNativeLayerIds(layerId, info.tileType, info.sourceLayers),
             pickable: true,
             sourceId: layerId,
             sourceKind: "pmtiles-url",
@@ -1052,10 +1003,7 @@ export function BasemapExtractPanel({
   return (
     <>
       {screenPoints ? (
-        <svg
-          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
-          aria-hidden="true"
-        >
+        <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" aria-hidden="true">
           <polygon
             points={screenPoints.map((p) => `${p.x},${p.y}`).join(" ")}
             style={{ fill: "hsl(var(--primary))", stroke: "hsl(var(--primary))" }}
@@ -1086,10 +1034,7 @@ export function BasemapExtractPanel({
           onPointerDown={handleDragStart}
         >
           <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-            <GripVertical
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
+            <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <Download className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <span className="truncate">{t("basemapExtract.title")}</span>
           </div>
@@ -1164,9 +1109,7 @@ export function BasemapExtractPanel({
             ) : null}
           </div>
           {drawing ? (
-            <p className="text-xs text-muted-foreground">
-              {t("basemapExtract.drawHint")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("basemapExtract.drawHint")}</p>
           ) : null}
 
           <div className="grid grid-cols-2 gap-2">
@@ -1195,9 +1138,7 @@ export function BasemapExtractPanel({
             ))}
           </div>
           {bboxInvalid ? (
-            <p className="text-xs text-destructive">
-              {t("basemapExtract.bboxHint")}
-            </p>
+            <p className="text-xs text-destructive">{t("basemapExtract.bboxHint")}</p>
           ) : null}
 
           <div className="grid grid-cols-2 gap-2">
@@ -1239,9 +1180,7 @@ export function BasemapExtractPanel({
             </div>
           </div>
           {zoomInvalid && minZoom !== "" && maxZoom !== "" ? (
-            <p className="text-xs text-destructive">
-              {t("basemapExtract.zoomHint")}
-            </p>
+            <p className="text-xs text-destructive">{t("basemapExtract.zoomHint")}</p>
           ) : null}
 
           <div className="space-y-1">
@@ -1379,9 +1318,7 @@ export function BasemapExtractPanel({
 
           <div className="space-y-1.5 border-t pt-3">
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">
-                {t("basemapExtract.savedTitle")}
-              </Label>
+              <Label className="text-xs">{t("basemapExtract.savedTitle")}</Label>
               <Button
                 type="button"
                 size="sm"
@@ -1391,23 +1328,15 @@ export function BasemapExtractPanel({
                 onClick={() => void openPmtilesAsBasemap()}
               >
                 {opening ? (
-                  <Loader2
-                    className="me-1 h-3.5 w-3.5 animate-spin"
-                    aria-hidden="true"
-                  />
+                  <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                 ) : (
-                  <FolderOpen
-                    className="me-1 h-3.5 w-3.5"
-                    aria-hidden="true"
-                  />
+                  <FolderOpen className="me-1 h-3.5 w-3.5" aria-hidden="true" />
                 )}
                 {t("basemapExtract.openFile")}
               </Button>
             </div>
             {savedBasemaps.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {t("basemapExtract.savedEmpty")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("basemapExtract.savedEmpty")}</p>
             ) : (
               <div className="max-h-48 space-y-1 overflow-auto">
                 {savedBasemaps.map((entry) => (
@@ -1440,23 +1369,16 @@ export function BasemapExtractPanel({
                     ) : (
                       <>
                         <div className="min-w-0 flex-1 space-y-0.5">
-                          <p
-                            className="truncate text-xs font-medium"
-                            title={entry.name}
-                          >
+                          <p className="truncate text-xs font-medium" title={entry.name}>
                             {entry.name}
                           </p>
                           <div className="flex items-center gap-1.5">
-                            {entry.tileType === "vector" &&
-                            entry.flavor != null ? (
+                            {entry.tileType === "vector" && entry.flavor != null ? (
                               <select
                                 className="h-6 rounded border border-input bg-background px-1 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                 value={(entry.flavor as ProtomapsFlavor) || "light"}
                                 onChange={(e) =>
-                                  handleSavedFlavorChange(
-                                    entry,
-                                    e.target.value as ProtomapsFlavor,
-                                  )
+                                  handleSavedFlavorChange(entry, e.target.value as ProtomapsFlavor)
                                 }
                                 aria-label={t("basemapExtract.style")}
                               >
@@ -1468,8 +1390,7 @@ export function BasemapExtractPanel({
                               </select>
                             ) : null}
                             <span className="truncate text-[11px] text-muted-foreground">
-                              {formatBytes(entry.bytes)} · z{entry.minZoom}–
-                              {entry.maxZoom}
+                              {formatBytes(entry.bytes)} · z{entry.minZoom}–{entry.maxZoom}
                             </span>
                           </div>
                         </div>
@@ -1502,10 +1423,7 @@ export function BasemapExtractPanel({
                               title={t("basemapExtract.delete")}
                               aria-label={t("basemapExtract.delete")}
                             >
-                              <Trash2
-                                className="h-3.5 w-3.5"
-                                aria-hidden="true"
-                              />
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -1532,15 +1450,9 @@ export function BasemapExtractPanel({
                               aria-label={t("basemapExtract.apply")}
                             >
                               {applyingId === entry.id ? (
-                                <Loader2
-                                  className="h-3.5 w-3.5 animate-spin"
-                                  aria-hidden="true"
-                                />
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                               ) : (
-                                <Layers
-                                  className="h-3.5 w-3.5"
-                                  aria-hidden="true"
-                                />
+                                <Layers className="h-3.5 w-3.5" aria-hidden="true" />
                               )}
                             </button>
                             <button
@@ -1550,10 +1462,7 @@ export function BasemapExtractPanel({
                               title={t("basemapExtract.rename")}
                               aria-label={t("basemapExtract.rename")}
                             >
-                              <Pencil
-                                className="h-3.5 w-3.5"
-                                aria-hidden="true"
-                              />
+                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -1562,10 +1471,7 @@ export function BasemapExtractPanel({
                               title={t("basemapExtract.delete")}
                               aria-label={t("basemapExtract.delete")}
                             >
-                              <Trash2
-                                className="h-3.5 w-3.5"
-                                aria-hidden="true"
-                              />
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                           </>
                         )}

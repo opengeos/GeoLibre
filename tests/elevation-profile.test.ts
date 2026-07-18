@@ -213,10 +213,7 @@ describe("elevation-profile deep link", () => {
         seen.push(coords);
       },
     };
-    await maybeHandleDeepLink(
-      consumer,
-      new URLSearchParams(`${ELEVATION_LINE_PARAM}=1,2;3,4`),
-    );
+    await maybeHandleDeepLink(consumer, new URLSearchParams(`${ELEVATION_LINE_PARAM}=1,2;3,4`));
     assert.equal(seen.length, 1);
     assert.deepEqual(seen[0], [
       [1, 2],
@@ -256,10 +253,7 @@ describe("elevation-profile Open-Meteo client", () => {
   });
 
   it("rejects when too many points are requested", async () => {
-    const points: LngLat[] = Array.from(
-      { length: MAX_POINTS_PER_REQUEST + 1 },
-      () => [0, 0],
-    );
+    const points: LngLat[] = Array.from({ length: MAX_POINTS_PER_REQUEST + 1 }, () => [0, 0]);
     await assert.rejects(
       () => fetchElevations(points, stubFetch({ elevation: [] })),
       ElevationFetchError,
@@ -267,19 +261,14 @@ describe("elevation-profile Open-Meteo client", () => {
   });
 
   it("rejects on a non-2xx response", async () => {
-    await assert.rejects(
-      () => fetchElevations([[0, 0]], stubFetch({}, 503)),
-      ElevationFetchError,
-    );
+    await assert.rejects(() => fetchElevations([[0, 0]], stubFetch({}, 503)), ElevationFetchError);
   });
 
   it("surfaces an aborted (timed-out) request as an ElevationFetchError", async () => {
-    const abortFetch: FetchLike = () =>
-      Promise.reject(new DOMException("aborted", "AbortError"));
+    const abortFetch: FetchLike = () => Promise.reject(new DOMException("aborted", "AbortError"));
     await assert.rejects(
       () => fetchElevations([[0, 0]], abortFetch),
-      (err: unknown) =>
-        err instanceof ElevationFetchError && /timed out/i.test(err.message),
+      (err: unknown) => err instanceof ElevationFetchError && /timed out/i.test(err.message),
     );
   });
 

@@ -1,8 +1,5 @@
 import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
-import {
-  DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
-  type MapController,
-} from "@geolibre/map";
+import { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, type MapController } from "@geolibre/map";
 import {
   closeDuckDBLayerPanel,
   closeEarthEnginePanel,
@@ -76,11 +73,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  createAppAPI,
-  getPluginManager,
-  usePluginRegistry,
-} from "../../hooks/usePlugins";
+import { createAppAPI, getPluginManager, usePluginRegistry } from "../../hooks/usePlugins";
 import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
 import { useOsmPbfLoader } from "../../hooks/useOsmPbfLoader";
 import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
@@ -88,11 +81,7 @@ import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
-import {
-  MENU_MANAGED_PLUGIN_IDS,
-  isMenuVisible,
-  isPluginVisible,
-} from "../../lib/ui-profile";
+import { MENU_MANAGED_PLUGIN_IDS, isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
@@ -199,8 +188,7 @@ export function TopToolbar({
       failed: t("geocode.reverseFailed"),
     });
     setBasemapControlLabels({
-      confirmStyleReplace: (name, count) =>
-        t("basemaps.confirmStyleReplace", { name, count }),
+      confirmStyleReplace: (name, count) => t("basemaps.confirmStyleReplace", { name, count }),
     });
     setAnnotationLabels({
       toolbar: t("annotations.toolbar"),
@@ -321,8 +309,7 @@ export function TopToolbar({
       addError: (message) => t("sourceCoop.addError", { message }),
       largeFileWarning: (size) => t("sourceCoop.largeFileWarning", { size }),
       streamHint: (size) => t("sourceCoop.streamHint", { size }),
-      tooLargeToOpen: (size, limit) =>
-        t("sourceCoop.tooLargeToOpen", { size, limit }),
+      tooLargeToOpen: (size, limit) => t("sourceCoop.tooLargeToOpen", { size, limit }),
     });
     setGraticuleLabels({
       title: t("graticule.title"),
@@ -379,19 +366,11 @@ export function TopToolbar({
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
-  const setSegmentEverythingOpen = useAppStore(
-    (s) => s.setSegmentEverythingOpen,
-  );
+  const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
-  const setLoadEditorFeaturesOpen = useAppStore(
-    (s) => s.setLoadEditorFeaturesOpen,
-  );
-  const loadEditorFeaturesOpen = useAppStore(
-    (s) => s.ui.loadEditorFeaturesOpen,
-  );
-  const loadEditorFeaturesLayerId = useAppStore(
-    (s) => s.ui.loadEditorFeaturesLayerId,
-  );
+  const setLoadEditorFeaturesOpen = useAppStore((s) => s.setLoadEditorFeaturesOpen);
+  const loadEditorFeaturesOpen = useAppStore((s) => s.ui.loadEditorFeaturesOpen);
+  const loadEditorFeaturesLayerId = useAppStore((s) => s.ui.loadEditorFeaturesLayerId);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const projectName = useAppStore((s) => s.projectName);
@@ -402,9 +381,7 @@ export function TopToolbar({
   // session-status badge can reopen it from outside this component tree (#754).
   // The dialog itself is rendered by DesktopShell (not here) so it survives
   // toolbar-hidden layouts; the toolbar only triggers it via this setter.
-  const setCollaborateDialogOpen = useAppStore(
-    (s) => s.setCollaborateDialogOpen,
-  );
+  const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
 
   const {
     plugins,
@@ -418,9 +395,7 @@ export function TopToolbar({
   } = usePluginRegistry();
   // Plugin ids hidden by the active UI profile (issue #500). Recompute only when
   // the profile changes so the Plugins menu can drop them.
-  const uiProfile = useDesktopSettingsStore(
-    (state) => state.desktopSettings.uiProfile,
-  );
+  const uiProfile = useDesktopSettingsStore((state) => state.desktopSettings.uiProfile);
   const hiddenPluginIds = useMemo(
     () =>
       new Set(
@@ -459,9 +434,7 @@ export function TopToolbar({
   // candidate doesn't blur the project-name field mid-composition.
   const projectNameComposingRef = useRef(false);
 
-  const [controlsVisible, setControlsVisible] = useState<
-    Record<ToolbarMapControl, boolean>
-  >(() =>
+  const [controlsVisible, setControlsVisible] = useState<Record<ToolbarMapControl, boolean>>(() =>
     MAP_CONTROL_ITEMS.reduce(
       (acc, { id }) => {
         acc[id] = DEFAULT_BUILT_IN_CONTROL_VISIBILITY[id];
@@ -472,9 +445,9 @@ export function TopToolbar({
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
   // PostgreSQL prefill (saved connection / clicked table) from the Browser panel.
-  const [addDataPostgres, setAddDataPostgres] = useState<
-    OpenAddDataPostgres | undefined
-  >(undefined);
+  const [addDataPostgres, setAddDataPostgres] = useState<OpenAddDataPostgres | undefined>(
+    undefined,
+  );
   // Drop the prefill whenever the dialog isn't on the PostgreSQL source, so a
   // stale prefill can't leak into a later postgres open reached via a path that
   // sets addDataKind directly (command palette / menus) rather than through the
@@ -499,9 +472,7 @@ export function TopToolbar({
   }, []);
   // Deck.gl Layer kind the Add Data dialog opens on (e.g. the 3D-model entry
   // jumps straight to the scenegraph layer type).
-  const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<
-    string | undefined
-  >(undefined);
+  const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<string | undefined>(undefined);
   const [netcdfDialogOpen, setNetcdfDialogOpen] = useState(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
@@ -563,9 +534,7 @@ export function TopToolbar({
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
-      const updated =
-        mapControllerRef.current?.setBuiltInControlVisible(control, visible) ??
-        false;
+      const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
       return updated ? { ...current, [control]: visible } : current;
     });
   };
@@ -978,7 +947,8 @@ export function TopToolbar({
       id: "view.set-view",
       title: t("toolbar.command.setView"),
       group: t("toolbar.commandGroup.view"),
-      keywords: "set view go to coordinates center zoom pitch bearing camera location longitude latitude",
+      keywords:
+        "set view go to coordinates center zoom pitch bearing camera location longitude latitude",
       icon: Crosshair,
       run: () => setSetViewOpen(true),
     },
@@ -1107,10 +1077,7 @@ export function TopToolbar({
   // reduce toolbar wrapping. The menu stays reachable other ways (e.g. Edit's
   // actions also have keyboard shortcuts). To make a future menu hideable, give
   // its trigger Button this class instead of `toolbarButtonClass`.
-  const toolbarSecondaryButtonClass = cn(
-    toolbarButtonClass,
-    "hidden md:inline-flex",
-  );
+  const toolbarSecondaryButtonClass = cn(toolbarButtonClass, "hidden md:inline-flex");
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:me-1");
   const appTitle = isTauri() ? "GeoLibre Desktop" : "GeoLibre";
   const renderToolbarLabel = (label: string) =>
@@ -1135,9 +1102,7 @@ export function TopToolbar({
     >
       <span className="me-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:me-2">
         <Map className="h-4 w-4" />
-        {showProjectInfo ? (
-          <span className="hidden sm:inline">{appTitle}</span>
-        ) : null}
+        {showProjectInfo ? <span className="hidden sm:inline">{appTitle}</span> : null}
       </span>
       {isMenuVisible(uiProfile, "project") && (
         <ProjectMenu
@@ -1181,25 +1146,19 @@ export function TopToolbar({
           }}
           onResetNorth={() => mapControllerRef.current?.resetNorth()}
           onResetPitch={() => mapControllerRef.current?.resetPitch()}
-          onResetPitchBearing={() =>
-            mapControllerRef.current?.resetNorthPitch()
-          }
+          onResetPitchBearing={() => mapControllerRef.current?.resetNorthPitch()}
           onSetView={() => setSetViewOpen(true)}
           onViewInGoogleEarth={() => {
             const map = mapControllerRef.current?.getMap();
             if (!map) return;
             const center = map.getCenter();
-            void openExternalLink(
-              googleEarthUrl(center.lat, center.lng, map.getZoom()),
-            );
+            void openExternalLink(googleEarthUrl(center.lat, center.lng, map.getZoom()));
           }}
           onViewInGoogleMaps={() => {
             const map = mapControllerRef.current?.getMap();
             if (!map) return;
             const center = map.getCenter();
-            void openExternalLink(
-              googleMapsUrl(center.lat, center.lng, map.getZoom()),
-            );
+            void openExternalLink(googleMapsUrl(center.lat, center.lng, map.getZoom()));
           }}
           onZoomIn={() => mapControllerRef.current?.zoomIn()}
           onZoomOut={() => mapControllerRef.current?.zoomOut()}
@@ -1340,8 +1299,7 @@ export function TopToolbar({
         getProject={async (title) => {
           // Shared projects are opened on another machine where the local files
           // don't exist, so always embed the vector data (never file references).
-          const { content, defaultProjectName } =
-            await projectFiles.buildEmbeddedProject(title);
+          const { content, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
           // Strip path separators, control chars, and other characters that are
           // illegal in filenames so the server gets a predictable name.
           const safeName = defaultProjectName.replace(
@@ -1357,9 +1315,7 @@ export function TopToolbar({
       <ProjectGalleryDialog
         open={galleryDialogOpen}
         onOpenChange={setGalleryDialogOpen}
-        onOpenProject={(url, authToken) =>
-          projectFiles.openProjectFromShareUrl(url, { authToken })
-        }
+        onOpenProject={(url, authToken) => projectFiles.openProjectFromShareUrl(url, { authToken })}
       />
       {isMenuVisible(uiProfile, "help") && (
         <HelpMenu
@@ -1391,11 +1347,7 @@ export function TopToolbar({
           }
         }}
       />
-      <AddNetcdfDialog
-        open={netcdfDialogOpen}
-        appApi={appApi}
-        onOpenChange={setNetcdfDialogOpen}
-      />
+      <AddNetcdfDialog open={netcdfDialogOpen} appApi={appApi} onOpenChange={setNetcdfDialogOpen} />
       <ProjectFileDialogs projectFiles={projectFiles} />
       <ConsentNoticeDialogs consent={consent} />
       <OsmPbfDialogs osmPbf={osmPbf} />

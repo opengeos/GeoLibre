@@ -38,12 +38,7 @@ describe("terrain-measure geometry: densifyLine", () => {
       [0, 0],
       [0.01, 0],
     ];
-    const { coords: sampled, distances } = densifyLine(
-      coords,
-      100,
-      500,
-      EARTH_RADIUS,
-    );
+    const { coords: sampled, distances } = densifyLine(coords, 100, 500, EARTH_RADIUS);
     assert.deepEqual(sampled[0], coords[0]);
     assert.deepEqual(sampled[sampled.length - 1], coords[1]);
     // ~1113 m at 100 m spacing → 13 samples (ceil(1113/100) + 1).
@@ -145,10 +140,7 @@ describe("terrain-measure geometry: pointInRing / buildAreaGrid", () => {
     ];
     const grid = buildAreaGrid(sliver, 256, EARTH_RADIUS);
     assert.ok(grid);
-    assert.ok(
-      grid.cols * grid.rows <= 256,
-      `expected ${grid.cols}x${grid.rows} <= 256 samples`,
-    );
+    assert.ok(grid.cols * grid.rows <= 256, `expected ${grid.cols}x${grid.rows} <= 256 samples`);
     const wide: LngLat[] = [
       [0, 0],
       [0.045, 0],
@@ -194,9 +186,7 @@ describe("terrain-measure geometry: surfaceArea", () => {
   it("scales the area by the slope secant on a uniform incline", () => {
     const grid = buildAreaGrid(square, 64, EARTH_RADIUS)!;
     // Elevation rises 1 m per meter eastward → 45° slope, secant √2.
-    const elevations = grid.coords.map(
-      (_, i) => (i % grid.cols) * grid.cellWidthMeters,
-    );
+    const elevations = grid.coords.map((_, i) => (i % grid.cols) * grid.cellWidthMeters);
     const result = surfaceArea(grid, elevations, 1_000_000);
     assert.ok(result);
     closeTo(result.surfaceSquareMeters, 1_000_000 * Math.SQRT2, 1000);
@@ -206,9 +196,7 @@ describe("terrain-measure geometry: surfaceArea", () => {
   it("clamps the mean slope like the area's secant", () => {
     const grid = buildAreaGrid(square, 64, EARTH_RADIUS)!;
     // A pathological spike: elevation rises 1000 m per meter eastward.
-    const elevations = grid.coords.map(
-      (_, i) => (i % grid.cols) * grid.cellWidthMeters * 1000,
-    );
+    const elevations = grid.coords.map((_, i) => (i % grid.cols) * grid.cellWidthMeters * 1000);
     const result = surfaceArea(grid, elevations, 1_000_000);
     assert.ok(result);
     // Both readouts are protected by the same 85-degree cap, so they can't
@@ -276,15 +264,9 @@ describe("terrain-measure samplers", () => {
       const count = (url.match(/latitude=([^&]*)/)?.[1] ?? "").split(",").length;
       calls.push(count);
       if (calls.length === 2) return new Response("boom", { status: 500 });
-      return new Response(
-        JSON.stringify({ elevation: Array(count).fill(7) }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ elevation: Array(count).fill(7) }), { status: 200 });
     };
-    const points: LngLat[] = Array.from({ length: 150 }, (_, i) => [
-      i / 1000,
-      0,
-    ]);
+    const points: LngLat[] = Array.from({ length: 150 }, (_, i) => [i / 1000, 0]);
     const elevations = await sampleRemoteElevations(points, fetchImpl);
     assert.deepEqual(calls, [100, 50]);
     assert.equal(elevations.length, 150);
@@ -298,8 +280,7 @@ describe("terrain-measure readout", () => {
     getTerrain: () => ({ exaggeration: 1 }),
     // 0.75 m of elevation per meter of northward ground distance → a 3-4-5
     // slope along a south-to-north line.
-    queryTerrainElevation: (point) =>
-      point[1] * ((Math.PI * EARTH_RADIUS) / 180) * 0.75,
+    queryTerrainElevation: (point) => point[1] * ((Math.PI * EARTH_RADIUS) / 180) * 0.75,
   };
 
   it("computes a 3-4-5 surface distance from map terrain", async () => {

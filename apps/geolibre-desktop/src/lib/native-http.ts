@@ -11,11 +11,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import {
-  appendDiagnostic,
-  formatUnknown,
-  type DiagnosticInput,
-} from "./diagnostics";
+import { appendDiagnostic, formatUnknown, type DiagnosticInput } from "./diagnostics";
 import { classifyFetchFailure } from "./fetch-error";
 
 /** The native HTTP commands exposed by the Tauri backend. */
@@ -71,10 +67,7 @@ export function nativeHttpFailureRecord(
     // Only append the classification when it says something useful; an ordinary
     // non-2xx status is "unknown" (label "request failed"), and appending it
     // would read as the redundant "failed (request failed)".
-    message:
-      kind !== "unknown"
-        ? `GET ${command} failed (${label})`
-        : `GET ${command} failed`,
+    message: kind !== "unknown" ? `GET ${command} failed (${label})` : `GET ${command} failed`,
     detail: hint ? `${hint}\n\n${rawError}` : rawError,
     durationMs,
     method: "GET",
@@ -137,9 +130,6 @@ export function fetchUrlBytes(
  * @param options - Optional context label for the diagnostics record.
  * @returns The resolved URL.
  */
-export function resolveUrlRedirect(
-  url: string,
-  options?: NativeHttpOptions,
-): Promise<string> {
+export function resolveUrlRedirect(url: string, options?: NativeHttpOptions): Promise<string> {
   return invokeNativeHttp<string>("resolve_url_redirect", url, options);
 }

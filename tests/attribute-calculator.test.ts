@@ -51,37 +51,22 @@ describe("expression compilation", () => {
   });
 
   it("exposes helper functions and the $index variable", () => {
+    assert.equal(compileExpression("upper(name)", DISCOVERED).evaluate({ name: "abc" }, 0), "ABC");
     assert.equal(
-      compileExpression("upper(name)", DISCOVERED).evaluate({ name: "abc" }, 0),
-      "ABC",
-    );
-    assert.equal(
-      compileExpression("round(pop / area, 2)", DISCOVERED).evaluate(
-        { pop: 10, area: 3 },
-        0,
-      ),
+      compileExpression("round(pop / area, 2)", DISCOVERED).evaluate({ pop: 10, area: 3 }, 0),
       3.33,
     );
-    assert.equal(
-      compileExpression("$index", DISCOVERED).evaluate({}, 7),
-      7,
-    );
+    assert.equal(compileExpression("$index", DISCOVERED).evaluate({}, 7), 7);
   });
 
   it("handles null-ish args in string helpers without coercing to 'null'", () => {
     // replace: a null search is a no-op; a null replacement is the empty string.
     assert.equal(
-      compileExpression('replace("a null b", x, "X")', ["x"]).evaluate(
-        { x: null },
-        0,
-      ),
+      compileExpression('replace("a null b", x, "X")', ["x"]).evaluate({ x: null }, 0),
       "a null b",
     );
     // substr uses slice semantics: a negative start counts from the end.
-    assert.equal(
-      compileExpression('substr("hello", -3)', []).evaluate({}, 0),
-      "llo",
-    );
+    assert.equal(compileExpression('substr("hello", -3)', []).evaluate({}, 0), "llo");
   });
 
   it("reaches non-identifier fields through props", () => {
@@ -94,9 +79,7 @@ describe("expression compilation", () => {
     // must be reachable only via props — compiling must not throw.
     const compiled = compileExpression('props["class"]', ["class", "name"]);
     assert.equal(compiled.evaluate({ class: "road", name: "x" }, 0), "road");
-    assert.doesNotThrow(() =>
-      compileExpression("name", ["class", "let", "name"]),
-    );
+    assert.doesNotThrow(() => compileExpression("name", ["class", "let", "name"]));
   });
 
   it("throws a SyntaxError for an unparseable or empty expression", () => {
@@ -150,14 +133,7 @@ describe("output coercion", () => {
 
 describe("calculateField", () => {
   it("creates a new field from an expression for every feature", () => {
-    const result = calculateField(
-      makeLayer(),
-      DISCOVERED,
-      "density",
-      true,
-      "pop / area",
-      "number",
-    );
+    const result = calculateField(makeLayer(), DISCOVERED, "density", true, "pop / area", "number");
     assert.ok(result && "patch" in result);
     assert.equal(result.evaluated, 2);
     assert.equal(result.errors, 0);
@@ -165,20 +141,12 @@ describe("calculateField", () => {
     assert.equal(props?.[0]?.density, 2);
     assert.equal(props?.[1]?.density, 2.5);
     // The new field is appended to the persisted column order.
-    const order = (result.patch.metadata?.columnSettings as { order?: string[] })
-      ?.order;
+    const order = (result.patch.metadata?.columnSettings as { order?: string[] })?.order;
     assert.deepEqual(order, undefined); // no prior explicit order → discovery places it
   });
 
   it("updates an existing field in place without adding metadata order", () => {
-    const result = calculateField(
-      makeLayer(),
-      DISCOVERED,
-      "pop",
-      false,
-      "pop * 2",
-      "number",
-    );
+    const result = calculateField(makeLayer(), DISCOVERED, "pop", false, "pop * 2", "number");
     assert.ok(result && "patch" in result);
     const props = result.patch.geojson?.features.map((f) => f.properties);
     assert.equal(props?.[0]?.pop, 20);
@@ -235,25 +203,12 @@ describe("calculateField", () => {
   });
 
   it("returns an error for an invalid expression instead of mutating", () => {
-    const result = calculateField(
-      makeLayer(),
-      DISCOVERED,
-      "x",
-      true,
-      "pop +",
-      "auto",
-    );
+    const result = calculateField(makeLayer(), DISCOVERED, "x", true, "pop +", "auto");
     assert.ok(result && "error" in result);
   });
 
   it("is a no-op when creating a colliding field or targeting an absent one", () => {
-    assert.equal(
-      calculateField(makeLayer(), DISCOVERED, "pop", true, "1", "number"),
-      null,
-    );
-    assert.equal(
-      calculateField(makeLayer(), DISCOVERED, "ghost", false, "1", "number"),
-      null,
-    );
+    assert.equal(calculateField(makeLayer(), DISCOVERED, "pop", true, "1", "number"), null);
+    assert.equal(calculateField(makeLayer(), DISCOVERED, "ghost", false, "1", "number"), null);
   });
 });

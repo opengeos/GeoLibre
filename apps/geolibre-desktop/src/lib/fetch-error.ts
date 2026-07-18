@@ -77,15 +77,11 @@ function errorNameAndMessage(error: unknown): { name: string; message: string } 
 }
 
 function isBrowserNetworkMessage(lowerMessage: string): boolean {
-  return BROWSER_NETWORK_MESSAGES.some((needle) =>
-    lowerMessage.includes(needle),
-  );
+  return BROWSER_NETWORK_MESSAGES.some((needle) => lowerMessage.includes(needle));
 }
 
 function isNativeNetworkMessage(lowerMessage: string): boolean {
-  return NATIVE_NETWORK_KEYWORDS.some((needle) =>
-    lowerMessage.includes(needle),
-  );
+  return NATIVE_NETWORK_KEYWORDS.some((needle) => lowerMessage.includes(needle));
 }
 
 /**

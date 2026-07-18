@@ -166,11 +166,7 @@ function asNumber(value: unknown): number | undefined {
 }
 
 /** Resolve the 1-indexed band number for a band name from tool parameters. */
-function resolveBand(
-  name: BandName,
-  sensor: string,
-  params: Record<string, unknown>,
-): number {
+function resolveBand(name: BandName, sensor: string, params: Record<string, unknown>): number {
   // Preset sensors always use their preset band layout; only the Custom sensor
   // reads the manual band-number params. (Mixing the two would let a stale
   // hidden custom value override a freshly selected preset.)
@@ -181,7 +177,7 @@ function resolveBand(
       sensor === "custom"
         ? `Band "${name}" is required for this index — enter a band number above.`
         : `The ${sensor} preset does not include the "${name}" band this index needs. ` +
-          `Switch to a sensor that has it, or select Custom to enter a band number.`,
+            `Switch to a sensor that has it, or select Custom to enter a band number.`,
     );
   }
   if (!Number.isInteger(band) || band < 1) {
@@ -196,9 +192,7 @@ function resolveBand(
  * knobs such as SAVI `L`). Throws a user-facing error if a required band is
  * missing or invalid.
  */
-export function buildSpectralIndexExpression(
-  params: Record<string, unknown>,
-): BuiltSpectralIndex {
+export function buildSpectralIndexExpression(params: Record<string, unknown>): BuiltSpectralIndex {
   const indexId = String(params.index ?? "");
   const index = getSpectralIndex(indexId);
   if (!index) throw new Error(`Unknown spectral index: "${indexId}".`);

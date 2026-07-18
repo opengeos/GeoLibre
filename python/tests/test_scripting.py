@@ -179,8 +179,7 @@ def test_identify_builds_params(m, monkeypatch):
     monkeypatch.setattr(
         m,
         "request",
-        lambda method, params=None, **_k: captured.update(method=method, params=params)
-        or [],
+        lambda method, params=None, **_k: captured.update(method=method, params=params) or [],
     )
     m.identify(-100, 40, layer_id="layer-1")
     assert captured["method"] == "identify"
@@ -203,9 +202,7 @@ def test_get_features_wraps_in_feature(m, monkeypatch):
     monkeypatch.setattr(
         m,
         "request",
-        lambda *_a, **_k: [
-            {"type": "Feature", "properties": {"a": 1}, "geometry": None}
-        ],
+        lambda *_a, **_k: [{"type": "Feature", "properties": {"a": 1}, "geometry": None}],
     )
     feats = m.get_features("layer-1")
     assert isinstance(feats[0], Feature)
@@ -216,11 +213,11 @@ def test_get_selected_features_wraps_in_feature(m, monkeypatch):
     monkeypatch.setattr(
         m,
         "request",
-        lambda method, params=None, **_k: [
-            {"type": "Feature", "properties": {"sel": 1}, "geometry": None}
-        ]
-        if method == "getSelectedFeatures"
-        else [],
+        lambda method, params=None, **_k: (
+            [{"type": "Feature", "properties": {"sel": 1}, "geometry": None}]
+            if method == "getSelectedFeatures"
+            else []
+        ),
     )
     feats = m.get_selected_features()
     assert isinstance(feats[0], Feature)
@@ -250,8 +247,10 @@ def test_get_drawn_features_wraps_in_feature(m, monkeypatch):
     monkeypatch.setattr(
         m,
         "request",
-        lambda method, params=None, **_k: captured.update(method=method)
-        or [{"type": "Feature", "properties": {"roi": 1}, "geometry": None}],
+        lambda method, params=None, **_k: (
+            captured.update(method=method)
+            or [{"type": "Feature", "properties": {"roi": 1}, "geometry": None}]
+        ),
     )
     feats = m.get_drawn_features()
     assert captured["method"] == "getDrawnFeatures"
@@ -263,9 +262,7 @@ def test_user_rois_returns_featurecollection(m, monkeypatch):
     monkeypatch.setattr(
         m,
         "request",
-        lambda *_a, **_k: [
-            {"type": "Feature", "properties": {}, "geometry": None}
-        ],
+        lambda *_a, **_k: [{"type": "Feature", "properties": {}, "geometry": None}],
     )
     fc = m.user_rois
     assert fc["type"] == "FeatureCollection"

@@ -45,20 +45,14 @@ const MODE_OPTIONS = [
   { value: "bicycle", label: "Cycling" },
 ];
 
-function getLayer(
-  ctx: ProcessingContext,
-  paramId: string,
-): GeoLibreLayer | undefined {
+function getLayer(ctx: ProcessingContext, paramId: string): GeoLibreLayer | undefined {
   const layerId = ctx.parameters[paramId] as string | undefined;
   return ctx.layers.find((layer) => layer.id === layerId);
 }
 
 /** Derives a stable point id from the feature id, an `id`/`name` property, or
  *  the feature index. */
-function pointId(
-  feature: Feature,
-  index: number,
-): string | number {
+function pointId(feature: Feature, index: number): string | number {
   const props = feature.properties ?? {};
   return (
     (feature.id as string | number | undefined) ??
@@ -127,8 +121,7 @@ function resolveEndpoint(ctx: ProcessingContext): string {
 export const isochroneTool: ProcessingAlgorithm = {
   id: "isochrone",
   name: "Isochrone / service area",
-  description:
-    "Travel-time or travel-distance reachability polygons from each point in a layer",
+  description: "Travel-time or travel-distance reachability polygons from each point in a layer",
   group: "Network",
   parameters: [
     {
@@ -195,9 +188,7 @@ export const isochroneTool: ProcessingAlgorithm = {
 
     const used = points.slice(0, MAX_ISOCHRONE_POINTS);
     if (points.length > used.length) {
-      ctx.log(
-        `Using the first ${used.length} of ${points.length} points (server-load cap).`,
-      );
+      ctx.log(`Using the first ${used.length} of ${points.length} points (server-load cap).`);
     }
 
     const features: Feature[] = [];
@@ -234,9 +225,7 @@ export const isochroneTool: ProcessingAlgorithm = {
       ctx.log("No isochrone polygons were returned.");
       return;
     }
-    ctx.log(
-      `Computed ${features.length} isochrone polygon(s) for ${used.length} point(s).`,
-    );
+    ctx.log(`Computed ${features.length} isochrone polygon(s) for ${used.length} point(s).`);
     ctx.addResultLayer?.("Isochrones", featureCollection(features));
   },
 };
@@ -302,27 +291,16 @@ export const odMatrixTool: ProcessingAlgorithm = {
         buildMatrixRequest(origins, destinations, mode),
         ctx.signal,
       );
-      const features = matrixResponseToFeatures(
-        response,
-        origins,
-        destinations,
-        { mode },
-      );
+      const features = matrixResponseToFeatures(response, origins, destinations, { mode });
       if (!features.length) {
         ctx.log("No reachable origin–destination pairs were returned.");
         return;
       }
-      ctx.log(
-        `Computed ${features.length} origin–destination pair(s) of ${cells} requested.`,
-      );
+      ctx.log(`Computed ${features.length} origin–destination pair(s) of ${cells} requested.`);
       ctx.addResultLayer?.("OD cost matrix", featureCollection(features));
     } catch (error) {
       if (ctx.signal?.aborted) return;
-      ctx.log(
-        `OD matrix failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      ctx.log(`OD matrix failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 };
@@ -367,8 +345,7 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
     },
   ],
   run: async (ctx) => {
-    const orderField =
-      (ctx.parameters.order_field as string | undefined)?.trim() || "";
+    const orderField = (ctx.parameters.order_field as string | undefined)?.trim() || "";
     const points = layerToSequencedPoints(getLayer(ctx, "layer"), orderField);
     if (points.length < 2) {
       ctx.log("Error: at least two point features are required to build a route");
@@ -384,22 +361,13 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
     const endpoint = resolveEndpoint(ctx);
 
     try {
-      const response = await requestRoute(
-        endpoint,
-        buildRouteRequest(used, mode),
-        ctx.signal,
-      );
+      const response = await requestRoute(endpoint, buildRouteRequest(used, mode), ctx.signal);
       const features = routeResponseToFeatures(response, used, { mode });
       if (!features.length) {
-        ctx.log(
-          "No route was returned. The points may be unroutable for this travel mode.",
-        );
+        ctx.log("No route was returned. The points may be unroutable for this travel mode.");
         return;
       }
-      const totalKm = features.reduce(
-        (sum, feature) => sum + feature.properties.distance_km,
-        0,
-      );
+      const totalKm = features.reduce((sum, feature) => sum + feature.properties.distance_km, 0);
       ctx.log(
         `Built a route through ${used.length} point(s): ${features.length} leg(s), ${totalKm.toFixed(2)} km total.`,
       );
@@ -411,9 +379,7 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
       // locations"); point the user at the actionable fix. The typed status
       // avoids depending on the wording of the error message.
       const isClientError =
-        error instanceof RoutingRequestError &&
-        error.status >= 400 &&
-        error.status < 500;
+        error instanceof RoutingRequestError && error.status >= 400 && error.status < 500;
       const hint = isClientError
         ? " The routing server rejected the request — reduce the number of points or use your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT)."
         : "";

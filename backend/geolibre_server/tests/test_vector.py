@@ -88,9 +88,7 @@ def test_status_returns_availability_shape() -> None:
 
 
 def test_run_without_geopandas_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        vector_ops, "geopandas_import_error", lambda: "No module named 'geopandas'"
-    )
+    monkeypatch.setattr(vector_ops, "geopandas_import_error", lambda: "No module named 'geopandas'")
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE))
     assert exc.value.status_code == 503
@@ -113,9 +111,7 @@ def test_buffer_returns_feature_collection() -> None:
 
 @requires_geopandas
 def test_intersection_overlay() -> None:
-    result = vector_run(
-        VectorToolRequest(tool_id="intersection", geojson=SQUARE, overlay=OVERLAP)
-    )
+    result = vector_run(VectorToolRequest(tool_id="intersection", geojson=SQUARE, overlay=OVERLAP))
     fc = result["geojson"]
     assert fc["type"] == "FeatureCollection"
     assert len(fc["features"]) >= 1
@@ -143,9 +139,7 @@ def test_single_layer_tools_return_feature_collection(tool_id: str) -> None:
 @requires_geopandas
 @pytest.mark.parametrize("tool_id", ["clip", "difference", "union"])
 def test_overlay_tools_return_feature_collection(tool_id: str) -> None:
-    result = vector_run(
-        VectorToolRequest(tool_id=tool_id, geojson=SQUARE, overlay=OVERLAP)
-    )
+    result = vector_run(VectorToolRequest(tool_id=tool_id, geojson=SQUARE, overlay=OVERLAP))
     fc = result["geojson"]
     assert fc["type"] == "FeatureCollection"
     assert len(fc["features"]) >= 1
@@ -154,20 +148,14 @@ def test_overlay_tools_return_feature_collection(tool_id: str) -> None:
 @requires_geopandas
 def test_union_dissolves_to_single_feature() -> None:
     # The sidecar union must match the client engine (one merged geometry).
-    result = vector_run(
-        VectorToolRequest(tool_id="union", geojson=SQUARE, overlay=OVERLAP)
-    )
+    result = vector_run(VectorToolRequest(tool_id="union", geojson=SQUARE, overlay=OVERLAP))
     assert len(result["geojson"]["features"]) == 1
 
 
 @requires_geopandas
 def test_buffer_rejects_negative_distance() -> None:
     with pytest.raises(HTTPException) as exc:
-        vector_run(
-            VectorToolRequest(
-                tool_id="buffer", geojson=SQUARE, parameters={"distance": -1}
-            )
-        )
+        vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE, parameters={"distance": -1}))
     assert exc.value.status_code == 400
 
 
@@ -188,9 +176,7 @@ def test_buffer_rejects_unknown_unit() -> None:
 def test_dissolve_rejects_unknown_field() -> None:
     with pytest.raises(HTTPException) as exc:
         vector_run(
-            VectorToolRequest(
-                tool_id="dissolve", geojson=SQUARE, parameters={"field": "missing"}
-            )
+            VectorToolRequest(tool_id="dissolve", geojson=SQUARE, parameters={"field": "missing"})
         )
     assert exc.value.status_code == 400
 
@@ -213,9 +199,7 @@ def _edited(name: str) -> dict:
 
 
 def test_write_without_geopandas_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        vector_ops, "geopandas_import_error", lambda: "No module named 'geopandas'"
-    )
+    monkeypatch.setattr(vector_ops, "geopandas_import_error", lambda: "No module named 'geopandas'")
     with pytest.raises(HTTPException) as exc:
         vector_write(WriteVectorRequest(path="/tmp/x.gpkg", geojson=_edited("a")))
     assert exc.value.status_code == 503
@@ -253,9 +237,7 @@ def test_write_rejects_empty_features(tmp_path) -> None:
 
 
 @requires_geopandas
-def test_write_rejects_oversized_input(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_write_rejects_oversized_input(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     src = tmp_path / "data.geojson"
     src.write_text('{"type":"FeatureCollection","features":[]}')
     monkeypatch.setattr(vector_ops, "MAX_FEATURES", 1)
@@ -270,13 +252,11 @@ def test_write_geojson_overwrites_in_place(tmp_path) -> None:
     import geopandas as gpd
 
     src = tmp_path / "layer.geojson"
-    gpd.GeoDataFrame.from_features(
-        _edited("original")["features"], crs="EPSG:4326"
-    ).to_file(src, driver="GeoJSON")
-
-    result = vector_write(
-        WriteVectorRequest(path=str(src), geojson=_edited("edited"))
+    gpd.GeoDataFrame.from_features(_edited("original")["features"], crs="EPSG:4326").to_file(
+        src, driver="GeoJSON"
     )
+
+    result = vector_write(WriteVectorRequest(path=str(src), geojson=_edited("edited")))
     assert result["feature_count"] == 1
     reread = gpd.read_file(src)
     assert list(reread["name"]) == ["edited"]
@@ -287,13 +267,11 @@ def test_write_geopackage_single_layer_round_trips(tmp_path) -> None:
     import geopandas as gpd
 
     src = tmp_path / "layer.gpkg"
-    gpd.GeoDataFrame.from_features(
-        _edited("original")["features"], crs="EPSG:4326"
-    ).to_file(src, layer="places", driver="GPKG")
-
-    result = vector_write(
-        WriteVectorRequest(path=str(src), geojson=_edited("edited"))
+    gpd.GeoDataFrame.from_features(_edited("original")["features"], crs="EPSG:4326").to_file(
+        src, layer="places", driver="GPKG"
     )
+
+    result = vector_write(WriteVectorRequest(path=str(src), geojson=_edited("edited")))
     assert result["feature_count"] == 1
     assert result["layer"] == "places"
     reread = gpd.read_file(src, layer="places")
@@ -305,17 +283,15 @@ def test_write_geopackage_preserves_sibling_layers(tmp_path) -> None:
     import geopandas as gpd
 
     src = tmp_path / "multi.gpkg"
-    gpd.GeoDataFrame.from_features(
-        _square("keep")["features"], crs="EPSG:4326"
-    ).to_file(src, layer="untouched", driver="GPKG")
-    gpd.GeoDataFrame.from_features(
-        _square("before")["features"], crs="EPSG:4326"
-    ).to_file(src, layer="target", driver="GPKG")
+    gpd.GeoDataFrame.from_features(_square("keep")["features"], crs="EPSG:4326").to_file(
+        src, layer="untouched", driver="GPKG"
+    )
+    gpd.GeoDataFrame.from_features(_square("before")["features"], crs="EPSG:4326").to_file(
+        src, layer="target", driver="GPKG"
+    )
 
     result = vector_write(
-        WriteVectorRequest(
-            path=str(src), geojson=_edited("after"), layer="target"
-        )
+        WriteVectorRequest(path=str(src), geojson=_edited("after"), layer="target")
     )
     assert result["layer"] == "target"
     # The written layer changed and the sibling table survived untouched.
@@ -328,14 +304,12 @@ def test_write_geopackage_rejects_unknown_layer(tmp_path) -> None:
     import geopandas as gpd
 
     src = tmp_path / "layer.gpkg"
-    gpd.GeoDataFrame.from_features(
-        _edited("a")["features"], crs="EPSG:4326"
-    ).to_file(src, layer="places", driver="GPKG")
+    gpd.GeoDataFrame.from_features(_edited("a")["features"], crs="EPSG:4326").to_file(
+        src, layer="places", driver="GPKG"
+    )
 
     with pytest.raises(HTTPException) as exc:
-        vector_write(
-            WriteVectorRequest(path=str(src), geojson=_edited("b"), layer="ghost")
-        )
+        vector_write(WriteVectorRequest(path=str(src), geojson=_edited("b"), layer="ghost"))
     assert exc.value.status_code == 404
 
 
@@ -346,12 +320,12 @@ def test_write_geopackage_defaults_to_first_feature_layer(tmp_path) -> None:
     import geopandas as gpd
 
     src = tmp_path / "multi.gpkg"
-    gpd.GeoDataFrame.from_features(
-        _square("a")["features"], crs="EPSG:4326"
-    ).to_file(src, layer="one", driver="GPKG")
-    gpd.GeoDataFrame.from_features(
-        _square("b")["features"], crs="EPSG:4326"
-    ).to_file(src, layer="two", driver="GPKG")
+    gpd.GeoDataFrame.from_features(_square("a")["features"], crs="EPSG:4326").to_file(
+        src, layer="one", driver="GPKG"
+    )
+    gpd.GeoDataFrame.from_features(_square("b")["features"], crs="EPSG:4326").to_file(
+        src, layer="two", driver="GPKG"
+    )
 
     result = vector_write(WriteVectorRequest(path=str(src), geojson=_edited("c")))
     assert result["layer"] == "one"
@@ -366,9 +340,9 @@ def test_write_geopackage_preserves_source_crs(tmp_path) -> None:
     src = tmp_path / "proj.gpkg"
     # A source stored in Web Mercator: the app would display it reprojected to
     # WGS84, and the edits come back as WGS84 — write-back must restore 3857.
-    gpd.GeoDataFrame.from_features(
-        _square("a")["features"], crs="EPSG:4326"
-    ).to_crs("EPSG:3857").to_file(src, layer="places", driver="GPKG")
+    gpd.GeoDataFrame.from_features(_square("a")["features"], crs="EPSG:4326").to_crs(
+        "EPSG:3857"
+    ).to_file(src, layer="places", driver="GPKG")
 
     vector_write(WriteVectorRequest(path=str(src), geojson=_edited("edited")))
     reread = gpd.read_file(src, layer="places")
@@ -376,9 +350,7 @@ def test_write_geopackage_preserves_source_crs(tmp_path) -> None:
 
 
 @requires_geopandas
-def test_write_respects_conversion_allowlist(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_write_respects_conversion_allowlist(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     import geopandas as gpd
 
     allowed = tmp_path / "allowed"
@@ -386,9 +358,9 @@ def test_write_respects_conversion_allowlist(
     outside = tmp_path / "outside"
     outside.mkdir()
     src = outside / "layer.geojson"
-    gpd.GeoDataFrame.from_features(
-        _edited("a")["features"], crs="EPSG:4326"
-    ).to_file(src, driver="GeoJSON")
+    gpd.GeoDataFrame.from_features(_edited("a")["features"], crs="EPSG:4326").to_file(
+        src, driver="GeoJSON"
+    )
 
     monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(allowed.resolve())])
     with pytest.raises(HTTPException) as exc:

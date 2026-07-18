@@ -2,9 +2,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 
 const pendingMercatorIdleGuards = new WeakSet<MapLibreMap>();
 
-export function ensureMercatorProjection(
-  map: MapLibreMap | null | undefined,
-): void {
+export function ensureMercatorProjection(map: MapLibreMap | null | undefined): void {
   if (!map) return;
   setMercatorProjection(map);
   scheduleMercatorIdleGuard(map);
@@ -68,10 +66,7 @@ export function acquireMercatorProjectionLock(
   app: MercatorProjectionApp,
   mapOverride?: MapLibreMap | null,
 ): void {
-  if (
-    mercatorProjectionHolders.size === 0 &&
-    capturedProjectionToRestore === null
-  ) {
+  if (mercatorProjectionHolders.size === 0 && capturedProjectionToRestore === null) {
     // Only remember "globe" as worth restoring. Never capture "mercator": it may
     // be a value WE forced and persisted into the project file, so a reopened
     // overlay-only project would otherwise capture the forced mercator as the
@@ -91,10 +86,7 @@ export function acquireMercatorProjectionLock(
  * @param key The same key passed to {@link acquireMercatorProjectionLock}.
  * @param app The app surface used to restore the projection.
  */
-export function releaseMercatorProjectionLock(
-  key: string,
-  app: MercatorProjectionApp,
-): void {
+export function releaseMercatorProjectionLock(key: string, app: MercatorProjectionApp): void {
   if (!mercatorProjectionHolders.delete(key)) return;
   if (mercatorProjectionHolders.size > 0) return;
   if (capturedProjectionToRestore === null) return;

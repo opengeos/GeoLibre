@@ -69,9 +69,7 @@ export class WfsXmlResponseError extends Error {
 function looksLikeHtmlResponse(text: string, contentType: string | null): boolean {
   if (contentType && /text\/html/i.test(contentType)) return true;
   const head = text.slice(0, 512);
-  return /<\s*(?:!doctype\s+html|html[\s>]|head[\s>]|body[\s>]|title[\s>])/i.test(
-    head,
-  );
+  return /<\s*(?:!doctype\s+html|html[\s>]|head[\s>]|body[\s>]|title[\s>])/i.test(head);
 }
 
 // Output-format tokens that commonly yield GeoJSON across WFS implementations.
@@ -121,10 +119,7 @@ export async function fetchGeoJsonFeatureCollection(
     response = await fetch(options.useWfsProxy ? proxyWfsRequestUrl(url) : url, {
       // Combine signals so a caller-supplied signal does not drop the timeout.
       signal: options.signal
-        ? AbortSignal.any([
-            options.signal,
-            AbortSignal.timeout(FETCH_TIMEOUT_MS),
-          ])
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)])
         : AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (error) {
@@ -206,9 +201,7 @@ export async function fetchWfsGeoJson(
   // down; fetchGeoJsonFeatureCollection ANDs its own per-call timeout on top,
   // but this budget is what bounds the total wall time.
   const budget = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, budget])
-    : budget;
+  const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
 
   let lastError: unknown;
   for (const outputFormat of candidates) {
@@ -230,9 +223,7 @@ export async function fetchWfsGeoJson(
       }
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new WfsXmlResponseError(false);
+  throw lastError instanceof Error ? lastError : new WfsXmlResponseError(false);
 }
 
 export async function refreshGeoJsonLayer(
@@ -309,9 +300,7 @@ export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
-export function getLayerRefreshConfig(
-  layer: GeoLibreLayer,
-): LayerRefreshConfig {
+export function getLayerRefreshConfig(layer: GeoLibreLayer): LayerRefreshConfig {
   const refresh = layer.metadata.refresh;
   if (!refresh || typeof refresh !== "object" || Array.isArray(refresh)) {
     return { enabled: false, intervalMs: 0 };
@@ -351,20 +340,14 @@ export function setLayerRefreshConfig(
   };
 }
 
-function appendQuery(
-  endpoint: string,
-  params: Array<[string, string]>,
-): string {
+function appendQuery(endpoint: string, params: Array<[string, string]>): string {
   const separator = endpoint.includes("?")
     ? endpoint.endsWith("?") || endpoint.endsWith("&")
       ? ""
       : "&"
     : "?";
   const query = params
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
-    )
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join("&");
   return `${endpoint}${separator}${query}`;
 }
@@ -385,10 +368,8 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
 }
 
 function layerHttpUrl(layer: GeoLibreLayer): string | null {
-  const sourcePath =
-    typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
-  const sourceUrl =
-    typeof layer.source.url === "string" ? layer.source.url.trim() : "";
+  const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+  const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";
   const url = sourceUrl || sourcePath;
   return isHttpUrl(url) ? url : null;
 }
@@ -406,9 +387,7 @@ function refreshSourceUrl(layer: GeoLibreLayer): string | null {
   // layer with an HTTP URL as refreshable unless it is explicitly tagged
   // with a non-refreshable kind.
   const sourceKind =
-    typeof layer.metadata.sourceKind === "string"
-      ? layer.metadata.sourceKind
-      : undefined;
+    typeof layer.metadata.sourceKind === "string" ? layer.metadata.sourceKind : undefined;
   if (sourceKind && !REFRESHABLE_GEOJSON_SOURCE_KINDS.has(sourceKind)) {
     return null;
   }
@@ -439,15 +418,11 @@ function isViteDevServer(): boolean {
 }
 
 function proxyWfsRequestUrl(url: string): string {
-  return isViteDevServer()
-    ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+  return isViteDevServer() ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
 }
 
 function proxyFeedRequestUrl(url: string): string {
-  return isViteDevServer()
-    ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+  return isViteDevServer() ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
 }
 
 function isHttpUrl(value: string): boolean {

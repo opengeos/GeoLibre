@@ -50,8 +50,7 @@ export function applyMatchedSelection(
   mode: SelectionMode,
 ): number {
   const store = useAppStore.getState();
-  const current =
-    store.selectedLayerId === targetLayerId ? store.selectedFeatureIds : [];
+  const current = store.selectedLayerId === targetLayerId ? store.selectedFeatureIds : [];
   const next = applySelectionMode(current, matchedIds, mode);
   if (store.selectedLayerId !== targetLayerId) store.selectLayer(targetLayerId);
   store.selectFeatures(next);

@@ -26,17 +26,13 @@ export function normalizeTileUrlTemplate(url: string): string {
 }
 
 export function hasXyzTilePlaceholders(url: string): boolean {
-  return ["x", "y", "z"].every((placeholder) =>
-    url.includes(`{${placeholder}}`),
-  );
+  return ["x", "y", "z"].every((placeholder) => url.includes(`{${placeholder}}`));
 }
 
 export function createXyzTileUrlTemplate(url: string): ResolvedXyzTileUrl {
   const originalUrl = normalizeTileUrlTemplate(url.trim());
   if (!hasXyzTilePlaceholders(originalUrl)) {
-    throw new Error(
-      "Enter an XYZ tile URL template with {z}, {x}, and {y} placeholders.",
-    );
+    throw new Error("Enter an XYZ tile URL template with {z}, {x}, and {y} placeholders.");
   }
 
   return {
@@ -61,13 +57,9 @@ export async function resolveXyzTileUrlTemplate(
     };
   }
 
-  const resolvedUrl = normalizeTileUrlTemplate(
-    await resolveShortXyzUrl(originalUrl, signal),
-  );
+  const resolvedUrl = normalizeTileUrlTemplate(await resolveShortXyzUrl(originalUrl, signal));
   if (!hasXyzTilePlaceholders(resolvedUrl)) {
-    throw new Error(
-      "Enter an XYZ tile URL template with {z}, {x}, and {y} placeholders.",
-    );
+    throw new Error("Enter an XYZ tile URL template with {z}, {x}, and {y} placeholders.");
   }
 
   return {
@@ -93,10 +85,7 @@ export function registerXyzTileProtocol(): void {
     });
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
-      data: array.buffer.slice(
-        array.byteOffset,
-        array.byteOffset + array.byteLength,
-      ),
+      data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),
     };
   });
   protocolRegistered = true;
@@ -131,8 +120,7 @@ async function resolveProjectXyzLayer(
   }
 
   const hasShortUrlMetadata =
-    typeof layer.metadata.originalUrl === "string" &&
-    layer.metadata.originalUrl.trim().length > 0;
+    typeof layer.metadata.originalUrl === "string" && layer.metadata.originalUrl.trim().length > 0;
   const normalizedUrl = normalizeTileUrlTemplate(url);
   const tileUrl =
     hasShortUrlMetadata || !hasXyzTilePlaceholders(normalizedUrl)
@@ -148,9 +136,7 @@ async function resolveProjectXyzLayer(
     metadata: {
       ...layer.metadata,
       originalUrl:
-        tileUrl.redirected || layer.metadata.originalUrl
-          ? tileUrl.originalUrl
-          : undefined,
+        tileUrl.redirected || layer.metadata.originalUrl ? tileUrl.originalUrl : undefined,
       resolvedUrl: tileUrl.redirected ? tileUrl.url : undefined,
       sourceKind: layer.metadata.sourceKind ?? "xyz-url",
     },
@@ -205,10 +191,7 @@ function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-async function resolveShortXyzUrl(
-  url: string,
-  signal?: AbortSignal,
-): Promise<string> {
+async function resolveShortXyzUrl(url: string, signal?: AbortSignal): Promise<string> {
   if (!isHttpUrl(url)) return url;
 
   if (isTauri()) {
@@ -225,10 +208,7 @@ async function resolveShortXyzUrl(
   return resolveShortXyzUrlWithFetch(url, signal);
 }
 
-async function resolveShortXyzUrlWithFetch(
-  url: string,
-  signal?: AbortSignal,
-): Promise<string> {
+async function resolveShortXyzUrlWithFetch(url: string, signal?: AbortSignal): Promise<string> {
   const response = await fetch(url, {
     headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
     redirect: "follow",
@@ -252,9 +232,7 @@ function isAbortError(error: unknown): boolean {
 
 function urlFromResolverResponse(response: Response): string | null {
   const resolvedUrl = normalizeTileUrlTemplate(response.url);
-  return resolvedUrl && hasXyzTilePlaceholders(resolvedUrl)
-    ? resolvedUrl
-    : null;
+  return resolvedUrl && hasXyzTilePlaceholders(resolvedUrl) ? resolvedUrl : null;
 }
 
 async function urlFromResolverBody(response: Response): Promise<string | null> {
@@ -289,11 +267,7 @@ function urlFromJsonValue(value: unknown): string | null {
   }
 
   const tiles = record.tiles;
-  if (
-    Array.isArray(tiles) &&
-    typeof tiles[0] === "string" &&
-    isHttpUrl(tiles[0])
-  ) {
+  if (Array.isArray(tiles) && typeof tiles[0] === "string" && isHttpUrl(tiles[0])) {
     return tiles[0];
   }
 

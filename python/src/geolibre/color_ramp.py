@@ -132,10 +132,7 @@ def quantile_breaks(values: list[float], count: int) -> list[float]:
         lower = math.floor(position)
         upper = min(len(sorted_values) - 1, math.ceil(position))
         ratio = position - lower
-        breaks.append(
-            sorted_values[lower]
-            + (sorted_values[upper] - sorted_values[lower]) * ratio
-        )
+        breaks.append(sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * ratio)
     return breaks
 
 

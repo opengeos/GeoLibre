@@ -26,30 +26,9 @@ import {
   type StyleLibraryEntry,
   type StyleLibraryEntryKind,
 } from "@geolibre/core";
-import {
-  applyQmlImport,
-  applySldImport,
-  parseQml,
-  parseSld,
-} from "@geolibre/map";
-import {
-  Button,
-  cn,
-  Input,
-  Label,
-  ScrollArea,
-  Select,
-} from "@geolibre/ui";
-import {
-  Check,
-  Download,
-  GripVertical,
-  Palette,
-  Save,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { applyQmlImport, applySldImport, parseQml, parseSld } from "@geolibre/map";
+import { Button, cn, Input, Label, ScrollArea, Select } from "@geolibre/ui";
+import { Check, Download, GripVertical, Palette, Save, Trash2, Upload, X } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -61,10 +40,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
 import { isQmlStyleXml } from "../../lib/style-format";
-import {
-  openLocalDataFileWithFallback,
-  saveTextFileWithFallback,
-} from "../../lib/tauri-io";
+import { openLocalDataFileWithFallback, saveTextFileWithFallback } from "../../lib/tauri-io";
 import { createCategorizedStops, createGraduatedStops } from "./StylePanel";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
@@ -187,8 +163,7 @@ export function StyleManagerPanel() {
       if ((event.target as HTMLElement).closest("button")) return;
       event.preventDefault();
       const el = panelRef.current;
-      const parent =
-        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const parent = (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
       const pb = parent?.getBoundingClientRect();
       const eb = el?.getBoundingClientRect();
       const start: PanelPos = pos ?? {
@@ -205,12 +180,8 @@ export function StyleManagerPanel() {
       const move = (m: PointerEvent) => {
         if (!panelRef.current) return;
         const bounds = parent?.getBoundingClientRect();
-        const maxX = bounds
-          ? bounds.width - w - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
-        const maxY = bounds
-          ? bounds.height - h - PANEL_MARGIN
-          : Number.POSITIVE_INFINITY;
+        const maxX = bounds ? bounds.width - w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxY = bounds ? bounds.height - h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
         setPos({
           x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
           y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
@@ -231,8 +202,7 @@ export function StyleManagerPanel() {
   );
 
   const layer = layers.find((l) => l.id === selectedLayerId);
-  const canUseLayer =
-    layer !== undefined && isStyleLibraryTargetLayer(layer.type);
+  const canUseLayer = layer !== undefined && isStyleLibraryTargetLayer(layer.type);
 
   // The panel is non-modal, so the selection can change while the save form
   // is open. Re-seed the name from the newly selected layer (the save always
@@ -240,10 +210,7 @@ export function StyleManagerPanel() {
   // to layer B can never save B's style under A's stale name.
   useEffect(() => {
     if (saveFormOpen) {
-      setSaveName(
-        useAppStore.getState().layers.find((l) => l.id === selectedLayerId)
-          ?.name ?? "",
-      );
+      setSaveName(useAppStore.getState().layers.find((l) => l.id === selectedLayerId)?.name ?? "");
     }
     // Only selection changes re-seed; typing in the field must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -258,11 +225,7 @@ export function StyleManagerPanel() {
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
-    for (const entry of [
-      ...BUILT_IN_STYLE_PRESETS,
-      ...styleLibrary,
-      ...projectStyleLibrary,
-    ]) {
+    for (const entry of [...BUILT_IN_STYLE_PRESETS, ...styleLibrary, ...projectStyleLibrary]) {
       for (const tag of entry.tags) tags.add(tag);
     }
     return [...tags].sort((a, b) => a.localeCompare(b));
@@ -322,15 +285,11 @@ export function StyleManagerPanel() {
     if (entry.kind === "ramp") {
       const mode = styleValue(layer.style, "vectorStyleMode");
       const property = styleValue(layer.style, "vectorStyleProperty");
-      const classified =
-        (mode === "graduated" || mode === "categorized") && property !== "";
+      const classified = (mode === "graduated" || mode === "categorized") && property !== "";
       if (classified) {
         const classCount =
-          patch.vectorStyleClassCount ??
-          styleValue(layer.style, "vectorStyleClassCount");
-        const ramp =
-          patch.vectorStyleColorRamp ??
-          styleValue(layer.style, "vectorStyleColorRamp");
+          patch.vectorStyleClassCount ?? styleValue(layer.style, "vectorStyleClassCount");
+        const ramp = patch.vectorStyleColorRamp ?? styleValue(layer.style, "vectorStyleColorRamp");
         const scheme =
           patch.vectorStyleClassificationScheme ??
           styleValue(layer.style, "vectorStyleClassificationScheme");
@@ -392,13 +351,15 @@ export function StyleManagerPanel() {
             extensions: ["json", "qml", "sld", "xml"],
           },
         ],
-        accept:
-          ".json,.qml,.sld,.xml,application/json,application/xml,text/xml",
+        accept: ".json,.qml,.sld,.xml,application/json,application/xml,text/xml",
         readText: true,
       });
       if (!picked || picked.text === undefined) return;
       const fileName =
-        picked.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ?? "";
+        picked.path
+          .split(/[\\/]/)
+          .pop()
+          ?.replace(/\.[^.]+$/, "") ?? "";
       const trimmed = picked.text.trimStart();
       if (trimmed.startsWith("<")) {
         // A QGIS QML or OGC SLD file: convert it to a full-style entry via the
@@ -473,10 +434,7 @@ export function StyleManagerPanel() {
     } catch (error) {
       setStatus({
         type: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : t("styleManager.importInvalid"),
+        text: error instanceof Error ? error.message : t("styleManager.importInvalid"),
       });
     }
   };
@@ -496,32 +454,24 @@ export function StyleManagerPanel() {
       return;
     }
     try {
-      const savedPath = await saveTextFileWithFallback(
-        serializeStyleLibrary(entries),
-        {
-          defaultName: "geolibre-styles.json",
-          filters: [
-            { name: t("styleManager.exportFilterName"), extensions: ["json"] },
-          ],
-          browserTypes: [
-            {
-              description: t("styleManager.exportFilterName"),
-              accept: { "application/json": [".json"] },
-            },
-          ],
-          mimeType: "application/json",
-        },
-      );
+      const savedPath = await saveTextFileWithFallback(serializeStyleLibrary(entries), {
+        defaultName: "geolibre-styles.json",
+        filters: [{ name: t("styleManager.exportFilterName"), extensions: ["json"] }],
+        browserTypes: [
+          {
+            description: t("styleManager.exportFilterName"),
+            accept: { "application/json": [".json"] },
+          },
+        ],
+        mimeType: "application/json",
+      });
       if (savedPath !== null) {
         setStatus({ type: "success", text: t("styleManager.exportSuccess") });
       }
     } catch (error) {
       setStatus({
         type: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : t("styleManager.exportFailed"),
+        text: error instanceof Error ? error.message : t("styleManager.exportFailed"),
       });
     }
   };
@@ -554,10 +504,7 @@ export function StyleManagerPanel() {
         title={t("styleManager.description")}
       >
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <GripVertical
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <Palette className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <span className="truncate">{t("styleManager.title")}</span>
         </div>
@@ -589,11 +536,7 @@ export function StyleManagerPanel() {
             variant="outline"
             className="h-8 px-2"
             disabled={!canUseLayer}
-            title={
-              canUseLayer
-                ? t("styleManager.saveCurrent")
-                : t("styleManager.noLayer")
-            }
+            title={canUseLayer ? t("styleManager.saveCurrent") : t("styleManager.noLayer")}
             aria-label={t("styleManager.saveCurrent")}
             onClick={() => {
               setSaveFormOpen((current) => !current);
@@ -630,9 +573,7 @@ export function StyleManagerPanel() {
               <button
                 key={tag}
                 type="button"
-                onClick={() =>
-                  setActiveTag((current) => (current === tag ? null : tag))
-                }
+                onClick={() => setActiveTag((current) => (current === tag ? null : tag))}
                 className={cn(
                   "rounded-full border px-2 py-0.5 text-xs",
                   activeTag === tag
@@ -650,9 +591,7 @@ export function StyleManagerPanel() {
           <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label htmlFor="style-manager-save-name">
-                  {t("styleManager.nameLabel")}
-                </Label>
+                <Label htmlFor="style-manager-save-name">{t("styleManager.nameLabel")}</Label>
                 <Input
                   id="style-manager-save-name"
                   value={saveName}
@@ -662,15 +601,11 @@ export function StyleManagerPanel() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="style-manager-save-kind">
-                  {t("styleManager.kindLabel")}
-                </Label>
+                <Label htmlFor="style-manager-save-kind">{t("styleManager.kindLabel")}</Label>
                 <Select
                   id="style-manager-save-kind"
                   value={saveKind}
-                  onChange={(event) =>
-                    setSaveKind(event.target.value as StyleLibraryEntryKind)
-                  }
+                  onChange={(event) => setSaveKind(event.target.value as StyleLibraryEntryKind)}
                 >
                   <option value="style">{kindLabels.style}</option>
                   <option value="symbol">{kindLabels.symbol}</option>
@@ -679,9 +614,7 @@ export function StyleManagerPanel() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="style-manager-save-tags">
-                  {t("styleManager.tagsLabel")}
-                </Label>
+                <Label htmlFor="style-manager-save-tags">{t("styleManager.tagsLabel")}</Label>
                 <Input
                   id="style-manager-save-tags"
                   value={saveTags}
@@ -691,29 +624,19 @@ export function StyleManagerPanel() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="style-manager-save-scope">
-                  {t("styleManager.scopeLabel")}
-                </Label>
+                <Label htmlFor="style-manager-save-scope">{t("styleManager.scopeLabel")}</Label>
                 <Select
                   id="style-manager-save-scope"
                   value={saveScope}
-                  onChange={(event) =>
-                    setSaveScope(event.target.value as "app" | "project")
-                  }
+                  onChange={(event) => setSaveScope(event.target.value as "app" | "project")}
                 >
                   <option value="app">{t("styleManager.scopeApp")}</option>
-                  <option value="project">
-                    {t("styleManager.scopeProject")}
-                  </option>
+                  <option value="project">{t("styleManager.scopeProject")}</option>
                 </Select>
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSaveFormOpen(false)}
-              >
+              <Button size="sm" variant="ghost" onClick={() => setSaveFormOpen(false)}>
                 {t("styleManager.cancel")}
               </Button>
               <Button size="sm" onClick={handleSave}>
@@ -737,9 +660,7 @@ export function StyleManagerPanel() {
         )}
 
         {!canUseLayer && (
-          <p className="text-xs text-muted-foreground">
-            {t("styleManager.noLayer")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("styleManager.noLayer")}</p>
         )}
 
         <ScrollArea className="min-h-0 flex-1">
@@ -764,14 +685,10 @@ export function StyleManagerPanel() {
                         >
                           <EntryPreview entry={entry} />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">
-                              {entry.name}
-                            </p>
+                            <p className="truncate text-sm font-medium">{entry.name}</p>
                             <p className="truncate text-xs text-muted-foreground">
                               {kindLabels[entry.kind]}
-                              {entry.tags.length > 0
-                                ? ` · ${entry.tags.join(", ")}`
-                                : ""}
+                              {entry.tags.length > 0 ? ` · ${entry.tags.join(", ")}` : ""}
                             </p>
                           </div>
                           <Button

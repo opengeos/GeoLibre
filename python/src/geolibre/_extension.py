@@ -94,9 +94,7 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
         ],
     )
     if bundle_present:
-        serverapp.log.info(
-            "[geolibre] Serving the bundled app at %s%s/", base_url, APP_ROUTE
-        )
+        serverapp.log.info("[geolibre] Serving the bundled app at %s%s/", base_url, APP_ROUTE)
     else:
         # A wheel built/installed without running the JS build (e.g. a dev
         # checkout) would otherwise 404 on every request with no explanation.

@@ -1,8 +1,4 @@
-import type {
-  CanvasSource,
-  LightSpecification,
-  Map as MapLibreMap,
-} from "maplibre-gl";
+import type { CanvasSource, LightSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 /**
@@ -86,12 +82,7 @@ export const DEFAULT_SUN_SETTINGS: SunSettings = {
   shadeOpacity: 0.55,
 };
 
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
 }
@@ -103,19 +94,11 @@ export function normalizeSunSettings(
 ): SunSettings {
   const c = (value ?? {}) as Partial<SunSettings>;
   return {
-    dateMs:
-      typeof c.dateMs === "number" && Number.isFinite(c.dateMs)
-        ? c.dateMs
-        : base.dateMs,
+    dateMs: typeof c.dateMs === "number" && Number.isFinite(c.dateMs) ? c.dateMs : base.dateMs,
     playing: typeof c.playing === "boolean" ? c.playing : base.playing,
     speed: clampNumber(c.speed, SUN_SPEED_MIN, SUN_SPEED_MAX, base.speed),
     loop: typeof c.loop === "boolean" ? c.loop : base.loop,
-    shadeOpacity: clampNumber(
-      c.shadeOpacity,
-      SUN_SHADE_MIN,
-      SUN_SHADE_MAX,
-      base.shadeOpacity,
-    ),
+    shadeOpacity: clampNumber(c.shadeOpacity, SUN_SHADE_MIN, SUN_SHADE_MAX, base.shadeOpacity),
   };
 }
 
@@ -156,10 +139,7 @@ export function sunEquatorialPosition(dateMs: number): SunEquatorial {
   const n = jd - 2451545.0;
   const meanLng = (280.46 + 0.9856474 * n) % 360;
   const meanAnomaly = ((357.528 + 0.9856003 * n) % 360) * D2R;
-  const eclipticLng =
-    meanLng +
-    1.915 * Math.sin(meanAnomaly) +
-    0.02 * Math.sin(2 * meanAnomaly);
+  const eclipticLng = meanLng + 1.915 * Math.sin(meanAnomaly) + 0.02 * Math.sin(2 * meanAnomaly);
   const obliquity = 23.439 - 0.0000004 * n;
   const lngRad = eclipticLng * D2R;
   const obRad = obliquity * D2R;
@@ -207,15 +187,11 @@ export function sunPositionAt(
   // floating-point rounding can push it fractionally past 1 (e.g. sun at zenith
   // for the current center at local noon), which would make asin return NaN.
   const sinAltitude =
-    Math.sin(latR) * Math.sin(decR) +
-    Math.cos(latR) * Math.cos(decR) * Math.cos(haR);
+    Math.sin(latR) * Math.sin(decR) + Math.cos(latR) * Math.cos(decR) * Math.cos(haR);
   const altitude = Math.asin(Math.min(1, Math.max(-1, sinAltitude))) * R2D;
   // Azimuth measured clockwise from north.
   const azimuth =
-    (Math.atan2(
-      Math.sin(haR),
-      Math.cos(haR) * Math.sin(latR) - Math.tan(decR) * Math.cos(latR),
-    ) *
+    (Math.atan2(Math.sin(haR), Math.cos(haR) * Math.sin(latR) - Math.tan(decR) * Math.cos(latR)) *
       R2D +
       180) %
     360;
@@ -369,16 +345,12 @@ class SunEngine {
     if (!this.nightContext) return;
     const subsolar = subsolarPoint(this.settings.dateMs);
     const subLng = subsolar.lng;
-    const shadeAlpha = Math.round(
-      Math.min(1, Math.max(0, this.settings.shadeOpacity)) * 255,
-    );
+    const shadeAlpha = Math.round(Math.min(1, Math.max(0, this.settings.shadeOpacity)) * 255);
     // Throttle: playing the clock re-renders every animation frame, but the
     // subsolar point creeps only a fraction of a degree per frame. Skip the
     // 460k-pixel recompute until it (or the shading depth) moves enough to be
     // visible; a scrub or date change jumps well past the epsilon and redraws.
-    const lngDelta = Math.abs(
-      ((subLng - this.lastMaskLng + 540) % 360) - 180,
-    );
+    const lngDelta = Math.abs(((subLng - this.lastMaskLng + 540) % 360) - 180);
     if (
       this.maskDrawn &&
       lngDelta < MASK_LNG_EPSILON &&
@@ -412,14 +384,12 @@ class SunEngine {
     let offset = 0;
     for (let y = 0; y < height; y += 1) {
       const lat =
-        NIGHT_CANVAS_NORTH -
-        ((y + 0.5) / height) * (NIGHT_CANVAS_NORTH - NIGHT_CANVAS_SOUTH);
+        NIGHT_CANVAS_NORTH - ((y + 0.5) / height) * (NIGHT_CANVAS_NORTH - NIGHT_CANVAS_SOUTH);
       const latR = lat * D2R;
       const sinLat = Math.sin(latR);
       const cosLat = Math.cos(latR);
       for (let x = 0; x < width; x += 1) {
-        const sinAltitude =
-          sinLat * sinDec + cosLat * cosDec * cosHourAngles[x];
+        const sinAltitude = sinLat * sinDec + cosLat * cosDec * cosHourAngles[x];
         const twilight = smoothstep(-sinAltitude / NIGHT_TWILIGHT_SIN_DEPTH);
         data[offset] = NIGHT_RGB.r;
         data[offset + 1] = NIGHT_RGB.g;
@@ -444,11 +414,7 @@ class SunEngine {
     } catch {
       return;
     }
-    const { altitude, azimuth } = sunPositionAt(
-      this.settings.dateMs,
-      center.lat,
-      center.lng,
-    );
+    const { altitude, azimuth } = sunPositionAt(this.settings.dateMs, center.lat, center.lng);
     // Polar angle: 0 = light straight overhead, 90 = at the horizon. Below the
     // horizon we keep it grazing and dim the intensity to read as night.
     const polar = Math.min(90, Math.max(0, 90 - altitude));
@@ -584,10 +550,7 @@ export function subscribeSunSettings(listener: () => void): () => void {
  * React subscribers. Returns true when something actually changed.
  */
 export function setSunSettings(next: Partial<SunSettings>): boolean {
-  const normalized = normalizeSunSettings(
-    { ...settings, ...next },
-    DEFAULT_SUN_SETTINGS,
-  );
+  const normalized = normalizeSunSettings({ ...settings, ...next }, DEFAULT_SUN_SETTINGS);
   if (sunSettingsEqual(normalized, settings)) return false;
   settings = normalized;
   engine?.applySettings(settings);
@@ -673,6 +636,5 @@ export const maplibreSunPlugin: GeoLibrePlugin = {
     }
     return { open: panelVisible, ...settings };
   },
-  applyProjectState: (app: GeoLibreAppAPI, state: unknown) =>
-    restoreSun(app, state),
+  applyProjectState: (app: GeoLibreAppAPI, state: unknown) => restoreSun(app, state),
 };

@@ -54,9 +54,7 @@ function stubFetch(
 
 describe("buildSearchUrl", () => {
   it("encodes bbox, paging, and newest-first ordering", () => {
-    const url = new URL(
-      buildSearchUrl({ bbox: [-1, -2, 3, 4], limit: 5, page: 2 }),
-    );
+    const url = new URL(buildSearchUrl({ bbox: [-1, -2, 3, 4], limit: 5, page: 2 }));
     assert.equal(url.origin + url.pathname, `${OAM_DEFAULT_ENDPOINT}/meta`);
     assert.equal(url.searchParams.get("bbox"), "-1,-2,3,4");
     assert.equal(url.searchParams.get("limit"), "5");
@@ -106,10 +104,7 @@ describe("searchOpenAerialMap", () => {
     assert.equal(image.thumbnailUrl, "https://oin.example.com/abc123.png");
     assert.deepEqual(image.bbox, [-84.5, 33.6, -84.2, 33.9]);
     // Rendered via titiler directly, not the un-CORS'd tiles.openaerialmap.org.
-    assert.equal(
-      image.tileUrl,
-      buildTitilerTemplate("https://oin.example.com/abc123.tif"),
-    );
+    assert.equal(image.tileUrl, buildTitilerTemplate("https://oin.example.com/abc123.tif"));
   });
 
   it("falls back to geojson.bbox and property gsd", async () => {
@@ -168,10 +163,7 @@ describe("searchOpenAerialMap", () => {
 
   it("throws a descriptive error on a non-OK response", async () => {
     const { fetchImpl } = stubFetch({}, { ok: false, status: 503 });
-    await assert.rejects(
-      () => searchOpenAerialMap({}, fetchImpl),
-      SERVICE_UNAVAILABLE_PATTERN,
-    );
+    await assert.rejects(() => searchOpenAerialMap({}, fetchImpl), SERVICE_UNAVAILABLE_PATTERN);
   });
 
   it("sends bbox and paging through to the request URL", async () => {
@@ -204,10 +196,7 @@ describe("searchOpenAerialMap", () => {
     });
     const { images } = await searchOpenAerialMap({}, fetchImpl);
     assert.equal(images[0].geometry?.type, "Polygon");
-    assert.equal(
-      (images[0].raw as { title?: string }).title,
-      "Sample scene",
-    );
+    assert.equal((images[0].raw as { title?: string }).title, "Sample scene");
   });
 });
 

@@ -4,10 +4,7 @@ import { join } from "node:path";
 
 // A GeoJSON drop is parsed in-browser; GeoPackage export uses bundled sql.js and
 // Shapefile export is pure JS + fflate, so this stays hermetic (no DuckDB/CDN).
-const FIXTURE_TEXT = readFileSync(
-  join(__dirname, "fixtures", "smoke.geojson"),
-  "utf8",
-);
+const FIXTURE_TEXT = readFileSync(join(__dirname, "fixtures", "smoke.geojson"), "utf8");
 
 async function waitForMap(page: Page): Promise<void> {
   // Force the anchor-download fallback so Playwright can capture the bytes (the
@@ -27,9 +24,7 @@ async function dropGeoJson(page: Page, name: string): Promise<void> {
   const dataTransfer = await page.evaluateHandle(
     ({ contents, fileName }) => {
       const dt = new DataTransfer();
-      dt.items.add(
-        new File([contents], fileName, { type: "application/geo+json" }),
-      );
+      dt.items.add(new File([contents], fileName, { type: "application/geo+json" }));
       return dt;
     },
     { contents: FIXTURE_TEXT, fileName: `${name}.geojson` },
@@ -40,9 +35,7 @@ async function dropGeoJson(page: Page, name: string): Promise<void> {
     });
   }
   await dataTransfer.dispose();
-  await expect(
-    page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`),
-  ).toBeVisible();
+  await expect(page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`)).toBeVisible();
 }
 
 async function exportVia(page: Page, menuItem: string): Promise<Buffer> {

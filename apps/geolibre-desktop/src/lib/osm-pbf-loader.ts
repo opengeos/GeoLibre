@@ -54,11 +54,7 @@ export function osmPbfBaseName(name: string): string {
  * points render on top. Returns the number of layers added.
  */
 export function addOsmPbfLayers(
-  addGeoJsonLayer: (
-    name: string,
-    geojson: OsmPbfLayers["points"],
-    sourcePath?: string,
-  ) => unknown,
+  addGeoJsonLayer: (name: string, geojson: OsmPbfLayers["points"], sourcePath?: string) => unknown,
   baseName: string,
   sourcePath: string,
   layers: OsmPbfLayers,
@@ -88,10 +84,7 @@ interface OsmPbfWorkerFailure {
 interface OsmPbfWorkerProgress extends OsmPbfProgress {
   type: "progress";
 }
-type OsmPbfWorkerMessage =
-  | OsmPbfWorkerSuccess
-  | OsmPbfWorkerFailure
-  | OsmPbfWorkerProgress;
+type OsmPbfWorkerMessage = OsmPbfWorkerSuccess | OsmPbfWorkerFailure | OsmPbfWorkerProgress;
 
 /**
  * Parse OSM PBF bytes into split GeoJSON layers on a Web Worker. The buffer is
@@ -110,10 +103,7 @@ export function loadOsmPbf(
       reject(new DOMException("OSM PBF load aborted.", "AbortError"));
       return;
     }
-    const worker = new Worker(
-      new URL("./osm-pbf.worker.ts", import.meta.url),
-      { type: "module" },
-    );
+    const worker = new Worker(new URL("./osm-pbf.worker.ts", import.meta.url), { type: "module" });
     const timeout = setTimeout(() => {
       worker.terminate();
       reject(new OsmPbfTooLargeError("OSM PBF parsing timed out."));
@@ -128,26 +118,22 @@ export function loadOsmPbf(
       worker.terminate();
     };
     signal?.addEventListener("abort", onAbort, { once: true });
-    worker.addEventListener(
-      "message",
-      (event: MessageEvent<OsmPbfWorkerMessage>) => {
-        const data = event.data;
-        // The terminal message (success or failure) is the one carrying `ok`;
-        // identify it by that so a future field can't be mistaken for it.
-        if (data && "ok" in data) {
-          finish();
-          if (data.ok) resolve(data.result);
-          else
-            reject(new Error(data.error || "Could not parse the OSM PBF file."));
-          return;
-        }
-        // Anything else is a progress update streamed before the terminal
-        // message; forward it and keep the worker alive.
-        if (data && "type" in data && data.type === "progress") {
-          onProgress?.({ processed: data.processed, total: data.total });
-        }
-      },
-    );
+    worker.addEventListener("message", (event: MessageEvent<OsmPbfWorkerMessage>) => {
+      const data = event.data;
+      // The terminal message (success or failure) is the one carrying `ok`;
+      // identify it by that so a future field can't be mistaken for it.
+      if (data && "ok" in data) {
+        finish();
+        if (data.ok) resolve(data.result);
+        else reject(new Error(data.error || "Could not parse the OSM PBF file."));
+        return;
+      }
+      // Anything else is a progress update streamed before the terminal
+      // message; forward it and keep the worker alive.
+      if (data && "type" in data && data.type === "progress") {
+        onProgress?.({ processed: data.processed, total: data.total });
+      }
+    });
     worker.addEventListener("error", (event) => {
       finish();
       reject(new Error(event.message || "The OSM PBF worker failed."));

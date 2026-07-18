@@ -53,11 +53,7 @@ export async function exportGeoTiff(
   const open: Awaited<ReturnType<typeof Gdal.open>>["datasets"] = [ds];
   try {
     // 1) Stamp the GCPs into a self-contained GeoTIFF.
-    const withGcps = await Gdal.gdal_translate(
-      ds,
-      buildGcpTranslateArgs(gcps),
-      "gcps.tif",
-    );
+    const withGcps = await Gdal.gdal_translate(ds, buildGcpTranslateArgs(gcps), "gcps.tif");
     // Round-trip through bytes to reopen as a fresh dataset (robust across the
     // gdal3.js virtual filesystem) before warping.
     const gcpBytes = await Gdal.getFileBytes(withGcps);
@@ -69,11 +65,7 @@ export async function exportGeoTiff(
     open.push(gcpDs);
 
     // 2) Warp to a Cloud-Optimized GeoTIFF.
-    const warped = await Gdal.gdalwarp(
-      gcpDs,
-      warpArgsForTransform(transform),
-      "georeferenced.tif",
-    );
+    const warped = await Gdal.gdalwarp(gcpDs, warpArgsForTransform(transform), "georeferenced.tif");
     return await Gdal.getFileBytes(warped);
   } finally {
     for (const d of open) {

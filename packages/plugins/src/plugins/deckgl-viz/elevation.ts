@@ -5,13 +5,7 @@ import {
   transformGeojsonElevation,
 } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
-import type {
-  Feature,
-  FeatureCollection,
-  Geometry,
-  GeometryCollection,
-  Position,
-} from "geojson";
+import type { Feature, FeatureCollection, Geometry, GeometryCollection, Position } from "geojson";
 import type { GeoLibreDeckGL } from "../../types";
 import { colorToRgba } from "../deck-style-utils";
 
@@ -76,11 +70,7 @@ function elevationData(
   offset: number,
 ): FeatureCollection {
   const cached = elevationDataCache.get(geojson);
-  if (
-    cached &&
-    cached.verticalScale === verticalScale &&
-    cached.offset === offset
-  ) {
+  if (cached && cached.verticalScale === verticalScale && cached.offset === offset) {
     return cached.data;
   }
   const data = transformGeojsonElevation(geojson, verticalScale, offset);
@@ -170,10 +160,7 @@ function splitPointFeatures(data: FeatureCollection): {
  * @param layer - The store layer to render (must satisfy
  *   {@link isElevation3dLayer}).
  */
-export function buildElevation3dLayers(
-  deckGL: GeoLibreDeckGL,
-  layer: GeoLibreLayer,
-): Layer[] {
+export function buildElevation3dLayers(deckGL: GeoLibreDeckGL, layer: GeoLibreLayer): Layer[] {
   const style = layer.style;
   const rawScale = styleValue(style, "elevation3dVerticalScale");
   const rawOffset = styleValue(style, "elevation3dOffset");
@@ -182,10 +169,7 @@ export function buildElevation3dLayers(
   const geojson = layer.geojson as FeatureCollection;
   const data = elevationData(geojson, verticalScale, offset);
   const { nonPointData, pointData } = splitPointFeatures(data);
-  const fillColor = colorToRgba(
-    styleValue(style, "fillColor"),
-    styleValue(style, "fillOpacity"),
-  );
+  const fillColor = colorToRgba(styleValue(style, "fillColor"), styleValue(style, "fillOpacity"));
   const deckLayers: Layer[] = [];
 
   if (nonPointData.features.length > 0) {
@@ -199,10 +183,7 @@ export function buildElevation3dLayers(
         getFillColor: fillColor,
         getLineColor: colorToRgba(styleValue(style, "strokeColor"), 1),
         getLineWidth: styleValue(style, "strokeWidth"),
-        lineWidthUnits:
-          styleValue(style, "strokeWidthUnit") === "meters"
-            ? "meters"
-            : "pixels",
+        lineWidthUnits: styleValue(style, "strokeWidthUnit") === "meters" ? "meters" : "pixels",
         lineWidthMinPixels: 1,
         lineBillboard: true,
         opacity: layer.opacity,

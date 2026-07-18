@@ -280,9 +280,7 @@ def register_local_file(path: str | os.PathLike[str]) -> str:
         raise ValueError(f"Local file not found: {path}")
     with _lock:
         if _base_url is None:
-            raise RuntimeError(
-                "The GeoLibre static server is not running; create a Map first."
-            )
+            raise RuntimeError("The GeoLibre static server is not running; create a Map first.")
         # Reuse an existing token for the same file so repeated add_raster calls
         # in a long-running notebook don't grow the registry without bound.
         token = next(

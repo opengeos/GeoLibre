@@ -1,8 +1,4 @@
-import {
-  useAppStore,
-  type ProcessingRunKind,
-  type ProcessingRunStatus,
-} from "@geolibre/core";
+import { useAppStore, type ProcessingRunKind, type ProcessingRunStatus } from "@geolibre/core";
 
 /** Prefix the Whitebox dialog uses for layer-reference parameter values. */
 const LAYER_TOKEN_PREFIX = "layer:";

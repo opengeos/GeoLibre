@@ -40,9 +40,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.selectByExpressionOpen);
   const setOpen = useAppStore((s) => s.setSelectByExpressionOpen);
-  const preselectedLayerId = useAppStore(
-    (s) => s.ui.selectByExpressionLayerId,
-  );
+  const preselectedLayerId = useAppStore((s) => s.ui.selectByExpressionLayerId);
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
@@ -65,11 +63,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
     setSummary(null);
     setTargetLayerId((current) => {
       const eligible = selectableVectorLayers(useAppStore.getState().layers);
-      const candidates = [
-        preselectedLayerId,
-        current,
-        useAppStore.getState().selectedLayerId,
-      ];
+      const candidates = [preselectedLayerId, current, useAppStore.getState().selectedLayerId];
       for (const id of candidates) {
         if (id && eligible.some((layer) => layer.id === id)) return id;
       }
@@ -77,16 +71,12 @@ export function SelectByExpressionDialog(): ReactElement | null {
     });
   }, [open, preselectedLayerId]);
 
-  const targetLayer =
-    eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
+  const targetLayer = eligibleLayers.find((layer) => layer.id === targetLayerId) ?? null;
 
   // Stable identities for the Expression Builder's memoization (see the
   // equivalent comment in StylePanel): fresh arrays every render would defeat
   // the dialog's validation/preview caching while it is open.
-  const features = useMemo(
-    () => targetLayer?.geojson?.features ?? [],
-    [targetLayer],
-  );
+  const features = useMemo(() => targetLayer?.geojson?.features ?? [], [targetLayer]);
   const fieldNames = useMemo(
     () => (targetLayer ? getAttributePropertyNames(targetLayer) : []),
     [targetLayer],
@@ -113,17 +103,14 @@ export function SelectByExpressionDialog(): ReactElement | null {
   }, [projectName, targetLayer, features, open]);
 
   const validation = useMemo(
-    () =>
-      validateMapExpression(source, { variables, expectedType: "boolean" }),
+    () => validateMapExpression(source, { variables, expectedType: "boolean" }),
     [source, variables],
   );
-  const canSelect =
-    Boolean(targetLayer) && source.trim().length > 0 && validation.ok;
+  const canSelect = Boolean(targetLayer) && source.trim().length > 0 && validation.ok;
   // The combine modes only make sense when the target layer holds the live
   // selection; otherwise remove/intersect would always yield an empty
   // selection, so the mode dropdown falls back to "new".
-  const targetHoldsSelection =
-    targetLayerId === selectedLayerId && selectionCount > 0;
+  const targetHoldsSelection = targetLayerId === selectedLayerId && selectionCount > 0;
   const effectiveMode = targetHoldsSelection ? mode : "new";
 
   const runSelection = () => {
@@ -142,11 +129,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
       }),
     });
     if (!result.ok) return;
-    const selected = applyMatchedSelection(
-      targetLayer.id,
-      result.ids,
-      effectiveMode,
-    );
+    const selected = applyMatchedSelection(targetLayer.id, result.ids, effectiveMode);
     setSummary({
       matched: result.ids.length,
       selected,
@@ -168,15 +151,11 @@ export function SelectByExpressionDialog(): ReactElement | null {
             {t("selection.byExpressionDescription")}
           </p>
           {eligibleLayers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("selection.noLayers")}
-            </p>
+            <p className="text-sm text-muted-foreground">{t("selection.noLayers")}</p>
           ) : (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="select-expression-layer">
-                  {t("selection.targetLayer")}
-                </Label>
+                <Label htmlFor="select-expression-layer">{t("selection.targetLayer")}</Label>
                 <Select
                   id="select-expression-layer"
                   value={targetLayerId ?? ""}
@@ -194,9 +173,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="select-expression-source">
-                    {t("selection.expression")}
-                  </Label>
+                  <Label htmlFor="select-expression-source">{t("selection.expression")}</Label>
                   <Button
                     type="button"
                     variant="outline"
@@ -228,11 +205,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
                 disableCombineModes={!targetHoldsSelection}
               />
               {summary && (
-                <p
-                  className="text-sm text-muted-foreground"
-                  role="status"
-                  aria-live="polite"
-                >
+                <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
                   {t("selection.summary", {
                     selected: summary.selected,
                     total: summary.total,

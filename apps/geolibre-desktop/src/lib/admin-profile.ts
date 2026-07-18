@@ -65,9 +65,7 @@ async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
         // below legitimately returns non-JSON when no file exists, so parse
         // warnings live here rather than inside parseAdminProfile.)
         if (parsed === null && import.meta.env.DEV) {
-          console.warn(
-            "[admin-profile] desktop admin-profile.json is not valid JSON; ignoring.",
-          );
+          console.warn("[admin-profile] desktop admin-profile.json is not valid JSON; ignoring.");
         }
         return parsed;
       }
@@ -84,10 +82,9 @@ async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
   try {
     // The admin file is optional; a 404 here is the normal "no admin profile"
     // case, so flag the request benign to keep it out of the error diagnostics.
-    const response = await fetch(
-      `${import.meta.env.BASE_URL}admin-profile.json`,
-      { headers: { [OPTIONAL_RESOURCE_HEADER]: "1" } },
-    );
+    const response = await fetch(`${import.meta.env.BASE_URL}admin-profile.json`, {
+      headers: { [OPTIONAL_RESOURCE_HEADER]: "1" },
+    });
     if (!response.ok) return null;
     return parseAdminProfile(await response.text());
   } catch {
@@ -112,8 +109,7 @@ export function resolveAdminProfile(
   pluginIds: readonly string[],
 ): Partial<UiProfileSettings> {
   const level =
-    typeof file.level === "string" &&
-    EXPERIENCE_LEVELS.includes(file.level as ExperienceLevel)
+    typeof file.level === "string" && EXPERIENCE_LEVELS.includes(file.level as ExperienceLevel)
       ? (file.level as ExperienceLevel)
       : null;
 
@@ -122,10 +118,7 @@ export function resolveAdminProfile(
   const resolveList = (
     explicit: string[] | undefined,
     fromPreset: string[] | undefined,
-  ): string[] =>
-    Array.isArray(explicit)
-      ? normalizeStringList(explicit)
-      : (fromPreset ?? []);
+  ): string[] => (Array.isArray(explicit) ? normalizeStringList(explicit) : (fromPreset ?? []));
 
   return {
     // An admin file enables filtering unless it explicitly opts out.
@@ -134,10 +127,7 @@ export function resolveAdminProfile(
     locked: file.lock === true,
     // An admin-managed profile should not also prompt the onboarding wizard.
     onboarded: true,
-    hiddenDataSources: resolveList(
-      file.hiddenDataSources,
-      preset?.hiddenDataSources,
-    ),
+    hiddenDataSources: resolveList(file.hiddenDataSources, preset?.hiddenDataSources),
     hiddenPlugins: resolveList(file.hiddenPlugins, preset?.hiddenPlugins),
     hiddenMenus: resolveList(file.hiddenMenus, preset?.hiddenMenus),
     hiddenMenuItems: resolveList(file.hiddenMenuItems, preset?.hiddenMenuItems),

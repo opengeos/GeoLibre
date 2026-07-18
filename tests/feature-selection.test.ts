@@ -40,60 +40,34 @@ describe("applySelectionMode", () => {
   const current = ["a", "b", "c"];
 
   it("'new' replaces the selection with the matches", () => {
-    assert.deepEqual(applySelectionMode(current, ["c", "d"], "new"), [
-      "c",
-      "d",
-    ]);
+    assert.deepEqual(applySelectionMode(current, ["c", "d"], "new"), ["c", "d"]);
   });
 
   it("'add' appends unseen matches after the current ids", () => {
-    assert.deepEqual(applySelectionMode(current, ["c", "d"], "add"), [
-      "a",
-      "b",
-      "c",
-      "d",
-    ]);
+    assert.deepEqual(applySelectionMode(current, ["c", "d"], "add"), ["a", "b", "c", "d"]);
   });
 
   it("'remove' drops matched ids from the current selection", () => {
-    assert.deepEqual(applySelectionMode(current, ["b", "z"], "remove"), [
-      "a",
-      "c",
-    ]);
+    assert.deepEqual(applySelectionMode(current, ["b", "z"], "remove"), ["a", "c"]);
   });
 
   it("'intersect' keeps only ids in both, preserving current order", () => {
-    assert.deepEqual(
-      applySelectionMode(current, ["c", "a", "z"], "intersect"),
-      ["a", "c"],
-    );
+    assert.deepEqual(applySelectionMode(current, ["c", "a", "z"], "intersect"), ["a", "c"]);
   });
 
   it("deduplicates repeated matches", () => {
-    assert.deepEqual(applySelectionMode([], ["x", "x", "y"], "new"), [
-      "x",
-      "y",
-    ]);
+    assert.deepEqual(applySelectionMode([], ["x", "x", "y"], "new"), ["x", "y"]);
   });
 
   it("deduplicates a degenerate current selection in remove/intersect", () => {
-    assert.deepEqual(
-      applySelectionMode(["a", "a", "b"], ["b"], "remove"),
-      ["a"],
-    );
-    assert.deepEqual(
-      applySelectionMode(["a", "a", "b"], ["a"], "intersect"),
-      ["a"],
-    );
+    assert.deepEqual(applySelectionMode(["a", "a", "b"], ["b"], "remove"), ["a"]);
+    assert.deepEqual(applySelectionMode(["a", "a", "b"], ["a"], "intersect"), ["a"]);
   });
 });
 
 describe("invertSelection", () => {
   it("selects the complement in layer order", () => {
-    assert.deepEqual(invertSelection(["1", "2", "3", "4"], ["2", "4"]), [
-      "1",
-      "3",
-    ]);
+    assert.deepEqual(invertSelection(["1", "2", "3", "4"], ["2", "4"]), ["1", "3"]);
   });
 
   it("selects everything when nothing is selected", () => {
@@ -109,10 +83,7 @@ describe("matchFeaturesByExpression", () => {
   ];
 
   it("returns the selection ids of matching features", () => {
-    const result = matchFeaturesByExpression(
-      features,
-      '[">", ["get", "pop"], 100]',
-    );
+    const result = matchFeaturesByExpression(features, '[">", ["get", "pop"], 100]');
     assert.equal(result.ok, true);
     assert.deepEqual(result.ids, ["big", "2"]);
     assert.equal(result.errorCount, 0);
@@ -146,21 +117,16 @@ describe("matchFeaturesByExpression", () => {
       point([0, 0], { flag: true }, "yes"),
       point([1, 1], { flag: "not-a-boolean" }, "bad"),
     ];
-    const result = matchFeaturesByExpression(
-      mixed,
-      '["boolean", ["get", "flag"]]',
-    );
+    const result = matchFeaturesByExpression(mixed, '["boolean", ["get", "flag"]]');
     assert.equal(result.ok, true);
     assert.deepEqual(result.ids, ["yes"]);
     assert.equal(result.errorCount, 1);
   });
 
   it("substitutes @ variables before compiling", () => {
-    const result = matchFeaturesByExpression(
-      features,
-      '[">", ["get", "pop"], "@threshold"]',
-      { variables: [{ token: "@threshold", value: 1000 }] },
-    );
+    const result = matchFeaturesByExpression(features, '[">", ["get", "pop"], "@threshold"]', {
+      variables: [{ token: "@threshold", value: 1000 }],
+    });
     assert.equal(result.ok, true);
     assert.deepEqual(result.ids, ["2"]);
   });
@@ -196,11 +162,7 @@ describe("matchFeaturesByLocation", () => {
   });
 
   it("supports within", () => {
-    const { matches } = matchFeaturesByLocation(
-      [inside, outside],
-      [box],
-      "within",
-    );
+    const { matches } = matchFeaturesByLocation([inside, outside], [box], "within");
     assert.deepEqual(matches, [true, false]);
   });
 
@@ -212,11 +174,7 @@ describe("matchFeaturesByLocation", () => {
   });
 
   it("disjoint is the complement of intersects", () => {
-    const { matches } = matchFeaturesByLocation(
-      [inside, outside],
-      [box],
-      "disjoint",
-    );
+    const { matches } = matchFeaturesByLocation([inside, outside], [box], "disjoint");
     assert.deepEqual(matches, [false, true]);
   });
 
@@ -229,13 +187,8 @@ describe("matchFeaturesByLocation", () => {
   });
 
   it("with an empty filter layer, disjoint keeps everything and intersects nothing", () => {
-    assert.deepEqual(
-      matchFeaturesByLocation([inside], [], "intersects").matches,
-      [false],
-    );
-    assert.deepEqual(matchFeaturesByLocation([inside], [], "disjoint").matches, [
-      true,
-    ]);
+    assert.deepEqual(matchFeaturesByLocation([inside], [], "intersects").matches, [false]);
+    assert.deepEqual(matchFeaturesByLocation([inside], [], "disjoint").matches, [true]);
   });
 
   it("excludes unevaluable pairs from disjoint and counts them", () => {

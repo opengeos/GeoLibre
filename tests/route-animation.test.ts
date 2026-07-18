@@ -56,21 +56,12 @@ const LINE: LngLat[] = [START, EAST, NORTH];
 
 describe("normalizeRouteAnimationSettings", () => {
   it("returns the defaults for undefined/empty input", () => {
-    assert.deepEqual(
-      normalizeRouteAnimationSettings(undefined),
-      DEFAULT_ROUTE_ANIMATION_SETTINGS,
-    );
-    assert.deepEqual(
-      normalizeRouteAnimationSettings({}),
-      DEFAULT_ROUTE_ANIMATION_SETTINGS,
-    );
+    assert.deepEqual(normalizeRouteAnimationSettings(undefined), DEFAULT_ROUTE_ANIMATION_SETTINGS);
+    assert.deepEqual(normalizeRouteAnimationSettings({}), DEFAULT_ROUTE_ANIMATION_SETTINGS);
   });
 
   it("clamps speed into its allowed range", () => {
-    assert.equal(
-      normalizeRouteAnimationSettings({ speedMps: -50 }).speedMps,
-      ROUTE_ANIM_SPEED_MIN,
-    );
+    assert.equal(normalizeRouteAnimationSettings({ speedMps: -50 }).speedMps, ROUTE_ANIM_SPEED_MIN);
     assert.equal(
       normalizeRouteAnimationSettings({ speedMps: 999999 }).speedMps,
       ROUTE_ANIM_SPEED_MAX,
@@ -80,21 +71,14 @@ describe("normalizeRouteAnimationSettings", () => {
   it("clamps progress into [0, 1]", () => {
     assert.equal(normalizeRouteAnimationSettings({ progress: -1 }).progress, 0);
     assert.equal(normalizeRouteAnimationSettings({ progress: 5 }).progress, 1);
-    assert.equal(
-      normalizeRouteAnimationSettings({ progress: 0.42 }).progress,
-      0.42,
-    );
+    assert.equal(normalizeRouteAnimationSettings({ progress: 0.42 }).progress, 0.42);
   });
 
   it("keeps a valid layerId and coerces empty/invalid ones to null", () => {
-    assert.equal(
-      normalizeRouteAnimationSettings({ layerId: "layer-1" }).layerId,
-      "layer-1",
-    );
+    assert.equal(normalizeRouteAnimationSettings({ layerId: "layer-1" }).layerId, "layer-1");
     assert.equal(normalizeRouteAnimationSettings({ layerId: "" }).layerId, null);
     assert.equal(
-      normalizeRouteAnimationSettings({ layerId: 42 as unknown as string })
-        .layerId,
+      normalizeRouteAnimationSettings({ layerId: 42 as unknown as string }).layerId,
       null,
     );
   });
@@ -129,17 +113,11 @@ describe("normalizeRouteAnimationSettings", () => {
       normalizeRouteAnimationSettings({ followZoom: 99 }).followZoom,
       ROUTE_FOLLOW_ZOOM_MAX,
     );
-    assert.equal(
-      normalizeRouteAnimationSettings({ followPitch: 45 }).followPitch,
-      45,
-    );
+    assert.equal(normalizeRouteAnimationSettings({ followPitch: 45 }).followPitch, 45);
   });
 
   it("accepts valid hex colors and rejects malformed ones", () => {
-    assert.equal(
-      normalizeRouteAnimationSettings({ color: "#ff0000" }).color,
-      "#ff0000",
-    );
+    assert.equal(normalizeRouteAnimationSettings({ color: "#ff0000" }).color, "#ff0000");
     assert.equal(normalizeRouteAnimationSettings({ color: "#abc" }).color, "#abc");
     assert.equal(
       normalizeRouteAnimationSettings({ color: "red" }).color,
@@ -152,14 +130,8 @@ describe("normalizeRouteAnimationSettings", () => {
   });
 
   it("accepts valid marker styles and falls back for invalid ones", () => {
-    assert.equal(
-      normalizeRouteAnimationSettings({ markerStyle: "point" }).markerStyle,
-      "point",
-    );
-    assert.equal(
-      normalizeRouteAnimationSettings({ markerStyle: "none" }).markerStyle,
-      "none",
-    );
+    assert.equal(normalizeRouteAnimationSettings({ markerStyle: "point" }).markerStyle, "point");
+    assert.equal(normalizeRouteAnimationSettings({ markerStyle: "none" }).markerStyle, "none");
     assert.equal(
       normalizeRouteAnimationSettings({
         markerStyle: "spaceship" as never,
@@ -299,10 +271,7 @@ describe("pointAlongLine", () => {
 
   it("returns the last vertex at (and beyond) the total length", () => {
     assert.deepEqual(pointAlongLine(LINE, cumulative, totalMeters).coord, NORTH);
-    assert.deepEqual(
-      pointAlongLine(LINE, cumulative, totalMeters * 2).coord,
-      NORTH,
-    );
+    assert.deepEqual(pointAlongLine(LINE, cumulative, totalMeters * 2).coord, NORTH);
   });
 
   it("interpolates the midpoint of the first segment", () => {
@@ -325,15 +294,10 @@ describe("pointAlongLine", () => {
     const halfFirst = cumulative[1] / 2;
     // Halfway up the first segment (0 → 100 m) is 50 m.
     assert.ok(
-      Math.abs(
-        pointAlongLine(LINE, cumulative, halfFirst, elevations).elevation - 50,
-      ) < 1e-6,
+      Math.abs(pointAlongLine(LINE, cumulative, halfFirst, elevations).elevation - 50) < 1e-6,
     );
     // At the far end the elevation is the last vertex's Z.
-    assert.equal(
-      pointAlongLine(LINE, cumulative, totalMeters, elevations).elevation,
-      250,
-    );
+    assert.equal(pointAlongLine(LINE, cumulative, totalMeters, elevations).elevation, 250);
   });
 
   it("reports elevation 0 when no elevations array is supplied", () => {
@@ -349,10 +313,7 @@ describe("sliceLineAtDistance", () => {
   });
 
   it("returns the whole line at the total length", () => {
-    assert.deepEqual(
-      sliceLineAtDistance(LINE, cumulative, totalMeters),
-      LINE,
-    );
+    assert.deepEqual(sliceLineAtDistance(LINE, cumulative, totalMeters), LINE);
   });
 
   it("ends exactly under the marker partway along", () => {
@@ -376,12 +337,7 @@ describe("sliceRouteAtDistance", () => {
   });
 
   it("returns the whole route with its elevations at the total length", () => {
-    const route = sliceRouteAtDistance(
-      LINE,
-      cumulative,
-      totalMeters,
-      elevations,
-    );
+    const route = sliceRouteAtDistance(LINE, cumulative, totalMeters, elevations);
     assert.deepEqual(route.coords, LINE);
     assert.deepEqual(route.elevations, elevations);
   });
@@ -530,9 +486,8 @@ describe("video export helpers", () => {
   });
 
   it("falls back to WebM when MP4 is unsupported", () => {
-    const mime = pickVideoMimeType(
-      ROUTE_VIDEO_MIME_CANDIDATES,
-      (type) => type.startsWith("video/webm"),
+    const mime = pickVideoMimeType(ROUTE_VIDEO_MIME_CANDIDATES, (type) =>
+      type.startsWith("video/webm"),
     );
     assert.ok(mime?.startsWith("video/webm"));
     assert.equal(videoExtensionForMime(mime as string), "webm");
@@ -553,14 +508,10 @@ describe("video export helpers", () => {
     setRouteAnimationRoute(LINE);
     const { totalMeters } = measureLine(LINE);
     setRouteAnimationSettings({ speedMps: 100 });
-    assert.ok(
-      Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 100) < 1e-6,
-    );
+    assert.ok(Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 100) < 1e-6);
     // Halving the speed doubles the estimated length.
     setRouteAnimationSettings({ speedMps: 50 });
-    assert.ok(
-      Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 50) < 1e-6,
-    );
+    assert.ok(Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 50) < 1e-6);
     resetStore();
   });
 });

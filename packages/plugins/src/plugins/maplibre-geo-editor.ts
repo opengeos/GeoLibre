@@ -1,9 +1,4 @@
-import {
-  type GeoLibreLayer,
-  lineWidthValue,
-  styleValue,
-  useAppStore,
-} from "@geolibre/core";
+import { type GeoLibreLayer, lineWidthValue, styleValue, useAppStore } from "@geolibre/core";
 import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
@@ -23,16 +18,9 @@ import {
   captureViewImportBaseline,
   tagViewFeaturesForImport,
 } from "./geo-editor-view-import";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
-export {
-  canEditLayerGeometry,
-  SKETCHES_SOURCE_KIND,
-} from "./geo-editor-geometry";
+export { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "./geo-editor-geometry";
 
 const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
@@ -44,15 +32,7 @@ const GEO_EDITOR_OPTIONS = {
   collapsed: false,
   toolbarOrientation: "vertical",
   columns: 2,
-  drawModes: [
-    "polygon",
-    "line",
-    "rectangle",
-    "circle",
-    "marker",
-    "freehand",
-    "text_marker",
-  ],
+  drawModes: ["polygon", "line", "rectangle", "circle", "marker", "freehand", "text_marker"],
   editModes: [
     "select",
     "drag",
@@ -129,11 +109,7 @@ let viewImportBaseline: ViewImportBaseline | null = null;
 /** Per-load id-prefix counter so appended loads cannot collide feature ids. */
 let viewImportLoadCounter = 0;
 
-const GEOMAN_EDIT_SYNC_EVENTS = [
-  "gm:dragend",
-  "gm:editend",
-  "gm:rotateend",
-] as const;
+const GEOMAN_EDIT_SYNC_EVENTS = ["gm:dragend", "gm:editend", "gm:rotateend"] as const;
 
 export const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
 
@@ -193,10 +169,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     geomanInstance = null;
   },
   getMapControlPosition: () => geoEditorPosition,
-  setMapControlPosition: (
-    app: GeoLibreAppAPI,
-    position: GeoLibreMapControlPosition,
-  ) => {
+  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
     geoEditorPosition = position;
     if (!geoEditorControl) return;
     app.removeMapControl(geoEditorControl);
@@ -333,9 +306,7 @@ function isSketchesLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.sourceKind === SKETCHES_SOURCE_KIND;
 }
 
-function findSketchesLayer(
-  layers: GeoLibreLayer[],
-): GeoLibreLayer | undefined {
+function findSketchesLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined {
   if (sketchesLayerId) {
     const tracked = layers.find((layer) => layer.id === sketchesLayerId);
     if (tracked) return tracked;
@@ -349,39 +320,28 @@ function findSketchesLayer(
  * helpers resolve through this so they suppress/style whichever layer the editor
  * is showing, without duplicating the suppression logic per mode.
  */
-function activeEditableLayer(
-  layers: GeoLibreLayer[],
-): GeoLibreLayer | undefined {
+function activeEditableLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined {
   if (editTargetLayerId) {
     return layers.find((layer) => layer.id === editTargetLayerId);
   }
   return findSketchesLayer(layers);
 }
 
-function cloneFeatureCollection(
-  collection: FeatureCollection,
-): FeatureCollection {
+function cloneFeatureCollection(collection: FeatureCollection): FeatureCollection {
   return structuredClone(collection);
 }
 
-function featureCollectionsEquivalent(
-  a: FeatureCollection,
-  b: FeatureCollection,
-): boolean {
+function featureCollectionsEquivalent(a: FeatureCollection, b: FeatureCollection): boolean {
   if (a.features.length !== b.features.length) return false;
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function sketchFeatureKey(feature: Feature, index: number): string {
   const props = feature.properties as Record<string, unknown> | null;
-  return String(
-    feature.id ?? props?.__gm_id ?? `${JSON.stringify(feature)}@${index}`,
-  );
+  return String(feature.id ?? props?.__gm_id ?? `${JSON.stringify(feature)}@${index}`);
 }
 
-function unionFeatureCollections(
-  ...collections: FeatureCollection[]
-): FeatureCollection {
+function unionFeatureCollections(...collections: FeatureCollection[]): FeatureCollection {
   const byKey = new Map<string, Feature>();
   for (const collection of collections) {
     collection.features.forEach((feature, index) => {
@@ -400,9 +360,7 @@ function syncSketchesToStore(): void {
   // so skip store writes here; `endLayerGeometryEdit` flushes the final state.
   if (editTargetLayerId) return;
 
-  let collection = cloneFeatureCollection(
-    geoEditorControl.getAllFeatureCollection(),
-  );
+  let collection = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   const store = useAppStore.getState();
   const existing = findSketchesLayer(store.layers);
 
@@ -421,16 +379,11 @@ function syncSketchesToStore(): void {
         return;
       }
 
-      const id = store.addGeoJsonLayer(
-        SKETCHES_LAYER_NAME,
-        collection,
-        SKETCHES_SOURCE_PATH,
-      );
+      const id = store.addGeoJsonLayer(SKETCHES_LAYER_NAME, collection, SKETCHES_SOURCE_PATH);
       sketchesLayerId = id;
       store.updateLayer(id, {
         metadata: {
-          ...useAppStore.getState().layers.find((layer) => layer.id === id)
-            ?.metadata,
+          ...useAppStore.getState().layers.find((layer) => layer.id === id)?.metadata,
           sourceKind: SKETCHES_SOURCE_KIND,
         },
       });
@@ -494,9 +447,7 @@ export async function loadViewFeaturesIntoEditor(
     throw new Error("The GeoEditor is not active.");
   }
   if (editTargetLayerId) {
-    throw new Error(
-      "Finish editing the current layer's geometry before loading view features.",
-    );
+    throw new Error("Finish editing the current layer's geometry before loading view features.");
   }
 
   await ensureGeomanReady();
@@ -511,15 +462,11 @@ export async function loadViewFeaturesIntoEditor(
   if (tagged.prepared === 0) {
     return { imported: 0, dropped: tagged.dropped };
   }
-  const newIds = new Set(
-    tagged.collection.features.map((feature) => String(feature.id)),
-  );
+  const newIds = new Set(tagged.collection.features.map((feature) => String(feature.id)));
 
   let collectionToLoad = tagged.collection;
   if (!replace) {
-    const existing = cloneFeatureCollection(
-      geoEditorControl.getAllFeatureCollection(),
-    );
+    const existing = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
     collectionToLoad = {
       type: "FeatureCollection",
       features: [...existing.features, ...tagged.collection.features],
@@ -570,9 +517,7 @@ export function buildEditorSaveCollection(options: {
   // baseline is stale. Exporting now would produce a nonsensical diff, so refuse
   // (the dialog disables Save while such a session is active).
   if (editTargetLayerId) return null;
-  const collection = cloneFeatureCollection(
-    geoEditorControl.getAllFeatureCollection(),
-  );
+  const collection = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
 
   if (!options.changedOnly) {
     return buildFullExport(collection);
@@ -647,10 +592,7 @@ function vectorSourceIdForLayer(layer: GeoLibreLayer): string | null {
   return typeof sourceId === "string" ? sourceId : null;
 }
 
-function writeBackToVectorSource(
-  layer: GeoLibreLayer,
-  collection: FeatureCollection,
-): void {
+function writeBackToVectorSource(layer: GeoLibreLayer, collection: FeatureCollection): void {
   const sourceId = vectorSourceIdForLayer(layer);
   if (!sourceId) return;
   const source = appApi?.getMap?.()?.getSource(sourceId) as
@@ -706,9 +648,7 @@ export async function startLayerGeometryEdit(
   }
   if (editTargetLayerId === layerId) return true;
 
-  const layer = useAppStore
-    .getState()
-    .layers.find((candidate) => candidate.id === layerId);
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
   if (!layer || !canEditLayerGeometry(layer) || !layer.geojson) return false;
 
   // Geoman may have only just been created (the plugin was activated for this
@@ -720,9 +660,7 @@ export async function startLayerGeometryEdit(
   // Sketches store layer's normal rendering (it stays visible as a plain layer
   // during the target edit).
   syncSketchesToStore();
-  savedSketchesCollection = cloneFeatureCollection(
-    geoEditorControl.getAllFeatureCollection(),
-  );
+  savedSketchesCollection = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   await clearSketchesFromEditor();
   setSketchesMapLayerSuppressed(false);
 
@@ -750,10 +688,7 @@ export async function startLayerGeometryEdit(
     // A "Missing source" failure means Geoman is not ready yet (handled by the
     // rollback below). Log anything else so unexpected failures (e.g. malformed
     // geojson) are not silently swallowed.
-    if (
-      !(error instanceof Error) ||
-      !error.message.includes("Missing source")
-    ) {
+    if (!(error instanceof Error) || !error.message.includes("Missing source")) {
       console.warn("startLayerGeometryEdit: loadGeoJson failed", error);
     }
   } finally {
@@ -875,10 +810,7 @@ async function restoreSketchesAfterSession(): Promise<void> {
   if (savedSketchesCollection?.features.length) {
     restoringSketchesToEditor = true;
     try {
-      await geoEditorControl.loadGeoJson(
-        savedSketchesCollection,
-        SKETCHES_SOURCE_PATH,
-      );
+      await geoEditorControl.loadGeoJson(savedSketchesCollection, SKETCHES_SOURCE_PATH);
     } catch {
       // Geoman may not be ready; the store subscription will re-restore.
     } finally {
@@ -948,16 +880,12 @@ function bindSketchesStoreSync(): void {
     // features, not sketches. Skip the Sketches reconciliation entirely and
     // only watch the target: abort if it was removed, reflect display changes.
     if (editTargetLayerId) {
-      const target = state.layers.find(
-        (layer) => layer.id === editTargetLayerId,
-      );
+      const target = state.layers.find((layer) => layer.id === editTargetLayerId);
       if (!target) {
         abortGeometryEditSession();
         return;
       }
-      const previousTarget = previous.layers.find(
-        (layer) => layer.id === editTargetLayerId,
-      );
+      const previousTarget = previous.layers.find((layer) => layer.id === editTargetLayerId);
       // If the user toggled the target layer back on while editing, re-hide it
       // so its stale normal rendering does not double-draw over Geoman.
       if (target.visible && previousTarget && !previousTarget.visible) {
@@ -1124,8 +1052,7 @@ function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
   const map = appApi?.getMap?.();
   if (!map) return;
 
-  const visibility =
-    layer.visible && !sketchesMapLayerSuppressed ? "visible" : "none";
+  const visibility = layer.visible && !sketchesMapLayerSuppressed ? "visible" : "none";
 
   for (const mapLayerId of sketchesMapLayerIds(layer.id)) {
     try {
@@ -1146,9 +1073,7 @@ function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void 
   // flag must not also hide the Geoman display layers that present the features
   // being edited.
   const effectiveVisibility =
-    visibility === "visible" &&
-    !editTargetLayerId &&
-    sketchesLayer?.visible === false
+    visibility === "visible" && !editTargetLayerId && sketchesLayer?.visible === false
       ? "none"
       : visibility;
 
@@ -1183,18 +1108,14 @@ function showGeomanDisplayLayers(): void {
  * `metadata.nativeLayerIds`; plain geojson layers use the conventional
  * `layer-<id>-*` ids. Only ids that actually exist on the map are returned.
  */
-function geoEditorTargetAnchorLayerIds(
-  map: maplibregl.Map,
-  layer: GeoLibreLayer,
-): string[] {
+function geoEditorTargetAnchorLayerIds(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
   const nativeLayerIds = layer.metadata.nativeLayerIds;
   // Filter to strings first, then fall back: a non-empty `nativeLayerIds` that
   // holds only non-string entries must still fall back to the conventional ids.
   const stringIds = Array.isArray(nativeLayerIds)
     ? nativeLayerIds.filter((id): id is string => typeof id === "string")
     : [];
-  const candidates =
-    stringIds.length > 0 ? stringIds : sketchesMapLayerIds(layer.id);
+  const candidates = stringIds.length > 0 ? stringIds : sketchesMapLayerIds(layer.id);
   return candidates.filter((id) => map.getLayer(id));
 }
 
@@ -1243,10 +1164,7 @@ function positionGeoEditorOverlayLayers(): void {
   }
 }
 
-function applyGeomanSketchesStyle(
-  map: maplibregl.Map,
-  sketchesLayer: GeoLibreLayer,
-): void {
+function applyGeomanSketchesStyle(map: maplibregl.Map, sketchesLayer: GeoLibreLayer): void {
   const style = map.getStyle();
   if (!style?.layers) return;
 
@@ -1261,11 +1179,7 @@ function applyGeomanSketchesStyle(
         "text-size",
         Math.max(1, styleValue(sketchesLayer.style, "textSize")),
       );
-      map.setPaintProperty(
-        layer.id,
-        "text-color",
-        styleValue(sketchesLayer.style, "textColor"),
-      );
+      map.setPaintProperty(layer.id, "text-color", styleValue(sketchesLayer.style, "textColor"));
       map.setPaintProperty(
         layer.id,
         "text-halo-color",
@@ -1367,9 +1281,7 @@ function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
   const source = layer.source;
   return (
     typeof source === "string" &&
-    (source.startsWith("gm_") ||
-      source.startsWith("gm-") ||
-      source.startsWith("geoman"))
+    (source.startsWith("gm_") || source.startsWith("gm-") || source.startsWith("geoman"))
   );
 }
 
@@ -1377,7 +1289,5 @@ function isGeomanTextMarkerLayer(
   layer: maplibregl.LayerSpecification,
 ): layer is maplibregl.SymbolLayerSpecification {
   if (layer.type !== "symbol" || !isGeomanDisplayLayer(layer)) return false;
-  return JSON.stringify(layer.layout?.["text-field"] ?? "").includes(
-    GEOMAN_TEXT_PROPERTY,
-  );
+  return JSON.stringify(layer.layout?.["text-field"] ?? "").includes(GEOMAN_TEXT_PROPERTY);
 }

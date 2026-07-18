@@ -80,7 +80,10 @@ describe("matchesShortcut", () => {
   });
 
   it("requires Alt only when specified", () => {
-    assert.equal(matchesShortcut(keyEvent("s", { ctrlKey: true, altKey: true }), save, false), false);
+    assert.equal(
+      matchesShortcut(keyEvent("s", { ctrlKey: true, altKey: true }), save, false),
+      false,
+    );
     const altShortcut: Shortcut = { key: "s", mod: true, shift: false, alt: true };
     assert.equal(
       matchesShortcut(keyEvent("s", { ctrlKey: true, altKey: true }), altShortcut, false),
@@ -119,7 +122,9 @@ describe("filterCommands", () => {
       ["b"],
     );
     assert.deepEqual(
-      filterCommands(commands, "add").map((c) => c.id).sort(),
+      filterCommands(commands, "add")
+        .map((c) => c.id)
+        .sort(),
       ["b", "c"],
     );
   });

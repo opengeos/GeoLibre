@@ -6,15 +6,10 @@ export type StyledDeckLayerLike = {
 };
 
 export function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
-export function colorToRgba(
-  color: string,
-  alpha: number,
-): [number, number, number, number] {
+export function colorToRgba(color: string, alpha: number): [number, number, number, number] {
   const normalized = color.trim();
   // The Style panel's ColorField can emit the "transparent" sentinel
   // (TRANSPARENT_COLOR in @geolibre/ui); render it invisible instead of

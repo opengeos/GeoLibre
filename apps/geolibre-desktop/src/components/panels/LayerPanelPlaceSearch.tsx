@@ -220,9 +220,7 @@ export function LayerPanelPlaceSearch({
           aria-autocomplete="list"
           aria-controls={showResults ? resultsId : undefined}
           aria-activedescendant={
-            showResults && activeIndex >= 0
-              ? `${resultsId}-option-${activeIndex}`
-              : undefined
+            showResults && activeIndex >= 0 ? `${resultsId}-option-${activeIndex}` : undefined
           }
           value={query}
           placeholder={t("layers.searchPlacesPlaceholder")}

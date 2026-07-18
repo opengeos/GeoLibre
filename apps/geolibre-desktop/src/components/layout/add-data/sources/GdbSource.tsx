@@ -13,11 +13,7 @@ import type { FeatureCollection } from "geojson";
 import { tempDir, join } from "@tauri-apps/api/path";
 import { remove } from "@tauri-apps/plugin-fs";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
-import {
-  isTauri,
-  pickLocalDirectory,
-  readLocalFileBytes,
-} from "../../../../lib/tauri-io";
+import { isTauri, pickLocalDirectory, readLocalFileBytes } from "../../../../lib/tauri-io";
 import { LAST_GEODATABASE_STORAGE_KEY } from "../constants";
 import {
   createBaseLayer,
@@ -75,10 +71,7 @@ function readStoredGdbSelection(): StoredGdbSelection | null {
 function writeStoredGdbSelection(selection: StoredGdbSelection): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
-      LAST_GEODATABASE_STORAGE_KEY,
-      JSON.stringify(selection),
-    );
+    window.localStorage.setItem(LAST_GEODATABASE_STORAGE_KEY, JSON.stringify(selection));
   } catch {
     // Best-effort persistence: a quota/private-mode failure must not break the
     // Add Data dialog (mirrors the service library's guard).
@@ -132,27 +125,20 @@ export function GdbSource() {
       if (job.status !== "succeeded") {
         throw new Error(job.error || t("addData.gdb.readError"));
       }
-      const result = job.result as
-        | { layers?: VectorDatasetLayer[] }
-        | undefined;
+      const result = job.result as { layers?: VectorDatasetLayer[] } | undefined;
       // Attribute-only tables (no geometry) cannot become map layers.
-      const spatialLayers = (result?.layers ?? []).filter(
-        (layer) => layer.geometry_type,
-      );
+      const spatialLayers = (result?.layers ?? []).filter((layer) => layer.geometry_type);
       if (spatialLayers.length === 0) {
         throw new Error(t("addData.gdb.errorNoLayers"));
       }
       const selected =
-        preferredLayer &&
-        spatialLayers.some((layer) => layer.name === preferredLayer)
+        preferredLayer && spatialLayers.some((layer) => layer.name === preferredLayer)
           ? preferredLayer
           : spatialLayers[0].name;
       setLayers(spatialLayers);
       setSelectedLayer(selected);
       source.setLayerName((current) =>
-        current.trim() && current !== defaultName
-          ? current
-          : layerNameFromPath(path, defaultName),
+        current.trim() && current !== defaultName ? current : layerNameFromPath(path, defaultName),
       );
       writeStoredGdbSelection({ path, layer: selected });
     } catch (err) {
@@ -237,9 +223,7 @@ export function GdbSource() {
         throw new Error(job.error || t("addData.gdb.convertError"));
       }
       const bytes = await readLocalFileBytes(outputPath);
-      featureCollection = JSON.parse(
-        new TextDecoder("utf-8").decode(bytes),
-      ) as FeatureCollection;
+      featureCollection = JSON.parse(new TextDecoder("utf-8").decode(bytes)) as FeatureCollection;
     } finally {
       // Best-effort cleanup so repeated imports cannot pile up in temp (the
       // capability grants remove for exactly this filename pattern). A failed
@@ -281,11 +265,7 @@ export function GdbSource() {
       onSubmit={handleSubmit}
       error={source.error}
       submitDisabled={
-        source.isSubmitting ||
-        isReadingLayers ||
-        !desktop ||
-        !gdbPath ||
-        selectedLayer === null
+        source.isSubmitting || isReadingLayers || !desktop || !gdbPath || selectedLayer === null
       }
     >
       <div className="space-y-3">
@@ -306,9 +286,7 @@ export function GdbSource() {
             {t("addData.gdb.chooseFolder")}
           </Button>
           <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {gdbPath
-              ? fileNameFromPath(gdbPath)
-              : t("addData.gdb.noFolderSelected")}
+            {gdbPath ? fileNameFromPath(gdbPath) : t("addData.gdb.noFolderSelected")}
           </span>
         </div>
 
@@ -347,9 +325,7 @@ export function GdbSource() {
               ))
             )}
           </Select>
-          <p className="text-xs text-muted-foreground">
-            {t("addData.gdb.help")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("addData.gdb.help")}</p>
         </div>
 
         {selectedInfo && !selectedInfo.crs ? (
@@ -361,9 +337,7 @@ export function GdbSource() {
               value={crsOverride}
               onChange={(event) => setCrsOverride(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              {t("addData.gdb.crsHelp")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("addData.gdb.crsHelp")}</p>
           </div>
         ) : null}
       </div>

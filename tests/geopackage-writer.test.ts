@@ -34,10 +34,7 @@ const SAMPLE: FeatureCollection = {
 describe("writeGeoPackage", () => {
   it("produces a valid GeoPackage SQLite file", () => {
     const bytes = writeGeoPackageSync(SQL, SAMPLE, "places");
-    assert.equal(
-      Buffer.from(bytes.subarray(0, 16)).toString("latin1"),
-      "SQLite format 3\0",
-    );
+    assert.equal(Buffer.from(bytes.subarray(0, 16)).toString("latin1"), "SQLite format 3\0");
 
     const db = new SQL.Database(bytes);
     try {
@@ -48,9 +45,7 @@ describe("writeGeoPackage", () => {
       // The required metadata tables exist.
       const tables = new Set(
         db
-          .exec(
-            "SELECT name FROM sqlite_master WHERE type='table'",
-          )[0]
+          .exec("SELECT name FROM sqlite_master WHERE type='table'")[0]
           .values.map((row) => String(row[0])),
       );
       for (const required of [
@@ -79,9 +74,7 @@ describe("writeGeoPackage", () => {
       assert.equal(count, 2);
 
       // Rows round-trip with their attribute values and a non-null geometry blob.
-      const rows = db.exec(
-        "SELECT name, value, ratio, ok, geom FROM places ORDER BY fid",
-      )[0];
+      const rows = db.exec("SELECT name, value, ratio, ok, geom FROM places ORDER BY fid")[0];
       assert.deepEqual(
         rows.values.map((r) => [r[0], r[1], r[2], r[3]]),
         [
@@ -99,8 +92,6 @@ describe("writeGeoPackage", () => {
   });
 
   it("rejects an empty FeatureCollection", () => {
-    assert.throws(() =>
-      writeGeoPackageSync(SQL, { type: "FeatureCollection", features: [] }, "x"),
-    );
+    assert.throws(() => writeGeoPackageSync(SQL, { type: "FeatureCollection", features: [] }, "x"));
   });
 });

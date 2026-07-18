@@ -35,7 +35,7 @@ export function participantCanEdit(
   mode: CollaborationMode,
 ): boolean {
   if (participant.role === "host") return true;
-  return participant.editOverride ?? (mode === "co-edit");
+  return participant.editOverride ?? mode === "co-edit";
 }
 
 // Client -> server -----------------------------------------------------------

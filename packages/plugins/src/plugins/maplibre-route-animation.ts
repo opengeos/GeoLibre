@@ -1,15 +1,9 @@
-import type {
-  GeoJSONSource,
-  Map as MapLibreMap,
-} from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, LineString, Point } from "geojson";
 import type { Layer } from "@deck.gl/core";
 import type { GeoLibreAppAPI, GeoLibreDeckGL, GeoLibrePlugin } from "../types";
 import { colorToRgba } from "./deck-style-utils";
-import {
-  ensureSharedDeckOverlay,
-  setSharedDeckLayers,
-} from "./shared-deck-overlay";
+import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import {
   type LngLat,
   measureLine,
@@ -79,11 +73,7 @@ const ARROW_ICON_ID = "geolibre-route-anim-arrow";
  */
 export type RouteMarkerStyle = "arrow" | "point" | "none";
 
-export const ROUTE_MARKER_STYLES: readonly RouteMarkerStyle[] = [
-  "arrow",
-  "point",
-  "none",
-] as const;
+export const ROUTE_MARKER_STYLES: readonly RouteMarkerStyle[] = ["arrow", "point", "none"] as const;
 
 /** Persisted, user-tunable state of the route animation. */
 export interface RouteAnimationSettings {
@@ -148,12 +138,7 @@ export const DEFAULT_ROUTE_ANIMATION_SETTINGS: RouteAnimationSettings = {
   color: DEFAULT_COLOR,
 };
 
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
 }
@@ -165,21 +150,12 @@ export function normalizeRouteAnimationSettings(
 ): RouteAnimationSettings {
   const c = (value ?? {}) as Partial<RouteAnimationSettings>;
   return {
-    layerId:
-      typeof c.layerId === "string" && c.layerId.length > 0
-        ? c.layerId
-        : base.layerId,
+    layerId: typeof c.layerId === "string" && c.layerId.length > 0 ? c.layerId : base.layerId,
     playing: typeof c.playing === "boolean" ? c.playing : base.playing,
-    speedMps: clampNumber(
-      c.speedMps,
-      ROUTE_ANIM_SPEED_MIN,
-      ROUTE_ANIM_SPEED_MAX,
-      base.speedMps,
-    ),
+    speedMps: clampNumber(c.speedMps, ROUTE_ANIM_SPEED_MIN, ROUTE_ANIM_SPEED_MAX, base.speedMps),
     loop: typeof c.loop === "boolean" ? c.loop : base.loop,
     progress: clampNumber(c.progress, 0, 1, base.progress),
-    followCamera:
-      typeof c.followCamera === "boolean" ? c.followCamera : base.followCamera,
+    followCamera: typeof c.followCamera === "boolean" ? c.followCamera : base.followCamera,
     followPitch: clampNumber(
       c.followPitch,
       ROUTE_FOLLOW_PITCH_MIN,
@@ -192,23 +168,16 @@ export function normalizeRouteAnimationSettings(
       ROUTE_FOLLOW_ZOOM_MAX,
       base.followZoom,
     ),
-    followRotate:
-      typeof c.followRotate === "boolean" ? c.followRotate : base.followRotate,
+    followRotate: typeof c.followRotate === "boolean" ? c.followRotate : base.followRotate,
     markerStyle: ROUTE_MARKER_STYLES.includes(c.markerStyle as RouteMarkerStyle)
       ? (c.markerStyle as RouteMarkerStyle)
       : base.markerStyle,
     showTrail: typeof c.showTrail === "boolean" ? c.showTrail : base.showTrail,
-    color:
-      typeof c.color === "string" && HEX_COLOR.test(c.color)
-        ? c.color
-        : base.color,
+    color: typeof c.color === "string" && HEX_COLOR.test(c.color) ? c.color : base.color,
   };
 }
 
-function settingsEqual(
-  a: RouteAnimationSettings,
-  b: RouteAnimationSettings,
-): boolean {
+function settingsEqual(a: RouteAnimationSettings, b: RouteAnimationSettings): boolean {
   return (
     a.layerId === b.layerId &&
     a.playing === b.playing &&
@@ -535,12 +504,8 @@ class RouteAnimationEngine {
   /** Draw the marker (and trail) at the current progress; optionally follow. */
   render(): void {
     if (this.destroyed) return;
-    const markerSource = this.map.getSource(MARKER_SOURCE_ID) as
-      | GeoJSONSource
-      | undefined;
-    const trailSource = this.map.getSource(TRAIL_SOURCE_ID) as
-      | GeoJSONSource
-      | undefined;
+    const markerSource = this.map.getSource(MARKER_SOURCE_ID) as GeoJSONSource | undefined;
+    const trailSource = this.map.getSource(TRAIL_SOURCE_ID) as GeoJSONSource | undefined;
 
     // No animatable route: actively clear the marker/trail so a stale or
     // placeholder feature (e.g. the initial [0, 0] point) never lingers on the
@@ -553,12 +518,7 @@ class RouteAnimationEngine {
     }
 
     const distance = this.settings.progress * this.totalMeters;
-    const point = pointAlongLine(
-      this.coords,
-      this.cumulative,
-      distance,
-      this.elevations,
-    );
+    const point = pointAlongLine(this.coords, this.cumulative, distance, this.elevations);
     const { coord, bearing } = point;
 
     // When the selected layer is drawn elevated (Style panel's "3D (Z values)"),
@@ -573,9 +533,7 @@ class RouteAnimationEngine {
       if (markerSource) markerSource.setData(markerFeature(coord, bearing));
       if (this.settings.showTrail) {
         trailSource?.setData(
-          lineFeature(
-            sliceLineAtDistance(this.coords, this.cumulative, distance),
-          ),
+          lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
         );
       } else {
         trailSource?.setData(emptyLine());
@@ -604,20 +562,10 @@ class RouteAnimationEngine {
     const layers: Layer[] = [];
 
     if (this.settings.showTrail) {
-      const trail = sliceRouteAtDistance(
-        this.coords,
-        this.cumulative,
-        distance,
-        this.elevations,
-      );
+      const trail = sliceRouteAtDistance(this.coords, this.cumulative, distance, this.elevations);
       if (trail.coords.length >= 2) {
         const path = trail.coords.map(
-          (c, i) =>
-            [c[0], c[1], lift(trail.elevations[i] ?? 0)] as [
-              number,
-              number,
-              number,
-            ],
+          (c, i) => [c[0], c[1], lift(trail.elevations[i] ?? 0)] as [number, number, number],
         );
         layers.push(
           new deck.layers.PathLayer<{ path: [number, number, number][] }>({
@@ -700,9 +648,7 @@ class RouteAnimationEngine {
       zoom: this.settings.followZoom,
       // Rotate the map so travel points up-screen (a chase cam); otherwise keep
       // the current bearing (north-up unless the user rotated the map).
-      bearing: this.settings.followRotate
-        ? bearing
-        : this.map.getBearing(),
+      bearing: this.settings.followRotate ? bearing : this.map.getBearing(),
     });
   }
 
@@ -727,8 +673,7 @@ class RouteAnimationEngine {
       // Cap the delta so a long stall (backgrounded/minimized tab pauses rAF)
       // resumes smoothly instead of making the marker jump far ahead.
       const elapsedSec = Math.min(0.25, (now - this.lastFrame) / 1000);
-      const advanced =
-        (elapsedSec * this.settings.speedMps) / this.totalMeters;
+      const advanced = (elapsedSec * this.settings.speedMps) / this.totalMeters;
       advanceRouteProgress(advanced);
     }
     this.lastFrame = now;
@@ -885,9 +830,7 @@ export function subscribeRouteAnimation(listener: () => void): () => void {
  * Apply a partial settings change: normalize, push to the engine, and notify
  * subscribers. Returns true when something actually changed.
  */
-export function setRouteAnimationSettings(
-  next: Partial<RouteAnimationSettings>,
-): boolean {
+export function setRouteAnimationSettings(next: Partial<RouteAnimationSettings>): boolean {
   const normalized = normalizeRouteAnimationSettings(
     { ...settings, ...next },
     DEFAULT_ROUTE_ANIMATION_SETTINGS,
@@ -936,15 +879,10 @@ export function setRouteAnimationProgress(progress: number): void {
  * or a load must never snap a running/restored animation back to the start. When
  * the coordinates are unchanged the engine already holds them, so it is a no-op.
  */
-export function setRouteAnimationRoute(
-  coords: LngLat[],
-  elevations: number[] = [],
-): void {
+export function setRouteAnimationRoute(coords: LngLat[], elevations: number[] = []): void {
   const unchanged =
     coords.length === routeCoords.length &&
-    coords.every(
-      (c, i) => c[0] === routeCoords[i][0] && c[1] === routeCoords[i][1],
-    ) &&
+    coords.every((c, i) => c[0] === routeCoords[i][0] && c[1] === routeCoords[i][1]) &&
     elevations.length === routeElevations.length &&
     elevations.every((z, i) => z === routeElevations[i]);
   routeCoords = coords;
@@ -969,9 +907,7 @@ export function setRouteAnimationRoute(
  * ride the elevated line (#1210); otherwise they render flat as before. Cheap
  * and idempotent, so the panel may call it whenever those style values change.
  */
-export function setRouteAnimationElevation(
-  elevation: RouteElevationConfig,
-): void {
+export function setRouteAnimationElevation(elevation: RouteElevationConfig): void {
   const unchanged =
     routeElevation.active === elevation.active &&
     routeElevation.verticalScale === elevation.verticalScale &&
@@ -1009,10 +945,7 @@ export function advanceRouteProgress(delta: number): void {
  * sun plugin's restore path; the only place allowed to change open/closed state
  * from stored data.
  */
-export function restoreRouteAnimation(
-  app: GeoLibreAppAPI,
-  state?: unknown,
-): boolean {
+export function restoreRouteAnimation(app: GeoLibreAppAPI, state?: unknown): boolean {
   const next = normalizeRouteAnimationSettings(state, {
     ...DEFAULT_ROUTE_ANIMATION_SETTINGS,
   });
@@ -1364,6 +1297,5 @@ export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
     if (!panelVisible && isDefaultSettings(settings)) return undefined;
     return { open: panelVisible, ...settings, playing: false };
   },
-  applyProjectState: (app: GeoLibreAppAPI, state: unknown) =>
-    restoreRouteAnimation(app, state),
+  applyProjectState: (app: GeoLibreAppAPI, state: unknown) => restoreRouteAnimation(app, state),
 };

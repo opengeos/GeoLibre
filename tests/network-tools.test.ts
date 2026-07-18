@@ -52,7 +52,13 @@ describe("layerToSequencedPoints", () => {
       {
         type: "Feature",
         properties: { name: "line" },
-        geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
       },
       point([Number.NaN, 38.9], { name: "bad-coord" }),
     ]);
@@ -71,10 +77,7 @@ describe("layerToSequencedPoints", () => {
   });
 
   it("falls back to the feature index as id when no id/name property exists", () => {
-    const layer = pointLayer([
-      point([-77.05, 38.88], {}),
-      point([-77.01, 38.89], {}),
-    ]);
+    const layer = pointLayer([point([-77.05, 38.88], {}), point([-77.01, 38.89], {})]);
     const ids = layerToSequencedPoints(layer, "").map((p) => p.id);
     assert.deepEqual(ids, [0, 1]);
   });

@@ -22,10 +22,7 @@
  */
 
 import { getActiveEllipsoid, getActiveMeanRadiusMeters } from "@geolibre/core";
-import type {
-  MeasureControl,
-  Measurement,
-} from "maplibre-gl-components";
+import type { MeasureControl, Measurement } from "maplibre-gl-components";
 import {
   fetchElevations,
   MAX_POINTS_PER_REQUEST,
@@ -49,13 +46,7 @@ const LINE_MAX_SAMPLES = 200;
 const AREA_MAX_SAMPLES = 256;
 
 /** Upstream unit ids (mirrors maplibre-gl-components' DistanceUnit/AreaUnit). */
-type DistanceUnit =
-  | "meters"
-  | "kilometers"
-  | "miles"
-  | "feet"
-  | "yards"
-  | "nautical-miles";
+type DistanceUnit = "meters" | "kilometers" | "miles" | "feet" | "yards" | "nautical-miles";
 type AreaUnit =
   | "square-meters"
   | "square-kilometers"
@@ -98,11 +89,7 @@ const UNIT_SYMBOLS: Record<DistanceUnit | AreaUnit, string> = {
 };
 
 /** Distance units whose users expect elevations in feet rather than meters. */
-const IMPERIAL_DISTANCE_UNITS: ReadonlySet<DistanceUnit> = new Set([
-  "miles",
-  "feet",
-  "yards",
-]);
+const IMPERIAL_DISTANCE_UNITS: ReadonlySet<DistanceUnit> = new Set(["miles", "feet", "yards"]);
 
 const FEET_PER_METER = 1 / 0.3048;
 
@@ -123,14 +110,11 @@ const terrainMeasureLabels = {
 };
 
 /** Override the terrain-measure labels with translated text. */
-export function setTerrainMeasureLabels(
-  labels: Partial<typeof terrainMeasureLabels>,
-): void {
+export function setTerrainMeasureLabels(labels: Partial<typeof terrainMeasureLabels>): void {
   for (const [key, value] of Object.entries(labels)) {
     // Only overwrite when the caller actually supplied the key; an omitted key
     // keeps the English default rather than being blanked out.
-    if (value !== undefined)
-      terrainMeasureLabels[key as keyof typeof terrainMeasureLabels] = value;
+    if (value !== undefined) terrainMeasureLabels[key as keyof typeof terrainMeasureLabels] = value;
   }
 }
 
@@ -153,9 +137,7 @@ export function sampleMapTerrain(
   const terrain = map.getTerrain();
   if (!terrain) return null;
   const exaggeration =
-    typeof terrain.exaggeration === "number" && terrain.exaggeration > 0
-      ? terrain.exaggeration
-      : 1;
+    typeof terrain.exaggeration === "number" && terrain.exaggeration > 0 ? terrain.exaggeration : 1;
   return points.map((point) => {
     const elevation = map.queryTerrainElevation!(point);
     return typeof elevation === "number" && Number.isFinite(elevation)
@@ -183,9 +165,7 @@ export async function sampleRemoteElevations(
     chunks.map(async (chunk) => {
       try {
         const elevations = await fetchElevations(chunk, fetchImpl);
-        return elevations.map((elevation) =>
-          Number.isFinite(elevation) ? elevation : null,
-        );
+        return elevations.map((elevation) => (Number.isFinite(elevation) ? elevation : null));
       } catch {
         return chunk.map(() => null);
       }
@@ -217,9 +197,7 @@ interface MeasureControlInternals {
  * the regression when bumping the dependency. Shared by this module and
  * `makeMeasurePanelResizable` so an upstream rename needs one fix.
  */
-export function measurePanelElement(
-  control: MeasureControl,
-): HTMLElement | null {
+export function measurePanelElement(control: MeasureControl): HTMLElement | null {
   const panel = (control as unknown as MeasureControlInternals)._panel;
   if (!panel) {
     console.warn(
@@ -245,12 +223,7 @@ export async function computeTerrainReadout(
 
   if (measurement.mode === "distance") {
     if (coords.length < 2) return null;
-    const line = densifyLine(
-      coords,
-      LINE_SAMPLE_SPACING_METERS,
-      LINE_MAX_SAMPLES,
-      radius,
-    );
+    const line = densifyLine(coords, LINE_SAMPLE_SPACING_METERS, LINE_MAX_SAMPLES, radius);
     const elevations = await sampleElevations(line.coords, map, fetchImpl);
     if (!elevations) return null;
     const result = surfaceDistance(line.distances, elevations);
@@ -332,10 +305,7 @@ export function terrainReadoutRows(
         `↑ ${formatElevationValue(result.gainMeters, units.distanceUnit)}  ↓ ${formatElevationValue(result.lossMeters, units.distanceUnit)}`,
       ],
     ];
-    if (
-      result.minElevationMeters !== null &&
-      result.maxElevationMeters !== null
-    ) {
+    if (result.minElevationMeters !== null && result.maxElevationMeters !== null) {
       rows.push([
         terrainMeasureLabels.elevationRange,
         `${formatElevationValue(result.minElevationMeters, units.distanceUnit)} / ${formatElevationValue(result.maxElevationMeters, units.distanceUnit)}`,
@@ -345,10 +315,7 @@ export function terrainReadoutRows(
   }
   const { result } = readout;
   return [
-    [
-      terrainMeasureLabels.surfaceArea,
-      formatAreaValue(result.surfaceSquareMeters, units.areaUnit),
-    ],
+    [terrainMeasureLabels.surfaceArea, formatAreaValue(result.surfaceSquareMeters, units.areaUnit)],
     [terrainMeasureLabels.meanSlope, `${result.meanSlopeDegrees.toFixed(1)}°`],
   ];
 }
@@ -439,9 +406,7 @@ export function attachTerrainMeasure(
     section.appendChild(note);
   };
 
-  const onDrawEnd = (event: {
-    measurement?: Measurement;
-  }): void => {
+  const onDrawEnd = (event: { measurement?: Measurement }): void => {
     const measurement = event.measurement;
     if (!measurement) return;
     const token = ++requestToken;
@@ -474,10 +439,7 @@ export function attachTerrainMeasure(
   const onMeasurementRemove = (event: { measurement?: Measurement }): void => {
     const removedId = event.measurement?.id;
     if (!removedId) return;
-    if (
-      current?.measurementId === removedId ||
-      pendingMeasurementId === removedId
-    ) {
+    if (current?.measurementId === removedId || pendingMeasurementId === removedId) {
       requestToken += 1;
       pendingMeasurementId = null;
       hide();

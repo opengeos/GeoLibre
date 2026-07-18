@@ -16,9 +16,7 @@ import {
   upsertServiceEntry,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
-function makeEntry(
-  overrides: Partial<ServiceLibraryEntry> = {},
-): ServiceLibraryEntry {
+function makeEntry(overrides: Partial<ServiceLibraryEntry> = {}): ServiceLibraryEntry {
   return {
     id: overrides.id ?? "id-1",
     name: overrides.name ?? "Example WMS",
@@ -136,9 +134,7 @@ describe("listServices", () => {
     assert.equal(wms[wms.length - 1].name, "My WMS");
     // A user XYZ entry must not appear under the wms kind.
     assert.equal(
-      listServices("wms", [makeEntry({ kind: "xyz", id: "x" })]).some(
-        (e) => e.id === "x",
-      ),
+      listServices("wms", [makeEntry({ kind: "xyz", id: "x" })]).some((e) => e.id === "x"),
       false,
     );
   });

@@ -1,10 +1,4 @@
-import type {
-  Feature,
-  FeatureCollection,
-  GeoJsonProperties,
-  Geometry,
-  Point,
-} from "geojson";
+import type { Feature, FeatureCollection, GeoJsonProperties, Geometry, Point } from "geojson";
 
 export interface DelimitedTextLayerResult {
   data: FeatureCollection;
@@ -36,10 +30,7 @@ export const NO_VALID_COORDINATES_MESSAGE =
 export const MIXED_COORDINATE_FIELDS_MESSAGE =
   "Select both a longitude and a latitude field, or leave both as None to add an attribute table.";
 
-export function parseDelimitedTextFields(
-  text: string,
-  delimiter: string,
-): string[] {
+export function parseDelimitedTextFields(text: string, delimiter: string): string[] {
   if (!delimiter) throw new Error("Enter a delimiter.");
 
   const rows = parseDelimitedRows(text, delimiter).filter((row) =>
@@ -115,9 +106,7 @@ export function parseDelimitedTextLayer(
     throw new Error(`Latitude field "${options.latitudeField}" was not found.`);
   }
   if (longitudeIndex < 0) {
-    throw new Error(
-      `Longitude field "${options.longitudeField}" was not found.`,
-    );
+    throw new Error(`Longitude field "${options.longitudeField}" was not found.`);
   }
 
   let skippedRows = 0;
@@ -252,10 +241,7 @@ function parseDelimitedRows(text: string, delimiter: string): string[][] {
  * Shared by the point and attribute-table paths so their property shape cannot
  * drift apart.
  */
-function buildRowProperties(
-  fields: string[],
-  row: string[],
-): GeoJsonProperties {
+function buildRowProperties(fields: string[], row: string[]): GeoJsonProperties {
   const properties: GeoJsonProperties = {};
   fields.forEach((field, index) => {
     properties[field] = row[index] ?? "";
@@ -284,9 +270,7 @@ function uniqueFieldNames(fields: string[]): string[] {
 
 function findFieldIndex(fields: string[], fieldName: string): number {
   const normalizedFieldName = fieldName.trim().toLowerCase();
-  return fields.findIndex(
-    (field) => field.trim().toLowerCase() === normalizedFieldName,
-  );
+  return fields.findIndex((field) => field.trim().toLowerCase() === normalizedFieldName);
 }
 
 /**
@@ -314,10 +298,7 @@ export function parseCoordinate(value: string | undefined): number {
 
   const decimalSeparator = lastComma > lastDot ? "," : ".";
   const groupingSeparator = decimalSeparator === "," ? "." : ",";
-  const normalized = trimmed
-    .split(groupingSeparator)
-    .join("")
-    .replaceAll(decimalSeparator, ".");
+  const normalized = trimmed.split(groupingSeparator).join("").replaceAll(decimalSeparator, ".");
   return Number(normalized);
 }
 
@@ -328,23 +309,10 @@ export function parseCoordinate(value: string | undefined): number {
  * would silently build wrong points. The Add Data dialog still offers it as a
  * manual option where the user confirms the column.
  */
-export const LONGITUDE_FIELD_CANDIDATES = [
-  "longitude",
-  "lon",
-  "lng",
-  "x",
-  "xcoord",
-  "x_coord",
-];
+export const LONGITUDE_FIELD_CANDIDATES = ["longitude", "lon", "lng", "x", "xcoord", "x_coord"];
 
 /** Header names that, case-insensitively, identify a latitude column. */
-export const LATITUDE_FIELD_CANDIDATES = [
-  "latitude",
-  "lat",
-  "y",
-  "ycoord",
-  "y_coord",
-];
+export const LATITUDE_FIELD_CANDIDATES = ["latitude", "lat", "y", "ycoord", "y_coord"];
 
 /** Delimiters tried, in order, when auto-detecting a delimited file's format. */
 export const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];

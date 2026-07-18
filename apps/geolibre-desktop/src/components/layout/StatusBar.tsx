@@ -34,18 +34,14 @@ export function StatusBar({
   const gpsAgeS = gpsStatus
     ? Math.max(0, Math.round((Date.now() - gpsStatus.timestamp) / 1000))
     : 0;
-  const gpsCoords = gpsStatus
-    ? `${gpsStatus.lng.toFixed(5)}, ${gpsStatus.lat.toFixed(5)}`
-    : null;
+  const gpsCoords = gpsStatus ? `${gpsStatus.lng.toFixed(5)}, ${gpsStatus.lat.toFixed(5)}` : null;
   // Compact status bars get coordinates only; the full form matches the GPS
   // dialog's readout formatting (space before the units).
   const gpsText = gpsStatus
     ? compact
       ? gpsCoords
       : `${gpsCoords} ±${Math.round(gpsStatus.accuracy)} m` +
-        (gpsStatus.speed != null
-          ? ` ${formatSpeedKmh(gpsStatus.speed)} km/h`
-          : "") +
+        (gpsStatus.speed != null ? ` ${formatSpeedKmh(gpsStatus.speed)} km/h` : "") +
         (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
     : null;
 
@@ -53,9 +49,7 @@ export function StatusBar({
     ? `${pointerCoords[0].toFixed(5)}, ${pointerCoords[1].toFixed(5)}`
     : "—";
 
-  const bboxText = mapView.bbox
-    ? mapView.bbox.map((n) => n.toFixed(4)).join(", ")
-    : "—";
+  const bboxText = mapView.bbox ? mapView.bbox.map((n) => n.toFixed(4)).join(", ") : "—";
 
   return (
     <footer
@@ -69,13 +63,9 @@ export function StatusBar({
       </span>
       {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
       <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
-      <span className="shrink-0">
-        Bearing: {mapView.bearing.toFixed(1)}°
-      </span>
+      <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
       <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
-      {compact ? null : (
-        <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>
-      )}
+      {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}
       <button
         type="button"
         className={cn(

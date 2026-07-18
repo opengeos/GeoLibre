@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DEFAULT_LEGEND_CONFIG,
@@ -189,12 +182,8 @@ export function PrintLayoutDialog({
 
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
-  const [titlePlacement, setTitlePlacement] = useState<"outside" | "inside">(
-    "outside",
-  );
-  const [titleAlign, setTitleAlign] = useState<"left" | "center" | "right">(
-    "center",
-  );
+  const [titlePlacement, setTitlePlacement] = useState<"outside" | "inside">("outside");
+  const [titleAlign, setTitleAlign] = useState<"left" | "center" | "right">("center");
   const [paperSize, setPaperSize] = useState<PaperSizeId>("a4");
   const [orientation, setOrientation] = useState<Orientation>("landscape");
   const [customWidth, setCustomWidth] = useState(1280);
@@ -211,9 +200,7 @@ export function PrintLayoutDialog({
   const [showDate, setShowDate] = useState(true);
   const [dateText, setDateText] = useState("");
   const [showAttribution, setShowAttribution] = useState(true);
-  const [pageMargin, setPageMargin] = useState<"normal" | "narrow" | "none">(
-    "normal",
-  );
+  const [pageMargin, setPageMargin] = useState<"normal" | "narrow" | "none">("normal");
   const [showPageBorder, setShowPageBorder] = useState(false);
   const [pageBorderColor, setPageBorderColor] = useState("#111827");
   const [pageBorderWidth, setPageBorderWidth] = useState(2);
@@ -238,9 +225,9 @@ export function PrintLayoutDialog({
   const [colorbarMin, setColorbarMin] = useState("0");
   const [colorbarMax, setColorbarMax] = useState("100");
   const [colorbarLabel, setColorbarLabel] = useState("");
-  const [colorbarOrientation, setColorbarOrientation] = useState<
-    "vertical" | "horizontal"
-  >("vertical");
+  const [colorbarOrientation, setColorbarOrientation] = useState<"vertical" | "horizontal">(
+    "vertical",
+  );
   // Bar length as a percentage of the body width/height.
   const [colorbarLength, setColorbarLength] = useState(34);
   // User-defined legend composed in the dialog (like Controls -> Legend).
@@ -273,13 +260,11 @@ export function PrintLayoutDialog({
       setLegendDictError(t("printLayout.customLegend.importError"));
       return;
     }
-    const entries = Object.entries(parsed as Record<string, unknown>).map(
-      ([label, color]) => ({
-        id: `cl-${++customLegendId.current}`,
-        label,
-        color: String(color),
-      }),
-    );
+    const entries = Object.entries(parsed as Record<string, unknown>).map(([label, color]) => ({
+      id: `cl-${++customLegendId.current}`,
+      label,
+      color: String(color),
+    }));
     if (entries.length === 0) {
       setLegendDictError(t("printLayout.customLegend.importError"));
       return;
@@ -307,8 +292,7 @@ export function PrintLayoutDialog({
   const [chartTitle, setChartTitle] = useState("");
   const [chartType, setChartType] = useState<ChartBlockType>("bar");
   const [chartCategoryField, setChartCategoryField] = useState("");
-  const [chartAggregation, setChartAggregation] =
-    useState<BarAggregation>("count");
+  const [chartAggregation, setChartAggregation] = useState<BarAggregation>("count");
   const [chartValueField, setChartValueField] = useState("");
   // Top-right by default: the scale bar + north arrow duo occupies the
   // bottom-right corner out of the box.
@@ -321,9 +305,7 @@ export function PrintLayoutDialog({
   const [crs, setCrs] = useState("");
   const [revision, setRevision] = useState("");
   // Custom print extent drawn on the map (GH #523).
-  const [captureMode, setCaptureMode] = useState<"viewport" | "extent">(
-    "viewport",
-  );
+  const [captureMode, setCaptureMode] = useState<"viewport" | "extent">("viewport");
   const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(null);
   const [drawingExtent, setDrawingExtent] = useState(false);
   // Atlas / map series: one page per coverage-layer feature (GH #1291).
@@ -331,14 +313,10 @@ export function PrintLayoutDialog({
   const [atlasLayerId, setAtlasLayerId] = useState("");
   // Coverage strategy: one page per feature, or pages tiling the layer's line
   // features in fixed-length stretches (GH #1291 follow-up).
-  const [atlasCoverage, setAtlasCoverage] = useState<"features" | "line">(
-    "features",
-  );
+  const [atlasCoverage, setAtlasCoverage] = useState<"features" | "line">("features");
   const [atlasSegmentKm, setAtlasSegmentKm] = useState("20");
   const [atlasNameField, setAtlasNameField] = useState("");
-  const [atlasExtentMode, setAtlasExtentMode] = useState<"margin" | "scale">(
-    "margin",
-  );
+  const [atlasExtentMode, setAtlasExtentMode] = useState<"margin" | "scale">("margin");
   const [atlasMarginPct, setAtlasMarginPct] = useState(10);
   const [atlasScale, setAtlasScale] = useState("50000");
   const [atlasSortField, setAtlasSortField] = useState("");
@@ -421,116 +399,101 @@ export function PrintLayoutDialog({
   // Resize the whole dialog from its bottom-right grip. The dialog is centred
   // via a -50% transform, so the right/bottom edges move by half the size
   // change; growing by 2x the pointer delta keeps the grip under the cursor.
-  const startDialogResize = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      const el = dialogRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startW = rect.width;
-      const startH = rect.height;
-      let next = { width: startW, height: startH };
-      let frame: number | null = null;
-      const prevCursor = document.body.style.cursor;
-      const prevSelect = document.body.style.userSelect;
-      document.body.style.cursor = "nwse-resize";
-      document.body.style.userSelect = "none";
+  const startDialogResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const el = dialogRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = rect.width;
+    const startH = rect.height;
+    let next = { width: startW, height: startH };
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "nwse-resize";
+    document.body.style.userSelect = "none";
 
-      const onMove = (e: PointerEvent) => {
-        next = {
-          width: Math.max(
-            480,
-            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2),
-          ),
-          height: Math.max(
-            360,
-            Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
-          ),
-        };
-        if (frame !== null) return;
-        frame = window.requestAnimationFrame(() => {
-          frame = null;
-          setDialogSize(next);
-        });
+    const onMove = (e: PointerEvent) => {
+      next = {
+        width: Math.max(480, Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2)),
+        height: Math.max(360, Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2)),
       };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onUp);
-        if (frame !== null) window.cancelAnimationFrame(frame);
-        document.body.style.cursor = prevCursor;
-        document.body.style.userSelect = prevSelect;
-        resizeCleanupRef.current = null;
-      };
-      const onUp = () => {
-        cleanup();
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
         setDialogSize(next);
-      };
-      resizeCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onUp);
-    },
-    [],
-  );
+      });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      resizeCleanupRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setDialogSize(next);
+    };
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
 
   // Drag the splitter between the controls column and the preview. Mirrors the
   // shell's panel-resize idiom: pointer capture so the drag survives leaving the
   // handle, RAF-throttled width updates, and a col-resize body cursor.
-  const startSplitterResize = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      const startX = event.clientX;
-      const startWidth = controlsWidthRef.current;
-      let nextWidth = startWidth;
-      let frame: number | null = null;
-      const prevCursor = document.body.style.cursor;
-      const prevSelect = document.body.style.userSelect;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
+  const startSplitterResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = controlsWidthRef.current;
+    let nextWidth = startWidth;
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
 
-      const onMove = (e: PointerEvent) => {
-        nextWidth = Math.max(
-          CONTROLS_MIN_WIDTH,
-          Math.min(CONTROLS_MAX_WIDTH, startWidth + e.clientX - startX),
-        );
-        if (frame !== null) return;
-        frame = window.requestAnimationFrame(() => {
-          frame = null;
-          setControlsWidth(nextWidth);
-        });
-      };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onUp);
-        if (frame !== null) window.cancelAnimationFrame(frame);
-        document.body.style.cursor = prevCursor;
-        document.body.style.userSelect = prevSelect;
-        resizeCleanupRef.current = null;
-      };
-      const onUp = () => {
-        cleanup();
+    const onMove = (e: PointerEvent) => {
+      nextWidth = Math.max(
+        CONTROLS_MIN_WIDTH,
+        Math.min(CONTROLS_MAX_WIDTH, startWidth + e.clientX - startX),
+      );
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
         setControlsWidth(nextWidth);
-      };
-      resizeCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onUp);
-    },
-    [],
-  );
+      });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      resizeCleanupRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setControlsWidth(nextWidth);
+    };
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
 
   const isCustom = paperSize === "custom";
-  const paperOptions = useMemo(
-    () => PAPER_SIZES.filter((p) => p.group === "paper"),
-    [],
-  );
+  const paperOptions = useMemo(() => PAPER_SIZES.filter((p) => p.group === "paper"), []);
   const screenOptions = useMemo(
     () => PAPER_SIZES.filter((p) => p.group === "screen" && p.id !== "custom"),
     [],
@@ -546,16 +509,13 @@ export function PrintLayoutDialog({
     [baseLegend, legendConfig],
   );
   const entryIdsInOrder = useMemo(
-    () =>
-      editorRows.filter((r) => r.kind === "entry").map((r) => r.layerId),
+    () => editorRows.filter((r) => r.kind === "entry").map((r) => r.layerId),
     [editorRows],
   );
 
   const moveEntry = useCallback(
     (layerId: string, direction: "up" | "down") => {
-      setLegendConfig(
-        reorderLegendEntry(legendConfig, entryIdsInOrder, layerId, direction),
-      );
+      setLegendConfig(reorderLegendEntry(legendConfig, entryIdsInOrder, layerId, direction));
     },
     [legendConfig, entryIdsInOrder, setLegendConfig],
   );
@@ -582,11 +542,7 @@ export function PrintLayoutDialog({
       // An explicit override wins (used right after drawing, before state has
       // settled); otherwise clip to the stored extent only in extent mode.
       const clip =
-        clipOverride !== undefined
-          ? clipOverride
-          : captureMode === "extent"
-            ? extentBbox
-            : null;
+        clipOverride !== undefined ? clipOverride : captureMode === "extent" ? extentBbox : null;
       // An active graticule draws coordinate labels at the map edges; fit the
       // captured map with "contain" so the page crop does not trim them.
       setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
@@ -670,10 +626,7 @@ export function PrintLayoutDialog({
   );
 
   const customSize = useMemo<CustomSize | null>(
-    () =>
-      isCustom
-        ? { width: customWidth, height: customHeight, unit: customUnit }
-        : null,
+    () => (isCustom ? { width: customWidth, height: customHeight, unit: customUnit } : null),
     [isCustom, customWidth, customHeight, customUnit],
   );
 
@@ -821,17 +774,13 @@ export function PrintLayoutDialog({
   // The per-vertex geometry walk runs once per coverage layer; sort/filter
   // edits below only re-iterate these lightweight per-feature records.
   const atlasFeatureInfos = useMemo(
-    () =>
-      atlasLayer?.geojson ? collectAtlasFeatures(atlasLayer.geojson) : [],
+    () => (atlasLayer?.geojson ? collectAtlasFeatures(atlasLayer.geojson) : []),
     [atlasLayer],
   );
   // Field names come from ALL features (once per layer, cheap over the
   // precomputed records), so sparse attributes past any sample window still
   // appear in the name/sort selectors.
-  const atlasFields = useMemo(
-    () => listAtlasFields(atlasFeatureInfos),
-    [atlasFeatureInfos],
-  );
+  const atlasFields = useMemo(() => listAtlasFields(atlasFeatureInfos), [atlasFeatureInfos]);
   // Reparse (and rebuild the page list below) off React's deferred lane, so
   // typing in the filter box does not synchronously re-iterate a large
   // coverage layer on every keystroke.
@@ -847,9 +796,7 @@ export function PrintLayoutDialog({
   const atlasLineFeatureCount = useMemo(
     () =>
       atlasLayer?.geojson
-        ? atlasLayer.geojson.features.filter((f) =>
-            hasLineGeometry(f.geometry),
-          ).length
+        ? atlasLayer.geojson.features.filter((f) => hasLineGeometry(f.geometry)).length
         : 0,
     [atlasLayer],
   );
@@ -887,27 +834,17 @@ export function PrintLayoutDialog({
   // Order + membership signature of the series: changes when sorting or
   // filtering reshuffles which feature sits at each page, but not when only
   // the display names do (a name-field switch must not re-drive the map).
-  const atlasDriveKey = useMemo(
-    () => atlasPages.map((p) => p.sourceIndex).join(","),
-    [atlasPages],
-  );
+  const atlasDriveKey = useMemo(() => atlasPages.map((p) => p.sourceIndex).join(","), [atlasPages]);
   // The stored index can go stale when a filter/sort change shrinks the list.
-  const clampedAtlasIndex = Math.min(
-    atlasIndex,
-    Math.max(0, atlasPageCount - 1),
-  );
-  const currentAtlasPage = atlasEnabled
-    ? (atlasPages[clampedAtlasIndex] ?? null)
-    : null;
+  const clampedAtlasIndex = Math.min(atlasIndex, Math.max(0, atlasPageCount - 1));
+  const currentAtlasPage = atlasEnabled ? (atlasPages[clampedAtlasIndex] ?? null) : null;
   const atlasActive = atlasEnabled && atlasPageCount > 0;
   atlasActiveRef.current = atlasActive;
   const atlasFilterValid = atlasFilterPredicate !== null;
-  const atlasScaleValid =
-    atlasExtentMode !== "scale" || Number(atlasScale) > 0;
+  const atlasScaleValid = atlasExtentMode !== "scale" || Number(atlasScale) > 0;
   // A floor (not just > 0) keeps a mistyped tiny length from cutting a long
   // line into an enormous synchronous page list.
-  const atlasSegmentValid =
-    atlasCoverage !== "line" || Number(atlasSegmentKm) >= 0.1;
+  const atlasSegmentValid = atlasCoverage !== "line" || Number(atlasSegmentKm) >= 0.1;
   // atlasPages is built from the *deferred* filter/segment values; block the
   // export while an edit is still catching up so a quick click can never
   // export the previous configuration's pages.
@@ -919,10 +856,7 @@ export function PrintLayoutDialog({
   // features / arbitrary extents while the user is looking at an error.
   const atlasConfigBlocked =
     atlasEnabled &&
-    (!atlasFilterValid ||
-      !atlasScaleValid ||
-      !atlasSegmentValid ||
-      atlasDeferredPending);
+    (!atlasFilterValid || !atlasScaleValid || !atlasSegmentValid || atlasDeferredPending);
   const atlasTokenCtx = useMemo<AtlasTokenContext | null>(
     () =>
       currentAtlasPage
@@ -947,13 +881,11 @@ export function PrintLayoutDialog({
     [atlasLayers, chartLayerId],
   );
   const tableFields = useMemo(
-    () =>
-      tableLayer?.geojson ? listAtlasFields(tableLayer.geojson.features) : [],
+    () => (tableLayer?.geojson ? listAtlasFields(tableLayer.geojson.features) : []),
     [tableLayer],
   );
   const chartFields = useMemo(
-    () =>
-      chartLayer?.geojson ? listAtlasFields(chartLayer.geojson.features) : [],
+    () => (chartLayer?.geojson ? listAtlasFields(chartLayer.geojson.features) : []),
     [chartLayer],
   );
   const tableAllRows = useMemo(
@@ -968,13 +900,11 @@ export function PrintLayoutDialog({
   // stepping/exporting an N-page atlas does not redo the vertex walk N times
   // (the same precompute pattern the atlas page builder uses).
   const tableFeatureInfos = useMemo(
-    () =>
-      tableLayer?.geojson ? collectAtlasFeatures(tableLayer.geojson) : [],
+    () => (tableLayer?.geojson ? collectAtlasFeatures(tableLayer.geojson) : []),
     [tableLayer],
   );
   const chartFeatureInfos = useMemo(
-    () =>
-      chartLayer?.geojson ? collectAtlasFeatures(chartLayer.geojson) : [],
+    () => (chartLayer?.geojson ? collectAtlasFeatures(chartLayer.geojson) : []),
     [chartLayer],
   );
   const chartCategoricalFields = useMemo(
@@ -999,20 +929,16 @@ export function PrintLayoutDialog({
     chartValueField && chartNumericFields.includes(chartValueField)
       ? chartValueField
       : (chartNumericFields[0] ?? "");
-  const chartNeedsValueField =
-    chartType === "line" || chartAggregation !== "count";
+  const chartNeedsValueField = chartType === "line" || chartAggregation !== "count";
   const effectiveTableColumns = useMemo(() => {
     const chosen = tableColumns.filter((c) => tableFields.includes(c));
-    return chosen.length > 0
-      ? chosen
-      : tableFields.slice(0, DEFAULT_TABLE_COLUMNS);
+    return chosen.length > 0 ? chosen : tableFields.slice(0, DEFAULT_TABLE_COLUMNS);
   }, [tableColumns, tableFields]);
 
   // Margin applied when fitting an atlas page's bounds, shared by the real
   // fit in captureAtlasPage and the pre-capture approximation below so the
   // two can never desync (fixed-scale mode fits tight and re-zooms after).
-  const atlasFitMarginPct =
-    atlasExtentMode === "margin" ? atlasMarginPct : 0;
+  const atlasFitMarginPct = atlasExtentMode === "margin" ? atlasMarginPct : 0;
 
   // The extent a data block's "only features on the page" filter tests
   // against, before the page's real capture is available: the atlas page's
@@ -1040,8 +966,7 @@ export function PrintLayoutDialog({
       allRows: ChartRow[],
       filterOn: boolean,
       bounds: AtlasBounds | null,
-    ): ChartRow[] =>
-      filterOn && bounds ? rowsWithinBounds(features, bounds) : allRows,
+    ): ChartRow[] => (filterOn && bounds ? rowsWithinBounds(features, bounds) : allRows),
     [],
   );
 
@@ -1070,8 +995,7 @@ export function PrintLayoutDialog({
             truncated: data.truncated,
             // The final hidden-row count depends on how many rows fit the
             // page, which only the renderer knows; hand it the translation.
-            formatNote: (count) =>
-              t("printLayout.dataTable.moreRows", { count }),
+            formatNote: (count) => t("printLayout.dataTable.moreRows", { count }),
             position: tablePosition,
           };
         }
@@ -1089,8 +1013,7 @@ export function PrintLayoutDialog({
             position: chartPosition,
             data,
             // Translated "+N more" for bar categories past the top-N cap.
-            formatNote: (count) =>
-              t("printLayout.dataTable.moreRows", { count }),
+            formatNote: (count) => t("printLayout.dataTable.moreRows", { count }),
           };
         }
       }
@@ -1129,12 +1052,7 @@ export function PrintLayoutDialog({
   const displayTableRows = useMemo(
     () =>
       showDataTable
-        ? rowsForBlock(
-            tableFeatureInfos,
-            tableAllRows,
-            tableFilterToPage,
-            displayFilterBounds,
-          )
+        ? rowsForBlock(tableFeatureInfos, tableAllRows, tableFilterToPage, displayFilterBounds)
         : [],
     [
       showDataTable,
@@ -1148,12 +1066,7 @@ export function PrintLayoutDialog({
   const displayChartRows = useMemo(
     () =>
       showDataChart
-        ? rowsForBlock(
-            chartFeatureInfos,
-            chartAllRows,
-            chartFilterToPage,
-            displayFilterBounds,
-          )
+        ? rowsForBlock(chartFeatureInfos, chartAllRows, chartFilterToPage, displayFilterBounds)
         : [],
     [
       showDataChart,
@@ -1212,9 +1125,7 @@ export function PrintLayoutDialog({
   // recaptures. Returns the capture plus the map's final visible bounds, so
   // the data blocks can filter to what the page actually shows.
   const captureAtlasPage = useCallback(
-    async (
-      page: AtlasPage,
-    ): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
+    async (page: AtlasPage): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
       const map = mapControllerRef.current?.getMap();
       if (!map) throw new Error("Map is not ready");
       const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
@@ -1266,17 +1177,12 @@ export function PrintLayoutDialog({
         });
         if (target > 0 && ratio > 0) {
           const zoom = map.getZoom() + Math.log2(ratio / target);
-          const clamped = Math.max(
-            map.getMinZoom(),
-            Math.min(map.getMaxZoom(), zoom),
-          );
+          const clamped = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), zoom));
           // A clamp means this page renders at the closest reachable scale,
           // not the requested one: surface that (like applyScale's notice)
           // instead of letting the substitution pass silently.
           setAtlasScaleNotice(
-            Math.abs(clamped - zoom) > 1e-3
-              ? t("printLayout.errors.scaleOutOfRange")
-              : null,
+            Math.abs(clamped - zoom) > 1e-3 ? t("printLayout.errors.scaleOutOfRange") : null,
           );
           if (Math.abs(clamped - map.getZoom()) > 1e-3) {
             map.setZoom(clamped);
@@ -1380,9 +1286,7 @@ export function PrintLayoutDialog({
   useEffect(() => {
     if (!open || !atlasEnabled || atlasPageCount === 0) return;
     const timer = window.setTimeout(() => {
-      void goToAtlasPageRef.current(
-        Math.min(atlasIndexRef.current, atlasPageCount - 1),
-      );
+      void goToAtlasPageRef.current(Math.min(atlasIndexRef.current, atlasPageCount - 1));
     }, 500);
     return () => window.clearTimeout(timer);
   }, [
@@ -1424,12 +1328,7 @@ export function PrintLayoutDialog({
   const applyScale = useCallback(
     (targetRatio: number) => {
       const map = mapControllerRef.current?.getMap();
-      if (
-        captureMode === "extent" ||
-        !map ||
-        !(targetRatio > 0) ||
-        !(currentRatio > 0)
-      ) {
+      if (captureMode === "extent" || !map || !(targetRatio > 0) || !(currentRatio > 0)) {
         return;
       }
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
@@ -1442,9 +1341,7 @@ export function PrintLayoutDialog({
       // applied partially: surface that instead of letting the value snap back
       // with no explanation (GH #743). A reachable scale clears the notice.
       setScaleNotice(
-        Math.abs(clampedZoom - newZoom) > 1e-3
-          ? t("printLayout.errors.scaleOutOfRange")
-          : null,
+        Math.abs(clampedZoom - newZoom) > 1e-3 ? t("printLayout.errors.scaleOutOfRange") : null,
       );
       // Drop a still-pending idle handler / fallback timer from a prior applyScale
       // before registering new ones, so two quick scale changes don't both fire.
@@ -1648,9 +1545,7 @@ export function PrintLayoutDialog({
     setExporting(true);
     setError(null);
     try {
-      const base = sanitizeFilename(
-        displayOptions.title || projectName || "map-layout",
-      );
+      const base = sanitizeFilename(displayOptions.title || projectName || "map-layout");
       if (kind === "png") {
         await exportLayoutPng(displayOptions, `${base}.png`);
       } else {
@@ -1698,18 +1593,8 @@ export function PrintLayoutDialog({
             // Each page's table/chart re-filters to the extent the page's
             // capture actually shows (not just the nominal feature bounds).
             ...buildBlocksFromRows(
-              rowsForBlock(
-                tableFeatureInfos,
-                tableAllRows,
-                tableFilterToPage,
-                viewBounds,
-              ),
-              rowsForBlock(
-                chartFeatureInfos,
-                chartAllRows,
-                chartFilterToPage,
-                viewBounds,
-              ),
+              rowsForBlock(tableFeatureInfos, tableAllRows, tableFilterToPage, viewBounds),
+              rowsForBlock(chartFeatureInfos, chartAllRows, chartFilterToPage, viewBounds),
             ),
             title: substituteAtlasTokens(options.title, ctx),
             subtitle: substituteAtlasTokens(options.subtitle, ctx),
@@ -1723,9 +1608,7 @@ export function PrintLayoutDialog({
         },
       };
       // The combined file's name cannot carry any single page's tokens.
-      const base = sanitizeFilename(
-        stripAtlasTokens(title) || projectName || "atlas",
-      );
+      const base = sanitizeFilename(stripAtlasTokens(title) || projectName || "atlas");
       if (kind === "pdf") {
         await exportAtlasPdf(source, `${base}-atlas.pdf`);
       } else {
@@ -1763,9 +1646,7 @@ export function PrintLayoutDialog({
             : undefined
         }
         bodyClassName={
-          dialogSize
-            ? "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6"
-            : undefined
+          dialogSize ? "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6" : undefined
         }
         resizeHandle={
           <div
@@ -1817,9 +1698,7 @@ export function PrintLayoutDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="layout-subtitle">
-                {t("printLayout.subtitleLabel")}
-              </Label>
+              <Label htmlFor="layout-subtitle">{t("printLayout.subtitleLabel")}</Label>
               <Input
                 id="layout-subtitle"
                 value={subtitle}
@@ -1830,34 +1709,22 @@ export function PrintLayoutDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="layout-title-placement">
-                  {t("printLayout.titlePlacement")}
-                </Label>
+                <Label htmlFor="layout-title-placement">{t("printLayout.titlePlacement")}</Label>
                 <Select
                   id="layout-title-placement"
                   value={titlePlacement}
-                  onChange={(e) =>
-                    setTitlePlacement(e.target.value as "outside" | "inside")
-                  }
+                  onChange={(e) => setTitlePlacement(e.target.value as "outside" | "inside")}
                 >
-                  <option value="outside">
-                    {t("printLayout.placement.outside")}
-                  </option>
-                  <option value="inside">
-                    {t("printLayout.placement.inside")}
-                  </option>
+                  <option value="outside">{t("printLayout.placement.outside")}</option>
+                  <option value="inside">{t("printLayout.placement.inside")}</option>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="layout-title-align">
-                  {t("printLayout.alignment")}
-                </Label>
+                <Label htmlFor="layout-title-align">{t("printLayout.alignment")}</Label>
                 <Select
                   id="layout-title-align"
                   value={titleAlign}
-                  onChange={(e) =>
-                    setTitleAlign(e.target.value as "left" | "center" | "right")
-                  }
+                  onChange={(e) => setTitleAlign(e.target.value as "left" | "center" | "right")}
                 >
                   <option value="left">{t("printLayout.align.left")}</option>
                   <option value="center">{t("printLayout.align.center")}</option>
@@ -1894,16 +1761,12 @@ export function PrintLayoutDialog({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="layout-orientation">
-                  {t("printLayout.orientation")}
-                </Label>
+                <Label htmlFor="layout-orientation">{t("printLayout.orientation")}</Label>
                 <Select
                   id="layout-orientation"
                   value={orientation}
                   disabled={isCustom}
-                  onChange={(e) =>
-                    setOrientation(e.target.value as Orientation)
-                  }
+                  onChange={(e) => setOrientation(e.target.value as Orientation)}
                 >
                   <option value="portrait">{t("printLayout.portrait")}</option>
                   <option value="landscape">{t("printLayout.landscape")}</option>
@@ -1914,31 +1777,23 @@ export function PrintLayoutDialog({
             {isCustom && (
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-custom-w">
-                    {t("printLayout.width")}
-                  </Label>
+                  <Label htmlFor="layout-custom-w">{t("printLayout.width")}</Label>
                   <Input
                     id="layout-custom-w"
                     type="number"
                     min={1}
                     value={customWidth}
-                    onChange={(e) =>
-                      setCustomWidth(Math.max(1, Number(e.target.value) || 0))
-                    }
+                    onChange={(e) => setCustomWidth(Math.max(1, Number(e.target.value) || 0))}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-custom-h">
-                    {t("printLayout.height")}
-                  </Label>
+                  <Label htmlFor="layout-custom-h">{t("printLayout.height")}</Label>
                   <Input
                     id="layout-custom-h"
                     type="number"
                     min={1}
                     value={customHeight}
-                    onChange={(e) =>
-                      setCustomHeight(Math.max(1, Number(e.target.value) || 0))
-                    }
+                    onChange={(e) => setCustomHeight(Math.max(1, Number(e.target.value) || 0))}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1966,26 +1821,16 @@ export function PrintLayoutDialog({
               <Select
                 id="layout-margin"
                 value={pageMargin}
-                onChange={(e) =>
-                  setPageMargin(e.target.value as "normal" | "narrow" | "none")
-                }
+                onChange={(e) => setPageMargin(e.target.value as "normal" | "narrow" | "none")}
               >
-                <option value="normal">
-                  {t("printLayout.marginOption.normal")}
-                </option>
-                <option value="narrow">
-                  {t("printLayout.marginOption.narrow")}
-                </option>
-                <option value="none">
-                  {t("printLayout.marginOption.none")}
-                </option>
+                <option value="normal">{t("printLayout.marginOption.normal")}</option>
+                <option value="narrow">{t("printLayout.marginOption.narrow")}</option>
+                <option value="none">{t("printLayout.marginOption.none")}</option>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="layout-map-bg">
-                {t("printLayout.mapBackground")}
-              </Label>
+              <Label htmlFor="layout-map-bg">{t("printLayout.mapBackground")}</Label>
               <div className="flex items-center gap-2">
                 <input
                   id="layout-map-bg"
@@ -2000,11 +1845,7 @@ export function PrintLayoutDialog({
                   value={mapBackgroundDraft}
                   onChange={(e) => commitMapBackground(e.target.value)}
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => commitMapBackground("#e5e7eb")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => commitMapBackground("#e5e7eb")}>
                   {t("common.reset")}
                 </Button>
               </div>
@@ -2013,9 +1854,7 @@ export function PrintLayoutDialog({
             {/* Map frame border (color + thickness; 0 hides it). GH #749. */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="layout-map-border-color">
-                  {t("printLayout.mapBorderColor")}
-                </Label>
+                <Label htmlFor="layout-map-border-color">{t("printLayout.mapBorderColor")}</Label>
                 <input
                   id="layout-map-border-color"
                   type="color"
@@ -2025,9 +1864,7 @@ export function PrintLayoutDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="layout-map-border-width">
-                  {t("printLayout.mapBorderWidth")}
-                </Label>
+                <Label htmlFor="layout-map-border-width">{t("printLayout.mapBorderWidth")}</Label>
                 <Input
                   id="layout-map-border-width"
                   type="number"
@@ -2035,9 +1872,7 @@ export function PrintLayoutDialog({
                   max={10}
                   value={mapBorderWidth}
                   onChange={(e) =>
-                    setMapBorderWidth(
-                      Math.max(0, Math.min(10, Number(e.target.value) || 0)),
-                    )
+                    setMapBorderWidth(Math.max(0, Math.min(10, Number(e.target.value) || 0)))
                   }
                 />
               </div>
@@ -2045,9 +1880,7 @@ export function PrintLayoutDialog({
 
             {isMmPage && (
               <div className="space-y-1.5">
-                <Label htmlFor="layout-scale">
-                  {t("printLayout.scaleLabel")}
-                </Label>
+                <Label htmlFor="layout-scale">{t("printLayout.scaleLabel")}</Label>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">1:</span>
                   <Input
@@ -2060,23 +1893,15 @@ export function PrintLayoutDialog({
                     onFocus={() => {
                       scaleFocusedRef.current = true;
                     }}
-                    onChange={(e) =>
-                      setScaleDraft(e.target.value.replace(/[^0-9]/g, ""))
-                    }
+                    onChange={(e) => setScaleDraft(e.target.value.replace(/[^0-9]/g, ""))}
                     onBlur={() => {
                       scaleFocusedRef.current = false;
                       const n = Number(scaleDraft);
                       if (n > 0) applyScale(n);
-                      else
-                        setScaleDraft(
-                          currentRatio > 0
-                            ? String(Math.round(currentRatio))
-                            : "",
-                        );
+                      else setScaleDraft(currentRatio > 0 ? String(Math.round(currentRatio)) : "");
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter")
-                        (e.target as HTMLInputElement).blur();
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     }}
                   />
                   <Select
@@ -2096,9 +1921,7 @@ export function PrintLayoutDialog({
                     ))}
                   </Select>
                 </div>
-                {scaleNotice && (
-                  <p className="text-xs text-destructive">{scaleNotice}</p>
-                )}
+                {scaleNotice && <p className="text-xs text-destructive">{scaleNotice}</p>}
               </div>
             )}
 
@@ -2112,16 +1935,12 @@ export function PrintLayoutDialog({
                 onClick={() => void handleDrawExtent()}
               >
                 <Crop className="me-2 h-4 w-4" />
-                {extentBbox
-                  ? t("printLayout.extent.redraw")
-                  : t("printLayout.extent.draw")}
+                {extentBbox ? t("printLayout.extent.redraw") : t("printLayout.extent.draw")}
               </Button>
               {extentBbox && (
                 <div className="space-y-1.5 pt-1">
                   <fieldset className="m-0 space-y-1.5 border-0 p-0">
-                    <legend className="sr-only">
-                      {t("printLayout.extent.label")}
-                    </legend>
+                    <legend className="sr-only">{t("printLayout.extent.label")}</legend>
                     <label className="flex cursor-pointer items-center gap-2 text-sm">
                       <input
                         type="radio"
@@ -2143,28 +1962,20 @@ export function PrintLayoutDialog({
                       {t("printLayout.extent.useCustom")}
                     </label>
                   </fieldset>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearExtent}
-                  >
+                  <Button variant="ghost" size="sm" onClick={handleClearExtent}>
                     <RotateCcw className="me-1.5 h-3.5 w-3.5" />
                     {t("printLayout.extent.clear")}
                   </Button>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                {t("printLayout.extent.hint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("printLayout.extent.hint")}</p>
             </div>
 
             <Separator />
 
             {/* Atlas / map series: one page per coverage feature (GH #1291). */}
             <div className="space-y-2">
-              <p className="text-sm font-medium">
-                {t("printLayout.atlas.section")}
-              </p>
+              <p className="text-sm font-medium">{t("printLayout.atlas.section")}</p>
               <ToggleField
                 id="atlas-enabled"
                 label={t("printLayout.atlas.enable")}
@@ -2185,9 +1996,7 @@ export function PrintLayoutDialog({
                   ) : (
                     <>
                       <div className="space-y-1.5">
-                        <Label htmlFor="atlas-layer">
-                          {t("printLayout.atlas.coverageLayer")}
-                        </Label>
+                        <Label htmlFor="atlas-layer">{t("printLayout.atlas.coverageLayer")}</Label>
                         <Select
                           id="atlas-layer"
                           value={atlasLayerId}
@@ -2211,26 +2020,20 @@ export function PrintLayoutDialog({
                       {/* Coverage strategy: per feature, or fixed-length
                           stretches along the layer's line features. */}
                       <div className="space-y-1.5">
-                        <Label htmlFor="atlas-coverage">
-                          {t("printLayout.atlas.coverage")}
-                        </Label>
+                        <Label htmlFor="atlas-coverage">{t("printLayout.atlas.coverage")}</Label>
                         <Select
                           id="atlas-coverage"
                           value={atlasCoverage}
                           disabled={atlasBusy}
                           onChange={(e) => {
-                            setAtlasCoverage(
-                              e.target.value as "features" | "line",
-                            );
+                            setAtlasCoverage(e.target.value as "features" | "line");
                             setAtlasIndex(0);
                           }}
                         >
                           <option value="features">
                             {t("printLayout.atlas.coveragePerFeature")}
                           </option>
-                          <option value="line">
-                            {t("printLayout.atlas.coverageAlongLine")}
-                          </option>
+                          <option value="line">{t("printLayout.atlas.coverageAlongLine")}</option>
                         </Select>
                       </div>
                       {atlasCoverage === "line" && (
@@ -2244,9 +2047,7 @@ export function PrintLayoutDialog({
                             disabled={atlasBusy}
                             value={atlasSegmentKm}
                             onChange={(e) =>
-                              setAtlasSegmentKm(
-                                e.target.value.replace(/[^0-9.]/g, ""),
-                              )
+                              setAtlasSegmentKm(e.target.value.replace(/[^0-9.]/g, ""))
                             }
                           />
                           {!atlasSegmentValid && (
@@ -2254,20 +2055,18 @@ export function PrintLayoutDialog({
                               {t("printLayout.atlas.segmentRequired")}
                             </p>
                           )}
-                          {atlasSegmentValid &&
-                            atlasLineFeatureCount === 0 && (
-                              <p className="text-xs text-destructive">
-                                {t("printLayout.atlas.noLineFeatures")}
-                              </p>
-                            )}
-                          {atlasSegmentValid &&
-                            atlasPageCount >= MAX_LINE_ATLAS_PAGES && (
-                              <p className="text-xs text-destructive">
-                                {t("printLayout.atlas.segmentTruncated", {
-                                  count: MAX_LINE_ATLAS_PAGES,
-                                })}
-                              </p>
-                            )}
+                          {atlasSegmentValid && atlasLineFeatureCount === 0 && (
+                            <p className="text-xs text-destructive">
+                              {t("printLayout.atlas.noLineFeatures")}
+                            </p>
+                          )}
+                          {atlasSegmentValid && atlasPageCount >= MAX_LINE_ATLAS_PAGES && (
+                            <p className="text-xs text-destructive">
+                              {t("printLayout.atlas.segmentTruncated", {
+                                count: MAX_LINE_ATLAS_PAGES,
+                              })}
+                            </p>
+                          )}
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-3">
@@ -2281,9 +2080,7 @@ export function PrintLayoutDialog({
                             disabled={atlasBusy}
                             onChange={(e) => setAtlasNameField(e.target.value)}
                           >
-                            <option value="">
-                              {t("printLayout.atlas.nameFieldNone")}
-                            </option>
+                            <option value="">{t("printLayout.atlas.nameFieldNone")}</option>
                             {atlasFields.map((f) => (
                               <option key={f} value={f}>
                                 {f}
@@ -2300,27 +2097,19 @@ export function PrintLayoutDialog({
                             value={atlasExtentMode}
                             disabled={atlasBusy}
                             onChange={(e) =>
-                              setAtlasExtentMode(
-                                e.target.value as "margin" | "scale",
-                              )
+                              setAtlasExtentMode(e.target.value as "margin" | "scale")
                             }
                           >
-                            <option value="margin">
-                              {t("printLayout.atlas.extentMargin")}
-                            </option>
+                            <option value="margin">{t("printLayout.atlas.extentMargin")}</option>
                             {isMmPage && (
-                              <option value="scale">
-                                {t("printLayout.atlas.extentScale")}
-                              </option>
+                              <option value="scale">{t("printLayout.atlas.extentScale")}</option>
                             )}
                           </Select>
                         </div>
                       </div>
                       {atlasExtentMode === "margin" ? (
                         <div className="space-y-1.5">
-                          <Label htmlFor="atlas-margin">
-                            {t("printLayout.atlas.marginLabel")}
-                          </Label>
+                          <Label htmlFor="atlas-margin">{t("printLayout.atlas.marginLabel")}</Label>
                           <Input
                             id="atlas-margin"
                             type="number"
@@ -2330,34 +2119,23 @@ export function PrintLayoutDialog({
                             value={atlasMarginPct}
                             onChange={(e) =>
                               setAtlasMarginPct(
-                                Math.max(
-                                  0,
-                                  Math.min(100, Number(e.target.value) || 0),
-                                ),
+                                Math.max(0, Math.min(100, Number(e.target.value) || 0)),
                               )
                             }
                           />
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <Label htmlFor="atlas-scale">
-                            {t("printLayout.atlas.scaleLabel")}
-                          </Label>
+                          <Label htmlFor="atlas-scale">{t("printLayout.atlas.scaleLabel")}</Label>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">
-                              1:
-                            </span>
+                            <span className="text-sm text-muted-foreground">1:</span>
                             <Input
                               id="atlas-scale"
                               inputMode="numeric"
                               disabled={atlasBusy}
                               className="flex-1"
                               value={atlasScale}
-                              onChange={(e) =>
-                                setAtlasScale(
-                                  e.target.value.replace(/[^0-9]/g, ""),
-                                )
-                              }
+                              onChange={(e) => setAtlasScale(e.target.value.replace(/[^0-9]/g, ""))}
                             />
                           </div>
                           {!atlasScaleValid && (
@@ -2366,9 +2144,7 @@ export function PrintLayoutDialog({
                             </p>
                           )}
                           {atlasScaleValid && atlasScaleNotice && (
-                            <p className="text-xs text-destructive">
-                              {atlasScaleNotice}
-                            </p>
+                            <p className="text-xs text-destructive">{atlasScaleNotice}</p>
                           )}
                         </div>
                       )}
@@ -2377,18 +2153,14 @@ export function PrintLayoutDialog({
                       {atlasCoverage === "features" && (
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <Label htmlFor="atlas-sort">
-                              {t("printLayout.atlas.sortField")}
-                            </Label>
+                            <Label htmlFor="atlas-sort">{t("printLayout.atlas.sortField")}</Label>
                             <Select
                               id="atlas-sort"
                               value={atlasSortField}
                               disabled={atlasBusy}
                               onChange={(e) => setAtlasSortField(e.target.value)}
                             >
-                              <option value="">
-                                {t("printLayout.atlas.sortNone")}
-                              </option>
+                              <option value="">{t("printLayout.atlas.sortNone")}</option>
                               {atlasFields.map((f) => (
                                 <option key={f} value={f}>
                                   {f}
@@ -2404,24 +2176,16 @@ export function PrintLayoutDialog({
                               id="atlas-sort-dir"
                               value={atlasSortDescending ? "desc" : "asc"}
                               disabled={atlasBusy || !atlasSortField}
-                              onChange={(e) =>
-                                setAtlasSortDescending(e.target.value === "desc")
-                              }
+                              onChange={(e) => setAtlasSortDescending(e.target.value === "desc")}
                             >
-                              <option value="asc">
-                                {t("printLayout.atlas.sortAsc")}
-                              </option>
-                              <option value="desc">
-                                {t("printLayout.atlas.sortDesc")}
-                              </option>
+                              <option value="asc">{t("printLayout.atlas.sortAsc")}</option>
+                              <option value="desc">{t("printLayout.atlas.sortDesc")}</option>
                             </Select>
                           </div>
                         </div>
                       )}
                       <div className="space-y-1.5">
-                        <Label htmlFor="atlas-filter">
-                          {t("printLayout.atlas.filterLabel")}
-                        </Label>
+                        <Label htmlFor="atlas-filter">{t("printLayout.atlas.filterLabel")}</Label>
                         <Input
                           id="atlas-filter"
                           value={atlasFilter}
@@ -2429,8 +2193,7 @@ export function PrintLayoutDialog({
                           placeholder={t("printLayout.atlas.filterPlaceholder")}
                           onChange={(e) => setAtlasFilter(e.target.value)}
                         />
-                        {deferredAtlasFilter.trim() !== "" &&
-                          !atlasFilterPredicate && (
+                        {deferredAtlasFilter.trim() !== "" && !atlasFilterPredicate && (
                           <p className="text-xs text-destructive">
                             {t("printLayout.atlas.filterError")}
                           </p>
@@ -2444,9 +2207,7 @@ export function PrintLayoutDialog({
                           id="atlas-filename"
                           value={atlasFilenamePattern}
                           disabled={atlasBusy}
-                          onChange={(e) =>
-                            setAtlasFilenamePattern(e.target.value)
-                          }
+                          onChange={(e) => setAtlasFilenamePattern(e.target.value)}
                         />
                       </div>
                       <p className="text-sm text-muted-foreground">
@@ -2473,9 +2234,7 @@ export function PrintLayoutDialog({
             <Separator />
 
             <div className="space-y-2">
-              <p className="text-sm font-medium">
-                {t("printLayout.mapElements")}
-              </p>
+              <p className="text-sm font-medium">{t("printLayout.mapElements")}</p>
               <ToggleField
                 id="el-title"
                 label={t("printLayout.element.title")}
@@ -2573,9 +2332,7 @@ export function PrintLayoutDialog({
             {showCustomLegend && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cl-title">
-                    {t("printLayout.customLegend.title")}
-                  </Label>
+                  <Label htmlFor="cl-title">{t("printLayout.customLegend.title")}</Label>
                   <Input
                     id="cl-title"
                     value={customLegendTitle}
@@ -2594,9 +2351,7 @@ export function PrintLayoutDialog({
                         onChange={(e) =>
                           setCustomLegendEntries((prev) =>
                             prev.map((x) =>
-                              x.id === entry.id
-                                ? { ...x, color: e.target.value }
-                                : x,
+                              x.id === entry.id ? { ...x, color: e.target.value } : x,
                             ),
                           )
                         }
@@ -2608,9 +2363,7 @@ export function PrintLayoutDialog({
                         onChange={(e) =>
                           setCustomLegendEntries((prev) =>
                             prev.map((x) =>
-                              x.id === entry.id
-                                ? { ...x, label: e.target.value }
-                                : x,
+                              x.id === entry.id ? { ...x, label: e.target.value } : x,
                             ),
                           )
                         }
@@ -2620,9 +2373,7 @@ export function PrintLayoutDialog({
                         aria-label={t("printLayout.customLegend.removeItem")}
                         className="shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() =>
-                          setCustomLegendEntries((prev) =>
-                            prev.filter((x) => x.id !== entry.id),
-                          )
+                          setCustomLegendEntries((prev) => prev.filter((x) => x.id !== entry.id))
                         }
                       >
                         <Trash2 className="h-4 w-4" />
@@ -2648,37 +2399,23 @@ export function PrintLayoutDialog({
                   </Button>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cl-position">
-                    {t("printLayout.customLegend.position")}
-                  </Label>
+                  <Label htmlFor="cl-position">{t("printLayout.customLegend.position")}</Label>
                   <Select
                     id="cl-position"
                     value={customLegendPosition}
                     onChange={(e) =>
-                      setCustomLegendPosition(
-                        e.target.value as typeof customLegendPosition,
-                      )
+                      setCustomLegendPosition(e.target.value as typeof customLegendPosition)
                     }
                   >
-                    <option value="top-left">
-                      {t("printLayout.position.topLeft")}
-                    </option>
-                    <option value="top-right">
-                      {t("printLayout.position.topRight")}
-                    </option>
-                    <option value="bottom-left">
-                      {t("printLayout.position.bottomLeft")}
-                    </option>
-                    <option value="bottom-right">
-                      {t("printLayout.position.bottomRight")}
-                    </option>
+                    <option value="top-left">{t("printLayout.position.topLeft")}</option>
+                    <option value="top-right">{t("printLayout.position.topRight")}</option>
+                    <option value="bottom-left">{t("printLayout.position.bottomLeft")}</option>
+                    <option value="bottom-right">{t("printLayout.position.bottomRight")}</option>
                   </Select>
                 </div>
                 <Separator />
                 <div className="space-y-1.5">
-                  <Label htmlFor="cl-dict">
-                    {t("printLayout.customLegend.importFromDict")}
-                  </Label>
+                  <Label htmlFor="cl-dict">{t("printLayout.customLegend.importFromDict")}</Label>
                   <Textarea
                     id="cl-dict"
                     rows={3}
@@ -2687,11 +2424,7 @@ export function PrintLayoutDialog({
                     placeholder={'{"Label A": "#ff6b6b", "Label B": "#4ecdc4"}'}
                     onChange={(e) => setLegendDict(e.target.value)}
                   />
-                  {legendDictError && (
-                    <p className="text-xs text-destructive">
-                      {legendDictError}
-                    </p>
-                  )}
+                  {legendDictError && <p className="text-xs text-destructive">{legendDictError}</p>}
                   <Button
                     variant="outline"
                     size="sm"
@@ -2707,9 +2440,7 @@ export function PrintLayoutDialog({
             {showColorbar && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cb-ramp">
-                    {t("printLayout.colorbar.colormap")}
-                  </Label>
+                  <Label htmlFor="cb-ramp">{t("printLayout.colorbar.colormap")}</Label>
                   <Select
                     id="cb-ramp"
                     value={colorbarRamp}
@@ -2724,9 +2455,7 @@ export function PrintLayoutDialog({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="cb-min">
-                      {t("printLayout.colorbar.min")}
-                    </Label>
+                    <Label htmlFor="cb-min">{t("printLayout.colorbar.min")}</Label>
                     <Input
                       id="cb-min"
                       type="number"
@@ -2735,9 +2464,7 @@ export function PrintLayoutDialog({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="cb-max">
-                      {t("printLayout.colorbar.max")}
-                    </Label>
+                    <Label htmlFor="cb-max">{t("printLayout.colorbar.max")}</Label>
                     <Input
                       id="cb-max"
                       type="number"
@@ -2747,9 +2474,7 @@ export function PrintLayoutDialog({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cb-label">
-                    {t("printLayout.colorbar.label")}
-                  </Label>
+                  <Label htmlFor="cb-label">{t("printLayout.colorbar.label")}</Label>
                   <Input
                     id="cb-label"
                     value={colorbarLabel}
@@ -2759,59 +2484,37 @@ export function PrintLayoutDialog({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="cb-orientation">
-                      {t("printLayout.colorbar.orientation")}
-                    </Label>
+                    <Label htmlFor="cb-orientation">{t("printLayout.colorbar.orientation")}</Label>
                     <Select
                       id="cb-orientation"
                       value={colorbarOrientation}
                       onChange={(e) =>
-                        setColorbarOrientation(
-                          e.target.value as "vertical" | "horizontal",
-                        )
+                        setColorbarOrientation(e.target.value as "vertical" | "horizontal")
                       }
                     >
-                      <option value="vertical">
-                        {t("printLayout.colorbar.vertical")}
-                      </option>
-                      <option value="horizontal">
-                        {t("printLayout.colorbar.horizontal")}
-                      </option>
+                      <option value="vertical">{t("printLayout.colorbar.vertical")}</option>
+                      <option value="horizontal">{t("printLayout.colorbar.horizontal")}</option>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="cb-position">
-                      {t("printLayout.colorbar.position")}
-                    </Label>
+                    <Label htmlFor="cb-position">{t("printLayout.colorbar.position")}</Label>
                     <Select
                       id="cb-position"
                       value={colorbarPosition}
                       onChange={(e) =>
-                        setColorbarPosition(
-                          e.target.value as typeof colorbarPosition,
-                        )
+                        setColorbarPosition(e.target.value as typeof colorbarPosition)
                       }
                     >
-                      <option value="top-left">
-                        {t("printLayout.position.topLeft")}
-                      </option>
-                      <option value="top-right">
-                        {t("printLayout.position.topRight")}
-                      </option>
-                      <option value="bottom-left">
-                        {t("printLayout.position.bottomLeft")}
-                      </option>
-                      <option value="bottom-right">
-                        {t("printLayout.position.bottomRight")}
-                      </option>
+                      <option value="top-left">{t("printLayout.position.topLeft")}</option>
+                      <option value="top-right">{t("printLayout.position.topRight")}</option>
+                      <option value="bottom-left">{t("printLayout.position.bottomLeft")}</option>
+                      <option value="bottom-right">{t("printLayout.position.bottomRight")}</option>
                     </Select>
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="cb-length">
-                      {t("printLayout.colorbar.length")}
-                    </Label>
+                    <Label htmlFor="cb-length">{t("printLayout.colorbar.length")}</Label>
                     <span className="text-sm tabular-nums text-muted-foreground">
                       {colorbarLength}%
                     </span>
@@ -2833,15 +2536,11 @@ export function PrintLayoutDialog({
             {showDataTable && (
               <div className="space-y-3 rounded-md border p-3">
                 {atlasLayers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {t("printLayout.atlas.noLayers")}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{t("printLayout.atlas.noLayers")}</p>
                 ) : (
                   <>
                     <div className="space-y-1.5">
-                      <Label htmlFor="dt-layer">
-                        {t("printLayout.dataBlocks.layer")}
-                      </Label>
+                      <Label htmlFor="dt-layer">{t("printLayout.dataBlocks.layer")}</Label>
                       <Select
                         id="dt-layer"
                         value={tableLayerId}
@@ -2860,9 +2559,7 @@ export function PrintLayoutDialog({
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="dt-title">
-                        {t("printLayout.dataBlocks.titleLabel")}
-                      </Label>
+                      <Label htmlFor="dt-title">{t("printLayout.dataBlocks.titleLabel")}</Label>
                       <Input
                         id="dt-title"
                         value={tableTitle}
@@ -2874,10 +2571,7 @@ export function PrintLayoutDialog({
                       <Label>{t("printLayout.dataTable.columns")}</Label>
                       <div className="max-h-40 space-y-1 overflow-auto rounded-md border p-2">
                         {tableFields.map((f) => (
-                          <label
-                            key={f}
-                            className="flex cursor-pointer items-center gap-2 text-sm"
-                          >
+                          <label key={f} className="flex cursor-pointer items-center gap-2 text-sm">
                             <input
                               type="checkbox"
                               className="h-4 w-4 accent-primary"
@@ -2888,9 +2582,7 @@ export function PrintLayoutDialog({
                                 else next.delete(f);
                                 // Normalize to the layer's field order so the
                                 // printed column order is stable.
-                                setTableColumns(
-                                  tableFields.filter((c) => next.has(c)),
-                                );
+                                setTableColumns(tableFields.filter((c) => next.has(c)));
                               }}
                             />
                             {f}
@@ -2905,17 +2597,13 @@ export function PrintLayoutDialog({
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="dt-sort">
-                          {t("printLayout.atlas.sortField")}
-                        </Label>
+                        <Label htmlFor="dt-sort">{t("printLayout.atlas.sortField")}</Label>
                         <Select
                           id="dt-sort"
                           value={tableSortField}
                           onChange={(e) => setTableSortField(e.target.value)}
                         >
-                          <option value="">
-                            {t("printLayout.atlas.sortNone")}
-                          </option>
+                          <option value="">{t("printLayout.atlas.sortNone")}</option>
                           {tableFields.map((f) => (
                             <option key={f} value={f}>
                               {f}
@@ -2924,31 +2612,21 @@ export function PrintLayoutDialog({
                         </Select>
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="dt-sort-dir">
-                          {t("printLayout.atlas.sortOrder")}
-                        </Label>
+                        <Label htmlFor="dt-sort-dir">{t("printLayout.atlas.sortOrder")}</Label>
                         <Select
                           id="dt-sort-dir"
                           value={tableSortDesc ? "desc" : "asc"}
                           disabled={!tableSortField}
-                          onChange={(e) =>
-                            setTableSortDesc(e.target.value === "desc")
-                          }
+                          onChange={(e) => setTableSortDesc(e.target.value === "desc")}
                         >
-                          <option value="asc">
-                            {t("printLayout.atlas.sortAsc")}
-                          </option>
-                          <option value="desc">
-                            {t("printLayout.atlas.sortDesc")}
-                          </option>
+                          <option value="asc">{t("printLayout.atlas.sortAsc")}</option>
+                          <option value="desc">{t("printLayout.atlas.sortDesc")}</option>
                         </Select>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="dt-max-rows">
-                          {t("printLayout.dataTable.maxRows")}
-                        </Label>
+                        <Label htmlFor="dt-max-rows">{t("printLayout.dataTable.maxRows")}</Label>
                         <Input
                           id="dt-max-rows"
                           type="number"
@@ -2957,34 +2635,20 @@ export function PrintLayoutDialog({
                           value={tableMaxRows}
                           onChange={(e) =>
                             setTableMaxRows(
-                              Math.max(
-                                1,
-                                Math.min(
-                                  MAX_TABLE_ROWS,
-                                  Number(e.target.value) || 1,
-                                ),
-                              ),
+                              Math.max(1, Math.min(MAX_TABLE_ROWS, Number(e.target.value) || 1)),
                             )
                           }
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="dt-position">
-                          {t("printLayout.dataBlocks.position")}
-                        </Label>
+                        <Label htmlFor="dt-position">{t("printLayout.dataBlocks.position")}</Label>
                         <Select
                           id="dt-position"
                           value={tablePosition}
-                          onChange={(e) =>
-                            setTablePosition(e.target.value as BodyCorner)
-                          }
+                          onChange={(e) => setTablePosition(e.target.value as BodyCorner)}
                         >
-                          <option value="top-left">
-                            {t("printLayout.position.topLeft")}
-                          </option>
-                          <option value="top-right">
-                            {t("printLayout.position.topRight")}
-                          </option>
+                          <option value="top-left">{t("printLayout.position.topLeft")}</option>
+                          <option value="top-right">{t("printLayout.position.topRight")}</option>
                           <option value="bottom-left">
                             {t("printLayout.position.bottomLeft")}
                           </option>
@@ -3017,15 +2681,11 @@ export function PrintLayoutDialog({
             {showDataChart && (
               <div className="space-y-3 rounded-md border p-3">
                 {atlasLayers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {t("printLayout.atlas.noLayers")}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{t("printLayout.atlas.noLayers")}</p>
                 ) : (
                   <>
                     <div className="space-y-1.5">
-                      <Label htmlFor="dc-layer">
-                        {t("printLayout.dataBlocks.layer")}
-                      </Label>
+                      <Label htmlFor="dc-layer">{t("printLayout.dataBlocks.layer")}</Label>
                       <Select
                         id="dc-layer"
                         value={chartLayerId}
@@ -3045,44 +2705,26 @@ export function PrintLayoutDialog({
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="dc-type">
-                          {t("printLayout.dataChart.type")}
-                        </Label>
+                        <Label htmlFor="dc-type">{t("printLayout.dataChart.type")}</Label>
                         <Select
                           id="dc-type"
                           value={chartType}
-                          onChange={(e) =>
-                            setChartType(e.target.value as ChartBlockType)
-                          }
+                          onChange={(e) => setChartType(e.target.value as ChartBlockType)}
                         >
-                          <option value="bar">
-                            {t("printLayout.dataChart.typeBar")}
-                          </option>
-                          <option value="pie">
-                            {t("printLayout.dataChart.typePie")}
-                          </option>
-                          <option value="line">
-                            {t("printLayout.dataChart.typeLine")}
-                          </option>
+                          <option value="bar">{t("printLayout.dataChart.typeBar")}</option>
+                          <option value="pie">{t("printLayout.dataChart.typePie")}</option>
+                          <option value="line">{t("printLayout.dataChart.typeLine")}</option>
                         </Select>
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="dc-position">
-                          {t("printLayout.dataBlocks.position")}
-                        </Label>
+                        <Label htmlFor="dc-position">{t("printLayout.dataBlocks.position")}</Label>
                         <Select
                           id="dc-position"
                           value={chartPosition}
-                          onChange={(e) =>
-                            setChartPosition(e.target.value as BodyCorner)
-                          }
+                          onChange={(e) => setChartPosition(e.target.value as BodyCorner)}
                         >
-                          <option value="top-left">
-                            {t("printLayout.position.topLeft")}
-                          </option>
-                          <option value="top-right">
-                            {t("printLayout.position.topRight")}
-                          </option>
+                          <option value="top-left">{t("printLayout.position.topLeft")}</option>
+                          <option value="top-right">{t("printLayout.position.topRight")}</option>
                           <option value="bottom-left">
                             {t("printLayout.position.bottomLeft")}
                           </option>
@@ -3101,9 +2743,7 @@ export function PrintLayoutDialog({
                           <Select
                             id="dc-category"
                             value={effectiveCategoryField}
-                            onChange={(e) =>
-                              setChartCategoryField(e.target.value)
-                            }
+                            onChange={(e) => setChartCategoryField(e.target.value)}
                           >
                             {chartCategoryOptions.map((f) => (
                               <option key={f} value={f}>
@@ -3119,30 +2759,18 @@ export function PrintLayoutDialog({
                           <Select
                             id="dc-aggregation"
                             value={chartAggregation}
-                            onChange={(e) =>
-                              setChartAggregation(
-                                e.target.value as BarAggregation,
-                              )
-                            }
+                            onChange={(e) => setChartAggregation(e.target.value as BarAggregation)}
                           >
-                            <option value="count">
-                              {t("printLayout.dataChart.aggCount")}
-                            </option>
-                            <option value="sum">
-                              {t("printLayout.dataChart.aggSum")}
-                            </option>
-                            <option value="mean">
-                              {t("printLayout.dataChart.aggMean")}
-                            </option>
+                            <option value="count">{t("printLayout.dataChart.aggCount")}</option>
+                            <option value="sum">{t("printLayout.dataChart.aggSum")}</option>
+                            <option value="mean">{t("printLayout.dataChart.aggMean")}</option>
                           </Select>
                         </div>
                       </div>
                     )}
                     {chartNeedsValueField && (
                       <div className="space-y-1.5">
-                        <Label htmlFor="dc-value">
-                          {t("printLayout.dataChart.valueField")}
-                        </Label>
+                        <Label htmlFor="dc-value">{t("printLayout.dataChart.valueField")}</Label>
                         <Select
                           id="dc-value"
                           value={effectiveValueField}
@@ -3163,9 +2791,7 @@ export function PrintLayoutDialog({
                       </div>
                     )}
                     <div className="space-y-1.5">
-                      <Label htmlFor="dc-title">
-                        {t("printLayout.dataBlocks.titleLabel")}
-                      </Label>
+                      <Label htmlFor="dc-title">{t("printLayout.dataBlocks.titleLabel")}</Label>
                       <Input
                         id="dc-title"
                         value={chartTitle}
@@ -3194,9 +2820,7 @@ export function PrintLayoutDialog({
 
             {showFooter && (
               <div className="space-y-1.5">
-                <Label htmlFor="layout-footer">
-                  {t("printLayout.footerTextLabel")}
-                </Label>
+                <Label htmlFor="layout-footer">{t("printLayout.footerTextLabel")}</Label>
                 <Input
                   id="layout-footer"
                   value={footerText}
@@ -3209,9 +2833,7 @@ export function PrintLayoutDialog({
             {showPageBorder && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-border-color">
-                    {t("printLayout.borderColor")}
-                  </Label>
+                  <Label htmlFor="layout-border-color">{t("printLayout.borderColor")}</Label>
                   <input
                     id="layout-border-color"
                     type="color"
@@ -3221,9 +2843,7 @@ export function PrintLayoutDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-border-width">
-                    {t("printLayout.borderWidth")}
-                  </Label>
+                  <Label htmlFor="layout-border-width">{t("printLayout.borderWidth")}</Label>
                   <Input
                     id="layout-border-width"
                     type="number"
@@ -3231,9 +2851,7 @@ export function PrintLayoutDialog({
                     max={10}
                     value={pageBorderWidth}
                     onChange={(e) =>
-                      setPageBorderWidth(
-                        Math.max(1, Math.min(10, Number(e.target.value) || 1)),
-                      )
+                      setPageBorderWidth(Math.max(1, Math.min(10, Number(e.target.value) || 1)))
                     }
                   />
                 </div>
@@ -3243,9 +2861,7 @@ export function PrintLayoutDialog({
             {showInfoBlock && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-author">
-                    {t("printLayout.info.author")}
-                  </Label>
+                  <Label htmlFor="layout-author">{t("printLayout.info.author")}</Label>
                   <Input
                     id="layout-author"
                     value={author}
@@ -3254,9 +2870,7 @@ export function PrintLayoutDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-project">
-                    {t("printLayout.info.project")}
-                  </Label>
+                  <Label htmlFor="layout-project">{t("printLayout.info.project")}</Label>
                   <Input
                     id="layout-project"
                     value={projectNumber}
@@ -3265,9 +2879,7 @@ export function PrintLayoutDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-crs">
-                    {t("printLayout.info.crs")}
-                  </Label>
+                  <Label htmlFor="layout-crs">{t("printLayout.info.crs")}</Label>
                   <Input
                     id="layout-crs"
                     value={crs}
@@ -3276,9 +2888,7 @@ export function PrintLayoutDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-revision">
-                    {t("printLayout.info.revision")}
-                  </Label>
+                  <Label htmlFor="layout-revision">{t("printLayout.info.revision")}</Label>
                   <Input
                     id="layout-revision"
                     value={revision}
@@ -3294,24 +2904,18 @@ export function PrintLayoutDialog({
                 <Separator />
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">
-                      {t("printLayout.legend.section")}
-                    </p>
+                    <p className="text-sm font-medium">{t("printLayout.legend.section")}</p>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        setLegendConfig({ ...DEFAULT_LEGEND_CONFIG })
-                      }
+                      onClick={() => setLegendConfig({ ...DEFAULT_LEGEND_CONFIG })}
                     >
                       <RotateCcw className="me-1.5 h-3.5 w-3.5" />
                       {t("common.reset")}
                     </Button>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="legend-title">
-                      {t("printLayout.legend.titleLabel")}
-                    </Label>
+                    <Label htmlFor="legend-title">{t("printLayout.legend.titleLabel")}</Label>
                     <Input
                       id="legend-title"
                       value={legendConfig.title}
@@ -3328,15 +2932,11 @@ export function PrintLayoutDialog({
                     id="legend-group"
                     label={t("printLayout.legend.groupByLayer")}
                     checked={legendConfig.groupByLayer}
-                    onChange={(next) =>
-                      setLegendConfig({ ...legendConfig, groupByLayer: next })
-                    }
+                    onChange={(next) => setLegendConfig({ ...legendConfig, groupByLayer: next })}
                   />
 
                   {editorRows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      {t("printLayout.legend.empty")}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("printLayout.legend.empty")}</p>
                   ) : (
                     <div className="max-h-56 space-y-1 overflow-auto rounded-md border p-2">
                       {editorRows.map((row) => {
@@ -3363,9 +2963,7 @@ export function PrintLayoutDialog({
                                   type="button"
                                   aria-label={t("printLayout.legend.moveDown")}
                                   className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                                  disabled={
-                                    entryIndex >= entryIdsInOrder.length - 1
-                                  }
+                                  disabled={entryIndex >= entryIdsInOrder.length - 1}
                                   onClick={() => moveEntry(row.layerId, "down")}
                                 >
                                   <ArrowDown className="h-3 w-3" />
@@ -3386,8 +2984,7 @@ export function PrintLayoutDialog({
                               className="h-7 flex-1 text-sm"
                               value={row.label}
                               placeholder={
-                                row.defaultLabel ||
-                                t("printLayout.legend.labelPlaceholder")
+                                row.defaultLabel || t("printLayout.legend.labelPlaceholder")
                               }
                               onChange={(e) =>
                                 setLegendConfig(
@@ -3409,9 +3006,7 @@ export function PrintLayoutDialog({
                               }
                               className="shrink-0 text-muted-foreground hover:text-foreground"
                               onClick={() =>
-                                setLegendConfig(
-                                  toggleLegendItemHidden(legendConfig, row.key),
-                                )
+                                setLegendConfig(toggleLegendItemHidden(legendConfig, row.key))
                               }
                             >
                               {row.hidden ? (
@@ -3462,9 +3057,7 @@ export function PrintLayoutDialog({
             }`}
           >
             <div className="flex w-full items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {t("printLayout.preview")}
-              </span>
+              <span className="text-sm text-muted-foreground">{t("printLayout.preview")}</span>
               {/* In atlas mode, recapture must re-drive the current page
                   (never the plain viewport/extent capture, which would clip to
                   an unrelated print-extent box and skip the fixed-scale
@@ -3504,9 +3097,7 @@ export function PrintLayoutDialog({
                   variant="outline"
                   size="sm"
                   aria-label={t("printLayout.atlas.nextPage")}
-                  disabled={
-                    atlasBusy || clampedAtlasIndex >= atlasPageCount - 1
-                  }
+                  disabled={atlasBusy || clampedAtlasIndex >= atlasPageCount - 1}
                   onClick={() => void goToAtlasPage(clampedAtlasIndex + 1)}
                 >
                   <ChevronRight className="h-4 w-4 rtl:rotate-180" />
@@ -3531,11 +3122,7 @@ export function PrintLayoutDialog({
             >
               {/* The canvas width/height (backing + CSS) are set imperatively in
                   the draw effect to fit this pane, so it scales with the dialog. */}
-              <canvas
-                ref={previewRef}
-                className="shadow-md"
-                style={{ imageRendering: "auto" }}
-              />
+              <canvas ref={previewRef} className="shadow-md" style={{ imageRendering: "auto" }} />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
@@ -3565,9 +3152,7 @@ export function PrintLayoutDialog({
             ) : (
               <ClipboardCopy className="me-2 h-4 w-4" />
             )}
-            {copied
-              ? t("printLayout.copied")
-              : t("printLayout.copyToClipboard")}
+            {copied ? t("printLayout.copied") : t("printLayout.copyToClipboard")}
           </Button>
           {/* Equal-weight export buttons: neither format is the "primary" one
               (GH #520). In atlas mode they become the whole-series exports:
@@ -3580,14 +3165,10 @@ export function PrintLayoutDialog({
               atlasConfigBlocked ||
               (atlasEnabled ? !atlasActive : !captured)
             }
-            onClick={() =>
-              void (atlasActive ? handleAtlasExport("zip") : handleExport("png"))
-            }
+            onClick={() => void (atlasActive ? handleAtlasExport("zip") : handleExport("png"))}
           >
             <FileImage className="me-2 h-4 w-4" />
-            {atlasActive
-              ? t("printLayout.atlas.exportZip")
-              : t("printLayout.exportPng")}
+            {atlasActive ? t("printLayout.atlas.exportZip") : t("printLayout.exportPng")}
           </Button>
           <Button
             variant="outline"
@@ -3597,9 +3178,7 @@ export function PrintLayoutDialog({
               atlasConfigBlocked ||
               (atlasEnabled ? !atlasActive : !captured)
             }
-            onClick={() =>
-              void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))
-            }
+            onClick={() => void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))}
           >
             <FileText className="me-2 h-4 w-4" />
             {atlasActive

@@ -18,11 +18,7 @@ const ORIGIN = "https://geolibre.app/demo";
 interface Env {}
 
 export default {
-  async fetch(
-    request: Request,
-    _env: Env,
-    _ctx: ExecutionContext,
-  ): Promise<Response> {
+  async fetch(request: Request, _env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const target = `${ORIGIN}${url.pathname}${url.search}`;
 
@@ -39,10 +35,7 @@ export default {
       return await fetch(target, {
         method: request.method,
         headers,
-        body:
-          request.method === "GET" || request.method === "HEAD"
-            ? null
-            : request.body,
+        body: request.method === "GET" || request.method === "HEAD" ? null : request.body,
         redirect: "follow",
       });
     } catch {

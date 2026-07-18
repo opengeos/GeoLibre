@@ -27,10 +27,7 @@ export interface OsmPbfConfirm {
  * @param setActionError - Setter for the shared toolbar error dialog.
  * @returns Dialog state and handlers consumed by the toolbar.
  */
-export function useOsmPbfLoader(
-  appApi: AppApi,
-  setActionError: (message: string | null) => void,
-) {
+export function useOsmPbfLoader(appApi: AppApi, setActionError: (message: string | null) => void) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<OsmPbfProgress | null>(null);
@@ -39,11 +36,7 @@ export function useOsmPbfLoader(
   const [confirm, setConfirm] = useState<OsmPbfConfirm | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const runOsmPbf = async (
-    data: ArrayBuffer,
-    baseName: string,
-    sourcePath: string,
-  ) => {
+  const runOsmPbf = async (data: ArrayBuffer, baseName: string, sourcePath: string) => {
     // Reuse a controller already started for the URL fetch, else make one, so
     // the loading dialog's Cancel/dismiss can abort the in-flight parse.
     const controller = abortRef.current ?? new AbortController();
@@ -57,12 +50,7 @@ export function useOsmPbfLoader(
     setProgress(null);
     try {
       const layers = await loadOsmPbf(data, controller.signal, setProgress);
-      const added = addOsmPbfLayers(
-        appApi.addGeoJsonLayer,
-        baseName,
-        sourcePath,
-        layers,
-      );
+      const added = addOsmPbfLayers(appApi.addGeoJsonLayer, baseName, sourcePath, layers);
       if (added === 0) {
         setActionError(t("toolbar.error.osmPbfNoFeatures"));
       } else if (layers.bounds) {
@@ -77,16 +65,11 @@ export function useOsmPbfLoader(
         setActionError(t("toolbar.error.osmPbfTooLarge"));
         return;
       }
-      const base =
-        err instanceof Error
-          ? err.message
-          : t("toolbar.error.couldNotLoadOsmPbf");
+      const base = err instanceof Error ? err.message : t("toolbar.error.couldNotLoadOsmPbf");
       // Bare .pbf is also the Mapbox Vector Tile extension; hint at it on
       // failure. The message + hint live in one catalog key so each locale
       // controls how the two sentences join (e.g. no space in CJK).
-      setActionError(
-        t("toolbar.error.osmPbfLoadFailedWithHint", { message: base }),
-      );
+      setActionError(t("toolbar.error.osmPbfLoadFailedWithHint", { message: base }));
     } finally {
       setLoading(false);
       setProgress(null);
@@ -102,11 +85,7 @@ export function useOsmPbfLoader(
   };
 
   // Large extracts can exhaust browser memory; confirm before parsing.
-  const startOsmPbf = (
-    data: ArrayBuffer,
-    baseName: string,
-    sourcePath: string,
-  ) => {
+  const startOsmPbf = (data: ArrayBuffer, baseName: string, sourcePath: string) => {
     if (data.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
       setConfirm({
         data,
@@ -131,11 +110,7 @@ export function useOsmPbfLoader(
       const fileName = result.path.split(/[/\\]/).pop() || "osm";
       startOsmPbf(result.data, osmPbfBaseName(fileName), result.path);
     } catch (err) {
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : t("toolbar.error.couldNotOpenOsmPbf"),
-      );
+      setActionError(err instanceof Error ? err.message : t("toolbar.error.couldNotOpenOsmPbf"));
     }
   };
 
@@ -165,8 +140,7 @@ export function useOsmPbfLoader(
         setActionError(t("toolbar.error.couldNotDownloadOsmPbf"));
         return;
       }
-      const fileName =
-        trimmedUrl.split("/").pop()?.split("?")[0].split("#")[0] || "osm";
+      const fileName = trimmedUrl.split("/").pop()?.split("?")[0].split("#")[0] || "osm";
       // Keep the loading indicator up through the parse for small files
       // (runOsmPbf re-sets it and clears it in finally); only stop it here when
       // a large file will instead show the confirm dialog, to avoid a flicker.
@@ -176,9 +150,7 @@ export function useOsmPbfLoader(
       setLoading(false);
       if (abortRef.current === controller) abortRef.current = null;
       setActionError(
-        err instanceof Error
-          ? err.message
-          : t("toolbar.error.couldNotDownloadOsmPbf"),
+        err instanceof Error ? err.message : t("toolbar.error.couldNotDownloadOsmPbf"),
       );
     }
   };

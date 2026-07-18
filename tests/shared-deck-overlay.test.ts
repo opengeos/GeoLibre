@@ -10,8 +10,7 @@ import {
 // A deck layer stand-in. Only identity/label matter for these assertions.
 type FakeLayer = { id: string };
 const layer = (id: string): FakeLayer => ({ id });
-const ids = (layers: unknown): string[] =>
-  (layers as FakeLayer[]).map((l) => l.id);
+const ids = (layers: unknown): string[] => (layers as FakeLayer[]).map((l) => l.id);
 
 // Captures the props handed to the single shared MapboxOverlay so a test can
 // read back the aggregated layer list and drive the device callback.
@@ -19,10 +18,7 @@ class FakeMapboxOverlay {
   static instances: FakeMapboxOverlay[] = [];
   props: { layers?: FakeLayer[] } = {};
   onDeviceInitialized?: (device: unknown) => void;
-  constructor(props: {
-    layers?: FakeLayer[];
-    onDeviceInitialized?: (device: unknown) => void;
-  }) {
+  constructor(props: { layers?: FakeLayer[]; onDeviceInitialized?: (device: unknown) => void }) {
     this.onDeviceInitialized = props.onDeviceInitialized;
     FakeMapboxOverlay.instances.push(this);
   }

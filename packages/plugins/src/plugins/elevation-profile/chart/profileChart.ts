@@ -66,9 +66,7 @@ export function buildChartGeometry(
 
   const distances = points.map((p) => p.distance);
   const elevations = points.map((p) => p.elevation);
-  const totalDistance = distances.length
-    ? distances[distances.length - 1]
-    : 0;
+  const totalDistance = distances.length ? distances[distances.length - 1] : 0;
 
   const minElevation = elevations.length ? Math.min(...elevations) : 0;
   const maxElevation = elevations.length ? Math.max(...elevations) : 0;
@@ -90,9 +88,7 @@ export function buildChartGeometry(
     if (points.length === 1) return 0;
     const clamped = Math.min(padding.left + plotWidth, Math.max(padding.left, px));
     const targetDistance =
-      totalDistance === 0
-        ? 0
-        : ((clamped - padding.left) / plotWidth) * totalDistance;
+      totalDistance === 0 ? 0 : ((clamped - padding.left) / plotWidth) * totalDistance;
 
     // Distances are ascending, so find the closest sample by linear scan.
     let nearest = 0;
@@ -107,15 +103,15 @@ export function buildChartGeometry(
     return nearest;
   };
 
-  let linePath = '';
+  let linePath = "";
   for (let i = 0; i < points.length; i += 1) {
     const x = xScale(points[i].distance);
     const y = yScale(points[i].elevation);
-    linePath += `${i === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`;
-    if (i < points.length - 1) linePath += ' ';
+    linePath += `${i === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+    if (i < points.length - 1) linePath += " ";
   }
 
-  let areaPath = '';
+  let areaPath = "";
   if (points.length > 0) {
     const firstX = xScale(points[0].distance);
     const lastX = xScale(points[points.length - 1].distance);

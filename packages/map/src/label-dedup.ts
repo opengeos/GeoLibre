@@ -4,9 +4,7 @@ import type { LabelDedupe } from "@geolibre/core";
  * Pull a representative `[x, y]` from a point geometry, or null for any other
  * geometry type (only points participate in label deduplication).
  */
-function pointCoordinates(
-  geometry: GeoJSON.Geometry | null,
-): [number, number] | null {
+function pointCoordinates(geometry: GeoJSON.Geometry | null): [number, number] | null {
   if (!geometry) return null;
   if (geometry.type === "Point") {
     const [x, y] = geometry.coordinates;
@@ -46,10 +44,7 @@ export function buildDedupedLabelFeatures(
   mode: LabelDedupe,
 ): GeoJSON.FeatureCollection | null {
   if (mode === "off" || !field) return null;
-  const groups = new Map<
-    string,
-    { coordinates: [number, number]; values: Set<string> }
-  >();
+  const groups = new Map<string, { coordinates: [number, number]; values: Set<string> }>();
   for (const feature of geojson.features) {
     const point = pointCoordinates(feature.geometry ?? null);
     if (!point) continue;

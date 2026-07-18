@@ -8,13 +8,7 @@
 import { zipSync } from "fflate";
 import jsPDF from "jspdf";
 import { isFullViewportMapCanvas } from "./print-capture";
-import {
-  drawLayout,
-  pageMm,
-  pagePx,
-  resolvePageSize,
-  type LayoutOptions,
-} from "./print-layout";
+import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
@@ -219,20 +213,14 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   };
 }
 
-
-function haversineMeters(
-  a: { lng: number; lat: number },
-  b: { lng: number; lat: number },
-): number {
+function haversineMeters(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
   const R = 6371008.8;
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
   const la1 = toRad(a.lat);
   const la2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -296,10 +284,7 @@ export async function exportLayoutPng(
  *   or an older browser) or the browser denies the write, so the dialog can
  *   surface an error instead of silently doing nothing.
  */
-export async function copyLayoutToClipboard(
-  opts: LayoutOptions,
-  dpi = 150,
-): Promise<void> {
+export async function copyLayoutToClipboard(opts: LayoutOptions, dpi = 150): Promise<void> {
   if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
     throw new Error("Clipboard image copy is not supported in this browser");
   }
@@ -350,9 +335,7 @@ export async function exportLayoutPdf(
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
-    browserTypes: [
-      { description: "PDF Document", accept: { "application/pdf": [".pdf"] } },
-    ],
+    browserTypes: [{ description: "PDF Document", accept: { "application/pdf": [".pdf"] } }],
     mimeType: "application/pdf",
   });
 }
@@ -409,9 +392,7 @@ export async function exportAtlasPdf(
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
-    browserTypes: [
-      { description: "PDF Document", accept: { "application/pdf": [".pdf"] } },
-    ],
+    browserTypes: [{ description: "PDF Document", accept: { "application/pdf": [".pdf"] } }],
     mimeType: "application/pdf",
   });
 }
@@ -438,7 +419,10 @@ export async function exportAtlasPngZip(
   // are case-insensitive and drop trailing dots/spaces), so "CA" and "Ca"
   // pages cannot silently overwrite each other when the zip is unpacked.
   const collisionKey = (name: string) =>
-    name.normalize("NFC").replace(/[ .]+$/g, "").toLowerCase();
+    name
+      .normalize("NFC")
+      .replace(/[ .]+$/g, "")
+      .toLowerCase();
   for (let i = 0; i < total; i++) {
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
@@ -457,9 +441,7 @@ export async function exportAtlasPngZip(
   return saveBinaryFileWithFallback(zipped, {
     defaultName: filename,
     filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
-    browserTypes: [
-      { description: "ZIP Archive", accept: { "application/zip": [".zip"] } },
-    ],
+    browserTypes: [{ description: "ZIP Archive", accept: { "application/zip": [".zip"] } }],
     mimeType: "application/zip",
   });
 }

@@ -49,10 +49,7 @@ describe("normalizeGraticuleSettings", () => {
 
   it("clamps the UTM metre interval into its allowed range", () => {
     assert.equal(normalizeGraticuleSettings({ spacingMeters: 5 }).spacingMeters, 100);
-    assert.equal(
-      normalizeGraticuleSettings({ spacingMeters: 9_999_999 }).spacingMeters,
-      1_000_000,
-    );
+    assert.equal(normalizeGraticuleSettings({ spacingMeters: 9_999_999 }).spacingMeters, 1_000_000);
     assert.equal(
       normalizeGraticuleSettings({ spacingMeters: Number.NaN }).spacingMeters,
       DEFAULT_GRATICULE_SETTINGS.spacingMeters,

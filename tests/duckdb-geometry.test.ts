@@ -60,14 +60,7 @@ describe("detectGeometryColumn", () => {
   });
 
   it("matches well-known WKB names case-insensitively", () => {
-    for (const name of [
-      "geometry",
-      "geom",
-      "wkb_geometry",
-      "GEOMETRY_WKB",
-      "Geom_WKB",
-      "WKB",
-    ]) {
+    for (const name of ["geometry", "geom", "wkb_geometry", "GEOMETRY_WKB", "Geom_WKB", "WKB"]) {
       const detected = detectGeometryColumn([
         describeRow("id", "BIGINT"),
         describeRow(name, "BLOB"),
@@ -77,10 +70,10 @@ describe("detectGeometryColumn", () => {
   });
 
   it("matches VARBINARY/BINARY WKB columns", () => {
-    assert.deepEqual(
-      detectGeometryColumn([describeRow("geom", "VARBINARY")]),
-      { column: "geom", isWkb: true },
-    );
+    assert.deepEqual(detectGeometryColumn([describeRow("geom", "VARBINARY")]), {
+      column: "geom",
+      isWkb: true,
+    });
     assert.deepEqual(detectGeometryColumn([describeRow("wkb", "BINARY")]), {
       column: "wkb",
       isWkb: true,
@@ -165,10 +158,7 @@ describe("geometryExpr", () => {
   });
 
   it("quotes identifiers safely", () => {
-    assert.equal(
-      geometryExpr({ column: 'odd"name', isWkb: false }),
-      '"odd""name"',
-    );
+    assert.equal(geometryExpr({ column: 'odd"name', isWkb: false }), '"odd""name"');
   });
 });
 
@@ -186,9 +176,7 @@ describe("geometryGeoJsonSql", () => {
 });
 
 describe("stripAutoFidColumn", () => {
-  function collection(
-    properties: Record<string, unknown> | null,
-  ): FeatureCollection {
+  function collection(properties: Record<string, unknown> | null): FeatureCollection {
     return {
       type: "FeatureCollection",
       features: [
@@ -294,9 +282,7 @@ describe("isUnsupportedSurfaceWkbError", () => {
     }
     // Curved type named but no id, and no surface keyword: also excluded.
     assert.equal(
-      isUnsupportedSurfaceWkbError(
-        new Error("WKB type 'CircularString' is not supported!"),
-      ),
+      isUnsupportedSurfaceWkbError(new Error("WKB type 'CircularString' is not supported!")),
       false,
     );
   });
@@ -313,10 +299,7 @@ describe("isUnsupportedSurfaceWkbError", () => {
   });
 
   it("ignores unrelated errors", () => {
-    assert.equal(
-      isUnsupportedSurfaceWkbError(new Error("stoi: no conversion")),
-      false,
-    );
+    assert.equal(isUnsupportedSurfaceWkbError(new Error("stoi: no conversion")), false);
     assert.equal(isUnsupportedSurfaceWkbError("TIN"), false);
   });
 });
@@ -333,15 +316,10 @@ describe("isGenericUnsupportedWkbError", () => {
 
   it("does not match the detailed surface or unrelated messages", () => {
     assert.equal(
-      isGenericUnsupportedWkbError(
-        new Error("WKB type 'TIN Z' is not supported! (type id: 1016)"),
-      ),
+      isGenericUnsupportedWkbError(new Error("WKB type 'TIN Z' is not supported! (type id: 1016)")),
       false,
     );
-    assert.equal(
-      isGenericUnsupportedWkbError(new Error("stoi: no conversion")),
-      false,
-    );
+    assert.equal(isGenericUnsupportedWkbError(new Error("stoi: no conversion")), false);
   });
 });
 
@@ -365,7 +343,14 @@ describe("wkbRowsToFeatureCollection", () => {
   it("decodes the WKB column and drops it (and blobs) from properties", () => {
     const wkb = encodeWkb({
       type: "Polygon",
-      coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]],
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
     });
     const out = wkbRowsToFeatureCollection(
       [{ name: "a", extra: new Uint8Array([1, 2]), wkb_geometry: wkb }],
@@ -373,7 +358,14 @@ describe("wkbRowsToFeatureCollection", () => {
     );
     assert.deepEqual(out.features[0].geometry, {
       type: "Polygon",
-      coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]],
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
     });
     // The WKB geometry column and any other blob columns are excluded.
     assert.deepEqual(out.features[0].properties, { name: "a" });
@@ -382,10 +374,7 @@ describe("wkbRowsToFeatureCollection", () => {
   it("decodes a base64-encoded WKB string column", () => {
     const wkb = encodeWkb({ type: "Point", coordinates: [3, 4] });
     const base64 = Buffer.from(wkb).toString("base64");
-    const out = wkbRowsToFeatureCollection(
-      [{ wkb_geometry: base64 }],
-      "wkb_geometry",
-    );
+    const out = wkbRowsToFeatureCollection([{ wkb_geometry: base64 }], "wkb_geometry");
     assert.deepEqual(out.features[0].geometry, {
       type: "Point",
       coordinates: [3, 4],
@@ -395,17 +384,17 @@ describe("wkbRowsToFeatureCollection", () => {
   it("yields a null geometry when a blob cannot be decoded", () => {
     // Type code 8 = CircularString, which decodeWkb throws on.
     const undecodable = new Uint8Array([0x01, 0x08, 0x00, 0x00, 0x00]);
-    const out = wkbRowsToFeatureCollection(
-      [{ id: 1, wkb_geometry: undecodable }],
-      "wkb_geometry",
-    );
+    const out = wkbRowsToFeatureCollection([{ id: 1, wkb_geometry: undecodable }], "wkb_geometry");
     assert.equal(out.features[0].geometry, null);
     assert.deepEqual(out.features[0].properties, { id: 1 });
   });
 
   it("treats a missing or empty geometry blob as null", () => {
     const out = wkbRowsToFeatureCollection(
-      [{ id: 1, wkb_geometry: null }, { id: 2, wkb_geometry: new Uint8Array() }],
+      [
+        { id: 1, wkb_geometry: null },
+        { id: 2, wkb_geometry: new Uint8Array() },
+      ],
       "wkb_geometry",
     );
     assert.equal(out.features[0].geometry, null);

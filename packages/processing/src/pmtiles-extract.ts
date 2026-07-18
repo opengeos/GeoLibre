@@ -56,9 +56,7 @@ export interface ExtractPmtilesOptions {
    * `estimatedOutputBytes`, so a UI can warn about large extracts. Return
    * `false` to cancel (the extraction rejects with an AbortError).
    */
-  confirmDownload?: (
-    progress: PmtilesExtractProgress,
-  ) => boolean | Promise<boolean>;
+  confirmDownload?: (progress: PmtilesExtractProgress) => boolean | Promise<boolean>;
   /** Test seam; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch;
 }
@@ -151,13 +149,8 @@ async function fetchRange(
         // without a finite content-length (e.g. chunked transfer) we can't tell
         // a 1 KB body from a 136 GB planet build without buffering it first, so
         // fail fast rather than risk streaming the whole archive into memory.
-        const contentLength = Number(
-          response.headers.get("content-length") ?? Number.NaN,
-        );
-        if (
-          !Number.isFinite(contentLength) ||
-          contentLength > MAX_FULL_BODY_BYTES
-        ) {
+        const contentLength = Number(response.headers.get("content-length") ?? Number.NaN);
+        if (!Number.isFinite(contentLength) || contentLength > MAX_FULL_BODY_BYTES) {
           throw new Error(
             "server ignored the Range header and did not report a small " +
               "content-length; the host must support HTTP range requests",
@@ -187,9 +180,7 @@ async function fetchRange(
       throw error;
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("range request failed");
+  throw lastError instanceof Error ? lastError : new Error("range request failed");
 }
 
 /**
@@ -208,20 +199,17 @@ async function runPool<T>(
 ): Promise<void> {
   let next = 0;
   let failure: unknown;
-  const lanes = Array.from(
-    { length: Math.max(1, Math.min(limit, items.length)) },
-    async () => {
-      while (next < items.length && failure === undefined) {
-        const item = items[next];
-        next += 1;
-        try {
-          await worker(item);
-        } catch (error) {
-          failure ??= error;
-        }
+  const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length && failure === undefined) {
+      const item = items[next];
+      next += 1;
+      try {
+        await worker(item);
+      } catch (error) {
+        failure ??= error;
       }
-    },
-  );
+    }
+  });
   await Promise.all(lanes);
   if (failure !== undefined) throw failure;
 }
@@ -251,14 +239,7 @@ export async function extractPmtiles(
   await initCogWasm();
   throwIfAborted(signal);
 
-  const extractor = new PmtilesExtractor(
-    bbox[0],
-    bbox[1],
-    bbox[2],
-    bbox[3],
-    minZoom,
-    maxZoom,
-  );
+  const extractor = new PmtilesExtractor(bbox[0], bbox[1], bbox[2], bbox[3], minZoom, maxZoom);
   try {
     if (maxTiles !== undefined) {
       extractor.set_max_tiles(maxTiles);

@@ -148,17 +148,11 @@ const closeSwipeSelectMenu = () => {
     });
 };
 
-const syncSwipeSelectProxy = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const syncSwipeSelectProxy = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   button.textContent = select.options[select.selectedIndex]?.text ?? "";
 };
 
-const openSwipeSelectMenu = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const openSwipeSelectMenu = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   closeSwipeSelectMenu();
   syncSwipeSelectProxy(select, button);
 
@@ -190,9 +184,7 @@ const openSwipeSelectMenu = (
     menu.appendChild(item);
   });
 
-  const items = Array.from(
-    menu.querySelectorAll<HTMLButtonElement>("button"),
-  );
+  const items = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
   menu.addEventListener("keydown", (event) => {
     const current = items.indexOf(document.activeElement as HTMLButtonElement);
     if (event.key === "ArrowDown") {
@@ -251,9 +243,7 @@ const enhanceSwipeSelect = (select: HTMLSelectElement) => {
 
 const enhanceSwipeSelects = () => {
   document
-    .querySelectorAll<HTMLSelectElement>(
-      ".swipe-control-panel .swipe-control-select",
-    )
+    .querySelectorAll<HTMLSelectElement>(".swipe-control-panel .swipe-control-select")
     .forEach(enhanceSwipeSelect);
 };
 
@@ -284,8 +274,7 @@ const syncSwipeLayerLabels = () => {
       if (!label) return;
 
       const displayName = getSwipeLayerLabel(layerId);
-      const title =
-        layerId === "__basemap__" ? displayName : `${displayName} (${layerId})`;
+      const title = layerId === "__basemap__" ? displayName : `${displayName} (${layerId})`;
       if (label.textContent !== displayName) {
         label.textContent = displayName;
       }
@@ -311,10 +300,7 @@ const scheduleEnhanceSwipePanel = () => {
 if (typeof document !== "undefined") {
   document.addEventListener("click", closeSwipeSelectMenu);
   window.addEventListener("resize", closeSwipeSelectMenu);
-  window.addEventListener(
-    "geolibre-layer-labels-change",
-    scheduleEnhanceSwipePanel,
-  );
+  window.addEventListener("geolibre-layer-labels-change", scheduleEnhanceSwipePanel);
   window.addEventListener(
     "scroll",
     (event) => {

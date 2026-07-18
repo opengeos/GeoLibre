@@ -118,9 +118,7 @@ function writeGeometry(writer: ByteWriter, geometry: Geometry): void {
       for (const child of geometry.geometries) writeGeometry(writer, child);
       break;
     default:
-      throw new Error(
-        `Unsupported geometry type for WKB: ${(geometry as Geometry).type}`,
-      );
+      throw new Error(`Unsupported geometry type for WKB: ${(geometry as Geometry).type}`);
   }
 }
 
@@ -231,18 +229,14 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
         const lines = readChildren();
         return {
           type: "MultiLineString",
-          coordinates: lines.map(
-            (l) => (l as { coordinates: Position[] }).coordinates,
-          ),
+          coordinates: lines.map((l) => (l as { coordinates: Position[] }).coordinates),
         };
       }
       case 6: {
         const polygons = readChildren();
         return {
           type: "MultiPolygon",
-          coordinates: polygons.map(
-            (p) => (p as { coordinates: Position[][] }).coordinates,
-          ),
+          coordinates: polygons.map((p) => (p as { coordinates: Position[][] }).coordinates),
         };
       }
       case 7:
@@ -255,9 +249,7 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
         const patches = readChildren();
         return {
           type: "MultiPolygon",
-          coordinates: patches.map(
-            (patch) => (patch as { coordinates: Position[][] }).coordinates,
-          ),
+          coordinates: patches.map((patch) => (patch as { coordinates: Position[][] }).coordinates),
         };
       }
       case 16: {
@@ -269,8 +261,7 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
         return {
           type: "MultiPolygon",
           coordinates: triangles.map(
-            (triangle) =>
-              (triangle as { coordinates: Position[][] }).coordinates,
+            (triangle) => (triangle as { coordinates: Position[][] }).coordinates,
           ),
         };
       }
@@ -284,9 +275,7 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
         // CurvePolygon, MultiCurve, MultiSurface) that GeoJSON cannot represent.
         throw new Error(
           `Unsupported WKB geometry type ${code}${
-            code >= 8 && code <= 12
-              ? " (curved geometries are not supported)"
-              : ""
+            code >= 8 && code <= 12 ? " (curved geometries are not supported)" : ""
           }.`,
         );
     }
@@ -320,10 +309,7 @@ export function extendBoundingBox(box: BoundingBox, geometry: Geometry): void {
 }
 
 /** Invoke `visit` for every coordinate position in a geometry. */
-export function walkPositions(
-  geometry: Geometry,
-  visit: (position: Position) => void,
-): void {
+export function walkPositions(geometry: Geometry, visit: (position: Position) => void): void {
   switch (geometry.type) {
     case "Point":
       visit(geometry.coordinates);
@@ -337,9 +323,7 @@ export function walkPositions(
       geometry.coordinates.forEach((part) => part.forEach(visit));
       break;
     case "MultiPolygon":
-      geometry.coordinates.forEach((polygon) =>
-        polygon.forEach((ring) => ring.forEach(visit)),
-      );
+      geometry.coordinates.forEach((polygon) => polygon.forEach((ring) => ring.forEach(visit)));
       break;
     case "GeometryCollection":
       geometry.geometries.forEach((child) => walkPositions(child, visit));

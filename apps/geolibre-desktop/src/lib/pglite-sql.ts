@@ -36,16 +36,10 @@ export interface PgColumn {
  * @returns The inferred Postgres column type.
  */
 export function classifyColumnType(values: unknown[]): PgColumnType {
-  const present = values.filter(
-    (value) => value !== null && value !== undefined,
-  );
+  const present = values.filter((value) => value !== null && value !== undefined);
   if (present.length === 0) return "text";
   if (present.some((value) => typeof value === "object")) return "jsonb";
-  if (
-    present.every(
-      (value) => typeof value === "number" && Number.isFinite(value),
-    )
-  ) {
+  if (present.every((value) => typeof value === "number" && Number.isFinite(value))) {
     return "double precision";
   }
   if (present.every((value) => typeof value === "boolean")) return "boolean";
@@ -90,9 +84,7 @@ export function inferPropertyColumns(features: Feature[]): PgColumn[] {
  * @param propertyNames Names already used by flattened property columns.
  * @returns A geometry column name guaranteed not to be in `propertyNames`.
  */
-export function pickGeometryColumnName(
-  propertyNames: Iterable<string>,
-): string {
+export function pickGeometryColumnName(propertyNames: Iterable<string>): string {
   const used = new Set(propertyNames);
   if (!used.has(DEFAULT_GEOMETRY_COLUMN)) return DEFAULT_GEOMETRY_COLUMN;
   if (!used.has("geometry")) return "geometry";
@@ -115,12 +107,8 @@ export function buildCreateTableStatement(
   columns: PgColumn[],
   geometryColumn: string,
 ): string {
-  const columnDefs = columns.map(
-    (column) => `${quoteIdentifier(column.name)} ${column.type}`,
-  );
-  columnDefs.push(
-    `${quoteIdentifier(geometryColumn)} geometry(Geometry, 4326)`,
-  );
+  const columnDefs = columns.map((column) => `${quoteIdentifier(column.name)} ${column.type}`);
+  columnDefs.push(`${quoteIdentifier(geometryColumn)} geometry(Geometry, 4326)`);
   return `CREATE TABLE ${qualifiedTable} (${columnDefs.join(", ")})`;
 }
 
@@ -168,9 +156,7 @@ export function buildInsertChunk(
       placeholders.push(`$${params.length}`);
     }
     params.push(feature.geometry ? JSON.stringify(feature.geometry) : null);
-    placeholders.push(
-      `ST_SetSRID(ST_GeomFromGeoJSON($${params.length}), 4326)`,
-    );
+    placeholders.push(`ST_SetSRID(ST_GeomFromGeoJSON($${params.length}), 4326)`);
     rows.push(`(${placeholders.join(", ")})`);
   }
   return {

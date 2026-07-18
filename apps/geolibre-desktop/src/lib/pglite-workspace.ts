@@ -81,9 +81,7 @@ async function getState(): Promise<PgliteState> {
         extensions: { postgis },
       }) as unknown as PgliteLike;
       await pg.exec("CREATE EXTENSION IF NOT EXISTS postgis;");
-      const oidResult = await pg.query(
-        "SELECT oid FROM pg_type WHERE typname = 'geometry'",
-      );
+      const oidResult = await pg.query("SELECT oid FROM pg_type WHERE typname = 'geometry'");
       const oid = oidResult.rows[0]?.oid;
       return {
         pg,
@@ -124,9 +122,7 @@ async function registerLayerTables(
     const qualifiedTable = `${quoteIdentifier(WORKSPACE_SCHEMA)}.${quoteIdentifier(tableName)}`;
     const columns = inferPropertyColumns(features);
     const geometryColumn = pickGeometryColumnName(columns.map((c) => c.name));
-    await pg.query(
-      buildCreateTableStatement(qualifiedTable, columns, geometryColumn),
-    );
+    await pg.query(buildCreateTableStatement(qualifiedTable, columns, geometryColumn));
     const chunkRows = insertChunkRows(columns.length);
     for (let i = 0; i < features.length; i += chunkRows) {
       const chunk = buildInsertChunk(
@@ -166,8 +162,7 @@ async function describeQuery(
     const geometryColumn =
       geometryOid === null
         ? null
-        : (described.fields.find((field) => field.dataTypeID === geometryOid)
-            ?.name ?? null);
+        : (described.fields.find((field) => field.dataTypeID === geometryOid)?.name ?? null);
     return { columnNames, geometryColumn };
   } catch {
     return null;
@@ -223,9 +218,7 @@ export async function runPostgisQuery(
             : `${sub}.${id} AS ${id}`;
         });
       projection.push(`ST_AsGeoJSON(${sub}.${geomId}) AS ${hiddenId}`);
-      const result = await pg.query(
-        `SELECT ${projection.join(", ")} FROM (${cleaned}) AS ${sub}`,
-      );
+      const result = await pg.query(`SELECT ${projection.join(", ")} FROM (${cleaned}) AS ${sub}`);
       const columns = result.fields
         .map((field) => field.name)
         .filter((name) => name !== GEOMETRY_JSON_COLUMN);

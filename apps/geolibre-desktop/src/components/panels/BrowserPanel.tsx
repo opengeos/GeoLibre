@@ -3,28 +3,12 @@ import type { MapController } from "@geolibre/map";
 import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
-import {
-  isLoadableFilePath,
-  isTauri,
-  listDirectory,
-  pickLocalDirectory,
-} from "../../lib/tauri-io";
+import { isLoadableFilePath, isTauri, listDirectory, pickLocalDirectory } from "../../lib/tauri-io";
 import { pinFolder, unpinFolder } from "../../lib/browser-folders";
-import {
-  addFavorite,
-  isFavoritableKind,
-  removeFavorite,
-} from "../../lib/browser-favorites";
+import { addFavorite, isFavoritableKind, removeFavorite } from "../../lib/browser-favorites";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
   augmentConnections,
@@ -102,9 +86,7 @@ export function BrowserPanel({
   const { tree, serviceById, favoriteIds } = useBrowserTree();
 
   const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(DEFAULT_EXPANDED),
-  );
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(DEFAULT_EXPANDED));
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Ref mirror of busyId for the re-entrancy guard: two clicks dispatched
@@ -125,9 +107,7 @@ export function BrowserPanel({
   // Lazy PostGIS introspection: keyed by connection string, populated the first
   // time a connection node is expanded so we never hit the sidecar for a
   // connection the user hasn't opened.
-  const [connLoads, setConnLoads] = useState<Record<string, ConnectionLoad>>(
-    {},
-  );
+  const [connLoads, setConnLoads] = useState<Record<string, ConnectionLoad>>({});
   // Tracks in-flight/settled fetches so a re-expand (or the expand-all a search
   // triggers) doesn't refetch. A failed fetch drops its entry so re-expanding
   // the connection retries (there is no separate refresh affordance).
@@ -210,9 +190,7 @@ export function BrowserPanel({
 
   // Lazy directory listing for the Files section: keyed by absolute path,
   // populated the first time a folder is expanded (same pattern as connections).
-  const [folderLoads, setFolderLoads] = useState<Record<string, FolderLoad>>(
-    {},
-  );
+  const [folderLoads, setFolderLoads] = useState<Record<string, FolderLoad>>({});
   const folderFetchedRef = useRef<Set<string>>(new Set());
   // Per-path fetch generation: bumped when a folder is (re)fetched or unpinned,
   // so a slow listDirectory that resolves after the folder was unpinned/re-pinned
@@ -272,10 +250,7 @@ export function BrowserPanel({
     [tree, connLoads, loadingLabel, folderLoads, foldersLoadingLabel, t],
   );
 
-  const filtered = useMemo(
-    () => filterBrowserTree(augmented, query),
-    [augmented, query],
-  );
+  const filtered = useMemo(() => filterBrowserTree(augmented, query), [augmented, query]);
 
   // While searching, expand every group so matches deep in the tree are
   // visible without the user hunting for them; otherwise use their choices.
@@ -310,10 +285,7 @@ export function BrowserPanel({
   const visibleRows = useMemo(
     // "info" rows (loading/error status) are non-interactive text, not tree
     // items, so they're excluded from keyboard navigation.
-    () =>
-      flattenVisibleTree(filtered, effectiveExpanded).filter(
-        (row) => row.kind !== "info",
-      ),
+    () => flattenVisibleTree(filtered, effectiveExpanded).filter((row) => row.kind !== "info"),
     [filtered, effectiveExpanded],
   );
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
@@ -339,10 +311,7 @@ export function BrowserPanel({
     // Only navigate when a treeitem row is focused. A row's secondary buttons
     // (star/×/＋) are Tab-reachable; an Arrow key fired from one of those must
     // not hijack nav and yank focus to another row.
-    if (
-      !(event.target instanceof HTMLElement) ||
-      !event.target.hasAttribute("data-browser-row")
-    ) {
+    if (!(event.target instanceof HTMLElement) || !event.target.hasAttribute("data-browser-row")) {
       return;
     }
     if (!currentRowId) return;
@@ -514,8 +483,7 @@ export function BrowserPanel({
     // match no real descendant).
     const separator = path.includes("\\") ? "\\" : "/";
     const prefix = path.endsWith(separator) ? path : `${path}${separator}`;
-    const isWithin = (candidate: string) =>
-      candidate === path || candidate.startsWith(prefix);
+    const isWithin = (candidate: string) => candidate === path || candidate.startsWith(prefix);
     for (const key of [...folderFetchedRef.current]) {
       if (isWithin(key)) folderFetchedRef.current.delete(key);
     }
@@ -536,10 +504,7 @@ export function BrowserPanel({
     setExpanded((prev) => {
       const next = new Set(prev);
       for (const id of prev) {
-        if (
-          id.startsWith(FOLDER_ID_PREFIX) &&
-          isWithin(id.slice(FOLDER_ID_PREFIX.length))
-        ) {
+        if (id.startsWith(FOLDER_ID_PREFIX) && isWithin(id.slice(FOLDER_ID_PREFIX.length))) {
           next.delete(id);
         }
       }
@@ -579,10 +544,7 @@ export function BrowserPanel({
   // (Databases' "New connection" and Files' "Add folder" show even with zero
   // entries, so a first-run user isn't stuck on the empty-state message).
   const hasContent = filtered.some(
-    (section) =>
-      section.children?.length ||
-      section.newConnectionKind ||
-      section.addFolderAction,
+    (section) => section.children?.length || section.newConnectionKind || section.addFolderAction,
   );
 
   return (
@@ -600,9 +562,7 @@ export function BrowserPanel({
         />
       </div>
 
-      {error ? (
-        <p className="border-b px-3 py-2 text-xs text-destructive">{error}</p>
-      ) : null}
+      {error ? <p className="border-b px-3 py-2 text-xs text-destructive">{error}</p> : null}
 
       <ScrollArea className="min-h-0 flex-1">
         {hasContent ? (
@@ -635,9 +595,7 @@ export function BrowserPanel({
           </ul>
         ) : (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {query.trim()
-              ? t("browser.noMatches")
-              : t("browser.empty")}
+            {query.trim() ? t("browser.noMatches") : t("browser.empty")}
           </p>
         )}
       </ScrollArea>

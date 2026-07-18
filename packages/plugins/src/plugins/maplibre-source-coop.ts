@@ -112,8 +112,7 @@ export const DEFAULT_SOURCE_COOP_LABELS: SourceCoopLabels = {
   search: "Search",
   searching: "Searching…",
   loading: "Loading catalog…",
-  loadError: (message) =>
-    `Could not reach Source Cooperative: ${message}. Please try again.`,
+  loadError: (message) => `Could not reach Source Cooperative: ${message}. Please try again.`,
   noResults: "No matching products.",
   retry: "Retry",
   featured: "Featured",
@@ -183,12 +182,9 @@ const CSS = {
     "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
     "color:hsl(var(--foreground));font-size:12px;cursor:pointer;",
   status: "font-size:11px;color:hsl(var(--muted-foreground));line-height:1.4;",
-  error:
-    "font-size:11px;color:hsl(var(--destructive));line-height:1.4;" +
-    "word-break:break-word;",
+  error: "font-size:11px;color:hsl(var(--destructive));line-height:1.4;" + "word-break:break-word;",
   list:
-    "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;" +
-    "overflow-y:auto;",
+    "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;" + "overflow-y:auto;",
   card:
     "display:flex;flex-direction:column;gap:4px;padding:6px;border-radius:6px;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
@@ -229,8 +225,7 @@ const CSS = {
     "border:1px solid hsl(var(--primary));background:hsl(var(--primary));" +
     "color:hsl(var(--primary-foreground));",
   header: "display:flex;flex-direction:column;gap:4px;",
-  crumbs:
-    "font-size:10px;color:hsl(var(--muted-foreground));word-break:break-all;",
+  crumbs: "font-size:10px;color:hsl(var(--muted-foreground));word-break:break-all;",
 } as const;
 
 /**
@@ -279,10 +274,7 @@ function isTauri(): boolean {
  * through the tiles Worker, which re-emits the JSON with CORS — source.coop
  * sends none, so a direct browser fetch is blocked outright.
  */
-function clientOptions(
-  app: GeoLibreAppAPI | null,
-  signal?: AbortSignal,
-): SourceCoopClientOptions {
+function clientOptions(app: GeoLibreAppAPI | null, signal?: AbortSignal): SourceCoopClientOptions {
   const fetchArrayBuffer = app?.fetchArrayBuffer;
   if (isTauri() && fetchArrayBuffer) {
     const fetchImpl: SourceCoopFetch = async (url) => {
@@ -335,9 +327,7 @@ function button(text: string, style: string, title?: string): HTMLButtonElement 
  * layer from the Layers panel.
  */
 function findAddedLayer(object: SourceCoopObject) {
-  return useAppStore
-    .getState()
-    .layers.find((layer) => layer.sourcePath === object.url);
+  return useAppStore.getState().layers.find((layer) => layer.sourcePath === object.url);
 }
 
 function findAddedLayerId(object: SourceCoopObject): string | undefined {
@@ -356,9 +346,7 @@ function findAddedLayerId(object: SourceCoopObject): string | undefined {
  * Takes the layer rather than the object so a card can settle both questions it
  * has for the store — is this added, and how — from one lookup.
  */
-function ingestModeOf(
-  layer: ReturnType<typeof findAddedLayer>,
-): SourceCoopIngestMode | undefined {
+function ingestModeOf(layer: ReturnType<typeof findAddedLayer>): SourceCoopIngestMode | undefined {
   const vectorState = layer?.metadata.vectorState;
   if (typeof vectorState !== "object" || vectorState === null) return undefined;
   const mode = (vectorState as { ingestMode?: unknown }).ingestMode;
@@ -434,9 +422,7 @@ function objectSubtitle(object: SourceCoopObject): string {
   const size = formatBytes(object.size);
   if (!object.lastModified) return size;
   const date = new Date(object.lastModified);
-  return Number.isNaN(date.getTime())
-    ? size
-    : `${size} · ${date.toLocaleDateString()}`;
+  return Number.isNaN(date.getTime()) ? size : `${size} · ${date.toLocaleDateString()}`;
 }
 
 function formatLabel(format: SourceCoopFormat): string {
@@ -452,10 +438,7 @@ function formatLabel(format: SourceCoopFormat): string {
  * @param state - Whether the file is on the map, and whether an add is in
  *   flight for it.
  */
-function noteText(
-  object: SourceCoopObject,
-  state: { added: boolean; pending: boolean },
-): string {
+function noteText(object: SourceCoopObject, state: { added: boolean; pending: boolean }): string {
   const size = formatBytes(object.size);
   switch (objectNote(object)) {
     case "streams":
@@ -473,9 +456,7 @@ function noteText(
       // the listing was smaller, or under an earlier MAX_VECTOR_BYTES — and its
       // Remove button works (see the title below). Claiming it is too large to
       // open would contradict the button directly beneath it.
-      return state.added
-        ? ""
-        : labels.tooLargeToOpen(size, formatBytes(MAX_VECTOR_BYTES));
+      return state.added ? "" : labels.tooLargeToOpen(size, formatBytes(MAX_VECTOR_BYTES));
     default:
       return "";
   }
@@ -492,9 +473,7 @@ function buildPanel(
   app: GeoLibreAppAPI | null,
   pinned?: SourceCoopPinnedProduct,
 ): () => void {
-  type View =
-    | { kind: "browse" }
-    | { kind: "product"; product: SourceCoopProduct; prefix: string };
+  type View = { kind: "browse" } | { kind: "product"; product: SourceCoopProduct; prefix: string };
 
   // A pinned panel skips the catalog entirely and opens straight into its
   // product, which is why the record is synthesized rather than fetched: the
@@ -590,10 +569,7 @@ function buildPanel(
       return;
     }
     const id = `${ref.accountId}/${ref.productId}`;
-    if (
-      catalog?.some((p) => `${p.accountId}/${p.productId}` === id) ||
-      extraProducts.has(id)
-    ) {
+    if (catalog?.some((p) => `${p.accountId}/${p.productId}` === id) || extraProducts.has(id)) {
       await loadCatalog();
       render();
       return;
@@ -604,11 +580,7 @@ function buildPanel(
     status = labels.searching;
     render();
     try {
-      const product = await fetchProduct(
-        ref.accountId,
-        ref.productId,
-        clientOptions(app, signal),
-      );
+      const product = await fetchProduct(ref.accountId, ref.productId, clientOptions(app, signal));
       if (token !== generation) return;
       if (product) extraProducts.set(id, product);
       status = "";
@@ -634,10 +606,7 @@ function buildPanel(
     status = labels.searching;
     render();
     try {
-      const products = await fetchAccountProducts(
-        accountId,
-        clientOptions(app, signal),
-      );
+      const products = await fetchAccountProducts(accountId, clientOptions(app, signal));
       if (token !== generation) return;
       for (const product of products) {
         extraProducts.set(`${product.accountId}/${product.productId}`, product);
@@ -746,9 +715,7 @@ function buildPanel(
       titleRow.appendChild(el("span", CSS.badge, labels.featured));
     }
     card.appendChild(titleRow);
-    card.appendChild(
-      el("div", CSS.sub, `${product.accountId}/${product.productId}`),
-    );
+    card.appendChild(el("div", CSS.sub, `${product.accountId}/${product.productId}`));
     if (product.description) {
       card.appendChild(el("div", CSS.desc, product.description));
     }
@@ -798,21 +765,14 @@ function buildPanel(
       const tooLarge = isTooLargeToOpen(object);
 
       const addButton = button(
-        pendingMode === "table"
-          ? labels.adding
-          : added
-            ? labels.remove
-            : labels.add,
+        pendingMode === "table" ? labels.adding : added ? labels.remove : labels.add,
         added ? CSS.actionActive : CSS.action,
         // `added` wins over `tooLarge`: the button reads Remove and removal
         // works, so the title has to describe that rather than the size gate.
         added
           ? labels.removeTitle
           : tooLarge
-            ? labels.tooLargeToOpen(
-                formatBytes(object.size),
-                formatBytes(MAX_VECTOR_BYTES),
-              )
+            ? labels.tooLargeToOpen(formatBytes(object.size), formatBytes(MAX_VECTOR_BYTES))
             : labels.addTitle,
       );
       addButton.disabled = pending || (tooLarge && !added);
@@ -829,10 +789,7 @@ function buildPanel(
           labels.streamTitle,
         );
         streamButton.disabled = pending;
-        streamButton.addEventListener(
-          "click",
-          () => void handleAdd(object, "stream"),
-        );
+        streamButton.addEventListener("click", () => void handleAdd(object, "stream"));
         actions.appendChild(streamButton);
       }
     }
@@ -951,9 +908,7 @@ function buildPanel(
       header.appendChild(back);
     }
     header.appendChild(el("div", CSS.title, product.title));
-    header.appendChild(
-      el("div", CSS.sub, `${product.accountId}/${product.productId}`),
-    );
+    header.appendChild(el("div", CSS.sub, `${product.accountId}/${product.productId}`));
     if (product.description) {
       header.appendChild(el("div", CSS.desc, product.description));
     }

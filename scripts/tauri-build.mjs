@@ -7,9 +7,7 @@ const userArgs = process.argv.slice(2);
 const nativeDuckDb = userArgs.includes("--native-duckdb");
 const tauriArgs = userArgs.filter((arg) => arg !== "--native-duckdb");
 const buildArgs =
-  tauriArgs.length === 0 && process.platform === "linux"
-    ? ["--bundles", "deb,rpm"]
-    : tauriArgs;
+  tauriArgs.length === 0 && process.platform === "linux" ? ["--bundles", "deb,rpm"] : tauriArgs;
 
 if (nativeDuckDb) {
   buildArgs.push("--features", "native-duckdb");

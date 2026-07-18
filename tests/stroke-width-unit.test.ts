@@ -24,10 +24,7 @@ describe("strokeWidthUnit default", () => {
 
 describe("linePaint with pixel stroke width (default)", () => {
   it("emits a constant numeric width", () => {
-    assert.equal(
-      linePaint(style({ strokeWidth: 4 }), 1)["line-width"],
-      4,
-    );
+    assert.equal(linePaint(style({ strokeWidth: 4 }), 1)["line-width"], 4);
   });
 });
 
@@ -64,10 +61,11 @@ describe("lineWidthValue (shared by map + geo-editor plugin)", () => {
   });
 
   it("returns the per-feature simplestyle override when enabled (pixels)", () => {
-    assert.deepEqual(
-      lineWidthValue(style({ strokeWidth: 3, simpleStyleEnabled: true })),
-      ["to-number", ["get", "stroke-width"], 3],
-    );
+    assert.deepEqual(lineWidthValue(style({ strokeWidth: 3, simpleStyleEnabled: true })), [
+      "to-number",
+      ["get", "stroke-width"],
+      3,
+    ]);
   });
 
   it("returns the meters expression in meters mode, ignoring simplestyle", () => {

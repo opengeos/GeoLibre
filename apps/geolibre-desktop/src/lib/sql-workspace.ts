@@ -32,19 +32,94 @@ const SQL_SUBQUERY_ALIAS = "__geolibre_sql_subquery";
 // named e.g. "Group" would sanitize to `group` and break `SELECT * FROM group`.
 // Such names are prefixed with `t_` to stay valid in the SQL the user types.
 const RESERVED_TABLE_NAMES = new Set([
-  "all", "analyse", "analyze", "and", "any", "array", "as", "asc",
-  "asymmetric", "both", "case", "cast", "check", "collate", "column",
-  "constraint", "create", "default", "deferrable", "desc", "describe",
-  "distinct", "do", "else", "end", "except", "false", "fetch", "for",
-  "foreign", "from", "grant", "group", "having", "in", "initially",
-  "intersect", "into", "lateral", "leading", "limit", "not", "null", "offset",
-  "on", "only", "or", "order", "pivot", "placing", "primary", "qualify",
-  "references", "returning", "select", "show", "some", "symmetric", "table",
-  "then", "to", "trailing", "true", "union", "unique", "using", "variadic",
-  "when", "where", "window", "with",
+  "all",
+  "analyse",
+  "analyze",
+  "and",
+  "any",
+  "array",
+  "as",
+  "asc",
+  "asymmetric",
+  "both",
+  "case",
+  "cast",
+  "check",
+  "collate",
+  "column",
+  "constraint",
+  "create",
+  "default",
+  "deferrable",
+  "desc",
+  "describe",
+  "distinct",
+  "do",
+  "else",
+  "end",
+  "except",
+  "false",
+  "fetch",
+  "for",
+  "foreign",
+  "from",
+  "grant",
+  "group",
+  "having",
+  "in",
+  "initially",
+  "intersect",
+  "into",
+  "lateral",
+  "leading",
+  "limit",
+  "not",
+  "null",
+  "offset",
+  "on",
+  "only",
+  "or",
+  "order",
+  "pivot",
+  "placing",
+  "primary",
+  "qualify",
+  "references",
+  "returning",
+  "select",
+  "show",
+  "some",
+  "symmetric",
+  "table",
+  "then",
+  "to",
+  "trailing",
+  "true",
+  "union",
+  "unique",
+  "using",
+  "variadic",
+  "when",
+  "where",
+  "window",
+  "with",
   // DuckDB-specific keywords beyond the ANSI set above.
-  "anti", "asof", "by", "glob", "ilike", "like", "macro", "map", "positional",
-  "semi", "struct", "summarize", "try_cast", "unpivot", "values", "virtual",
+  "anti",
+  "asof",
+  "by",
+  "glob",
+  "ilike",
+  "like",
+  "macro",
+  "map",
+  "positional",
+  "semi",
+  "struct",
+  "summarize",
+  "try_cast",
+  "unpivot",
+  "values",
+  "virtual",
 ]);
 
 // Bare URLs and file paths after FROM/JOIN are auto-wrapped in a matching
@@ -68,8 +143,7 @@ const DATA_SOURCE_READERS: Array<{ extensions: string[]; reader: string }> = [
 // HTTPS gateway equivalents so they flow through the existing HTTP range reader
 // pipeline without requiring the (unreliable in WASM) httpfs extension or
 // CREATE SECRET. Only anonymous / public access is supported.
-const CLOUD_URL_PATTERN =
-  /\b(s3|gs|az):\/\/([^\s'"`,;)]+)/gi;
+const CLOUD_URL_PATTERN = /\b(s3|gs|az):\/\/([^\s'"`,;)]+)/gi;
 
 /** Map a single cloud URL to its public HTTPS equivalent. */
 function cloudUrlToHttps(scheme: string, path: string): string {
@@ -137,8 +211,7 @@ const REMOTE_READER_ARG_PATTERN =
 // no remote parquet of its own to warm up with (e.g. a local-only first query
 // that would otherwise load spatial cold), this parquet is read instead — only
 // its footer is fetched. Exported so the dialog shares the same single URL.
-export const SAMPLE_DATASET_URL =
-  "https://data.source.coop/giswqs/opengeos/countries.parquet";
+export const SAMPLE_DATASET_URL = "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 /** A loaded layer exposed to the workspace as a DuckDB table. */
 export interface SqlWorkspaceTable {
@@ -177,8 +250,7 @@ function sanitizeTableName(layerName: string, layerId: string): string {
   // reached; prefixing an empty base would yield "t_" and bypass the fallback.
   // A leading digit or a reserved keyword is prefixed with `t_` so the name is
   // a usable bare identifier in the SQL the user writes.
-  const needsPrefix =
-    !!base && (!/^[a-z_]/.test(base) || RESERVED_TABLE_NAMES.has(base));
+  const needsPrefix = !!base && (!/^[a-z_]/.test(base) || RESERVED_TABLE_NAMES.has(base));
   const normalized = base ? (needsPrefix ? `t_${base}` : base) : "";
   return normalized || `layer_${layerId.replace(/[^a-z0-9]+/gi, "_")}`;
 }
@@ -217,9 +289,7 @@ export function assignTableNames(
  * @param layers Current app layers; those without `geojson` are skipped.
  * @returns The tables, in the same order and naming as registration.
  */
-export function previewLayerTables(
-  layers: GeoLibreLayer[],
-): SqlWorkspaceTable[] {
+export function previewLayerTables(layers: GeoLibreLayer[]): SqlWorkspaceTable[] {
   return assignTableNames(layers).map(({ layer, tableName }) => ({
     tableName,
     layerName: layer.name,
@@ -324,16 +394,13 @@ export async function registerLayerTables(
     // below (TypeScript does not carry the filter's narrowing across functions).
     if (!layer.geojson) continue;
     const fileName = `${filePrefix}__${tableName}.geojson`;
-    await db.registerFileText(
-      fileName,
-      JSON.stringify(stripAutoFidColumn(layer.geojson)),
-    );
+    await db.registerFileText(fileName, JSON.stringify(stripAutoFidColumn(layer.geojson)));
     // Track immediately after registration so a failure in the CREATE TABLE
     // below still leaves this file in the cleanup list.
     registeredFiles?.push(fileName);
     await connection.query(
       `CREATE OR REPLACE TEMP TABLE ${quoteIdentifier(tableName)} AS ` +
-      `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
+        `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
     );
     registered.push({ tableName, layerName: layer.name });
   }
@@ -407,7 +474,7 @@ async function describeQuery(
     const described = rowsFromResult(
       await connection.query(
         `DESCRIBE SELECT * FROM (${statement}) AS ` +
-        `${quoteIdentifier(SQL_SUBQUERY_ALIAS)} LIMIT 0`,
+          `${quoteIdentifier(SQL_SUBQUERY_ALIAS)} LIMIT 0`,
       ),
     );
     const columnNames = described
@@ -418,8 +485,7 @@ async function describeQuery(
     )?.column_name;
     return {
       columnNames,
-      geometryColumn:
-        typeof geometryColumn === "string" ? geometryColumn : null,
+      geometryColumn: typeof geometryColumn === "string" ? geometryColumn : null,
     };
   } catch {
     return null;
@@ -530,10 +596,7 @@ export function containsMultipleStatements(sql: string): boolean {
 
 /** Pick the DuckDB table function for a data source extension, if recognised. */
 function readerForExtension(extension: string): string | null {
-  return (
-    DATA_SOURCE_READERS.find((entry) => entry.extensions.includes(extension))
-      ?.reader ?? null
-  );
+  return DATA_SOURCE_READERS.find((entry) => entry.extensions.includes(extension))?.reader ?? null;
 }
 
 /**
@@ -560,9 +623,7 @@ function rewriteBareSources(sql: string): string {
     const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
     const reader = readerForExtension(extension);
     result += sql.slice(lastIndex, index);
-    result += reader
-      ? `${keyword} ${reader}(${quoteSqlString(source)})`
-      : whole;
+    result += reader ? `${keyword} ${reader}(${quoteSqlString(source)})` : whole;
     lastIndex = index + match[0].length;
   }
   result += sql.slice(lastIndex);
@@ -626,9 +687,7 @@ async function registerRemoteSources(
     const matchIndex = match.index ?? 0;
     const handle = handleByUrl.get(match[2]);
     rewritten += statement.slice(lastIndex, matchIndex);
-    rewritten += handle
-      ? `${match[1]}(${quoteSqlString(handle)}`
-      : match[0];
+    rewritten += handle ? `${match[1]}(${quoteSqlString(handle)}` : match[0];
     lastIndex = matchIndex + match[0].length;
   }
   rewritten += statement.slice(lastIndex);
@@ -690,10 +749,7 @@ export function rowsToFeatureCollection(
  * @returns Columns, rows, row count, geometry column name, and GeoJSON result.
  * @throws Whatever DuckDB throws for invalid SQL (surfaced to the caller).
  */
-export async function runSqlQuery(
-  sql: string,
-  layers: GeoLibreLayer[],
-): Promise<SqlQueryResult> {
+export async function runSqlQuery(sql: string, layers: GeoLibreLayer[]): Promise<SqlQueryResult> {
   // Strip a trailing semicolon and any trailing comment (literal-aware) so the
   // statement can be wrapped in the geometry-detection subquery `... FROM
   // (<sql>) AS ...` without the terminator or a line comment breaking it.
@@ -788,9 +844,7 @@ async function runSqlStatementOnce(
   // or drop one another's VFS files. Populated by registerLayerTables and
   // registerRemoteSources as they create handles so cleanup matches exactly
   // what was registered.
-  const filePrefix = `__geolibre_sql_${Date.now()}_${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  const filePrefix = `__geolibre_sql_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const registeredFiles: string[] = [];
 
   try {
@@ -813,10 +867,7 @@ async function runSqlStatementOnce(
     // read_parquet and its alias parquet_scan both initialise the HTTP read
     // path; only fall back to the default warmup when neither is present.
     if (
-      !warmups.some(
-        (call) =>
-          call.startsWith("read_parquet") || call.startsWith("parquet_scan"),
-      )
+      !warmups.some((call) => call.startsWith("read_parquet") || call.startsWith("parquet_scan"))
     ) {
       warmups.push(`read_parquet(${quoteSqlString(SAMPLE_DATASET_URL)})`);
     }
@@ -842,13 +893,11 @@ async function runSqlStatementOnce(
         : "";
       const result = await connection.query(
         `SELECT *${excludeClause} REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
-        `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
-        `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
+          `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
+          `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
       );
       const allColumns = columnNamesFromResult(result);
-      const columns = allColumns.filter(
-        (column) => column !== GEOMETRY_JSON_COLUMN,
-      );
+      const columns = allColumns.filter((column) => column !== GEOMETRY_JSON_COLUMN);
       const rawRows = rowsFromResult(result);
       const geojson = rowsToFeatureCollection(rawRows, geometryColumn);
       const rows = rawRows.map((row) => normalizeRow(row, columns));
@@ -863,9 +912,7 @@ async function runSqlStatementOnce(
 
     const result = await connection.query(statement);
     const columns = columnNamesFromResult(result);
-    const rows = rowsFromResult(result).map((row) =>
-      normalizeRow(row, columns),
-    );
+    const rows = rowsFromResult(result).map((row) => normalizeRow(row, columns));
     return {
       columns,
       rows,
@@ -888,14 +935,10 @@ async function runSqlStatementOnce(
 }
 
 /** Serialise result rows to CSV text, quoting per RFC 4180. */
-export function resultToCsv(
-  columns: string[],
-  rows: Record<string, unknown>[],
-): string {
+export function resultToCsv(columns: string[], rows: Record<string, unknown>[]): string {
   const escape = (value: unknown): string => {
     if (value === null || value === undefined) return "";
-    const text =
-      typeof value === "object" ? JSON.stringify(value) : String(value);
+    const text = typeof value === "object" ? JSON.stringify(value) : String(value);
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   };
   const lines = [columns.map(escape).join(",")];

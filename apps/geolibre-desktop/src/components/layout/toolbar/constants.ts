@@ -1,12 +1,5 @@
-import type {
-  ConversionToolKind,
-  RasterToolKind,
-  VectorToolKind,
-} from "@geolibre/core";
-import {
-  type BuiltInMapControl,
-  type MapController,
-} from "@geolibre/map";
+import type { ConversionToolKind, RasterToolKind, VectorToolKind } from "@geolibre/core";
+import { type BuiltInMapControl, type MapController } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { ParseKeys } from "i18next";
 import type { createAppAPI } from "../../../hooks/usePlugins";
@@ -90,8 +83,7 @@ export const WEBSITE_URL = "https://geolibre.app";
 export const GITHUB_URL = "https://github.com/opengeos/GeoLibre";
 // A small (~350 KB) CORS-enabled Las Vegas Strip sample, so the URL field works
 // out of the box on both the desktop and web builds.
-export const DEFAULT_OSM_PBF_URL =
-  "https://data.source.coop/giswqs/opengeos/LasVegas.osm.pbf";
+export const DEFAULT_OSM_PBF_URL = "https://data.source.coop/giswqs/opengeos/LasVegas.osm.pbf";
 
 // Static command metadata for the menus that map a single id to a label. These
 // drive the command palette so it stays in sync with the menus without each
@@ -216,10 +208,7 @@ export function formatRecentProjectTime(openedAt: string): string {
 }
 
 /** Initial toolbar control visibility map applied when a new project is created. */
-export function newProjectToolbarControlVisibility(): Record<
-  ToolbarMapControl,
-  boolean
-> {
+export function newProjectToolbarControlVisibility(): Record<ToolbarMapControl, boolean> {
   return MAP_CONTROL_ITEMS.reduce(
     (acc, { id }) => {
       acc[id] = NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(id);

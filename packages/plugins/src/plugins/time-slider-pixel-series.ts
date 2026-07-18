@@ -1,8 +1,4 @@
-import {
-  type CogSourceSpec,
-  generateSteps,
-  resolveUrl,
-} from "maplibre-gl-time-slider";
+import { type CogSourceSpec, generateSteps, resolveUrl } from "maplibre-gl-time-slider";
 import {
   type BandReading,
   loadGeoTIFF,
@@ -118,9 +114,7 @@ const READ_CONCURRENCY = 6;
 export function getTimeSliderCogSources(): CogSourceSpec[] {
   const control = getActiveTimeSliderControl();
   if (!control) return [];
-  return control
-    .getSources()
-    .filter((spec): spec is CogSourceSpec => spec.type === "cog");
+  return control.getSources().filter((spec): spec is CogSourceSpec => spec.type === "cog");
 }
 
 /**
@@ -196,10 +190,7 @@ function getTimeSliderSteps(maxSteps: number): {
  *   (a stray NaN/Infinity would otherwise blank the whole chart via scaleY).
  *   Null renders as a gap.
  */
-export function valueAtBand(
-  point: PixelSeriesPoint,
-  bandIndex: number,
-): number | null {
+export function valueAtBand(point: PixelSeriesPoint, bandIndex: number): number | null {
   const band = point.bands.find((entry) => entry.index === bandIndex);
   if (!band || band.isNodata || !Number.isFinite(band.value)) return null;
   return band.value;
@@ -213,16 +204,13 @@ export function valueAtBand(
  * @param results - The loaded query results.
  * @returns Band options sorted by index.
  */
-export function bandOptionsFromResults(
-  results: PixelTimeSeriesResult[],
-): BandOption[] {
+export function bandOptionsFromResults(results: PixelTimeSeriesResult[]): BandOption[] {
   const byIndex = new Map<number, BandOption>();
   for (const result of results) {
     for (const band of result.bands) {
       const existing = byIndex.get(band.index);
       if (!existing) byIndex.set(band.index, band);
-      else if (existing.name == null && band.name != null)
-        byIndex.set(band.index, band);
+      else if (existing.name == null && band.name != null) byIndex.set(band.index, band);
     }
   }
   return [...byIndex.values()].sort((a, b) => a.index - b.index);
@@ -264,9 +252,7 @@ async function runWithConcurrency<T>(
       }
     }
   }
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () =>
-    worker(),
-  );
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
   await Promise.all(workers);
   return results;
 }
@@ -292,8 +278,7 @@ function pickDefaultBandIndex(
   const firstSourceBands = new Set(
     firstSourcePoints.flatMap((point) => point.bands.map((band) => band.index)),
   );
-  if (configured !== undefined && firstSourceBands.has(configured))
-    return configured;
+  if (configured !== undefined && firstSourceBands.has(configured)) return configured;
   return bands[0].index;
 }
 
@@ -322,8 +307,7 @@ export async function queryPixelTimeSeries(
   if (sources.length === 0) {
     throw new Error("The Time Slider has no COG sources to query.");
   }
-  const { steps, truncated, total: originalStepCount } =
-    getTimeSliderSteps(maxSteps);
+  const { steps, truncated, total: originalStepCount } = getTimeSliderSteps(maxSteps);
   if (steps.length === 0) {
     throw new Error("The Time Slider timeline has no steps to query.");
   }
@@ -470,11 +454,7 @@ export function seriesToFeatureCollection(
 ): FeatureCollection<Point> {
   const features: Feature<Point>[] = [];
   let id = 0;
-  const push = (
-    lng: number,
-    lat: number,
-    properties: Record<string, unknown>,
-  ) =>
+  const push = (lng: number, lat: number, properties: Record<string, unknown>) =>
     features.push({
       type: "Feature",
       id: id++,
@@ -505,10 +485,7 @@ export function seriesToFeatureCollection(
               band_name: band.name,
               // Mirror valueAtBand: a non-finite value exports as null so CSV /
               // GeoParquet output stays consistent with the chart's semantics.
-              value:
-                band.isNodata || !Number.isFinite(band.value)
-                  ? null
-                  : band.value,
+              value: band.isNodata || !Number.isFinite(band.value) ? null : band.value,
               is_nodata: band.isNodata,
             });
           }

@@ -35,9 +35,7 @@ interface ShareProjectDialogProps {
    * Lazily serialize the current project (under the given title) when the user
    * confirms the upload.
    */
-  getProject: (
-    title: string,
-  ) => Promise<{ content: string; filename: string }>;
+  getProject: (title: string) => Promise<{ content: string; filename: string }>;
 }
 
 // The website's account settings page, where the user both creates API tokens
@@ -177,9 +175,7 @@ export function ShareProjectDialog({
             <ol className="space-y-3">
               <li className="space-y-2 rounded-md border p-3">
                 <p className="font-medium">{t("share.step1Title")}</p>
-                <p className="text-muted-foreground">
-                  {t("share.step1Description")}
-                </p>
+                <p className="text-muted-foreground">{t("share.step1Description")}</p>
                 <Button
                   type="button"
                   variant="outline"
@@ -191,9 +187,7 @@ export function ShareProjectDialog({
               </li>
               <li className="space-y-2 rounded-md border p-3">
                 <p className="font-medium">{t("share.step2Title")}</p>
-                <p className="text-muted-foreground">
-                  {t("share.step2Description")}
-                </p>
+                <p className="text-muted-foreground">{t("share.step2Description")}</p>
                 <Button type="button" onClick={handleConfigureToken}>
                   <KeyRound className="me-2 h-3.5 w-3.5" />
                   {t("share.configureToken")}
@@ -212,11 +206,7 @@ export function ShareProjectDialog({
                 aria-label={t("share.copyLink")}
                 onClick={handleCopy}
               >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
             </div>
             <div className="flex justify-end gap-2">
@@ -247,9 +237,7 @@ export function ShareProjectDialog({
                 autoFocus={!titleValid}
               />
               {!titleValid && (
-                <p className="text-xs text-muted-foreground">
-                  {t("share.titleRequired")}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("share.titleRequired")}</p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -257,9 +245,7 @@ export function ShareProjectDialog({
               <Select
                 id="share-visibility"
                 value={visibility}
-                onChange={(e) =>
-                  setVisibility(e.target.value as ShareVisibility)
-                }
+                onChange={(e) => setVisibility(e.target.value as ShareVisibility)}
                 disabled={status === "uploading"}
               >
                 <option value="unlisted">{t("share.visibilityUnlisted")}</option>
@@ -285,10 +271,7 @@ export function ShareProjectDialog({
                 </Button>
               </div>
             ) : error ? (
-              <p
-                role="alert"
-                className="rounded-md bg-destructive/10 p-2 text-sm text-destructive"
-              >
+              <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
                 {error}
               </p>
             ) : null}
@@ -296,11 +279,7 @@ export function ShareProjectDialog({
             <div className="flex justify-end gap-2">
               {/* Stays enabled during upload: closing the dialog aborts the
                   in-flight request via the open effect's cleanup. */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 {t("common.cancel")}
               </Button>
               <Button

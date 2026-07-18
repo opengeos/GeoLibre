@@ -77,14 +77,6 @@ export function useMartinConnection(): MartinConnection {
       resetOnOpen,
       stopTransient,
     }),
-    [
-      server,
-      sources,
-      selectedSourceId,
-      status,
-      markLayerAdded,
-      resetOnOpen,
-      stopTransient,
-    ],
+    [server, sources, selectedSourceId, status, markLayerAdded, resetOnOpen, stopTransient],
   );
 }

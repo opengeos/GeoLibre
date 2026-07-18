@@ -221,17 +221,11 @@ const closeLidarSelectMenu = () => {
     });
 };
 
-const syncLidarSelectProxy = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const syncLidarSelectProxy = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   button.textContent = select.options[select.selectedIndex]?.text ?? "";
 };
 
-const openLidarSelectMenu = (
-  select: HTMLSelectElement,
-  button: HTMLButtonElement,
-) => {
+const openLidarSelectMenu = (select: HTMLSelectElement, button: HTMLButtonElement) => {
   closeLidarSelectMenu();
 
   const rect = button.getBoundingClientRect();
@@ -263,9 +257,7 @@ const openLidarSelectMenu = (
     menu.appendChild(item);
   });
 
-  const items = Array.from(
-    menu.querySelectorAll<HTMLButtonElement>("button"),
-  );
+  const items = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
   menu.addEventListener("click", (event) => event.stopPropagation());
   menu.addEventListener("keydown", (event) => {
     const current = items.indexOf(document.activeElement as HTMLButtonElement);

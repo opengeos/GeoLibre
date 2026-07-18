@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { VectorLayerInfo, VectorLayerStyle } from "maplibre-gl-vector";
 import {
   createVectorStoreLayer,
@@ -61,10 +57,7 @@ function vectorInfo(patch: Partial<VectorLayerInfo> = {}): VectorLayerInfo {
  * getState is a static snapshot of options.collapsed: tests exercising
  * event-driven expand/collapse transitions need a stateful fake instead.
  */
-function fakeControl(
-  infos: VectorLayerInfo[] = [],
-  options: { collapsed?: boolean } = {},
-) {
+function fakeControl(infos: VectorLayerInfo[] = [], options: { collapsed?: boolean } = {}) {
   const calls: { method: string; args: unknown[] }[] = [];
   const control: VectorSyncableControl = {
     getState: () => ({ collapsed: options.collapsed ?? true }),
@@ -74,8 +67,7 @@ function fakeControl(
       calls.push({ method: "setLayerOpacity", args: [id, opacity] }),
     setLayerVisibility: (id, visible) =>
       calls.push({ method: "setLayerVisibility", args: [id, visible] }),
-    setLayerStyle: (id, style) =>
-      calls.push({ method: "setLayerStyle", args: [id, style] }),
+    setLayerStyle: (id, style) => calls.push({ method: "setLayerStyle", args: [id, style] }),
   };
   return { control, calls };
 }
@@ -132,9 +124,7 @@ describe("isEmbeddableLocalVectorLayer", () => {
 
 describe("createVectorStoreLayer", () => {
   it("mirrors a URL layer as an external custom layer", () => {
-    const layer = createVectorStoreLayer(
-      vectorInfo({ opacity: 0.5, visible: false }),
-    );
+    const layer = createVectorStoreLayer(vectorInfo({ opacity: 0.5, visible: false }));
 
     assert.equal(layer.id, "vector-1");
     assert.equal(layer.name, "countries");
@@ -151,10 +141,7 @@ describe("createVectorStoreLayer", () => {
     assert.equal(layer.metadata.vectorSource, "url");
     assert.equal(layer.metadata.featureCount, 258);
     // layer-sync orders these real MapLibre style layers directly.
-    assert.deepEqual(layer.metadata.nativeLayerIds, [
-      "vector-1-fill",
-      "vector-1-outline",
-    ]);
+    assert.deepEqual(layer.metadata.nativeLayerIds, ["vector-1-fill", "vector-1-outline"]);
     assert.deepEqual(layer.metadata.sourceIds, ["vector-1-source"]);
     // fitLayer falls back to metadata.bounds for zoom-to-layer.
     assert.deepEqual(layer.metadata.bounds, [-180, -90, 180, 90]);
@@ -162,11 +149,8 @@ describe("createVectorStoreLayer", () => {
   });
 
   it("maps geometry categories onto custom layer types", () => {
-    const typeFor = (
-      geometryType: VectorLayerInfo["geometryType"],
-    ): unknown =>
-      createVectorStoreLayer(vectorInfo({ geometryType })).metadata
-        .customLayerType;
+    const typeFor = (geometryType: VectorLayerInfo["geometryType"]): unknown =>
+      createVectorStoreLayer(vectorInfo({ geometryType })).metadata.customLayerType;
 
     assert.equal(typeFor("point"), "circle");
     assert.equal(typeFor("line"), "line");
@@ -218,9 +202,7 @@ describe("createVectorStoreLayer", () => {
   });
 
   it("exposes attribute field names in metadata for the Style panel", () => {
-    const layer = createVectorStoreLayer(
-      vectorInfo({ fields: ["name", "continent", "pop_est"] }),
-    );
+    const layer = createVectorStoreLayer(vectorInfo({ fields: ["name", "continent", "pop_est"] }));
 
     assert.deepEqual(layer.metadata.fields, ["name", "continent", "pop_est"]);
   });
@@ -369,10 +351,7 @@ describe("syncVectorLayersToStore", () => {
 
   it("adds store layers for control layers, leaving others alone", () => {
     useAppStore.getState().addLayer(otherStoreLayer());
-    const { control } = fakeControl([
-      vectorInfo(),
-      vectorInfo({ id: "vector-2", name: "cities" }),
-    ]);
+    const { control } = fakeControl([vectorInfo(), vectorInfo({ id: "vector-2", name: "cities" })]);
 
     syncVectorLayersToStore(control);
 
@@ -420,19 +399,11 @@ describe("syncVectorLayersToStore", () => {
   it("refreshes the saved panel collapsed state", () => {
     const { control } = fakeControl([vectorInfo()]);
     syncVectorLayersToStore(control);
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      true,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, true);
 
-    syncVectorLayersToStore(
-      fakeControl([vectorInfo()], { collapsed: false }).control,
-    );
+    syncVectorLayersToStore(fakeControl([vectorInfo()], { collapsed: false }).control);
 
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      false,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, false);
   });
 
   it("flips panelCollapsed on store layers when an expand event syncs", () => {
@@ -457,17 +428,11 @@ describe("syncVectorLayersToStore", () => {
     };
 
     syncVectorLayersToStore(control);
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      true,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, true);
 
     expand();
 
-    assert.equal(
-      useAppStore.getState().layers[0].metadata.panelCollapsed,
-      false,
-    );
+    assert.equal(useAppStore.getState().layers[0].metadata.panelCollapsed, false);
   });
 
   it("does not touch an existing layer when nothing changed", () => {
@@ -501,10 +466,7 @@ describe("syncVectorLayersToStore", () => {
 
     syncVectorLayersToStore(fakeControl([info]).control);
 
-    assert.equal(
-      "embeddedGeoJSON" in useAppStore.getState().layers[0].metadata,
-      false,
-    );
+    assert.equal("embeddedGeoJSON" in useAppStore.getState().layers[0].metadata, false);
   });
 
   it("does nothing while sync is suspended", () => {
@@ -609,17 +571,12 @@ describe("wireVectorStoreSync", () => {
       extrusionHeight: ["*", ["to-number", ["get", "height"], 0], 1],
       extrusionBase: 0,
     };
-    assert.deepEqual(calls, [
-      { method: "setLayerStyle", args: ["vector-1", expectedStyle] },
-    ]);
+    assert.deepEqual(calls, [{ method: "setLayerStyle", args: ["vector-1", expectedStyle] }]);
 
     // The control-seed style is kept in sync so a saved project restores the
     // edited colors (restoreVectorLayers seeds addData from vectorState.style).
     const stored = useAppStore.getState().layers[0];
-    assert.deepEqual(
-      (stored.metadata.vectorState as { style: unknown }).style,
-      expectedStyle,
-    );
+    assert.deepEqual((stored.metadata.vectorState as { style: unknown }).style, expectedStyle);
   });
 
   it("pushes the point renderer (heatmap/cluster) through the control", () => {
@@ -839,13 +796,7 @@ describe("savedVectorState", () => {
     // A saved categorized/graduated style persists a color expression in
     // vectorState.style; restore must hand it back so the control seeds the
     // expression and the reopened project renders the data-driven colors.
-    const matchExpr = [
-      "match",
-      ["to-string", ["get", "continent"]],
-      "Asia",
-      "#ff0000",
-      "#3388ff",
-    ];
+    const matchExpr = ["match", ["to-string", ["get", "continent"]], "Asia", "#ff0000", "#3388ff"];
     const layer = createVectorStoreLayer(vectorInfo());
     (layer.metadata.vectorState as Record<string, unknown>).style = {
       ...vectorStyle(),
@@ -967,13 +918,7 @@ describe("savedVectorState", () => {
 
   it("restores 3D extrusion fields from the persisted style", () => {
     const heightExpr = ["*", ["to-number", ["get", "height"], 0], 2];
-    const colorExpr = [
-      "match",
-      ["to-string", ["get", "kind"]],
-      "tower",
-      "#ff0000",
-      "#3388ff",
-    ];
+    const colorExpr = ["match", ["to-string", ["get", "kind"]], "tower", "#ff0000", "#3388ff"];
     const layer = createVectorStoreLayer(vectorInfo());
     (layer.metadata.vectorState as Record<string, unknown>).style = {
       ...vectorStyle(),

@@ -28,9 +28,7 @@ const registry = new Map<string, GeoLibreFloatingPanelRegistration>();
 // in FloatingPanelCard's render body, which re-renders on every pointermove
 // during a drag/resize) is shared with the right-panel registry via
 // PanelTitleResolver. Each registry owns its own instance.
-const titleResolver = new PanelTitleResolver<GeoLibreFloatingPanelRegistration>(
-  "Floating panel",
-);
+const titleResolver = new PanelTitleResolver<GeoLibreFloatingPanelRegistration>("Floating panel");
 const listeners = new Set<() => void>();
 
 let openIds: string[] = [];
@@ -45,11 +43,7 @@ function emit(): void {
   }
 }
 
-function runHook(
-  id: string,
-  hookName: "onOpen" | "onClose",
-  hook: (() => void) | undefined,
-): void {
+function runHook(id: string, hookName: "onOpen" | "onClose", hook: (() => void) | undefined): void {
   if (!hook) return;
   try {
     hook();
@@ -63,13 +57,9 @@ function runHook(
  * {@link openFloatingPanel} is called. Returns an unregister function (call it
  * from the plugin's `deactivate` hook); it closes the panel if open.
  */
-export function registerFloatingPanel(
-  panel: GeoLibreFloatingPanelRegistration,
-): () => void {
+export function registerFloatingPanel(panel: GeoLibreFloatingPanelRegistration): () => void {
   if (!panel || typeof panel.id !== "string" || panel.id.length === 0) {
-    throw new Error(
-      "registerFloatingPanel requires a panel with a non-empty id.",
-    );
+    throw new Error("registerFloatingPanel requires a panel with a non-empty id.");
   }
   if (typeof panel.title !== "string" && typeof panel.title !== "function") {
     throw new Error(
@@ -80,9 +70,7 @@ export function registerFloatingPanel(
     throw new Error(`Floating panel "${panel.id}" must have a non-empty title.`);
   }
   if (typeof panel.render !== "function") {
-    throw new Error(
-      `Floating panel "${panel.id}" must provide a render(container) function.`,
-    );
+    throw new Error(`Floating panel "${panel.id}" must provide a render(container) function.`);
   }
   // Normalize title to a resolver so both strings and getters update live.
   titleResolver.set(panel);
@@ -114,9 +102,7 @@ export function unregisterFloatingPanel(id: string): void {
 export function openFloatingPanel(id: string): boolean {
   const panel = registry.get(id);
   if (!panel) {
-    console.warn(
-      `openFloatingPanel: no floating panel registered with id "${id}".`,
-    );
+    console.warn(`openFloatingPanel: no floating panel registered with id "${id}".`);
     return false;
   }
   const wasOpen = openIds.includes(id);

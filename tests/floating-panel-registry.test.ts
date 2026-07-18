@@ -151,9 +151,7 @@ describe("floating-panel registry", () => {
         render: () => undefined,
       }),
     );
-    assert.throws(() =>
-      registerFloatingPanel({ id: "x", title: "", render: () => undefined }),
-    );
+    assert.throws(() => registerFloatingPanel({ id: "x", title: "", render: () => undefined }));
     assert.throws(() =>
       registerFloatingPanel({
         id: "x",

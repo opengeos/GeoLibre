@@ -88,11 +88,7 @@ function asFiniteNumber(value: unknown): number | null {
  * is present but data-driven in a shape the importer cannot flatten, mirroring
  * how `fill-opacity` is handled.
  */
-function warnUnreadableNumber(
-  value: unknown,
-  description: string,
-  warnings: string[],
-): void {
+function warnUnreadableNumber(value: unknown, description: string, warnings: string[]): void {
   if (value !== undefined && asFiniteNumber(value) === null) {
     warnings.push(
       `The ${description} is data-driven in a way that could not be read; the layer keeps its current ${description}.`,
@@ -164,11 +160,7 @@ function parseColorValue(value: unknown, warnings: string[]): ParsedColor {
   // Accepted ambiguity: a genuine one-rule rule-based `case` whose sole rule
   // filters on `geometry-type == "Polygon"` would be read as this guard; that
   // exact shape is vanishingly rare and structurally indistinguishable.
-  if (
-    array[0] === "case" &&
-    array.length === 4 &&
-    isPolygonGeometryTest(array[1])
-  ) {
+  if (array[0] === "case" && array.length === 4 && isPolygonGeometryTest(array[1])) {
     return parseColorValue(array[3], warnings);
   }
 
@@ -186,9 +178,7 @@ function isPolygonGeometryTest(node: unknown): boolean {
   const array = asArray(node);
   if (!array || array[0] !== "==" || array.length !== 3) return false;
   const left = asArray(array[1]);
-  return (
-    !!left && left[0] === "geometry-type" && array[2] === "Polygon"
-  );
+  return !!left && left[0] === "geometry-type" && array[2] === "Polygon";
 }
 
 /** Parse `["match", ["to-string", ["get", p]], v1, c1, ..., fallback]`. */
@@ -225,9 +215,7 @@ function parseMatch(array: unknown[], warnings: string[]): ParsedColor {
     }
   }
   if (droppedArm) {
-    warnings.push(
-      "Some categorized categories used a non-flat color and were skipped.",
-    );
+    warnings.push("Some categorized categories used a non-flat color and were skipped.");
   }
   return { mode: "categorized", property, stops, color: fallback };
 }
@@ -238,10 +226,7 @@ function parseMatch(array: unknown[], warnings: string[]): ParsedColor {
  * `heatmap-density`) is not graduated color, so it is preserved as an
  * expression.
  */
-function parseInterpolateColor(
-  array: unknown[],
-  warnings: string[],
-): ParsedColor {
+function parseInterpolateColor(array: unknown[], warnings: string[]): ParsedColor {
   const property = wrappedProperty(array[2]);
   if (!property) {
     return { mode: "expression", expression: JSON.stringify(array) };
@@ -259,9 +244,7 @@ function parseInterpolateColor(
     stops.push({ value, color });
   }
   if (droppedStop && stops.length >= 2) {
-    warnings.push(
-      "Some graduated stops used a non-flat color and were skipped.",
-    );
+    warnings.push("Some graduated stops used a non-flat color and were skipped.");
   }
   if (stops.length < 2) {
     warnings.push(
@@ -304,10 +287,7 @@ function parseCase(array: unknown[]): ParsedColor {
  * the flat fallback in `fillColor`; the attribute-driven modes carry the
  * property, stops, or rules across.
  */
-function applyColorRenderer(
-  parsed: ParsedColor,
-  patch: Partial<Omit<LayerStyle, "labels">>,
-): void {
+function applyColorRenderer(parsed: ParsedColor, patch: Partial<Omit<LayerStyle, "labels">>): void {
   if (parsed.mode) patch.vectorStyleMode = parsed.mode;
   if (parsed.color !== undefined) patch.fillColor = parsed.color;
   if (parsed.property !== undefined) patch.vectorStyleProperty = parsed.property;
@@ -330,12 +310,7 @@ function parseStrokeColor(value: unknown): string | null {
   const flat = asString(value);
   if (flat !== null) return flat;
   // The polygon-outline guard keeps the flat stroke in the polygon branch.
-  if (
-    array &&
-    array[0] === "case" &&
-    array.length === 4 &&
-    isPolygonGeometryTest(array[1])
-  ) {
+  if (array && array[0] === "case" && array.length === 4 && isPolygonGeometryTest(array[1])) {
     return asString(array[2]);
   }
   return null;
@@ -368,12 +343,7 @@ function parseProportional(value: unknown): ParsedProportional | null {
   const minRadius = asFiniteNumber(body[1]);
   const maxValue = asFiniteNumber(body[2]);
   const maxRadius = asFiniteNumber(body[3]);
-  if (
-    minValue === null ||
-    minRadius === null ||
-    maxValue === null ||
-    maxRadius === null
-  ) {
+  if (minValue === null || minRadius === null || maxValue === null || maxRadius === null) {
     return null;
   }
   return { property, minValue, maxValue, minRadius, maxRadius };
@@ -427,8 +397,7 @@ function parseLineWidth(
     ) {
       const widthAtZoom0 = asFiniteNumber(array[4]);
       if (widthAtZoom0 !== null) {
-        patch.strokeWidth =
-          widthAtZoom0 * mercatorMetersPerPixelAtZoom0();
+        patch.strokeWidth = widthAtZoom0 * mercatorMetersPerPixelAtZoom0();
         patch.strokeWidthUnit = "meters";
         return;
       }
@@ -484,10 +453,7 @@ function clampZoom(value: unknown): number | null {
 }
 
 /** Apply a render layer's `minzoom`/`maxzoom` to the patch's zoom window. */
-function applyZoomRange(
-  layer: RawStyleLayer,
-  patch: Partial<Omit<LayerStyle, "labels">>,
-): void {
+function applyZoomRange(layer: RawStyleLayer, patch: Partial<Omit<LayerStyle, "labels">>): void {
   const min = clampZoom(layer.minzoom);
   const max = clampZoom(layer.maxzoom);
   // Normalize so a malformed style with minzoom > maxzoom does not import an
@@ -502,10 +468,7 @@ function applyZoomRange(
 }
 
 /** Build the label patch from a `symbol` layer's layout/paint. */
-function parseLabelLayer(
-  layer: RawStyleLayer,
-  warnings: string[],
-): Partial<LabelStyle> {
+function parseLabelLayer(layer: RawStyleLayer, warnings: string[]): Partial<LabelStyle> {
   const layout = layer.layout ?? {};
   const paint = layer.paint ?? {};
   const labels: Partial<LabelStyle> = { enabled: true };
@@ -534,8 +497,7 @@ function parseLabelLayer(
 
   // MapLibre offers "line" and "line-center"; both are line placement here.
   const placement = layout["symbol-placement"];
-  labels.placement =
-    placement === "line" || placement === "line-center" ? "line" : "point";
+  labels.placement = placement === "line" || placement === "line-center" ? "line" : "point";
 
   if (typeof layout["text-allow-overlap"] === "boolean") {
     labels.allowOverlap = layout["text-allow-overlap"];
@@ -615,18 +577,14 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   const root = input as { layers?: unknown } | null;
   const rawLayers = asArray(root?.layers);
   if (!rawLayers) {
-    warnings.push(
-      "This file is not a Mapbox GL style (no `layers` array); nothing was imported.",
-    );
+    warnings.push("This file is not a Mapbox GL style (no `layers` array); nothing was imported.");
     return { style: patch, labels, warnings, matchedLayerCount: 0 };
   }
 
   const layers = rawLayers.filter(
-    (layer): layer is RawStyleLayer =>
-      typeof layer === "object" && layer !== null,
+    (layer): layer is RawStyleLayer => typeof layer === "object" && layer !== null,
   );
-  const byType = (type: string) =>
-    layers.filter((layer) => layer.type === type);
+  const byType = (type: string) => layers.filter((layer) => layer.type === type);
 
   // A color renderer (categorized/graduated/rule-based/expression) is shared by
   // every geometry in an exported style, so read it once from the highest-
@@ -639,9 +597,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   // rather than dropping the extras silently.
   for (const type of ["fill", "fill-extrusion", "line", "circle", "symbol"]) {
     if (byType(type).length > 1) {
-      warnings.push(
-        `The style has multiple ${type} layers; only the first was imported.`,
-      );
+      warnings.push(`The style has multiple ${type} layers; only the first was imported.`);
     }
   }
 
@@ -690,9 +646,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (flatOpacity !== null) {
       patch.fillOpacity = flatOpacity;
     } else if (opacity !== undefined) {
-      warnings.push(
-        "The fill opacity is data-driven; the layer keeps its current fill opacity.",
-      );
+      warnings.push("The fill opacity is data-driven; the layer keeps its current fill opacity.");
     }
     const outline = parseStrokeColor(paint["fill-outline-color"]);
     if (outline) patch.strokeColor = outline;
@@ -730,10 +684,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     patch.pointRenderer = "single";
     const paint = circle.paint ?? {};
     if (!colorClaimed) {
-      applyColorRenderer(
-        parseColorValue(paint["circle-color"], warnings),
-        patch,
-      );
+      applyColorRenderer(parseColorValue(paint["circle-color"], warnings), patch);
       colorClaimed = true;
     }
     const radius = paint["circle-radius"];
@@ -755,9 +706,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (flatOpacity !== null) {
       patch.fillOpacity = flatOpacity;
     } else if (opacity !== undefined) {
-      warnings.push(
-        "The circle opacity is data-driven; the layer keeps its current fill opacity.",
-      );
+      warnings.push("The circle opacity is data-driven; the layer keeps its current fill opacity.");
     }
     const strokeColor = asString(paint["circle-stroke-color"]);
     if (strokeColor) patch.strokeColor = strokeColor;
@@ -778,9 +727,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // GeoLibre has a single point renderer, so a style with both a circle and a
     // heatmap layer (e.g. split by zoom) collapses to the heatmap; flag the loss.
     if (circle) {
-      warnings.push(
-        "The style has both circle and heatmap point layers; imported as a heatmap.",
-      );
+      warnings.push("The style has both circle and heatmap point layers; imported as a heatmap.");
     }
     patch.pointRenderer = "heatmap";
     const paint = heatmap.paint ?? {};
@@ -789,12 +736,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     else warnUnreadableNumber(paint["heatmap-radius"], "heatmap radius", warnings);
     const intensity = asFiniteNumber(paint["heatmap-intensity"]);
     if (intensity !== null) patch.heatmapIntensity = intensity;
-    else
-      warnUnreadableNumber(
-        paint["heatmap-intensity"],
-        "heatmap intensity",
-        warnings,
-      );
+    else warnUnreadableNumber(paint["heatmap-intensity"], "heatmap intensity", warnings);
     applyZoomRange(heatmap, patch);
   }
 
@@ -872,8 +814,6 @@ export function applyMapboxStyleImport(
   return {
     ...base,
     ...result.style,
-    labels: result.labels
-      ? { ...base.labels, ...result.labels }
-      : base.labels,
+    labels: result.labels ? { ...base.labels, ...result.labels } : base.labels,
   };
 }

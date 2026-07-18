@@ -45,29 +45,16 @@ def test_token_required_when_configured(monkeypatch: pytest.MonkeyPatch) -> None
         assert client.get("/health").status_code == 200
         # Missing / wrong token is rejected.
         assert client.get("/algorithms").status_code == 401
-        assert (
-            client.get("/algorithms", headers={"X-GeoLibre-Token": "nope"}).status_code
-            == 401
-        )
+        assert client.get("/algorithms", headers={"X-GeoLibre-Token": "nope"}).status_code == 401
         # Correct token via either accepted header passes.
+        assert client.get("/algorithms", headers={"X-GeoLibre-Token": "s3cr3t"}).status_code == 200
         assert (
-            client.get(
-                "/algorithms", headers={"X-GeoLibre-Token": "s3cr3t"}
-            ).status_code
-            == 200
-        )
-        assert (
-            client.get(
-                "/algorithms", headers={"Authorization": "Bearer s3cr3t"}
-            ).status_code
-            == 200
+            client.get("/algorithms", headers={"Authorization": "Bearer s3cr3t"}).status_code == 200
         )
         # A non-ASCII token header (raw latin-1 bytes on the wire) must fail auth
         # (401), not crash the byte comparison with a TypeError (500).
         assert (
-            client.get(
-                "/algorithms", headers={"X-GeoLibre-Token": b"t\xe9k\xe9n"}
-            ).status_code
+            client.get("/algorithms", headers={"X-GeoLibre-Token": b"t\xe9k\xe9n"}).status_code
             == 401
         )
     finally:
@@ -97,9 +84,7 @@ def test_untrusted_host_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
         _reload_app(monkeypatch, None)
 
 
-def test_whitebox_path_confined_to_roots(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_whitebox_path_confined_to_roots(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Whitebox input/output paths outside the allowlisted roots are rejected."""
     from geolibre_server.app import conversion
     from geolibre_server.app.whitebox import (
@@ -198,9 +183,7 @@ def test_whitebox_path_check_ignores_mislabeled_kind(
     assert args["input"] == "EPSG:4326"
 
 
-def test_whitebox_relative_path_confined_by_cwd(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_whitebox_relative_path_confined_by_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """A relative path arg is confined by pinning the subprocess cwd to a root.
 
     A bare filename like ``pwned.tif`` is not "escape-shaped", so it isn't
@@ -304,9 +287,7 @@ def test_whitebox_relative_path_through_symlink_is_rejected(
     assert args["output"] == "subdir/out.tif"
 
 
-def test_whitebox_null_byte_path_is_rejected(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_whitebox_null_byte_path_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """An embedded NUL byte yields a clean 403, not an uncaught 500."""
     from geolibre_server.app import conversion
     from geolibre_server.app.whitebox import (

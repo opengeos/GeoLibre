@@ -2,21 +2,16 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
-import {
-  DEFAULT_LANGUAGE,
-  languageDirection,
-  resolveLanguage,
-} from "./languages";
+import { DEFAULT_LANGUAGE, languageDirection, resolveLanguage } from "./languages";
 
 /**
  * Catalogs are auto-discovered: every `locales/<code>.json` is bundled eagerly,
  * so adding a locale is a pure drop-in — no edits to this file. The web build
  * keeps them in the main chunk (catalogs are tiny); see `docs/i18n.md`.
  */
-const catalogModules = import.meta.glob<{ default: Record<string, unknown> }>(
-  "./locales/*.json",
-  { eager: true },
-);
+const catalogModules = import.meta.glob<{ default: Record<string, unknown> }>("./locales/*.json", {
+  eager: true,
+});
 
 const resources: Record<string, { translation: Record<string, unknown> }> = {};
 for (const [path, mod] of Object.entries(catalogModules)) {
@@ -62,16 +57,11 @@ export function getInitialLanguage(): string {
       if (fromQuery) return fromQuery;
     }
 
-    const fromSettings = resolveLanguage(
-      persistedLanguage(),
-      AVAILABLE_LANGUAGES,
-    );
+    const fromSettings = resolveLanguage(persistedLanguage(), AVAILABLE_LANGUAGES);
     if (fromSettings) return fromSettings;
 
     const navigatorLanguages =
-      typeof navigator !== "undefined"
-        ? (navigator.languages ?? [navigator.language])
-        : [];
+      typeof navigator !== "undefined" ? (navigator.languages ?? [navigator.language]) : [];
     for (const candidate of navigatorLanguages) {
       const fromNavigator = resolveLanguage(candidate, AVAILABLE_LANGUAGES);
       if (fromNavigator) return fromNavigator;

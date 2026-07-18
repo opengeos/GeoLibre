@@ -82,8 +82,7 @@ function createHandle(): Promise<WorkerHandle> {
     // Bound the one-time runtime download/init so a hung or unreachable CDN
     // cannot leave the dialog spinning forever; clears once the worker is ready.
     initTimer = setTimeout(() => {
-      const message =
-        "Timed out loading the Python runtime. Check your connection and try again.";
+      const message = "Timed out loading the Python runtime. Check your connection and try again.";
       failWorker(message);
       reject(new Error(message));
     }, PYODIDE_INIT_TIMEOUT_MS);

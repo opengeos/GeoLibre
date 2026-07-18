@@ -23,14 +23,10 @@ export const MAX_PLUGIN_ASSET_BYTES = 50 * 1024 * 1024;
 // Matches the Rust validate_required_manifest_string: non-empty with no leading
 // or trailing whitespace.
 function isRequiredManifestString(value: unknown): value is string {
-  return (
-    typeof value === "string" && value.length > 0 && value.trim() === value
-  );
+  return typeof value === "string" && value.length > 0 && value.trim() === value;
 }
 
-export function isExternalPluginManifest(
-  value: unknown,
-): value is GeoLibreExternalPluginManifest {
+export function isExternalPluginManifest(value: unknown): value is GeoLibreExternalPluginManifest {
   if (!value || typeof value !== "object") return false;
   const manifest = value as Partial<GeoLibreExternalPluginManifest>;
   return (
@@ -39,12 +35,10 @@ export function isExternalPluginManifest(
     isRequiredManifestString(manifest.version) &&
     isRequiredManifestString(manifest.entry) &&
     (manifest.entry.endsWith(".js") || manifest.entry.endsWith(".mjs")) &&
-    (manifest.description === undefined ||
-      typeof manifest.description === "string") &&
+    (manifest.description === undefined || typeof manifest.description === "string") &&
     (manifest.style === undefined ||
       (typeof manifest.style === "string" && manifest.style.endsWith(".css"))) &&
-    (manifest.activeByDefault === undefined ||
-      typeof manifest.activeByDefault === "boolean")
+    (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean")
   );
 }
 
@@ -85,9 +79,7 @@ function assertSafeArchivePath(field: string, value: string): void {
 // `*/plugin.json`, ignoring the `__MACOSX/` metadata folder macOS adds. Returns
 // the manifest's full key, or null when no plugin.json is present. The entry and
 // style paths in the manifest resolve against the manifest's own directory.
-function findManifestPath(
-  files: Record<string, Uint8Array>,
-): string | null {
+function findManifestPath(files: Record<string, Uint8Array>): string | null {
   if (files["plugin.json"]) return "plugin.json";
   let best: string | null = null;
   let bestDepth = Number.POSITIVE_INFINITY;
@@ -136,9 +128,7 @@ export async function bundleFromZipBytes(
   assertSafeArchivePath("entry", manifest.entry);
   const entryBytes = files[prefix + manifest.entry];
   if (!entryBytes) {
-    throw new Error(
-      `Plugin entry '${manifest.entry}' is missing from the archive.`,
-    );
+    throw new Error(`Plugin entry '${manifest.entry}' is missing from the archive.`);
   }
   const entrySource = decodePluginText(entryBytes, "plugin entry");
 
@@ -147,9 +137,7 @@ export async function bundleFromZipBytes(
     assertSafeArchivePath("style", manifest.style);
     const styleBytes = files[prefix + manifest.style];
     if (!styleBytes) {
-      throw new Error(
-        `Plugin style '${manifest.style}' is missing from the archive.`,
-      );
+      throw new Error(`Plugin style '${manifest.style}' is missing from the archive.`);
     }
     styleSource = decodePluginText(styleBytes, "plugin style");
   }

@@ -7,12 +7,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Globe2, Map as MapIcon } from "lucide-react";
-import {
-  type FormEvent,
-  type ReactNode,
-  useId,
-  useState,
-} from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAddDataShell } from "./context";
 import { errorMessage } from "./helpers";
@@ -33,10 +28,7 @@ export function useAddDataSource(defaultLayerName: string) {
 
   const beforeLayer = beforeLayerId.trim() || null;
 
-  const addAndClose = (
-    layer: GeoLibreLayer,
-    options: { fit?: boolean } = {},
-  ) => {
+  const addAndClose = (layer: GeoLibreLayer, options: { fit?: boolean } = {}) => {
     shell.addLayer(layer, beforeLayer);
     if (options.fit) shell.mapControllerRef.current?.fitLayer(layer);
     shell.closeDialog();
@@ -47,8 +39,7 @@ export function useAddDataSource(defaultLayerName: string) {
    * submit-in-progress flag, returning a form `onSubmit` handler.
    */
   const runSubmit =
-    (action: () => Promise<void> | void) =>
-    async (event: FormEvent<HTMLFormElement>) => {
+    (action: () => Promise<void> | void) => async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setError(null);
       shell.setIsSubmitting(true);
@@ -161,8 +152,7 @@ export function InsertBeforeField({
   const { existingLayers, mapControllerRef } = useAddDataShell();
   // Computed during render (not memoized) so the list picks up the map
   // controller once it finishes initialising; the call is a cheap filter.
-  const basemapStyleLayerIds =
-    mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
+  const basemapStyleLayerIds = mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   // The basemap style exposes dozens of internal layer ids that overwhelm the
   // dropdown for standard users (issue #453). Keep them behind an opt-in
   // "advanced" toggle so the default list only shows the user's own layers —
@@ -172,9 +162,7 @@ export function InsertBeforeField({
   const basemapLayersVisible = showBasemapLayers || valueIsBasemapLayer;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="add-data-before-id">
-        {t("addData.shared.insertBelow")}
-      </Label>
+      <Label htmlFor="add-data-before-id">{t("addData.shared.insertBelow")}</Label>
       <Select
         id="add-data-before-id"
         value={value}
@@ -232,12 +220,7 @@ export function AddDataFooter({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={closeDialog}
-          disabled={isSubmitting}
-        >
+        <Button type="button" variant="outline" onClick={closeDialog} disabled={isSubmitting}>
           {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={submitDisabled}>
@@ -283,10 +266,7 @@ export function AddDataSourceForm({
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
       <LayerNameField value={layerName} onChange={onLayerNameChange} />
-      <InsertBeforeField
-        value={beforeLayerId}
-        onChange={onBeforeLayerIdChange}
-      />
+      <InsertBeforeField value={beforeLayerId} onChange={onBeforeLayerIdChange} />
       {children}
       <AddDataFooter
         error={error}

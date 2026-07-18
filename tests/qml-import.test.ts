@@ -221,7 +221,9 @@ describe("parseQml", () => {
       <labeling type="rule-based"><rules><rule><settings/></rule></rules></labeling>`),
     );
     assert.equal(result.labels, null);
-    assert.ok(result.warnings.some((w) => /"rule-based" labeling has no GeoLibre equivalent/.test(w)));
+    assert.ok(
+      result.warnings.some((w) => /"rule-based" labeling has no GeoLibre equivalent/.test(w)),
+    );
   });
 
   it("reports a clear error for a non-QML document", () => {
