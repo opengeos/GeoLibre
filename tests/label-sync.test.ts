@@ -478,6 +478,31 @@ describe("label sync", () => {
     assert.ok(!("symbol-sort-key" in label.layout));
   });
 
+  it("falls back when an override is well-formed but wrong for its destination", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        // A JSON array that is not an expression (no operator), and an
+        // expression whose result type cannot fit the destination. Both must
+        // fall back to the literal control: addLayer validates the whole
+        // layer spec, so passing them through would reject the entire label
+        // layer, not just the property.
+        sizeExpression: "[1, 2, 3]",
+        colorExpression: '["literal", 5]',
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as {
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    };
+    assert.equal(label.layout["text-size"], DEFAULT_LAYER_STYLE.labels.size);
+    assert.equal(label.paint["text-color"], DEFAULT_LAYER_STYLE.labels.color);
+  });
+
   it("ANDs the visibility expression into the label filter", () => {
     const { map, layers } = makeMap();
     syncLayer(

@@ -3,11 +3,11 @@ import {
   type GeoLibreLayer,
   geojsonHasZCoordinates,
   type LayerStyle,
-  parseJsonExpression,
   proportionalRadiusExpression,
   ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
   styleValue,
+  validateMapExpression,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
@@ -2344,23 +2344,28 @@ function applyVectorDataRenderLayers(
       // opacity, per-feature placement priority (symbol-sort-key), and
       // attribute-gated visibility. They read source feature attributes, so
       // they are skipped on the dedup path, whose synthetic features carry
-      // only the aggregated label value. A typo'd or non-array value parses
-      // to null and falls back to the literal control instead of breaking
-      // the layer.
-      // The `|| ""` guards against a hand-edited project file storing null
-      // for an expression field (the type says string, but the value comes
-      // from untrusted JSON).
-      const labelOverride = (source: string) =>
-        dedupedLabelFc
-          ? null
-          : (parseJsonExpression(source || "") as
-              | maplibregl.ExpressionSpecification
-              | null);
-      const sizeOverride = labelOverride(labels.sizeExpression);
-      const colorOverride = labelOverride(labels.colorExpression);
-      const opacityOverride = labelOverride(labels.opacityExpression);
-      const priorityOverride = labelOverride(labels.priorityExpression);
-      const visibilityOverride = labelOverride(labels.visibilityExpression);
+      // only the aggregated label value. An override that is invalid for its
+      // destination — malformed JSON, not an expression, or the wrong result
+      // type — parses to null and falls back to the literal control; the
+      // style-spec check matters because addLayer validates the whole layer
+      // spec, so an unchecked type-mismatched value would reject the entire
+      // label layer on first add rather than just that property.
+      const labelOverride = (
+        source: string,
+        expectedType: "number" | "color" | "boolean",
+      ) =>
+        dedupedLabelFc ? null : parseLabelOverride(source, expectedType);
+      const sizeOverride = labelOverride(labels.sizeExpression, "number");
+      const colorOverride = labelOverride(labels.colorExpression, "color");
+      const opacityOverride = labelOverride(labels.opacityExpression, "number");
+      const priorityOverride = labelOverride(
+        labels.priorityExpression,
+        "number",
+      );
+      const visibilityOverride = labelOverride(
+        labels.visibilityExpression,
+        "boolean",
+      );
       // The visibility expression joins the marker exclusion before the
       // layer-wide feature filters, so a feature evaluating false simply gets
       // no label.
@@ -2620,6 +2625,47 @@ function getDedupedLabelFeatures(
 
 function removeSourceIfExists(map: maplibregl.Map, id: string): void {
   if (map.getSource(id)) map.removeSource(id);
+}
+
+// Data-defined label overrides are re-read on every sync (which can fire per
+// frame, e.g. while dragging the opacity slider), and validating through the
+// style spec is far more expensive than the reads, so results are memoized by
+// expected type + source. Bounded so a pathological stream of distinct
+// expressions cannot grow it without limit.
+const labelOverrideCache = new Map<
+  string,
+  maplibregl.ExpressionSpecification | null
+>();
+const LABEL_OVERRIDE_CACHE_MAX = 256;
+
+/**
+ * Parses and validates a data-defined label override (a MapLibre expression
+ * stored as a JSON string) against its destination's expected result type.
+ * Returns null — falling back to the literal control — for anything invalid:
+ * malformed JSON, a non-expression value, or a type the destination cannot
+ * accept. The `|| ""` guards against a hand-edited project file storing null
+ * for an expression field (the type says string, but the value comes from
+ * untrusted JSON).
+ */
+function parseLabelOverride(
+  source: string,
+  expectedType: "number" | "color" | "boolean",
+): maplibregl.ExpressionSpecification | null {
+  const trimmed = (source || "").trim();
+  if (!trimmed) return null;
+  const key = `${expectedType}:${trimmed}`;
+  const cached = labelOverrideCache.get(key);
+  if (cached !== undefined) return cached;
+  const validation = validateMapExpression(trimmed, { expectedType });
+  const result =
+    validation.ok && validation.parsed
+      ? (validation.parsed as unknown as maplibregl.ExpressionSpecification)
+      : null;
+  if (labelOverrideCache.size >= LABEL_OVERRIDE_CACHE_MAX) {
+    labelOverrideCache.clear();
+  }
+  labelOverrideCache.set(key, result);
+  return result;
 }
 
 // Keep this predicate aligned with textMarkerFilter: any text-marker-shaped

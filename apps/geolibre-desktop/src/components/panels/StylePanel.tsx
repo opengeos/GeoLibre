@@ -89,13 +89,62 @@ import {
  * color, visibility a boolean filter).
  */
 const LABEL_OVERRIDE_PROPERTIES = [
-  { key: "size", field: "sizeExpression", context: "number" },
-  { key: "color", field: "colorExpression", context: "color" },
-  { key: "opacity", field: "opacityExpression", context: "number" },
-  { key: "visibility", field: "visibilityExpression", context: "filter" },
-  { key: "priority", field: "priorityExpression", context: "number" },
+  {
+    key: "size",
+    field: "sizeExpression",
+    context: "number",
+    expectedType: "number",
+  },
+  {
+    key: "color",
+    field: "colorExpression",
+    context: "color",
+    expectedType: "color",
+  },
+  {
+    key: "opacity",
+    field: "opacityExpression",
+    context: "number",
+    expectedType: "number",
+  },
+  {
+    key: "visibility",
+    field: "visibilityExpression",
+    context: "filter",
+    expectedType: "boolean",
+  },
+  {
+    key: "priority",
+    field: "priorityExpression",
+    context: "number",
+    expectedType: "number",
+  },
 ] as const;
 type LabelOverrideProperty = (typeof LABEL_OVERRIDE_PROPERTIES)[number];
+
+// Override validity is checked on every panel render, and compiling through
+// the style spec is far more expensive than a lookup, so results are memoized
+// by expected type + source (module scope: this section renders below the
+// component's early returns, where a useMemo would violate the rules of
+// hooks). Bounded so a pathological stream of distinct expressions cannot
+// grow it without limit.
+const labelOverrideValidityCache = new Map<string, boolean>();
+const LABEL_OVERRIDE_VALIDITY_CACHE_MAX = 256;
+
+function labelOverrideInvalid(
+  value: string,
+  expectedType: "number" | "color" | "boolean",
+): boolean {
+  const key = `${expectedType}:${value}`;
+  const cached = labelOverrideValidityCache.get(key);
+  if (cached !== undefined) return cached;
+  const invalid = !validateMapExpression(value, { expectedType }).ok;
+  if (labelOverrideValidityCache.size >= LABEL_OVERRIDE_VALIDITY_CACHE_MAX) {
+    labelOverrideValidityCache.clear();
+  }
+  labelOverrideValidityCache.set(key, invalid);
+  return invalid;
+}
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -3480,30 +3529,24 @@ export function StylePanel({
   );
 
   // One pass over the override fields for both the rows and the invalid
-  // banner, so each expression is validated once per render. The `|| ""`
-  // guards against a hand-edited project file storing null for an expression
-  // field (the type says string, but the value comes from untrusted JSON);
-  // the invalid flag surfaces the renderer's silent fallback to the literal
-  // control (the builder's Apply is disabled for invalid expressions, but a
-  // hand-edited file can still carry one). Validation runs through the style
-  // spec with the row's expected result type, mirroring the builder's own
-  // check, so a type mismatch (e.g. a string-producing size expression) is
-  // flagged too, not just malformed JSON.
+  // banner; the style-spec compile behind the invalid flag is memoized per
+  // distinct expression (labelOverrideInvalid), so re-renders cost lookups,
+  // not recompiles. The `|| ""` guards against a hand-edited project file
+  // storing null for an expression field (the type says string, but the
+  // value comes from untrusted JSON); the invalid flag surfaces the
+  // renderer's fallback to the literal control (the builder's Apply is
+  // disabled for invalid expressions, but a hand-edited file can still carry
+  // one). Validation runs through the style spec with the row's expected
+  // result type, mirroring the builder's own check, so a type mismatch
+  // (e.g. a string-producing size expression) is flagged too, not just
+  // malformed JSON.
   const labelOverrideStates = LABEL_OVERRIDE_PROPERTIES.map((property) => {
     const value = (labels[property.field] || "").trim();
     return {
       property,
       value,
       invalid:
-        value !== "" &&
-        !validateMapExpression(value, {
-          expectedType:
-            property.context === "filter"
-              ? "boolean"
-              : property.context === "color"
-                ? "color"
-                : "number",
-        }).ok,
+        value !== "" && labelOverrideInvalid(value, property.expectedType),
     };
   });
   const labelControls = (
