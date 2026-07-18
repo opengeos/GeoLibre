@@ -7,6 +7,7 @@ export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";
 export * from "./vector-color";
+export * from "./expressions";
 export * from "./scale-units";
 export * from "./project";
 export * from "./style-library";

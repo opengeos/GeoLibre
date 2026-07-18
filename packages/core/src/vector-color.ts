@@ -1,5 +1,6 @@
 import { styleValue, type LayerStyle, type VectorRule } from "./types";
 import { getActiveSemiMajorAxisMeters } from "./ellipsoids";
+import { removeTrailingJsonCommas } from "./expressions";
 
 /**
  * A data-driven color value for a vector paint property: either a plain CSS
@@ -292,43 +293,6 @@ export function parseJsonExpression(expression: string): unknown[] | null {
   } catch {
     return null;
   }
-}
-
-function removeTrailingJsonCommas(value: string): string {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-
-    if (inString) {
-      result += char;
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      result += char;
-      continue;
-    }
-
-    if (char === ",") {
-      const nextSignificant = value.slice(index + 1).match(/\S/)?.[0];
-      if (nextSignificant === "]" || nextSignificant === "}") continue;
-    }
-
-    result += char;
-  }
-
-  return result;
 }
 
 /**
