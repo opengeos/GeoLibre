@@ -9,6 +9,7 @@ export * from "./routing";
 export * from "./vector-color";
 export * from "./expressions";
 export * from "./joins";
+export * from "./virtual-fields";
 export * from "./selection";
 export * from "./scale-units";
 export * from "./project";

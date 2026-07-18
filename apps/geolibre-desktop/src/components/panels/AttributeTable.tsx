@@ -56,6 +56,7 @@ import {
   RotateCcw,
   Save,
   Sigma,
+  SquareFunction,
   TableProperties,
   Telescope,
   Trash2,
@@ -366,6 +367,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         (layer?.joins ?? []).flatMap((join) => join.addedFields ?? []),
       ),
     [layer?.joins],
+  );
+  // Same for columns computed by virtual fields (expression-backed, re-derived
+  // on every data change): read-only here, managed in Layer properties.
+  const virtualFieldColumns = useMemo(
+    () =>
+      new Set(
+        (layer?.virtualFields ?? []).flatMap((field) =>
+          field.addedField ? [field.addedField] : [],
+        ),
+      ),
+    [layer?.virtualFields],
+  );
+  const derivedColumns = useMemo(
+    () => new Set([...joinDerivedColumns, ...virtualFieldColumns]),
+    [joinDerivedColumns, virtualFieldColumns],
   );
   const features = layer?.geojson?.features ?? [];
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
@@ -986,11 +1002,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setAddingColumn(false);
   };
 
-  // The Field Calculator must not target a join-derived column either: the
-  // calculated value would be overwritten by the join re-derivation in the
-  // same store update.
+  // The Field Calculator must not target a derived column (joined or virtual)
+  // either: the calculated value would be overwritten by the re-derivation in
+  // the same store update.
   const calculatorTargetColumns = discoveredColumns.filter(
-    (col) => !joinDerivedColumns.has(col),
+    (col) => !derivedColumns.has(col),
   );
 
   const openCalculator = () => {
@@ -1273,8 +1289,28 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           type="button"
           className="flex h-full min-w-0 flex-1 items-center gap-1 pe-1 text-start font-medium"
           onClick={() => toggleSort(col)}
+          title={
+            virtualFieldColumns.has(col)
+              ? t("attributeTable.virtualColumnTitle")
+              : undefined
+          }
         >
-          <span className="truncate">{col}</span>
+          {/* Virtual (expression-computed) columns get a function glyph and
+              italics so their read-only, derived nature is visible at a
+              glance, as in QGIS. */}
+          {virtualFieldColumns.has(col) && (
+            <SquareFunction
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          )}
+          <span
+            className={
+              virtualFieldColumns.has(col) ? "truncate italic" : "truncate"
+            }
+          >
+            {col}
+          </span>
           {renderSortIcon(col)}
         </button>
         <DropdownMenu>
@@ -1292,7 +1328,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={joinDerivedColumns.has(col)}
+              disabled={derivedColumns.has(col)}
               onSelect={() => beginColumnRename(col)}
             >
               <Pencil className="me-2 h-3.5 w-3.5" />
@@ -1319,7 +1355,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              disabled={joinDerivedColumns.has(col)}
+              disabled={derivedColumns.has(col)}
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="me-2 h-3.5 w-3.5" />
@@ -1791,12 +1827,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             data-state={changed ? "edited" : undefined}
                             className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
                             title={
-                              joinDerivedColumns.has(col)
-                                ? t("attributeTable.joinedColumnTitle")
-                                : undefined
+                              virtualFieldColumns.has(col)
+                                ? t("attributeTable.virtualColumnTitle")
+                                : joinDerivedColumns.has(col)
+                                  ? t("attributeTable.joinedColumnTitle")
+                                  : undefined
                             }
                           >
-                            {isEditing && !joinDerivedColumns.has(col) ? (
+                            {isEditing && !derivedColumns.has(col) ? (
                               <Input
                                 className={inputClassName}
                                 aria-invalid={invalid || undefined}

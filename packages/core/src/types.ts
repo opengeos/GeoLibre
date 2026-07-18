@@ -711,6 +711,49 @@ export interface LayerJoin {
   stats?: LayerJoinStats;
 }
 
+/**
+ * A virtual field attached to a vector layer (QGIS Field Calculator → "Create
+ * virtual field", issue #1321): a column defined by a MapLibre expression that
+ * recomputes live instead of being written once as static values. The engine
+ * (`virtual-fields.ts`) materializes the computed values into the layer's
+ * feature properties — so the attribute table, Expression Builder,
+ * data-driven styling, labels, and selection all see the column with no
+ * further wiring — and re-derives them whenever the layer's data (or its
+ * joins) change. Definitions persist in `.geolibre.json` and re-resolve on
+ * project load; the expression is a declarative MapLibre expression (never
+ * arbitrary code), so re-evaluating it from a shared project file is safe.
+ */
+export interface LayerVirtualField {
+  /** Stable id for list edits. */
+  id: string;
+  /** The output column name. A name already taken by a base column is skipped. */
+  name: string;
+  /**
+   * MapLibre expression source (JSON text, e.g. `["/", ["get", "pop"],
+   * ["get", "area_km2"]]`) evaluated against each feature.
+   */
+  expression: string;
+  /** `false` detaches the computed column without deleting the definition. */
+  enabled?: boolean;
+  /**
+   * Bookkeeping written by the engine: the column name actually materialized
+   * on the last apply, absent when the field was disabled, failed to compile,
+   * or was skipped because the name collided with an existing column.
+   * Applying virtual fields strips these first, which makes re-application
+   * idempotent (an existing column is never shadowed, so stripping exactly
+   * restores the pre-apply properties). Not user-editable.
+   */
+  addedField?: string;
+  /** Compile error from the last apply, when the expression failed to parse. */
+  error?: string;
+  /**
+   * Features whose evaluation threw at runtime on the last apply (their cell
+   * is null). Surfaced so the UI can warn without one bad feature aborting
+   * the whole column.
+   */
+  errorCount?: number;
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -729,6 +772,13 @@ export interface GeoLibreLayer {
    * and re-derived whenever the layer's or a join table's data changes.
    */
   joins?: LayerJoin[];
+  /**
+   * Expression-backed virtual fields computed for this layer's features, in
+   * order. Applied after joins (so an expression can read joined columns) and
+   * materialized into `geojson` feature properties; re-derived whenever the
+   * layer's data changes. See {@link LayerVirtualField}.
+   */
+  virtualFields?: LayerVirtualField[];
   /**
    * Transient MapLibre filter expression applied on top of every rendered
    * sub-layer's geometry filter. The Time Slider plugin sets this on a bound

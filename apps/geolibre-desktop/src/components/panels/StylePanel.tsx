@@ -50,6 +50,7 @@ import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { LayerJoinsSection } from "./LayerJoinsSection";
+import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
@@ -4546,6 +4547,11 @@ export function StylePanel({
               {/* Keyed by layer so the add-join draft never survives a layer
                   switch (a stale draft could reference the new target itself). */}
               <LayerJoinsSection key={layer.id} layer={layer} />
+              <Separator />
+              {/* Virtual fields need the layer's features in the store too
+                  (the expressions evaluate against layer.geojson). Keyed for
+                  the same draft-lifetime reason as the joins section. */}
+              <VirtualFieldsSection key={`vf-${layer.id}`} layer={layer} />
             </>
           ) : null}
         </div>
