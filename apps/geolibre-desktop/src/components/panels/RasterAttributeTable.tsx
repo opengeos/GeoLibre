@@ -32,6 +32,7 @@ import {
   MAX_RAT_SYMBOLOGY_CLASSES,
   categoricalSymbologyFromRows,
   computeValueCounts,
+  gdalAuxXmlUrl,
   parseGdalRat,
   pixelAreaSquareMeters,
   ratRowsToCsv,
@@ -54,14 +55,19 @@ function isRatLayer(layer: GeoLibreLayer | undefined): layer is GeoLibreLayer {
   return !!layer && canExportRasterLayer(layer);
 }
 
+/** The layer's `metadata.rasterState` as a record ({} when absent/malformed). */
+function rasterStateOf(layer: GeoLibreLayer): Record<string, unknown> {
+  const state = layer.metadata.rasterState;
+  return state && typeof state === "object" && !Array.isArray(state)
+    ? (state as Record<string, unknown>)
+    : {};
+}
+
 /** The 1-indexed band the layer currently renders (rasterState.bands[0]). */
 function currentBand(layer: GeoLibreLayer): number {
-  const state = layer.metadata.rasterState;
-  if (state && typeof state === "object" && !Array.isArray(state)) {
-    const bands = (state as Record<string, unknown>).bands;
-    if (Array.isArray(bands) && typeof bands[0] === "number" && bands[0] >= 1) {
-      return bands[0];
-    }
+  const bands = rasterStateOf(layer).bands;
+  if (Array.isArray(bands) && typeof bands[0] === "number" && bands[0] >= 1) {
+    return bands[0];
   }
   return 1;
 }
@@ -83,8 +89,10 @@ async function fetchGdalRat(
 ): Promise<GdalRatEntry[] | null> {
   const url = layer.source?.url;
   if (typeof url !== "string" || !/^https?:\/\//.test(url)) return null;
+  const auxUrl = gdalAuxXmlUrl(url);
+  if (!auxUrl) return null;
   try {
-    const response = await fetch(`${url}.aux.xml`, { signal });
+    const response = await fetch(auxUrl, { signal });
     if (!response.ok) return null;
     return parseGdalRat(await response.text(), band);
   } catch {
@@ -121,25 +129,66 @@ export function RasterAttributeTable({
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const ratLayer = isRatLayer(layer) ? layer : null;
-  const record = ratLayer ? savedRasterAttributeTable(ratLayer) : null;
+  // Derived only while open: the panel stays mounted when closed, and
+  // validating/sorting a stored table on every layers write would be dead work.
+  const record = open && ratLayer ? savedRasterAttributeTable(ratLayer) : null;
 
   const [computing, setComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
+  // In-progress edits, keyed by row value. Labels commit on blur/Enter and
+  // colors on a trailing throttle, so a keystroke or picker-drag tick doesn't
+  // trigger a full store write (and the layer-sync/texture work it fans out
+  // to) per event.
+  const [labelDrafts, setLabelDrafts] = useState<Record<number, string>>({});
+  const [colorDrafts, setColorDrafts] = useState<Record<number, string>>({});
   const sectionRef = useRef<HTMLElement | null>(null);
   const computeAbortRef = useRef<AbortController | null>(null);
+  const colorFlushRef = useRef<number | null>(null);
+  const pendingColorRef = useRef<{ value: number; color: string } | null>(null);
 
   // Reset transient state when the target layer changes, and abort any
-  // in-flight computation so its result can't land on the wrong layer.
+  // in-flight computation so its result can't land on the wrong layer. The
+  // aborted call's finally skips its own setComputing(false) (the abort means
+  // someone else owns the flag now), so the flag is reset here — otherwise a
+  // layer switch mid-compute would leave the panel stuck on "computing".
   useEffect(() => {
     setError(null);
     setNotice(null);
+    setLabelDrafts({});
+    setColorDrafts({});
     return () => {
-      computeAbortRef.current?.abort();
-      computeAbortRef.current = null;
+      if (computeAbortRef.current) {
+        computeAbortRef.current.abort();
+        computeAbortRef.current = null;
+        setComputing(false);
+      }
+      // Drop any throttled color commit aimed at the previous layer.
+      if (colorFlushRef.current !== null) {
+        window.clearTimeout(colorFlushRef.current);
+        colorFlushRef.current = null;
+      }
+      pendingColorRef.current = null;
     };
   }, [ratLayer?.id]);
+
+  /**
+   * Merges a metadata patch onto the layer's LIVE metadata, read from the
+   * store at write time. The panel's async flows (compute, palette reads) can
+   * take seconds; spreading a metadata snapshot captured before the await
+   * would silently revert anything written meanwhile (style-panel edits, the
+   * raster control's sync echo), since updateLayer replaces metadata
+   * wholesale.
+   */
+  const patchLayerMetadata = useCallback(
+    (layerId: string, patch: Record<string, unknown>): void => {
+      const live = useAppStore.getState().layers.find((l) => l.id === layerId);
+      if (!live) return;
+      updateLayer(layerId, { metadata: { ...live.metadata, ...patch } });
+    },
+    [updateLayer],
+  );
 
   const compute = useCallback(
     async (target: GeoLibreLayer, band: number) => {
@@ -155,6 +204,15 @@ export function RasterAttributeTable({
       setError(null);
       setNotice(null);
       try {
+        // Labels/colors seed from an existing GDAL RAT (remote .aux.xml), then
+        // the raster's embedded color table, then a sampled ramp — and any
+        // labels/colors the user already edited win over all three. Both
+        // lookups depend only on the URL, so they run concurrently with (and
+        // hide under) the main download.
+        const ratPromise = fetchGdalRat(target, band, controller.signal);
+        const palettePromise = getPaletteLegend(target.id, url).catch(
+          () => null,
+        );
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) {
           throw new Error(t("rasterAttributeTable.readError"));
@@ -170,21 +228,18 @@ export function RasterAttributeTable({
           setError(t("rasterAttributeTable.notCategorical"));
           return;
         }
-        // Labels/colors seed from an existing GDAL RAT (remote .aux.xml), then
-        // the raster's embedded color table, then a sampled ramp — and any
-        // labels/colors the user already edited win over all three.
-        const rat = await fetchGdalRat(target, band, controller.signal);
-        let palette: Map<number, string> | null = null;
-        try {
-          const entries = await getPaletteLegend(target.id, url);
-          if (entries) {
-            palette = new Map(entries.map((e) => [e.value, e.color]));
-          }
-        } catch {
-          // No palette is fine; colors fall back to the ramp.
-        }
+        const rat = await ratPromise;
+        const paletteEntries = await palettePromise;
+        const palette = paletteEntries
+          ? new Map(paletteEntries.map((e) => [e.value, e.color]))
+          : null;
         if (controller.signal.aborted) return;
-        const previous = savedRasterAttributeTable(target);
+        // Re-read the stored table from the live store (not the pre-await
+        // snapshot) so label/color edits made during the scan survive.
+        const live = useAppStore
+          .getState()
+          .layers.find((l) => l.id === target.id);
+        const previous = live ? savedRasterAttributeTable(live) : null;
         const seeded = seedRatRows(counts, { rat, palette });
         const priorByValue = new Map(
           (previous?.band === band ? previous.rows : []).map((row) => [
@@ -201,9 +256,7 @@ export function RasterAttributeTable({
           rows,
           pixelAreaM2: pixelAreaSquareMeters(raster),
         };
-        updateLayer(target.id, {
-          metadata: { ...target.metadata, rasterAttributeTable: next },
-        });
+        patchLayerMetadata(target.id, { rasterAttributeTable: next });
       } catch (err) {
         if (controller.signal.aborted) return;
         setError(
@@ -218,7 +271,7 @@ export function RasterAttributeTable({
         if (!controller.signal.aborted) setComputing(false);
       }
     },
-    [t, updateLayer],
+    [t, patchLayerMetadata],
   );
 
   // First open for a layer with no stored table: build it automatically so the
@@ -253,38 +306,71 @@ export function RasterAttributeTable({
     );
   }
 
+  /** The layer's live store snapshot, read at write time. */
+  function liveLayer(layerId: string): GeoLibreLayer | undefined {
+    return useAppStore.getState().layers.find((l) => l.id === layerId);
+  }
+
   /**
    * Persists edited rows and, when the colors changed while the table's
    * symbology is applied on the layer, re-derives that symbology in the same
    * store write so the map recolors live.
    */
   function commitRows(
-    target: GeoLibreLayer,
+    layerId: string,
     current: RasterAttributeTableRecord,
     rows: RasterAttributeTableRow[],
     options: { colorsChanged?: boolean } = {},
   ) {
+    const live = liveLayer(layerId);
+    if (!live) return;
     const liveSymbology =
-      options.colorsChanged && tableSymbologyActive(target, current.rows)
+      options.colorsChanged && tableSymbologyActive(live, current.rows)
         ? categoricalSymbologyFromRows(rows)?.symbology
         : undefined;
-    updateLayer(target.id, {
-      metadata: {
-        ...target.metadata,
-        rasterAttributeTable: { ...current, rows },
-        ...(liveSymbology ? { rasterSymbology: liveSymbology } : {}),
-      },
+    patchLayerMetadata(layerId, {
+      rasterAttributeTable: { ...current, rows },
+      ...(liveSymbology ? { rasterSymbology: liveSymbology } : {}),
     });
   }
 
-  function updateRow(index: number, patch: Partial<RasterAttributeTableRow>) {
-    if (!ratLayer || !record) return;
-    const rows = record.rows.map((row, i) =>
-      i === index ? { ...row, ...patch } : row,
+  /**
+   * Applies a patch to one row (matched by value), re-reading the stored
+   * table at commit time so a deferred commit (throttled color, blur label)
+   * can never revert an earlier one from a stale snapshot.
+   */
+  function commitRowPatch(
+    value: number,
+    patch: Partial<RasterAttributeTableRow>,
+  ) {
+    if (!ratLayer) return;
+    const live = liveLayer(ratLayer.id);
+    const current = live ? savedRasterAttributeTable(live) : null;
+    if (!current) return;
+    const rows = current.rows.map((row) =>
+      row.value === value ? { ...row, ...patch } : row,
     );
-    commitRows(ratLayer, record, rows, {
+    commitRows(ratLayer.id, current, rows, {
       colorsChanged: patch.color !== undefined,
     });
+  }
+
+  /** Trailing-throttled color commit: at most one store write per interval. */
+  function scheduleColorCommit(value: number, color: string) {
+    pendingColorRef.current = { value, color };
+    if (colorFlushRef.current !== null) return;
+    colorFlushRef.current = window.setTimeout(() => {
+      colorFlushRef.current = null;
+      const pending = pendingColorRef.current;
+      pendingColorRef.current = null;
+      if (!pending) return;
+      commitRowPatch(pending.value, { color: pending.color });
+      setColorDrafts((drafts) => {
+        const next = { ...drafts };
+        delete next[pending.value];
+        return next;
+      });
+    }, 200);
   }
 
   function applySymbology() {
@@ -298,31 +384,24 @@ export function RasterAttributeTable({
       );
       return;
     }
-    const state =
-      ratLayer.metadata.rasterState &&
-      typeof ratLayer.metadata.rasterState === "object" &&
-      !Array.isArray(ratLayer.metadata.rasterState)
-        ? (ratLayer.metadata.rasterState as Record<string, unknown>)
-        : {};
-    updateLayer(ratLayer.id, {
-      metadata: {
-        ...ratLayer.metadata,
-        rasterState: {
-          ...state,
-          mode: "single",
-          bands: [record.band],
-          // Move off the "palette" colormap so the single-band pseudocolor
-          // pipeline (rescale + colormap module) is active; the injected
-          // classified texture then replaces the named ramp's colors, exactly
-          // as the classification UI does.
-          colormap: result.symbology.ramp,
-          rescale: result.rescale,
-          // The injected classified texture bakes its own colors; reversal
-          // would double-apply through the upstream shader.
-          reversed: false,
-        },
-        rasterSymbology: result.symbology,
+    const live = liveLayer(ratLayer.id);
+    if (!live) return;
+    patchLayerMetadata(ratLayer.id, {
+      rasterState: {
+        ...rasterStateOf(live),
+        mode: "single",
+        bands: [record.band],
+        // Move off the "palette" colormap so the single-band pseudocolor
+        // pipeline (rescale + colormap module) is active; the injected
+        // classified texture then replaces the named ramp's colors, exactly
+        // as the classification UI does.
+        colormap: result.symbology.ramp,
+        rescale: result.rescale,
+        // The injected classified texture bakes its own colors; reversal
+        // would double-apply through the upstream shader.
+        reversed: false,
       },
+      rasterSymbology: result.symbology,
     });
     setError(null);
     setNotice(t("rasterAttributeTable.symbologyApplied"));
@@ -340,12 +419,17 @@ export function RasterAttributeTable({
         setNotice(t("rasterAttributeTable.noPalette"));
         return;
       }
+      // The palette scan can take seconds on a cache miss; re-read the stored
+      // table so label/color edits made during the await survive.
+      const live = liveLayer(ratLayer.id);
+      const current = live ? savedRasterAttributeTable(live) : null;
+      if (!current) return;
       const palette = new Map(entries.map((e) => [e.value, e.color]));
-      const rows = record.rows.map((row) => {
+      const rows = current.rows.map((row) => {
         const color = palette.get(row.value);
         return color ? { ...row, color } : row;
       });
-      commitRows(ratLayer, record, rows, { colorsChanged: true });
+      commitRows(ratLayer.id, current, rows, { colorsChanged: true });
     } catch {
       setNotice(t("rasterAttributeTable.noPalette"));
     }
@@ -452,15 +536,9 @@ export function RasterAttributeTable({
         <span className="text-sm font-semibold">
           {t("rasterAttributeTable.title")}
         </span>
-        {ratLayer ? (
-          <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
-            {ratLayer.name}
-          </span>
-        ) : (
-          <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
-            {t("rasterAttributeTable.noRasterSelected")}
-          </span>
-        )}
+        <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
+          {ratLayer?.name ?? t("rasterAttributeTable.noRasterSelected")}
+        </span>
         {ratLayer && bandCount > 1 ? (
           <Select
             aria-label={t("rasterAttributeTable.band")}
@@ -613,7 +691,7 @@ export function RasterAttributeTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, index) => (
+              {rows.map((row) => (
                 <tr key={row.value} className="border-b last:border-b-0">
                   <td className="px-3 py-1 font-mono">{row.value}</td>
                   <td className="px-3 py-1 font-mono">
@@ -636,10 +714,15 @@ export function RasterAttributeTable({
                         value: row.value,
                       })}
                       className="h-6 w-10 cursor-pointer rounded border bg-transparent"
-                      value={row.color}
-                      onChange={(event) =>
-                        updateRow(index, { color: event.target.value })
-                      }
+                      value={colorDrafts[row.value] ?? row.color}
+                      onChange={(event) => {
+                        const color = event.target.value;
+                        setColorDrafts((drafts) => ({
+                          ...drafts,
+                          [row.value]: color,
+                        }));
+                        scheduleColorCommit(row.value, color);
+                      }}
                     />
                   </td>
                   <td className="px-3 py-1">
@@ -648,10 +731,29 @@ export function RasterAttributeTable({
                         value: row.value,
                       })}
                       className="h-6 px-2 py-0 text-xs"
-                      value={row.label}
+                      value={labelDrafts[row.value] ?? row.label}
                       onChange={(event) =>
-                        updateRow(index, { label: event.target.value })
+                        setLabelDrafts((drafts) => ({
+                          ...drafts,
+                          [row.value]: event.target.value,
+                        }))
                       }
+                      onBlur={(event) => {
+                        // Read the DOM value: a same-tick type-then-blur can
+                        // outrun the draft state update.
+                        const text = event.currentTarget.value;
+                        if (text !== row.label) {
+                          commitRowPatch(row.value, { label: text });
+                        }
+                        setLabelDrafts((drafts) => {
+                          const next = { ...drafts };
+                          delete next[row.value];
+                          return next;
+                        });
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
                     />
                   </td>
                 </tr>

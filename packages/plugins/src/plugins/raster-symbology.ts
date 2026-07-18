@@ -301,19 +301,20 @@ export function savedRasterSymbology(
     return null;
   }
   if (typeof candidate.classCount !== "number") return null;
-  // Stored symbologies accept up to RASTER_MAX_STORED_CLASSES (a categorical
-  // symbology from the Raster Attribute Table has one class per value); the
-  // tighter clampRasterClassCount cap applies only to UI authoring.
-  const classCount = Number.isFinite(candidate.classCount)
-    ? Math.min(
-        RASTER_MAX_STORED_CLASSES,
-        Math.max(RASTER_MIN_CLASSES, Math.round(candidate.classCount)),
-      )
-    : RASTER_MIN_CLASSES;
 
+  // The breaks are the authoritative class edges (the renderer sizes the
+  // stepped texture off breaks.length), so the class count is derived from
+  // them rather than trusted from the stored field. This keeps records
+  // consistent by construction: a categorical symbology from the Raster
+  // Attribute Table may carry one class per pixel value (well past the UI's
+  // RASTER_MAX_CLASSES authoring cap, up to RASTER_MAX_STORED_CLASSES), and a
+  // legacy record whose stored count disagrees with its edges (older versions
+  // clamped the count but not the breaks) renders from its edges instead of
+  // being dropped.
   if (
     !Array.isArray(candidate.breaks) ||
-    candidate.breaks.length !== classCount + 1 ||
+    candidate.breaks.length < RASTER_MIN_CLASSES + 1 ||
+    candidate.breaks.length > RASTER_MAX_STORED_CLASSES + 1 ||
     !candidate.breaks.every(
       (value) => typeof value === "number" && Number.isFinite(value),
     )
@@ -324,6 +325,7 @@ export function savedRasterSymbology(
   for (let index = 1; index < breaks.length; index += 1) {
     if (breaks[index] < breaks[index - 1]) return null;
   }
+  const classCount = breaks.length - 1;
 
   // A custom ramp needs at least two valid colors; drop malformed entries so a
   // hand-edited project silently falls back to the named ramp rather than

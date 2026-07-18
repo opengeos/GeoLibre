@@ -143,6 +143,23 @@ export function syncRasterLayersToStore(control: RasterSyncableControl): void {
   syncRasterLayersToStoreWithOptions(control);
 }
 
+/**
+ * Metadata keys GeoLibre writes onto control-managed raster layers that the
+ * control itself knows nothing about: `rasterSymbology` (discrete
+ * classification), `rasterAttributeTable` (the categorical class table,
+ * #1307), and `localBytesUrl` (a blob URL retaining a File-loaded raster's
+ * bytes for in-browser tools). The store sync rebuilds a raster layer's
+ * metadata wholesale from the control's `RasterLayerInfo` on every control
+ * event, so any key not listed here is silently wiped by the next opacity
+ * drag or visibility toggle — add new GeoLibre-owned raster metadata keys to
+ * this list.
+ */
+export const GEOLIBRE_OWNED_METADATA_KEYS = [
+  "rasterSymbology",
+  "rasterAttributeTable",
+  "localBytesUrl",
+] as const;
+
 export function syncRasterLayersToStoreWithOptions(
   control: RasterSyncableControl,
   options: RasterSyncOptions = {},
@@ -173,23 +190,16 @@ export function syncRasterLayersToStoreWithOptions(
         continue;
       }
 
-      // rasterSymbology (discrete classification), rasterAttributeTable (the
-      // categorical class table, #1307) and localBytesUrl (a blob URL
-      // retaining a File-loaded raster's bytes for in-browser tools) are
-      // GeoLibre-owned and absent from RasterLayerInfo, so carry them forward
-      // across the wholesale metadata rebuild instead of letting every control
-      // event wipe them.
-      const preserved = {
-        ...(existing.metadata.rasterSymbology !== undefined
-          ? { rasterSymbology: existing.metadata.rasterSymbology }
-          : {}),
-        ...(existing.metadata.rasterAttributeTable !== undefined
-          ? { rasterAttributeTable: existing.metadata.rasterAttributeTable }
-          : {}),
-        ...(existing.metadata.localBytesUrl !== undefined
-          ? { localBytesUrl: existing.metadata.localBytesUrl }
-          : {}),
-      };
+      // GeoLibre-owned metadata keys (see GEOLIBRE_OWNED_METADATA_KEYS) are
+      // absent from RasterLayerInfo, so carry them forward across the
+      // wholesale metadata rebuild instead of letting every control event
+      // wipe them.
+      const preserved: Record<string, unknown> = {};
+      for (const key of GEOLIBRE_OWNED_METADATA_KEYS) {
+        if (existing.metadata[key] !== undefined) {
+          preserved[key] = existing.metadata[key];
+        }
+      }
       const metadata =
         Object.keys(preserved).length > 0
           ? { ...layer.metadata, ...preserved }

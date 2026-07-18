@@ -6,6 +6,7 @@ import {
   categoricalBreaks,
   categoricalSymbologyFromRows,
   computeValueCounts,
+  gdalAuxXmlUrl,
   parseGdalRat,
   pixelAreaSquareMeters,
   ratRowsToCsv,
@@ -13,7 +14,10 @@ import {
   seedRatRows,
   type RasterAttributeTableRow,
 } from "../apps/geolibre-desktop/src/lib/raster-attribute-table";
-import { savedRasterSymbology } from "../packages/plugins/src/plugins/raster-symbology";
+import {
+  RASTER_MAX_STORED_CLASSES,
+  savedRasterSymbology,
+} from "../packages/plugins/src/plugins/raster-symbology";
 
 function layerWith(metadata: Record<string, unknown>): GeoLibreLayer {
   return {
@@ -66,6 +70,29 @@ describe("computeValueCounts", () => {
   it("returns null when the band exceeds the unique-value cap", () => {
     const values = Float32Array.from({ length: 100 }, (_, i) => i);
     assert.equal(computeValueCounts(values, null, 50), null);
+  });
+});
+
+describe("MAX_RAT_SYMBOLOGY_CLASSES", () => {
+  it("mirrors RASTER_MAX_STORED_CLASSES (kept a copy so the pure lib avoids a value import of @geolibre/plugins)", () => {
+    assert.equal(MAX_RAT_SYMBOLOGY_CLASSES, RASTER_MAX_STORED_CLASSES);
+  });
+});
+
+describe("gdalAuxXmlUrl", () => {
+  it("appends .aux.xml to the path, keeping any query string", () => {
+    assert.equal(
+      gdalAuxXmlUrl("https://host/data/lc.tif"),
+      "https://host/data/lc.tif.aux.xml",
+    );
+    assert.equal(
+      gdalAuxXmlUrl("https://host/data/lc.tif?X-Amz-Signature=abc&x=1"),
+      "https://host/data/lc.tif.aux.xml?X-Amz-Signature=abc&x=1",
+    );
+  });
+
+  it("returns null for an unparseable URL", () => {
+    assert.equal(gdalAuxXmlUrl("not a url"), null);
   });
 });
 
@@ -123,6 +150,26 @@ describe("parseGdalRat", () => {
     assert.equal(entries[0].color, undefined);
   });
 
+  it("keeps column positions across self-closing empty cells", () => {
+    // GDAL serializes an empty string cell as <F />; skipping it would shift
+    // every later column of the row one place left.
+    const xml = `<PAMDataset><PAMRasterBand band="1">
+      <GDALRasterAttributeTable>
+        <FieldDefn index="0"><Name>Value</Name><Usage>5</Usage></FieldDefn>
+        <FieldDefn index="1"><Name>Class_name</Name><Usage>2</Usage></FieldDefn>
+        <FieldDefn index="2"><Name>Red</Name><Usage>6</Usage></FieldDefn>
+        <FieldDefn index="3"><Name>Green</Name><Usage>7</Usage></FieldDefn>
+        <FieldDefn index="4"><Name>Blue</Name><Usage>8</Usage></FieldDefn>
+        <Row index="0"><F>3</F><F /><F>10</F><F>20</F><F>30</F></Row>
+      </GDALRasterAttributeTable>
+    </PAMRasterBand></PAMDataset>`;
+    const entries = parseGdalRat(xml, 1);
+    assert.ok(entries);
+    assert.equal(entries[0].value, 3);
+    assert.equal(entries[0].label, undefined);
+    assert.equal(entries[0].color, "#0a141e");
+  });
+
   it("returns null when no field identifies the value column", () => {
     const xml = `<PAMDataset><PAMRasterBand band="1">
       <GDALRasterAttributeTable>
@@ -168,6 +215,29 @@ describe("pixelAreaSquareMeters", () => {
     // Center latitude 0: one 0.01 degree pixel is about 1.11 km on each side.
     assert.ok(area !== null);
     assert.ok(Math.abs(area - 0.01 * 111320 * 0.01 * 111132) < 1);
+  });
+
+  it("uses the flipY flag for a south-up geographic raster", () => {
+    // South-up: originY is the southern edge, so the center is half a span
+    // NORTH of it. North-up and south-up rasters covering the same extent
+    // must agree on the pixel area.
+    const northUp = pixelAreaSquareMeters({
+      resX: 0.01,
+      resY: 0.01,
+      originY: 46,
+      height: 200,
+      geoKeys: { GTModelTypeGeoKey: 2 },
+    });
+    const southUp = pixelAreaSquareMeters({
+      resX: 0.01,
+      resY: 0.01,
+      originY: 44,
+      height: 200,
+      flipY: true,
+      geoKeys: { GTModelTypeGeoKey: 2 },
+    });
+    assert.ok(northUp !== null && southUp !== null);
+    assert.ok(Math.abs(northUp - southUp) < 1e-9);
   });
 
   it("returns null when the model type is unknown", () => {

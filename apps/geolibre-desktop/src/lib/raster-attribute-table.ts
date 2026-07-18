@@ -3,8 +3,11 @@ import {
   getVectorColorRamp,
   interpolateColors,
   normalizeHexColor,
+  rgbToHex,
 } from "@geolibre/core";
 import type { RasterSymbology } from "@geolibre/plugins";
+
+import { csvCell } from "./csv";
 
 /**
  * Raster Attribute Table (issue #1307).
@@ -56,6 +59,10 @@ export const MAX_RAT_ROWS = 1024;
 /**
  * Upper bound on classes "apply as symbology" supports: the injected colormap
  * lookup texture is 256 texels wide, so more classes cannot be told apart.
+ * Mirrors `RASTER_MAX_STORED_CLASSES` in `@geolibre/plugins` — not imported
+ * because a value import of that package would pull its browser-only renderer
+ * deps into this pure module's `node --test` run; a unit test pins the two
+ * constants equal so they cannot drift.
  */
 export const MAX_RAT_SYMBOLOGY_CLASSES = 256;
 
@@ -93,6 +100,25 @@ export function computeValueCounts(
 }
 
 // --- GDAL PAM (.aux.xml) RAT parsing ---------------------------------------
+
+/**
+ * The URL of a raster's GDAL PAM sidecar: `.aux.xml` appended to the path,
+ * not the raw string — a query-authenticated URL (a presigned S3/Azure link,
+ * a `?token=` tile host) must keep its query after the suffix, or the request
+ * asks for the wrong resource.
+ *
+ * @param url - The raster's http(s) URL.
+ * @returns The sidecar URL, or null when `url` is not parseable.
+ */
+export function gdalAuxXmlUrl(url: string): string | null {
+  try {
+    const sidecar = new URL(url);
+    sidecar.pathname += ".aux.xml";
+    return sidecar.toString();
+  } catch {
+    return null;
+  }
+}
 
 /** Unescapes the five XML entities GDAL writes in PAM text nodes. */
 function decodeXml(text: string): string {
@@ -198,9 +224,17 @@ export function parseGdalRat(xml: string, band = 1): GdalRatEntry[] | null {
       : null;
   };
 
+  // Row cells: paired <F>…</F> blocks and self-closing <F/> (an empty cell,
+  // which GDAL writes for blank strings) — skipping the latter would shift
+  // every later column of the row one place left.
+  const rowCells = (row: string): string[] =>
+    (row.match(/<F(?:\s[^>]*)?\/>|<F(?:\s[^>]*)?>[\s\S]*?<\/F>/g) ?? []).map(
+      (cell) => (cell.endsWith("/>") ? "" : xmlTag(cell, "F")),
+    );
+
   const entries: GdalRatEntry[] = [];
   for (const row of xmlBlocks(rat, "Row")) {
-    const fields = xmlBlocks(row, "F").map((f) => xmlTag(f, "F"));
+    const fields = rowCells(row);
     const value = Number(fields[valueIndex]);
     if (!Number.isFinite(value)) continue;
     const entry: GdalRatEntry = { value };
@@ -215,9 +249,7 @@ export function parseGdalRat(xml: string, band = 1): GdalRatEntry[] | null {
     const g = channel(fields, greenIndex);
     const b = channel(fields, blueIndex);
     if (r !== null && g !== null && b !== null) {
-      entry.color = `#${[r, g, b]
-        .map((c) => c.toString(16).padStart(2, "0"))
-        .join("")}`;
+      entry.color = rgbToHex({ r, g, b });
     }
     entries.push(entry);
   }
@@ -242,8 +274,10 @@ const METERS_PER_DEG_LON = 111320;
  * geographic rasters scale degrees by the raster's center latitude. Other or
  * unknown units return null (the table then shows counts without areas).
  *
- * @param info - The raster's resolution, top-left origin Y, height and GeoKeys
- *   (the fields `readRasterData` provides).
+ * @param info - The raster's resolution, origin Y, height, GeoKeys and south-up
+ *   flag (the fields `readRasterData` provides): `resY` is positive, `originY`
+ *   is the northern edge for a north-up raster and the southern edge when
+ *   `flipY` is set.
  * @returns Square meters per pixel, or null when the CRS units are unknown.
  */
 export function pixelAreaSquareMeters(info: {
@@ -251,6 +285,7 @@ export function pixelAreaSquareMeters(info: {
   resY: number;
   originY: number;
   height: number;
+  flipY?: boolean;
   geoKeys: Record<string, unknown>;
 }): number | null {
   const model = Number(info.geoKeys.GTModelTypeGeoKey);
@@ -260,7 +295,10 @@ export function pixelAreaSquareMeters(info: {
     return Math.abs(info.resX * info.resY);
   }
   if (model === GT_MODEL_TYPE_GEOGRAPHIC) {
-    const centerLat = info.originY - (info.height * info.resY) / 2;
+    const halfSpan = (info.height * info.resY) / 2;
+    const centerLat = info.flipY
+      ? info.originY + halfSpan
+      : info.originY - halfSpan;
     if (!Number.isFinite(centerLat) || Math.abs(centerLat) > 90) return null;
     const metersPerDegLon =
       METERS_PER_DEG_LON * Math.cos((centerLat * Math.PI) / 180);
@@ -426,17 +464,6 @@ export function categoricalSymbologyFromRows(
 }
 
 // --- CSV --------------------------------------------------------------------
-
-/**
- * RFC 4180 cell quoting, mirroring `vector-export.ts`'s private helper.
- * Duplicated (four lines) rather than imported: vector-export statically pulls
- * in tauri-io → shpjs, which would drag a browser-only bundle into this
- * otherwise pure module (and into its `node --test` run).
- */
-function csvCell(value: unknown): string {
-  const text = String(value);
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 /**
  * Serializes the table to CSV (RFC 4180 quoting). The percent column is over

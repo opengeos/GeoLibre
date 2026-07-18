@@ -188,7 +188,10 @@ describe("savedRasterSymbology", () => {
     assert.equal(result.method, "quantile");
   });
 
-  it("rejects a record whose breaks do not match its class count", () => {
+  it("derives the class count from the breaks when the stored count disagrees", () => {
+    // Legacy records could store a clamped-down count next to unclamped
+    // breaks (or vice versa); the breaks are authoritative, so the record
+    // renders from its edges instead of being dropped.
     const result = savedRasterSymbology(
       layerWith({
         classified: true,
@@ -198,7 +201,32 @@ describe("savedRasterSymbology", () => {
         breaks: Array.from({ length: 13 }, (_, index) => index),
       }),
     );
-    assert.equal(result, null);
+    assert.ok(result);
+    assert.equal(result.classCount, 12);
+  });
+
+  it("rejects breaks outside the stored-class bounds", () => {
+    const base = {
+      classified: true,
+      ramp: "plasma",
+      method: "quantile" as const,
+      classCount: 5,
+    };
+    // One class (two edges) is below the two-class minimum.
+    assert.equal(
+      savedRasterSymbology(layerWith({ ...base, breaks: [0, 1] })),
+      null,
+    );
+    // 258 edges would be 257 classes, past RASTER_MAX_STORED_CLASSES.
+    assert.equal(
+      savedRasterSymbology(
+        layerWith({
+          ...base,
+          breaks: Array.from({ length: 258 }, (_, index) => index),
+        }),
+      ),
+      null,
+    );
   });
 
   it("keeps and normalizes custom colors with >= 2 valid entries", () => {

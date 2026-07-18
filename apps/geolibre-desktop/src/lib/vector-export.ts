@@ -1,4 +1,5 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import { csvCell as quoteCsvCell } from "./csv";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import {
@@ -31,8 +32,7 @@ export function sanitizeExportFileName(name: string): string {
 }
 
 function csvCell(value: unknown): string {
-  const text = formatAttributeValue(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  return quoteCsvCell(formatAttributeValue(value));
 }
 
 function geojsonToCsv(geojson: FeatureCollection): string {
