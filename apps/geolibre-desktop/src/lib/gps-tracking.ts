@@ -16,6 +16,7 @@ import type {
   Feature,
   FeatureCollection,
   LineString,
+  MultiLineString,
   Point,
   Polygon,
   Position,
@@ -146,26 +147,53 @@ export function shouldLogFix(
   return true;
 }
 
+/**
+ * A recorded track as continuous runs of fixes. Pausing and resuming the
+ * recording starts a new segment, so the gap travelled while paused is never
+ * drawn or measured as if it had been walked (mirrors GPX's `<trkseg>`).
+ */
+export type GpsTrackSegments = GpsFix[][];
+
+/**
+ * Segments with enough points to form a line. A 0/1-point segment (e.g. a
+ * single stray fix between a resume and the next pause) has no drawable or
+ * measurable extent and is dropped from geometry, stats, and GPX alike.
+ */
+export function lineSegments(segments: GpsTrackSegments): GpsFix[][] {
+  return segments.filter((s) => s.length >= 2);
+}
+
+/** Total logged fixes across all segments. */
+export function trackPointCount(segments: GpsTrackSegments): number {
+  return segments.reduce((n, s) => n + s.length, 0);
+}
+
 export interface TrackStats {
-  /** Path length in meters, summed over consecutive logged fixes. */
+  /**
+   * Path length in meters, summed over consecutive fixes within each segment.
+   * Gaps between segments (paused stretches) contribute nothing.
+   */
   distanceM: number;
-  /** Seconds between the first and last logged fix. */
+  /** Seconds between the first and last logged fix, pauses included. */
   durationS: number;
   pointCount: number;
 }
 
-export function trackStats(fixes: GpsFix[]): TrackStats {
+export function trackStats(segments: GpsTrackSegments): TrackStats {
   let distanceM = 0;
-  for (let i = 1; i < fixes.length; i += 1) {
-    const a = fixes[i - 1];
-    const b = fixes[i];
-    distanceM += haversineMeters([a.lng, a.lat], [b.lng, b.lat]);
+  for (const fixes of segments) {
+    for (let i = 1; i < fixes.length; i += 1) {
+      const a = fixes[i - 1];
+      const b = fixes[i];
+      distanceM += haversineMeters([a.lng, a.lat], [b.lng, b.lat]);
+    }
   }
+  const all = segments.flat();
   const durationS =
-    fixes.length >= 2
-      ? (fixes[fixes.length - 1].timestamp - fixes[0].timestamp) / 1000
+    all.length >= 2
+      ? (all[all.length - 1].timestamp - all[0].timestamp) / 1000
       : 0;
-  return { distanceM, durationS, pointCount: fixes.length };
+  return { distanceM, durationS, pointCount: all.length };
 }
 
 /** A fix's GeoJSON coordinate, carrying altitude as the third value if known. */
@@ -191,37 +219,66 @@ export function isGpsCaptureLayer(layer: GpsLayerLike): boolean {
 }
 
 /**
- * Build the track LineString feature saved to a layer (and previewed live).
- * Per-vertex timestamps ride along as an ISO-string array property so the
- * recording remains GPX-exportable after a project save/load round trip.
+ * Build the track feature saved to a layer: a LineString for a single
+ * continuous recording, a MultiLineString when pauses split it into several
+ * segments. Per-vertex timestamps ride along as an ISO-string `times`
+ * property (flat for a LineString, nested per segment for a MultiLineString)
+ * so the recording remains GPX-exportable after a project save/load round trip.
  */
-export function trackLineFeature(fixes: GpsFix[]): Feature<LineString> {
-  const stats = trackStats(fixes);
+export function trackFeature(
+  segments: GpsTrackSegments,
+): Feature<LineString | MultiLineString> {
+  const kept = lineSegments(segments);
+  const stats = trackStats(kept);
+  const all = kept.flat();
+  const times = kept.map((seg) =>
+    seg.map((f) => new Date(f.timestamp).toISOString()),
+  );
   return {
     type: "Feature",
-    geometry: {
-      type: "LineString",
-      coordinates: fixes.map(fixPosition),
-    },
+    geometry:
+      kept.length === 1
+        ? { type: "LineString", coordinates: kept[0].map(fixPosition) }
+        : {
+            type: "MultiLineString",
+            coordinates: kept.map((seg) => seg.map(fixPosition)),
+          },
     properties: {
       gpx_kind: "track",
       point_count: stats.pointCount,
+      segment_count: kept.length,
       distance_m: Math.round(stats.distanceM * 10) / 10,
       duration_s: Math.round(stats.durationS),
-      start_time: fixes.length
-        ? new Date(fixes[0].timestamp).toISOString()
+      start_time: all.length ? new Date(all[0].timestamp).toISOString() : null,
+      end_time: all.length
+        ? new Date(all[all.length - 1].timestamp).toISOString()
         : null,
-      end_time: fixes.length
-        ? new Date(fixes[fixes.length - 1].timestamp).toISOString()
-        : null,
-      times: fixes.map((f) => new Date(f.timestamp).toISOString()),
+      times: kept.length === 1 ? times[0] : times,
     },
   };
 }
 
-/** The FeatureCollection saved as a track layer (a single LineString). */
-export function trackFeatureCollection(fixes: GpsFix[]): FeatureCollection {
-  return { type: "FeatureCollection", features: [trackLineFeature(fixes)] };
+/** The FeatureCollection saved as a track layer (a single track feature). */
+export function trackFeatureCollection(
+  segments: GpsTrackSegments,
+): FeatureCollection {
+  return { type: "FeatureCollection", features: [trackFeature(segments)] };
+}
+
+/**
+ * Geometry-only rendering of the in-progress track for the live map source.
+ * Deliberately carries no timestamps or stats: it is rebuilt on every fix, so
+ * it stays as cheap as possible (see the per-fix redraw in GpsTrackingDialog).
+ */
+export function trackPreview(segments: GpsTrackSegments): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: lineSegments(segments).map((seg) => ({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: seg.map(fixPosition) },
+      properties: {},
+    })),
+  };
 }
 
 /** Build the Point feature saved when capturing the current position. */
@@ -285,20 +342,28 @@ function gpxTrkpt(fix: GpsFix, indent: string): string {
 }
 
 /**
- * Serialize a recorded track to a GPX 1.1 document (one `<trk>` with a single
- * `<trkseg>`, per-point elevation and timestamps). The complement of the
- * reader in `gpx.ts`, which is import-only.
+ * Serialize a recorded track to a GPX 1.1 document: one `<trk>` with a
+ * `<trkseg>` per continuous segment (pause/resume boundaries), per-point
+ * elevation and timestamps. The complement of the reader in `gpx.ts`, which
+ * is import-only.
  */
-export function buildTrackGpx(fixes: GpsFix[], name: string): string {
-  const points = fixes.map((f) => gpxTrkpt(f, "      ")).join("\n");
+export function buildTrackGpx(
+  segments: GpsTrackSegments,
+  name: string,
+): string {
+  const segs = lineSegments(segments).map((seg) =>
+    [
+      `    <trkseg>`,
+      seg.map((f) => gpxTrkpt(f, "      ")).join("\n"),
+      `    </trkseg>`,
+    ].join("\n"),
+  );
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<gpx version="1.1" creator="GeoLibre" xmlns="http://www.topografix.com/GPX/1/1">`,
     `  <trk>`,
     `    <name>${escapeXml(name)}</name>`,
-    `    <trkseg>`,
-    points,
-    `    </trkseg>`,
+    segs.join("\n"),
     `  </trk>`,
     `</gpx>`,
     ``,

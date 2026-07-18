@@ -41,11 +41,14 @@ import {
   GPS_CAPTURE_FLAG,
   GPS_TRACK_FLAG,
   type GpsFix,
+  type GpsTrackSegments,
   type GpsTrackingSettings,
   isGpsCaptureLayer,
+  lineSegments,
   normalizeGpsSettings,
   shouldLogFix,
   trackFeatureCollection,
+  trackPreview,
   trackStats,
 } from "../../lib/gps-tracking";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
@@ -203,9 +206,10 @@ export function GpsTrackingDialog({
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerArrowRef = useRef<HTMLDivElement | null>(null);
-  // Logged track fixes; a ref so the high-frequency watch callback appends
-  // without re-creating itself, with `fixCount` mirroring it for renders.
-  const fixesRef = useRef<GpsFix[]>([]);
+  // Logged track fixes as pause/resume segments; a ref so the high-frequency
+  // watch callback appends in place without re-creating itself, with
+  // `fixCount` mirroring the total for renders. Always holds >= 1 segment.
+  const fixesRef = useRef<GpsTrackSegments>([[]]);
   const lastFixRef = useRef<GpsFix | null>(null);
   const recordingRef = useRef<RecordingState>("off");
   const followRef = useRef(true);
@@ -241,10 +245,26 @@ export function GpsTrackingDialog({
         timestamp: fix.timestamp,
       });
 
+      // Log to the track first: which fixes belong in the recording must not
+      // depend on whether the map object happens to be available right now.
+      if (recordingRef.current === "recording") {
+        const segment = fixesRef.current[fixesRef.current.length - 1];
+        const prev = segment[segment.length - 1] ?? null;
+        if (shouldLogFix(prev, fix, settingsRef.current)) {
+          segment.push(fix);
+          setFixCount((n) => n + 1);
+        }
+      }
+
       const map = getMap();
       if (map) {
         ensureGpsSources(map);
         setSourceData(map, ACCURACY_SOURCE, accuracyCircle(fix));
+        // Redraw the whole track on every fix, not only when one was logged:
+        // a basemap switch (map.setStyle) wipes the custom source, and this
+        // unconditional refresh heals it on the next fix. trackPreview is
+        // geometry-only, so the rebuild stays cheap.
+        setSourceData(map, TRACK_SOURCE, trackPreview(fixesRef.current));
         if (!markerRef.current) {
           const { root, arrow } = createMarkerElement();
           markerArrowRef.current = arrow;
@@ -263,21 +283,6 @@ export function GpsTrackingDialog({
             fix.heading != null ? "block" : "none";
         }
         if (fix.heading != null) markerRef.current.setRotation(fix.heading);
-
-        if (recordingRef.current === "recording") {
-          const prev = fixesRef.current[fixesRef.current.length - 1] ?? null;
-          if (shouldLogFix(prev, fix, settingsRef.current)) {
-            fixesRef.current = [...fixesRef.current, fix];
-            setFixCount(fixesRef.current.length);
-            if (fixesRef.current.length >= 2) {
-              setSourceData(
-                map,
-                TRACK_SOURCE,
-                trackFeatureCollection(fixesRef.current),
-              );
-            }
-          }
-        }
 
         if (followRef.current) {
           map.easeTo({
@@ -379,7 +384,7 @@ export function GpsTrackingDialog({
   }, []);
 
   const clearTrack = useCallback(() => {
-    fixesRef.current = [];
+    fixesRef.current = [[]];
     setFixCount(0);
     const map = getMap();
     if (map) setSourceData(map, TRACK_SOURCE, EMPTY_FC);
@@ -398,8 +403,17 @@ export function GpsTrackingDialog({
     setNotice(null);
   }, [clearTrack]);
 
+  const handleResumeRecording = useCallback(() => {
+    // A pause/resume boundary starts a new segment, so the stretch travelled
+    // while paused is never drawn or measured as if it had been walked.
+    const segments = fixesRef.current;
+    if (segments[segments.length - 1].length > 0) segments.push([]);
+    setRecording("recording");
+    if (!tracking) handleStart();
+  }, [tracking, handleStart]);
+
   const trackName = useCallback(() => {
-    const first = fixesRef.current[0];
+    const first = fixesRef.current.flat()[0];
     const stamp = new Date(first ? first.timestamp : Date.now());
     // Local wall-clock start time, filename-safe (no colons).
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -410,7 +424,7 @@ export function GpsTrackingDialog({
   }, [t]);
 
   const handleSaveTrack = useCallback(() => {
-    if (fixesRef.current.length < 2) return;
+    if (lineSegments(fixesRef.current).length === 0) return;
     const name = trackName();
     const id = addGeoJsonLayer(name, trackFeatureCollection(fixesRef.current));
     updateLayer(id, { metadata: { [GPS_TRACK_FLAG]: true } });
@@ -421,7 +435,7 @@ export function GpsTrackingDialog({
 
   const handleExportTrack = useCallback(
     async (format: "gpx" | "geojson") => {
-      if (fixesRef.current.length < 2) return;
+      if (lineSegments(fixesRef.current).length === 0) return;
       const name = trackName();
       const content =
         format === "gpx"
@@ -490,7 +504,8 @@ export function GpsTrackingDialog({
   }, [t]);
 
   const stats = trackStats(fixesRef.current);
-  const canSaveTrack = fixCount >= 2;
+  // `fixCount` in the guard keeps this recomputed as fixes arrive.
+  const canSaveTrack = fixCount >= 2 && lineSegments(fixesRef.current).length > 0;
   const showPanel = tracking && !open;
 
   return (
@@ -500,9 +515,10 @@ export function GpsTrackingDialog({
           fix={lastFix}
           recording={recording}
           stats={stats}
+          capturedCount={capturedCount}
           onCapture={handleCapturePoint}
           onPause={() => setRecording("paused")}
-          onResume={() => setRecording("recording")}
+          onResume={handleResumeRecording}
           onOpen={() => onOpenChange(true)}
         />
       )}
@@ -576,13 +592,7 @@ export function GpsTrackingDialog({
                     </Button>
                   )}
                   {recording === "paused" && (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setRecording("recording");
-                        if (!tracking) handleStart();
-                      }}
-                    >
+                    <Button size="sm" onClick={handleResumeRecording}>
                       <Play className="me-1 h-3.5 w-3.5" />
                       {t("gps.resume")}
                     </Button>
@@ -758,6 +768,7 @@ interface FloatingPanelProps {
   fix: GpsFix | null;
   recording: RecordingState;
   stats: { distanceM: number; durationS: number; pointCount: number };
+  capturedCount: number;
   onCapture: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -773,6 +784,7 @@ function FloatingPanel({
   fix,
   recording,
   stats,
+  capturedCount,
   onCapture,
   onPause,
   onResume,
@@ -826,6 +838,11 @@ function FloatingPanel({
           <Maximize2 className="h-3.5 w-3.5" />
         </Button>
       </div>
+      {capturedCount > 0 && (
+        <p aria-live="polite" className="text-xs text-muted-foreground">
+          {t("gps.captured", { count: capturedCount })}
+        </p>
+      )}
     </div>
   );
 }

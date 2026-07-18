@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
+import { formatSpeedKmh } from "../../lib/gps-tracking";
 
 interface StatusBarProps {
   compact?: boolean;
@@ -38,7 +39,7 @@ export function StatusBar({
         gpsStatus.accuracy,
       )}m` +
       (gpsStatus.speed != null
-        ? ` ${(gpsStatus.speed * 3.6).toFixed(1)}km/h`
+        ? ` ${formatSpeedKmh(gpsStatus.speed)}km/h`
         : "") +
       (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
     : null;

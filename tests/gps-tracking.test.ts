@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { LineString } from "geojson";
+import type { LineString, MultiLineString } from "geojson";
 import {
   accuracyCircle,
   buildTrackGpx,
@@ -14,10 +14,13 @@ import {
   type GpsFix,
   haversineMeters,
   isGpsCaptureLayer,
+  lineSegments,
   normalizeGpsSettings,
   shouldLogFix,
+  trackFeature,
   trackFeatureCollection,
-  trackLineFeature,
+  trackPointCount,
+  trackPreview,
   trackStats,
 } from "../apps/geolibre-desktop/src/lib/gps-tracking";
 
@@ -122,31 +125,89 @@ describe("gps-tracking track shaping", () => {
     fix({ lat: 44.052, altitude: null, timestamp: 1_700_000_060_000 }),
   ];
 
-  it("trackStats sums segment distances and spans the timestamps", () => {
-    const stats = trackStats(fixes);
+  it("trackStats sums distances within a segment and spans the timestamps", () => {
+    const stats = trackStats([fixes]);
     assert.equal(stats.pointCount, 3);
     assert.equal(stats.durationS, 60);
     assert.ok(Math.abs(stats.distanceM - 222.4) < 2, `got ${stats.distanceM}`);
   });
 
-  it("trackLineFeature carries altitude, timestamps, and summary props", () => {
-    const feature = trackLineFeature(fixes);
+  it("trackStats does not count the gap between segments as distance", () => {
+    // Two segments ~1.1 km apart; only intra-segment distance (~111 m each)
+    // counts, while duration still spans the pause.
+    const stats = trackStats([
+      [
+        fix({ lat: 44.0, timestamp: 1_700_000_000_000 }),
+        fix({ lat: 44.001, timestamp: 1_700_000_030_000 }),
+      ],
+      [
+        fix({ lat: 44.01, timestamp: 1_700_000_600_000 }),
+        fix({ lat: 44.011, timestamp: 1_700_000_630_000 }),
+      ],
+    ]);
+    assert.equal(stats.pointCount, 4);
+    assert.equal(stats.durationS, 630);
+    assert.ok(Math.abs(stats.distanceM - 222.4) < 2, `got ${stats.distanceM}`);
+  });
+
+  it("lineSegments drops stray 0/1-point segments; trackPointCount counts all", () => {
+    const segments = [[], [fix()], fixes];
+    assert.equal(lineSegments(segments).length, 1);
+    assert.equal(trackPointCount(segments), 4);
+  });
+
+  it("trackFeature (single segment) is a LineString with altitude, flat times, and summary props", () => {
+    const feature = trackFeature([fixes]);
     const line = feature.geometry as LineString;
+    assert.equal(line.type, "LineString");
     assert.equal(line.coordinates.length, 3);
     assert.equal(line.coordinates[0].length, 3);
     assert.equal(line.coordinates[0][2], 120);
     assert.equal(line.coordinates[2].length, 2);
     assert.equal(feature.properties?.point_count, 3);
+    assert.equal(feature.properties?.segment_count, 1);
     assert.equal(feature.properties?.duration_s, 60);
     assert.equal(feature.properties?.start_time, "2023-11-14T22:13:20.000Z");
     assert.equal(feature.properties?.end_time, "2023-11-14T22:14:20.000Z");
-    assert.equal((feature.properties?.times as string[]).length, 3);
+    assert.deepEqual(feature.properties?.times, [
+      "2023-11-14T22:13:20.000Z",
+      "2023-11-14T22:13:50.000Z",
+      "2023-11-14T22:14:20.000Z",
+    ]);
   });
 
-  it("trackFeatureCollection wraps the single line feature", () => {
-    const fc = trackFeatureCollection(fixes);
+  it("trackFeature (multiple segments) is a MultiLineString with nested times", () => {
+    const other: GpsFix[] = [
+      fix({ lat: 44.06, timestamp: 1_700_000_120_000 }),
+      fix({ lat: 44.061, timestamp: 1_700_000_150_000 }),
+    ];
+    const feature = trackFeature([fixes, [fix()], other]);
+    const multi = feature.geometry as MultiLineString;
+    assert.equal(multi.type, "MultiLineString");
+    assert.equal(multi.coordinates.length, 2);
+    assert.equal(multi.coordinates[0].length, 3);
+    assert.equal(multi.coordinates[1].length, 2);
+    assert.equal(feature.properties?.point_count, 5);
+    assert.equal(feature.properties?.segment_count, 2);
+    const times = feature.properties?.times as string[][];
+    assert.equal(times.length, 2);
+    assert.equal(times[0].length, 3);
+    assert.equal(times[1].length, 2);
+  });
+
+  it("trackFeatureCollection wraps the single track feature", () => {
+    const fc = trackFeatureCollection([fixes]);
     assert.equal(fc.features.length, 1);
     assert.equal(fc.features[0].geometry.type, "LineString");
+  });
+
+  it("trackPreview renders one bare line per drawable segment", () => {
+    const preview = trackPreview([fixes, [fix()], fixes]);
+    assert.equal(preview.features.length, 2);
+    for (const f of preview.features) {
+      assert.equal(f.geometry.type, "LineString");
+      assert.deepEqual(f.properties, {});
+    }
   });
 
   it("capturePointFeature records time, accuracy, and optional motion props", () => {
@@ -169,8 +230,10 @@ describe("gps-tracking GPX export", () => {
   it("serializes trackpoints with elevation and time", () => {
     const gpx = buildTrackGpx(
       [
-        fix({ altitude: 120, timestamp: 1_700_000_000_000 }),
-        fix({ lat: 44.051, timestamp: 1_700_000_030_000 }),
+        [
+          fix({ altitude: 120, timestamp: 1_700_000_000_000 }),
+          fix({ lat: 44.051, timestamp: 1_700_000_030_000 }),
+        ],
       ],
       "Morning walk",
     );
@@ -182,10 +245,24 @@ describe("gps-tracking GPX export", () => {
     assert.ok(gpx.includes(`<time>2023-11-14T22:13:20.000Z</time>`));
     // The second fix has no altitude, so exactly one <ele> is written.
     assert.equal(gpx.split("<ele>").length, 2);
+    assert.equal(gpx.split("<trkseg>").length, 2);
+  });
+
+  it("writes one trkseg per segment, skipping stray 1-point segments", () => {
+    const seg = (lat: number, t: number) => [
+      fix({ lat, timestamp: t }),
+      fix({ lat: lat + 0.001, timestamp: t + 30_000 }),
+    ];
+    const gpx = buildTrackGpx(
+      [seg(44.0, 1_700_000_000_000), [fix()], seg(44.1, 1_700_000_600_000)],
+      "Segmented",
+    );
+    assert.equal(gpx.split("<trkseg>").length, 3);
+    assert.equal(gpx.split("<trkpt").length, 5);
   });
 
   it("escapes XML in the track name", () => {
-    const gpx = buildTrackGpx([fix()], `Trail <A> & "B"`);
+    const gpx = buildTrackGpx([[fix(), fix({ lat: 44.1 })]], `Trail <A> & "B"`);
     assert.ok(
       gpx.includes("<name>Trail &lt;A&gt; &amp; &quot;B&quot;</name>"),
     );
