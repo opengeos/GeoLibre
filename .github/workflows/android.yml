@@ -53,9 +53,10 @@ jobs:
           java-version: "21"
 
       - name: Set up Android SDK
-        # Third-party action pinned to a full commit SHA (v3 tag head) per the
-        # repo's policy for non-official actions; a tag could be re-pointed.
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        # Third-party action pinned to a full commit SHA (v4.0.1) per the repo's
+        # policy for non-official actions; a tag could be re-pointed. v4 runs on
+        # Node.js 24 (v3 targeted the now-deprecated Node.js 20).
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Install Android NDK, platform, and build-tools
         run: |

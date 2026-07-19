@@ -40,13 +40,15 @@ tauri-plugin-persisted-scope = "2"
 duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 # rustls-tls stays the default backend for every request. rustls-tls-native-roots
-# also trusts the OS/system certificate store (enterprise CAs), and native-tls is
-# used only on the opt-in mTLS path for PKCS#12 client certificates (issue #1220).
+# also trusts the OS/system certificate store (enterprise CAs). native-tls (which
+# drags in openssl-sys) is used only on the opt-in mTLS path for PKCS#12 client
+# certificates (issue #1220), so it is added per-target below — everywhere except
+# Android, where there is no such path and openssl-sys cannot cross-compile for
+# the NDK.
 reqwest = { version = "0.12", default-features = false, features = [
   "blocking",
   "rustls-tls",
   "rustls-tls-native-roots",
-  "native-tls",
 ] }
 flate2 = "1"
 tar = "0.4"
@@ -56,6 +58,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # OS CSPRNG for the per-launch Jupyter token (already an indirect dep).
 getrandom = "0.4"
+
+# native-tls backs only the desktop mTLS PKCS#12 path (issue #1220). It pulls in
+# openssl-sys, which has no vendored/cross build for the Android NDK, so the
+# feature is added on every target except Android (the code that uses it is
+# likewise cfg'd out in src/lib.rs).
+[target.'cfg(not(target_os = "android"))'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
 
 # Runtime WebKitGTK version check (already an indirect dep via tauri/wry).
 [target."cfg(target_os = \"linux\")".dependencies]

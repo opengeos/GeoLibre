@@ -735,7 +735,9 @@ impl reqwest::dns::Resolve for GuardedDnsResolver {
 enum ClientIdentity {
     /// PEM identity (certificate chain plus an unencrypted PKCS#8 key), rustls.
     Pem(reqwest::Identity),
-    /// PKCS#12 identity, native-tls.
+    /// PKCS#12 identity, native-tls. Not available on Android, which does not
+    /// ship the native-tls backend (openssl-sys has no NDK cross build).
+    #[cfg(not(target_os = "android"))]
     Pkcs12(reqwest::Identity),
 }
 
@@ -811,14 +813,27 @@ fn client_identity() -> Result<Option<ClientIdentity>, String> {
         )
     })?;
     if client_cert_is_pkcs12(&path, password.is_some()) {
-        let identity = reqwest::Identity::from_pkcs12_der(&bytes, password.as_deref().unwrap_or(""))
-            .map_err(|error| {
-                format!(
-                    "Could not load PKCS#12 client certificate {}: {error}",
-                    path.display()
-                )
-            })?;
-        Ok(Some(ClientIdentity::Pkcs12(identity)))
+        #[cfg(not(target_os = "android"))]
+        {
+            let identity =
+                reqwest::Identity::from_pkcs12_der(&bytes, password.as_deref().unwrap_or(""))
+                    .map_err(|error| {
+                        format!(
+                            "Could not load PKCS#12 client certificate {}: {error}",
+                            path.display()
+                        )
+                    })?;
+            Ok(Some(ClientIdentity::Pkcs12(identity)))
+        }
+        // Android lacks the native-tls backend that parses PKCS#12, so surface a
+        // clear error rather than silently misreading the bundle as PEM.
+        #[cfg(target_os = "android")]
+        {
+            Err(format!(
+                "PKCS#12 client certificates are not supported on this platform: {}",
+                path.display()
+            ))
+        }
     } else {
         let identity = reqwest::Identity::from_pem(&bytes).map_err(|error| {
             format!(
@@ -867,6 +882,8 @@ fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {
     builder = match client_identity()? {
         // PKCS#12 identities are only understood by native-tls, which also reads
         // the OS trust store on every platform; switch this one client over.
+        // (Not reachable on Android — client_identity errors out there.)
+        #[cfg(not(target_os = "android"))]
         Some(ClientIdentity::Pkcs12(identity)) => builder.use_native_tls().identity(identity),
         Some(ClientIdentity::Pem(identity)) => builder.use_rustls_tls().identity(identity),
         None => builder.use_rustls_tls(),
