@@ -137,23 +137,21 @@ export const i18nReady: Promise<unknown> = (async () => {
     }
   }
 
-  return i18n
-    .use(initReactI18next)
-    .init({
-      resources,
-      lng: initialLanguage,
-      fallbackLng: DEFAULT_LANGUAGE,
-      defaultNS: "translation",
-      interpolation: {
-        // React already escapes rendered values, so i18next double-escaping would
-        // mangle any text that legitimately contains `<`, `&`, etc.
-        escapeValue: false,
-      },
-      // We gate the first render on `i18nReady`, so the initial catalog is always
-      // present by mount — no Suspense boundary needed.
-      react: { useSuspense: false },
-      returnNull: false,
-    });
+  return i18n.use(initReactI18next).init({
+    resources,
+    lng: initialLanguage,
+    fallbackLng: DEFAULT_LANGUAGE,
+    defaultNS: "translation",
+    interpolation: {
+      // React already escapes rendered values, so i18next double-escaping would
+      // mangle any text that legitimately contains `<`, `&`, etc.
+      escapeValue: false,
+    },
+    // We gate the first render on `i18nReady`, so the initial catalog is always
+    // present by mount — no Suspense boundary needed.
+    react: { useSuspense: false },
+    returnNull: false,
+  });
 })().catch((error: unknown) => {
   console.error("[GeoLibre] i18n initialization failed", error);
 });
