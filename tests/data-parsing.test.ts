@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
+  isGeographicCrs,
   parseCoordinate,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
@@ -179,6 +180,28 @@ describe("delimited text parsing", () => {
         }),
       /No rows contained valid longitude and latitude values\./,
     );
+  });
+});
+
+describe("isGeographicCrs", () => {
+  it("treats a blank or missing CRS as WGS84", () => {
+    assert.equal(isGeographicCrs(""), true);
+    assert.equal(isGeographicCrs("   "), true);
+    assert.equal(isGeographicCrs(undefined), true);
+  });
+
+  it("recognizes WGS84 aliases regardless of case or stray whitespace", () => {
+    assert.equal(isGeographicCrs("EPSG:4326"), true);
+    assert.equal(isGeographicCrs("epsg:4326"), true);
+    assert.equal(isGeographicCrs("EPSG: 4326"), true);
+    assert.equal(isGeographicCrs("OGC:CRS84"), true);
+    assert.equal(isGeographicCrs("urn:ogc:def:crs:OGC:1.3:CRS84"), true);
+  });
+
+  it("treats a projected CRS as non-geographic", () => {
+    assert.equal(isGeographicCrs("EPSG:32643"), false);
+    assert.equal(isGeographicCrs("EPSG:3857"), false);
+    assert.equal(isGeographicCrs("ESRI:102100"), false);
   });
 });
 

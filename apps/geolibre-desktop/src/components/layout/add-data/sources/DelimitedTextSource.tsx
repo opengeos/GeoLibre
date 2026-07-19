@@ -218,7 +218,9 @@ export function DelimitedTextSource() {
             latitudeField: delimitedTextLatitudeField.trim(),
             longitudeField: delimitedTextLongitudeField.trim(),
             skippedRows: result.skippedRows,
-            sourceCrs: sourceCrs || null,
+            // A non-spatial attribute table has no geometry, so a source CRS is
+            // meaningless there; only record it for point layers.
+            sourceCrs: result.isTable ? null : sourceCrs || null,
             sourceKind: "delimited-text",
             totalRows: result.totalRows,
           },
