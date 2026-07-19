@@ -10,9 +10,12 @@ import { isStyleLibraryTargetLayer } from "./style-library";
  * `metadata.sourceKind` marking a deck.gl COG raster managed by the
  * maplibre-gl-raster control. Mirrors `RASTER_SOURCE_KIND` in
  * `@geolibre/plugins` (which `@geolibre/core` must not depend on). The clipboard
- * test imports the real constant from `@geolibre/plugins` and asserts a layer
- * tagged with it classifies as `"raster"`, so a rename of the upstream constant
- * makes the test fail here rather than silently dropping raster copy/paste.
+ * test imports the real constant directly from the module that defines it
+ * (`packages/plugins/src/plugins/raster-layer-sync.ts`, not the package barrel,
+ * whose browser-only plugins crash under the Node test runner) and asserts a
+ * layer tagged with it classifies as `"raster"`, so a rename of the upstream
+ * constant makes the test fail here rather than silently dropping raster
+ * copy/paste.
  */
 const RASTER_SOURCE_KIND = "maplibre-gl-raster";
 
@@ -90,7 +93,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * @returns The style family, or `null`.
  */
 export function copyableLayerStyleKind(layer: GeoLibreLayer): LayerStyleClipboardKind | null {
-  if (layer.metadata?.sourceKind === RASTER_SOURCE_KIND) return "raster";
+  if (layer.metadata.sourceKind === RASTER_SOURCE_KIND) return "raster";
   if (isStyleLibraryTargetLayer(layer.type)) return "vector";
   return null;
 }
@@ -116,8 +119,8 @@ export function extractCopiedLayerStyle(layer: GeoLibreLayer): CopiedLayerStyle 
   }
   // A raster entry never carries the vector `style` bag, so the full-style
   // clone is skipped here.
-  const rasterState = layer.metadata?.rasterState;
-  const rasterSymbology = layer.metadata?.rasterSymbology;
+  const rasterState = layer.metadata.rasterState;
+  const rasterSymbology = layer.metadata.rasterSymbology;
   return {
     kind,
     sourceName: layer.name,
@@ -155,9 +158,7 @@ export function applyCopiedLayerStyle(
   // Merge the appearance keys onto the target's existing rasterState, keeping
   // its own `mode`/`bands`/`index` so the paste restyles the layer without
   // repointing it at the source's band selection.
-  const targetState = isPlainObject(target.metadata?.rasterState)
-    ? target.metadata.rasterState
-    : {};
+  const targetState = isPlainObject(target.metadata.rasterState) ? target.metadata.rasterState : {};
   const source = copied.rasterState ?? {};
   const targetBandCount = Array.isArray(targetState.bands) ? targetState.bands.length : 1;
   const mergedState: Record<string, unknown> = { ...targetState };

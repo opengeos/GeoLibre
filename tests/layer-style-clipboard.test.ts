@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import {
   applyCopiedLayerStyle,
   copyableLayerStyleKind,
+  createEmptyProject,
   DEFAULT_LAYER_STYLE,
   extractCopiedLayerStyle,
   useAppStore,
@@ -290,6 +291,15 @@ describe("store copy/paste actions", () => {
     store.copyLayerStyle("a");
     assert.ok(useAppStore.getState().copiedLayerStyle);
     useAppStore.getState().newProject({ name: "Fresh" });
+    assert.equal(useAppStore.getState().copiedLayerStyle, null);
+  });
+
+  it("clears the clipboard when a project is loaded", () => {
+    const store = useAppStore.getState();
+    store.addLayer(vectorLayer({ id: "a" }));
+    store.copyLayerStyle("a");
+    assert.ok(useAppStore.getState().copiedLayerStyle);
+    useAppStore.getState().loadProject(createEmptyProject("Loaded"));
     assert.equal(useAppStore.getState().copiedLayerStyle, null);
   });
 
