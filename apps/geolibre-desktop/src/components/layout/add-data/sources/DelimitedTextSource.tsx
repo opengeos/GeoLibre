@@ -2,9 +2,9 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Columns3, FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isGeographicCrs } from "../../../../lib/crs-utils";
 import {
   detectCoordinateFields,
-  isGeographicCrs,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "../../../../lib/delimited-text";

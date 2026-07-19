@@ -13,7 +13,7 @@ import {
   stripAutoFidColumn,
   wkbRowsToFeatureCollection,
 } from "./duckdb-geometry";
-import { isGeographicCrs } from "./delimited-text";
+import { isGeographicCrs } from "./crs-utils";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";

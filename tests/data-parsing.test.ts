@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isGeographicCrs } from "../apps/geolibre-desktop/src/lib/crs-utils";
 import {
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
-  isGeographicCrs,
   parseCoordinate,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
@@ -242,6 +242,15 @@ describe("parseCoordinate", () => {
     assert.equal(parseCoordinate("659319,6", { grouped: true }), 659319.6);
     assert.equal(parseCoordinate("659319.6", { grouped: true }), 659319.6);
     assert.equal(parseCoordinate("1,234.56", { grouped: true }), 1234.56);
+  });
+
+  it("resolves the ambiguous small-magnitude grouped value as thousands (documented)", () => {
+    // `45,123` could be 45123 (thousands) or 45.123 (European decimal); it is
+    // indistinguishable from the string alone. Grouped mode deliberately chooses
+    // the large-magnitude reading, which suits UTM/State-Plane coordinates. This
+    // test pins that documented behavior so a future change to the heuristic is
+    // a conscious one.
+    assert.equal(parseCoordinate("45,123", { grouped: true }), 45123);
   });
 });
 
