@@ -36,10 +36,17 @@ export function layerNameFromPath(path: string, fallback: string): string {
  * Normalize a user-entered CRS into the `AUTHORITY:CODE` form `ST_Transform`
  * expects: a bare number becomes `EPSG:<n>`, an `epsg:4326` is upper-cased, and
  * an already-qualified `ESRI:102100` passes through. A blank stays blank (load
- * the data as-is). Shared by the CAD and File Geodatabase sources.
+ * the data as-is). Shared by the CAD, File Geodatabase, and Delimited Text
+ * sources.
+ *
+ * All whitespace is stripped, not just the edges, so a code pasted with a stray
+ * space (e.g. `EPSG: 32643`, common when copied from a site that renders it with
+ * a space) becomes `EPSG:32643` and is handed to PROJ in a form it accepts. This
+ * also keeps the normalized value in agreement with `isGeographicCrs`, which
+ * strips whitespace before classifying.
  */
 export function normalizeCrs(raw: string): string {
-  const value = raw.trim();
+  const value = raw.replace(/\s+/g, "");
   if (!value) return "";
   if (/^\d+$/.test(value)) return `EPSG:${value}`;
   return value.toUpperCase();

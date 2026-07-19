@@ -17,6 +17,7 @@ import {
   wmsVersionFromEndpoint,
   geoJsonToPointRows,
   layerNameFromPath,
+  normalizeCrs,
   parseOptionalNumber,
   parseRequiredNumber,
   parseVideoCorner,
@@ -293,6 +294,24 @@ describe("resolveDelimitedTextDelimiter", () => {
     assert.equal(resolveDelimitedTextDelimiter("comma", ""), ",");
     assert.equal(resolveDelimitedTextDelimiter("tab", ""), "\t");
     assert.equal(resolveDelimitedTextDelimiter("custom", "~"), "~");
+  });
+});
+
+describe("normalizeCrs", () => {
+  it("qualifies a bare code and upper-cases an authority string", () => {
+    assert.equal(normalizeCrs("32643"), "EPSG:32643");
+    assert.equal(normalizeCrs("epsg:4326"), "EPSG:4326");
+    assert.equal(normalizeCrs("esri:102100"), "ESRI:102100");
+  });
+
+  it("returns blank for an empty or whitespace-only value", () => {
+    assert.equal(normalizeCrs(""), "");
+    assert.equal(normalizeCrs("   "), "");
+  });
+
+  it("strips internal whitespace so a pasted `EPSG: 32643` is valid for PROJ", () => {
+    assert.equal(normalizeCrs("EPSG: 32643"), "EPSG:32643");
+    assert.equal(normalizeCrs("  epsg : 4326 "), "EPSG:4326");
   });
 });
 
