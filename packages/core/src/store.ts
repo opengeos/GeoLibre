@@ -478,7 +478,11 @@ export interface AppState {
    * {@link copyLayerStyle} and applied by {@link pasteLayerStyle} (copy/paste
    * styles, issue #1339). Runtime-only: excluded from undo history
    * (`partialize` never lists it) and from the saved project. `null` until a
-   * style is copied this session.
+   * style is copied this session. Cleared by `newProject`/`loadProject` so a
+   * paste can't apply an entry from a different project; it deliberately
+   * survives undo/redo within a project (it holds a deep snapshot, not a live
+   * layer reference, so a paste stays valid even if the source layer is undone
+   * away — only the displayed source name may then be stale).
    */
   copiedLayerStyle: CopiedLayerStyle | null;
   /**

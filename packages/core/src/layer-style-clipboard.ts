@@ -39,27 +39,43 @@ export const RASTER_APPEARANCE_STATE_KEYS = [
   "gamma",
 ] as const;
 
-/**
- * A layer's symbology captured for the paste clipboard. Vector entries apply
- * their whole {@link LayerStyle}; raster entries apply the appearance subset of
- * `rasterState` plus the classification symbology.
- */
-export interface CopiedLayerStyle {
-  /** Style family; a paste target must share it. */
-  kind: LayerStyleClipboardKind;
+/** Fields every clipboard entry carries, regardless of style family. */
+interface CopiedLayerStyleBase {
   /** Source layer name, surfaced in the paste tooltip and status message. */
   sourceName: string;
-  /** Deep-cloned full layer style (vector paint / raster color adjustments). */
-  style: LayerStyle;
   /** Source layer opacity in [0, 1]. */
   opacity: number;
-  /** Raster visualization state (`metadata.rasterState`); raster kind only. */
+}
+
+/** A copied vector layer style: the whole {@link LayerStyle} bag. */
+export interface CopiedVectorStyle extends CopiedLayerStyleBase {
+  kind: "vector";
+  /** Deep-cloned full vector layer style. */
+  style: LayerStyle;
+}
+
+/**
+ * A copied deck.gl raster style: the `metadata.rasterState` appearance and the
+ * classification symbology. There is no `style` field — the vector
+ * {@link LayerStyle} bag holds nothing a deck.gl raster renders from.
+ */
+export interface CopiedRasterStyle extends CopiedLayerStyleBase {
+  kind: "raster";
+  /** Raster visualization state (`metadata.rasterState`). */
   rasterState?: Record<string, unknown>;
-  /** Whether the source carried a `metadata.rasterSymbology`; raster kind only. */
-  hasRasterSymbology?: boolean;
-  /** Raster classification symbology (`metadata.rasterSymbology`); raster kind only. */
+  /** Whether the source carried a `metadata.rasterSymbology`. */
+  hasRasterSymbology: boolean;
+  /** Raster classification symbology (`metadata.rasterSymbology`). */
   rasterSymbology?: unknown;
 }
+
+/**
+ * A layer's symbology captured for the paste clipboard. A discriminated union
+ * on {@link LayerStyleClipboardKind} so raster-only fields cannot be read off a
+ * vector entry (or vice versa); a paste only applies between layers of the same
+ * family.
+ */
+export type CopiedLayerStyle = CopiedVectorStyle | CopiedRasterStyle;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -90,17 +106,22 @@ export function copyableLayerStyleKind(layer: GeoLibreLayer): LayerStyleClipboar
 export function extractCopiedLayerStyle(layer: GeoLibreLayer): CopiedLayerStyle | null {
   const kind = copyableLayerStyleKind(layer);
   if (!kind) return null;
-  const base: CopiedLayerStyle = {
-    kind,
-    sourceName: layer.name,
-    style: structuredClone({ ...DEFAULT_LAYER_STYLE, ...layer.style }),
-    opacity: layer.opacity,
-  };
-  if (kind === "vector") return base;
+  if (kind === "vector") {
+    return {
+      kind,
+      sourceName: layer.name,
+      opacity: layer.opacity,
+      style: structuredClone({ ...DEFAULT_LAYER_STYLE, ...layer.style }),
+    };
+  }
+  // A raster entry never carries the vector `style` bag, so the full-style
+  // clone is skipped here.
   const rasterState = layer.metadata?.rasterState;
   const rasterSymbology = layer.metadata?.rasterSymbology;
   return {
-    ...base,
+    kind,
+    sourceName: layer.name,
+    opacity: layer.opacity,
     rasterState: isPlainObject(rasterState) ? structuredClone(rasterState) : undefined,
     hasRasterSymbology: rasterSymbology !== undefined,
     ...(rasterSymbology !== undefined ? { rasterSymbology: structuredClone(rasterSymbology) } : {}),
@@ -122,6 +143,13 @@ export function applyCopiedLayerStyle(
 ): Partial<GeoLibreLayer> | null {
   if (copyableLayerStyleKind(target) !== copied.kind) return null;
   if (copied.kind === "vector") {
+    // The whole style is applied verbatim, including attribute-bound fields
+    // (`vectorStyleProperty` and its stops/rules, `labels.field`,
+    // `extrusionHeightProperty`, `proportionalSizeProperty`, `diagramFields`).
+    // This is deliberate QGIS "Paste Style" behavior and matches the Style
+    // Manager's full-"style" preset: a target lacking those attributes just
+    // renders that facet inert (no classification / labels), which the user
+    // re-points, rather than the paste silently dropping parts of the style.
     return { style: structuredClone(copied.style), opacity: copied.opacity };
   }
   // Merge the appearance keys onto the target's existing rasterState, keeping
