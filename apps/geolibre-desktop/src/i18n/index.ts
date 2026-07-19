@@ -59,13 +59,23 @@ export async function loadCatalog(code: string): Promise<void> {
 let languageRequestToken = 0;
 
 /**
+ * Serializes the `i18n.changeLanguage` calls. Catalog fetches may finish out of
+ * order, but the actual switches run one at a time in the order they were
+ * issued, so a slower earlier switch can't resolve last and flip the active
+ * language back to a superseded selection. Each queued switch skips itself if a
+ * newer request has already superseded it by the time its turn comes up.
+ */
+let languageSwitchQueue: Promise<void> = Promise.resolve();
+
+/**
  * Load a locale's catalog (if needed) and switch to it, ignoring any request a
  * newer call has since superseded — so rapidly picking two uncached locales
- * can't let a slower earlier fetch clobber the newer selection. Resolves `true`
- * only when this call actually applied the language (callers persist the choice
- * on `true`), `false` when it was superseded. Rejects only when the *latest*
- * request fails — its catalog fetch or the switch itself; a superseded
- * request's failure is swallowed.
+ * can't let a slower earlier request clobber the newer selection (neither the
+ * persisted choice nor the visible language). Resolves `true` only when this
+ * call actually applied the language (callers persist the choice on `true`),
+ * `false` when it was superseded. Rejects only when the *latest* request fails
+ * — its catalog fetch or the switch itself; a superseded request's failure is
+ * swallowed.
  */
 export async function setActiveLanguage(code: string): Promise<boolean> {
   const token = ++languageRequestToken;
@@ -76,14 +86,26 @@ export async function setActiveLanguage(code: string): Promise<boolean> {
     return false;
   }
   if (token !== languageRequestToken) return false;
-  try {
-    await i18n.changeLanguage(code);
-  } catch (error) {
-    // Same contract as the catalog fetch above: only surface the failure if
-    // this is still the latest request; a superseded one's error is swallowed.
-    if (token === languageRequestToken) throw error;
-    return false;
-  }
+
+  // Chain onto the switch queue so overlapping `changeLanguage` calls apply in
+  // issue order rather than resolution order. The queue promise never rejects
+  // (failures are captured below), so the chain always advances.
+  let failure: unknown;
+  const run = languageSwitchQueue.then(async () => {
+    // A newer request superseded this one before its turn — leave the language
+    // to that newer switch.
+    if (token !== languageRequestToken) return;
+    try {
+      await i18n.changeLanguage(code);
+    } catch (error) {
+      // Surface only the latest request's failure; a superseded one's is moot.
+      if (token === languageRequestToken) failure = error;
+    }
+  });
+  languageSwitchQueue = run;
+  await run;
+
+  if (failure) throw failure;
   return token === languageRequestToken;
 }
 
