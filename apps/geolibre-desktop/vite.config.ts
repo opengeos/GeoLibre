@@ -729,8 +729,11 @@ function pwaPlugin(): Plugin[] {
       globPatterns: ["**/*.{js,css,html,woff,woff2}"],
       globIgnores: HEAVY_PRECACHE_IGNORES,
       // deck.gl/vendor shell chunks can run a few MB; allow them into the
-      // precache. MapLibre and the huge binaries are globIgnored above.
-      maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+      // precache. MapLibre and the huge binaries are globIgnored above. The
+      // eager i18n catalog chunk (every locale, bundled at boot so the app
+      // works offline in any language — see src/i18n/index.ts) is the largest
+      // shell entry and grows as translations fill in, so keep headroom here.
+      maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       cleanupOutdatedCaches: true,
       clientsClaim: true,
       skipWaiting: true,
