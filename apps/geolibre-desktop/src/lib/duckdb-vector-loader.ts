@@ -1,5 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
+import { isGeographicCrs } from "./crs-utils";
 import {
   detectGeometryColumn,
   geometryExpr,
@@ -13,7 +14,6 @@ import {
   stripAutoFidColumn,
   wkbRowsToFeatureCollection,
 } from "./duckdb-geometry";
-import { isGeographicCrs } from "./crs-utils";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";

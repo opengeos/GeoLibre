@@ -39,15 +39,23 @@ export function layerNameFromPath(path: string, fallback: string): string {
  * the data as-is). Shared by the CAD, File Geodatabase, and Delimited Text
  * sources.
  *
- * All whitespace is stripped, not just the edges, so a code pasted with a stray
- * space (e.g. `EPSG: 32643`, common when copied from a site that renders it with
- * a space) becomes `EPSG:32643` and is handed to PROJ in a form it accepts. This
- * also keeps the normalized value in agreement with `isGeographicCrs`, which
- * strips whitespace before classifying.
+ * For authority-code input, all whitespace is stripped, not just the edges, so a
+ * code pasted with a stray space (e.g. `EPSG: 32643`, common when copied from a
+ * site that renders it with a space) becomes `EPSG:32643` and is handed to PROJ
+ * in a form it accepts. This also keeps the normalized value in agreement with
+ * `isGeographicCrs`, which strips whitespace before classifying.
+ *
+ * A WKT definition (which `ST_Transform` also accepts) is passed through with
+ * only edge trimming: its internal whitespace and letter case are significant,
+ * so it is detected by its brackets/quotes and left untouched.
  */
 export function normalizeCrs(raw: string): string {
-  const value = raw.replace(/\s+/g, "");
-  if (!value) return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  // A WKT string carries meaningful spaces and casing; compacting or upper-casing
+  // it would corrupt it, so return it as-is once edge-trimmed.
+  if (/[["]/.test(trimmed)) return trimmed;
+  const value = trimmed.replace(/\s+/g, "");
   if (/^\d+$/.test(value)) return `EPSG:${value}`;
   return value.toUpperCase();
 }

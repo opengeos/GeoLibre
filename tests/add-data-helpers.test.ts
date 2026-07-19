@@ -313,6 +313,11 @@ describe("normalizeCrs", () => {
     assert.equal(normalizeCrs("EPSG: 32643"), "EPSG:32643");
     assert.equal(normalizeCrs("  epsg : 4326 "), "EPSG:4326");
   });
+
+  it("passes a WKT definition through untouched (apart from edge trimming)", () => {
+    const wkt = '  GEOGCS["WGS 84",DATUM["WGS_1984"]]  ';
+    assert.equal(normalizeCrs(wkt), 'GEOGCS["WGS 84",DATUM["WGS_1984"]]');
+  });
 });
 
 describe("savedPostgresConnectionLabel", () => {
