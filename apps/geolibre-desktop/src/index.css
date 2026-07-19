@@ -2205,16 +2205,15 @@ body,
   padding-top: 0;
 }
 
-/* The library caps the panel with an inline max-height (500px), which
-   overflows short windows: the panel sits ~50px from the top of the map
-   with overflow hidden, so the bottom is cut off and only the inner
-   content area scrolls within the 500px cap. Clamp the panel to the map
-   height instead so the content scrollbar always reaches the bottom.
-   !important is needed to beat the inline style, and this rule sits
-   after the small-screen media query above so it wins there too. */
-.maplibregl-map .pc-control-panel {
-  max-height: min(500px, calc(100% - 60px)) !important;
-}
+/* No panel max-height override here on purpose. Up to
+   maplibre-gl-planetary-computer 0.3.0 the library pinned an inline
+   max-height of 500px that overflowed short windows, so GeoLibre clamped the
+   panel to the map height with !important. Since 0.4.0 the panel is
+   resizable and content-fit: it sets max-height itself from the live map rect
+   (mapRect.height - offset - margin) whenever it repositions, and drops the
+   cap to "none" while a resize handle is being dragged. Re-adding a static
+   !important cap here would pin the panel to that height and break both --
+   see the 0.4.0 bump in PR #1344. */
 
 .dark .pc-control-toggle {
   background: hsl(var(--popover));

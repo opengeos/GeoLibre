@@ -147,7 +147,7 @@ function createPlanetaryComputerControl(
 
   // updateLayer stores the passed visible/opacity values verbatim before
   // re-emitting "layer:update" (verified against
-  // maplibre-gl-planetary-computer 0.3.0), so the equality checks here and
+  // maplibre-gl-planetary-computer 0.4.0), so the equality checks here and
   // in syncPlanetaryComputerLayersToStore break the store <-> control
   // feedback cycle. When upgrading the library, re-verify that updateLayer
   // does not coerce or round these values; if it ever does, toggling
@@ -609,9 +609,9 @@ function renderedLayerIds(layer: GeoLibreLayer): string[] {
 }
 
 function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
-  // Private API verified against maplibre-gl-planetary-computer 0.3.0. These
+  // Private API verified against maplibre-gl-planetary-computer 0.4.0. These
   // calls are needed so the upstream panel and GeoLibre store see restored
-  // layers that were re-registered with saved IDs. In 0.3.0, _emit constructs
+  // layers that were re-registered with saved IDs. In 0.4.0, _emit constructs
   // PlanetaryComputerEventData from _state.activeLayers synchronously, which is
   // why one "layer:add" emit is enough to reconcile all restored layers.
   const internals = control as unknown as PlanetaryComputerControlInternals;
@@ -708,7 +708,7 @@ type PlanetaryComputerLayerManagerInternals = {
   layers?: Map<string, ActiveLayer>;
 };
 
-// Mirrors private maplibre-gl-planetary-computer 0.3.0 internals used only by
+// Mirrors private maplibre-gl-planetary-computer 0.4.0 internals used only by
 // the restore path. Missing required internals make the affected layer restore
 // fail before any map mutation, so dependency drift does not corrupt control
 // state.
