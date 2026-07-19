@@ -146,8 +146,10 @@ export function parseDelimitedTextLayer(
   const features: Feature<Point, GeoJsonProperties>[] = [];
 
   for (const row of rows.slice(1)) {
-    const latitude = parseCoordinate(row[latitudeIndex]);
-    const longitude = parseCoordinate(row[longitudeIndex]);
+    // For a projected CRS, treat a bare comma as a thousands separator (large
+    // easting/northing) rather than a decimal point.
+    const latitude = parseCoordinate(row[latitudeIndex], { grouped: !geographic });
+    const longitude = parseCoordinate(row[longitudeIndex], { grouped: !geographic });
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       skippedRows += 1;
       continue;
@@ -318,16 +320,38 @@ function findFieldIndex(fields: string[], fieldName: string): number {
  * parses to `1.234`); this is unambiguous for WGS84 coordinates, where a
  * thousands grouping never occurs within the valid +/-180 range.
  *
+ * That last assumption breaks for **projected** coordinates: a UTM easting is
+ * hundreds of thousands to millions of metres, exactly where thousands grouping
+ * occurs, so `"659,319"` means `659319`, not `659.319`. Pass `grouped: true`
+ * (the delimited-text importer sets it for a projected source CRS) so a bare
+ * comma laid out as a thousands group (e.g. `659,319` or `1,234,567`, no decimal
+ * point) is stripped rather than read as a decimal. A comma that is *not* a
+ * valid thousands group (e.g. `659319,6`, a European decimal) still falls
+ * through to the decimal heuristic, so both conventions round-trip correctly.
+ *
  * @param value - The raw coordinate field (may include surrounding whitespace).
+ * @param options - `grouped` marks the value as a projected coordinate, where a
+ *   bare comma is a thousands separator rather than a decimal point.
  * @returns The parsed number, or `NaN` when the value is empty or unparsable.
  */
-export function parseCoordinate(value: string | undefined): number {
+export function parseCoordinate(
+  value: string | undefined,
+  options?: { grouped?: boolean },
+): number {
   const trimmed = (value ?? "").trim();
   if (!trimmed) return Number.NaN;
 
   const lastComma = trimmed.lastIndexOf(",");
   const lastDot = trimmed.lastIndexOf(".");
   if (lastComma < 0 && lastDot < 0) return Number(trimmed);
+
+  // A projected coordinate written with comma thousands separators and no
+  // decimal point (`659,319`, `1,234,567`) is a whole number of metres; strip
+  // the commas. Only a strict thousands layout qualifies, so a European decimal
+  // like `659319,6` is left for the decimal heuristic below.
+  if (options?.grouped && lastDot < 0 && /^-?\d{1,3}(,\d{3})+$/.test(trimmed)) {
+    return Number(trimmed.replaceAll(",", ""));
+  }
 
   const decimalSeparator = lastComma > lastDot ? "," : ".";
   const groupingSeparator = decimalSeparator === "," ? "." : ",";

@@ -226,6 +226,23 @@ describe("parseCoordinate", () => {
     assert.ok(Number.isNaN(parseCoordinate(undefined)));
     assert.ok(Number.isNaN(parseCoordinate("not-a-number")));
   });
+
+  it("reads a bare comma as thousands grouping for projected coordinates", () => {
+    // A UTM easting exported with a thousands separator and no decimal must not
+    // be mistaken for a decimal (659.319); grouped mode strips the commas.
+    assert.equal(parseCoordinate("659,319", { grouped: true }), 659319);
+    assert.equal(parseCoordinate("1,234,567", { grouped: true }), 1234567);
+    // Without grouped mode (WGS84) the historical decimal reading is preserved.
+    assert.equal(parseCoordinate("659,319"), 659.319);
+  });
+
+  it("still reads a European decimal comma for projected coordinates", () => {
+    // `659319,6` is not a valid thousands layout, so it stays a decimal even in
+    // grouped mode; a mixed grouping+decimal value resolves the same way.
+    assert.equal(parseCoordinate("659319,6", { grouped: true }), 659319.6);
+    assert.equal(parseCoordinate("659319.6", { grouped: true }), 659319.6);
+    assert.equal(parseCoordinate("1,234.56", { grouped: true }), 1234.56);
+  });
 });
 
 describe("delimited text auto-detection", () => {
