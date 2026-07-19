@@ -60,3 +60,35 @@ describe("Time Slider open-ended end date persistence", () => {
     assert.equal(apply(config), false);
   });
 });
+
+describe("Time Slider mosaic source persistence", () => {
+  const mosaicSource = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+    type: "mosaic",
+    id: "s2-mosaic",
+    name: "Sentinel-2 Monthly Mosaic",
+    url: "https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json",
+    engine: "wasm",
+    ...overrides,
+  });
+
+  it("round-trips a mosaic source (url + engine) through a save", () => {
+    assert.equal(apply(baseConfig({ sources: [mosaicSource()] })), true);
+    const config = saved();
+    assert.ok(config);
+    const sources = config.sources as Record<string, unknown>[];
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0].type, "mosaic");
+    assert.equal(sources[0].engine, "wasm");
+    assert.equal(
+      sources[0].url,
+      "https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json",
+    );
+  });
+
+  it("rejects a mosaic source whose url is not a plain http(s) URL", () => {
+    assert.equal(
+      apply(baseConfig({ sources: [mosaicSource({ url: "javascript:alert(1)" })] })),
+      false,
+    );
+  });
+});
