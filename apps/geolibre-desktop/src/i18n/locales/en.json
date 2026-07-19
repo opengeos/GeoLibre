@@ -474,7 +474,7 @@
       "crs": "Coordinate system",
       "crsPlaceholder": "e.g. EPSG:32643",
       "crsPresetLabel": "Common coordinate systems...",
-      "crsHelp": "Leave blank if the coordinates are already longitude/latitude (WGS84). Otherwise enter the EPSG code of the coordinate columns and the points will be reprojected to WGS84."
+      "crsHelp": "Leave blank if the coordinates are already longitude/latitude (WGS84). Otherwise enter the EPSG code of the coordinate columns and the points will be reprojected to WGS84. For a projected CRS, the longitude and latitude fields select the X (easting) and Y (northing) columns."
     },
     "photos": {
       "defaultName": "Photos",

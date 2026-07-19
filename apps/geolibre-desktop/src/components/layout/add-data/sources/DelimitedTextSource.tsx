@@ -61,10 +61,21 @@ export function DelimitedTextSource() {
     setDelimitedTextColumnsStatus(null);
   };
 
+  // Clear the entered CRS whenever the underlying data source changes (new file,
+  // new URL, mode switch, sample). A projected CRS disables the lon/lat bounds
+  // check in parseDelimitedTextLayer, so a code left over from a previous file
+  // would silently reinterpret the next (possibly WGS84) file's coordinates as
+  // easting/northing and reproject them into nonsense with no validation error.
+  // Deliberately not called on a delimiter tweak, which keeps the same file.
+  const resetDelimitedTextCrs = () => {
+    setDelimitedTextCrs("");
+  };
+
   const handleDelimitedTextModeChange = (mode: DelimitedTextMode) => {
     setDelimitedTextMode(mode);
     setSelectedDelimitedText(null);
     resetDelimitedTextColumns();
+    resetDelimitedTextCrs();
   };
 
   const readDelimitedTextSource = async (): Promise<{
@@ -114,6 +125,7 @@ export function DelimitedTextSource() {
         text: result.text,
       });
       resetDelimitedTextColumns();
+      resetDelimitedTextCrs();
       source.setLayerName((current) =>
         current.trim() && current !== defaultName
           ? current
@@ -297,6 +309,7 @@ export function DelimitedTextSource() {
               onChange={(event) => {
                 setDelimitedTextUrl(event.target.value);
                 resetDelimitedTextColumns();
+                resetDelimitedTextCrs();
               }}
             />
           </div>
@@ -437,7 +450,7 @@ export function DelimitedTextSource() {
             setDelimitedTextCustomDelimiter("");
             // The sample is WGS84 lon/lat, so clear any projected CRS the user
             // may have entered; otherwise it would reproject correct coordinates.
-            setDelimitedTextCrs("");
+            resetDelimitedTextCrs();
             setDelimitedTextUrl(url);
           }}
         />
