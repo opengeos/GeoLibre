@@ -3,7 +3,7 @@
 // module holds the UI-free data layer so both the desktop app and tests consume
 // the same extract/apply logic.
 
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle, type LayerType } from "./types";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "./types";
 import { isStyleLibraryTargetLayer } from "./style-library";
 
 /**
@@ -45,9 +45,7 @@ export const RASTER_APPEARANCE_STATE_KEYS = [
 export interface CopiedLayerStyle {
   /** Style family; a paste target must share it. */
   kind: LayerStyleClipboardKind;
-  /** Source layer type, shown in the paste menu tooltip. */
-  sourceType: LayerType;
-  /** Source layer name, shown when confirming the copy. */
+  /** Source layer name, surfaced in the paste tooltip and status message. */
   sourceName: string;
   /** Deep-cloned full layer style (vector paint / raster color adjustments). */
   style: LayerStyle;
@@ -92,7 +90,6 @@ export function extractCopiedLayerStyle(layer: GeoLibreLayer): CopiedLayerStyle 
   if (!kind) return null;
   const base: CopiedLayerStyle = {
     kind,
-    sourceType: layer.type,
     sourceName: layer.name,
     style: structuredClone({ ...DEFAULT_LAYER_STYLE, ...layer.style }),
     opacity: layer.opacity,

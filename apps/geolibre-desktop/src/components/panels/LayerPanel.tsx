@@ -799,7 +799,7 @@ export function LayerPanel({
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
-        [layer.id]: { type: "success", message: t("layers.styleCopied") },
+        [layer.id]: { type: "success", message: t("layers.styleCopied", { name: layer.name }) },
       }));
       scheduleStatusClear(layer.id);
     },
@@ -808,11 +808,14 @@ export function LayerPanel({
 
   const handlePasteStyle = useCallback(
     (layer: GeoLibreLayer) => {
+      // Read the source name before pasting; the message names the layer the
+      // clipboard style came from.
+      const sourceName = useAppStore.getState().copiedLayerStyle?.sourceName ?? "";
       pasteLayerStyle(layer.id);
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
-        [layer.id]: { type: "success", message: t("layers.stylePasted") },
+        [layer.id]: { type: "success", message: t("layers.stylePasted", { name: sourceName }) },
       }));
       scheduleStatusClear(layer.id);
     },
@@ -2812,6 +2815,13 @@ export function LayerPanel({
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 disabled={!canPasteStyle}
+                                title={
+                                  canPasteStyle && copiedLayerStyle
+                                    ? t("layers.pasteStyleFrom", {
+                                        name: copiedLayerStyle.sourceName,
+                                      })
+                                    : undefined
+                                }
                                 onSelect={() => {
                                   handlePasteStyle(layer);
                                 }}

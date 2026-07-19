@@ -1687,6 +1687,9 @@ export const useAppStore = create<AppState>()(
           selectedFeatureId: null,
           selectedFeatureIds: [],
           identifyLayerId: null,
+          // The copied style names a layer from the previous project, so a
+          // paste in the new one would apply an orphaned entry.
+          copiedLayerStyle: null,
           pointerCoords: null,
           attributeFilter: "",
           // Don't carry an active story presentation into a different project.
@@ -1727,6 +1730,9 @@ export const useAppStore = create<AppState>()(
           selectedFeatureId: null,
           selectedFeatureIds: [],
           identifyLayerId: null,
+          // The copied style names a layer from the previous project, so a
+          // paste in the loaded one would apply an orphaned entry.
+          copiedLayerStyle: null,
           // Present a bundled story on load; otherwise drop any presentation
           // carried over from the previous project.
           ui: {
