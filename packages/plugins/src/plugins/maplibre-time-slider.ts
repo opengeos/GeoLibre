@@ -131,6 +131,11 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
   name: "Time Slider",
   version: "1.0.3",
+  // The dock's `collapsed` flag round-trips through getProjectState /
+  // configToOptions, so the restored config decides whether it opens. Without
+  // this the host's restore-time collapse sweep hid the dock entirely (its
+  // collapsed style is `display: none`) even for a project saved expanded.
+  restoresPanelCollapseState: true,
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
     const control = new TimeSliderControl(

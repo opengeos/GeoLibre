@@ -733,6 +733,37 @@ describe("PluginManager panel auto-expand on restore", () => {
     );
   });
 
+  it("leaves a plugin that persists its own collapsed state expanded", async () => {
+    const manager = new PluginManager();
+    const control = fakeControl();
+    const addMapControl = () => true;
+    const mockApp = { addMapControl } as unknown as GeoLibreAppAPI;
+    // The Time Slider dock: its `collapsed` flag round-trips through the saved
+    // project, so the restore sweep must not force it shut. Its collapsed style
+    // is `display: none`, so collapsing it here hid the dock outright (#1346).
+    manager.register({
+      ...panelPlugin("time-slider", control),
+      restoresPanelCollapseState: true,
+    });
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["time-slider"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      mockApp,
+    );
+
+    await flushTimers();
+    assert.equal(
+      control.collapsed,
+      false,
+      "a plugin that restores its own collapsed state must keep the panel the project saved as open",
+    );
+  });
+
   it("collapses panels added by an async activation", async () => {
     const manager = new PluginManager();
     const control = fakeControl();

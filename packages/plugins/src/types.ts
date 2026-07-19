@@ -648,6 +648,21 @@ export interface GeoLibrePlugin {
   ) => boolean | void;
   getProjectState?: () => unknown;
   applyProjectState?: (app: GeoLibreAppAPI, state: unknown) => boolean | void;
+  /**
+   * Set when the plugin persists its own panel open/collapsed state through
+   * getProjectState/applyProjectState.
+   *
+   * The project-restore pass collapses every control it adds so a loaded
+   * project does not bury the map under expanded panels (#952). That heuristic
+   * is right for panels which auto-expand on activation and carry no saved
+   * state, but wrong for a plugin whose collapsed state is part of the project:
+   * the blanket collapse overrides the user's saved `collapsed: false` and,
+   * because collapsing mutates the control's live state, a later re-save writes
+   * the collapsed state back into the project file. Declaring this opts out of
+   * the sweep — the restored config is then the only thing deciding whether the
+   * panel opens.
+   */
+  restoresPanelCollapseState?: boolean;
 }
 
 export interface GeoLibreExternalPluginManifest {

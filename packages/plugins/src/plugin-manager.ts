@@ -357,8 +357,14 @@ export class PluginManager {
         setTimeout(() => collapsible.collapse?.(), 0);
       }, 0);
     };
+    // A plugin that persists its own collapsed state is exempt: the saved
+    // project already says whether its panel should be open, and collapsing it
+    // here would both override that and (since collapse() mutates the control)
+    // write the collapsed state back on the next save.
     const scopeForRestore = (id: string): GeoLibreAppAPI =>
-      scopeAppToPlugin(app, id, { onControlAdded: collapseRestoredPanel });
+      this.plugins.get(id)?.restoresPanelCollapseState
+        ? scopeAppToPlugin(app, id)
+        : scopeAppToPlugin(app, id, { onControlAdded: collapseRestoredPanel });
 
     // Deactivate first so plugins that should be inactive tear down their live
     // controls before we touch positions or settings. This keeps the order of
