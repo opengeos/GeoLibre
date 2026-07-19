@@ -19,7 +19,8 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
-import { Loader2, MapPin, Search, X } from "lucide-react";
+import { Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
+import { formatLatLon, parseLatLon } from "../../lib/coordinates";
 
 interface LayerPanelPlaceSearchProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -49,6 +50,9 @@ export function LayerPanelPlaceSearch({
   const geocodingPrefs = useAppStore((s) => s.preferences.geocoding);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeMatch[]>([]);
+  // True when the single result is a parsed lat/lon jump rather than a geocoder
+  // match, so the row is labeled and iconed as a coordinate instead of a place.
+  const [isCoordinate, setIsCoordinate] = useState(false);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -84,6 +88,7 @@ export function LayerPanelPlaceSearch({
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      setIsCoordinate(false);
       setStatus("loading");
       setActiveIndex(-1);
       setOpen(true);
@@ -116,8 +121,25 @@ export function LayerPanelPlaceSearch({
       abortRef.current?.abort();
       setResults([]);
       setActiveIndex(-1);
+      setIsCoordinate(false);
       setStatus("idle");
       setOpen(false);
+      return;
+    }
+    // Coordinate short-circuit: a query that parses as lat/lon (DD, DMS, or DDM)
+    // becomes a direct "go to coordinate" jump, resolved instantly with no
+    // geocoder round-trip so the exact point (not the nearest named place) is
+    // used. Cancel any in-flight forward-geocode from a previous keystroke.
+    const coord = parseLatLon(trimmed);
+    if (coord) {
+      abortRef.current?.abort();
+      setResults([
+        { lat: coord.lat, lon: coord.lon, displayName: formatLatLon(coord), score: null },
+      ]);
+      setActiveIndex(0);
+      setIsCoordinate(true);
+      setStatus("idle");
+      setOpen(true);
       return;
     }
     const handle = setTimeout(() => {
@@ -146,6 +168,7 @@ export function LayerPanelPlaceSearch({
       setQuery(match.displayName);
       setResults([]);
       setActiveIndex(-1);
+      setIsCoordinate(false);
       setStatus("idle");
       setOpen(false);
     },
@@ -159,6 +182,7 @@ export function LayerPanelPlaceSearch({
     setQuery("");
     setResults([]);
     setActiveIndex(-1);
+    setIsCoordinate(false);
     setStatus("idle");
     setOpen(false);
   }, []);
@@ -202,8 +226,18 @@ export function LayerPanelPlaceSearch({
                     }}
                     onMouseEnter={() => setActiveIndex(index)}
                   >
-                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="line-clamp-2">{match.displayName}</span>
+                    {isCoordinate ? (
+                      <LocateFixed className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="line-clamp-2">
+                      {isCoordinate
+                        ? t("layers.searchPlacesGoToCoordinate", {
+                            coordinate: match.displayName,
+                          })
+                        : match.displayName}
+                    </span>
                   </button>
                 </li>
               ))}

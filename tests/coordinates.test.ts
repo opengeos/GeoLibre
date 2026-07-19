@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseLatLon } from "../apps/geolibre-desktop/src/lib/coordinates";
+import { formatLatLon, parseLatLon } from "../apps/geolibre-desktop/src/lib/coordinates";
 
 /** Assert a parsed coordinate is close to the expected lat/lon. */
 function assertClose(
@@ -93,5 +93,23 @@ describe("parseLatLon — rejection", () => {
 
   it("returns null for decimal degrees with trailing minutes/seconds", () => {
     assert.equal(parseLatLon(`51.5 30 26N, 0 7 39W`), null);
+  });
+});
+
+describe("formatLatLon", () => {
+  it("formats a decimal-degree coordinate as `lat, lon`", () => {
+    assert.equal(formatLatLon({ lat: 51.5074, lon: -0.1278 }), "51.5074, -0.1278");
+  });
+
+  it("rounds to at most 6 decimals and drops trailing zeros", () => {
+    assert.equal(
+      formatLatLon({ lat: 35.4753170123, lon: -97.5 }),
+      "35.475317, -97.5",
+    );
+  });
+
+  it("round-trips through parseLatLon", () => {
+    const formatted = formatLatLon({ lat: 40.7128, lon: -74.006 });
+    assertClose(parseLatLon(formatted), 40.7128, -74.006);
   });
 });

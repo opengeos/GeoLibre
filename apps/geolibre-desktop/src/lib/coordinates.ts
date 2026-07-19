@@ -120,3 +120,16 @@ export function parseLatLon(input: string): LatLon | null {
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
   return { lat, lon };
 }
+
+/**
+ * Format a decimal-degree coordinate as a compact `lat, lon` string for display,
+ * rounding each axis to at most 6 decimal places (~0.1 m) and dropping trailing
+ * zeros. Used by the place-search box to label a direct "go to coordinate" jump.
+ *
+ * @param coord The coordinate to format.
+ * @returns A string such as `51.5074, -0.1278`.
+ */
+export function formatLatLon({ lat, lon }: LatLon): string {
+  const round = (value: number): string => Number(value.toFixed(6)).toString();
+  return `${round(lat)}, ${round(lon)}`;
+}
