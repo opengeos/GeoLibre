@@ -484,15 +484,18 @@ export interface AppState {
   /**
    * Snapshot the given layer's style into {@link copiedLayerStyle} so it can be
    * pasted onto a compatible layer. No-op when the layer is missing or has no
-   * copyable symbology (leaving any prior clipboard entry untouched).
+   * copyable symbology (leaving any prior clipboard entry untouched). Returns
+   * `true` when a style was captured, so callers can skip the confirmation on a
+   * no-op.
    */
-  copyLayerStyle: (id: string) => void;
+  copyLayerStyle: (id: string) => boolean;
   /**
    * Apply the {@link copiedLayerStyle} clipboard entry onto the given layer.
    * No-op when the clipboard is empty, the layer is missing, or the entry's
-   * style family does not match the target layer's.
+   * style family does not match the target layer's. Returns `true` when the
+   * style was applied, so callers can skip the confirmation on a no-op.
    */
-  pasteLayerStyle: (id: string) => void;
+  pasteLayerStyle: (id: string) => boolean;
   /**
    * Replace a layer's persistent attribute joins and immediately re-derive its
    * joined columns (strip what the previous joins added, apply the new list).
@@ -1395,30 +1398,31 @@ export const useAppStore = create<AppState>()(
           isDirty: true,
         })),
 
-      copyLayerStyle: (id) =>
-        set((s) => {
-          const layer = s.layers.find((l) => l.id === id);
-          if (!layer) return s;
-          const copied = extractCopiedLayerStyle(layer);
-          // Leave any prior clipboard entry in place when this layer is not
-          // copyable, so opening a non-stylable layer's menu never clears it.
-          if (!copied) return s;
-          return { copiedLayerStyle: copied };
-        }),
+      copyLayerStyle: (id) => {
+        const layer = get().layers.find((l) => l.id === id);
+        if (!layer) return false;
+        const copied = extractCopiedLayerStyle(layer);
+        // Leave any prior clipboard entry in place when this layer is not
+        // copyable, so opening a non-stylable layer's menu never clears it.
+        if (!copied) return false;
+        set({ copiedLayerStyle: copied });
+        return true;
+      },
 
-      pasteLayerStyle: (id) =>
-        set((s) => {
-          const copied = s.copiedLayerStyle;
-          if (!copied) return s;
-          const layer = s.layers.find((l) => l.id === id);
-          if (!layer) return s;
-          const patch = applyCopiedLayerStyle(layer, copied);
-          if (!patch) return s;
-          return {
-            layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-            isDirty: true,
-          };
-        }),
+      pasteLayerStyle: (id) => {
+        const s = get();
+        const copied = s.copiedLayerStyle;
+        if (!copied) return false;
+        const layer = s.layers.find((l) => l.id === id);
+        if (!layer) return false;
+        const patch = applyCopiedLayerStyle(layer, copied);
+        if (!patch) return false;
+        set({
+          layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+          isDirty: true,
+        });
+        return true;
+      },
 
       reorderLayer: (id, direction) =>
         set((s) => {

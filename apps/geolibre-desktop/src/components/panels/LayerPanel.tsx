@@ -795,7 +795,9 @@ export function LayerPanel({
 
   const handleCopyStyle = useCallback(
     (layer: GeoLibreLayer) => {
-      copyLayerStyle(layer.id);
+      // Only confirm when a style was actually captured; the action no-ops on a
+      // non-copyable layer.
+      if (!copyLayerStyle(layer.id)) return;
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
@@ -811,7 +813,9 @@ export function LayerPanel({
       // Read the source name before pasting; the message names the layer the
       // clipboard style came from.
       const sourceName = useAppStore.getState().copiedLayerStyle?.sourceName ?? "";
-      pasteLayerStyle(layer.id);
+      // Only confirm when the style was actually applied; the action no-ops on
+      // an empty clipboard or a family mismatch.
+      if (!pasteLayerStyle(layer.id)) return;
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,

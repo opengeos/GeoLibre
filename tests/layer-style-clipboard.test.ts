@@ -8,11 +8,12 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-
-// Mirrors RASTER_SOURCE_KIND in @geolibre/plugins; the clipboard module inlines
-// the same literal (core must not depend on plugins). If this string ever
-// drifts from the plugins constant, the raster-kind tests here go red.
-const RASTER_SOURCE_KIND = "maplibre-gl-raster";
+// The real constant `@geolibre/core`'s clipboard module inlines as a literal
+// (core must not depend on plugins). Importing it here — not re-declaring it —
+// makes the raster fixtures fail if the two ever drift. Pulled from the module
+// that defines it rather than the package barrel, whose browser-only plugins
+// (earth-engine, ...) do not load under the Node test runner.
+import { RASTER_SOURCE_KIND } from "../packages/plugins/src/plugins/raster-layer-sync";
 
 function vectorLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   return {
@@ -207,6 +208,46 @@ describe("applyCopiedLayerStyle", () => {
     assert.ok(patch);
     assert.equal("rasterSymbology" in (patch.metadata as Record<string, unknown>), false);
   });
+
+  it("skips rescale when the source and target band counts differ", () => {
+    // An RGB source carries a 3-entry rescale; a single-band target expects 1.
+    const copied = extractCopiedLayerStyle(
+      rasterLayer({
+        metadata: {
+          sourceKind: RASTER_SOURCE_KIND,
+          rasterState: {
+            mode: "rgb",
+            bands: [1, 2, 3],
+            colormap: "gray",
+            rescale: [
+              [0, 255],
+              [0, 255],
+              [0, 255],
+            ],
+          },
+        },
+      }),
+    );
+    assert.ok(copied);
+    const target = rasterLayer({
+      id: "target",
+      metadata: {
+        sourceKind: RASTER_SOURCE_KIND,
+        rasterState: { mode: "single", bands: [1], colormap: "viridis", rescale: [[10, 90]] },
+      },
+    });
+    const patch = applyCopiedLayerStyle(target, copied);
+    assert.ok(patch);
+    const state = (patch.metadata as Record<string, unknown>).rasterState as Record<
+      string,
+      unknown
+    >;
+    // Colormap (shape-independent) is carried over, but the mismatched rescale
+    // is not — the target keeps its own single-band stretch.
+    assert.equal(state.colormap, "gray");
+    assert.deepEqual(state.rescale, [[10, 90]]);
+    assert.deepEqual(state.bands, [1]);
+  });
 });
 
 describe("store copy/paste actions", () => {
@@ -221,13 +262,35 @@ describe("store copy/paste actions", () => {
     );
     store.addLayer(vectorLayer({ id: "b" }));
 
-    store.copyLayerStyle("a");
+    assert.equal(store.copyLayerStyle("a"), true);
     assert.equal(useAppStore.getState().copiedLayerStyle?.kind, "vector");
 
-    store.pasteLayerStyle("b");
+    assert.equal(store.pasteLayerStyle("b"), true);
     const pasted = useAppStore.getState().layers.find((l) => l.id === "b");
     assert.equal(pasted?.style.fillColor, "#abcdef");
     assert.equal(useAppStore.getState().isDirty, true);
+  });
+
+  it("reports a no-op copy or paste with a false return", () => {
+    const store = useAppStore.getState();
+    store.addLayer(vectorLayer({ id: "vec" }));
+    store.addLayer(vectorLayer({ id: "xyz", type: "xyz", metadata: {} }));
+
+    assert.equal(store.copyLayerStyle("xyz"), false); // not copyable
+    assert.equal(store.copyLayerStyle("missing"), false); // no such layer
+    assert.equal(store.pasteLayerStyle("vec"), false); // empty clipboard
+
+    assert.equal(store.copyLayerStyle("vec"), true);
+    assert.equal(store.pasteLayerStyle("missing"), false); // no such target
+  });
+
+  it("clears the clipboard when a new project starts", () => {
+    const store = useAppStore.getState();
+    store.addLayer(vectorLayer({ id: "a" }));
+    store.copyLayerStyle("a");
+    assert.ok(useAppStore.getState().copiedLayerStyle);
+    useAppStore.getState().newProject({ name: "Fresh" });
+    assert.equal(useAppStore.getState().copiedLayerStyle, null);
   });
 
   it("leaves a non-copyable layer's request as a no-op without clearing the clipboard", () => {

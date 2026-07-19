@@ -9,8 +9,10 @@ import { isStyleLibraryTargetLayer } from "./style-library";
 /**
  * `metadata.sourceKind` marking a deck.gl COG raster managed by the
  * maplibre-gl-raster control. Mirrors `RASTER_SOURCE_KIND` in
- * `@geolibre/plugins` (which `@geolibre/core` must not depend on); kept in sync
- * by the `"maps a raster layer to the raster kind"` clipboard test.
+ * `@geolibre/plugins` (which `@geolibre/core` must not depend on). The clipboard
+ * test imports the real constant from `@geolibre/plugins` and asserts a layer
+ * tagged with it classifies as `"raster"`, so a rename of the upstream constant
+ * makes the test fail here rather than silently dropping raster copy/paste.
  */
 const RASTER_SOURCE_KIND = "maplibre-gl-raster";
 
@@ -129,9 +131,25 @@ export function applyCopiedLayerStyle(
     ? target.metadata.rasterState
     : {};
   const source = copied.rasterState ?? {};
+  const targetBandCount = Array.isArray(targetState.bands) ? targetState.bands.length : 1;
   const mergedState: Record<string, unknown> = { ...targetState };
   for (const key of RASTER_APPEARANCE_STATE_KEYS) {
-    if (key in source) mergedState[key] = structuredClone(source[key]);
+    if (!(key in source)) continue;
+    // `rescale` is a per-band min/max array sized to the source's band count.
+    // Copying it onto a target with a different band count (e.g. an RGB source
+    // onto a single-band target) would leave a rescale whose length disagrees
+    // with the preserved `bands` — the same "band it does not have" hazard the
+    // mode/bands preservation above avoids, one level down. Skip it then and
+    // let the target keep its own stretch. A null source rescale (auto) is safe
+    // to carry over regardless.
+    if (
+      key === "rescale" &&
+      Array.isArray(source.rescale) &&
+      source.rescale.length !== targetBandCount
+    ) {
+      continue;
+    }
+    mergedState[key] = structuredClone(source[key]);
   }
   const metadata: Record<string, unknown> = { ...target.metadata, rasterState: mergedState };
   if (copied.hasRasterSymbology) {
