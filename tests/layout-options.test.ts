@@ -28,6 +28,7 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.layerPanelVisible, true);
     assert.equal(options.stylePanelVisible, true);
     assert.equal(options.attributePanelVisible, true);
+    assert.equal(options.panelsHidden, false);
   });
 
   it("hides every chrome element when maponly is set as a bare flag", () => {
@@ -38,6 +39,9 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.layerPanelVisible, false);
     assert.equal(options.stylePanelVisible, false);
     assert.equal(options.attributePanelVisible, false);
+    // Gates the whole side dock (plugin/Browser panels + shared rail), not just
+    // the built-in Layers/Style panels.
+    assert.equal(options.panelsHidden, true);
   });
 
   it("accepts truthy maponly values", () => {
@@ -61,6 +65,7 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.layerPanelVisible, true);
     assert.equal(options.stylePanelVisible, true);
     assert.equal(options.attributePanelVisible, true);
+    assert.equal(options.panelsHidden, false);
   });
 
   it("ignores maponly with a non-truthy value", () => {
@@ -69,6 +74,7 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.toolbarVisible, true);
     assert.equal(options.statusBarVisible, true);
     assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.panelsHidden, false);
   });
 
   it("leaves the toolbar and status bar visible for panels=none", () => {
@@ -79,5 +85,6 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.layerPanelVisible, false);
     assert.equal(options.stylePanelVisible, false);
     assert.equal(options.attributePanelVisible, false);
+    assert.equal(options.panelsHidden, true);
   });
 });
