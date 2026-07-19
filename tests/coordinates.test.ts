@@ -102,10 +102,7 @@ describe("formatLatLon", () => {
   });
 
   it("rounds to at most 6 decimals and drops trailing zeros", () => {
-    assert.equal(
-      formatLatLon({ lat: 35.4753170123, lon: -97.5 }),
-      "35.475317, -97.5",
-    );
+    assert.equal(formatLatLon({ lat: 35.4753170123, lon: -97.5 }), "35.475317, -97.5");
   });
 
   it("round-trips through parseLatLon", () => {
