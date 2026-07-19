@@ -134,11 +134,13 @@ export const MAX_SAVED_SERVICES = 200;
 // Last File Geodatabase (and feature class) added through the GDB source, so
 // reopening the panel restores the selection instead of starting blank.
 export const LAST_GEODATABASE_STORAGE_KEY = "geolibre.lastGeodatabase";
-// A short list of common coordinate systems offered as quick presets in the Add
-// CAD Layer dialog (CAD files carry no CRS of their own, so the user names one).
-// The labels are CRS proper names and stay untranslated; selecting one fills the
-// free-text EPSG field, which remains the source of truth.
-export const CAD_CRS_PRESETS: readonly { label: string; value: string }[] = [
+// A short list of common coordinate systems offered as quick presets wherever a
+// source CRS is named by hand: the Add CAD Layer dialog (CAD files carry no CRS
+// of their own) and the Add Delimited Text Layer dialog (a CSV's coordinate
+// columns may be in any CRS). The labels are CRS proper names and stay
+// untranslated; selecting one fills the free-text EPSG field, which remains the
+// source of truth.
+export const COMMON_CRS_PRESETS: readonly { label: string; value: string }[] = [
   { label: "WGS 84 (EPSG:4326)", value: "EPSG:4326" },
   { label: "Web Mercator (EPSG:3857)", value: "EPSG:3857" },
   { label: "NAD83 (EPSG:4269)", value: "EPSG:4269" },

@@ -11,7 +11,7 @@ import {
 import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import {
-  CAD_CRS_PRESETS,
+  COMMON_CRS_PRESETS,
   DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD,
   DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD,
   DEFAULT_DELIMITED_TEXT_URL,
@@ -412,7 +412,7 @@ export function DelimitedTextSource() {
             <option value="" disabled>
               {t("addData.delimitedText.crsPresetLabel")}
             </option>
-            {CAD_CRS_PRESETS.map((preset) => (
+            {COMMON_CRS_PRESETS.map((preset) => (
               <option key={preset.value} value={preset.value}>
                 {preset.label}
               </option>

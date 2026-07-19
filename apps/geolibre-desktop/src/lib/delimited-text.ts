@@ -55,7 +55,11 @@ export function parseDelimitedTextFields(text: string, delimiter: string): strin
  * @returns `true` for a blank/WGS84 CRS, `false` for any other declared CRS.
  */
 export function isGeographicCrs(crs: string | undefined): boolean {
-  const value = (crs ?? "").trim().toUpperCase();
+  // Strip all whitespace before matching so a free-text CRS with a stray space
+  // (e.g. `EPSG: 4326`) is still recognized as WGS84 rather than mistaken for a
+  // projected CRS, which would skip the lon/lat bounds check and trigger a
+  // needless reprojection round-trip.
+  const value = (crs ?? "").replace(/\s+/g, "").toUpperCase();
   if (!value) return true;
   return value.includes("CRS84") || /EPSG:+4326\b/.test(value);
 }

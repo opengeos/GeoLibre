@@ -13,6 +13,7 @@ import {
   stripAutoFidColumn,
   wkbRowsToFeatureCollection,
 } from "./duckdb-geometry";
+import { isGeographicCrs } from "./delimited-text";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
@@ -818,7 +819,9 @@ function sourceCrsFromGeoJson(fc: FeatureCollection): string | null {
   if (typeof name !== "string") return null;
   const upper = name.toUpperCase();
   // CRS84 and EPSG:4326 are both WGS84 lon/lat; no reprojection is required.
-  if (upper.includes("CRS84") || /EPSG:+4326\b/.test(upper)) return null;
+  // Shares the WGS84 test with the delimited-text importer so the rule lives in
+  // one place.
+  if (isGeographicCrs(name)) return null;
   const match = upper.match(/EPSG:+(\d+)/);
   return match ? `EPSG:${match[1]}` : null;
 }

@@ -9,7 +9,7 @@ import {
   readCadLayers,
 } from "../../../../lib/duckdb-vector-loader";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
-import { CAD_CRS_PRESETS, CAD_SAMPLES } from "../constants";
+import { COMMON_CRS_PRESETS, CAD_SAMPLES } from "../constants";
 import {
   createBaseLayer,
   errorMessage,
@@ -273,7 +273,7 @@ export function CadSource() {
             <option value="" disabled>
               {t("addData.cad.crsPresetLabel")}
             </option>
-            {CAD_CRS_PRESETS.map((preset) => (
+            {COMMON_CRS_PRESETS.map((preset) => (
               <option key={preset.value} value={preset.value}>
                 {preset.label}
               </option>
