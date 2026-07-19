@@ -1,7 +1,7 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AVAILABLE_LANGUAGES, loadCatalog } from "../i18n";
+import { AVAILABLE_LANGUAGES, setActiveLanguage } from "../i18n";
 import {
   DEFAULT_LANGUAGE,
   languageOptions,
@@ -32,41 +32,29 @@ const OPTIONS = languageOptions(AVAILABLE_LANGUAGES);
 export function useLanguage(): UseLanguageResult {
   const { i18n } = useTranslation();
   const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
-  // The most recently requested language. Rapidly picking two uncached locales
-  // races their lazy catalog fetches; without this guard a slower earlier fetch
-  // could resolve last and clobber the newer selection.
-  const latestRequestRef = useRef<string | null>(null);
 
   const setLanguage = useCallback(
     (code: string) => {
-      latestRequestRef.current = code;
-      // Import the target locale's lazy catalog chunk before switching, then
-      // persist only after the language has actually switched — so a catalog
-      // that fails to load leaves neither the UI nor the persisted setting on a
-      // language with no strings. English is bundled, so switching to it needs
-      // no fetch.
-      loadCatalog(code)
-        .then(() => {
-          // A newer selection superseded this one while its catalog loaded —
-          // drop this stale request so it can't override the latest choice.
-          if (latestRequestRef.current !== code) return undefined;
-          return i18n.changeLanguage(code);
-        })
-        .then(() => {
-          if (latestRequestRef.current !== code) return;
+      // `setActiveLanguage` lazily imports the target locale's catalog before
+      // switching and applies the module-scope "latest request wins" guard, so
+      // rapidly picking two uncached locales can't let a slower earlier fetch
+      // clobber the newer selection. It resolves `true` only when this call
+      // actually applied the language — persist the choice only then, so a
+      // superseded or failed switch leaves neither the UI nor the setting on a
+      // language with no strings.
+      setActiveLanguage(code)
+        .then((applied) => {
+          if (!applied) return;
           const current = useDesktopSettingsStore.getState().desktopSettings;
           setDesktopSettings({ ...current, language: code });
         })
         .catch((error: unknown) => {
-          // A newer selection already superseded this one — its failure is for an
-          // abandoned request and not worth surfacing.
-          if (latestRequestRef.current !== code) return;
-          // Keep the current language (its catalog is still loaded) rather than
-          // switch to an empty one; surface the failed fetch.
+          // Only the latest request's genuine fetch failure rejects here; keep
+          // the current language (its catalog is still loaded) and surface it.
           console.error("[GeoLibre] Failed to change language", error);
         });
     },
-    [i18n, setDesktopSettings],
+    [setDesktopSettings],
   );
 
   // i18n.language can be a full tag (e.g. `en-US`); reuse the shared resolver to

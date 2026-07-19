@@ -50,6 +50,35 @@ export async function loadCatalog(code: string): Promise<void> {
   i18n.addResourceBundle(code, "translation", mod.default, true, true);
 }
 
+/**
+ * Monotonic token for the most recent `setActiveLanguage` call. Kept at module
+ * scope (not in a hook's ref) so the "latest request wins" guard holds across
+ * *every* caller — multiple components, or a remount — not just one hook
+ * instance.
+ */
+let languageRequestToken = 0;
+
+/**
+ * Load a locale's catalog (if needed) and switch to it, ignoring any request a
+ * newer call has since superseded — so rapidly picking two uncached locales
+ * can't let a slower earlier fetch clobber the newer selection. Resolves `true`
+ * only when this call actually applied the language (callers persist the choice
+ * on `true`), `false` when it was superseded. Rejects only when the *latest*
+ * request's catalog fetch fails; a superseded request's failure is swallowed.
+ */
+export async function setActiveLanguage(code: string): Promise<boolean> {
+  const token = ++languageRequestToken;
+  try {
+    await loadCatalog(code);
+  } catch (error) {
+    if (token === languageRequestToken) throw error;
+    return false;
+  }
+  if (token !== languageRequestToken) return false;
+  await i18n.changeLanguage(code);
+  return token === languageRequestToken;
+}
+
 const QUERY_PARAM_KEYS = ["locale", "lang"];
 
 /**
