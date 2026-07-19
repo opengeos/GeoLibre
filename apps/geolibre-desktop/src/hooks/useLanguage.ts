@@ -58,6 +58,9 @@ export function useLanguage(): UseLanguageResult {
           setDesktopSettings({ ...current, language: code });
         })
         .catch((error: unknown) => {
+          // A newer selection already superseded this one — its failure is for an
+          // abandoned request and not worth surfacing.
+          if (latestRequestRef.current !== code) return;
           // Keep the current language (its catalog is still loaded) rather than
           // switch to an empty one; surface the failed fetch.
           console.error("[GeoLibre] Failed to change language", error);
