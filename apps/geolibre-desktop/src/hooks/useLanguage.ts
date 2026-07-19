@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AVAILABLE_LANGUAGES } from "../i18n";
+import { AVAILABLE_LANGUAGES, loadCatalog } from "../i18n";
 import {
   DEFAULT_LANGUAGE,
   languageOptions,
@@ -35,20 +35,20 @@ export function useLanguage(): UseLanguageResult {
 
   const setLanguage = useCallback(
     (code: string) => {
-      // Persist only after the language has actually switched, so a future
-      // lazy-loaded or remote catalog that fails to load does not leave a
-      // broken language persisted for the next boot. With today's eagerly
-      // bundled catalogs this resolves synchronously.
-      i18n
-        .changeLanguage(code)
+      // Import the target locale's lazy catalog chunk before switching, then
+      // persist only after the language has actually switched — so a catalog
+      // that fails to load leaves neither the UI nor the persisted setting on a
+      // language with no strings. English is bundled, so switching to it needs
+      // no fetch.
+      loadCatalog(code)
+        .then(() => i18n.changeLanguage(code))
         .then(() => {
           const current = useDesktopSettingsStore.getState().desktopSettings;
           setDesktopSettings({ ...current, language: code });
         })
         .catch((error: unknown) => {
-          // Today's eager catalogs never reject; if a future async/remote
-          // catalog fails, surface it instead of silently leaving the setting
-          // unpersisted while the UI has already switched.
+          // Keep the current language (its catalog is still loaded) rather than
+          // switch to an empty one; surface the failed fetch.
           console.error("[GeoLibre] Failed to change language", error);
         });
     },

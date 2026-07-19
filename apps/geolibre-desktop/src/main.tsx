@@ -38,8 +38,10 @@ import { TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
 // param, stored settings, or the browser) before React renders, so the first
-// paint is already in the right language.
-import i18n from "./i18n";
+// paint is already in the right language. English is bundled; other locales are
+// lazily imported, so `i18nReady` resolves once the initial locale's catalog has
+// loaded and init has run — the render below awaits it.
+import i18n, { i18nReady } from "./i18n";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
@@ -115,7 +117,13 @@ registerSW({
 // Fetch both chunks in parallel rather than waterfalling the boundary import
 // after App resolves — a free win, and it matters over the network in the web
 // build where these are separate fetches.
-void Promise.all([import("./App"), import("./components/common/error-boundaries")])
+void Promise.all([
+  import("./App"),
+  import("./components/common/error-boundaries"),
+  // Gate the first render on i18next being initialized with the active locale's
+  // (lazily loaded) catalog, so the UI never paints raw translation keys.
+  i18nReady,
+])
   .then(([{ default: App }, { AppErrorBoundary }]) => {
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>

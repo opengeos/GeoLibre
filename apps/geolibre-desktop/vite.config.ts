@@ -236,6 +236,15 @@ const RADIX_OPTIMIZE_EXCLUDES = [
 ];
 
 function manualChunks(id: string): string | undefined {
+  // Lazy per-locale i18n catalogs (src/i18n/index.ts dynamic-imports every
+  // non-English locale). Give each its own predictably named `i18n-locale-<code>`
+  // chunk so the service worker can keep them OUT of the app-shell precache
+  // (globIgnored below) and CacheFirst-cache them on demand instead. The prefix
+  // is deliberately distinct from the auto-named `i18n-<hash>` chunk that holds
+  // the i18n init module + statically bundled English, which MUST stay precached
+  // for offline boot.
+  const localeMatch = id.match(/\/i18n\/locales\/([a-z-]+)\.json(?:\?|$)/);
+  if (localeMatch && localeMatch[1] !== "en") return `i18n-locale-${localeMatch[1]}`;
   if (!id.includes("node_modules")) return undefined;
   // Only route JS/TS modules into manual chunks. The name-based rules below match
   // on the module id, so a package's *stylesheet* (e.g.
@@ -680,6 +689,14 @@ function pwaPlugin(): Plugin[] {
     // in the app-shell precache — and a large private plugin bundle would
     // otherwise trip workbox's maximumFileSizeToCacheInBytes and fail the build.
     "**/plugins/**",
+    // Lazy per-locale i18n catalogs (`i18n-locale-<code>` chunks from
+    // manualChunks). Only the active language is fetched, and it is CacheFirst-
+    // cached on first use like the other lazily-loaded chunks — keeping all 15
+    // non-English catalogs (several MB fully translated) out of the app-shell
+    // precache. The `-locale-` infix is required: the i18n init + English chunk
+    // is auto-named `i18n-<hash>` and must stay precached, so this must NOT match
+    // it. English is bundled there, so it stays precached and works offline.
+    "**/i18n-locale-*.js",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy
@@ -729,11 +746,8 @@ function pwaPlugin(): Plugin[] {
       globPatterns: ["**/*.{js,css,html,woff,woff2}"],
       globIgnores: HEAVY_PRECACHE_IGNORES,
       // deck.gl/vendor shell chunks can run a few MB; allow them into the
-      // precache. MapLibre and the huge binaries are globIgnored above. The
-      // eager i18n catalog chunk (every locale, bundled at boot so the app
-      // works offline in any language — see src/i18n/index.ts) is the largest
-      // shell entry and grows as translations fill in, so keep headroom here.
-      maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+      // precache. MapLibre and the huge binaries are globIgnored above.
+      maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       cleanupOutdatedCaches: true,
       clientsClaim: true,
       skipWaiting: true,
