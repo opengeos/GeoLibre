@@ -1829,7 +1829,7 @@ export function DesktopShell({
         {/* The Browser panel body is portaled into its dedicated content host
             (which the dock slots relocate between positions), so it shares the
             app's React context and the shell owns its dock chrome. */}
-        {activePanelId === BROWSER_PANEL_ID
+        {activePanelId === BROWSER_PANEL_ID && !layoutOptions.panelsHidden
           ? createPortal(
               <BrowserPanel
                 mapControllerRef={mapControllerRef}
@@ -1839,7 +1839,10 @@ export function DesktopShell({
               browserContentEl,
             )
           : null}
-        {replaceLayersPanelId ? (
+        {/* Map-only / hidden-panels embeds show nothing but the map: skip the
+            whole left side-dock (Layers, plugin panels, and the shared rail that
+            hosts the Browser entry), not just the built-in Layers panel. */}
+        {layoutOptions.panelsHidden ? null : replaceLayersPanelId ? (
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
           // the Layers sidebar surface, so a single rail lists both the workbench
           // and Layers instead of the two positional plugin slots flanking it.
@@ -2024,7 +2027,9 @@ export function DesktopShell({
             />
           )}
         </main>
-        {replaceStylePanelId ? (
+        {/* Same as the left dock: a map-only / hidden-panels embed skips the
+            entire right side-dock (Style, plugin panels, and their shared rail). */}
+        {layoutOptions.panelsHidden ? null : replaceStylePanelId ? (
           // Shared-rail mode (issue #765): the plugin panel shares the Style
           // sidebar surface, so a single rail lists both the workbench and Style
           // instead of the two positional plugin slots flanking the Style panel.

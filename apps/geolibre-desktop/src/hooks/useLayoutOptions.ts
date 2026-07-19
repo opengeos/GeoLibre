@@ -6,6 +6,14 @@ export interface LayoutOptions {
   attributePanelVisible: boolean;
   compact: boolean;
   layerPanelVisible: boolean;
+  /**
+   * Whether the embed chrome hides every side panel (`?maponly`,
+   * `?panels=hidden`, `?hidePanels=true`). Unlike `layerPanelVisible` /
+   * `stylePanelVisible` (which the in-app settings also toggle), this gates the
+   * whole side-dock surface — including the plugin/Browser panels and their
+   * shared rail — so a map-only embed shows nothing but the map.
+   */
+  panelsHidden: boolean;
   showProjectInfo: boolean;
   statusBarVisible: boolean;
   stylePanelVisible: boolean;
@@ -30,6 +38,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     return {
       attributePanelVisible: true,
       compact: false,
+      panelsHidden: false,
       statusBarVisible: true,
       toolbarVisible: true,
       ...layoutSettings,
@@ -68,6 +77,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     attributePanelVisible,
     compact,
     layerPanelVisible,
+    panelsHidden,
     showProjectInfo,
     statusBarVisible: !mapOnly,
     stylePanelVisible,
