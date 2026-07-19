@@ -28,7 +28,7 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@turf/union": "^7.3.5",
-    "cog-tiler-wasm": "^0.2.6",
+    "cog-tiler-wasm": "^0.3.0",
     "geotiff": "^3.0.5",
     "h5wasm": "^0.10.3",
     "jspdf": "^4.2.1",
