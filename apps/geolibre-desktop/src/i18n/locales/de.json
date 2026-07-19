@@ -1898,7 +1898,7 @@
       "runsInBrowserWriters": "Die Konvertierung läuft in Ihrem Browser mit DuckDB-WASM und den mitgelieferten Writern.",
       "runsInBrowserWasm": "Die Konvertierung läuft in Ihrem Browser mit geolibre-wasm. Kein Sidecar erforderlich.",
       "convertingWithWasm": "{{name}} wird mit geolibre-wasm konvertiert",
-      "rasterShape": "Raster mit {{width}}×{{height}} Pixeln und {{bands}} Band/Bändern gelesen",
+      "rasterShape": "Raster {{width}}×{{height}} gelesen; Bänder: {{bands}}",
       "wroteCog": "Gekacheltes COG mit Übersichten geschrieben ({{compression}})",
       "notAGeoTiff": "Diese Datei ist kein lesbares GeoTIFF. Im Browser liest „Raster zu COG“ nur GeoTIFF; andere Formate benötigen die Desktop-App.",
       "zoomRangeError": "Zoomstufen müssen 0 ≤ min ≤ max ≤ {{max}} erfüllen.",

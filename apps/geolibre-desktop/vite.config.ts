@@ -243,7 +243,10 @@ function manualChunks(id: string): string | undefined {
   // is deliberately distinct from the auto-named `i18n-<hash>` chunk that holds
   // the i18n init module + statically bundled English, which MUST stay precached
   // for offline boot.
-  const localeMatch = id.match(/\/i18n\/locales\/([a-z-]+)\.json(?:\?|$)/);
+  // Match any locale filename, including regional tags like `pt-BR` / `zh-Hans`
+  // (uppercase/mixed-case), so those chunks still get the `i18n-locale-` name
+  // and the Workbox exclusion below — not just the two-letter `[a-z]` codes.
+  const localeMatch = id.match(/\/i18n\/locales\/([^/]+)\.json(?:\?|$)/);
   if (localeMatch && localeMatch[1] !== "en") return `i18n-locale-${localeMatch[1]}`;
   if (!id.includes("node_modules")) return undefined;
   // Only route JS/TS modules into manual chunks. The name-based rules below match

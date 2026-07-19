@@ -2581,7 +2581,7 @@
     "unsupportedTitle": "GeoLibre bu biçimi görüntüleyemez — bunun yerine indirin",
     "addError": "Bu dosya eklenemedi: {{message}}",
     "largeFileWarning": "Bu dosya {{size}}. Kaynaktan akışla getirilir, bu nedenle yalnızca görünümdeki kısımlar okunur.",
-    "streamHint": "Bu dosya {{size}}. Ekle onu belleğe kopyalar; Akışla oku yalnızca görünümdeki kısımları okur.",
+    "streamHint": "Bu dosya {{size}}. «Ekle» onu belleğe kopyalar; «Akışla oku» yalnızca görünümdeki kısımları okur.",
     "tooLargeToOpen": "Bu dosya {{size}} — tarayıcının açması için çok büyük ({{limit}} sınırı). İndirin veya bu veri kümesinin bölümlenmiş bir sürümünü kullanın."
   },
   "basemaps": {

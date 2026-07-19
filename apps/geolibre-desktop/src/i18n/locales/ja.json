@@ -1867,7 +1867,7 @@
       "resampling": "リサンプリング",
       "colormapDefault": "デフォルト（viridis）",
       "zoomNative": "ネイティブ",
-      "rasterToPmtilesDesc": "ラスターをWeb Mercator PNGタイルの単一PMTilesアーカイブにレンダリングし、クラウドネイティブ配信にそのまま使えるようにします。1つのバンドをカラーマップで描画するため、マルチバンド画像はトゥルーカラーでは表示されません。すべてWebAssemblyで実行されるため、WebアプリでもデスクトップアプリでもサイドカーHは不要です。",
+      "rasterToPmtilesDesc": "ラスターをWeb Mercator PNGタイルの単一PMTilesアーカイブにレンダリングし、クラウドネイティブ配信にそのまま使えるようにします。1つのバンドをカラーマップで描画するため、マルチバンド画像はトゥルーカラーでは表示されません。すべてWebAssemblyで実行されるため、Webアプリでもデスクトップアプリでもサイドカーは不要です。",
       "cogBrowserNote": "ブラウザでは8ビットラスターは元の型を維持し、それ以外（Int16 DEM、Float64など）はFloat32として書き出されます。デスクトップアプリは元の型を維持します。",
       "noSidecarConversion": "{{kind}}にはサイドカー変換がありません。",
       "minZoom": "最小ズーム",

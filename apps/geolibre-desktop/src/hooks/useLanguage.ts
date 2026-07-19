@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AVAILABLE_LANGUAGES, loadCatalog } from "../i18n";
@@ -32,17 +32,28 @@ const OPTIONS = languageOptions(AVAILABLE_LANGUAGES);
 export function useLanguage(): UseLanguageResult {
   const { i18n } = useTranslation();
   const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
+  // The most recently requested language. Rapidly picking two uncached locales
+  // races their lazy catalog fetches; without this guard a slower earlier fetch
+  // could resolve last and clobber the newer selection.
+  const latestRequestRef = useRef<string | null>(null);
 
   const setLanguage = useCallback(
     (code: string) => {
+      latestRequestRef.current = code;
       // Import the target locale's lazy catalog chunk before switching, then
       // persist only after the language has actually switched — so a catalog
       // that fails to load leaves neither the UI nor the persisted setting on a
       // language with no strings. English is bundled, so switching to it needs
       // no fetch.
       loadCatalog(code)
-        .then(() => i18n.changeLanguage(code))
         .then(() => {
+          // A newer selection superseded this one while its catalog loaded —
+          // drop this stale request so it can't override the latest choice.
+          if (latestRequestRef.current !== code) return undefined;
+          return i18n.changeLanguage(code);
+        })
+        .then(() => {
+          if (latestRequestRef.current !== code) return;
           const current = useDesktopSettingsStore.getState().desktopSettings;
           setDesktopSettings({ ...current, language: code });
         })

@@ -2581,7 +2581,7 @@
     "unsupportedTitle": "GeoLibre ne peut pas afficher ce format — téléchargez-le à la place",
     "addError": "Impossible d'ajouter ce fichier : {{message}}",
     "largeFileWarning": "Ce fichier fait {{size}}. Il est diffusé depuis la source, donc seules les parties visibles sont lues.",
-    "streamHint": "Ce fichier fait {{size}}. Ajouter le copie en mémoire ; Diffuser ne lit que les parties visibles.",
+    "streamHint": "Ce fichier fait {{size}}. « Ajouter » le copie en mémoire ; « Diffuser » ne lit que les parties visibles.",
     "tooLargeToOpen": "Ce fichier fait {{size}} — trop volumineux pour être ouvert par le navigateur (limite de {{limit}}). Téléchargez-le, ou utilisez une version partitionnée de ce jeu de données."
   },
   "basemaps": {

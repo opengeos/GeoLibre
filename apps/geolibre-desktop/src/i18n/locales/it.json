@@ -2370,7 +2370,7 @@
     "needTwoLayers": "La selezione per posizione richiede due livelli vettoriali con elementi.",
     "summary": "{{selected}} di {{total}} elemento/i selezionato/i ({{matched}} corrispondenti).",
     "evaluationErrors": "{{count}} elemento/i non è stato possibile valutare e non è stato incluso.",
-    "unevaluableDisjoint": "{{count}} elemento/i è stato escluso perché la sua geometria non è stato possibile valutarla.",
+    "unevaluableDisjoint": "{{count}} elemento/i sono stati esclusi perché non è stato possibile valutarne la geometria.",
     "tooManyPairs": "Questo confronto richiede {{pairs}} test di coppie di elementi (limite {{limit}}). Usa invece Elaborazione → GeoLibre → Vettoriale → Seleziona per posizione con il motore Sidecar.",
     "exportedLayerName": "{{name}} (selezione)"
   },
@@ -2581,7 +2581,7 @@
     "unsupportedTitle": "GeoLibre non può renderizzare questo formato — scaricalo invece",
     "addError": "Impossibile aggiungere questo file: {{message}}",
     "largeFileWarning": "Questo file è {{size}}. Viene trasmesso in streaming dalla sorgente, quindi vengono lette solo le parti in vista.",
-    "streamHint": "Questo file è {{size}}. Aggiungi lo copia in memoria; Streaming legge solo le parti in vista.",
+    "streamHint": "Questo file è {{size}}. «Aggiungi» lo copia in memoria; «Streaming» legge solo le parti visibili.",
     "tooLargeToOpen": "Questo file è {{size}} — troppo grande da aprire nel browser (limite {{limit}}). Scaricalo, oppure usa una versione partizionata di questo dataset."
   },
   "basemaps": {
@@ -2882,7 +2882,7 @@
     "decreaseValue": "Diminuisci valore",
     "history": {
       "title": "Cronologia di elaborazione",
-      "description": "Ogni esecuzione di elaborazione in questo progetto, dalla più recente. Riesegui uno strumento, riaprilo con gli stessi parametri, oppure copia l'esecuzione come JSON o Python.",
+      "description": "Ogni esecuzione di elaborazione in questo progetto, dalla più recente alla meno recente. Riesegui uno strumento, riaprilo con gli stessi parametri, oppure copia l'esecuzione come JSON o Python.",
       "empty": "Nessuna esecuzione di elaborazione registrata finora. Esegui uno strumento dal menu Elaborazione e apparirà qui.",
       "rerun": "Riesegui",
       "editRerun": "Modifica e riesegui",

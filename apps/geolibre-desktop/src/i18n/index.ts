@@ -126,20 +126,28 @@ const initialLanguage = getInitialLanguage();
 export const i18nReady: Promise<unknown> = (async () => {
   // English is already bundled; preload only a non-default initial locale so its
   // strings are present on the very first paint.
+  let effectiveLanguage = initialLanguage;
   if (initialLanguage !== DEFAULT_LANGUAGE && loaders[initialLanguage]) {
     try {
       const mod = await loaders[initialLanguage]();
       resources[initialLanguage] = { translation: mod.default };
     } catch (error) {
-      // Fall back to English (already loaded) rather than block boot on a
-      // catalog fetch that failed; the language still switches once online.
-      console.error("[GeoLibre] Failed to load initial locale catalog", error);
+      // The catalog fetch failed (e.g. offline first visit): boot in English
+      // rather than in a locale whose strings are absent, which would render
+      // English fallback text while still applying the locale's `lang`/`dir`
+      // (wrong RTL direction for e.g. Arabic). The user can switch once online.
+      console.error("[GeoLibre] Failed to load initial locale catalog; using English", error);
+      effectiveLanguage = DEFAULT_LANGUAGE;
     }
   }
 
+  // Deliberately no `.catch` here: English is always bundled, so init only
+  // rejects on a genuine i18next failure. Swallowing it would fulfill
+  // `i18nReady` and let `main.tsx` render an uninitialized instance (raw keys);
+  // instead let it reject so the startup chain's error handler runs.
   return i18n.use(initReactI18next).init({
     resources,
-    lng: initialLanguage,
+    lng: effectiveLanguage,
     fallbackLng: DEFAULT_LANGUAGE,
     defaultNS: "translation",
     interpolation: {
@@ -152,8 +160,6 @@ export const i18nReady: Promise<unknown> = (async () => {
     react: { useSuspense: false },
     returnNull: false,
   });
-})().catch((error: unknown) => {
-  console.error("[GeoLibre] i18n initialization failed", error);
-});
+})();
 
 export default i18n;
