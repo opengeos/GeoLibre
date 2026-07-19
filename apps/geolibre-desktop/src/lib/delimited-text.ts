@@ -43,16 +43,45 @@ export function parseDelimitedTextFields(text: string, delimiter: string): strin
   return uniqueFieldNames(rows[0].map((field) => field.trim()));
 }
 
+/**
+ * True when `crs` denotes WGS84 longitude/latitude (or is blank), so the parsed
+ * coordinates are already in the +/-180 / +/-90 range MapLibre expects and need
+ * no reprojection. A projected CRS (e.g. `EPSG:32643`) returns `false`: its
+ * coordinates are metres, must skip the lon/lat bounds check, and are
+ * reprojected to WGS84 by the caller before the layer is added.
+ *
+ * @param crs - A CRS as `AUTHORITY:CODE` (e.g. `EPSG:4326`), a WGS84 alias
+ *   (`CRS84`), or blank.
+ * @returns `true` for a blank/WGS84 CRS, `false` for any other declared CRS.
+ */
+export function isGeographicCrs(crs: string | undefined): boolean {
+  const value = (crs ?? "").trim().toUpperCase();
+  if (!value) return true;
+  return value.includes("CRS84") || /EPSG:+4326\b/.test(value);
+}
+
 export function parseDelimitedTextLayer(
   text: string,
   options: {
     delimiter: string;
     latitudeField: string;
     longitudeField: string;
+    /**
+     * Source CRS of the coordinate columns as `AUTHORITY:CODE`, or blank for
+     * WGS84 longitude/latitude. When a projected CRS is given, coordinates are
+     * kept in their native units (skipping the lon/lat range check) so the
+     * caller can reproject them to WGS84; see {@link isGeographicCrs}.
+     */
+    sourceCrs?: string;
   },
 ): DelimitedTextLayerResult {
   const delimiter = options.delimiter;
   if (!delimiter) throw new Error("Enter a delimiter.");
+  // A projected source CRS carries coordinates in metres (or feet), which lie
+  // far outside the WGS84 +/-180 / +/-90 range, so the geographic bounds check
+  // below would reject every row. Skip it for projected CRSs and let the caller
+  // reproject the raw coordinates to WGS84.
+  const geographic = isGeographicCrs(options.sourceCrs);
 
   const rows = parseDelimitedRows(text, delimiter).filter((row) =>
     row.some((value) => value.trim()),
@@ -119,7 +148,7 @@ export function parseDelimitedTextLayer(
       skippedRows += 1;
       continue;
     }
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    if (geographic && (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)) {
       skippedRows += 1;
       continue;
     }

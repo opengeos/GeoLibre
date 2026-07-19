@@ -145,6 +145,41 @@ describe("delimited text parsing", () => {
     assert.equal(result.isTable, false);
     assert.equal(result.data.features.length, 1);
   });
+
+  it("keeps out-of-range coordinates when a projected source CRS is given", () => {
+    // UTM zone 43N (EPSG:32643) easting/northing lie far outside the WGS84
+    // +/-180 / +/-90 range; without a projected CRS every row would be skipped
+    // (issue #1338). The caller reprojects these native coordinates to WGS84.
+    const result = parseDelimitedTextLayer(
+      ["id,x,y", "1,659319.6360799533,3005510.000378756"].join("\n"),
+      {
+        delimiter: ",",
+        longitudeField: "x",
+        latitudeField: "y",
+        sourceCrs: "EPSG:32643",
+      },
+    );
+
+    assert.equal(result.isTable, false);
+    assert.equal(result.skippedRows, 0);
+    assert.equal(result.data.features.length, 1);
+    assert.deepEqual(
+      (result.data.features[0].geometry as { coordinates: number[] }).coordinates,
+      [659319.6360799533, 3005510.000378756],
+    );
+  });
+
+  it("still rejects out-of-range coordinates for a WGS84 (blank) CRS", () => {
+    assert.throws(
+      () =>
+        parseDelimitedTextLayer(["id,x,y", "1,659319.6,3005510.0"].join("\n"), {
+          delimiter: ",",
+          longitudeField: "x",
+          latitudeField: "y",
+        }),
+      /No rows contained valid longitude and latitude values\./,
+    );
+  });
 });
 
 describe("parseCoordinate", () => {

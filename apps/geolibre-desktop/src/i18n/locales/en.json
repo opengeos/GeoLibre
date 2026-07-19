@@ -470,7 +470,11 @@
       "longitudeField": "Longitude field",
       "latitudeField": "Latitude field",
       "noneField": "None (attribute table)",
-      "tableHint": "Leave both coordinate fields as None to add the file as a non-spatial attribute table (for use in an attribute join)."
+      "tableHint": "Leave both coordinate fields as None to add the file as a non-spatial attribute table (for use in an attribute join).",
+      "crs": "Coordinate system",
+      "crsPlaceholder": "e.g. EPSG:32643",
+      "crsPresetLabel": "Common coordinate systems...",
+      "crsHelp": "Leave blank if the coordinates are already longitude/latitude (WGS84). Otherwise enter the EPSG code of the coordinate columns and the points will be reprojected to WGS84."
     },
     "photos": {
       "defaultName": "Photos",

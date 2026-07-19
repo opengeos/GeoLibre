@@ -4,11 +4,14 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   detectCoordinateFields,
+  isGeographicCrs,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "../../../../lib/delimited-text";
+import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import {
+  CAD_CRS_PRESETS,
   DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD,
   DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD,
   DEFAULT_DELIMITED_TEXT_URL,
@@ -18,6 +21,7 @@ import {
   errorMessage,
   fileNameFromPath,
   layerNameFromPath,
+  normalizeCrs,
   resolveDelimitedTextDelimiter,
 } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -40,6 +44,10 @@ export function DelimitedTextSource() {
   const [delimitedTextLongitudeField, setDelimitedTextLongitudeField] = useState(
     DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD,
   );
+  // Source CRS of the coordinate columns. Blank means WGS84 longitude/latitude
+  // (the historical behaviour); a projected EPSG code reprojects the points to
+  // WGS84 after parsing so CSVs in any CRS import in the right place (#1338).
+  const [delimitedTextCrs, setDelimitedTextCrs] = useState("");
   const [delimitedTextFields, setDelimitedTextFields] = useState<string[]>([]);
   const [delimitedTextColumnsStatus, setDelimitedTextColumnsStatus] = useState<string | null>(null);
   const [isRetrievingDelimitedTextColumns, setIsRetrievingDelimitedTextColumns] = useState(false);
@@ -179,11 +187,20 @@ export function DelimitedTextSource() {
     const { sourcePath, text } = await readDelimitedTextSource();
     if (!text) throw new Error(t("addData.delimitedText.errorDataMissing"));
 
+    const sourceCrs = normalizeCrs(delimitedTextCrs);
     const result = parseDelimitedTextLayer(text, {
       delimiter,
       latitudeField: delimitedTextLatitudeField,
       longitudeField: delimitedTextLongitudeField,
+      sourceCrs,
     });
+    // A projected source CRS leaves the parsed coordinates in their native units
+    // (e.g. UTM metres), so reproject them to WGS84 before the map renders them.
+    // Attribute tables (null geometry) have nothing to reproject.
+    const geojson =
+      result.isTable || isGeographicCrs(sourceCrs)
+        ? result.data
+        : await reprojectFeatureCollectionToWgs84(result.data, sourceCrs);
     source.addAndClose(
       {
         ...createBaseLayer(
@@ -195,17 +212,18 @@ export function DelimitedTextSource() {
           },
           {
             delimiter,
-            featureCount: result.data.features.length,
+            featureCount: geojson.features.length,
             fields: result.fields,
             isTable: result.isTable,
             latitudeField: delimitedTextLatitudeField.trim(),
             longitudeField: delimitedTextLongitudeField.trim(),
             skippedRows: result.skippedRows,
+            sourceCrs: sourceCrs || null,
             sourceKind: "delimited-text",
             totalRows: result.totalRows,
           },
         ),
-        geojson: result.data,
+        geojson,
         sourcePath,
       },
       // A non-spatial attribute table has no geometry to fit the map to.
@@ -375,6 +393,34 @@ export function DelimitedTextSource() {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">{t("addData.delimitedText.tableHint")}</p>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="delimited-text-crs">{t("addData.delimitedText.crs")}</Label>
+          <Input
+            id="delimited-text-crs"
+            placeholder={t("addData.delimitedText.crsPlaceholder")}
+            value={delimitedTextCrs}
+            onChange={(event) => setDelimitedTextCrs(event.target.value)}
+          />
+          <Select
+            aria-label={t("addData.delimitedText.crsPresetLabel")}
+            value=""
+            onChange={(event) => {
+              if (event.target.value) setDelimitedTextCrs(event.target.value);
+            }}
+          >
+            <option value="" disabled>
+              {t("addData.delimitedText.crsPresetLabel")}
+            </option>
+            {CAD_CRS_PRESETS.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("addData.delimitedText.crsHelp")}</p>
+        </div>
+
         <SampleDataSelect
           samples={[
             { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },
@@ -387,6 +433,9 @@ export function DelimitedTextSource() {
             // otherwise a previously chosen delimiter would misparse it.
             setDelimitedTextDelimiter("comma");
             setDelimitedTextCustomDelimiter("");
+            // The sample is WGS84 lon/lat, so clear any projected CRS the user
+            // may have entered; otherwise it would reproject correct coordinates.
+            setDelimitedTextCrs("");
             setDelimitedTextUrl(url);
           }}
         />
