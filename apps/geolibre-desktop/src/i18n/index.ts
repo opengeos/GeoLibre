@@ -64,7 +64,8 @@ let languageRequestToken = 0;
  * can't let a slower earlier fetch clobber the newer selection. Resolves `true`
  * only when this call actually applied the language (callers persist the choice
  * on `true`), `false` when it was superseded. Rejects only when the *latest*
- * request's catalog fetch fails; a superseded request's failure is swallowed.
+ * request fails — its catalog fetch or the switch itself; a superseded
+ * request's failure is swallowed.
  */
 export async function setActiveLanguage(code: string): Promise<boolean> {
   const token = ++languageRequestToken;
@@ -75,7 +76,14 @@ export async function setActiveLanguage(code: string): Promise<boolean> {
     return false;
   }
   if (token !== languageRequestToken) return false;
-  await i18n.changeLanguage(code);
+  try {
+    await i18n.changeLanguage(code);
+  } catch (error) {
+    // Same contract as the catalog fetch above: only surface the failure if
+    // this is still the latest request; a superseded one's error is swallowed.
+    if (token === languageRequestToken) throw error;
+    return false;
+  }
   return token === languageRequestToken;
 }
 
