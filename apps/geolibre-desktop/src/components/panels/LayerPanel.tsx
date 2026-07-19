@@ -19,6 +19,7 @@ import {
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
   isStyleLibraryTargetLayer,
+  copyableLayerStyleKind,
   useAppStore,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
@@ -91,6 +92,8 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  ClipboardPaste,
+  Copy,
   Database,
   Download,
   Eye,
@@ -529,6 +532,9 @@ export function LayerPanel({
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const copyLayerStyle = useAppStore((s) => s.copyLayerStyle);
+  const pasteLayerStyle = useAppStore((s) => s.pasteLayerStyle);
+  const copiedLayerStyle = useAppStore((s) => s.copiedLayerStyle);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setRasterAttributeTableOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
@@ -785,6 +791,32 @@ export function LayerPanel({
       refreshStatusTimersRef.current.set(layerId, timer);
     },
     [clearRefreshStatusTimer],
+  );
+
+  const handleCopyStyle = useCallback(
+    (layer: GeoLibreLayer) => {
+      copyLayerStyle(layer.id);
+      clearRefreshStatusTimer(layer.id);
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: { type: "success", message: t("layers.styleCopied") },
+      }));
+      scheduleStatusClear(layer.id);
+    },
+    [copyLayerStyle, clearRefreshStatusTimer, scheduleStatusClear, t],
+  );
+
+  const handlePasteStyle = useCallback(
+    (layer: GeoLibreLayer) => {
+      pasteLayerStyle(layer.id);
+      clearRefreshStatusTimer(layer.id);
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: { type: "success", message: t("layers.stylePasted") },
+      }));
+      scheduleStatusClear(layer.id);
+    },
+    [pasteLayerStyle, clearRefreshStatusTimer, scheduleStatusClear, t],
   );
 
   const handleRefreshLayer = useCallback(
@@ -2203,6 +2235,11 @@ export function LayerPanel({
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
             // layers. Shares the Style Manager's gate so the two can't drift.
             const canImportStyle = isStyleLibraryTargetLayer(layer.type);
+            // Copy/paste symbology (issue #1339). Vector-styled layers and
+            // deck.gl rasters each copy their own style family; a paste only
+            // lands when the clipboard entry shares the target's family.
+            const copyStyleKind = copyableLayerStyleKind(layer);
+            const canPasteStyle = copiedLayerStyle?.kind === copyStyleKind;
             // Write-back commits edits to the layer's local source file in place
             // (desktop only, supported formats); Export writes a new file.
             const canWriteBack = canWriteEditsToSource(layer);
@@ -2759,6 +2796,30 @@ export function LayerPanel({
                                 )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
+                          )}
+                          {/* Copy/paste symbology between layers (issue #1339),
+                          for vector-styled layers and deck.gl rasters. Paste is
+                          disabled until a same-family style is on the clipboard. */}
+                          {copyStyleKind && (
+                            <>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  handleCopyStyle(layer);
+                                }}
+                              >
+                                <Copy className="me-2 h-3.5 w-3.5" />
+                                {t("layers.copyStyle")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!canPasteStyle}
+                                onSelect={() => {
+                                  handlePasteStyle(layer);
+                                }}
+                              >
+                                <ClipboardPaste className="me-2 h-3.5 w-3.5" />
+                                {t("layers.pasteStyle")}
+                              </DropdownMenuItem>
+                            </>
                           )}
                           {canWriteBack && (
                             <DropdownMenuItem

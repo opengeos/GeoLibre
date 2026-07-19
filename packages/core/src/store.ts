@@ -57,6 +57,11 @@ import {
   type StyleLibraryEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
+import {
+  applyCopiedLayerStyle,
+  type CopiedLayerStyle,
+  extractCopiedLayerStyle,
+} from "./layer-style-clipboard";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh, reapplyLayerJoins } from "./joins";
 import {
   DEFAULT_ELLIPSOID_ID,
@@ -469,6 +474,26 @@ export interface AppState {
   setLayerOpacity: (id: string, opacity: number) => void;
   setLayerStyle: (id: string, style: Partial<LayerStyle>) => void;
   /**
+   * Transient clipboard holding a layer's symbology, captured by
+   * {@link copyLayerStyle} and applied by {@link pasteLayerStyle} (copy/paste
+   * styles, issue #1339). Runtime-only: excluded from undo history
+   * (`partialize` never lists it) and from the saved project. `null` until a
+   * style is copied this session.
+   */
+  copiedLayerStyle: CopiedLayerStyle | null;
+  /**
+   * Snapshot the given layer's style into {@link copiedLayerStyle} so it can be
+   * pasted onto a compatible layer. No-op when the layer is missing or has no
+   * copyable symbology (leaving any prior clipboard entry untouched).
+   */
+  copyLayerStyle: (id: string) => void;
+  /**
+   * Apply the {@link copiedLayerStyle} clipboard entry onto the given layer.
+   * No-op when the clipboard is empty, the layer is missing, or the entry's
+   * style family does not match the target layer's.
+   */
+  pasteLayerStyle: (id: string) => void;
+  /**
    * Replace a layer's persistent attribute joins and immediately re-derive its
    * joined columns (strip what the previous joins added, apply the new list).
    * Pass an empty array to detach every join and restore the base attributes.
@@ -732,6 +757,7 @@ export const useAppStore = create<AppState>()(
       mapLayout: { ...DEFAULT_MAP_GRID_LAYOUT },
       secondaryMapViews: [],
       primaryMapLabel: "",
+      copiedLayerStyle: null,
       selectedLayerId: null,
       selectedFeatureId: null,
       selectedFeatureIds: [],
@@ -1368,6 +1394,31 @@ export const useAppStore = create<AppState>()(
           ),
           isDirty: true,
         })),
+
+      copyLayerStyle: (id) =>
+        set((s) => {
+          const layer = s.layers.find((l) => l.id === id);
+          if (!layer) return s;
+          const copied = extractCopiedLayerStyle(layer);
+          // Leave any prior clipboard entry in place when this layer is not
+          // copyable, so opening a non-stylable layer's menu never clears it.
+          if (!copied) return s;
+          return { copiedLayerStyle: copied };
+        }),
+
+      pasteLayerStyle: (id) =>
+        set((s) => {
+          const copied = s.copiedLayerStyle;
+          if (!copied) return s;
+          const layer = s.layers.find((l) => l.id === id);
+          if (!layer) return s;
+          const patch = applyCopiedLayerStyle(layer, copied);
+          if (!patch) return s;
+          return {
+            layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+            isDirty: true,
+          };
+        }),
 
       reorderLayer: (id, direction) =>
         set((s) => {
