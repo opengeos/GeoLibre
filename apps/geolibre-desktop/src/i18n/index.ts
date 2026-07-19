@@ -3,24 +3,52 @@ import { initReactI18next } from "react-i18next";
 
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
 import { DEFAULT_LANGUAGE, languageDirection, resolveLanguage } from "./languages";
+import enTranslation from "./locales/en.json";
 
 /**
- * Catalogs are auto-discovered: every `locales/<code>.json` is bundled eagerly,
- * so adding a locale is a pure drop-in — no edits to this file. The web build
- * keeps them in the main chunk (catalogs are tiny); see `docs/i18n.md`.
+ * English is the fallback baseline (and the source of truth `i18next.d.ts` types
+ * `t()` against), so it is bundled statically — always present and synchronous.
+ * Every *other* locale is a separate lazily-imported chunk, fetched only when it
+ * becomes the active language: fully translated, the 15 non-English catalogs run
+ * to several MB and must not ship in the boot graph. The service worker keeps
+ * these chunks out of the app-shell precache and CacheFirst-caches each on first
+ * use (see `vite.config.ts`); `docs/i18n.md` has the details.
  */
-const catalogModules = import.meta.glob<{ default: Record<string, unknown> }>("./locales/*.json", {
-  eager: true,
-});
+const localeLoaders = import.meta.glob<{ default: Record<string, unknown> }>([
+  "./locales/*.json",
+  "!./locales/en.json",
+]);
 
-const resources: Record<string, { translation: Record<string, unknown> }> = {};
-for (const [path, mod] of Object.entries(catalogModules)) {
+/** Non-English catalog code → dynamic-import loader for its chunk. */
+const loaders: Record<string, () => Promise<{ default: Record<string, unknown> }>> = {};
+for (const [path, loader] of Object.entries(localeLoaders)) {
   const code = path.replace(/^\.\/locales\//, "").replace(/\.json$/, "");
-  resources[code] = { translation: mod.default };
+  loaders[code] = loader;
 }
 
-/** Catalog codes we actually ship, e.g. `["en", "zh"]`. */
-export const AVAILABLE_LANGUAGES: string[] = Object.keys(resources).sort();
+/** Catalog codes we ship: English plus every lazily-loadable locale. */
+export const AVAILABLE_LANGUAGES: string[] = [DEFAULT_LANGUAGE, ...Object.keys(loaders)].sort();
+
+/** English is registered up front; other locales are added on demand. */
+const resources: Record<string, { translation: Record<string, unknown> }> = {
+  [DEFAULT_LANGUAGE]: { translation: enTranslation as Record<string, unknown> },
+};
+
+/**
+ * Ensure a locale's catalog is registered with i18next, importing its chunk on
+ * first use. English is always present, and an unknown or already-loaded code is
+ * a no-op, so callers can await this unconditionally before switching language.
+ * A failed import rejects, letting the caller keep the current language rather
+ * than switch to an empty catalog.
+ */
+export async function loadCatalog(code: string): Promise<void> {
+  if (code === DEFAULT_LANGUAGE) return;
+  if (i18n.hasResourceBundle(code, "translation")) return;
+  const loader = loaders[code];
+  if (!loader) return;
+  const mod = await loader();
+  i18n.addResourceBundle(code, "translation", mod.default, true, true);
+}
 
 const QUERY_PARAM_KEYS = ["locale", "lang"];
 
@@ -48,6 +76,8 @@ function persistedLanguage(): string | null {
  *   3. the browser's preferred languages (`navigator.languages`)
  *   4. the default (`en`)
  * Only languages we ship a catalog for are honored; anything else falls through.
+ * Resolution is synchronous — it inspects the catalog *codes*, never their
+ * (possibly not-yet-loaded) contents.
  */
 export function getInitialLanguage(): string {
   if (typeof window !== "undefined") {
@@ -85,11 +115,39 @@ function applyDocumentDirection(code: string) {
 
 i18n.on("languageChanged", applyDocumentDirection);
 
-i18n
-  .use(initReactI18next)
-  .init({
+const initialLanguage = getInitialLanguage();
+
+/**
+ * Resolves once i18next is initialized with English plus (if applicable) the
+ * initial language's catalog. `main.tsx` awaits this before the first render so
+ * the UI paints in the right language rather than flashing raw translation keys
+ * while a lazy catalog loads.
+ */
+export const i18nReady: Promise<unknown> = (async () => {
+  // English is already bundled; preload only a non-default initial locale so its
+  // strings are present on the very first paint.
+  let effectiveLanguage = initialLanguage;
+  if (initialLanguage !== DEFAULT_LANGUAGE && loaders[initialLanguage]) {
+    try {
+      const mod = await loaders[initialLanguage]();
+      resources[initialLanguage] = { translation: mod.default };
+    } catch (error) {
+      // The catalog fetch failed (e.g. offline first visit): boot in English
+      // rather than in a locale whose strings are absent, which would render
+      // English fallback text while still applying the locale's `lang`/`dir`
+      // (wrong RTL direction for e.g. Arabic). The user can switch once online.
+      console.error("[GeoLibre] Failed to load initial locale catalog; using English", error);
+      effectiveLanguage = DEFAULT_LANGUAGE;
+    }
+  }
+
+  // Deliberately no `.catch` here: English is always bundled, so init only
+  // rejects on a genuine i18next failure. Swallowing it would fulfill
+  // `i18nReady` and let `main.tsx` render an uninitialized instance (raw keys);
+  // instead let it reject so the startup chain's error handler runs.
+  return i18n.use(initReactI18next).init({
     resources,
-    lng: getInitialLanguage(),
+    lng: effectiveLanguage,
     fallbackLng: DEFAULT_LANGUAGE,
     defaultNS: "translation",
     interpolation: {
@@ -97,15 +155,11 @@ i18n
       // mangle any text that legitimately contains `<`, `&`, etc.
       escapeValue: false,
     },
-    // Catalogs are bundled eagerly (synchronous), so there is nothing to wait on
-    // — skip Suspense and render immediately rather than requiring a boundary.
+    // We gate the first render on `i18nReady`, so the initial catalog is always
+    // present by mount — no Suspense boundary needed.
     react: { useSuspense: false },
     returnNull: false,
-    // Eager catalogs make init resolve synchronously today, but surface any error
-    // (e.g. if loading ever becomes async) instead of silently swallowing it.
-  })
-  .catch((error: unknown) => {
-    console.error("[GeoLibre] i18n initialization failed", error);
   });
+})();
 
 export default i18n;
