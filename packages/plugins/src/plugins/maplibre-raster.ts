@@ -71,6 +71,15 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
     url: "https://data.source.coop/giswqs/opengeos/naip_water_train.vrt",
     attribution: "USDA Farm Service Agency (FSA)",
   },
+  {
+    // A STAC FeatureCollection of 2023 North Dakota NAIP scenes, whose assets
+    // resolve to COGs on Azure blob storage: exercises maplibre-gl-raster's
+    // STAC mosaic support (v0.12.0+), which stitches the scenes at read time
+    // rather than requiring a prebuilt VRT or MosaicJSON.
+    label: "NAIP STAC mosaic (North Dakota)",
+    url: "https://data.source.coop/giswqs/opengeos/naip_nd_2023_stac.json",
+    attribution: "USDA Farm Service Agency (FSA)",
+  },
 ];
 
 // This type mirrors undocumented private members of RasterControl from
