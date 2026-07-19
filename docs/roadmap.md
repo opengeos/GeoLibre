@@ -316,7 +316,7 @@
 - [x] All 13 locale catalogs completed, with the remaining hardcoded panel and dialog strings migrated to the translation system
 - [x] The AI assistant can read provider API keys from OS environment variables, and the desktop diagnostics network log now captures native Tauri HTTP requests and classifies failed `fetch()` errors
 
-## v2.1: A data-source Browser panel, route animation, in-browser object detection, and map recording (current)
+## v2.1: A data-source Browser panel, route animation, in-browser object detection, and map recording
 
 - [x] A QGIS-style **Browser panel** (Data Source Manager) for exploring and adding data from one place: browse map Services and Recent items, connect to PostGIS databases and browse their schemas and tables, drill into local files, save and reopen Favorites, add a New connection per service kind, and navigate the whole tree from the keyboard
 - [x] **Route animation**: animate a marker along any line layer, follow the track in 3D with camera controls, and export the whole animation as an MP4 video
@@ -331,6 +331,28 @@
 - [x] Scale bar switches between metric, imperial, and nautical units
 - [x] Bundled plugin drop-ins can set `activeByDefault` in their manifest, deployments can opt out of the welcome dialog, and the app now defaults to the Advanced interface and skips the welcome dialog on first run
 - [x] Optional HTTP Basic Auth for the web (Docker) container
+
+## v2.2: A styling overhaul, expression-driven fields and labels, print atlas, and browser-native conversions (current)
+
+- [x] A **rule-based renderer** with per-rule symbol properties, scale-dependent visibility, nested rules, and per-rule toggles, so a single layer can carry a full hierarchy of styling rules and hide anything that matches no rule when the else rule is off
+- [x] A **Style Manager** that saves reusable symbol, color-ramp, and label presets to a personal library and applies them across projects
+- [x] A symbology pack covering inverted-polygon masks, arrow and marker lines, and geometry generators, plus data-driven proportional sizing for marker icons
+- [x] **Diagram symbology**: draw pie, donut, and bar charts on features straight from their attributes
+- [x] A **data-defined labeling engine** with expression-driven label properties, placement priority, and full control over how labels are drawn
+- [x] A shared **Expression Builder** — a function reference, searchable field list, live preview, and reusable variables — wired into filters, labels, styling, and selection
+- [x] **Virtual fields**: expression-backed computed columns that update as the underlying data changes, plus a Raster Attribute Table for single-band categorical rasters
+- [x] An **attribute form designer** with edit widgets, validation constraints, and conditional field visibility for structured data entry
+- [x] **Persistent attribute joins** configured in layer properties, so a table can enrich a layer's features and stick across sessions
+- [x] **Select by Expression** and **Select by Location**, plus live query layers backed by DuckDB SQL that re-run as the data updates
+- [x] **Atlas / map series** in the Print Layout — generate one page per feature, or a uniform series of pages along a line such as a river or trail — and drop attribute-table and chart blocks onto the page
+- [x] Browser-native format conversion for COG, FlatGeobuf, Shapefile, and GeoPackage, and Vector to PMTiles running on a background worker, no Python sidecar required
+- [x] **Live GPS tracking**: a moving position marker, a recorded track log, and digitizing new features straight from the GPS feed
+- [x] Data quality tools to check validity, fix geometries, and check topology rules, catching and repairing bad geometries before they cause trouble
+- [x] A **Processing History** panel that lists every tool run, re-runs it with one click, and copies the equivalent Python code
+- [x] Timelapse mode now animates EOX Sentinel-2 cloudless annual basemaps and NASA GIBS providers (Landsat/WELD and MODIS land cover) with a provider picker and legend
+- [x] Desktop gains OS trust store and mTLS client-certificate support for native HTTP, automatic reload when local files change on disk, and Esri File Geodatabase (`.gdb`) layer support
+- [x] New Natural Earth and Source Cooperative data browsers under Plugins > Web Services, including opening or streaming large GeoParquet from Source Cooperative
+- [x] Terrain-aware 3D measurements in the Measure tool, optional title/source captions and on-map panel capture (HTML, legend, colorbar) in video recordings, and a new Georgian locale alongside full Arabic right-to-left support
 
 ## Plugin marketplace and registry (design)
 
