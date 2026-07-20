@@ -513,9 +513,10 @@ export function PrintLayoutDialog({
   // Custom SVG markers must be drawn into legend swatches, but drawLayout is
   // synchronous while decoding an SVG is not, so preload them here (keyed by the
   // swatch marker's svg string) and hand drawLayout the ready images -- like the
-  // captured map image. A stable joined key avoids reloading on unrelated legend
-  // edits (labels, hidden flags); the NUL separator never occurs in SVG markup
-  // or a URL, so splitting it back into sources in the effect is lossless.
+  // captured map image. The key is a JSON array of the sorted sources: it
+  // round-trips losslessly (SVG markup and URLs contain spaces/newlines) and,
+  // being stable, avoids reloading on unrelated legend edits (labels, hidden
+  // flags).
   const markerSvgKey = useMemo(() => {
     const sources = new Set<string>();
     for (const entry of baseLegend) {
@@ -523,11 +524,11 @@ export function PrintLayoutDialog({
         if (sw.marker?.shape === "custom" && sw.marker.svg) sources.add(sw.marker.svg);
       }
     }
-    return Array.from(sources).sort().join(" ");
+    return JSON.stringify(Array.from(sources).sort());
   }, [baseLegend]);
   const [markerIcons, setMarkerIcons] = useState<Map<string, HTMLImageElement>>(new Map());
   useEffect(() => {
-    const sources = markerSvgKey ? markerSvgKey.split(" ") : [];
+    const sources = JSON.parse(markerSvgKey) as string[];
     if (sources.length === 0) {
       setMarkerIcons((prev) => (prev.size === 0 ? prev : new Map()));
       return;
