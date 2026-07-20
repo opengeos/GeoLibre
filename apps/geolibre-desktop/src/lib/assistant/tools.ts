@@ -10,6 +10,7 @@ import maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
 import { z } from "zod";
+import { projectedGeoJsonCrs } from "../crs-utils";
 import { inferPropertyColumns } from "../pglite-sql";
 import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
 import { cleanStatement, maskSqlLiterals, previewLayerTables, runSqlQuery } from "../sql-workspace";
@@ -364,7 +365,15 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
         if (length && Number(length) > MAX_BYTES) {
           throw new Error(`Response too large (${length} bytes).`);
         }
-        const geojson = asFeatureCollection(JSON.parse(await readTextCapped(response, MAX_BYTES)));
+        const parsed = asFeatureCollection(JSON.parse(await readTextCapped(response, MAX_BYTES)));
+        // A projected GeoJSON declares a non-WGS84 CRS via a legacy top-level
+        // `crs` member; reproject to WGS84 so MapLibre receives lon/lat. The
+        // DuckDB loader is pulled in only when such a member is present.
+        const geojson = projectedGeoJsonCrs(parsed)
+          ? await (
+              await import("../duckdb-vector-loader")
+            ).reprojectFeatureCollectionToWgs84(parsed)
+          : parsed;
         const name =
           input.name?.trim() || input.url.split("/").pop()?.split("?")[0] || "Remote layer";
         const id = store().addGeoJsonLayer(name, geojson, input.url);

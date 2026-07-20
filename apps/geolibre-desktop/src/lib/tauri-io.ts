@@ -29,6 +29,7 @@ import {
 } from "./duckdb-vector-guard";
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./geotagged-photos";
+import { projectedGeoJsonCrs } from "./crs-utils";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import {
@@ -415,7 +416,20 @@ function normalizeShapefileResult(value: unknown): FeatureCollection {
 }
 
 async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
-  return assertFeatureCollection(JSON.parse(text));
+  const fc = assertFeatureCollection(JSON.parse(text));
+  // A projected GeoJSON declares a non-WGS84 CRS via a legacy top-level `crs`
+  // member and carries raw projected coordinates MapLibre cannot render. When
+  // one is present, reproject to WGS84 (the heavy DuckDB loader is pulled in
+  // only then). A blank/WGS84 member takes the cheap path below and never loads
+  // DuckDB, keeping the common case light.
+  if (projectedGeoJsonCrs(fc)) {
+    const { reprojectFeatureCollectionToWgs84 } = await import("./duckdb-vector-loader");
+    return reprojectFeatureCollectionToWgs84(fc);
+  }
+  // Drop the deprecated `crs` member (RFC 7946 mandates WGS84) so it does not
+  // linger on an already-WGS84 collection.
+  const { crs: _deprecatedCrs, ...stripped } = fc as FeatureCollection & { crs?: unknown };
+  return stripped as FeatureCollection;
 }
 
 /**

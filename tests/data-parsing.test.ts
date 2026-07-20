@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isGeographicCrs } from "../apps/geolibre-desktop/src/lib/crs-utils";
+import { isGeographicCrs, projectedGeoJsonCrs } from "../apps/geolibre-desktop/src/lib/crs-utils";
 import {
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
@@ -202,6 +202,35 @@ describe("isGeographicCrs", () => {
     assert.equal(isGeographicCrs("EPSG:32643"), false);
     assert.equal(isGeographicCrs("EPSG:3857"), false);
     assert.equal(isGeographicCrs("ESRI:102100"), false);
+  });
+});
+
+describe("projectedGeoJsonCrs", () => {
+  const withCrs = (name: string) => ({
+    type: "FeatureCollection",
+    crs: { type: "name", properties: { name } },
+    features: [],
+  });
+
+  it("returns the projected CRS name from a legacy crs member (URN and short form)", () => {
+    assert.equal(
+      projectedGeoJsonCrs(withCrs("urn:ogc:def:crs:EPSG::26911")),
+      "urn:ogc:def:crs:EPSG::26911",
+    );
+    assert.equal(projectedGeoJsonCrs(withCrs("EPSG:3857")), "EPSG:3857");
+  });
+
+  it("returns null for a WGS84/CRS84 member", () => {
+    assert.equal(projectedGeoJsonCrs(withCrs("urn:ogc:def:crs:EPSG::4326")), null);
+    assert.equal(projectedGeoJsonCrs(withCrs("EPSG:4326")), null);
+    assert.equal(projectedGeoJsonCrs(withCrs("urn:ogc:def:crs:OGC:1.3:CRS84")), null);
+  });
+
+  it("returns null when the crs member is absent or malformed", () => {
+    assert.equal(projectedGeoJsonCrs({ type: "FeatureCollection", features: [] }), null);
+    assert.equal(projectedGeoJsonCrs({ crs: { properties: {} } }), null);
+    assert.equal(projectedGeoJsonCrs(null), null);
+    assert.equal(projectedGeoJsonCrs("not an object"), null);
   });
 });
 

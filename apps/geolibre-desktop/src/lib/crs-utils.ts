@@ -25,3 +25,26 @@ export function isGeographicCrs(crs: string | undefined): boolean {
   if (!value) return true;
   return value.includes("CRS84") || /EPSG:+4326\b/.test(value);
 }
+
+/**
+ * Reads the name of a legacy top-level GeoJSON `crs` member when it declares a
+ * projected (non-WGS84) CRS, or null otherwise.
+ *
+ * RFC 7946 mandates WGS84 for GeoJSON, but GDAL/QGIS still emit the pre-RFC form
+ * with a `"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::26911" } }`
+ * member and coordinates in the projected CRS. Such coordinates (metres) cannot
+ * be rendered by MapLibre and must be reprojected to WGS84 first. A member that
+ * is absent, malformed, or already WGS84/CRS84 returns null so the caller keeps
+ * the cheap, DuckDB-free path.
+ *
+ * The returned name is handed as-is to `reprojectFeatureCollectionToWgs84`,
+ * which parses the EPSG code from it, so both the URN and short forms work.
+ *
+ * @param value - A parsed GeoJSON object that may carry a `crs` member
+ * @returns The projected CRS name to reproject from, or null when none is needed
+ */
+export function projectedGeoJsonCrs(value: unknown): string | null {
+  const name = (value as { crs?: { properties?: { name?: unknown } } })?.crs?.properties?.name;
+  if (typeof name !== "string") return null;
+  return isGeographicCrs(name) ? null : name;
+}
