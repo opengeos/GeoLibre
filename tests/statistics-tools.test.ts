@@ -6,6 +6,7 @@ import {
   STATISTICS_TOOLS,
   averageNearestNeighborTool,
   emergingHotSpotTool,
+  emergingPattern,
   getStatisticsTool,
   getisOrdTool,
   globalMoransITool,
@@ -402,5 +403,33 @@ describe("emerging hot spot (space-time cube)", () => {
       cubeParams,
     );
     assert.ok(few.messages.some((m) => m.includes("at least 3 points")));
+  });
+});
+
+describe("emerging pattern classification", () => {
+  const CRIT = 1.96; // 95% two-sided threshold
+  const NO_TREND = { s: 0, tau: 0, z: 0, p: 1 };
+
+  it("prioritizes the >=90% persistent family over oscillating", () => {
+    // 12 steps, hot in 11 (>=90%) with one earlier significant-cold bin and no
+    // trend. ArcGIS classifies this as Persistent, not Oscillating.
+    const z = new Array(12).fill(3);
+    z[3] = -3;
+    assert.equal(emergingPattern(z, CRIT, NO_TREND, 0.05).pattern, "Persistent Hot Spot");
+  });
+
+  it("classifies <90% hot with a prior cold bin as oscillating", () => {
+    // Final step hot, only 2/12 hot (<90%), and a significant-cold bin earlier.
+    const z = new Array(12).fill(0);
+    z[3] = -3;
+    z[10] = 3;
+    z[11] = 3;
+    assert.equal(emergingPattern(z, CRIT, NO_TREND, 0.05).pattern, "Oscillating Hot Spot");
+  });
+
+  it("mirrors the priority for the cold family", () => {
+    const z = new Array(12).fill(-3);
+    z[3] = 3;
+    assert.equal(emergingPattern(z, CRIT, NO_TREND, 0.05).pattern, "Persistent Cold Spot");
   });
 });

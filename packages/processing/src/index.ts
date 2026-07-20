@@ -43,6 +43,7 @@ export {
   averageNearestNeighborTool,
   kernelDensityTool,
   emergingHotSpotTool,
+  emergingPattern,
 } from "./statistics-tools";
 export { H3_TOOLS, getH3Tool, createH3GridTool, binPointsTool } from "./h3-tools";
 export {

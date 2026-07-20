@@ -868,7 +868,7 @@ function mannKendall(series: number[]): MannKendall {
  * z-series; `alpha` its significance. Returns a label and a signed bin code
  * (positive = hot family, negative = cold family, 0 = no pattern) for styling.
  */
-function emergingPattern(
+export function emergingPattern(
   zSeries: number[],
   crit: number,
   mk: MannKendall,
@@ -892,25 +892,29 @@ function emergingPattern(
   };
 
   if (finalHot) {
-    if (coldCount > 0) return { pattern: "Oscillating Hot Spot", bin: 2 };
     const run = trailingRun(hot);
+    // The ≥90% "persistent family" takes priority: ArcGIS defines Oscillating
+    // only for locations that are significant hot spots in < 90% of time steps,
+    // so a cell hot in ≥90% of steps stays Persistent/Intensifying/Diminishing
+    // even if it had a stray significant-cold bin earlier in its history.
     if (hotCount / n >= 0.9) {
       if (trendUp) return { pattern: "Intensifying Hot Spot", bin: 4 };
       if (trendDown) return { pattern: "Diminishing Hot Spot", bin: 4 };
       return { pattern: "Persistent Hot Spot", bin: 3 };
     }
+    if (coldCount > 0) return { pattern: "Oscillating Hot Spot", bin: 2 };
     if (run === 1 && hotCount === 1) return { pattern: "New Hot Spot", bin: 1 };
     if (run === hotCount) return { pattern: "Consecutive Hot Spot", bin: 2 };
     return { pattern: "Sporadic Hot Spot", bin: 1 };
   }
   if (finalCold) {
-    if (hotCount > 0) return { pattern: "Oscillating Cold Spot", bin: -2 };
     const run = trailingRun(cold);
     if (coldCount / n >= 0.9) {
       if (trendDown) return { pattern: "Intensifying Cold Spot", bin: -4 };
       if (trendUp) return { pattern: "Diminishing Cold Spot", bin: -4 };
       return { pattern: "Persistent Cold Spot", bin: -3 };
     }
+    if (hotCount > 0) return { pattern: "Oscillating Cold Spot", bin: -2 };
     if (run === 1 && coldCount === 1) return { pattern: "New Cold Spot", bin: -1 };
     if (run === coldCount) return { pattern: "Consecutive Cold Spot", bin: -2 };
     return { pattern: "Sporadic Cold Spot", bin: -1 };
