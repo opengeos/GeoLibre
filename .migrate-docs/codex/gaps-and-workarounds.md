@@ -7,3 +7,6 @@
 - 2026-07-20 — External Plugin API v1 is incompatible with the strict seam and
   is rejected before code execution; first-party runtimes move adapter-private
   and external authors migrate to v2. See [the governance decision](maplibre.md#2026-07-20--conflicting-phase-0-scopes--strict-mapengine-boundary).
+- 2026-07-20 — The strict boundary begins with 197 reviewed violations; the
+  checked-in ratchet permits only monotonic removal until the fixture is empty.
+  See [the boundary step](maplibre.md#2026-07-20--public-mapcontroller-dependency-graph--strict-mapengine-contract-and-ratchet).

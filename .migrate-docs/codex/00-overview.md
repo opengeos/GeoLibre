@@ -30,3 +30,6 @@ Status values: not started · in progress · partial · blocked · done
   adapter-private, preserving their ids and project state.
 - Decision: the instruction to implement the master plan confirms the strict
   Phase 0 arbitration recorded in `.migrate-docs/migration-plan.md` §3.
+- Implemented: the engine-neutral contract and typed extension command map are
+  exported from `@geolibre/map`; the boundary ratchet records 197 reviewed
+  path/pattern violations and rejects additions or unreviewed changes.

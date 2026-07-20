@@ -71,3 +71,40 @@
   because production code is unchanged.
 - Follow-up: implement the contracts and boundary ratchet on
   `codex-migrate-to-arcgisjsapi`, then update this log with test evidence.
+
+## 2026-07-20 — Public `MapController` dependency graph → strict `MapEngine` contract and ratchet
+
+- Source: MapLibre — public `MapController` imports plus direct `maplibre-gl`,
+  `maplibre-gl-*`, deck.gl, three.js, and Cesium imports across applications and
+  plugins.
+- Files touched: `packages/map/src/index.ts` before → engine contracts exported;
+  new `packages/map/src/engine/types.ts` and
+  `packages/map/src/engine/extensions.ts`; new
+  `tests/engine-contracts.test.ts`, `tests/engine-boundary.test.ts`, and
+  `tests/fixtures/engine-boundary-baseline.json`.
+- ArcGIS approach: define lifecycle, camera, layer, viewport, interaction,
+  control, event, marker, popup, capture, and extension-command contracts using
+  only GeoLibre, GeoJSON, DOM, and primitive types. Future `MapView` and
+  `SceneView` adapters must implement these ports without exporting ArcGIS SDK
+  objects.
+- What changed: `MapEngine` and its restricted `MapEngineClient` are now the
+  typed target for all renderer operations. A recursive source test snapshots
+  197 reviewed path/pattern leaks outside `packages/map` and fails if a leak is
+  added, renamed without review, or changes renderer pattern.
+- Gap / limitation: the repository still has all 197 baseline violations; this
+  commit establishes the enforceable destination but does not yet migrate a
+  consumer.
+- Workaround: keep the explicit ratchet baseline green while each subsequent
+  commit removes its migrated entries. Removal criteria: the fixture becomes an
+  empty array at strict Phase 0 exit.
+- Tradeoff accepted: the initial baseline is large and creates intentional
+  fixture churn during relocation, but it makes boundary regressions visible
+  while permitting small, behavior-preserving commits.
+- Status: done.
+- Verification: `node --import tsx --test tests/engine-contracts.test.ts
+  tests/engine-boundary.test.ts` → 4 passed; `npx tsc --noEmit --strict
+  --skipLibCheck --moduleResolution bundler --module esnext --target es2022
+  --lib es2022,dom --types node tests/engine-contracts.test.ts` → passed;
+  scoped ESLint and `git diff --check` → passed.
+- Follow-up: implement the stable synchronous handle and lazy MapLibre adapter,
+  then begin deleting reviewed boundary entries.

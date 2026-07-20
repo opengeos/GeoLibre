@@ -1,0 +1,790 @@
+[
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/add-data/apply-service.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/add-data/context.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/AddDataDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/BasemapExtractPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/CollaborationStatusBadge.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/DesktopShell.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/GpsTrackingDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/GpsTrackingDialog.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/LoadFeaturesIntoEditorDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/ManagePluginsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/MapContextMenu.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/MapContextMenu.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/MapModeBanner.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/PixelTimeSeriesControl.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/PrintLayoutDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/RasterSubsetPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/RecordTourDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/RecordVideoDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/RegionSelectOverlay.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/RemoteCursorsOverlay.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/RemoteCursorsOverlay.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/SettingsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/SetViewDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/TerrainSettingsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/toolbar/constants.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/toolbar/EditMenu.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/layout/TopToolbar.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/AssistantPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/AttributeTable.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/AttributeTable.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/BrowserPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/LayerPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/LayerPanelPlaceSearch.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/LayerPanelPlaceSearch.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/NotebookPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/PythonConsolePanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/RasterAttributeTable.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/RasterSymbologySection.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/RasterSymbologySection.tsx",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/RouteAnimationPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/panels/StylePanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/GeocodeDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/ModelBuilderDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/NetworkToolsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/ObjectDetectionDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/ProcessingDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/RasterToolsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/SegmentationDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/SegmentEverythingPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/StatisticsToolsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/processing/VectorToolsDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapComposeBar.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapHandoutDialog.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapHandoutDialog.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapPanel.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapPresenter.tsx",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapPresenter.tsx",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useCollaboration.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useCollaboration.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useCommandBridge.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useCommandBridge.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useEmbedBridge.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useNotebookBridge.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useNotebookBridge.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@deck.gl/aggregation-layers"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@deck.gl/geo-layers"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@deck.gl/layers"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@deck.gl/mapbox"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@deck.gl/mesh-layers"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/usePlugins.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/hooks/useViewportHistory.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/assistant/tools.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/assistant/tools.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/assistant/tools.ts",
+    "pattern": "maplibre-gl-planetary-computer"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/build-project-snapshot.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/collada-to-glb.ts",
+    "pattern": "three"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/collada-to-glb.ts",
+    "pattern": "three/addons/exporters/GLTFExporter.js"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/collada-to-glb.ts",
+    "pattern": "three/addons/loaders/ColladaLoader.js"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/lidar-style.ts",
+    "pattern": "maplibre-gl-lidar/style.css?inline"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/map-recorder.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/mbtiles.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/offline-tiles.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/print-extent.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/pyodide/pyodide-console.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/rtl-text.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/scripting/scriptingApi.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/selection-actions.ts",
+    "pattern": "@geolibre/map#MapController"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/tour-recorder.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/vector-export.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/lib/xyz-url.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-3d-tiles/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-basemap-control/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-components/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-duckdb/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-earth-engine/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-enviroatlas/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-esri-wayback/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-fema-wms/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-geo-editor/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-geoagent/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-nasa-earthdata/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-national-map/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-overture-maps/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-planetary-computer/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-raster/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-streetview/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-swipe/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-time-slider/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-usgs-lidar/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/main.tsx",
+    "pattern": "maplibre-gl-vector/style.css"
+  },
+  {
+    "path": "apps/geolibre-desktop/src/types/three-addons.d.ts",
+    "pattern": "three"
+  },
+  {
+    "path": "apps/geolibre-desktop/vite.config.ts",
+    "pattern": "cesium"
+  },
+  {
+    "path": "packages/plugins/src/arcgis-maplibre.d.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/maplibre-gl-usgs-lidar.d.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/maplibre-gl-usgs-lidar.d.ts",
+    "pattern": "maplibre-gl-lidar"
+  },
+  {
+    "path": "packages/plugins/src/plugin-manager.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/arcgis-i3s-tiles.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/arcgis-i3s-tiles.ts",
+    "pattern": "@deck.gl/mapbox"
+  },
+  {
+    "path": "packages/plugins/src/plugins/arcgis-layer.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/colormap-colors.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "packages/plugins/src/plugins/deckgl-viz/diagrams.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/deckgl-viz/elevation.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/deckgl-viz/overlay.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/deckgl-viz/registry.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/elevation-profile/core/ElevationProfileControl.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/map-projection-utils.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-3d-tiles.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-3d-tiles.ts",
+    "pattern": "maplibre-gl-3d-tiles"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-annotations.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-basemap-control.ts",
+    "pattern": "maplibre-gl-basemap-control"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-components.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-components.ts",
+    "pattern": "@deck.gl/mapbox"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-components.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-components.ts",
+    "pattern": "maplibre-gl-components"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-components.ts",
+    "pattern": "maplibre-gl-lidar"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-components.ts",
+    "pattern": "maplibre-gl-splat"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-directions.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-duckdb.ts",
+    "pattern": "maplibre-gl-duckdb"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-earth-engine.ts",
+    "pattern": "maplibre-gl-earth-engine"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-effects.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-enviroatlas.ts",
+    "pattern": "maplibre-gl-enviroatlas"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-esri-wayback.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-esri-wayback.ts",
+    "pattern": "maplibre-gl-esri-wayback"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-fema-wms.ts",
+    "pattern": "maplibre-gl-fema-wms"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-geo-editor.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-geo-editor.ts",
+    "pattern": "maplibre-gl-geo-editor"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-geoagent.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-geoagent.ts",
+    "pattern": "maplibre-gl-earth-engine"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-geoagent.ts",
+    "pattern": "maplibre-gl-geoagent"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-graticule.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-mapillary.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-nasa-earthdata.ts",
+    "pattern": "maplibre-gl-nasa-earthdata"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-national-map.ts",
+    "pattern": "maplibre-gl-national-map"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-openaerialmap.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-overture-maps.ts",
+    "pattern": "maplibre-gl-overture-maps"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-planetary-computer.ts",
+    "pattern": "maplibre-gl-planetary-computer"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-raster.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-raster.ts",
+    "pattern": "@deck.gl/mapbox"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-raster.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-reverse-geocode.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-route-animation.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-route-animation.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-streetview.ts",
+    "pattern": "maplibre-gl-streetview"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-sun.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-swipe.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-swipe.ts",
+    "pattern": "maplibre-gl-swipe"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-time-slider.ts",
+    "pattern": "maplibre-gl-time-slider"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-timelapse.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-usgs-lidar.ts",
+    "pattern": "maplibre-gl-usgs-lidar"
+  },
+  {
+    "path": "packages/plugins/src/plugins/maplibre-vector.ts",
+    "pattern": "maplibre-gl-vector"
+  },
+  {
+    "path": "packages/plugins/src/plugins/raster-layer-sync.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "packages/plugins/src/plugins/raster-palette.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "packages/plugins/src/plugins/raster-symbology-texture.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "packages/plugins/src/plugins/shared-deck-overlay.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/plugins/shared-deck-overlay.ts",
+    "pattern": "@deck.gl/mapbox"
+  },
+  {
+    "path": "packages/plugins/src/plugins/swipe-cog-mirror.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/swipe-cog-mirror.ts",
+    "pattern": "maplibre-gl-components"
+  },
+  {
+    "path": "packages/plugins/src/plugins/terrain-measure.ts",
+    "pattern": "maplibre-gl-components"
+  },
+  {
+    "path": "packages/plugins/src/plugins/time-slider-pixel-series.ts",
+    "pattern": "maplibre-gl-raster"
+  },
+  {
+    "path": "packages/plugins/src/plugins/time-slider-pixel-series.ts",
+    "pattern": "maplibre-gl-time-slider"
+  },
+  {
+    "path": "packages/plugins/src/plugins/vector-layer-sync.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/plugins/vector-layer-sync.ts",
+    "pattern": "maplibre-gl-vector"
+  },
+  {
+    "path": "packages/plugins/src/plugins/weather-layer.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "@deck.gl/aggregation-layers"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "@deck.gl/core"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "@deck.gl/geo-layers"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "@deck.gl/layers"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "@deck.gl/mapbox"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "@deck.gl/mesh-layers"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "maplibre-gl"
+  },
+  {
+    "path": "packages/plugins/src/types.ts",
+    "pattern": "maplibre-gl-raster"
+  }
+]
