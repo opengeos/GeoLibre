@@ -25,6 +25,8 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
     (await import("./basemap-control")).maplibreBasemapControlRuntime,
   "geolibre-sun": async () => (await import("./sun")).maplibreSunRuntime,
   "maplibre-gl-directions": async () => (await import("./directions")).maplibreDirectionsRuntime,
+  "maplibre-gl-earth-engine": async () =>
+    (await import("./earth-engine")).maplibreEarthEngineRuntime,
 };
 
 /**

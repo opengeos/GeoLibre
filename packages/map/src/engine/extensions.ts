@@ -58,4 +58,8 @@ export interface MapEngineExtensionMap {
     input: undefined;
     output: boolean;
   };
+  "earth-engine.hide": {
+    input: undefined;
+    output: boolean;
+  };
 }

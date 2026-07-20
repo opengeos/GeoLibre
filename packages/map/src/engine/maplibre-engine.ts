@@ -581,6 +581,11 @@ export class MapLibreEngine implements MapEngine {
           "maplibre-gl-directions",
           command,
         ) as MapEngineExtensionMap[K]["output"];
+      case "earth-engine.hide":
+        return this.hostedRuntimes.runCommand(
+          "maplibre-gl-earth-engine",
+          command,
+        ) as MapEngineExtensionMap[K]["output"];
     }
   }
 

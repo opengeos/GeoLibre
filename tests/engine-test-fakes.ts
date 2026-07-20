@@ -125,7 +125,11 @@ export function createTestMapEngine(
       if (command === "viewport.resize") {
         return undefined as MapEngineExtensionMap[K]["output"];
       }
-      if (command === "directions.remove-last" || command === "directions.clear") {
+      if (
+        command === "directions.remove-last" ||
+        command === "directions.clear" ||
+        command === "earth-engine.hide"
+      ) {
         return false as MapEngineExtensionMap[K]["output"];
       }
       if (

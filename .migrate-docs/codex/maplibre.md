@@ -1047,3 +1047,56 @@
   129 violations.
 - Follow-up: relocate the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — Earth Engine `PluginControl` → ArcGIS `WebTileLayer` + custom authentication UI
+
+- Source: MapLibre — the toolbar-owned Earth Engine panel directly constructed
+  `maplibre-gl-earth-engine`'s `PluginControl`, mounted/hidden it as a native
+  control, and patched its private layer hooks to mirror raster records into
+  the GeoLibre store.
+- Files touched: `packages/plugins/src/plugins/maplibre-earth-engine.ts` before
+  → renderer-neutral toolbar façade;
+  `packages/map/src/maplibre-runtime/earth-engine.ts` added for native control,
+  private hooks, and store reconciliation; Earth Engine OAuth helper/type
+  declaration moved from `packages/plugins` before → an adapter-owned
+  `@geolibre/map/earth-engine-auth` subpath shared by GeoAgent; hosted-runtime
+  registry, extension map, MapLibre/Cesium adapters, workspace manifests/
+  lockfile, Rust source comment, contract fakes, Earth Engine test, and boundary
+  fixture updated.
+- ArcGIS approach: a future adapter can render authenticated Earth Engine tile
+  templates with an adapter-owned `WebTileLayer` (or `ImageryLayer` where a
+  compatible image service exists) and build a dedicated OAuth/script workflow
+  with ArcGIS widgets or Calcite UI. This keeps the toolbar on the same typed
+  lifecycle and visibility contract while the renderer selects its provider.
+- What changed: opening the panel now lazily activates the MapLibre hosted
+  runtime; hiding it sends the typed `earth-engine.hide` command; teardown uses
+  the existing hosted-plugin lifecycle. The runtime dynamically imports and
+  subclasses `PluginControl`, owns its native DOM/control lifecycle and private
+  callbacks, and retains the prior bidirectional `useAppStore` layer sync, so
+  store records remain authoritative. OAuth behavior, GeoAgent's shared auth
+  functions, generated raster records, and data ingest are unchanged.
+- Gap / limitation: ArcGIS has no equivalent to the MapLibre control's bundled
+  Earth Engine script editor, asset workflow, and default authentication UI;
+  Earth Engine tiles remain a third-party provider rather than a native ArcGIS
+  analysis service.
+- Workaround: isolate the existing control and its undocumented private-member
+  bridge in the lazy MapLibre runtime while exposing only visibility through the
+  seam. Removal criteria: replace it once an ArcGIS adapter can authenticate,
+  create/store-sync Earth Engine tile layers, run the supported scripts, and
+  pass the same layer add/remove/opacity/visibility/teardown tests without
+  `PluginControl` or MapLibre types.
+- Tradeoff accepted: `@geolibre/map` now exposes a narrow, renderer-adjacent
+  OAuth helper subpath for GeoAgent and owns the Earth Engine/Tauri dependencies;
+  that package wiring and one typed hide command trade modest complexity for
+  strict lazy renderer isolation and preservation of store authority.
+- Status: partial.
+- Verification: `node --import tsx --test tests/earth-engine-plugin.test.ts
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 49 passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser externalization warnings were
+  non-fatal); the production build emitted separate `earth-engine`,
+  `earth-engine-auth`, `maplibre-earth-engine`, and browser-SDK chunks; the
+  reviewed engine-boundary baseline fell from 129 to 128 violations.
+- Follow-up: relocate the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.

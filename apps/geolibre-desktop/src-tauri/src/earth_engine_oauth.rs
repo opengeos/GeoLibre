@@ -314,7 +314,7 @@ fn auth_page(client_id: &str, state: &str) -> String {
     // scope. `cloud-platform` is intentionally omitted (GeoLibre never uses it),
     // keeping the app clear of Google's broad/restricted-scope verification. Keep
     // in sync with EARTH_ENGINE_OAUTH_SCOPES in
-    // packages/plugins/src/plugins/earth-engine-auth.ts.
+    // packages/map/src/earth-engine-auth.ts.
     const scope = [
       "https://www.googleapis.com/auth/earthengine",
       "https://www.googleapis.com/auth/drive.file"

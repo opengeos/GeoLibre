@@ -8,9 +8,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./capture/map-recorder": "./src/capture/map-recorder.ts",
-    "./capture/tour-recorder": "./src/capture/tour-recorder.ts"
+    "./capture/tour-recorder": "./src/capture/tour-recorder.ts",
+    "./earth-engine-auth": "./src/earth-engine-auth.ts"
   },
   "dependencies": {
+    "@google/earthengine": "^1.7.29",
     "@geolibre/core": "*",
     "@maplibre/maplibre-gl-directions": "^0.9.1",
     "@maplibre/geojson-vt": "^6.1.1",
@@ -24,12 +26,15 @@
     "@turf/helpers": "^7.3.5",
     "@turf/mask": "^7.3.5",
     "@turf/union": "^7.3.5",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "cesium": "^1.143.0",
     "fast-xml-parser": "^5.10.0",
     "html2canvas-pro": "^2.2.4",
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-basemap-control": "^0.12.0",
     "maplibre-gl-enviroatlas": "^0.1.1",
+    "maplibre-gl-earth-engine": "^0.4.2",
     "maplibre-gl-esri-wayback": "^0.2.2",
     "maplibre-gl-fema-wms": "^0.1.2",
     "maplibre-gl-layer-control": "^0.17.4",

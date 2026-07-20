@@ -105,6 +105,7 @@ function createCompleteFake(): MapEngine {
           return true;
         case "directions.remove-last":
         case "directions.clear":
+        case "earth-engine.hide":
           return false;
         case "hosted-plugin.deactivate":
         case "hosted-plugin.get-state":
@@ -161,7 +162,9 @@ test("extension commands infer their declared result", async () => {
   const state: unknown = engine.invoke("hosted-plugin.get-state", {
     pluginId: "example",
   });
+  const hidden: boolean = engine.invoke("earth-engine.hide", undefined);
 
   assert.equal(activated, true);
   assert.equal(state, undefined);
+  assert.equal(hidden, false);
 });

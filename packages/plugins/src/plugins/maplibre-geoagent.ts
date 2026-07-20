@@ -1,5 +1,16 @@
-/// <reference path="../earthengine.d.ts" />
-
+import {
+  authenticateEarthEngine as authenticateEarthEngineForGeoLibre,
+  captureEarthEngineFunctionInfo,
+  clearEarthEngineFunctionInfo,
+  closeTauriOauthPopups,
+  errorMessage,
+  importMetaEnv,
+  installEarthEngineFunctionInfoFallback,
+  oauthClientIdValue,
+  preloadEarthEngineAuthLibrary,
+  projectValue as earthEngineProjectValue,
+  shouldUseTauriEarthEngineOAuth,
+} from "@geolibre/map/earth-engine-auth";
 import type { GeoAgentControl, GeoAgentControlOptions } from "maplibre-gl-geoagent";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import {
@@ -15,19 +26,6 @@ import {
   wireGeoAgentStoreSync,
   type GeoAgentOverlayRecord,
 } from "./geoagent-layer-sync";
-import {
-  authenticateEarthEngine as authenticateEarthEngineForGeoLibre,
-  captureEarthEngineFunctionInfo,
-  clearEarthEngineFunctionInfo,
-  closeTauriOauthPopups,
-  errorMessage,
-  importMetaEnv,
-  installEarthEngineFunctionInfoFallback,
-  oauthClientIdValue,
-  preloadEarthEngineAuthLibrary,
-  projectValue as earthEngineProjectValue,
-  shouldUseTauriEarthEngineOAuth,
-} from "./earth-engine-auth";
 
 const STORAGE_PREFIX = "geolibre.geoagent";
 

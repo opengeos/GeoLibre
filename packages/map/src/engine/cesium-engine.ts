@@ -312,6 +312,7 @@ export class CesiumEngine implements MapEngine {
         return undefined as MapEngineExtensionMap[K]["output"];
       case "directions.remove-last":
       case "directions.clear":
+      case "earth-engine.hide":
         return false as MapEngineExtensionMap[K]["output"];
     }
   }

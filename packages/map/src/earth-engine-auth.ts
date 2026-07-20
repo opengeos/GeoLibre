@@ -1,4 +1,4 @@
-/// <reference path="../earthengine.d.ts" />
+/// <reference path="./earthengine.d.ts" />
 
 import { invoke } from "@tauri-apps/api/core";
 

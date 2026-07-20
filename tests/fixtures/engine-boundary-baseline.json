@@ -352,10 +352,6 @@
     "pattern": "maplibre-gl-duckdb"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-earth-engine.ts",
-    "pattern": "maplibre-gl-earth-engine"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-effects.ts",
     "pattern": "maplibre-gl"
   },
