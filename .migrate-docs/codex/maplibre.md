@@ -1453,3 +1453,32 @@
   from 121 to 119 violations.
 - Follow-up: relocate the next first-party plugin or renderer helper still
   importing MapLibre/deck.gl directly; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre graticule settings helpers → ArcGIS renderer-neutral grid model
+
+- Source: MapLibre — the Gridlines plugin mixed its native MapLibre layer/control
+  implementation with serializable grid settings, UTM helpers, coordinate-label
+  formatting, and project-state normalization.
+- Files touched: `packages/plugins/src/plugins/maplibre-graticule.ts` before →
+  consumes/re-exports the shared model; `packages/core/src/graticule.ts` added;
+  `packages/core/src/index.ts` exports the model.
+- ArcGIS approach: an ArcGIS `GraphicsLayer` or view-specific grid renderer can
+  consume the same settings model while the eventual adapter translates it to
+  ArcGIS graphics/text symbols without exposing a `MapView` to the plugin.
+- What changed: settings, labels, validation, equality, UTM-zone helpers, and
+  coordinate formatters now live in `@geolibre/core`; the still-native plugin
+  consumes the shared model without changing settings values or project JSON.
+- Gap / limitation: ArcGIS has no direct drop-in equivalent for MapLibre style
+  layers that simultaneously render graticule lines and edge-following labels.
+- Workaround: retain the existing native rendering temporarily while making its
+  model adapter-neutral. Removal criteria: the lazy adapter runtime owns native
+  rendering and an ArcGIS adapter draws equivalent grid/label graphics from this
+  shared state.
+- Tradeoff accepted: core gains a small gridline-domain module before the
+  renderer move, but later adapters and project state no longer depend on a
+  MapLibre plugin module.
+- Status: partial.
+- Verification: `node --import tsx --test tests/graticule.test.ts` → 18 passed;
+  `git diff --check` → passed.
+- Follow-up: move the native MapLibre control, layers, and sidebar panel into a
+  lazy hosted runtime through MapEngine; Codex, 2026-07-20.

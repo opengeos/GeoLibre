@@ -108,3 +108,4 @@ export * from "./directions";
 export * from "./effects-settings";
 export * from "./time-slider";
 export * from "./time-slider-pixel-series";
+export * from "./graticule";
