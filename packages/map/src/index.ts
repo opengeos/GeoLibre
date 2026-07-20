@@ -1,7 +1,7 @@
 export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCanvas";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
-export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
+export { isArcGIS3DSupportedLayerType as isCesiumSupportedLayerType, ArcGISSceneEngine } from "./engine/arcgis-scene-engine";
 export * from "./engine/types";
 export { MapLibreEngine } from "./engine/maplibre-engine";
 export {
