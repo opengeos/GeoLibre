@@ -784,7 +784,17 @@ export class MapController {
       if (control === "compass") return this.addCompassControl();
       if (control === "geolocate") return this.addGeolocateControl();
       if (control === "globe") return this.addGlobeControl();
-      if (control === "terrain") return this.addTerrainControl();
+      if (control === "terrain") {
+        const added = this.addTerrainControl();
+        // Turning the Terrain control on should show 3D relief immediately, so
+        // users don't have to click the control button as a second step. Guard
+        // on the DEM source being present (added by addTerrainControl once the
+        // style is ready) so setEnabled has a source to point setTerrain at.
+        if (this.map?.getSource(TERRAIN_SOURCE_ID)) {
+          this.terrainControl?.setEnabled(true);
+        }
+        return added;
+      }
       if (control === "scale") return this.addScaleControl();
       if (control === "attribution") return this.addAttributionControl();
       if (control === "logo") return this.addLogoControl();

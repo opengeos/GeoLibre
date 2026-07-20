@@ -1017,3 +1017,110 @@ describe("MapController story-map layer helpers", () => {
     assert.equal(paint["raster-opacity-transition"], undefined);
   });
 });
+
+// A DOM stub just rich enough for TerrainControl.onAdd, which the fake map's
+// addControl invokes below so the control has a live map to enable terrain on.
+function makeTerrainDomStub(): { createElement: () => unknown } {
+  return {
+    createElement: () => {
+      const classes = new Set<string>();
+      return {
+        className: "",
+        type: "",
+        title: "",
+        setAttribute() {},
+        appendChild: (child: unknown) => child,
+        addEventListener() {},
+        remove() {},
+        classList: {
+          toggle: (name: string, force?: boolean) => {
+            const next = force ?? !classes.has(name);
+            if (next) classes.add(name);
+            else classes.delete(name);
+            return next;
+          },
+        },
+      };
+    },
+  };
+}
+
+describe("MapController terrain auto-enable", () => {
+  it("enables terrain when the Terrain control is turned on, without a click", () => {
+    const prevDoc = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: unknown }).document = makeTerrainDomStub();
+    try {
+      let terrain: maplibregl.TerrainSpecification | null = null;
+      const sources = new Set<string>();
+      const map = {
+        // addControl mirrors MapLibre: it runs the control's onAdd so the
+        // control captures the map and can toggle terrain.
+        addControl: (control: maplibregl.IControl) =>
+          control.onAdd(map as unknown as maplibregl.Map),
+        removeControl() {},
+        getSource: (id: string) => (sources.has(id) ? {} : undefined),
+        addSource: (id: string) => {
+          sources.add(id);
+        },
+        getTerrain: () => terrain,
+        setTerrain: (spec: maplibregl.TerrainSpecification | null) => {
+          terrain = spec;
+        },
+        setCenterClampedToGround() {},
+        on() {},
+        off() {},
+      };
+      const controller = createMapController();
+      const internal = controller as unknown as { map: unknown; styleReady: boolean };
+      internal.map = map;
+      internal.styleReady = true;
+
+      const ok = controller.setBuiltInControlVisible("terrain", true);
+
+      assert.equal(ok, true);
+      // Terrain is active immediately — the user never had to click the button.
+      assert.equal(terrain?.source, "geolibre-terrain-dem");
+    } finally {
+      if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document;
+      else (globalThis as { document?: unknown }).document = prevDoc;
+    }
+  });
+
+  it("does not enable terrain when the style (and DEM source) is not ready", () => {
+    const prevDoc = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: unknown }).document = makeTerrainDomStub();
+    try {
+      let terrain: maplibregl.TerrainSpecification | null = null;
+      const sources = new Set<string>();
+      const map = {
+        addControl: (control: maplibregl.IControl) =>
+          control.onAdd(map as unknown as maplibregl.Map),
+        removeControl() {},
+        getSource: (id: string) => (sources.has(id) ? {} : undefined),
+        addSource: (id: string) => {
+          sources.add(id);
+        },
+        getTerrain: () => terrain,
+        setTerrain: (spec: maplibregl.TerrainSpecification | null) => {
+          terrain = spec;
+        },
+        setCenterClampedToGround() {},
+        on() {},
+        off() {},
+      };
+      const controller = createMapController();
+      const internal = controller as unknown as { map: unknown; styleReady: boolean };
+      internal.map = map;
+      // Style not ready: addTerrainSource no-ops, so there is no source for
+      // setTerrain to point at and auto-enable must be skipped rather than throw.
+      internal.styleReady = false;
+
+      controller.setBuiltInControlVisible("terrain", true);
+
+      assert.equal(terrain, null);
+    } finally {
+      if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document;
+      else (globalThis as { document?: unknown }).document = prevDoc;
+    }
+  });
+});
