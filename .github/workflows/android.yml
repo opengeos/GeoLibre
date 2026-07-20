@@ -229,6 +229,43 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
+      - name: Verify built AAB package id
+        # Third assertion, on the artifact that actually reaches Play. The two
+        # checks above cover the Gradle script and the sideload APKs; the AAB is
+        # produced by a separate Gradle task, so on the "verify rather than
+        # trust" principle the rest of this workflow follows, the file Play
+        # burns the package id from is not left as the only unchecked one.
+        #
+        # bundletool rather than aapt2: an AAB's manifest is protobuf-encoded,
+        # not binary XML, so aapt2 cannot read it. Grepping the raw protobuf for
+        # the package string was rejected — it would match an occurrence
+        # anywhere in the manifest and cannot assert it is the `package`
+        # attribute, which is a weak check wearing the costume of a strong one.
+        if: steps.keystore.outputs.present == 'true'
+        env:
+          # Pinned; bump deliberately like the other tool versions above.
+          BUNDLETOOL_VERSION: "1.18.3"
+        run: |
+          set -euo pipefail
+          jar="$RUNNER_TEMP/bundletool.jar"
+          curl -fsSL -o "$jar" \
+            "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          mapfile -t aabs < <(find \
+            apps/geolibre-desktop/src-tauri/gen/android \
+            -path '*/outputs/bundle/*' -name '*.aab' | sort)
+          if [ "${#aabs[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one AAB under outputs/bundle/, found ${#aabs[@]}"
+            printf '::error::  %s\n' "${aabs[@]:-}"
+            exit 1
+          fi
+          pkg="$("$JAVA_HOME/bin/java" -jar "$jar" dump manifest \
+            --bundle="${aabs[0]}" --xpath=/manifest/@package)"
+          if [ "$pkg" != "$EXPECTED_PACKAGE" ]; then
+            echo "::error::${aabs[0]} has package '$pkg', expected '$EXPECTED_PACKAGE'"
+            exit 1
+          fi
+          echo "AAB ${aabs[0]} reports package $EXPECTED_PACKAGE."
+
       - name: Verify 16 KB page alignment
         # Play rejects apps targeting Android 15+ whose native libs are not
         # 16 KB-aligned. The RUSTFLAGS above are what produce the alignment;
