@@ -666,6 +666,7 @@ function pwaPlugin(): Plugin[] {
     // its first runtime fetch and is CacheFirst-cached thereafter.
     "**/maplibre-*",
     "**/duckdb-*",
+    "**/arcgis-*",
     // CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane
     // switches to the globe, so it is CacheFirst-cached on first use rather than
     // bloating the app-shell precache. The `Cesium-*` (capital) glob catches the

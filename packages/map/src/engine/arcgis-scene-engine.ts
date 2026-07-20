@@ -139,13 +139,13 @@ export class ArcGISSceneEngine implements MapEngine {
     });
 
     this.view = new SceneView({
-      container,
+      container: container as any,
       map,
       qualityProfile: "low", // for light performance in split layout
       environment: {
-        atmosphere: { quality: "low" },
+        atmosphere: { quality: "low" } as any,
         starsEnabled: false
-      },
+      } as any,
       ui: {
         components: [] // disable default UI controls in grid panes
       }
@@ -225,20 +225,21 @@ export class ArcGISSceneEngine implements MapEngine {
       { default: WebTileLayer },
       { default: WMSLayer },
       { default: WMTSLayer },
-      { default: OGC3DTilesLayer }
+      { default: IntegratedMesh3DTilesLayer }
     ] = await Promise.all([
       import("@arcgis/core/layers/GeoJSONLayer"),
       import("@arcgis/core/layers/WebTileLayer"),
       import("@arcgis/core/layers/WMSLayer"),
       import("@arcgis/core/layers/WMTSLayer"),
-      import("@arcgis/core/layers/OGC3DTilesLayer")
+      import("@arcgis/core/layers/IntegratedMesh3DTilesLayer")
     ]);
 
     const isSupported = (layer: GeoLibreLayer) => {
+      const source = layer.source as any;
       if (layer.type === "geojson") return Boolean(layer.geojson?.features?.length);
-      if (layer.type === "3d-tiles") return Boolean(layer.source.url ?? layer.sourcePath);
-      if (layer.type === "wms") return Boolean(layer.source.url);
-      return Boolean(layer.source.tiles?.[0]);
+      if (layer.type === "3d-tiles") return Boolean(source?.url ?? layer.sourcePath);
+      if (layer.type === "wms") return Boolean(source?.url);
+      return Boolean(source?.tiles?.[0]);
     };
 
     const newActiveLayers = new Map<string, { layer: GeoLibreLayer; handle: any }>();
@@ -249,6 +250,7 @@ export class ArcGISSceneEngine implements MapEngine {
       }
 
       const existingLayer = this.activeLayers.get(layer.id);
+      const source = layer.source as any;
 
       if (existingLayer) {
         const needsRebuild = this.checkNeedsRebuild(existingLayer.layer, layer);
@@ -276,25 +278,25 @@ export class ArcGISSceneEngine implements MapEngine {
           renderer: getRendererForGeoJSON(layer) as any,
         });
       } else if (layer.type === "3d-tiles") {
-        const url = layer.source.url ?? layer.sourcePath;
-        handle = new OGC3DTilesLayer({
+        const url = source?.url ?? layer.sourcePath;
+        handle = new IntegratedMesh3DTilesLayer({
           id: layer.id,
           url: url,
           visible: layer.visible,
           opacity: layer.opacity,
           elevationInfo: {
             mode: "relative-to-ground",
-            offset: Number(layer.source.altitudeOffset ?? 0),
+            offset: Number(source?.altitudeOffset ?? 0),
           },
         });
       } else if (layer.type === "wms") {
-        const layerNames = layer.source.params?.layers ?? layer.source.params?.LAYERS;
+        const layerNames = source?.params?.layers ?? source?.params?.LAYERS;
         const sublayers = layerNames
           ? layerNames.split(",").map((name: string) => ({ name }))
           : undefined;
         handle = new WMSLayer({
           id: layer.id,
-          url: layer.source.url,
+          url: source?.url,
           visible: layer.visible,
           opacity: layer.opacity,
           sublayers,
@@ -302,12 +304,12 @@ export class ArcGISSceneEngine implements MapEngine {
       } else if (layer.type === "wmts") {
         handle = new WMTSLayer({
           id: layer.id,
-          url: layer.source.url,
+          url: source?.url,
           visible: layer.visible,
           opacity: layer.opacity,
         });
       } else {
-        const url = layer.source.tiles?.[0] ?? "";
+        const url = source?.tiles?.[0] ?? "";
         handle = new WebTileLayer({
           id: layer.id,
           urlTemplate: url.replace(/{z}/g, "{level}").replace(/{x}/g, "{col}").replace(/{y}/g, "{row}"),
@@ -331,6 +333,8 @@ export class ArcGISSceneEngine implements MapEngine {
 
   private checkNeedsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
     if (prev.type !== next.type) return true;
+    const prevSource = prev.source as any;
+    const nextSource = next.source as any;
     if (prev.type === "geojson") {
       return prev.geojson !== next.geojson ||
         prev.style?.fillColor !== next.style?.fillColor ||
@@ -338,10 +342,10 @@ export class ArcGISSceneEngine implements MapEngine {
         prev.style?.strokeWidth !== next.style?.strokeWidth;
     }
     if (prev.type === "3d-tiles") {
-      return (prev.source.url ?? prev.sourcePath) !== (next.source.url ?? next.sourcePath) ||
-        prev.source.altitudeOffset !== next.source.altitudeOffset;
+      return (prevSource?.url ?? prev.sourcePath) !== (nextSource?.url ?? next.sourcePath) ||
+        prevSource?.altitudeOffset !== nextSource?.altitudeOffset;
     }
-    return (prev.source.tiles?.[0] !== next.source.tiles?.[0]) || prev.source.url !== next.source.url;
+    return (prevSource?.tiles?.[0] !== nextSource?.tiles?.[0]) || prevSource?.url !== nextSource?.url;
   }
 
   supportsLayer(layer: GeoLibreLayer): boolean {
