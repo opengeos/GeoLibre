@@ -285,6 +285,12 @@ class StableMapEngineHandle implements MapEngine {
     input: MapEngineExtensionMap[K]["input"],
   ): MapEngineExtensionMap[K]["output"] {
     if (this.adapter) return this.adapter.invoke(command, input);
+    if (command === "viewport.resize") {
+      this.enqueue((engine) => {
+        engine.invoke(command, input);
+      });
+      return undefined as MapEngineExtensionMap[K]["output"];
+    }
     if (command === "hosted-plugin.activate") {
       return this.whenReady().then((adapter) => adapter.invoke(command, input)) as MapEngineExtensionMap[K]["output"];
     }
@@ -426,10 +432,18 @@ export function createMapEngineHandle(id: MapEngineId): MapEngine {
   return new StableMapEngineHandle(id, () => loadRegisteredMapEngine(id));
 }
 
+/** Package-private configured factory seam used by engine hosts. */
+export function createMapEngineHandleWithFactory(
+  id: MapEngineId,
+  factory: MapEngineFactory,
+): MapEngine {
+  return new StableMapEngineHandle(id, factory);
+}
+
 /** Package-private test seam; intentionally not exported from `@geolibre/map`. */
 export function createMapEngineHandleForTesting(
   id: MapEngineId,
   factory: MapEngineFactory,
 ): MapEngine {
-  return new StableMapEngineHandle(id, factory);
+  return createMapEngineHandleWithFactory(id, factory);
 }

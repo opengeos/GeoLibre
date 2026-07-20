@@ -305,6 +305,9 @@ export class CesiumEngine implements MapEngine {
     _input: MapEngineExtensionMap[K]["input"],
   ): MapEngineExtensionMap[K]["output"] {
     switch (command) {
+      case "viewport.resize":
+        this.viewer?.resize();
+        return undefined as MapEngineExtensionMap[K]["output"];
       case "hosted-plugin.activate":
       case "hosted-plugin.set-position":
       case "hosted-plugin.apply-state":

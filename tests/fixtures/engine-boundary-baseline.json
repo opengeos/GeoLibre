@@ -20,10 +20,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/DesktopShell.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx",
     "pattern": "@geolibre/map#MapController"
   },

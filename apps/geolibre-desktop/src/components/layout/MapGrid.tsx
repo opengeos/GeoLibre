@@ -1,5 +1,5 @@
 import { getCesiumIonToken, useAppStore } from "@geolibre/core";
-import { CesiumCanvas, isCesiumSupportedLayerType, SecondaryMapCanvas } from "@geolibre/map";
+import { EngineCanvas, isMapEngineLayerSupported } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -73,7 +73,7 @@ interface MapGridProps {
  *
  * With a single pane (the default) it renders the primary map untouched, so the
  * normal single-map DOM and behavior are unchanged. With a larger grid it tiles
- * the primary map plus one {@link SecondaryMapCanvas} per `secondaryMapViews`
+ * the primary map plus one engine-neutral canvas per `secondaryMapViews`
  * entry into a CSS grid. Every pane shares the primary's basemap and layers;
  * each secondary pane carries a layer-visibility toggle so it can show a
  * different subset of the shared layers, plus a button to drop the pane. Camera
@@ -147,9 +147,14 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         // the globe: `Cesium.Ion.defaultAccessToken` is applied once at viewer
         // creation, so without a remount a swapped (e.g. corrected) token would
         // never take effect on an already-mounted pane.
-        <CesiumCanvas key={cesiumToken} viewId={viewId} ionToken={cesiumToken} />
+        <EngineCanvas
+          key={cesiumToken}
+          engineId="cesium"
+          viewId={viewId}
+          ionToken={cesiumToken}
+        />
       ) : (
-        <SecondaryMapCanvas viewId={viewId} />
+        <EngineCanvas engineId="maplibre" viewId={viewId} />
       )}
       <PaneLabel
         value={label}
@@ -233,7 +238,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
           layers.map((layer) => {
             const override = layerVisibility?.[layer.id];
             const visible = override === undefined ? layer.visible : override;
-            const only2d = is3d && !isCesiumSupportedLayerType(layer);
+            const only2d = is3d && !isMapEngineLayerSupported("cesium", layer);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}

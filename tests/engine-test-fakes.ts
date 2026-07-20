@@ -111,6 +111,9 @@ export function createTestMapEngine(
       _input: MapEngineExtensionMap[K]["input"],
     ): MapEngineExtensionMap[K]["output"] => {
       operations.push(`invoke:${command}`);
+      if (command === "viewport.resize") {
+        return undefined as MapEngineExtensionMap[K]["output"];
+      }
       if (
         command === "hosted-plugin.activate" ||
         command === "hosted-plugin.set-position" ||

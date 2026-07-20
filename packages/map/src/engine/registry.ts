@@ -1,3 +1,4 @@
+import type { GeoLibreLayer, LayerType } from "@geolibre/core";
 import type { MapEngine, MapEngineCapability, MapEngineId } from "./types";
 
 export type MapEngineFactory = () => Promise<MapEngine>;
@@ -6,6 +7,7 @@ export interface MapEngineDescriptor {
   readonly id: MapEngineId;
   readonly available: boolean;
   readonly capabilities: readonly MapEngineCapability[];
+  readonly supportedLayerTypes: "all" | readonly LayerType[];
 }
 
 const mapLibreCapabilities: readonly MapEngineCapability[] = [
@@ -23,11 +25,13 @@ const descriptors: Readonly<Record<MapEngineId, MapEngineDescriptor>> = {
     id: "maplibre",
     available: true,
     capabilities: mapLibreCapabilities,
+    supportedLayerTypes: "all",
   },
   cesium: {
     id: "cesium",
     available: true,
     capabilities: [],
+    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts", "3d-tiles"],
   },
 };
 
@@ -40,6 +44,11 @@ export function registeredEngineSupports(
   capability: MapEngineCapability,
 ): boolean {
   return descriptors[id].capabilities.includes(capability);
+}
+
+export function isMapEngineLayerSupported(id: MapEngineId, layer: GeoLibreLayer): boolean {
+  const supported = descriptors[id].supportedLayerTypes;
+  return supported === "all" || supported.includes(layer.type);
 }
 
 export async function loadRegisteredMapEngine(id: MapEngineId): Promise<MapEngine> {

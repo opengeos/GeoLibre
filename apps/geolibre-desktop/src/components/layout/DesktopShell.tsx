@@ -1,7 +1,11 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
-import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
-import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import type { MapDiagnosticEvent, MapEngineClient } from "@geolibre/map";
+import {
+  EngineCanvas,
+  resolvePrimaryEngineId,
+  setExternalDeckLayerOrderHandler,
+} from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
@@ -37,6 +41,7 @@ import { convertGeoTiffToCog, isTiff, readGeoTiffInfo } from "@geolibre/processi
 import {
   type CSSProperties,
   type DragEvent,
+  type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
   lazy,
   Suspense,
@@ -563,7 +568,12 @@ export function DesktopShell({
   // mid-drag still detaches the global listeners and restores document.body.
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
-  const mapControllerRef = useRef<MapController | null>(null);
+  // Transitional alias: existing consumers infer their legacy controller ref
+  // from the project hook while the public ref is already MapEngineClient.
+  // The adapter supplies compatibility methods until the consumer slices land.
+  const mapControllerRef = useRef(null) as Parameters<typeof useProjectFileActions>[0];
+  const mapEngineRef = mapControllerRef as unknown as MutableRefObject<MapEngineClient | null>;
+  const [primaryEngineId] = useState(() => resolvePrimaryEngineId(window.location.search));
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
   // `pendingKnowledgePlace` holds the target while the one-time consent notice
   // is open, so it can be applied only after the user acknowledges it.
@@ -1074,7 +1084,7 @@ export function DesktopShell({
     };
   }, []);
 
-  const handleMapControllerReady = useCallback(() => {
+  const handleMapEngineReady = useCallback(() => {
     setMapReadyGeneration((generation) => generation + 1);
   }, []);
 
@@ -1937,10 +1947,12 @@ export function DesktopShell({
           <h1 className="sr-only">GeoLibre map workspace</h1>
           <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
             <MapGrid>
-              <MapCanvas
-                controllerRef={mapControllerRef}
+              <EngineCanvas
+                primary
+                engineId={primaryEngineId}
+                engineRef={mapEngineRef}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                onControllerReady={handleMapControllerReady}
+                onEngineReady={handleMapEngineReady}
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <MapContextMenu

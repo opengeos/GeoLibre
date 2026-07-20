@@ -1,4 +1,5 @@
 export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCanvas";
+export { EngineCanvas, type EngineCanvasProps } from "./EngineCanvas";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
@@ -58,6 +59,7 @@ export {
 export { createMapEngineHandle } from "./engine/handle";
 export {
   getMapEngineDescriptor,
+  isMapEngineLayerSupported,
   resolvePrimaryEngineId,
   type MapEngineDescriptor,
 } from "./engine/registry";

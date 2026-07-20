@@ -145,3 +145,44 @@
   checks → passed; `git diff --check` → passed.
 - Follow-up: extract the existing Cesium viewer lifecycle behind the same seam
   and encode unsupported capabilities explicitly.
+
+## 2026-07-20 — Concrete pane components → engine-id `EngineCanvas` host
+
+- Source: MapLibre — application imports of `MapCanvas`/`SecondaryMapCanvas`,
+  the primary `MapController` ref, concrete secondary host selection, and direct
+  container-resize calls.
+- Files touched: new `packages/map/src/EngineCanvas.tsx`;
+  `packages/map/src/engine/{extensions.ts,handle.ts,maplibre-engine.ts,registry.ts}`
+  and `packages/map/src/index.ts` before → host/factory/metadata support;
+  `apps/geolibre-desktop/src/components/layout/{DesktopShell.tsx,MapGrid.tsx}`
+  before → engine-id host selection; boundary fixture 197 → 196 entries; new
+  `tests/engine-registry.test.ts` and `e2e/engine-param.spec.ts`.
+- ArcGIS approach: make React select an engine by neutral id and consume a
+  stable `MapEngineClient`; later `arcgis-map` and `arcgis-scene` ids can enter
+  the registry without changing the application host or pane chrome.
+- What changed: secondary MapLibre/Cesium panes now mount through one store-led
+  host that owns configuration, layer effects, camera echo handling, diagnostics,
+  and resize commands. `DesktopShell` publishes a `MapEngineClient` ref and
+  resolves the primary `?engine=` value through the registry. Layer support
+  labels use registry metadata rather than a Cesium component import.
+- Gap / limitation: primary MapLibre identify/photo behavior still lives in
+  legacy `MapCanvas`, and unmigrated internal consumers still call controller
+  methods.
+- Workaround: `EngineCanvas` attaches a package-private `MapEngineClient` proxy
+  to the existing primary controller and forwards unknown legacy members only
+  inside the repository. Removal criteria: camera/control, query/interaction,
+  and plugin consumer slices are complete, after which primary hosting uses the
+  normal lazy handle and the proxy is deleted.
+- Tradeoff accepted: primary MapLibre is not fully lazy during this transitional
+  commit, but behavior and plugin readiness timing remain unchanged while the
+  public application ref and secondary hosts move to the final seam.
+- Status: partial.
+- Verification: `npm run build -w geolibre-desktop` → passed;
+  `node --import tsx --test tests/engine-registry.test.ts
+  tests/engine-contracts.test.ts tests/engine-conformance.test.ts
+  tests/engine-boundary.test.ts tests/maplibre-engine.test.ts
+  tests/cesium-engine.test.ts` → 27 passed; `npx playwright test
+  e2e/engine-param.spec.ts` → 2 passed; scoped ESLint and `git diff --check` →
+  passed (two unrelated pre-existing hook warnings remain in `DesktopShell`).
+- Follow-up: migrate camera/view/control consumers to `MapEngineClient` and
+  remove their corresponding boundary entries.

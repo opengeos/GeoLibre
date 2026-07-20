@@ -18,6 +18,7 @@ import type {
   MapControlState,
   MapEngine,
   MapEngineCapability,
+  MapEngineClient,
   MapEngineEventMap,
   MapMarkerEventMap,
   MapMarkerHandle,
@@ -36,6 +37,7 @@ interface MapControllerContract {
       readonly mapPreferences?: MapPreferences;
     },
   ): maplibregl.Map;
+  getMap(): maplibregl.Map | null;
   destroy(): void;
   setStyle(url: string): void;
   setBasemapVisible(visible: boolean): void;
@@ -398,6 +400,15 @@ export class MapLibreEngine implements MapEngine {
     }
   }
 
+  /** Attach the adapter ports to the controller owned by legacy `MapCanvas`. */
+  attachExistingController(controller: MapControllerContract): void {
+    const map = controller.getMap();
+    if (!map) throw new Error("Cannot attach MapEngine ports before MapController is mounted.");
+    this.controller = controller;
+    this.map = map;
+    this.bindNativeEvents();
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
@@ -465,6 +476,9 @@ export class MapLibreEngine implements MapEngine {
     _input: MapEngineExtensionMap[K]["input"],
   ): MapEngineExtensionMap[K]["output"] {
     switch (command) {
+      case "viewport.resize":
+        this.map?.resize();
+        return undefined as MapEngineExtensionMap[K]["output"];
       case "hosted-plugin.activate":
       case "hosted-plugin.set-position":
       case "hosted-plugin.apply-state":
@@ -761,4 +775,34 @@ export class MapLibreEngine implements MapEngine {
 
 export function createMapLibreEngine(): MapEngine {
   return new MapLibreEngine();
+}
+
+const mapEngineClientKeys = new Set<PropertyKey>([
+  "camera",
+  "layers",
+  "viewport",
+  "interactions",
+  "controls",
+  "invoke",
+  "on",
+]);
+
+/**
+ * Transitional package-private bridge for the primary legacy host. The public
+ * type is strictly `MapEngineClient`; unknown legacy properties are forwarded
+ * only so unmigrated in-repo consumers keep working until their dedicated
+ * consumer slices land.
+ */
+export function createMapEngineClientForController(
+  controller: MapControllerContract,
+): MapEngineClient {
+  const engine = new MapLibreEngine();
+  engine.attachExistingController(controller);
+  return new Proxy({} as MapEngineClient, {
+    get: (_target, property) => {
+      const owner = mapEngineClientKeys.has(property) ? engine : controller;
+      const value = Reflect.get(owner, property, owner);
+      return typeof value === "function" ? value.bind(owner) : value;
+    },
+  });
 }

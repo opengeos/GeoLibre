@@ -5,6 +5,10 @@ import type { MapControlPosition } from "./types";
  * engine contract. Runtime modules may augment this interface.
  */
 export interface MapEngineExtensionMap {
+  "viewport.resize": {
+    input: undefined;
+    output: void;
+  };
   "hosted-plugin.activate": {
     input: {
       pluginId: string;

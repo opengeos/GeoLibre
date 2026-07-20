@@ -68,6 +68,7 @@ function createControllerModule(native: FakeNativeMap): {
       calls.push("init");
       return native.map;
     },
+    getMap: () => native.map,
     destroy: () => calls.push("destroy"),
     setStyle: () => calls.push("setStyle"),
     setBasemapVisible: () => calls.push("setBasemapVisible"),

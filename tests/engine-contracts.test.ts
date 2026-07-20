@@ -93,6 +93,8 @@ function createCompleteFake(): MapEngine {
     },
     invoke: (command) => {
       switch (command) {
+        case "viewport.resize":
+          return undefined;
         case "hosted-plugin.activate":
         case "hosted-plugin.set-position":
         case "hosted-plugin.apply-state":

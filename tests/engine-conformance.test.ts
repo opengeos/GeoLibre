@@ -107,6 +107,7 @@ function createMapLibreHarness(): EngineHarness {
   ];
   const controller = {
     init: () => native.map,
+    getMap: () => native.map,
     destroy: () => {
       destroyed.value = true;
     },

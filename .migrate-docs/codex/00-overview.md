@@ -42,3 +42,7 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: the shared conformance suite runs the same lifecycle, view,
   layer-order, hit, event-unsubscribe, pre-ready queue, and unsupported-operation
   assertions against MapLibre and Cesium.
+- Implemented: applications select panes only through `EngineCanvas` and engine
+  ids. The boundary ratchet is down to 196 reviewed violations; the primary
+  controller compatibility bridge remains package-private pending consumer
+  migration.
