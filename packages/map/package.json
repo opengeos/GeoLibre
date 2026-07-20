@@ -12,6 +12,7 @@
     "./earth-engine-auth": "./src/earth-engine-auth.ts"
   },
   "dependencies": {
+    "@arcgis/core": "^5.1.13",
     "@google/earthengine": "^1.7.29",
     "@geolibre/core": "*",
     "@maplibre/maplibre-gl-directions": "^0.9.1",

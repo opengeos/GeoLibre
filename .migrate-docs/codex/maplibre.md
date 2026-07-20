@@ -1597,3 +1597,37 @@
   browser-externalization warnings were non-fatal); dev server
   `http://127.0.0.1:5174/` returned HTTP 200.
 - Follow-up: none.
+
+## 2026-07-20 — MapLibre 2D bootstrap → ArcGIS SDK local `assetsPath` staging
+
+- Source: MapLibre — the existing primary 2D host has no ArcGIS SDK runtime or
+  static asset deployment; its default engine must remain unaffected while an
+  alternative renderer is introduced.
+- Files touched: `packages/map/package.json` and `package-lock.json` before →
+  add `@arcgis/core` 5.1.13; new
+  `apps/geolibre-desktop/vite-plugins/copy-arcgis-assets.ts`; Vite config and
+  `.gitignore` before → stage generated `public/arcgis-assets/` files.
+- ArcGIS approach: use the installed `@arcgis/core` package and copy its
+  workers, styles, localization, symbols, and WASM assets into the app base
+  path. The lazy ArcGIS adapter will set `esriConfig.assetsPath` to that local
+  location before creating a `MapView`.
+- What changed: the version-aware Vite plugin resolves the installed package,
+  refreshes the local asset directory only when its version marker changes, and
+  is run before both development serving and production public-file copying.
+- Gap / limitation: ArcGIS's asset tree is substantially larger than the
+  existing MapLibre bootstrap and cannot be tree-shaken to the adapter's first
+  visible map without risking missing runtime worker/symbol resources.
+- Workaround: stage the SDK's version-matched asset tree locally rather than
+  rely on the SDK CDN default. Removal criteria: remove the plugin only if a
+  supported SDK packaging strategy produces a complete, version-pinned local
+  asset subset for every GeoLibre target.
+- Tradeoff accepted: build output and offline precache grow for the local
+  ArcGIS assets, while the ArcGIS JavaScript stays out of the default MapLibre
+  import path until the user opts in.
+- Status: partial.
+- Verification: `npm run build` → passed; generated
+  `apps/geolibre-desktop/public/arcgis-assets/.arcgis-version` identifies
+  `@arcgis/core` 5.1.13. The normal JupyterLite-unavailable notice and Vite
+  browser-externalization warnings were non-fatal.
+- Follow-up: implement the lazy `ArcGISMapEngine`, set its local asset path,
+  and register `?engine=arcgis`; Codex, 2026-07-20.

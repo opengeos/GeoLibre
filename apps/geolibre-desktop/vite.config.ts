@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
+import { copyArcgisAssets } from "./vite-plugins/copy-arcgis-assets";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
@@ -848,6 +849,7 @@ export default defineConfig({
     ),
     copyRtlText(path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js")),
     copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
+    copyArcgisAssets(path.resolve(__dirname, "public/arcgis-assets")),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
