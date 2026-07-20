@@ -3,9 +3,15 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   BASEMAP_CONTROL_PLUGIN_ID,
-  getActiveBasemapControl,
   maplibreBasemapControlPlugin as plugin,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
+import {
+  getActiveBasemapControl,
+  maplibreBasemapControlRuntime,
+} from "../packages/map/src/maplibre-runtime/basemap-control";
+import type { MapEngineExtensionMap } from "../packages/map/src/engine/extensions";
+import type { MapEngineClient } from "../packages/map/src/engine/types";
+import type { MapLibreHostedRuntimeContext } from "../packages/map/src/maplibre-runtime/types";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 /** A raster basemap layer as the control leaves it in the store when stacked. */
@@ -23,21 +29,47 @@ function stackedRasterBasemap(basemapId: string): GeoLibreLayer {
 }
 
 /**
- * A fake app that records every unregisterExternalNativeLayer call and mirrors
- * the real one (which removes the store layer), so a test can assert whether
- * deactivate wiped the stacked basemaps or left them alone.
+ * Route the renderer-neutral descriptor's engine commands into the adapter
+ * runtime with a fake private control host. This deliberately gives the plugin
+ * no `getMap`/native-control escape hatch.
  */
-function fakeApp(unregistered: string[]): GeoLibreAppAPI {
+function fakeApp(): GeoLibreAppAPI {
+  const context: MapLibreHostedRuntimeContext = {
+    client: {} as MapEngineClient,
+    addControl: () => true,
+    removeControl: () => undefined,
+  };
   return {
-    getMap: () => ({}),
-    addMapControl: () => true,
-    removeMapControl: () => {},
-    getActiveBasemap: () => "https://tiles.openfreemap.org/styles/liberty",
-    unregisterExternalNativeLayer: (id: string) => {
-      unregistered.push(id);
-      useAppStore.getState().removeLayer(id);
-    },
-  } as unknown as GeoLibreAppAPI;
+    map: {
+      invoke: (command: string, input: unknown) => {
+        if (command === "hosted-plugin.activate") {
+          return maplibreBasemapControlRuntime.activate(
+            context,
+            input as MapEngineExtensionMap["hosted-plugin.activate"]["input"],
+          );
+        }
+        if (command === "hosted-plugin.deactivate") {
+          maplibreBasemapControlRuntime.deactivate?.(context);
+          return undefined;
+        }
+        if (command === "hosted-plugin.set-position") {
+          const position = (input as MapEngineExtensionMap["hosted-plugin.set-position"]["input"])
+            .position;
+          return maplibreBasemapControlRuntime.setPosition?.(context, position) ?? false;
+        }
+        return undefined;
+      },
+    } as unknown as MapEngineClient,
+  } as GeoLibreAppAPI;
+}
+
+function deactivateRuntime(): void {
+  if (getActiveBasemapControl()) {
+    maplibreBasemapControlRuntime.deactivate?.({
+      client: {} as MapEngineClient,
+      removeControl: () => undefined,
+    });
+  }
 }
 
 describe("maplibreBasemapControlPlugin lifecycle", () => {
@@ -47,7 +79,7 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
 
   afterEach(() => {
     // Tear the control down so module-level state never leaks between tests.
-    if (getActiveBasemapControl()) plugin.deactivate?.(fakeApp([]));
+    deactivateRuntime();
     useAppStore.setState({ layers: [] });
   });
 
@@ -57,14 +89,12 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
 
   it("keeps stacked raster basemaps in the store when deactivated", () => {
     useAppStore.getState().addLayer(stackedRasterBasemap("google-satellite"));
-    const unregistered: string[] = [];
-    const app = fakeApp(unregistered);
+    const app = fakeApp();
 
     plugin.activate(app);
     plugin.deactivate?.(app);
 
-    // The layer survives and nothing was unregistered/removed.
-    assert.deepEqual(unregistered, []);
+    // The layer survives the adapter-runtime teardown.
     assert.equal(
       useAppStore
         .getState()
@@ -75,7 +105,7 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
 
   it("relinks and highlights restored rasters on reactivation", () => {
     useAppStore.getState().addLayer(stackedRasterBasemap("google-satellite"));
-    const app = fakeApp([]);
+    const app = fakeApp();
 
     plugin.activate(app);
     plugin.deactivate?.(app);

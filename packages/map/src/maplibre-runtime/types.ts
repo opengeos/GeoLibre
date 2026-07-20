@@ -23,6 +23,8 @@ export interface MapLibreHostedRuntimeActivation {
   readonly onStateChange?: (state: unknown) => void;
   /** Host-provided text export for controls that cannot rely on anchor downloads. */
   readonly exportTextFile?: (filename: string, content: string) => void;
+  /** Host confirmation for an adapter-owned style-basemap replacement. */
+  readonly confirmStyleReplace?: (basemapName: string, count: number) => boolean;
 }
 
 /** A concrete renderer runtime, addressed only by its stable plugin id. */

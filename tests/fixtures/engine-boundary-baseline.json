@@ -324,10 +324,6 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-basemap-control.ts",
-    "pattern": "maplibre-gl-basemap-control"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-components.ts",
     "pattern": "@deck.gl/core"
   },

@@ -21,6 +21,8 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
     (await import("./esri-wayback")).maplibreEsriWaybackRuntime,
   "maplibre-gl-overture-maps": async () =>
     (await import("./overture-maps")).maplibreOvertureMapsRuntime,
+  "maplibre-gl-basemap-control": async () =>
+    (await import("./basemap-control")).maplibreBasemapControlRuntime,
 };
 
 /**

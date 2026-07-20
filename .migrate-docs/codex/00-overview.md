@@ -101,6 +101,10 @@ Status values: not started · in progress · partial · blocked · done
   loading/result popup lifecycle solely through `MapEngineClient`; a typed
   popup-close callback prevents stale lookup results from reopening a dismissed
   popup, and the boundary ratchet is 133 reviewed violations.
+- Implemented: Basemap Control is now a renderer-neutral descriptor backed by a
+  lazy MapLibre adapter runtime. Background-style selection and stacked raster
+  basemap records continue through the existing store actions; the boundary
+  ratchet is 132 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

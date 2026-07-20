@@ -25,6 +25,8 @@ export interface MapEngineExtensionMap {
       state?: unknown;
       onStateChange?: (state: unknown) => void;
       exportTextFile?: (filename: string, content: string) => void;
+      /** Host confirmation for an adapter-owned style-basemap replacement. */
+      confirmStyleReplace?: (basemapName: string, count: number) => boolean;
     };
     output: boolean | Promise<boolean>;
   };

@@ -879,3 +879,45 @@
   reviewed engine-boundary baseline fell from 134 to 133 violations.
 - Follow-up: relocate Basemap Control through the lazy adapter runtime while
   retaining the store as the basemap source of truth; Codex, 2026-07-20.
+
+## 2026-07-20 — Basemap Control native lifecycle → lazy MapLibre adapter runtime
+
+- Source: MapLibre — `maplibre-gl-basemap-control` directly constructed its
+  native control in the plugin package, mounted it on the native map, and
+  synchronized style/raster selections through the public app API.
+- Files touched: moved
+  `packages/plugins/src/plugins/maplibre-basemap-control.ts` before →
+  `packages/map/src/maplibre-runtime/basemap-control.ts`; original plugin file
+  before → renderer-neutral descriptor; hosted-runtime registry, extension
+  activation types, workspace manifests/lockfile, public exports, tests, and
+  boundary baseline updated.
+- ArcGIS approach: a future ArcGIS hosted widget will use `Map`/`MapView`
+  basemap assignment for style choices and `WebTileLayer` records for stacked
+  raster basemaps, while receiving the same typed hosted-runtime activation
+  command and normalized store state.
+- What changed: the descriptor now invokes only typed `MapEngineClient`
+  hosted-plugin commands and supplies the translated confirmation callback.
+  The lazy adapter runtime owns the native control, provider credentials,
+  native events, and native mount lifecycle. It reads/writes the existing
+  background-style and layer store actions directly; stacked raster basemap
+  records remain store-authoritative and data ingest is unchanged.
+- Gap / limitation: MapLibre's provider menu, style URL substitution, and
+  stacked-raster control behavior have not been validated against an ArcGIS
+  widget equivalent.
+- Workaround: keep the MapLibre-specific provider/control reconciliation inside
+  the adapter and preserve only normalized style/layer records plus a narrow
+  confirmation callback at the seam. Removal criteria: replace the runtime
+  when an ArcGIS widget passes the same store-sync, restore, and style-replace
+  confirmation tests without MapLibre source or layer ids.
+- Tradeoff accepted: the adapter duplicates a small store-layer builder and
+  first activation loads a dedicated runtime chunk, trading minor maintenance
+  and startup delay for store authority and no renderer imports in the plugin
+  package.
+- Status: partial.
+- Verification: `node --import tsx --test tests/basemap-control-plugin.test.ts
+  tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 48 passed;
+  `npm run build` → passed; the reviewed engine-boundary baseline fell from
+  133 to 132 violations.
+- Follow-up: relocate another first-party MapLibre plugin that still reaches a
+  native map object; Codex, 2026-07-20.
