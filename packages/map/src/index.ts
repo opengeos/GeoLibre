@@ -50,6 +50,12 @@ export type {
   ScreenPoint,
   Unsubscribe,
 } from "./engine/types";
+export { createMapEngineHandle } from "./engine/handle";
+export {
+  getMapEngineDescriptor,
+  resolvePrimaryEngineId,
+  type MapEngineDescriptor,
+} from "./engine/registry";
 export {
   TerrainControl,
   DEFAULT_TERRAIN_EXAGGERATION,

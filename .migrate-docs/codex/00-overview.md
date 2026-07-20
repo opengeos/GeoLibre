@@ -33,3 +33,6 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: the engine-neutral contract and typed extension command map are
   exported from `@geolibre/map`; the boundary ratchet records 197 reviewed
   path/pattern violations and rejects additions or unreviewed changes.
+- Implemented: `createMapEngineHandle("maplibre")` is synchronous, queues
+  ordered pre-ready mutations, forwards normalized events, and lazy-loads a
+  `MapLibreEngine` that keeps `MapController` private to the adapter.

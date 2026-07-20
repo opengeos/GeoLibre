@@ -1,0 +1,175 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { GeoLibreLayer, MapPreferences, MapViewState } from "../packages/core/src/index";
+import {
+  MapLibreEngine,
+  type MapControllerModule,
+} from "../packages/map/src/engine/maplibre-engine";
+import type { HitFeature } from "../packages/map/src/engine/types";
+
+interface FakeNativeMap {
+  readonly map: unknown;
+  emit(event: string, payload?: Record<string, unknown>): void;
+}
+
+function createNativeMap(): FakeNativeMap {
+  const listeners = new Map<string, Set<(payload: Record<string, unknown>) => void>>();
+  const map = {
+    on: (event: string, handler: (payload: Record<string, unknown>) => void) => {
+      const handlers = listeners.get(event) ?? new Set();
+      handlers.add(handler);
+      listeners.set(event, handlers);
+    },
+    off: (event: string, handler: (payload: Record<string, unknown>) => void) => {
+      listeners.get(event)?.delete(handler);
+    },
+    once: (event: string, handler: (payload: Record<string, unknown>) => void) => {
+      const once = (payload: Record<string, unknown>): void => {
+        listeners.get(event)?.delete(once);
+        handler(payload);
+      };
+      const handlers = listeners.get(event) ?? new Set();
+      handlers.add(once);
+      listeners.set(event, handlers);
+    },
+    isMoving: () => false,
+    unproject: ([x, y]: [number, number]) => ({ lng: x, lat: y }),
+  };
+  return {
+    map,
+    emit: (event, payload = {}) => {
+      for (const handler of [...(listeners.get(event) ?? [])]) handler(payload);
+    },
+  };
+}
+
+function createControllerModule(native: FakeNativeMap): {
+  readonly module: MapControllerModule;
+  readonly calls: string[];
+  readonly hits: HitFeature[];
+} {
+  const calls: string[] = [];
+  const hits: HitFeature[] = [
+    {
+      layerId: "cities",
+      featureId: "zurich",
+      properties: { name: "Zurich" },
+      geometry: { type: "Point", coordinates: [8.55, 47.37] },
+    },
+  ];
+  const view: MapViewState = {
+    center: [8.55, 47.37],
+    zoom: 8,
+    bearing: 0,
+    pitch: 0,
+  };
+  const controller = {
+    init: () => {
+      calls.push("init");
+      return native.map;
+    },
+    destroy: () => calls.push("destroy"),
+    setStyle: () => calls.push("setStyle"),
+    setBasemapVisible: () => calls.push("setBasemapVisible"),
+    setBasemapOpacity: () => calls.push("setBasemapOpacity"),
+    applyMapPreferences: (_preferences: MapPreferences) => calls.push("applyMapPreferences"),
+    applyView: () => calls.push("applyView"),
+    easeToView: () => calls.push("easeToView"),
+    readView: () => view,
+    waitAndSyncLayers: (_layers: GeoLibreLayer[]) => calls.push("waitAndSyncLayers"),
+    getLayerGeoJson: async () => null,
+    getLayerRasterSource: () => null,
+    getBasemapStyleLayerIds: () => [],
+    fitLayer: () => undefined,
+    fitBounds: () => undefined,
+    flyToView: () => undefined,
+    flyTo: () => undefined,
+    zoomIn: () => undefined,
+    zoomOut: () => undefined,
+    resetNorth: () => undefined,
+    resetPitch: () => undefined,
+    resetNorthPitch: () => undefined,
+    readProjection: () => "mercator",
+    identifyFeatures: () => hits,
+    highlightFeature: () => undefined,
+    clearFeatureHighlight: () => undefined,
+    setBuiltInControlVisible: () => true,
+    getBuiltInControlPosition: () => "top-right",
+    setBuiltInControlPosition: () => true,
+    setCompassLabel: () => undefined,
+    setTerrainLabel: () => undefined,
+    setBackgroundLabel: () => undefined,
+    getTerrainExaggeration: () => 1,
+    setTerrainExaggeration: () => undefined,
+  };
+  return {
+    module: {
+      createMapController: () => controller,
+    } as unknown as MapControllerModule,
+    calls,
+    hits,
+  };
+}
+
+test("MapLibre loads its controller lazily and translates load events", async () => {
+  const native = createNativeMap();
+  const controller = createControllerModule(native);
+  let loaderCalls = 0;
+  const engine = new MapLibreEngine(async () => {
+    loaderCalls += 1;
+    return controller.module;
+  });
+  const loadReasons: string[] = [];
+  engine.on("load", ({ reason }) => loadReasons.push(reason));
+
+  assert.equal(loaderCalls, 0);
+  await engine.mount({} as HTMLElement, {
+    center: [8.55, 47.37],
+    zoom: 8,
+    bearing: 0,
+    pitch: 0,
+  });
+  assert.equal(loaderCalls, 1);
+  assert.deepEqual(controller.calls, ["init"]);
+
+  native.emit("style.load");
+  native.emit("load");
+  native.emit("load");
+  native.emit("style.load");
+  assert.deepEqual(loadReasons, ["mount", "style"]);
+});
+
+test("MapLibre delegates layer sync and normalizes hits through the controller", async () => {
+  const native = createNativeMap();
+  const controller = createControllerModule(native);
+  const engine = new MapLibreEngine(async () => controller.module);
+  await engine.mount({} as HTMLElement, {
+    center: [0, 0],
+    zoom: 2,
+    bearing: 0,
+    pitch: 0,
+  });
+
+  engine.syncLayers([]);
+  const hits = await engine.hitTest({ x: 10, y: 20 });
+
+  assert.equal(controller.calls.at(-1), "waitAndSyncLayers");
+  assert.deepEqual(hits, controller.hits);
+});
+
+test("MapLibre converts native errors into engine-neutral diagnostics", async () => {
+  const native = createNativeMap();
+  const controller = createControllerModule(native);
+  const engine = new MapLibreEngine(async () => controller.module);
+  const errors: Array<{ message: string; status?: number }> = [];
+  engine.on("error", (error) => errors.push(error));
+  await engine.mount({} as HTMLElement, {
+    center: [0, 0],
+    zoom: 2,
+    bearing: 0,
+    pitch: 0,
+  });
+
+  native.emit("error", { error: { message: "tile failed", status: 503 } });
+  assert.deepEqual(errors, [{ message: "tile failed", status: 503 }]);
+});

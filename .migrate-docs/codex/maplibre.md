@@ -108,3 +108,40 @@
   scoped ESLint and `git diff --check` → passed.
 - Follow-up: implement the stable synchronous handle and lazy MapLibre adapter,
   then begin deleting reviewed boundary entries.
+
+## 2026-07-20 — `MapController` lifecycle → lazy `MapLibreEngine` adapter
+
+- Source: MapLibre — eager `MapController` construction, raw MapLibre event
+  payloads, and direct controller method calls for camera, layers, controls,
+  queries, markers, popups, capture, and transient overlays.
+- Files touched: new `packages/map/src/engine/handle.ts`,
+  `packages/map/src/engine/registry.ts`, and
+  `packages/map/src/engine/maplibre-engine.ts`; `packages/map/src/index.ts`
+  before → stable handle/registry exports; new `tests/engine-test-fakes.ts`,
+  `tests/map-engine-handle.test.ts`, and `tests/maplibre-engine.test.ts`.
+- ArcGIS approach: use a synchronous engine handle in React while the selected
+  adapter loads asynchronously. The same handle can later load an ArcGIS
+  `MapView`/`SceneView` adapter without changing consumer refs or exposing the
+  SDK view.
+- What changed: the handle preserves the initial view, queues mutations in
+  call order, forwards one normalized event stream, and cancels pending work on
+  destroy. `MapLibreEngine` dynamically imports `MapController`, delegates
+  store-layer reconciliation to `waitAndSyncLayers`, and implements all public
+  capability ports without a `getMap()` or `getController()` escape hatch.
+- Gap / limitation: consumers still mount `MapCanvas` and receive
+  `MapController`; this adapter is implemented and tested but is not yet the
+  active React host.
+- Workaround: retain the controller internally as a compatibility
+  implementation until `EngineCanvas` replaces the concrete hosts. Removal
+  criteria: all hosts and consumers use `MapEngineClient`, after which the
+  public controller export is deleted.
+- Tradeoff accepted: the stable handle contains small neutral defaults and
+  optimistic control results while an adapter is loading; queued operations and
+  adapter events reconcile those values once mounting completes.
+- Status: done.
+- Verification: `node --import tsx --test tests/map-engine-handle.test.ts
+  tests/maplibre-engine.test.ts tests/map-controller.test.ts
+  tests/engine-boundary.test.ts` → 51 passed; scoped strict TypeScript and ESLint
+  checks → passed; `git diff --check` → passed.
+- Follow-up: extract the existing Cesium viewer lifecycle behind the same seam
+  and encode unsupported capabilities explicitly.
