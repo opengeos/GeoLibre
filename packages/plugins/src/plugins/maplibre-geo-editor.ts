@@ -17,7 +17,7 @@ import {
   buildFullExport,
   captureViewImportBaseline,
   tagViewFeaturesForImport,
-} from "./geo-editor-view-import";
+} from "./geo-editor-import-state";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
 export { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "./geo-editor-geometry";

@@ -51,3 +51,7 @@ Status values: not started · in progress · partial · blocked · done
   and assistant consumers now use engine ports. Tagged engine events replace
   native move payloads, `run_maplibre_js` is removed, and the boundary ratchet
   is down to 178 reviewed violations.
+- Implemented: MapLibre source/style discovery, vector-tile viewport querying,
+  and clipped-feature deduplication now live adapter-side in `@geolibre/map`.
+  The layer port reports queryable store targets and keeps renderer snapshots
+  read-only; Task 8 application consumers are the remaining work in this slice.

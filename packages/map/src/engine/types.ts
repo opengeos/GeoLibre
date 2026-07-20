@@ -115,6 +115,8 @@ export interface MapCameraPort {
 export interface MapRenderTarget {
   readonly id: string;
   readonly scope: "basemap" | "content" | "overlay";
+  /** Whether `queryInView(id)` can recover renderer-held vector features. */
+  readonly queryable?: boolean;
 }
 
 export interface MapLayerPort {

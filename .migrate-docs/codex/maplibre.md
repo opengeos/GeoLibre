@@ -239,3 +239,43 @@
   `git diff --check` → passed.
 - Follow-up: migrate live layer/source/style queries and feature operations to
   `MapEngineClient.layers`, then remove the corresponding intersection types.
+
+## 2026-07-20 — Renderer source/style queries → adapter-owned feature-query core
+
+- Source: MapLibre — application/plugin helpers inspected `getStyle()`,
+  `querySourceFeatures()`, and viewport bounds to discover store-layer sources,
+  recover vector-tile features, and merge tile-clipped geometry.
+- Files touched: `packages/plugins/src/plugins/geo-editor-view-import.ts` before
+  → `packages/map/src/engine/feature-query.ts` plus editor-only
+  `geo-editor-import-state.ts`; `packages/map/src/{map-controller.ts,index.ts}`
+  and `engine/{types.ts,maplibre-engine.ts}` before → adapter-owned query and
+  render-target delegation; package manifests/lockfile and
+  `tests/{geo-editor-view-import,map-controller,maplibre-engine}.test.ts`.
+- ArcGIS approach: keep store-layer ids as the only public query key. Future
+  ArcGIS adapters resolve those ids to `FeatureLayer`/`GraphicsLayer` objects
+  privately and return normalized GeoJSON/hits through `MapLayerPort`, without
+  exposing a view, layer, source, or SDK feature.
+- What changed: viewport filtering, tile-fragment deduplication, source-layer
+  resolution, and style inspection moved into `@geolibre/map`. The MapLibre
+  controller now reports queryable content targets and performs in-view queries
+  for the adapter; live GeoJSON/raster reads, identify, and highlight remain
+  available only through the public layer port. Editor normalization/change
+  tracking remains renderer-neutral in the plugin package.
+- Gap / limitation: application call sites still need conversion to
+  `MapEngineClient.layers`; the primary compatibility controller remains until
+  those consumers no longer request native source/style objects.
+- Workaround: compatibility re-exports preserve the existing plugin API while
+  new application code imports query contracts from `@geolibre/map`. Removal
+  criteria: Task 8 leaves no app-side `getSource`, `getLayer`, `getStyle`, or
+  `queryRenderedFeatures` call.
+- Tradeoff accepted: `MapRenderTarget` gains optional queryability metadata so
+  editor UIs can list valid store targets without learning renderer layer
+  types. This small contract addition avoids a second discovery API and remains
+  implementable by ArcGIS adapters.
+- Status: partial.
+- Verification: `npm run build` → passed; `node --import tsx --test
+  tests/geo-editor-view-import.test.ts tests/map-controller.test.ts
+  tests/maplibre-engine.test.ts tests/feature-selection.test.ts
+  tests/sql-query-layer.test.ts` → 112 passed; `git diff --check` → passed.
+- Follow-up: convert export, story, attribute-table, processing, style, editor,
+  notebook, scripting, and assistant consumers to the layer port.

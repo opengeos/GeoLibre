@@ -52,10 +52,7 @@ export type {
   Unsubscribe,
 } from "./engine/types";
 export { MapEngineCapabilityError } from "./engine/types";
-export {
-  createCesiumEngine,
-  type CesiumEngineOptions,
-} from "./engine/cesium-engine";
+export { createCesiumEngine, type CesiumEngineOptions } from "./engine/cesium-engine";
 export { createMapEngineHandle } from "./engine/handle";
 export {
   getMapEngineDescriptor,
@@ -63,6 +60,18 @@ export {
   resolvePrimaryEngineId,
   type MapEngineDescriptor,
 } from "./engine/registry";
+export {
+  dedupeViewportFeatures,
+  geometryCoordinateCount,
+  geometryIntersectsBounds,
+  listViewVectorLayers,
+  queryViewLayerFeatures,
+  resolveStoreLayerViewSource,
+  type FeatureQueryMap,
+  type QueryableStoreLayer,
+  type ViewBounds,
+  type ViewVectorLayer,
+} from "./engine/feature-query";
 export {
   TerrainControl,
   DEFAULT_TERRAIN_EXAGGERATION,

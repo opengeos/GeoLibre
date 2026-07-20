@@ -2,6 +2,15 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { Feature, FeatureCollection } from "geojson";
 import {
+  dedupeViewportFeatures,
+  geometryIntersectsBounds,
+  listViewVectorLayers,
+  queryViewLayerFeatures,
+  resolveStoreLayerViewSource,
+  type ViewBounds,
+  type FeatureQueryMap,
+} from "../packages/map/src/engine/feature-query";
+import {
   VIEW_IMPORT_CHANGE_PROPERTY,
   VIEW_IMPORT_EDITOR_PROPERTY,
   VIEW_IMPORT_ID_PROPERTY,
@@ -9,15 +18,8 @@ import {
   buildChangedExport,
   buildFullExport,
   captureViewImportBaseline,
-  dedupeViewportFeatures,
-  geometryIntersectsBounds,
-  listViewVectorLayers,
-  queryViewLayerFeatures,
-  resolveStoreLayerViewSource,
   tagViewFeaturesForImport,
-  type ViewBounds,
-  type ViewImportMap,
-} from "../packages/plugins/src/plugins/geo-editor-view-import";
+} from "../packages/plugins/src/plugins/geo-editor-import-state";
 
 const WORLD: ViewBounds = { west: -180, east: 180, south: -90, north: 90 };
 
@@ -329,7 +331,7 @@ describe("dedupeViewportFeatures", () => {
 describe("queryViewLayerFeatures", () => {
   it("queries the source layer and filters to the viewport", () => {
     const calls: Array<{ sourceId: string; options?: { sourceLayer?: string } }> = [];
-    const map: ViewImportMap = {
+    const map: FeatureQueryMap = {
       getStyle: () => ({}),
       querySourceFeatures: (sourceId, options) => {
         calls.push({ sourceId, options });

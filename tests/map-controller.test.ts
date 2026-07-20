@@ -22,6 +22,7 @@ interface FakeMap {
   calls: { method: string; args: unknown[] }[];
   setDataCalls: { id: string; data: unknown }[];
   queueRenderedFeatures: (features: unknown[]) => void;
+  queueSourceFeatures: (features: unknown[]) => void;
 }
 
 /**
@@ -41,6 +42,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   const calls: { method: string; args: unknown[] }[] = [];
   const setDataCalls: { id: string; data: unknown }[] = [];
   let pendingRenderedFeatures: unknown[] = [];
+  let pendingSourceFeatures: unknown[] = [];
 
   for (const id of initialBasemapLayers) {
     // Background layers participate in basemap visibility/opacity sync.
@@ -145,6 +147,10 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
         opts.layers?.includes((feature as { layer?: { id?: string } }).layer?.id ?? ""),
       );
     },
+    querySourceFeatures: (sourceId: string, options?: { sourceLayer?: string }) => {
+      calls.push({ method: "querySourceFeatures", args: [sourceId, options] });
+      return pendingSourceFeatures;
+    },
     getCenter: () => ({ lng: -100, lat: 40 }),
     getBounds: () => ({
       getWest: () => -120,
@@ -177,6 +183,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     setDataCalls,
     queueRenderedFeatures: (features) => {
       pendingRenderedFeatures = features;
+    },
+    queueSourceFeatures: (features) => {
+      pendingSourceFeatures = features;
     },
   };
   return { map, fake };
@@ -558,6 +567,33 @@ describe("MapController camera and query helpers", () => {
 
     assert.equal(controller.identifyFeatures([0, 0], "a").length, 0);
     assert.equal(controller.identifyFeatures([0, 0], "b").length, 1);
+  });
+
+  it("lists queryable content targets and recovers deduplicated in-view features", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    controller.syncLayers([pointLayer("a")]);
+    fake.queueSourceFeatures([
+      {
+        id: "inside",
+        properties: { name: "Inside" },
+        geometry: { type: "Point", coordinates: [-100, 40] },
+      },
+      {
+        id: "outside",
+        properties: { name: "Outside" },
+        geometry: { type: "Point", coordinates: [10, 10] },
+      },
+    ]);
+
+    assert.deepEqual(controller.getContentRenderTargets(), [{ id: "a", queryable: true }]);
+    const features = controller.queryLayerFeaturesInView("a");
+    assert.deepEqual(
+      features.map((feature) => feature.id),
+      ["inside"],
+    );
+    const query = fake.calls.find((call) => call.method === "querySourceFeatures");
+    assert.equal(query?.args[0], "source-a");
   });
 
   it("writes story opacity directly to the native paint property", () => {

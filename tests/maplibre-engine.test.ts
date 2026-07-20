@@ -57,6 +57,14 @@ function createControllerModule(native: FakeNativeMap): {
       geometry: { type: "Point", coordinates: [8.55, 47.37] },
     },
   ];
+  const liveFeatures = [
+    {
+      type: "Feature" as const,
+      id: "zurich",
+      properties: { name: "Zurich" },
+      geometry: { type: "Point" as const, coordinates: [8.55, 47.37] },
+    },
+  ];
   const view: MapViewState = {
     center: [8.55, 47.37],
     zoom: 8,
@@ -78,9 +86,11 @@ function createControllerModule(native: FakeNativeMap): {
     easeToView: () => calls.push("easeToView"),
     readView: () => view,
     waitAndSyncLayers: (_layers: GeoLibreLayer[]) => calls.push("waitAndSyncLayers"),
-    getLayerGeoJson: async () => null,
-    getLayerRasterSource: () => null,
-    getBasemapStyleLayerIds: () => [],
+    getLayerGeoJson: async () => ({ type: "FeatureCollection" as const, features: liveFeatures }),
+    getLayerRasterSource: () => ({ type: "raster", url: "https://example.com/tiles.json" }),
+    getBasemapStyleLayerIds: () => ["water"],
+    getContentRenderTargets: () => [{ id: "cities", queryable: true }],
+    queryLayerFeaturesInView: () => liveFeatures,
     fitLayer: () => undefined,
     fitBounds: () => undefined,
     flyToView: () => undefined,
@@ -92,8 +102,8 @@ function createControllerModule(native: FakeNativeMap): {
     resetNorthPitch: () => undefined,
     readProjection: () => "mercator",
     identifyFeatures: () => hits,
-    highlightFeature: () => undefined,
-    clearFeatureHighlight: () => undefined,
+    highlightFeature: () => calls.push("highlightFeature"),
+    clearFeatureHighlight: () => calls.push("clearFeatureHighlight"),
     setBuiltInControlVisible: () => true,
     getBuiltInControlPosition: () => "top-right",
     setBuiltInControlPosition: () => true,
@@ -156,6 +166,34 @@ test("MapLibre delegates layer sync and normalizes hits through the controller",
 
   assert.equal(controller.calls.at(-1), "waitAndSyncLayers");
   assert.deepEqual(hits, controller.hits);
+});
+
+test("MapLibre exposes live layer snapshots and feature operations only through its port", async () => {
+  const native = createNativeMap();
+  const controller = createControllerModule(native);
+  const engine = new MapLibreEngine(async () => controller.module);
+  await engine.mount({} as HTMLElement, {
+    center: [0, 0],
+    zoom: 2,
+    bearing: 0,
+    pitch: 0,
+  });
+
+  const snapshot = await engine.layers.readGeoJson("cities");
+  assert.equal(snapshot?.features[0].id, "zurich");
+  assert.equal(engine.layers.readRasterSource("imagery")?.type, "raster");
+  assert.deepEqual(
+    engine.layers.queryInView("cities").map((feature) => feature.id),
+    ["zurich"],
+  );
+  assert.deepEqual(engine.layers.listRenderTargets(), [
+    { id: "water", scope: "basemap", queryable: false },
+    { id: "cities", scope: "content", queryable: true },
+  ]);
+
+  engine.layers.setHighlight(undefined, ["zurich"]);
+  engine.layers.clearHighlight();
+  assert.deepEqual(controller.calls.slice(-2), ["highlightFeature", "clearFeatureHighlight"]);
 });
 
 test("MapLibre converts native errors into engine-neutral diagnostics", async () => {

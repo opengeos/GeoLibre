@@ -40,6 +40,11 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
+import {
+  type FeatureQueryMap,
+  queryViewLayerFeatures,
+  resolveStoreLayerViewSource,
+} from "./engine/feature-query";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
 import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-basemap";
 import { ResetBearingControl } from "./reset-bearing-control";
@@ -1017,6 +1022,28 @@ export class MapController {
 
   getBasemapStyleLayerIds(): string[] {
     return this.getBasemapStyleLayers().map((layer) => layer.id);
+  }
+
+  /** Describe authoritative store layers currently backed by renderer targets. */
+  getContentRenderTargets(): Array<{ id: string; queryable: boolean }> {
+    const style = this.map?.getStyle();
+    return this.syncedLayers.map((layer) => ({
+      id: layer.id,
+      queryable: resolveStoreLayerViewSource(layer, style) !== null,
+    }));
+  }
+
+  /**
+   * Recover the loaded, in-view features for a store layer. This is a renderer
+   * snapshot only; callers must never write it back as parallel project state.
+   */
+  queryLayerFeaturesInView(layerId: string): Feature[] {
+    if (!this.map) return [];
+    const layer = this.syncedLayers.find((candidate) => candidate.id === layerId);
+    if (!layer) return [];
+    const source = resolveStoreLayerViewSource(layer, this.map.getStyle());
+    if (!source) return [];
+    return queryViewLayerFeatures(this.map as unknown as FeatureQueryMap, source);
   }
 
   private getBasemapStyleLayers(): maplibregl.LayerSpecification[] {

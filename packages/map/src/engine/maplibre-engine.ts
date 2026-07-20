@@ -6,7 +6,7 @@ import type {
   StoryChapterAnimation,
   StoryChapterLocation,
 } from "@geolibre/core";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import type { MapEngineExtensionMap } from "./extensions";
 import type {
@@ -51,6 +51,8 @@ interface MapControllerContract {
   getLayerGeoJson(layerId: string): Promise<FeatureCollection | null>;
   getLayerRasterSource(layerId: string): Record<string, unknown> | null;
   getBasemapStyleLayerIds(): string[];
+  getContentRenderTargets?(): Array<{ id: string; queryable: boolean }>;
+  queryLayerFeaturesInView?(layerId: string): Feature[];
   fitLayer(layer: GeoLibreLayer): void;
   fitBounds(bounds: BBox): void;
   flyToView(location: StoryChapterLocation): void;
@@ -155,10 +157,6 @@ function normalizeError(error: unknown): MapEngineEventMap["error"] {
   return { message: typeof error === "string" ? error : "MapLibre error" };
 }
 
-function geometryFromFeature(feature: maplibregl.MapGeoJSONFeature): Geometry | null {
-  return (feature.geometry as Geometry | undefined) ?? null;
-}
-
 export class MapLibreEngine implements MapEngine {
   private readonly listeners = new Map<keyof MapEngineEventMap, Set<(payload: never) => void>>();
   private readonly nativeListeners: Array<{
@@ -251,31 +249,25 @@ export class MapLibreEngine implements MapEngine {
       this.controller?.getLayerGeoJson(layerId) ?? null,
     readRasterSource: (layerId: string): Readonly<Record<string, unknown>> | null =>
       this.controller?.getLayerRasterSource(layerId) ?? null,
-    queryInView: (layerId: string): readonly Feature[] => {
-      if (!this.map) return [];
-      return this.map
-        .queryRenderedFeatures()
-        .filter((feature) => feature.layer.id.includes(layerId) || feature.source.includes(layerId))
-        .map((feature) => ({
-          type: "Feature",
-          id: feature.id,
-          properties: feature.properties,
-          geometry: geometryFromFeature(feature),
-        })) as Feature[];
-    },
+    queryInView: (layerId: string): readonly Feature[] =>
+      this.controller?.queryLayerFeaturesInView?.(layerId) ?? [],
     listRenderTargets: (): readonly MapRenderTarget[] => {
       const basemapTargets =
         this.controller?.getBasemapStyleLayerIds().map((id) => ({
           id,
           scope: "basemap" as const,
+          queryable: false,
         })) ?? [];
-      const contentTargets = this.syncedLayers.map((layer) => ({
-        id: layer.id,
+      const controllerTargets = this.controller?.getContentRenderTargets?.();
+      const contentTargets = (controllerTargets ?? this.syncedLayers).map((target) => ({
+        id: target.id,
         scope: "content" as const,
+        queryable: "queryable" in target ? target.queryable : false,
       }));
       const overlayTargets = [...this.overlayIds].map((id) => ({
         id,
         scope: "overlay" as const,
+        queryable: false,
       }));
       return [...basemapTargets, ...contentTargets, ...overlayTargets];
     },

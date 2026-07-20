@@ -22,6 +22,7 @@
     "@dvt3d/maplibre-three-plugin": "^1.6.0",
     "@esri/maplibre-arcgis": "^1.3.0",
     "@geolibre/core": "*",
+    "@geolibre/map": "*",
     "@geoman-io/maplibre-geoman-free": "^0.8.4",
     "@loaders.gl/i3s": "^4.4.3",
     "@maplibre/maplibre-gl-directions": "^0.9.1",

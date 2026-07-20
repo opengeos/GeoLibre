@@ -321,13 +321,15 @@ export {
   listViewVectorLayers,
   resolveStoreLayerViewSource,
   queryViewLayerFeatures,
+  type ViewVectorLayer,
+  type FeatureQueryMap as ViewImportMap,
+} from "@geolibre/map";
+export {
   VIEW_IMPORT_ID_PROPERTY,
   VIEW_IMPORT_CHANGE_PROPERTY,
-  type ViewVectorLayer,
-  type ViewImportMap,
   type ViewImportExport,
   type ViewImportChangeCounts,
-} from "./plugins/geo-editor-view-import";
+} from "./plugins/geo-editor-import-state";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
