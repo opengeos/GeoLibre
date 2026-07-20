@@ -849,10 +849,23 @@ export const useAppStore = create<AppState>()(
           ui: { ...s.ui, collaborateDialogOpen: false },
         })),
       setMapView: (view, markDirty = false) =>
-        set((s) => ({
-          mapView: { ...s.mapView, ...view },
-          isDirty: markDirty || s.isDirty,
-        })),
+        set((s) => {
+          const mapView = { ...s.mapView, ...view };
+          const isDirty = markDirty || s.isDirty;
+          // `applyView` causes every supported engine to emit `moveend`.
+          // Keep the store authoritative, but do not replace its camera with
+          // an equal copy when that programmatic event echoes back. A new
+          // `mapView` reference would otherwise re-run the sync effect which
+          // called `applyView`, creating an unbounded render loop.
+          //
+          // `bbox` is a derived viewport measurement rather than an input to
+          // camera synchronization, so `sameCamera` intentionally ignores it.
+          if (sameCamera(s.mapView, mapView)) {
+            if (isDirty === s.isDirty) return s;
+            return { isDirty };
+          }
+          return { mapView, isDirty };
+        }),
       setMapGrid: (rows, cols) =>
         set((s) => {
           const clampedRows = clampGridDim(rows);

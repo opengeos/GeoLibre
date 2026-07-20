@@ -157,6 +157,9 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: Mapillary coverage, selection, viewer, and floating-panel DOM
   are a lazy MapLibre runtime. Typed panel and store-layer bridges keep layer
   records host-owned and reduce the boundary baseline to 117.
+- Implemented: value-identical camera events now preserve the authoritative
+  `mapView` reference, preventing a MapEngine `applyView`/`moveend` echo from
+  recursively re-running synchronized-view effects.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

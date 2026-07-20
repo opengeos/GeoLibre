@@ -1561,3 +1561,39 @@
 - Follow-up: implement equivalent ArcGIS coverage/oriented-imagery runtime and
   validate authenticated coverage selection against the Mapillary workflow;
   Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre `applyView`/`moveend` camera echo → ArcGIS `MapView` viewpoint synchronization
+
+- Source: MapLibre — a programmatic `MapController.applyView(...)` emits
+  `moveend`; `StoreEngineCanvas` passed that unchanged camera to
+  `setMapView(...)`, which replaced the Zustand `mapView` object on every echo
+  and re-ran the synchronized-view effect indefinitely.
+- Files touched: `packages/core/src/store.ts` before → value-identical
+  `setMapView` writes return the existing state/reference; new
+  `tests/map-view-store.test.ts` verifies no subscriber notification and dirty
+  semantics.
+- ArcGIS approach: future `MapView` adapters will handle programmatic
+  `viewpoint` changes and `view.watch("viewpoint", ...)` through the same
+  store-first equality gate, so ArcGIS view events cannot feed a synchronized
+  pane back into its own `applyView` effect.
+- What changed: `setMapView` merges a proposed camera, compares its
+  center/zoom/bearing/pitch with the stored camera, and returns the existing
+  store state for an equal non-dirty write. An equal write that explicitly
+  marks the project dirty updates only `isDirty`, retaining the existing camera
+  reference; changed cameras continue to update the authoritative store.
+- Gap / limitation: none.
+- Workaround: retain the value-equality gate for renderer programmatic-camera
+  events. Removal criteria: only remove it if MapEngine gains an enforced
+  origin protocol that makes store-originated echoes impossible across every
+  adapter and the synchronized-view effect no longer applies equal cameras.
+- Tradeoff accepted: the derived `bbox` is intentionally ignored when the
+  camera is otherwise equal, so a viewport-measurement-only echo does not
+  produce a subscriber update; this matches the existing secondary-pane camera
+  guard and avoids treating renderer layout metadata as project camera input.
+- Status: done.
+- Verification: `node --import tsx --test tests/map-view-store.test.ts` → 2
+  passed; `node --import tsx --test tests/undo-redo.test.ts` → 27 passed;
+  `npm run build` → passed (the normal JupyterLite-unavailable notice and Vite
+  browser-externalization warnings were non-fatal); dev server
+  `http://127.0.0.1:5174/` returned HTTP 200.
+- Follow-up: none.
