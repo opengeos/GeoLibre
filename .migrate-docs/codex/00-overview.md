@@ -53,5 +53,7 @@ Status values: not started · in progress · partial · blocked · done
   is down to 178 reviewed violations.
 - Implemented: MapLibre source/style discovery, vector-tile viewport querying,
   and clipped-feature deduplication now live adapter-side in `@geolibre/map`.
-  The layer port reports queryable store targets and keeps renderer snapshots
-  read-only; Task 8 application consumers are the remaining work in this slice.
+  Export, Attribute Table, story, processing, editor, notebook/widget,
+  scripting, and assistant consumers use the layer/camera/viewport ports;
+  renderer snapshots stay store-first and read-only. The boundary ratchet is
+  down to 167 reviewed violations.

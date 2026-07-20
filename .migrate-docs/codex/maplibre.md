@@ -279,3 +279,52 @@
   tests/sql-query-layer.test.ts` → 112 passed; `git diff --check` → passed.
 - Follow-up: convert export, story, attribute-table, processing, style, editor,
   notebook, scripting, and assistant consumers to the layer port.
+
+## 2026-07-20 — Application layer reads → `MapEngineClient.layers`
+
+- Source: MapLibre — application-side live-source recovery, basemap style-layer
+  listing, viewport feature queries, click identify listeners, processing
+  bounds, and native-map screenshot reads across export, table, story, editor,
+  notebook, scripting, and assistant surfaces.
+- Files touched: `apps/geolibre-desktop/src/components/{layout,panels,processing,storymap}/**`
+  before → layer/camera/viewport port consumers; `hooks/{useCommandBridge,useNotebookBridge}.ts`
+  before → normalized click subscriptions and identify; new
+  `lib/map-engine-layer-data.ts` plus `lib/{vector-export.ts,scripting/scriptingApi.ts,assistant/tools.ts}`
+  before → store-first snapshot recovery; boundary fixture 178 → 167 entries;
+  new `tests/map-engine-layer-consumers.test.ts`.
+- ArcGIS approach: ArcGIS `FeatureLayer.queryFeatures`, hit testing, layer-list
+  ordering, and screenshot capture remain adapter-private. Consumers address
+  only store layer ids and receive GeoJSON, normalized hits, render-target ids,
+  bounds, or canvases from `MapEngineClient`.
+- What changed: inline store GeoJSON always wins; renderer-held collections are
+  read through `layers.readGeoJson` only when absent and remain local snapshots.
+  Attribute Table no longer writes recovered data into the store. Story export
+  recovers live GeoJSON/raster specs through the port; editor import uses
+  queryable render targets and `queryInView`; layer/style insertion lists use
+  neutral render targets; processing uses camera bbox; notebook/widget clicks
+  use normalized engine events plus `queryAtLngLat`; scripting screenshots use
+  `viewport.capture`; assistant and scripting layer reads share one store-first
+  helper. The explicit geometry-edit action may promote a snapshot into the
+  store because editing deliberately transfers authority to project state.
+- Gap / limitation: transient overlay mutation, print/graticule capture,
+  offline-style packaging, and first-party plugin activation still contain
+  concrete renderer access assigned to Tasks 9–11. Editor/plugin callers retain
+  temporary `MapController & MapEngineClient` intersections for plugin runtime
+  methods, not for layer queries.
+- Workaround: those remaining native paths stay on the reviewed boundary
+  fixture and the package-private primary compatibility proxy. Removal criteria:
+  Tasks 9–11 relocate each operation under an engine capability and delete its
+  fixture entry.
+- Tradeoff accepted: snapshot recovery is asynchronous for exports, scripting,
+  and assistant summaries, while viewport query remains synchronous to preserve
+  the editor interaction path. Both return plain GeoJSON and neither exposes or
+  caches a renderer object.
+- Status: done.
+- Verification: `npm run build` → passed; `node --import tsx --test
+  tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts
+  tests/geo-editor-view-import.test.ts tests/map-controller.test.ts
+  tests/maplibre-engine.test.ts tests/feature-selection.test.ts
+  tests/sql-query-layer.test.ts` → 117 passed; `git diff --check` → passed.
+- Follow-up: extract point picking, bounds drawing, markers, and transient
+  overlays for Task 9, starting with the remaining application-side source/layer
+  mutations.

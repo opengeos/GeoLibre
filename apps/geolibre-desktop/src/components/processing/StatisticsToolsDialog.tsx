@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController, type MapEngineClient } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngineClient } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
   getStatisticsTool,
@@ -25,7 +25,7 @@ import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/process
 import { ParameterField } from "./ParameterField";
 
 interface StatisticsToolsDialogProps {
-  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 /**
@@ -251,12 +251,7 @@ export function StatisticsToolsDialog({
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.camera.fitBounds(bounds),
         addResultLayer,
-        viewportBounds: () => {
-          const map = mapControllerRef.current?.getMap();
-          if (!map) return null;
-          const b = map.getBounds();
-          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-        },
+        viewportBounds: () => mapControllerRef.current?.camera.readView().bbox ?? null,
       };
       await tool.run(ctx);
       // A logged "Error: ..." line marks a soft failure (the client tools

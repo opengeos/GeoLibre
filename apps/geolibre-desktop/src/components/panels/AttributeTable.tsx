@@ -15,8 +15,7 @@ import {
   updateDuckDBLayerRows,
   type DuckDBAttributeRow,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
-import type { GeoJSONSource } from "maplibre-gl";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -332,7 +331,7 @@ function applyDraftsToDuckDBRows(
 }
 
 interface AttributeTableProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
@@ -380,6 +379,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const deferTableResize = isTauri();
 
   const [loadingVectorGeojson, setLoadingVectorGeojson] = useState(false);
+  const [rendererGeojson, setRendererGeojson] = useState<{
+    layerId: string;
+    data: FeatureCollection;
+  } | null>(null);
   // Inline field-rename editing in a column header.
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [editingColumnName, setEditingColumnName] = useState("");
@@ -414,6 +417,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const calcExpressionRef = useRef<HTMLTextAreaElement>(null);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
+  const resolvedGeojson =
+    layer?.geojson ??
+    (rendererGeojson && rendererGeojson.layerId === layer?.id ? rendererGeojson.data : undefined);
   const hasLayer = Boolean(layer);
   // Columns materialized by persistent joins are derived data: every save
   // re-derives them from the join table, so an edit, rename, or delete here
@@ -437,7 +443,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     () => new Set([...joinDerivedColumns, ...virtualFieldColumns]),
     [joinDerivedColumns, virtualFieldColumns],
   );
-  const features = layer?.geojson?.features ?? [];
+  const features = resolvedGeojson?.features ?? [];
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
   const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
   const attributeRows: AttributeTableRow[] = isDuckDBLayer
@@ -446,7 +452,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         featureId: String(feature.id ?? index),
         properties: (feature.properties ?? {}) as Record<string, unknown>,
       }));
-  const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
+  const hasAttributeSource = Boolean(resolvedGeojson || isDuckDBLayer);
   // Add Vector Layer (geojson-mode) layers render from a MapLibre source the
   // control owns, and their `layer.geojson` is dropped when a project is saved.
   // Edits made here would neither redraw on the map nor survive a save, so the
@@ -466,18 +472,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // vector layer. Tiles-mode vector layers are not handled here.
   useEffect(() => {
     if (!layer || layer.geojson) {
+      setRendererGeojson(null);
       setLoadingVectorGeojson(false);
       return;
     }
     const sourceId = geojsonVectorSourceId(layer);
     if (!sourceId) {
+      setRendererGeojson(null);
       setLoadingVectorGeojson(false);
       return;
     }
-    const source = mapControllerRef.current?.getMap()?.getSource(sourceId) as
-      | GeoJSONSource
-      | undefined;
-    if (!source || typeof source.getData !== "function") {
+    const layerPort = mapControllerRef.current?.layers;
+    if (!layerPort) {
+      setRendererGeojson(null);
       // Reset here too: a prior run may have left the indicator true, and this
       // early return would otherwise leave it stuck after a layer switch.
       setLoadingVectorGeojson(false);
@@ -486,18 +493,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     let cancelled = false;
     const layerId = layer.id;
+    setRendererGeojson(null);
     setLoadingVectorGeojson(true);
-    source
-      .getData()
+    layerPort
+      .readGeoJson(layerId)
       .then((data) => {
         if (cancelled) return;
-        if (
-          data &&
-          typeof data === "object" &&
-          (data as { type?: string }).type === "FeatureCollection"
-        ) {
-          updateLayer(layerId, { geojson: data as FeatureCollection });
-        }
+        if (data) setRendererGeojson({ layerId, data });
       })
       .catch(() => {
         // Best-effort: a source that cannot return data leaves the table in its
@@ -510,7 +512,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     return () => {
       cancelled = true;
     };
-  }, [layer, mapControllerRef, updateLayer]);
+  }, [layer, mapControllerRef]);
   const hasEdits = hasDraftEdits(drafts);
   const hasInvalidDrafts = attributeRows.some((row) => {
     const rowDrafts = drafts[row.featureId];
@@ -531,14 +533,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // draft keystroke) changes; null when no form config is active.
   const formFeatureIndex = useMemo(() => {
     if (!attributeForm?.fields.length) return null;
-    const geojsonFeatures = layer?.geojson?.features ?? [];
+    const geojsonFeatures = resolvedGeojson?.features ?? [];
     return new Map(
       geojsonFeatures.map((feature, index): [string, Feature] => [
         String(feature.id ?? index),
         feature,
       ]),
     );
-  }, [attributeForm, layer?.geojson]);
+  }, [attributeForm, resolvedGeojson]);
   const formDraftErrors = useMemo(
     () => computeFormDraftErrors(attributeForm, drafts, formFeatureIndex),
     [attributeForm, drafts, formFeatureIndex],
@@ -893,16 +895,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   const geojsonWithDrafts = () => {
-    if (!layer?.geojson) return null;
+    if (!resolvedGeojson) return null;
 
     return {
-      ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
+      ...resolvedGeojson,
+      features: applyDraftsToFeatures(resolvedGeojson.features, drafts, formFields),
     };
   };
 
   const exportLayer = async (format: VectorExportFormat) => {
-    if (!layer?.geojson) return;
+    if (!layer || !resolvedGeojson) return;
 
     try {
       setExportError(null);

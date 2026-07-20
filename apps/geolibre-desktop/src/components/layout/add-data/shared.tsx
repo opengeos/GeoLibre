@@ -152,7 +152,11 @@ export function InsertBeforeField({
   const { existingLayers, mapControllerRef } = useAddDataShell();
   // Computed during render (not memoized) so the list picks up the map
   // controller once it finishes initialising; the call is a cheap filter.
-  const basemapStyleLayerIds = mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
+  const basemapStyleLayerIds =
+    mapControllerRef.current?.layers
+      .listRenderTargets()
+      .filter((target) => target.scope === "basemap")
+      .map((target) => target.id) ?? [];
   // The basemap style exposes dozens of internal layer ids that overwhelm the
   // dropdown for standard users (issue #453). Keep them behind an opt-in
   // "advanced" toggle so the default list only shows the user's own layers —

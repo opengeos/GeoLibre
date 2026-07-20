@@ -817,22 +817,9 @@ export function DesktopShell({
   const ensureLayerGeojsonFromSource = useCallback(async (layerId: string) => {
     const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
     if (!layer || layer.geojson) return;
-    const sourceIds = layer.metadata.sourceIds;
-    const sourceId = Array.isArray(sourceIds) ? sourceIds[0] : undefined;
-    if (typeof sourceId !== "string") return;
-    const source = mapControllerRef.current?.getMap()?.getSource(sourceId) as
-      | { getData?: () => Promise<unknown> }
-      | undefined;
-    if (!source || typeof source.getData !== "function") return;
     try {
-      const data = await source.getData();
-      if (
-        data &&
-        typeof data === "object" &&
-        (data as { type?: string }).type === "FeatureCollection"
-      ) {
-        useAppStore.getState().updateLayer(layerId, { geojson: data as FeatureCollection });
-      }
+      const data = await mapControllerRef.current?.layers.readGeoJson(layerId);
+      if (data) useAppStore.getState().updateLayer(layerId, { geojson: data });
     } catch {
       // Best effort; startLayerGeometryEdit will fail and surface an error.
     }

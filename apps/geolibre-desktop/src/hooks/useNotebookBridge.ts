@@ -1,7 +1,6 @@
 import { useAppStore } from "@geolibre/core";
-import type maplibregl from "maplibre-gl";
 import { type RefObject, useEffect } from "react";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient, Unsubscribe } from "@geolibre/map";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 import { unsupportedScriptingCommandMessage } from "../lib/scripting/errors";
 
@@ -41,7 +40,7 @@ interface CommandMessage {
  */
 export function useNotebookBridge(
   iframeRef: RefObject<HTMLIFrameElement | null>,
-  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>,
+  mapControllerRef: RefObject<MapEngineClient | null>,
 ): void {
   useEffect(() => {
     const controller = () => mapControllerRef.current;
@@ -151,22 +150,19 @@ export function useNotebookBridge(
       }
     });
 
-    // Map click events. The controller/map appear asynchronously after the map
-    // loads, so poll on animation frames until the map exists, then attach.
-    let clickMap: ReturnType<MapController["getMap"]> | null = null;
-    const onMapClick = (event: maplibregl.MapMouseEvent) => {
-      const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
-      emit("click", {
-        lngLat,
-        features: controller()?.identifyFeatures(lngLat) ?? [],
-      });
-    };
+    // Engine click events. The client appears asynchronously after the map
+    // loads, so poll on animation frames until the ref is populated, then
+    // subscribe to the normalized event stream.
+    let unsubscribeClick: Unsubscribe | null = null;
     let rafId: number | null = null;
     const attachClick = () => {
-      const map = controller()?.getMap();
-      if (map) {
-        clickMap = map;
-        map.on("click", onMapClick);
+      const client = controller();
+      if (client) {
+        unsubscribeClick = client.on("click", ({ lngLat }) => {
+          void client.layers.queryAtLngLat(lngLat).then((features) => {
+            emit("click", { lngLat, features });
+          });
+        });
         return;
       }
       rafId = requestAnimationFrame(attachClick);
@@ -177,7 +173,7 @@ export function useNotebookBridge(
       window.removeEventListener("message", handleMessage);
       unsubscribe();
       if (rafId !== null) cancelAnimationFrame(rafId);
-      clickMap?.off("click", onMapClick);
+      unsubscribeClick?.();
     };
     // Mount-only: both refs are stable and read lazily inside the closures.
   }, [iframeRef, mapControllerRef]);

@@ -1,5 +1,5 @@
 import { geojsonHasZCoordinates, styleValue, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
@@ -78,7 +78,7 @@ interface LineLayerOption {
 }
 
 interface RouteAnimationPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /**
@@ -178,12 +178,12 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
   // the geojson-layer key, not the churning `layers` array.
   useEffect(() => {
     let cancelled = false;
-    const map = mapControllerRef.current?.getMap() ?? undefined;
+    const layerPort = mapControllerRef.current?.layers;
     const candidates = useAppStore.getState().layers.filter((layer) => layer.type === "geojson");
     (async () => {
       const resolved = await Promise.all(
         candidates.map(async (layer) => {
-          const fc = await resolveLayerGeojson(layer, map).catch(() => null);
+          const fc = await resolveLayerGeojson(layer, layerPort).catch(() => null);
           return fc && flattenToLine(fc).length >= 2 ? { id: layer.id, name: layer.name } : null;
         }),
       );
@@ -217,9 +217,9 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       setRouteAnimationSettings({ layerId: null });
       return;
     }
-    const map = mapControllerRef.current?.getMap() ?? undefined;
+    const layerPort = mapControllerRef.current?.layers;
     (async () => {
-      const fc = await resolveLayerGeojson(layer, map).catch(() => null);
+      const fc = await resolveLayerGeojson(layer, layerPort).catch(() => null);
       if (cancelled) return;
       const { coords, elevations } = flattenToRoute(fc);
       setRouteAnimationRoute(coords, elevations);

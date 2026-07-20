@@ -5,7 +5,7 @@ import {
   type ProcessingModel,
   type ProcessingModelStep,
 } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngineClient } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
@@ -46,7 +46,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 interface ModelBuilderDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 /** The conventional id of a tool's primary input layer parameter. */
@@ -145,14 +145,9 @@ function useFieldsByLayer(layers: GeoLibreLayer[], enabled: boolean): Map<string
 
 /** Read the current map viewport as [west, south, east, north]. */
 function viewportBoundsReader(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngineClient | null>,
 ): () => [number, number, number, number] | null {
-  return () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return null;
-    const b = map.getBounds();
-    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-  };
+  return () => mapControllerRef.current?.camera.readView().bbox ?? null;
 }
 
 /**

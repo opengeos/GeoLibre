@@ -9,10 +9,10 @@ import {
 } from "@geolibre/processing";
 import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { beginProcessingRun } from "../processing-history";
-import { captureMapImage } from "../print-layout-export";
 import { flyToCamera } from "../map-engine-camera";
+import { readLayerFeatureCollection } from "../map-engine-layer-data";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -26,8 +26,8 @@ export type ScriptingHandler = (params: Record<string, unknown>) => unknown | Pr
 export type ScriptingHandlers = Record<string, ScriptingHandler>;
 
 export interface ScriptingDeps {
-  /** Lazily resolve the live map controller (it is created asynchronously). */
-  getController: () => (MapController & MapEngineClient) | null;
+  /** Lazily resolve the live map engine (it is created asynchronously). */
+  getController: () => MapEngineClient | null;
 }
 
 /**
@@ -90,13 +90,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const layerId = typeof params.layerId === "string" ? params.layerId : undefined;
       return getController()?.layers.queryAtLngLat(lngLat, layerId) ?? [];
     },
-    getLayerFeatures: (params) => {
+    getLayerFeatures: async (params) => {
       const layerId = requireLayerId(params);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
-      return layer.geojson?.features ?? [];
+      return (await readLayerFeatureCollection(layer, getController()?.layers))?.features ?? [];
     },
-    getSelectedFeatures: () => {
+    getSelectedFeatures: async () => {
       // Selection is a single layer+feature pair in the store; return it as a
       // (0-or-1 element) list so the shape is forward-compatible with
       // multi-select and matches getLayerFeatures/getDrawnFeatures.
@@ -104,7 +104,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const { selectedLayerId, selectedFeatureId } = state;
       if (!selectedLayerId || !selectedFeatureId) return [];
       const layer = state.layers.find((item) => item.id === selectedLayerId);
-      const features = layer?.geojson?.features ?? [];
+      if (!layer) return [];
+      const features =
+        (await readLayerFeatureCollection(layer, getController()?.layers))?.features ?? [];
       // Mirror the controller's id convention (String(feature.id ?? index)) so a
       // selectedFeatureId derived from an index still resolves.
       const match = features.find(
@@ -252,14 +254,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     },
 
     // -- export -------------------------------------------------------------
-    toImage: () => {
-      const map = getController()?.getMap();
-      if (!map) throw new Error("The map is not ready yet");
+    toImage: async () => {
+      const client = getController();
+      if (!client) throw new Error("The map is not ready yet");
       // toDataURL is a synchronous PNG encode (100-400ms on a large/high-DPI
       // viewport). In the in-app console (main thread) this briefly freezes the
       // UI, so callers should avoid it in tight loops; the notebook path hides
       // this behind the postMessage round-trip.
-      return captureMapImage(map).image.toDataURL("image/png");
+      const capture = await client.viewport.capture();
+      return capture.canvas.toDataURL("image/png");
     },
   };
 }

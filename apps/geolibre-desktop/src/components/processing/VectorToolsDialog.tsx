@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController, type MapEngineClient } from "@geolibre/map";
+import { detectGeometryProfile, type MapEngineClient } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useTranslation } from "react-i18next";
 
 interface VectorToolsDialogProps {
-  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 type Engine = "client" | "sidecar" | "pyodide";
@@ -140,16 +140,15 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       params.north !== undefined
     )
       return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const b = map.getBounds();
+    const bbox = mapControllerRef.current?.camera.readView().bbox;
+    if (!bbox) return;
     const round = (n: number) => Number(n.toFixed(6));
     setParams((prev) => ({
       ...prev,
-      west: round(b.getWest()),
-      south: round(b.getSouth()),
-      east: round(b.getEast()),
-      north: round(b.getNorth()),
+      west: round(bbox[0]),
+      south: round(bbox[1]),
+      east: round(bbox[2]),
+      north: round(bbox[3]),
     }));
     // params.west/south/east/north are read as a one-time guard; re-running only
     // when the source changes is intentional.
@@ -381,12 +380,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
           fitBounds: (bounds) => mapControllerRef.current?.camera.fitBounds(bounds),
           addResultLayer,
           duckdb,
-          viewportBounds: () => {
-            const map = mapControllerRef.current?.getMap();
-            if (!map) return null;
-            const b = map.getBounds();
-            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-          },
+          viewportBounds: () => mapControllerRef.current?.camera.readView().bbox ?? null,
         };
         await tool.run(ctx);
       }

@@ -993,10 +993,7 @@ export function LayerPanel({
     async (layer: GeoLibreLayer, format: VectorExportFormat) => {
       clearRefreshStatusTimer(layer.id);
       try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
+        const geojson = await resolveLayerGeojson(layer, mapControllerRef.current?.layers);
         if (!geojson) {
           // A source-backed (Add Vector Layer) layer whose features could not be
           // read is usually a not-yet-ready map source, not a layer that lacks
@@ -1072,10 +1069,7 @@ export function LayerPanel({
     ) => {
       clearRefreshStatusTimer(layer.id);
       try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
+        const geojson = await resolveLayerGeojson(layer, mapControllerRef.current?.layers);
         const built = build(geojson ?? null);
         if ("error" in built) {
           setRefreshStatuses((current) => ({
@@ -1328,10 +1322,7 @@ export function LayerPanel({
       const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
       if (!isPostgis && !path) return;
       try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
+        const geojson = await resolveLayerGeojson(layer, mapControllerRef.current?.layers);
         if (!geojson || geojson.features.length === 0) {
           setRefreshStatuses((current) => ({
             ...current,
@@ -1470,10 +1461,7 @@ export function LayerPanel({
       setBindLayerGeojson(null);
       setBindError(null);
       try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
+        const geojson = await resolveLayerGeojson(layer, mapControllerRef.current?.layers);
         if (bindRequestRef.current !== token) return;
         const candidates = detectTimeProperties(geojson ?? undefined);
         setBindLayerGeojson(geojson ?? null);
@@ -1497,8 +1485,7 @@ export function LayerPanel({
     // Reuse the feature collection resolved when the dialog opened so large
     // layers are not scanned twice.
     const geojson =
-      bindLayerGeojson ??
-      (await resolveLayerGeojson(layer, mapControllerRef.current?.getMap() ?? undefined));
+      bindLayerGeojson ?? (await resolveLayerGeojson(layer, mapControllerRef.current?.layers));
     // If the dialog was cancelled (or reopened for another layer) while the
     // fallback scan was in flight, abandon this commit.
     if (bindRequestRef.current !== token) return;

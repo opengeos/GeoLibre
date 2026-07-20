@@ -10,6 +10,7 @@ import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
 import { z } from "zod";
 import { inferPropertyColumns } from "../pglite-sql";
+import { readLayerFeatureCollection } from "../map-engine-layer-data";
 import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
 import { cleanStatement, maskSqlLiterals, previewLayerTables, runSqlQuery } from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
@@ -136,19 +137,14 @@ function concatBytes(chunks: Uint8Array[], total: number): Uint8Array {
   return out;
 }
 
-/** Detect a layer's geometry family from its first feature. */
-function geometryTypeOf(layer: GeoLibreLayer): string | null {
-  return layer.geojson?.features?.[0]?.geometry?.type ?? null;
-}
-
 /** Summarize a layer's identity and schema without exposing row data. */
-function summarizeLayer(layer: GeoLibreLayer): LayerSummary {
-  const features = layer.geojson?.features ?? [];
+function summarizeLayer(layer: GeoLibreLayer, geojson = layer.geojson): LayerSummary {
+  const features = geojson?.features ?? [];
   return {
     id: layer.id,
     name: layer.name,
     type: layer.type,
-    geometryType: geometryTypeOf(layer),
+    geometryType: features[0]?.geometry?.type ?? null,
     featureCount: features.length,
     fields: features.length
       ? inferPropertyColumns(features).map((column) => ({
@@ -291,7 +287,17 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     description:
       "List the layers currently loaded in the map, with their id, type, geometry, feature count, attribute field names, and the SQL table name to use in run_sql. Call this before referring to a layer.",
     inputSchema: z.object({}),
-    callback: () => json({ layers: store().layers.map(summarizeLayer) }),
+    callback: async () => {
+      const client = deps.getMapController();
+      const layers = await Promise.all(
+        store().layers.map(async (layer) => {
+          if (layer.geojson || !client) return summarizeLayer(layer);
+          const snapshot = await readLayerFeatureCollection(layer, client.layers).catch(() => null);
+          return summarizeLayer(layer, snapshot ?? undefined);
+        }),
+      );
+      return json({ layers });
+    },
   });
 
   const runSql = tool({

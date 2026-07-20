@@ -1,8 +1,9 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import type { MapLayerPort } from "@geolibre/map";
 import { csvCell as quoteCsvCell } from "./csv";
 import type { FeatureCollection } from "geojson";
-import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
+import { readLayerFeatureCollection } from "./map-engine-layer-data";
 import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
 
 export type VectorExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
@@ -263,24 +264,12 @@ export function geojsonVectorSourceId(layer: GeoLibreLayer | undefined): string 
  */
 export async function resolveLayerGeojson(
   layer: GeoLibreLayer,
-  map: MapLibreMap | undefined,
+  layers: MapLayerPort | undefined,
 ): Promise<FeatureCollection | null> {
   if (layer.geojson) return layer.geojson;
 
   const sourceId = geojsonVectorSourceId(layer);
-  if (!sourceId || !map) return null;
+  if (!sourceId || !layers) return null;
 
-  const source = map.getSource(sourceId) as GeoJSONSource | undefined;
-  if (!source || typeof source.getData !== "function") return null;
-
-  const data = await source.getData();
-  if (
-    data &&
-    typeof data === "object" &&
-    (data as { type?: string }).type === "FeatureCollection" &&
-    Array.isArray((data as { features?: unknown }).features)
-  ) {
-    return data as FeatureCollection;
-  }
-  return null;
+  return readLayerFeatureCollection(layer, layers);
 }

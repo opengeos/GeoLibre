@@ -324,7 +324,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
             layers.map(async (layer) => {
               if (layer.type === "geojson") {
                 if (layer.geojson) return layer;
-                const geojson = await controller.getLayerGeoJson(layer.id);
+                const geojson = await controller.layers.readGeoJson(layer.id);
                 return geojson ? { ...layer, geojson } : layer;
               }
               if (
@@ -345,7 +345,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 if (hasTiles || hasEmbeddableUrl) {
                   return layer;
                 }
-                const liveSource = controller.getLayerRasterSource(layer.id);
+                const liveSource = controller.layers.readRasterSource(layer.id);
                 return liveSource
                   ? { ...layer, source: { ...layer.source, ...liveSource } }
                   : layer;

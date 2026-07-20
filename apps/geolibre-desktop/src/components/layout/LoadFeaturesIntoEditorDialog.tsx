@@ -1,6 +1,6 @@
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
   getGeoEditorFeatureCount,
@@ -8,12 +8,8 @@ import {
   hasViewImportBaseline,
   isGeoEditorAvailableForImport,
   loadViewFeaturesIntoEditor,
-  queryViewLayerFeatures,
-  resolveStoreLayerViewSource,
   SKETCHES_SOURCE_KIND,
   subscribeGeometryEdit,
-  type ViewImportMap,
-  type ViewVectorLayer,
 } from "@geolibre/plugins";
 import type { Feature } from "geojson";
 import { ChevronDown, ChevronUp, GripVertical, RefreshCw, X } from "lucide-react";
@@ -35,7 +31,7 @@ import { exportVectorLayer } from "../../lib/vector-export";
 interface LoadFeaturesIntoEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
   /** Store layer to preselect (set when opened from a layer's context menu). */
   initialLayerId: string | null;
 }
@@ -58,7 +54,6 @@ const STATUS_BAR_GAP = 24;
 interface EligibleLayer {
   id: string;
   name: string;
-  source: ViewVectorLayer;
 }
 
 type StatusKind = "success" | "error" | "info";
@@ -120,12 +115,16 @@ export function LoadFeaturesIntoEditorDialog({
   // Sketches layer (the editor's own output) is excluded. Recomputed when the
   // Layers panel changes or the dialog reopens.
   const computeEligible = useCallback((): EligibleLayer[] => {
-    const style = mapControllerRef.current?.getMap()?.getStyle();
+    const queryableIds = new Set(
+      mapControllerRef.current?.layers
+        .listRenderTargets()
+        .filter((target) => target.scope === "content" && target.queryable)
+        .map((target) => target.id) ?? [],
+    );
     const result: EligibleLayer[] = [];
     for (const layer of storeLayers) {
       if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) continue;
-      const source = resolveStoreLayerViewSource(layer, style);
-      if (source) result.push({ id: layer.id, name: layer.name, source });
+      if (queryableIds.has(layer.id)) result.push({ id: layer.id, name: layer.name });
     }
     return result;
   }, [mapControllerRef, storeLayers]);
@@ -167,7 +166,7 @@ export function LoadFeaturesIntoEditorDialog({
     // Open at the bottom-left of the map canvas by default (measured from the
     // map container, so it clears the left Layers panel), leaving a gap above
     // the status bar. Anchored by `bottom` so growing content extends upward.
-    const mapRect = mapControllerRef.current?.getMap()?.getContainer()?.getBoundingClientRect();
+    const mapRect = mapControllerRef.current?.viewport.getRect();
     const left = mapRect ? mapRect.left + EDGE_MARGIN : EDGE_MARGIN;
     const bottomOffset = (mapRect ? window.innerHeight - mapRect.bottom : 0) + STATUS_BAR_GAP;
     setAnchor({ x: left, bottom: bottomOffset });
@@ -256,8 +255,8 @@ export function LoadFeaturesIntoEditorDialog({
   // load immediately, or report that none are in view.
   const runLoad = useCallback(
     (replace: boolean) => {
-      const map = mapControllerRef.current?.getMap();
-      if (!map || !selectedLayer) {
+      const client = mapControllerRef.current;
+      if (!client || !selectedLayer) {
         setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
         return;
       }
@@ -270,7 +269,7 @@ export function LoadFeaturesIntoEditorDialog({
       window.setTimeout(() => {
         let features: Feature[];
         try {
-          features = queryViewLayerFeatures(map as unknown as ViewImportMap, selectedLayer.source);
+          features = [...client.layers.queryInView(selectedLayer.id)];
         } catch (error) {
           // e.g. the layer's source was removed between selecting and loading.
           setStatus({

@@ -47,7 +47,7 @@ import {
   SKETCHES_SOURCE_KIND,
   countAtlasDroppedDiagrams,
 } from "@geolibre/plugins";
-import { type MapController } from "@geolibre/map";
+import { type MapController, type MapEngineClient } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
@@ -149,7 +149,7 @@ function labelOverrideInvalid(
 }
 
 interface StylePanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
@@ -1773,7 +1773,11 @@ export function StylePanel({
   };
   // NOTE: not reactive to basemap switches — the ref does not trigger a
   // re-render, so the list refreshes on the next store-driven render.
-  const basemapStyleLayerIds = mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
+  const basemapStyleLayerIds =
+    mapControllerRef.current?.layers
+      .listRenderTargets()
+      .filter((target) => target.scope === "basemap")
+      .map((target) => target.id) ?? [];
   const otherLayers = layers.filter((l) => l.id !== layer.id);
   // While 3D (Z values) is active the basemap group below is hidden, so a
   // saved basemap target surfaces under "Saved (unavailable)" instead of
