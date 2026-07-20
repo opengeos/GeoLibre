@@ -27,10 +27,22 @@ env:
   # updates must target API 36 or the upload is rejected.
   ANDROID_PLATFORM: "platforms;android-36"
   ANDROID_BUILD_TOOLS: "build-tools;36.0.0"
-  # NDK r27 LTS — Tauri v2's supported line. Bump deliberately. Note r27 does
-  # not emit 16 KB-aligned .so files on its own; src-tauri/.cargo/config.toml
-  # passes the linker flags that do, and a CI step below verifies the result.
+  # NDK r27 LTS — Tauri v2's supported line. Bump deliberately.
   ANDROID_NDK_VERSION: "27.3.13750724"
+  # 16 KB page-size alignment for the Rust .so files (a Google Play requirement
+  # since 2025-11-01 for apps targeting Android 15+; GeoLibre targets 36).
+  # NDK r28+ emits aligned segments by default, r27 does not, so ask explicitly.
+  #
+  # This MUST be the RUSTFLAGS env var rather than `target.<triple>.rustflags`
+  # in a .cargo/config.toml: the Tauri CLI sets RUSTFLAGS itself when invoking
+  # cargo for Android, and an env RUSTFLAGS overrides the config file outright,
+  # so the config-file form is silently ignored and ships 4 KB-aligned libs.
+  # Tauri appends to an inherited value, so setting it here survives. Verified
+  # against real APKs: without it the shipped .so are 2**12, with it 2**14.
+  #
+  # Set at workflow level so the APK and AAB steps agree — a mismatch changes
+  # the cargo fingerprint and forces a full rebuild between them.
+  RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
 
 jobs:
   build:
@@ -129,15 +141,34 @@ jobs:
 
       - name: Verify 16 KB page alignment
         # Play rejects apps targeting Android 15+ whose native libs are not
-        # 16 KB-aligned. The linker flags live in src-tauri/.cargo/config.toml;
-        # this step is the gate that proves they actually took effect, so a
-        # silent regression (flags dropped, NDK/toolchain change) fails here
-        # rather than at upload time. Checks every packaged .so, not a sample.
+        # 16 KB-aligned. The RUSTFLAGS above are what produce the alignment;
+        # this step proves they actually took effect, so a silent regression
+        # (flags dropped, Tauri overriding them, NDK change) fails here rather
+        # than at upload time.
+        #
+        # Inspects the .so *inside the built APKs* — the bytes Play receives —
+        # rather than a path under gen/android. Do not be tempted back to
+        # `find gen/android -path '*/release/*'`: Gradle's output dirs are
+        # arm64Release / armRelease / x86Release / x86_64Release (capital R),
+        # so that pattern matches nothing and the check never runs.
         run: |
           set -euo pipefail
           objdump="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
           checked=0
           bad=0
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          # Unpack every release APK's native libs into one tree, then check all.
+          apks=0
+          while IFS= read -r apk; do
+            apks=$((apks + 1))
+            unzip -o -q "$apk" 'lib/*/*.so' -d "$workdir/$apks" || true
+          done < <(find apps/geolibre-desktop/src-tauri/gen/android \
+            -name '*release*.apk')
+          if [ "$apks" -eq 0 ]; then
+            echo "::error::No release APKs found to verify"
+            exit 1
+          fi
           while IFS= read -r so; do
             checked=$((checked + 1))
             # `objdump -p` prints one line per segment ending in `align 2**N`
@@ -163,10 +194,9 @@ jobs:
               esac
             done < <("$objdump" -p "$so" |
               awk '$1 == "LOAD" { split($NF, a, /\*\*/); print a[2] }')
-          done < <(find apps/geolibre-desktop/src-tauri/gen/android \
-            -path '*/release/*' -name '*.so')
+          done < <(find "$workdir" -name '*.so')
           if [ "$checked" -eq 0 ]; then
-            echo "::error::No .so files found to verify — the check would pass vacuously"
+            echo "::error::No .so files found inside the APKs — the check would pass vacuously"
             exit 1
           fi
           if [ "$bad" -gt 0 ]; then

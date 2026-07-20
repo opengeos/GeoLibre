@@ -57,16 +57,34 @@ updates must target API 36 to be accepted.
 
 Google Play rejects apps targeting Android 15+ whose native libraries are not
 aligned for 16 KB memory pages, and such libraries fail to load on 16 KB
-devices. NDK r28+ does this by default; **r27 does not**, so
-`src-tauri/.cargo/config.toml` passes `-Wl,-z,max-page-size=16384` (plus
-`common-page-size`) for the four Android targets. The flags are scoped per
-target so they never reach the desktop builds. CI verifies every packaged `.so`
-and fails the build on a regression; to check locally:
+devices. NDK r28+ does this by default; **r27 does not**, so the flags are
+passed explicitly. Export this before an Android build (CI sets it at workflow
+level in `.github/workflows/android.yml`):
 
 ```bash
-"$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -l lib.so \
-  | awk '$1 == "LOAD" { print $NF }'   # every value must be >= 0x4000
+export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
 ```
+
+> It has to be the `RUSTFLAGS` **environment variable**. Putting the same flags
+> in `target.<triple>.rustflags` in a `.cargo/config.toml` does *not* work: the
+> Tauri CLI sets `RUSTFLAGS` itself when it invokes cargo for Android, and an
+> env `RUSTFLAGS` overrides the config file outright. The config-file form is
+> silently ignored — it parses, it builds, and it ships 4 KB-aligned libraries
+> that Play rejects. Tauri appends to an inherited value, so exporting it works.
+
+Check the result on a built APK — the bytes Play actually receives:
+
+```bash
+unzip -o -q app-arm64-release-unsigned.apk 'lib/*/*.so' -d /tmp/apkcheck
+"$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump" -p \
+  /tmp/apkcheck/lib/*/*.so | awk '$1 == "LOAD" { print $NF }' | sort -u
+# every value must be 2**14 or greater; 2**12 means the flags did not apply
+```
+
+Use `llvm-objdump -p` rather than `readelf -l`: readelf wraps each LOAD across
+two lines, so it is easy to parse the wrong column and read an address as an
+alignment. CI runs this same check over every packaged `.so` and fails on a
+regression.
 
 ## Build
 
@@ -82,9 +100,12 @@ npx tauri android build --aab                    # universal AAB for Google Play
   makes each APK ~40 MB; a debug build is ~200 MB (unstripped `.so` with
   debuginfo).
 - `--split-per-abi` emits one APK per architecture instead of a single ~150 MB
-  universal APK. Install the **`arm64-v8a`** one on real phones.
+  universal APK. Install the **`arm64`** one on real phones.
 - Output:
-  `src-tauri/gen/android/app/build/outputs/apk/<abi>/release/app-<abi>-release-unsigned.apk`.
+  `src-tauri/gen/android/app/build/outputs/apk/<abi>/release/app-<abi>-release-unsigned.apk`,
+  where `<abi>` is Tauri's short name — **`arm64`**, `arm`, `x86`, `x86_64` —
+  *not* the Android ABI directory name (`arm64-v8a`, `armeabi-v7a`) that appears
+  inside the APK under `lib/`.
 
 - Sideload/GitHub-release path: the per-ABI **APKs**.
 - Google Play path: the universal **AAB** (Play generates per-device splits from
@@ -107,9 +128,9 @@ Release APKs are unsigned. To install one, sign it (a debug key is fine for
 testing; use a real key for distribution):
 
 ```bash
-BT="$ANDROID_HOME/build-tools/34.0.0"
+BT="$ANDROID_HOME/build-tools/36.0.0"
 KS="$HOME/.android/debug.keystore"   # auto-created by Android tooling; or make your own
-"$BT/zipalign" -p -f 4 app-arm64-v8a-release-unsigned.apk aligned.apk
+"$BT/zipalign" -p -f 4 app-arm64-release-unsigned.apk aligned.apk
 "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android \
   --ks-key-alias androiddebugkey --key-pass pass:android \
   --out geolibre-arm64.apk aligned.apk
@@ -159,9 +180,9 @@ For live development with hot reload, connect the device and run
 
 ```bash
 sdkmanager --sdk_root="$ANDROID_HOME" \
-  "emulator" "system-images;android-34;google_apis_playstore;x86_64"
+  "emulator" "system-images;android-36;google_apis_playstore;x86_64"
 avdmanager create avd -n geolibre \
-  -k "system-images;android-34;google_apis_playstore;x86_64" -d pixel_7
+  -k "system-images;android-36;google_apis_playstore;x86_64" -d pixel_7
 emulator -avd geolibre
 adb install -r geolibre-arm64.apk
 ```
