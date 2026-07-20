@@ -662,3 +662,35 @@
   `npm run build` → passed.
 - Follow-up: include this helper in every remaining hosted control relocation;
   Codex, 2026-07-20.
+
+## 2026-07-20 — Eager default-control lifecycle assumption → lazy adapter runtime commands
+
+- Source: MapLibre — the active-by-default Layer Control is mounted by
+  `MapController` before `PluginManager` has an app API, so restoring it as
+  inactive or changing its saved corner could call a hosted runtime that had
+  never been activated or imported.
+- Files touched: `packages/map/src/maplibre-runtime/registry.ts` before → lazy
+  lifecycle-command loading; `tests/hosted-map-runtime-registry.test.ts` before
+  → active-by-default restoration coverage.
+- ArcGIS approach: a future ArcGIS adapter keeps the same descriptor commands
+  and resolves its lazy `MapView` widget when a default widget's first request
+  is hide or reposition, without exposing the widget to PluginManager.
+- What changed: the per-engine registry now lazy-loads an unloaded runtime for
+  deactivation and positioning as well as activation. Deactivation is applied
+  once the chunk resolves; positioning returns that the adapter accepted the
+  persisted request while applying it immediately after the runtime loads.
+- Gap / limitation: the current extension command shape is synchronous for
+  position and void for deactivation, so a first-command chunk-load failure
+  cannot be returned to PluginManager.
+- Workaround: catch and report lazy lifecycle failures in the adapter; the
+  persisted descriptor position remains the source of truth for a later retry.
+  Removal criteria: make hosted lifecycle commands uniformly asynchronous only
+  if all PluginManager callers can surface and recover from those failures.
+- Tradeoff accepted: a default control can incur a one-time lazy-load delay
+  during project restore, in exchange for preserving adapter ownership and
+  avoiding an eager renderer runtime at application startup.
+- Status: partial.
+- Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 43 passed.
+- Follow-up: relocate the next self-contained MapLibre controls and update the
+  boundary ratchet in the same verified commit; Codex, 2026-07-20.

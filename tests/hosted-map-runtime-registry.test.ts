@@ -45,6 +45,23 @@ describe("MapLibre hosted runtime registry", () => {
     assert.deepEqual(calls, ["activate:bottom-left", "position:top-right", "deactivate"]);
   });
 
+  it("applies lifecycle requests for an active-by-default control before activation", async () => {
+    const calls: string[] = [];
+    const registry = createMapLibreHostedRuntimeRegistry({} as MapEngineClient, {
+      control: async () => ({
+        activate: () => true,
+        deactivate: () => calls.push("deactivate"),
+        setPosition: (_context, position) => calls.push(`position:${position}`),
+      }),
+    });
+
+    assert.equal(registry.setPosition("control", "bottom-right"), true);
+    registry.deactivate("control");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    assert.deepEqual(calls, ["position:bottom-right", "deactivate"]);
+  });
+
   it("surfaces a dynamic-import failure to PluginManager activation rollback", async () => {
     const registry = createMapLibreHostedRuntimeRegistry({} as MapEngineClient, {
       unavailable: async () => Promise.reject(new Error("chunk unavailable")),

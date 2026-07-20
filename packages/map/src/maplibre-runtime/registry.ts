@@ -20,7 +20,10 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
 
 /**
  * Owns loaded MapLibre-only runtimes for one engine instance. Loader functions
- * are deliberately evaluated only when the matching plugin is activated.
+ * are deliberately evaluated only when the matching plugin receives its first
+ * lifecycle command. This keeps inactive controls out of the startup bundle,
+ * while still allowing an active-by-default built-in control to be hidden or
+ * repositioned before it has needed a plugin activation.
  */
 export class MapLibreHostedRuntimeRegistry {
   private readonly loaded = new Map<string, MapLibreHostedRuntime>();
@@ -44,13 +47,40 @@ export class MapLibreHostedRuntimeRegistry {
   }
 
   deactivate(pluginId: string): void {
-    this.loaded.get(pluginId)?.deactivate?.(this.context());
+    const runtime = this.loaded.get(pluginId);
+    if (runtime) {
+      runtime.deactivate?.(this.context());
+      return;
+    }
+
+    // Active-by-default controls are mounted by the engine before PluginManager
+    // has an app API. Their first plugin lifecycle operation can therefore be
+    // a deactivate during project restore. Load lazily here so the engine-owned
+    // control is actually hidden instead of leaving it visible.
+    void this.load(pluginId)
+      .then((loadedRuntime) => loadedRuntime.deactivate?.(this.context()))
+      .catch((error: unknown) => {
+        console.warn(`[maplibre-hosted-runtime] failed to deactivate "${pluginId}":`, error);
+      });
   }
 
   setPosition(pluginId: string, position: MapControlPosition): boolean {
     const runtime = this.loaded.get(pluginId);
-    if (!runtime?.setPosition) return false;
-    return runtime.setPosition(this.context(), position) !== false;
+    if (runtime) {
+      if (!runtime.setPosition) return false;
+      return runtime.setPosition(this.context(), position) !== false;
+    }
+
+    // See deactivate(): accept the requested position now and apply it once
+    // the lazily loaded runtime is available. PluginManager persists the
+    // descriptor position independently, so this optimistic result precisely
+    // reflects that the request was accepted by the adapter.
+    void this.load(pluginId)
+      .then((loadedRuntime) => loadedRuntime.setPosition?.(this.context(), position))
+      .catch((error: unknown) => {
+        console.warn(`[maplibre-hosted-runtime] failed to position "${pluginId}":`, error);
+      });
+    return true;
   }
 
   getState(pluginId: string): unknown {

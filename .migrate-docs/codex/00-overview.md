@@ -77,7 +77,8 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: the MapLibre adapter now owns a per-engine lazy hosted-runtime
   registry. Layer Control and Street View are relocated descriptor/runtime
   pairs; a runtime-import failure reaches the existing plugin activation
-  rollback.
+  rollback. Active-by-default controls lazily resolve their adapter runtime on
+  first hide or position request, preserving restored project state.
 - Implemented: FEMA NFHL, NASA Earthdata, EnviroAtlas, and National Map now
   run as lazy MapLibre provider-control runtimes. Their bidirectional
   store-sync helper moved with them; store layers remain authoritative and
