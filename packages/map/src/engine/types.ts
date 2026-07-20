@@ -40,6 +40,7 @@ export interface HitFeature {
 }
 
 export interface MapEngine {
+  getController(): any;
   mount(container: HTMLElement, initialView: MapViewState): Promise<void>;
   destroy(): void;
   applyView(view: MapViewState): void;

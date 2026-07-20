@@ -930,6 +930,9 @@ export const MapCanvas = memo(function MapCanvas({
 
   const engineRef = useRef<MapEngine | null>(null);
 
+  useEffect(() => {
+    if (!containerRef.current || engineRef.current) return;
+
     const engineId = getEngineIdFromUrl();
     let engine: MapEngine;
     if (engineId === "arcgis-map") {
@@ -962,11 +965,11 @@ export const MapCanvas = memo(function MapCanvas({
       if (!map) return;
 
       if (engineId === "maplibre") {
-        map.on("mousemove", (e) => {
+        map.on("mousemove", (e: any) => {
           setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
         });
         map.on("mouseout", () => setPointerCoords(null));
-        map.on("error", (event) => {
+        map.on("error", (event: any) => {
           // Cancelled tile fetches are already surfaced (as info) by the
           // network capture; logging them here would double-count aborts.
           if (isAbortError(event.error)) return;
