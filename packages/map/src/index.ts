@@ -1,5 +1,6 @@
 export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCanvas";
 export { EngineCanvas, type EngineCanvasProps } from "./EngineCanvas";
+export { InsetMapCanvas, type InsetMapCanvasProps, type InsetMapMarker } from "./InsetMapCanvas";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";

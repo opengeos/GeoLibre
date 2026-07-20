@@ -96,14 +96,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapPresenter.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapPresenter.tsx",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "apps/geolibre-desktop/src/hooks/useCommandBridge.ts",
     "pattern": "@geolibre/map#MapController"
   },

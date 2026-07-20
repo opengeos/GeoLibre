@@ -72,6 +72,39 @@
 - Follow-up: migrate the story presentation's inset-map and marker lifecycle
   through an engine-owned React host in Task 10.
 
+## 2026-07-20 — Story inset `new maplibregl.Map`/`Marker` → restricted engine host and marker port
+
+- Source: MapLibre — direct `new maplibregl.Map`, `new maplibregl.Marker`,
+  `setCenter`, marker DOM visibility, native container lookup, and direct story
+  layer-style mutation in the scroll-driven story presenter.
+- Files touched: `apps/geolibre-desktop/src/components/storymap/StoryMapPresenter.tsx`
+  before → `MapEngineClient` marker/camera/extension/viewport consumer; new
+  `packages/map/src/InsetMapCanvas.tsx`; `packages/map/src/index.ts`; new
+  `tests/inset-map-canvas.test.ts`; boundary baseline.
+- ArcGIS approach: the future adapter maps the inset host to a lazily created
+  `@arcgis/core/views/MapView`, camera changes to `MapView.goTo`, and the story
+  point to a `Graphic` in a `GraphicsLayer`; React stays coupled only to the
+  engine handle and marker contract.
+- What changed: `StoryMapPresenter` creates and updates its main marker through
+  `interactions.createMarker`, invokes typed story opacity extensions, and
+  portals into `viewport.getElement`. `InsetMapCanvas` configures, mounts,
+  resizes, disables controls/navigation, updates, and destroys a secondary lazy
+  engine handle without returning a concrete map object.
+- Gap / limitation: MapLibre's HTML marker element can carry arbitrary CSS,
+  while ArcGIS marker graphics use symbol renderers rather than DOM elements.
+- Workaround: keep the existing inset-dot CSS class as an engine-neutral marker
+  element input. Removal criteria: replace it with a named marker-symbol option
+  once the ArcGIS adapter and MapLibre adapter share a tested visual-marker
+  contract.
+- Tradeoff accepted: an inset starts a second renderer instance and marker hide
+  transitions recreate a marker, trading small startup/allocation cost for
+  deterministic cleanup and no SDK leakage into the app.
+- Status: done.
+- Verification: `node --import tsx --test tests/inset-map-canvas.test.ts
+  tests/engine-boundary.test.ts tests/map-engine-camera-consumers.test.ts
+  tests/storymap-pdf.test.ts` → 22 passed; `npm run build` → passed.
+- Follow-up: introduce Plugin API v2 in Task 11; Codex, 2026-07-20.
+
 ## 2026-07-20 — Flat native controller surface → typed `MapEngine` capability groups
 
 - Source: MapLibre — the broad `MapController` API and native

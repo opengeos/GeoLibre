@@ -10,14 +10,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
 import {
   useAppStore,
   type StoryActiveSlideMode,
   type StoryChapter,
   type StoryMap,
 } from "@geolibre/core";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import { InsetMapCanvas, type MapEngineClient, type MapMarkerHandle } from "@geolibre/map";
 import { Button, cn } from "@geolibre/ui";
 import { GripVertical, List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
@@ -30,7 +29,7 @@ import {
 } from "../../lib/storymap-constants";
 
 interface StoryMapPresenterProps {
-  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /** One scroll step in the presentation: a chapter card or an intro/outro slide. */
@@ -116,10 +115,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   }, [setPanelOpen, setPresenting]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const insetRef = useRef<HTMLDivElement>(null);
-  const insetMapRef = useRef<maplibregl.Map | null>(null);
-  const insetMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const markerRef = useRef<MapMarkerHandle | null>(null);
   // Active scroll step (chapters + slides); -1 before the first enter.
   const activeStepRef = useRef<number>(-1);
   // Last chapter entered (skipping slides), so layer-fade replay still steps
@@ -132,6 +128,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   // stays visible.
   const [coverColor, setCoverColor] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(true);
+  const [insetMarker, setInsetMarker] = useState<{
+    readonly lngLat: [number, number];
+    readonly visible: boolean;
+  } | null>(null);
 
   // Memoized so the render path and `hasChapters` get a stable reference.
   const chapters = useMemo(() => storymap?.chapters ?? [], [storymap]);
@@ -299,11 +299,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   // Set up scroll observation and the live map side-effects while presenting.
   useEffect(() => {
     if (!hasChapters) return;
-    const controller = mapControllerRef.current;
-    const map = controller?.getMap();
+    const client = mapControllerRef.current;
     const container = scrollRef.current;
     const story = storymapRef.current;
-    if (!controller || !map || !container || !story) return;
+    if (!client || !container || !story) return;
     // Frozen snapshot for this presentation run (edits are blocked while
     // presenting), shadowing the outer memoized `chapters`/`steps` deliberately.
     const chapters = story.chapters;
@@ -311,56 +310,51 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
     const stepEls = Array.from(container.querySelectorAll<HTMLElement>("[data-step-index]"));
 
-    // Main-map marker, created once and moved per chapter.
-    if (story.showMarkers) {
-      markerRef.current = new maplibregl.Marker({
+    let markerLocation = chapters[0].location.center;
+    const ensureMainMarker = () => {
+      if (!story.showMarkers || markerRef.current) return;
+      markerRef.current = client.interactions.createMarker({
         color: story.markerColor,
-      })
-        .setLngLat(chapters[0].location.center)
-        .addTo(map);
-    }
-
-    // Optional inset minimap.
-    if (story.inset && insetRef.current) {
-      const insetMap = new maplibregl.Map({
-        container: insetRef.current,
-        style: STORY_INSET_STYLE_URL,
-        center: chapters[0].location.center,
-        zoom: 1,
-        interactive: false,
-        attributionControl: false,
+        lngLat: markerLocation,
       });
-      insetMapRef.current = insetMap;
-      const el = document.createElement("div");
-      el.className = "glsm-inset-marker";
-      insetMarkerRef.current = new maplibregl.Marker({ element: el })
-        .setLngLat(chapters[0].location.center)
-        .addTo(insetMap);
-    }
+    };
+    ensureMainMarker();
+    if (story.inset) setInsetMarker({ lngLat: markerLocation, visible: true });
 
     const applyEffects = (changes: StoryChapter["onChapterEnter"]) => {
       for (const change of changes) {
-        controller.setStoryLayerOpacity(change.layerId, change.opacity, change.duration);
+        client.invoke("story.set-layer-opacity", {
+          layerId: change.layerId,
+          opacity: change.opacity,
+          durationMs: change.duration,
+        });
       }
     };
 
     const moveCameraTo = (location: StoryChapter["location"]) => {
-      markerRef.current?.setLngLat(location.center);
-      if (insetMapRef.current) {
-        insetMapRef.current.setCenter(location.center);
-        insetMarkerRef.current?.setLngLat(location.center);
-      }
+      markerLocation = location.center;
+      markerRef.current?.setLngLat(markerLocation);
+      if (story.inset)
+        setInsetMarker((current) => ({
+          lngLat: markerLocation,
+          visible: current?.visible ?? true,
+        }));
     };
 
     // Hide or show the map (and inset) markers. The "global" overview slide is a
     // clean world view, so its marker is hidden; chapters and the adjacent
     // preview keep theirs.
     const setMarkersVisible = (visible: boolean) => {
-      const value = visible ? "" : "hidden";
-      const marker = markerRef.current?.getElement();
-      if (marker) marker.style.visibility = value;
-      const insetMarker = insetMarkerRef.current?.getElement();
-      if (insetMarker) insetMarker.style.visibility = value;
+      if (visible) ensureMainMarker();
+      else {
+        markerRef.current?.remove();
+        markerRef.current = null;
+      }
+      if (story.inset)
+        setInsetMarker((current) => ({
+          lngLat: current?.lngLat ?? markerLocation,
+          visible,
+        }));
     };
 
     const enterChapter = (chapter: StoryChapter, index: number) => {
@@ -371,7 +365,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
       // Drive the camera through the controller (which handles the optional
       // rotation) rather than mutating the MapLibre instance directly.
-      controller.camera.playStoryChapter(chapter.location, {
+      client.camera.playStoryChapter(chapter.location, {
         animation: chapter.mapAnimation || "flyTo",
         rotate: chapter.rotateAnimation,
       });
@@ -415,7 +409,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
           : step.position === "start"
             ? (chapters[0]?.location ?? STORY_GLOBAL_VIEW)
             : (chapters[chapters.length - 1]?.location ?? STORY_GLOBAL_VIEW);
-      controller.camera.playStoryChapter(location, {
+      client.camera.playStoryChapter(location, {
         animation: "flyTo",
         rotate: false,
       });
@@ -473,10 +467,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       observer.disconnect();
       markerRef.current?.remove();
       markerRef.current = null;
-      insetMarkerRef.current?.remove();
-      insetMarkerRef.current = null;
-      insetMapRef.current?.remove();
-      insetMapRef.current = null;
+      setInsetMarker(null);
       activeStepRef.current = -1;
       activeChapterRef.current = -1;
       // Reset nav highlight (mirroring activeChapterRef = -1), slide cover, and
@@ -485,7 +476,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       setCoverColor(null);
       setCardLayouts({});
       // Undo any direct opacity changes made during playback.
-      controller.restoreLayerStyles();
+      client.invoke("story.restore-layer-styles", undefined);
     };
   }, [hasChapters, mapControllerRef]);
 
@@ -507,11 +498,9 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
   if (!presenting || chapters.length === 0) return null;
 
-  // Render into the MapLibre container so the presentation is clipped to the
-  // map canvas instead of overlaying the toolbar and side panels. The container
-  // carries `.maplibregl-map { position: relative }`, so `absolute inset-0`
-  // lines the overlay up exactly with the map.
-  const container = mapControllerRef.current?.getMap()?.getContainer() ?? null;
+  // Render into the active engine's viewport so the presentation is clipped to
+  // the map instead of overlaying the toolbar and side panels.
+  const container = mapControllerRef.current?.viewport.getElement() ?? null;
   if (!container) return null;
 
   const theme = storymap?.theme ?? "dark";
@@ -582,15 +571,20 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       ) : null}
 
       {storymap?.inset ? (
-        // The inner div is the MapLibre container; MapLibre stamps it with
-        // `.maplibregl-map { position: relative }`, so keep the corner
-        // positioning on the outer wrapper where it cannot be overridden.
         <div
           className={`pointer-events-none absolute z-[71] h-44 w-44 overflow-hidden rounded-md border-2 border-white/80 shadow-lg ${
             INSET_POSITION_CLASS[storymap.insetPosition] ?? INSET_POSITION_CLASS["bottom-left"]
           }`}
         >
-          <div ref={insetRef} className="h-full w-full" />
+          <InsetMapCanvas
+            center={insetMarker?.lngLat ?? chapters[0].location.center}
+            basemapStyleUrl={STORY_INSET_STYLE_URL}
+            marker={{
+              lngLat: insetMarker?.lngLat ?? chapters[0].location.center,
+              visible: insetMarker?.visible ?? true,
+              className: "glsm-inset-marker",
+            }}
+          />
         </div>
       ) : null}
 

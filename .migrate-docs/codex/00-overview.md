@@ -66,6 +66,10 @@ Status values: not started · in progress · partial · blocked · done
   from `viewport.capture`; tours use engine camera transitions/idle waits and a
   restorable navigation suspension. The boundary ratchet is down to 149 reviewed
   violations.
+- Implemented: story presentation now owns its main marker, layer effects, and
+  viewport portal through `MapEngineClient`; an `@geolibre/map` inset host mounts
+  and tears down a restricted lazy engine handle. The boundary ratchet is down
+  to 147 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
