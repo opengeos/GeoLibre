@@ -7,6 +7,7 @@ import {
   VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
+import { loadMarkerSvgImage } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
 import {
   Button,
@@ -508,6 +509,42 @@ export function PrintLayoutDialog({
     () => legendEditorRows(baseLegend, legendConfig),
     [baseLegend, legendConfig],
   );
+
+  // Custom SVG markers must be drawn into legend swatches, but drawLayout is
+  // synchronous while decoding an SVG is not, so preload them here (keyed by the
+  // swatch marker's svg string) and hand drawLayout the ready images -- like the
+  // captured map image. A stable joined key avoids reloading on unrelated legend
+  // edits (labels, hidden flags); the NUL separator never occurs in SVG markup
+  // or a URL, so splitting it back into sources in the effect is lossless.
+  const markerSvgKey = useMemo(() => {
+    const sources = new Set<string>();
+    for (const entry of baseLegend) {
+      for (const sw of entry.swatches) {
+        if (sw.marker?.shape === "custom" && sw.marker.svg) sources.add(sw.marker.svg);
+      }
+    }
+    return Array.from(sources).sort().join(" ");
+  }, [baseLegend]);
+  const [markerIcons, setMarkerIcons] = useState<Map<string, HTMLImageElement>>(new Map());
+  useEffect(() => {
+    const sources = markerSvgKey ? markerSvgKey.split(" ") : [];
+    if (sources.length === 0) {
+      setMarkerIcons((prev) => (prev.size === 0 ? prev : new Map()));
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      sources.map(async (src) => [src, await loadMarkerSvgImage(src)] as const),
+    ).then((pairs) => {
+      if (cancelled) return;
+      const next = new Map<string, HTMLImageElement>();
+      for (const [src, img] of pairs) if (img) next.set(src, img);
+      setMarkerIcons(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [markerSvgKey]);
   const entryIdsInOrder = useMemo(
     () => editorRows.filter((r) => r.kind === "entry").map((r) => r.layerId),
     [editorRows],
@@ -696,6 +733,7 @@ export function PrintLayoutDialog({
       legend,
       legendTitle: legendConfig.title,
       legendGroupByLayer: legendConfig.groupByLayer,
+      markerIcons,
       metersPerPixel: captured?.metersPerPixel ?? 0,
       bearingDeg: captured?.bearingDeg ?? 0,
       mapImage: captured?.image ?? null,
@@ -749,6 +787,7 @@ export function PrintLayoutDialog({
       revision,
       legend,
       legendConfig,
+      markerIcons,
       captured,
       mapFit,
       t,
@@ -2972,14 +3011,29 @@ export function PrintLayoutDialog({
                             ) : (
                               <span className="w-3 shrink-0" />
                             )}
-                            {row.color ? (
-                              <span
-                                className="h-3.5 w-3.5 shrink-0 rounded-sm border"
-                                style={{ backgroundColor: row.color }}
-                              />
-                            ) : (
-                              <span className="w-3.5 shrink-0" />
-                            )}
+                            {(() => {
+                              const svgSrc =
+                                row.marker?.shape === "custom" && row.marker.svg
+                                  ? markerIcons.get(row.marker.svg)?.src
+                                  : undefined;
+                              if (svgSrc) {
+                                return (
+                                  <span
+                                    className="h-3.5 w-3.5 shrink-0 rounded-sm border bg-contain bg-center bg-no-repeat"
+                                    style={{ backgroundImage: `url(${svgSrc})` }}
+                                  />
+                                );
+                              }
+                              if (row.color) {
+                                return (
+                                  <span
+                                    className="h-3.5 w-3.5 shrink-0 rounded-sm border"
+                                    style={{ backgroundColor: row.color }}
+                                  />
+                                );
+                              }
+                              return <span className="w-3.5 shrink-0" />;
+                            })()}
                             <Input
                               className="h-7 flex-1 text-sm"
                               value={row.label}

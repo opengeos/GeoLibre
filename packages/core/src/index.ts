@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./diagram";
+export * from "./marker-shape";
 export * from "./photo";
 export * from "./ellipsoids";
 export * from "./geojson-z";

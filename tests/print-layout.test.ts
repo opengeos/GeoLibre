@@ -29,7 +29,7 @@ function recordingCanvas(): {
   // Stroked polylines: one entry per beginPath..stroke sequence that used
   // lineTo, holding the segment count (the line chart's path).
   const polylines: number[] = [];
-  const counters = { arcs: 0, pendingLines: 0 };
+  const counters = { arcs: 0, pendingLines: 0, drawImages: 0 };
   const state: Record<string, unknown> = {
     textAlign: "start",
     textBaseline: "alphabetic",
@@ -52,6 +52,11 @@ function recordingCanvas(): {
       if (prop === "arc") {
         return () => {
           counters.arcs += 1;
+        };
+      }
+      if (prop === "drawImage") {
+        return () => {
+          counters.drawImages += 1;
         };
       }
       if (prop === "beginPath") {
@@ -90,6 +95,9 @@ function recordingCanvas(): {
     fillRects,
     get arcs() {
       return counters.arcs;
+    },
+    get drawImages() {
+      return counters.drawImages;
     },
     polylines,
   };
@@ -165,6 +173,78 @@ describe("drawLayout legend rendering", () => {
       }),
     );
     assert.ok(fills.some((f) => f.text === "Roads"));
+  });
+
+  it("draws a built-in point marker as its shape (not a color square)", () => {
+    const { canvas, polylines, fillRects } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "pts",
+            name: "Sites",
+            swatches: [{ color: "#00aa55", marker: { shape: "triangle", color: "#00aa55" } }],
+          },
+        ],
+      }),
+    );
+    // The triangle is a stroked/filled path, so a polyline is recorded and no
+    // swatch-sized color square is filled for the marker.
+    assert.ok(polylines.length > 0, "expected the marker shape path to be drawn");
+    assert.ok(
+      !fillRects.some((r) => r.fillStyle === "#00aa55" && r.w === r.h),
+      "expected no plain color square for a shape marker",
+    );
+  });
+
+  it("draws a preloaded custom SVG marker as an image", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    // `drawImages` is a live getter, so read it off `rec` after the draw rather
+    // than destructuring (which would capture its pre-draw value of 0).
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "bees",
+            name: "Bees",
+            swatches: [{ color: "#3b82f6", marker: { shape: "custom", color: "#3b82f6", svg } }],
+          },
+        ],
+        markerIcons: new Map([[svg, image]]),
+      }),
+    );
+    assert.equal(rec.drawImages, 1, "expected the SVG icon to be drawn as an image");
+    assert.ok(
+      !rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
+      "expected no fallback color square when the icon is available",
+    );
+  });
+
+  it("falls back to a color square when a custom SVG marker icon is not preloaded", () => {
+    const svg = "<svg/>";
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "bees",
+            name: "Bees",
+            swatches: [{ color: "#3b82f6", marker: { shape: "custom", color: "#3b82f6", svg } }],
+          },
+        ],
+        // No markerIcons: the icon is unavailable.
+      }),
+    );
+    assert.equal(rec.drawImages, 0);
+    assert.ok(
+      rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
+      "expected a fallback color square when the icon is missing",
+    );
   });
 
   it("left-aligns legend rows when a legend title is present", () => {

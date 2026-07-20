@@ -140,6 +140,96 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches[0].color, "#ff0000");
   });
 
+  it("carries a built-in marker (in its marker color) for a marker-enabled point layer", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Stations",
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#ffffff",
+          markerEnabled: true,
+          markerShape: "star",
+          markerColor: "#ff8800",
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 1);
+    // The swatch uses the marker color (not the white fill) and carries the shape.
+    assert.equal(legend[0].swatches[0].color, "#ff8800");
+    assert.deepEqual(legend[0].swatches[0].marker, { shape: "star", color: "#ff8800" });
+  });
+
+  it("carries the SVG on a custom marker so the legend can draw the icon", () => {
+    const svg = "<svg><circle r='4'/></svg>";
+    const legend = buildLegend([
+      makeLayer({
+        name: "Bees",
+        style: {
+          vectorStyleMode: "single",
+          markerEnabled: true,
+          markerShape: "custom",
+          markerColor: "#3b82f6",
+          markerSvg: svg,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.deepEqual(legend[0].swatches[0].marker, {
+      shape: "custom",
+      color: "#3b82f6",
+      svg,
+    });
+  });
+
+  it("falls back to the fill swatch when a custom marker has no SVG markup", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Empty",
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#112233",
+          markerEnabled: true,
+          markerShape: "custom",
+          markerSvg: "   ",
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches[0].color, "#112233");
+    assert.equal(legend[0].swatches[0].marker, undefined);
+  });
+
+  it("leaves non-marker layers with a plain fill swatch and no marker", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Plain",
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#123456",
+          markerEnabled: false,
+          markerShape: "star",
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches[0].color, "#123456");
+    assert.equal(legend[0].swatches[0].marker, undefined);
+  });
+
+  it("surfaces the entry marker on the editor row for a single-symbol point layer", () => {
+    const base = buildLegend([
+      makeLayer({
+        id: "pts",
+        name: "Points",
+        style: {
+          vectorStyleMode: "single",
+          markerEnabled: true,
+          markerShape: "triangle",
+          markerColor: "#00aa55",
+        } as LayerStyle,
+      }),
+    ]);
+    const rows = legendEditorRows(base, config());
+    assert.deepEqual(rows[0].marker, { shape: "triangle", color: "#00aa55" });
+  });
+
   it("expands graduated symbology into ramp swatches with labels", () => {
     const legend = buildLegend([
       makeLayer({

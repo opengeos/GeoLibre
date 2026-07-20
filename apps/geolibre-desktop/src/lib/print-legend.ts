@@ -6,14 +6,17 @@ import {
   diagramsSuppressedByPointRenderer,
   effectiveVectorRules,
   isHexColor,
+  normalizeHexColor,
   styleValue,
   type GeoLibreLayer,
+  type LayerStyle,
   type LayerType,
   type LegendConfig,
   type LegendItemOverride,
+  type MarkerShape,
   type VectorStyleStop,
 } from "@geolibre/core";
-import type { LegendEntry, LegendSwatch } from "./print-layout";
+import type { LegendEntry, LegendMarker, LegendSwatch } from "./print-layout";
 
 /** Layer types styled as vectors (colored fills the legend can represent). */
 const VECTOR_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
@@ -91,10 +94,13 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
           continue;
         }
       }
+      const primary = pointMarkerSwatch(layer.style) ?? {
+        color: styleValue(layer.style, "fillColor"),
+      };
       entries.push({
         id: layer.id,
         name: layer.name,
-        swatches: [{ color: styleValue(layer.style, "fillColor") }, ...diagrams],
+        swatches: [primary, ...diagrams],
       });
       continue;
     }
@@ -107,6 +113,28 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
     });
   }
   return entries;
+}
+
+/**
+ * The primary legend swatch for a single-symbol point layer that renders a
+ * marker icon, carrying the marker so the legend draws the actual shape / SVG
+ * instead of a plain fill square. Mirrors `prepareMarker` (`@geolibre/map`):
+ * enabled only when `markerEnabled` is on, and a `"custom"` marker with no SVG
+ * markup falls through (returns null) to the plain fill swatch. Returns null
+ * for layers with no marker, so the caller keeps the existing fill swatch.
+ */
+function pointMarkerSwatch(style: LayerStyle): LegendSwatch | null {
+  if (styleValue(style, "markerEnabled") !== true) return null;
+  const shape = styleValue(style, "markerShape") as MarkerShape;
+  const color = normalizeHexColor(styleValue(style, "markerColor")) ?? "#3b82f6";
+  if (shape === "custom") {
+    const svg = styleValue(style, "markerSvg").trim();
+    if (!svg) return null;
+    const marker: LegendMarker = { shape, color, svg };
+    return { color, marker };
+  }
+  const marker: LegendMarker = { shape, color };
+  return { color, marker };
 }
 
 /** Stable key for an individual class swatch within an entry. */
@@ -268,6 +296,8 @@ export interface LegendEditorRow {
   kind: "entry" | "class";
   /** Swatch color, when the row has one (entries always do; class rows do too). */
   color?: string;
+  /** Point marker for a single-symbol entry row, so the editor previews it. */
+  marker?: LegendMarker;
   /** The auto-generated label. */
   defaultLabel: string;
   /** Effective label after applying any override. */
@@ -298,6 +328,7 @@ export function legendEditorRows(base: LegendEntry[], config: LegendConfig): Leg
       layerId: entry.id,
       kind: "entry",
       color: single ? entry.swatches[0]?.color : undefined,
+      marker: single ? entry.swatches[0]?.marker : undefined,
       defaultLabel: entry.name,
       // Show the raw override (so the input can hold spaces mid-edit) but fall
       // back to the default when it is blank, matching what applyLegendConfig

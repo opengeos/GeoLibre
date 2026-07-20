@@ -89,3 +89,4 @@ export {
   type QmlExportResult,
 } from "./qml-export";
 export { applyQmlImport, parseQml, type QmlImportResult } from "./qml-import";
+export { loadMarkerSvgImage } from "./markers";

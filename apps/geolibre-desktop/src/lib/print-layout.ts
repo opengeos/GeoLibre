@@ -8,7 +8,14 @@
  * (PNG / PDF), so the preview is faithful to the output.
  */
 
-import { formatRoundNum, getRoundNum, scaleDenomination, type MapScaleUnit } from "@geolibre/core";
+import {
+  drawMarkerPath,
+  formatRoundNum,
+  getRoundNum,
+  scaleDenomination,
+  type MapScaleUnit,
+  type MarkerShape,
+} from "@geolibre/core";
 
 export type PaperSizeId =
   | "a4"
@@ -167,10 +174,34 @@ export function pagePx(size: ResolvedPageSize, dpi: number): { width: number; he
   };
 }
 
+/**
+ * A point layer's marker, carried on its legend swatch so the legend can draw
+ * the actual marker (a built-in shape recolored, or a custom SVG icon) instead
+ * of a plain color square. Mirrors the map's marker sprite (`prepareMarker` in
+ * `@geolibre/map`).
+ */
+export interface LegendMarker {
+  /** Built-in shape, or `"custom"` for an SVG icon in {@link svg}. */
+  shape: MarkerShape;
+  /** Fill color for a built-in shape (ignored for `"custom"`). */
+  color: string;
+  /**
+   * Raw SVG markup or a URL, set only when {@link shape} is `"custom"`. Doubles
+   * as the lookup key into {@link LayoutOptions.markerIcons}.
+   */
+  svg?: string;
+}
+
 /** A single swatch in a legend entry (one color, with an optional label). */
 export interface LegendSwatch {
   color: string;
   label?: string;
+  /**
+   * When set, the swatch represents a point marker: the legend draws the marker
+   * (see {@link LegendMarker}) in place of the {@link color} square, falling
+   * back to the square if a custom SVG icon has not been preloaded.
+   */
+  marker?: LegendMarker;
 }
 
 export interface LegendEntry {
@@ -388,6 +419,14 @@ export interface LayoutOptions {
    * classes; when false, classes are listed flat without the layer heading.
    */
   legendGroupByLayer: boolean;
+  /**
+   * Preloaded custom-SVG marker icons for legend swatches, keyed by the
+   * swatch marker's `svg` string ({@link LegendMarker.svg}). Loading SVGs is
+   * async, but {@link drawLayout} is synchronous, so the caller resolves them
+   * up front (like {@link mapImage}) and passes them here; a marker whose icon
+   * is missing falls back to a plain color square.
+   */
+  markerIcons?: ReadonlyMap<string, CanvasImageSource>;
   /** Ground metres per source-image pixel at the map centre. */
   metersPerPixel: number;
   /** Map bearing in degrees clockwise from north. */
@@ -836,6 +875,7 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
     legendHeight = drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit, {
       title: opts.legendTitle,
       groupByLayer: opts.legendGroupByLayer,
+      markerIcons: opts.markerIcons,
     });
     ctx.restore();
   }
@@ -1876,6 +1916,47 @@ function drawDataChart(
 }
 
 /**
+ * Draw a point layer's marker into a `size`×`size` legend swatch box at
+ * (`sx`, `sy`): a custom SVG icon (from the preloaded {@link markerIcons}) or a
+ * built-in shape recolored to the marker color. Falls back to a plain
+ * `fallbackColor` square when a custom SVG has not been (or could not be)
+ * preloaded, so the swatch is never blank.
+ */
+function drawLegendMarker(
+  ctx: CanvasRenderingContext2D,
+  marker: LegendMarker,
+  sx: number,
+  sy: number,
+  size: number,
+  fallbackColor: string,
+  markerIcons?: ReadonlyMap<string, CanvasImageSource>,
+): void {
+  if (marker.shape === "custom") {
+    const icon = marker.svg ? markerIcons?.get(marker.svg) : undefined;
+    if (icon) {
+      ctx.drawImage(icon, sx, sy, size, size);
+      return;
+    }
+    // SVG not available: fall back to a neutral color square.
+    ctx.fillStyle = fallbackColor || "#999999";
+    ctx.fillRect(sx, sy, size, size);
+    ctx.strokeStyle = BORDER;
+    ctx.strokeRect(sx, sy, size, size);
+    return;
+  }
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.fillStyle = marker.color;
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, size * 0.06);
+  ctx.lineJoin = "round";
+  drawMarkerPath(ctx, marker.shape, size);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
  * Draw a legend box anchored at its top-left corner.
  *
  * @returns The drawn box's height, so corner panels can stack below it.
@@ -1886,7 +1967,11 @@ function drawLegend(
   y: number,
   entries: LegendEntry[],
   unit: number,
-  opts: { title: string; groupByLayer: boolean },
+  opts: {
+    title: string;
+    groupByLayer: boolean;
+    markerIcons?: ReadonlyMap<string, CanvasImageSource>;
+  },
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.6;
@@ -1898,8 +1983,9 @@ function drawLegend(
 
   // Flatten entries into drawable rows. Single-swatch entries render inline; a
   // multi-class entry renders a layer heading (when groupByLayer is on) above
-  // its class swatches, or just the flat class swatches when it is off.
-  const rows: { color: string; text: string }[] = [];
+  // its class swatches, or just the flat class swatches when it is off. A row
+  // draws a swatch when it has a color or a marker; a group heading has neither.
+  const rows: { color: string; text: string; marker?: LegendMarker }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
       // Prefer the swatch's own label so a multi-class entry collapsed to one
@@ -1910,6 +1996,7 @@ function drawLegend(
       rows.push({
         color: swatch?.color ?? "#999999",
         text: swatch?.label ?? entry.name,
+        marker: swatch?.marker,
       });
     } else {
       if (opts.groupByLayer) rows.push({ color: "", text: entry.name });
@@ -1919,13 +2006,16 @@ function drawLegend(
     }
   }
 
+  const rowHasSwatch = (r: { color: string; marker?: LegendMarker }): boolean =>
+    Boolean(r.color) || Boolean(r.marker);
+
   // Measure required width.
   ctx.save();
   ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
   let maxText = hasTitle ? ctx.measureText(title).width : 0;
   ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
   for (const r of rows) {
-    const w = ctx.measureText(r.text).width + (r.color ? swatch + unit : 0);
+    const w = ctx.measureText(r.text).width + (rowHasSwatch(r) ? swatch + unit : 0);
     if (w > maxText) maxText = w;
   }
 
@@ -1958,15 +2048,20 @@ function drawLegend(
 
   for (const r of rows) {
     cy += rowH;
-    const textX = r.color ? x + pad + swatch + unit : x + pad;
-    if (r.color) {
+    const hasSwatch = rowHasSwatch(r);
+    const textX = hasSwatch ? x + pad + swatch + unit : x + pad;
+    const sx = x + pad;
+    const sy = cy - swatch * 0.85;
+    if (r.marker) {
+      drawLegendMarker(ctx, r.marker, sx, sy, swatch, r.color, opts.markerIcons);
+    } else if (r.color) {
       ctx.fillStyle = r.color;
-      ctx.fillRect(x + pad, cy - swatch * 0.85, swatch, swatch);
+      ctx.fillRect(sx, sy, swatch, swatch);
       ctx.strokeStyle = BORDER;
-      ctx.strokeRect(x + pad, cy - swatch * 0.85, swatch, swatch);
+      ctx.strokeRect(sx, sy, swatch, swatch);
     }
-    ctx.fillStyle = r.color ? INK : MUTED;
-    ctx.font = `${r.color ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
+    ctx.fillStyle = hasSwatch ? INK : MUTED;
+    ctx.font = `${hasSwatch ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(r.text, textX, cy);
   }
   ctx.restore();
