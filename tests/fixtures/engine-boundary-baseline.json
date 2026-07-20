@@ -12,34 +12,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/BasemapExtractPanel.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx",
-    "pattern": "maplibre-gl"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx",
-    "pattern": "maplibre-gl"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/GpsTrackingDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/GpsTrackingDialog.tsx",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/LoadFeaturesIntoEditorDialog.tsx",
     "pattern": "@geolibre/map#MapController"
   },
@@ -60,15 +32,7 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/PixelTimeSeriesControl.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/PrintLayoutDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/RasterSubsetPanel.tsx",
     "pattern": "@geolibre/map#MapController"
   },
   {
@@ -78,18 +42,6 @@
   {
     "path": "apps/geolibre-desktop/src/components/layout/RecordVideoDialog.tsx",
     "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/RegionSelectOverlay.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/RemoteCursorsOverlay.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/RemoteCursorsOverlay.tsx",
-    "pattern": "maplibre-gl"
   },
   {
     "path": "apps/geolibre-desktop/src/components/layout/toolbar/constants.ts",
@@ -241,10 +193,6 @@
   },
   {
     "path": "apps/geolibre-desktop/src/lib/offline-tiles.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/lib/print-extent.ts",
     "pattern": "maplibre-gl"
   },
   {

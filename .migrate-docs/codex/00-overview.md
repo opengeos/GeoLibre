@@ -57,3 +57,9 @@ Status values: not started · in progress · partial · blocked · done
   scripting, and assistant consumers use the layer/camera/viewport ports;
   renderer snapshots stay store-first and read-only. The boundary ratchet is
   down to 167 reviewed violations.
+- Implemented: cancelable point/bounds gestures, marker rotation and drag
+  lifecycle, double-click drawing policy, and restorable transient GeoJSON
+  overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
+  field collection, georeferencing, raster/basemap subset selection, time-series
+  picking, region selection, print extent, and processing consumers are
+  renderer-neutral. The boundary ratchet is down to 154 reviewed violations.

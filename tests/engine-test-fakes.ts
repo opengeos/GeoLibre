@@ -25,6 +25,7 @@ function createMarkerHandle(): MapMarkerHandle {
     },
     getLngLat: () => lngLat,
     setDraggable: () => undefined,
+    setRotation: () => undefined,
     on: () => () => undefined,
     remove: () => undefined,
   };
@@ -90,6 +91,7 @@ export function createTestMapEngine(
     interactions: {
       pickPoint: async () => null,
       drawBounds: async () => null,
+      setDoubleClickZoomEnabled: () => operations.push("interactions.setDoubleClickZoomEnabled"),
       createMarker: createMarkerHandle,
       upsertGeoJsonOverlay: () => operations.push("interactions.upsertGeoJsonOverlay"),
       setOverlayVisible: () => operations.push("interactions.setOverlayVisible"),

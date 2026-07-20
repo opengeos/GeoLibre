@@ -6,7 +6,7 @@ import {
   useAppStore,
   VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
 import {
   Button,
@@ -110,7 +110,7 @@ import {
 interface PrintLayoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
 }
 
 /** Common industry scale denominators offered as quick presets (GH #522). */
@@ -522,8 +522,9 @@ export function PrintLayoutDialog({
 
   const recapture = useCallback(
     (clipOverride?: PrintExtent | null) => {
-      const map = mapControllerRef.current?.getMap();
-      if (!map) {
+      const client = mapControllerRef.current;
+      const map = client?.getMap();
+      if (!client || !map) {
         setError(t("printLayout.errors.mapNotReady"));
         setCaptured(null);
         return;
@@ -548,7 +549,7 @@ export function PrintLayoutDialog({
       setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
       // Hide the extent box while reading the drawing buffer so its outline is
       // never baked into the captured image.
-      setPrintExtentVisible(map, false);
+      setPrintExtentVisible(client, false);
       try {
         setCaptured(captureMapImage(map, clip));
         setError(null);
@@ -556,7 +557,7 @@ export function PrintLayoutDialog({
         setError(t("printLayout.errors.captureFailed"));
         setCaptured(null);
       } finally {
-        setPrintExtentVisible(map, true);
+        setPrintExtentVisible(client, true);
       }
     },
     [mapControllerRef, t, captureMode, extentBbox],
@@ -566,7 +567,7 @@ export function PrintLayoutDialog({
   // a background project-name change while the dialog is open does not replace
   // the snapshot the user is composing.
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
+    const client = mapControllerRef.current;
     if (open && !wasOpenRef.current) {
       setError(null);
       // Clear any out-of-range scale notice from a prior session: the dialog is
@@ -584,7 +585,7 @@ export function PrintLayoutDialog({
       setTitle((prev) => prev || (projectName ?? "").trim());
       setDateText((prev) => prev || new Date().toLocaleDateString());
       // Re-show a previously drawn extent box while composing.
-      if (map && extentBbox) showPrintExtent(map, extentBbox);
+      if (client && extentBbox) showPrintExtent(client, extentBbox);
       // With an active atlas persisting from a prior session, skip the plain
       // viewport capture: the atlas auto-drive effect recaptures the current
       // page on this same transition, and the extra capture would flash an
@@ -592,7 +593,7 @@ export function PrintLayoutDialog({
       if (!atlasActiveRef.current) recapture();
     } else if (!open && wasOpenRef.current && !drawingRef.current) {
       // Closing for good (not to draw): take the extent box off the map.
-      if (map) clearPrintExtent(map);
+      if (client) clearPrintExtent(client);
     }
     wasOpenRef.current = open;
   }, [open, projectName, recapture, mapControllerRef, extentBbox]);
@@ -613,13 +614,14 @@ export function PrintLayoutDialog({
         window.clearTimeout(copiedTimeoutRef.current);
         copiedTimeoutRef.current = null;
       }
-      const map = mapControllerRef.current?.getMap();
-      if (map) {
+      const client = mapControllerRef.current;
+      const map = client?.getMap();
+      if (client && map) {
         if (idleRecaptureRef.current) {
           map.off("idle", idleRecaptureRef.current);
           idleRecaptureRef.current = null;
         }
-        clearPrintExtent(map);
+        clearPrintExtent(client);
       }
     },
     [mapControllerRef],
@@ -1126,8 +1128,9 @@ export function PrintLayoutDialog({
   // the data blocks can filter to what the page actually shows.
   const captureAtlasPage = useCallback(
     async (page: AtlasPage): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
-      const map = mapControllerRef.current?.getMap();
-      if (!map) throw new Error("Map is not ready");
+      const client = mapControllerRef.current;
+      const map = client?.getMap();
+      if (!client || !map) throw new Error("Map is not ready");
       const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
       map.fitBounds(
         [
@@ -1144,11 +1147,11 @@ export function PrintLayoutDialog({
       // Hide the drawn print-extent box while reading the buffer, as recapture
       // does, so its outline is never baked into a page.
       const capture = () => {
-        setPrintExtentVisible(map, false);
+        setPrintExtentVisible(client, false);
         try {
           return captureMapImage(map, null);
         } finally {
-          setPrintExtentVisible(map, true);
+          setPrintExtentVisible(client, true);
         }
       };
       let cap = capture();
@@ -1397,8 +1400,8 @@ export function PrintLayoutDialog({
   // Hide the dialog so the map is interactive, let the user drag an extent box,
   // then reopen with the new extent active.
   const handleDrawExtent = useCallback(async () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const client = mapControllerRef.current;
+    if (!client) return;
     const page = resolvePageSize(options);
     const aspect = page.width / page.height;
     const controller = new AbortController();
@@ -1407,7 +1410,7 @@ export function PrintLayoutDialog({
     setDrawingExtent(true);
     onOpenChange(false);
     try {
-      const extent = await drawPrintExtent(map, {
+      const extent = await drawPrintExtent(client, {
         aspect,
         signal: controller.signal,
       });
@@ -1419,9 +1422,9 @@ export function PrintLayoutDialog({
         recapture(extent);
       } else if (extentBbox) {
         // Cancelled drag: drop the half-drawn preview back to the prior extent.
-        showPrintExtent(map, extentBbox);
+        showPrintExtent(client, extentBbox);
       } else {
-        clearPrintExtent(map);
+        clearPrintExtent(client);
       }
     } finally {
       if (drawAbortRef.current === controller) drawAbortRef.current = null;
@@ -1434,8 +1437,8 @@ export function PrintLayoutDialog({
   }, [mapControllerRef, options, onOpenChange, recapture, extentBbox]);
 
   const handleClearExtent = useCallback(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (map) clearPrintExtent(map);
+    const client = mapControllerRef.current;
+    if (client) clearPrintExtent(client);
     setExtentBbox(null);
     setCaptureMode("viewport");
     recapture(null);

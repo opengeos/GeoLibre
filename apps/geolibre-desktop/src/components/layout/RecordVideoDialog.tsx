@@ -1,4 +1,4 @@
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   Circle,
@@ -33,7 +33,7 @@ import { RegionSelectOverlay } from "./RegionSelectOverlay";
 interface RecordVideoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second

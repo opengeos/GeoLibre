@@ -1,9 +1,9 @@
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { useEffect, useRef, useState } from "react";
 import { MIN_REGION_SIZE, type RecordRegion } from "../../lib/map-recorder";
 
 interface RegionSelectOverlayProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
   /**
    * - `select`: drag a new rectangle (crosshair, captures pointer events).
    * - `frame`: show the chosen rectangle as a fixed frame; pointer events pass
@@ -57,7 +57,7 @@ export function RegionSelectOverlay({
 }: RegionSelectOverlayProps) {
   // The canvas's position/size in viewport coordinates, so the fixed overlay can
   // be pinned over it and drag points can be made canvas-relative.
-  const [canvasBox, setCanvasBox] = useState<DOMRect | null>(null);
+  const [canvasBox, setCanvasBox] = useState<DOMRectReadOnly | null>(null);
   const [dragRect, setDragRect] = useState<CanvasRect | null>(null);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -70,21 +70,21 @@ export function RegionSelectOverlay({
       setCanvasBox(null);
       return;
     }
-    const map = mapControllerRef.current?.getMap();
-    const canvas = map?.getCanvas();
-    if (!canvas || !map) return;
-    const update = () => setCanvasBox(canvas.getBoundingClientRect());
+    const client = mapControllerRef.current;
+    const canvas = client?.viewport.getElement();
+    if (!canvas || !client) return;
+    const update = () => setCanvasBox(client.viewport.getRect());
     update();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     observer?.observe(canvas);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
-    map.on("resize", update);
+    const unsubscribeResize = client.on("resize", update);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
-      map.off("resize", update);
+      unsubscribeResize();
     };
   }, [mode, mapControllerRef]);
 

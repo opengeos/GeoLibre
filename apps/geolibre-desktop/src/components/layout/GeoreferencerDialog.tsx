@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type maplibregl from "maplibre-gl";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   Button,
@@ -48,7 +47,7 @@ import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 interface GeoreferencerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 interface LoadedImage {
@@ -126,10 +125,11 @@ export function GeoreferencerDialog({
 
   const imgRef = useRef<HTMLImageElement | null>(null);
   const linkPixelRef = useRef<{ px: number; py: number } | null>(null);
+  const linkAbortRef = useRef<AbortController | null>(null);
   // Monotonic id for stable GCP React keys.
   const gcpKeyRef = useRef(0);
 
-  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
+  const getClient = useCallback(() => mapControllerRef.current, [mapControllerRef]);
 
   const affine = useMemo(() => solveAffine(gcps), [gcps]);
   const residuals = useMemo(
@@ -140,6 +140,7 @@ export function GeoreferencerDialog({
   // The dialog keeps its image + GCPs across close/reopen (and after "Add to
   // map") so the session persists; only an explicit Clear resets it.
   const handleClear = useCallback(() => {
+    linkAbortRef.current?.abort();
     setImage(null);
     setGcps([]);
     setPendingPixel(null);
@@ -222,51 +223,40 @@ export function GeoreferencerDialog({
   );
 
   const handleLinkOnMap = useCallback(() => {
-    if (!pendingPixel || !getMap()) return;
+    if (!pendingPixel || !getClient()) return;
     linkPixelRef.current = pendingPixel;
     setLinking(true);
     onOpenChange(false);
-  }, [pendingPixel, getMap, onOpenChange]);
+  }, [pendingPixel, getClient, onOpenChange]);
 
   useEffect(() => {
     if (!linking) return;
-    const map = getMap();
-    if (!map) {
+    const client = getClient();
+    if (!client) {
       setLinking(false);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const prevCursor = map.getCanvas().style.cursor;
-    map.getCanvas().style.cursor = "crosshair";
-    const onClick = (e: maplibregl.MapMouseEvent) => {
+    const controller = new AbortController();
+    linkAbortRef.current = controller;
+    void client.interactions.pickPoint({ signal: controller.signal }).then((point) => {
+      if (controller.signal.aborted) return;
       const p = linkPixelRef.current;
-      if (p) {
+      if (p && point) {
         const key = (gcpKeyRef.current += 1);
-        setGcps((gs) => [...gs, { px: p.px, py: p.py, lng: e.lngLat.lng, lat: e.lngLat.lat, key }]);
+        setGcps((gs) => [...gs, { px: p.px, py: p.py, lng: point[0], lat: point[1], key }]);
         setPendingPixel(null);
       }
       setLinking(false);
       onOpenChange(true);
-    };
-    // Escape aborts the link and restores the dialog (keeps the pending pixel).
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key !== "Escape") return;
-      // Remove the click handler synchronously so a queued click can't still
-      // fire onClick (and add a stray GCP) before the effect cleanup runs.
-      map.off("click", onClick);
-      setLinking(false);
-      onOpenChange(true);
-    };
-    map.once("click", onClick);
-    window.addEventListener("keydown", onKey);
+    });
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", onClick);
-      window.removeEventListener("keydown", onKey);
-      map.getCanvas().style.cursor = prevCursor;
+      controller.abort();
+      if (linkAbortRef.current === controller) linkAbortRef.current = null;
     };
-  }, [linking, getMap, onOpenChange]);
+  }, [linking, getClient, onOpenChange]);
 
   const handleApply = useCallback(() => {
     if (!affine || !image) return;

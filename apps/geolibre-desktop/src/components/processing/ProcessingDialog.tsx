@@ -1092,8 +1092,8 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // raster instead of being occluded by it. Toggling the button (or closing the
   // panel) aborts an in-flight draw.
   const handleDrawBbox = async () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const client = mapControllerRef.current;
+    if (!client) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
@@ -1106,7 +1106,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     drawAbortRef.current = controller;
     setDrawing(true);
     try {
-      const extent = await drawPrintExtent(map, {
+      const extent = await drawPrintExtent(client, {
         signal: controller.signal,
         drawBox: false,
         // Project the box corners to viewport space (map.project is canvas-
@@ -1117,7 +1117,8 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             setDrawPoints(null);
             return;
           }
-          const rect = map.getCanvas().getBoundingClientRect();
+          const rect = client.viewport.getRect();
+          if (!rect) return;
           const [w, s, e, n] = box;
           const corners: [number, number][] = [
             [w, n],
@@ -1127,8 +1128,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           ];
           setDrawPoints(
             corners.map(([lng, lat]) => {
-              const p = map.project([lng, lat]);
-              return { x: p.x + rect.left, y: p.y + rect.top };
+              const point = client.viewport.project([lng, lat]);
+              return point
+                ? { x: point.x + rect.left, y: point.y + rect.top }
+                : { x: rect.left, y: rect.top };
             }),
           );
         },
@@ -1136,7 +1139,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       if (controller.signal.aborted) return;
       if (extent) applyBboxExtent(extent);
     } finally {
-      clearPrintExtent(map);
+      clearPrintExtent(client);
       setDrawPoints(null);
       if (drawAbortRef.current === controller) {
         drawAbortRef.current = null;

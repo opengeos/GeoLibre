@@ -6,9 +6,10 @@ import {
 } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
+  type BBox,
   evictOfflineBasemapStyle,
   hasPMTilesArchive,
-  type MapController,
+  type MapEngineClient,
   OFFLINE_BASEMAP_SENTINEL_PREFIX,
   pmtilesNativeLayerIds,
   PROTOMAPS_FLAVORS,
@@ -116,17 +117,12 @@ const EMPTY_COORDS: CoordFields = { west: "", south: "", east: "", north: "" };
 interface BasemapExtractPanelProps {
   open: boolean;
   onClose: () => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /** Round a coordinate to a readable-but-precise 6 decimal places. */
 function fmtCoord(value: number): string {
   return Number(value.toFixed(6)).toString();
-}
-
-/** Order two corners into a `[west, south, east, north]` box. */
-function orderBbox(a: [number, number], b: [number, number]): [number, number, number, number] {
-  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
@@ -340,13 +336,12 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
 
   // Cancels an in-flight extraction when the panel closes or a new run starts.
   const abortRef = useRef<AbortController | null>(null);
+  const drawAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const seedFromView = useCallback(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const b = map.getBounds();
-    setCoords(coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]));
+    const bbox = mapControllerRef.current?.camera.readView().bbox;
+    if (bbox) setCoords(coordsFromBbox(bbox));
   }, [mapControllerRef]);
 
   // Reset every field whenever the panel opens (seeding the bbox from the
@@ -398,8 +393,8 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
   // once per open (not per box edit) to avoid re-attaching listeners on every
   // drag tick. Rendered as an SVG so it sits above any deck.gl overlay.
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || !open) {
+    const client = mapControllerRef.current;
+    if (!client || !open) {
       setScreenPoints(null);
       return;
     }
@@ -424,20 +419,16 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
         [e, s],
         [w, s],
       ];
-      setScreenPoints(
-        corners.map((corner) => {
-          const p = map.project(corner);
-          return { x: p.x, y: p.y };
-        }),
-      );
+      const projected = corners.map((corner) => client.viewport.project(corner));
+      setScreenPoints(projected.every((point) => point !== null) ? projected : null);
     };
     reprojectRef.current = reproject;
     reproject();
-    map.on("move", reproject);
-    map.on("resize", reproject);
+    const unsubscribeMove = client.on("move", reproject);
+    const unsubscribeResize = client.on("resize", reproject);
     return () => {
-      map.off("move", reproject);
-      map.off("resize", reproject);
+      unsubscribeMove();
+      unsubscribeResize();
     };
   }, [open, mapControllerRef]);
 
@@ -445,68 +436,34 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
     reprojectRef.current();
   }, [bbox]);
 
-  // Rubber-band draw mode: drag a rectangle on the map. Mirrors the Raster
-  // Subset panel and lib/print-extent.ts: draw starts on a canvas mousedown,
-  // then tracking is driven by window mousemove/mouseup so a drag leaving the
-  // canvas still commits. dragPan/boxZoom are suspended for the duration.
+  // Rubber-band drawing is owned by the engine, including navigation lock and
+  // restoration on commit, Escape, blur, or abort.
   useEffect(() => {
     if (!drawing) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const client = mapControllerRef.current;
+    if (!client) {
       setDrawing(false);
       return;
     }
-    const canvas = map.getCanvas();
-    const prevCursor = canvas.style.cursor;
-    canvas.style.cursor = "crosshair";
-    const panWasEnabled = map.dragPan.isEnabled();
-    const boxZoomWasEnabled = map.boxZoom.isEnabled();
-    map.dragPan.disable();
-    map.boxZoom.disable();
-
-    const toLngLat = (clientX: number, clientY: number): [number, number] => {
-      const rect = canvas.getBoundingClientRect();
-      const ll = map.unproject([clientX - rect.left, clientY - rect.top]);
-      return [ll.lng, ll.lat];
-    };
-
-    let start: [number, number] | null = null;
-    const onDown = (e: {
-      lngLat: { lng: number; lat: number };
-      originalEvent?: { button?: number };
-    }) => {
-      if (e.originalEvent && e.originalEvent.button !== 0) return;
-      start = [e.lngLat.lng, e.lngLat.lat];
-    };
-    const onWindowMove = (e: MouseEvent) => {
-      if (!start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      clearStatus();
-    };
-    const onWindowUp = (e: MouseEvent) => {
-      if (e.button !== 0 || !start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      start = null;
-      setDrawing(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) setDrawing(false);
-    };
-    const onBlur = () => setDrawing(false);
-    map.on("mousedown", onDown);
-    window.addEventListener("mousemove", onWindowMove);
-    window.addEventListener("mouseup", onWindowUp);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("blur", onBlur);
+    const controller = new AbortController();
+    drawAbortRef.current = controller;
+    void client.interactions
+      .drawBounds({
+        signal: controller.signal,
+        onPreview: (preview) => {
+          if (!preview) return;
+          setCoords(coordsFromBbox(preview));
+          clearStatus();
+        },
+      })
+      .then((result: BBox | null) => {
+        if (controller.signal.aborted) return;
+        if (result) setCoords(coordsFromBbox(result));
+        setDrawing(false);
+      });
     return () => {
-      map.off("mousedown", onDown);
-      window.removeEventListener("mousemove", onWindowMove);
-      window.removeEventListener("mouseup", onWindowUp);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", onBlur);
-      canvas.style.cursor = prevCursor;
-      if (panWasEnabled) map.dragPan.enable();
-      if (boxZoomWasEnabled) map.boxZoom.enable();
+      controller.abort();
+      if (drawAbortRef.current === controller) drawAbortRef.current = null;
     };
   }, [drawing, mapControllerRef, clearStatus]);
 

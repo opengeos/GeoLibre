@@ -1,5 +1,5 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { BBox, MapEngineClient } from "@geolibre/map";
 import { Button, Input, Label, Textarea } from "@geolibre/ui";
 import {
   ChevronDown,
@@ -59,17 +59,12 @@ interface RasterSubsetPanelProps {
   /** The layer being extracted, or `null` when the panel is closed. */
   layer: GeoLibreLayer | null;
   onClose: () => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /** Round a coordinate to a readable-but-precise 6 decimal places. */
 function fmtCoord(value: number): string {
   return Number(value.toFixed(6)).toString();
-}
-
-/** Order two corners into a `[west, south, east, north]` box. */
-function orderBbox(a: [number, number], b: [number, number]): [number, number, number, number] {
-  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
@@ -240,6 +235,7 @@ export function RasterSubsetPanel({ layer, onClose, mapControllerRef }: RasterSu
   // or a new extraction starts, so a stalled request never leaves the UI stuck
   // on "Extracting...".
   const abortRef = useRef<AbortController | null>(null);
+  const drawAbortRef = useRef<AbortController | null>(null);
   // Abort any in-flight extraction when the panel unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -265,8 +261,8 @@ export function RasterSubsetPanel({ layer, onClose, mapControllerRef }: RasterSu
     setRunning(false);
     setPos(null);
     if (!layer) return;
-    const map = mapControllerRef.current?.getMap();
-    const z = map ? clamp(Math.round(map.getZoom()), 0, 30) : 10;
+    const client = mapControllerRef.current;
+    const z = client ? clamp(Math.round(client.camera.readView().zoom), 0, 30) : 10;
     setZoom(String(z));
   }, [layer, mapControllerRef]);
 
@@ -285,8 +281,8 @@ export function RasterSubsetPanel({ layer, onClose, mapControllerRef }: RasterSu
   // Rendered as an SVG (not a MapLibre layer) so it stays visible above the
   // interleaved deck.gl COG/raster overlay.
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || !layer) {
+    const client = mapControllerRef.current;
+    if (!client || !layer) {
       setScreenPoints(null);
       return;
     }
@@ -303,20 +299,16 @@ export function RasterSubsetPanel({ layer, onClose, mapControllerRef }: RasterSu
         [e, s],
         [w, s],
       ];
-      setScreenPoints(
-        corners.map((corner) => {
-          const p = map.project(corner);
-          return { x: p.x, y: p.y };
-        }),
-      );
+      const projected = corners.map((corner) => client.viewport.project(corner));
+      setScreenPoints(projected.every((point) => point !== null) ? projected : null);
     };
     reprojectRef.current = reproject;
     reproject();
-    map.on("move", reproject);
-    map.on("resize", reproject);
+    const unsubscribeMove = client.on("move", reproject);
+    const unsubscribeResize = client.on("resize", reproject);
     return () => {
-      map.off("move", reproject);
-      map.off("resize", reproject);
+      unsubscribeMove();
+      unsubscribeResize();
     };
   }, [layer, mapControllerRef]);
 
@@ -326,87 +318,39 @@ export function RasterSubsetPanel({ layer, onClose, mapControllerRef }: RasterSu
     reprojectRef.current();
   }, [bbox]);
 
-  // Rubber-band draw mode: drag a rectangle on the map. The draw starts on a
-  // canvas mousedown, then tracking is driven by *window* mousemove/mouseup so a
-  // drag that leaves the canvas (very common, since this panel sits over the map
-  // and the box often extends to the edge) still updates and commits. dragPan/
-  // boxZoom are suspended for the duration and only restored if they were on
-  // before (another tool may have disabled them); Esc and window blur cancel.
-  // Mirrors the box-draw handler in lib/print-extent.ts.
+  // Rubber-band draw mode is owned by the engine so renderer interactions are
+  // restored consistently on commit, Escape, blur, or abort.
   useEffect(() => {
     if (!drawing) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const client = mapControllerRef.current;
+    if (!client) {
       setDrawing(false);
       return;
     }
-    const canvas = map.getCanvas();
-    const prevCursor = canvas.style.cursor;
-    canvas.style.cursor = "crosshair";
-    const panWasEnabled = map.dragPan.isEnabled();
-    const boxZoomWasEnabled = map.boxZoom.isEnabled();
-    map.dragPan.disable();
-    map.boxZoom.disable();
-
-    // Convert a viewport (client) point to a lng/lat via the canvas rect, so a
-    // release outside the canvas still maps to a map coordinate.
-    const toLngLat = (clientX: number, clientY: number): [number, number] => {
-      const rect = canvas.getBoundingClientRect();
-      const ll = map.unproject([clientX - rect.left, clientY - rect.top]);
-      return [ll.lng, ll.lat];
-    };
-
-    let start: [number, number] | null = null;
-    const onDown = (e: {
-      lngLat: { lng: number; lat: number };
-      originalEvent?: { button?: number };
-    }) => {
-      // Only the primary (left) button draws, so a right/middle-button drag
-      // doesn't rubber-band a box while draw mode is active.
-      if (e.originalEvent && e.originalEvent.button !== 0) return;
-      start = [e.lngLat.lng, e.lngLat.lat];
-    };
-    const onWindowMove = (e: MouseEvent) => {
-      if (!start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-    };
-    const onWindowUp = (e: MouseEvent) => {
-      // Only end the draw for a release that actually started one (a canvas
-      // mousedown set `start`); a click elsewhere while armed (e.g. "Use view"
-      // or a field) must not silently exit draw mode.
-      if (e.button !== 0 || !start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      start = null;
-      setDrawing(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) setDrawing(false);
-    };
-    // Cancel if the window loses focus mid-drag (Alt+Tab, a system dialog): the
-    // mouseup would otherwise never arrive, leaving the draw armed.
-    const onBlur = () => setDrawing(false);
-    map.on("mousedown", onDown);
-    window.addEventListener("mousemove", onWindowMove);
-    window.addEventListener("mouseup", onWindowUp);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("blur", onBlur);
+    const controller = new AbortController();
+    drawAbortRef.current = controller;
+    void client.interactions
+      .drawBounds({
+        signal: controller.signal,
+        onPreview: (preview) => {
+          if (preview) setCoords(coordsFromBbox(preview));
+        },
+      })
+      .then((result: BBox | null) => {
+        if (controller.signal.aborted) return;
+        if (result) setCoords(coordsFromBbox(result));
+        setDrawing(false);
+      });
     return () => {
-      map.off("mousedown", onDown);
-      window.removeEventListener("mousemove", onWindowMove);
-      window.removeEventListener("mouseup", onWindowUp);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", onBlur);
-      canvas.style.cursor = prevCursor;
-      if (panWasEnabled) map.dragPan.enable();
-      if (boxZoomWasEnabled) map.boxZoom.enable();
+      controller.abort();
+      if (drawAbortRef.current === controller) drawAbortRef.current = null;
     };
   }, [drawing, mapControllerRef]);
 
   const handleUseView = useCallback(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const b = map.getBounds();
-    setCoords(coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]));
+    const bbox = mapControllerRef.current?.camera.readView().bbox;
+    if (!bbox) return;
+    setCoords(coordsFromBbox(bbox));
     clearStatus();
   }, [mapControllerRef, clearStatus]);
 

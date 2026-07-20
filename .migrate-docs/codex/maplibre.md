@@ -328,3 +328,54 @@
 - Follow-up: extract point picking, bounds drawing, markers, and transient
   overlays for Task 9, starting with the remaining application-side source/layer
   mutations.
+
+## 2026-07-20 — MapLibre gestures, markers, and style overlays → ArcGIS-ready interaction ports
+
+- Source: MapLibre — `Map#on` point and rubber-band gestures, navigation-handler
+  toggles, `new maplibregl.Marker`, direct GeoJSON source/layer mutation,
+  `styledata` restoration, and `project`/`unproject` calls used by transient
+  application tools.
+- Files touched: new `packages/map/src/engine/{pick-point.ts,draw-bounds.ts,markers.ts,transient-overlays.ts}`;
+  `packages/map/src/engine/{types.ts,maplibre-engine.ts,handle.ts,cesium-engine.ts}`
+  before → interaction lifecycle delegated adapter-side; application consumers
+  in `apps/geolibre-desktop/src/components/{layout,processing}/**` plus
+  `lib/print-extent.ts` before → `MapEngineClient` interaction/event/viewport
+  ports; boundary fixture 167 → 154 entries; new
+  `tests/map-engine-interactions.test.ts` and adapter projection coverage.
+- ArcGIS approach: future `MapView`/`SceneView` adapters translate normalized
+  point and drag input from `View.on`, create marker graphics, and retain
+  transient geometry in adapter-owned `GraphicsLayer` instances. Consumers pass
+  only WGS84 coordinates, GeoJSON, DOM marker content, and primitive style
+  values; no ArcGIS `View`, `Graphic`, or layer object crosses the seam.
+- What changed: point picking and click-drag bounds drawing now share
+  cancellation, Escape/blur cleanup, cursor restoration, navigation locking,
+  antimeridian normalization, minimum-size rejection, and optional Shift-aspect
+  snapping inside the adapter. Marker handles gained rotation alignment,
+  rotation updates, drag event cleanup, and safe pre-ready forwarding.
+  Transient overlays retain their specs across MapLibre style replacement and
+  own source/layer visibility, paint updates, dynamic property color, dash,
+  removal, and destruction. GPS, remote presence, field capture,
+  georeferencing, raster/basemap selection, pixel picking, recorder-region
+  framing, print extent, and processing previews now use only engine ports;
+  saved observations and layers still enter the store solely through explicit
+  user actions.
+- Gap / limitation: the neutral overlay style is intentionally smaller than a
+  complete MapLibre expression/style surface, and Task 10 capture/graticule
+  paths plus Task 11 plugin runtimes still require the package-private primary
+  compatibility controller.
+- Workaround: expose only the concrete transient styles required by migrated
+  tools (`lineColorProperty`, dash, fill/line/point primitives) and keep
+  renderer-specific gesture implementations adapter-private. Removal criteria:
+  replace the MapLibre helper implementations with ArcGIS view/graphics
+  implementations and delete the compatibility proxy after Tasks 10–11.
+- Tradeoff accepted: high-frequency overlays update a retained GeoJSON source
+  and reapply a small fixed paint set rather than exposing arbitrary renderer
+  styles. This adds a few adapter calls per update but preserves a portable,
+  enforceable contract and style-reload recovery.
+- Status: done.
+- Verification: `npm run build` → passed; `npm run test:frontend` → 3,412 passed,
+  1 skipped, 0 failed; focused interaction/conformance/field/GPS/print/recorder
+  suite → 122 passed; scoped ESLint → 0 errors (one pre-existing
+  `ProcessingDialog` hook warning); `git diff --check` → passed.
+- Follow-up: migrate capture, print/graticule inspection, recording, and
+  offline-style packaging through Task 10 engine ports.

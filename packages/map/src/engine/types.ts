@@ -171,6 +171,8 @@ export interface MapMarkerOptions {
   readonly draggable?: boolean;
   readonly anchor?: MapMarkerAnchor;
   readonly offset?: ScreenPoint;
+  readonly rotationAlignment?: "map" | "viewport";
+  readonly pitchAlignment?: "map" | "viewport";
 }
 
 export interface MapMarkerEventMap {
@@ -183,6 +185,7 @@ export interface MapMarkerHandle {
   setLngLat(lngLat: LngLat): void;
   getLngLat(): LngLat;
   setDraggable(draggable: boolean): void;
+  setRotation(rotation: number): void;
   on<K extends keyof MapMarkerEventMap>(
     event: K,
     handler: (payload: MapMarkerEventMap[K]) => void,
@@ -194,8 +197,10 @@ export interface GeoJsonOverlayStyle {
   readonly fillColor?: string;
   readonly fillOpacity?: number;
   readonly lineColor?: string;
+  readonly lineColorProperty?: string;
   readonly lineOpacity?: number;
   readonly lineWidth?: number;
+  readonly lineDash?: readonly number[];
   readonly pointColor?: string;
   readonly pointOpacity?: number;
   readonly pointRadius?: number;
@@ -215,6 +220,7 @@ export interface MapInteractionPort {
     readonly signal?: AbortSignal;
     readonly onPreview?: (bounds: BBox | null) => void;
   }): Promise<BBox | null>;
+  setDoubleClickZoomEnabled(enabled: boolean): void;
   createMarker(options: MapMarkerOptions): MapMarkerHandle;
   upsertGeoJsonOverlay(spec: GeoJsonOverlaySpec): void;
   setOverlayVisible(id: string, visible: boolean): void;

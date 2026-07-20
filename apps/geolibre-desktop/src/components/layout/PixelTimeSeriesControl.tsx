@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { clamp } from "../../lib/clamp";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { exportVectorLayer } from "../../lib/vector-export";
@@ -58,7 +58,7 @@ const SERIES_COLORS = [
 const SOURCE_DASHES: (string | undefined)[] = [undefined, "4 3", "2 2", "8 3"];
 
 interface PixelTimeSeriesControlProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /** A single clicked location and the state of its time-series query. */
@@ -282,17 +282,21 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // Esc stops picking.
   useEffect(() => {
     if (!picking) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const client = mapControllerRef.current;
+    if (!client) {
       setPicking(false);
       return;
     }
-    const canvas = map.getCanvas();
+    const canvas = client.viewport.getElement();
+    if (!canvas) {
+      setPicking(false);
+      return;
+    }
     const prevCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
-    const onClick = (event: { lngLat: { lng: number; lat: number } }) => {
+    const onClick = (event: { lngLat: [number, number] }) => {
       const id = (idCounter.current += 1);
-      const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
+      const lngLat = event.lngLat;
       setPoints((prev) => [
         ...prev,
         {
@@ -313,10 +317,10 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
       // autocomplete closing), so picking isn't cancelled out from under it.
       if (event.key === "Escape" && !event.defaultPrevented) setPicking(false);
     };
-    map.on("click", onClick);
+    const unsubscribeClick = client.on("click", onClick);
     window.addEventListener("keydown", onKey);
     return () => {
-      map.off("click", onClick);
+      unsubscribeClick();
       window.removeEventListener("keydown", onKey);
       canvas.style.cursor = prevCursor;
     };

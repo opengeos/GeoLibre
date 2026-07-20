@@ -159,6 +159,9 @@ class StableMapEngineHandle implements MapEngine {
       const adapter = await this.whenReady();
       return adapter.interactions.drawBounds(options);
     },
+    setDoubleClickZoomEnabled: (enabled: boolean): void => {
+      this.enqueue((engine) => engine.interactions.setDoubleClickZoomEnabled(enabled));
+    },
     createMarker: (options: MapMarkerOptions): MapMarkerHandle =>
       this.createDeferredMarker(options),
     upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => {
@@ -377,10 +380,23 @@ class StableMapEngineHandle implements MapEngine {
   private createDeferredMarker(options: MapMarkerOptions): MapMarkerHandle {
     let lngLat = options.lngLat;
     let draggable = options.draggable ?? false;
+    let rotation = 0;
     let nativeMarker: MapMarkerHandle | null = null;
     let removed = false;
     const listeners = new Map<keyof MapMarkerEventMap, Set<(payload: never) => void>>();
-    const nativeUnsubscribes: Unsubscribe[] = [];
+    const nativeUnsubscribes = new Map<keyof MapMarkerEventMap, Unsubscribe>();
+
+    const bindNativeEvent = <K extends keyof MapMarkerEventMap>(event: K): void => {
+      const handlers = listeners.get(event);
+      if (!nativeMarker || !handlers?.size || nativeUnsubscribes.has(event)) return;
+      nativeUnsubscribes.set(
+        event,
+        nativeMarker.on(event, (payload) => {
+          lngLat = payload.lngLat;
+          for (const handler of handlers) handler(payload as never);
+        }),
+      );
+    };
 
     this.enqueue((engine) => {
       nativeMarker = engine.interactions.createMarker({
@@ -388,15 +404,9 @@ class StableMapEngineHandle implements MapEngine {
         lngLat,
         draggable,
       });
-      for (const [event, handlers] of listeners) {
-        nativeUnsubscribes.push(
-          nativeMarker.on(event, (payload) => {
-            lngLat = payload.lngLat;
-            for (const handler of handlers) handler(payload as never);
-          }),
-        );
-      }
+      for (const event of listeners.keys()) bindNativeEvent(event);
       if (removed) nativeMarker.remove();
+      else if (rotation !== 0) nativeMarker.setRotation(rotation);
     });
 
     return {
@@ -409,16 +419,26 @@ class StableMapEngineHandle implements MapEngine {
         draggable = nextDraggable;
         nativeMarker?.setDraggable(nextDraggable);
       },
+      setRotation: (nextRotation): void => {
+        rotation = nextRotation;
+        nativeMarker?.setRotation(nextRotation);
+      },
       on: (event, handler): Unsubscribe => {
         const handlers = listeners.get(event) ?? new Set<(payload: never) => void>();
         handlers.add(handler as (payload: never) => void);
         listeners.set(event, handlers);
-        if (nativeMarker) return nativeMarker.on(event, handler);
-        return () => handlers.delete(handler as (payload: never) => void);
+        bindNativeEvent(event);
+        return () => {
+          handlers.delete(handler as (payload: never) => void);
+          if (handlers.size > 0) return;
+          nativeUnsubscribes.get(event)?.();
+          nativeUnsubscribes.delete(event);
+        };
       },
       remove: (): void => {
         removed = true;
-        for (const unsubscribe of nativeUnsubscribes.splice(0)) unsubscribe();
+        for (const unsubscribe of nativeUnsubscribes.values()) unsubscribe();
+        nativeUnsubscribes.clear();
         nativeMarker?.remove();
       },
     };

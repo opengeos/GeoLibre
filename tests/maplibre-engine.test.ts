@@ -14,6 +14,9 @@ interface FakeNativeMap {
 
 function createNativeMap(): FakeNativeMap {
   const listeners = new Map<string, Set<(payload: Record<string, unknown>) => void>>();
+  const container = {
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 800, height: 600 }),
+  };
   const map = {
     on: (event: string, handler: (payload: Record<string, unknown>) => void) => {
       const handlers = listeners.get(event) ?? new Set();
@@ -33,7 +36,9 @@ function createNativeMap(): FakeNativeMap {
       listeners.set(event, handlers);
     },
     isMoving: () => false,
-    unproject: ([x, y]: [number, number]) => ({ lng: x, lat: y }),
+    project: ([lng, lat]: [number, number]) => ({ x: lng * 10, y: lat * -10 }),
+    unproject: ([x, y]: [number, number]) => ({ lng: x / 10, lat: y / -10 }),
+    getContainer: () => container,
   };
   return {
     map,
@@ -194,6 +199,24 @@ test("MapLibre exposes live layer snapshots and feature operations only through 
   engine.layers.setHighlight(undefined, ["zurich"]);
   engine.layers.clearHighlight();
   assert.deepEqual(controller.calls.slice(-2), ["highlightFeature", "clearFeatureHighlight"]);
+});
+
+test("MapLibre projection ports round-trip coordinates without exposing the native map", async () => {
+  const native = createNativeMap();
+  const controller = createControllerModule(native);
+  const engine = new MapLibreEngine(async () => controller.module);
+  await engine.mount({} as HTMLElement, {
+    center: [0, 0],
+    zoom: 2,
+    bearing: 0,
+    pitch: 0,
+  });
+
+  const coordinate: [number, number] = [8.55, 47.37];
+  const point = engine.viewport.project(coordinate);
+  assert.deepEqual(point, { x: 85.5, y: -473.7 });
+  assert.deepEqual(point ? engine.viewport.unproject(point) : null, coordinate);
+  assert.equal(engine.viewport.getRect()?.width, 800);
 });
 
 test("MapLibre converts native errors into engine-neutral diagnostics", async () => {

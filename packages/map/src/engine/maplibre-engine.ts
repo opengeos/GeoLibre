@@ -9,6 +9,10 @@ import type {
 import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import type { MapEngineExtensionMap } from "./extensions";
+import { drawMapLibreBounds } from "./draw-bounds";
+import { createMapLibreMarker } from "./markers";
+import { pickMapLibrePoint } from "./pick-point";
+import { MapLibreTransientOverlays } from "./transient-overlays";
 import type {
   BBox,
   BuiltInMapControl,
@@ -21,7 +25,6 @@ import type {
   MapEngineCapability,
   MapEngineClient,
   MapEngineEventMap,
-  MapMarkerEventMap,
   MapMarkerHandle,
   MapMarkerOptions,
   MapRenderTarget,
@@ -167,7 +170,7 @@ export class MapLibreEngine implements MapEngine {
   private readonly controlVisibility: Record<BuiltInMapControl, boolean> = {
     ...defaultControlVisibility,
   };
-  private readonly overlayIds = new Set<string>();
+  private overlays: MapLibreTransientOverlays | null = null;
   private controller: MapControllerContract | null = null;
   private map: maplibregl.Map | null = null;
   private pendingConfiguration: PendingConfiguration = {};
@@ -264,7 +267,7 @@ export class MapLibreEngine implements MapEngine {
         scope: "content" as const,
         queryable: "queryable" in target ? target.queryable : false,
       }));
-      const overlayTargets = [...this.overlayIds].map((id) => ({
+      const overlayTargets = (this.overlays?.ids() ?? []).map((id) => ({
         id,
         scope: "overlay" as const,
         queryable: false,
@@ -315,18 +318,25 @@ export class MapLibreEngine implements MapEngine {
 
   readonly interactions = {
     pickPoint: async (options?: { readonly signal?: AbortSignal }): Promise<LngLat | null> =>
-      this.pickPoint(options),
+      this.map ? pickMapLibrePoint(this.map, options) : null,
     drawBounds: async (options?: {
       readonly aspectRatio?: number;
       readonly signal?: AbortSignal;
       readonly onPreview?: (bounds: BBox | null) => void;
-    }): Promise<BBox | null> => this.drawBounds(options),
-    createMarker: (options: MapMarkerOptions): MapMarkerHandle => this.createMarker(options),
-    upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => this.upsertOverlay(spec),
-    setOverlayVisible: (id: string, visible: boolean): void => {
-      this.setOverlayVisibility(id, visible);
+    }): Promise<BBox | null> => (this.map ? drawMapLibreBounds(this.map, options) : null),
+    setDoubleClickZoomEnabled: (enabled: boolean): void => {
+      if (enabled) this.map?.doubleClickZoom.enable();
+      else this.map?.doubleClickZoom.disable();
     },
-    removeOverlay: (id: string): void => this.removeOverlay(id),
+    createMarker: (options: MapMarkerOptions): MapMarkerHandle => {
+      if (!this.map) throw new Error("MapLibre engine is not mounted.");
+      return createMapLibreMarker(this.map, options);
+    },
+    upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => this.overlays?.upsert(spec),
+    setOverlayVisible: (id: string, visible: boolean): void => {
+      this.overlays?.setVisible(id, visible);
+    },
+    removeOverlay: (id: string): void => this.overlays?.remove(id),
     showPopup: (options: {
       readonly id: string;
       readonly lngLat: LngLat;
@@ -385,6 +395,7 @@ export class MapLibreEngine implements MapEngine {
     }
     this.controller = controller;
     this.map = map;
+    this.overlays = new MapLibreTransientOverlays(map);
     this.bindNativeEvents();
     if (typeof this.pendingConfiguration.basemapVisible === "boolean") {
       controller.setBasemapVisible(this.pendingConfiguration.basemapVisible);
@@ -400,6 +411,7 @@ export class MapLibreEngine implements MapEngine {
     if (!map) throw new Error("Cannot attach MapEngine ports before MapController is mounted.");
     this.controller = controller;
     this.map = map;
+    this.overlays = new MapLibreTransientOverlays(map);
     this.bindNativeEvents();
   }
 
@@ -413,7 +425,8 @@ export class MapLibreEngine implements MapEngine {
     }
     for (const popup of this.popups.values()) popup.remove();
     this.popups.clear();
-    this.overlayIds.clear();
+    this.overlays?.destroy();
+    this.overlays = null;
     this.controller?.destroy();
     this.controller = null;
     this.map = null;
@@ -514,6 +527,7 @@ export class MapLibreEngine implements MapEngine {
       this.emit("load", { reason: "mount" });
     });
     this.listen("style.load", () => {
+      this.overlays?.restore();
       if (!this.loadEmitted || !this.sawInitialStyle) {
         this.sawInitialStyle = true;
         return;
@@ -581,166 +595,6 @@ export class MapLibreEngine implements MapEngine {
       options?.signal?.addEventListener("abort", abort, { once: true });
       if (options?.timeoutMs) timeout = setTimeout(finish, options.timeoutMs);
     });
-  }
-
-  private async pickPoint(options?: { readonly signal?: AbortSignal }): Promise<LngLat | null> {
-    const map = this.map;
-    if (!map) return null;
-    return new Promise<LngLat | null>((resolve, reject) => {
-      const finish = (event: maplibregl.MapMouseEvent): void => {
-        options?.signal?.removeEventListener("abort", abort);
-        resolve([event.lngLat.lng, event.lngLat.lat]);
-      };
-      const abort = (): void => {
-        map.off("click", finish);
-        reject(options?.signal?.reason ?? new DOMException("Aborted", "AbortError"));
-      };
-      map.once("click", finish);
-      options?.signal?.addEventListener("abort", abort, { once: true });
-    });
-  }
-
-  private async drawBounds(options?: {
-    readonly aspectRatio?: number;
-    readonly signal?: AbortSignal;
-    readonly onPreview?: (bounds: BBox | null) => void;
-  }): Promise<BBox | null> {
-    const first = await this.pickPoint({ signal: options?.signal });
-    if (!first) return null;
-    const second = await this.pickPoint({ signal: options?.signal });
-    if (!second) return null;
-    let west = Math.min(first[0], second[0]);
-    let east = Math.max(first[0], second[0]);
-    let south = Math.min(first[1], second[1]);
-    let north = Math.max(first[1], second[1]);
-    if (options?.aspectRatio && options.aspectRatio > 0 && east > west && north > south) {
-      const width = east - west;
-      const height = north - south;
-      if (width / height > options.aspectRatio) {
-        const targetHeight = width / options.aspectRatio;
-        const center = (north + south) / 2;
-        south = center - targetHeight / 2;
-        north = center + targetHeight / 2;
-      } else {
-        const targetWidth = height * options.aspectRatio;
-        const center = (east + west) / 2;
-        west = center - targetWidth / 2;
-        east = center + targetWidth / 2;
-      }
-    }
-    const bounds: BBox = [west, south, east, north];
-    options?.onPreview?.(bounds);
-    return bounds;
-  }
-
-  private createMarker(options: MapMarkerOptions): MapMarkerHandle {
-    if (!this.map) throw new Error("MapLibre engine is not mounted.");
-    const marker = new maplibregl.Marker({
-      element: options.element,
-      color: options.color,
-      draggable: options.draggable,
-      anchor: options.anchor,
-      offset: options.offset ? [options.offset.x, options.offset.y] : undefined,
-    })
-      .setLngLat(options.lngLat)
-      .addTo(this.map);
-    return {
-      setLngLat: (lngLat): void => {
-        marker.setLngLat(lngLat);
-      },
-      getLngLat: (): LngLat => normalizeLngLat(marker.getLngLat()),
-      setDraggable: (draggable): void => {
-        marker.setDraggable(draggable);
-      },
-      on: <K extends keyof MapMarkerEventMap>(
-        event: K,
-        handler: (payload: MapMarkerEventMap[K]) => void,
-      ): Unsubscribe => {
-        const listener = (): void => handler({ lngLat: normalizeLngLat(marker.getLngLat()) });
-        marker.on(event, listener);
-        return () => marker.off(event, listener);
-      },
-      remove: (): void => {
-        marker.remove();
-      },
-    };
-  }
-
-  private overlaySourceId(id: string): string {
-    return `geolibre-engine-overlay-${id}`;
-  }
-
-  private overlayLayerIds(id: string): readonly string[] {
-    const sourceId = this.overlaySourceId(id);
-    return [`${sourceId}-fill`, `${sourceId}-line`, `${sourceId}-point`];
-  }
-
-  private upsertOverlay(spec: GeoJsonOverlaySpec): void {
-    if (!this.map) return;
-    const sourceId = this.overlaySourceId(spec.id);
-    const existing = this.map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-    if (existing) existing.setData(spec.data);
-    else this.map.addSource(sourceId, { type: "geojson", data: spec.data });
-    const visibility = spec.visible === false ? "none" : "visible";
-    const definitions: maplibregl.LayerSpecification[] = [
-      {
-        id: `${sourceId}-fill`,
-        type: "fill",
-        source: sourceId,
-        filter: ["==", ["geometry-type"], "Polygon"],
-        layout: { visibility },
-        paint: {
-          "fill-color": spec.style?.fillColor ?? "#2563eb",
-          "fill-opacity": spec.style?.fillOpacity ?? 0.2,
-        },
-      },
-      {
-        id: `${sourceId}-line`,
-        type: "line",
-        source: sourceId,
-        layout: { visibility },
-        paint: {
-          "line-color": spec.style?.lineColor ?? "#2563eb",
-          "line-opacity": spec.style?.lineOpacity ?? 1,
-          "line-width": spec.style?.lineWidth ?? 2,
-        },
-      },
-      {
-        id: `${sourceId}-point`,
-        type: "circle",
-        source: sourceId,
-        filter: ["==", ["geometry-type"], "Point"],
-        layout: { visibility },
-        paint: {
-          "circle-color": spec.style?.pointColor ?? "#2563eb",
-          "circle-opacity": spec.style?.pointOpacity ?? 1,
-          "circle-radius": spec.style?.pointRadius ?? 5,
-        },
-      },
-    ];
-    for (const definition of definitions) {
-      if (!this.map.getLayer(definition.id)) this.map.addLayer(definition);
-    }
-    this.overlayIds.add(spec.id);
-  }
-
-  private setOverlayVisibility(id: string, visible: boolean): void {
-    if (!this.map) return;
-    for (const layerId of this.overlayLayerIds(id)) {
-      if (this.map.getLayer(layerId)) {
-        this.map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
-      }
-    }
-  }
-
-  private removeOverlay(id: string): void {
-    if (!this.map) return;
-    for (const layerId of this.overlayLayerIds(id)) {
-      if (this.map.getLayer(layerId)) this.map.removeLayer(layerId);
-    }
-    const sourceId = this.overlaySourceId(id);
-    if (this.map.getSource(sourceId)) this.map.removeSource(sourceId);
-    this.overlayIds.delete(id);
   }
 
   private showPopup(options: {

@@ -21,6 +21,7 @@ function createMarkerHandle(): MapMarkerHandle {
     setLngLat: () => undefined,
     getLngLat: () => [8.55, 47.37],
     setDraggable: () => undefined,
+    setRotation: () => undefined,
     on: () => () => undefined,
     remove: () => undefined,
   };
@@ -74,6 +75,7 @@ function createCompleteFake(): MapEngine {
     interactions: {
       pickPoint: async () => null,
       drawBounds: async () => null,
+      setDoubleClickZoomEnabled: () => undefined,
       createMarker: createMarkerHandle,
       upsertGeoJsonOverlay: () => undefined,
       setOverlayVisible: () => undefined,

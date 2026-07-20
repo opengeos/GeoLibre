@@ -1,59 +1,52 @@
 import { useAppStore, type CollaborationPresence } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
-import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import type { MapEngineClient, MapMarkerHandle } from "@geolibre/map";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 
 const VIEWPORT_SOURCE_ID = "__geolibre_collab_viewports";
-const VIEWPORT_LAYER_ID = "__geolibre_collab_viewports_line";
+
+interface CursorMarker {
+  marker: MapMarkerHandle;
+  element: HTMLElement;
+}
 
 /**
  * Renders remote participants' presence on the map during a live session:
- * cursors as MapLibre Markers and viewports as a dedicated GeoJSON line layer.
+ * cursors as engine markers and viewports as a transient GeoJSON overlay.
  *
  * Non-visual component (returns null) — it imperatively attaches to the live map
- * via the controller ref, mirroring how plugins reach the map through
- * `getMap()`. It owns and tears down only its own markers/source/layer, so it is
- * independent of the deck.gl overlay's lifecycle.
+ * via the engine client. It owns and tears down only its own markers/overlay,
+ * so it is independent of the content-layer lifecycle.
  *
  * @param mapControllerRef - Ref to the live map controller.
  */
 export function RemoteCursorsOverlay({
   mapControllerRef,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }): null {
   const presence = useAppStore((s) => s.collaboration.presence);
   const isActive = useAppStore((s) => s.collaboration.isActive);
-  const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const markersRef = useRef<Map<string, CursorMarker>>(new Map());
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map || !isActive) {
-      // Clean up any lingering markers/layer when the session ends.
-      safely(() => clearAll(map, markersRef.current));
+    const client = mapControllerRef.current;
+    if (!client || !isActive) {
+      // Clean up any lingering markers/overlay when the session ends.
+      safely(() => clearAll(client, markersRef.current));
       return;
     }
 
-    // Never let presence rendering throw out of a React effect/map event — the
-    // map style mutates concurrently (layer add/remove, basemap reload) and a
-    // transient failure must not trip the Map error boundary. The next presence
-    // update or styledata event retries.
-    const render = () => safely(() => renderPresence(map, presence, markersRef.current));
-    render();
-    // Re-apply after a style reload (basemap change) wipes the source/layer.
-    map.on("styledata", render);
-    return () => {
-      map.off("styledata", render);
-    };
+    // Never let presence rendering throw out of a React effect. A transient
+    // renderer failure must not trip the map error boundary; the next presence
+    // update retries, while the engine restores overlays after style changes.
+    safely(() => renderPresence(client, presence, markersRef.current));
   }, [presence, isActive, mapControllerRef]);
 
   // Remove everything on unmount.
   useEffect(
-    () => () =>
-      safely(() => clearAll(mapControllerRef.current?.getMap() ?? null, markersRef.current)),
+    () => () => safely(() => clearAll(mapControllerRef.current, markersRef.current)),
     [mapControllerRef],
   );
 
@@ -74,16 +67,16 @@ function safely(fn: () => void): void {
 }
 
 function renderPresence(
-  map: MapLibreMap,
+  client: MapEngineClient,
   presence: Record<string, CollaborationPresence>,
-  markers: Map<string, maplibregl.Marker>,
+  markers: Map<string, CursorMarker>,
 ): void {
   const ids = new Set(Object.keys(presence));
 
   // Drop markers for participants who left.
-  for (const [id, marker] of markers) {
+  for (const [id, record] of markers) {
     if (!ids.has(id)) {
-      marker.remove();
+      record.marker.remove();
       markers.delete(id);
     }
   }
@@ -91,31 +84,39 @@ function renderPresence(
   // Add/update a cursor marker per participant that has a cursor position.
   for (const [id, p] of Object.entries(presence)) {
     if (!p.cursor) {
-      markers.get(id)?.remove();
+      markers.get(id)?.marker.remove();
       markers.delete(id);
       continue;
     }
-    let marker = markers.get(id);
-    if (!marker) {
-      marker = new maplibregl.Marker({
-        element: createCursorElement(p),
-        anchor: "top-left",
-      });
-      markers.set(id, marker);
-      marker.addTo(map);
+    let record = markers.get(id);
+    if (!record) {
+      const element = createCursorElement(p);
+      record = {
+        element,
+        marker: client.interactions.createMarker({
+          lngLat: [p.cursor.lng, p.cursor.lat],
+          element,
+          anchor: "top-left",
+        }),
+      };
+      markers.set(id, record);
     } else {
-      updateCursorElement(marker.getElement(), p);
+      updateCursorElement(record.element, p);
+      record.marker.setLngLat([p.cursor.lng, p.cursor.lat]);
     }
-    marker.setLngLat([p.cursor.lng, p.cursor.lat]);
   }
 
-  // Adding/updating the viewport source+layer mutates the style, so only touch
-  // it once the style is loaded; markers above are DOM and always safe.
-  if (map.isStyleLoaded()) {
-    ensureViewportLayer(map);
-    const source = map.getSource(VIEWPORT_SOURCE_ID) as GeoJSONSource | undefined;
-    source?.setData(viewportCollection(presence));
-  }
+  client.interactions.upsertGeoJsonOverlay({
+    id: VIEWPORT_SOURCE_ID,
+    data: viewportCollection(presence),
+    style: {
+      lineColorProperty: "color",
+      lineWidth: 2,
+      lineDash: [2, 1],
+      lineOpacity: 0.8,
+      fillOpacity: 0,
+    },
+  });
 }
 
 function viewportCollection(
@@ -149,28 +150,6 @@ function viewportCollection(
     });
   }
   return { type: "FeatureCollection", features };
-}
-
-function ensureViewportLayer(map: MapLibreMap): void {
-  if (!map.getSource(VIEWPORT_SOURCE_ID)) {
-    map.addSource(VIEWPORT_SOURCE_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-    });
-  }
-  if (!map.getLayer(VIEWPORT_LAYER_ID)) {
-    map.addLayer({
-      id: VIEWPORT_LAYER_ID,
-      type: "line",
-      source: VIEWPORT_SOURCE_ID,
-      paint: {
-        "line-color": ["get", "color"],
-        "line-width": 2,
-        "line-dasharray": [2, 1],
-        "line-opacity": 0.8,
-      },
-    });
-  }
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -225,11 +204,8 @@ function createCursorSvg(color: string): SVGSVGElement {
   return svg;
 }
 
-function clearAll(map: MapLibreMap | null, markers: Map<string, maplibregl.Marker>): void {
-  for (const marker of markers.values()) marker.remove();
+function clearAll(client: MapEngineClient | null, markers: Map<string, CursorMarker>): void {
+  for (const record of markers.values()) record.marker.remove();
   markers.clear();
-  if (map) {
-    if (map.getLayer(VIEWPORT_LAYER_ID)) map.removeLayer(VIEWPORT_LAYER_ID);
-    if (map.getSource(VIEWPORT_SOURCE_ID)) map.removeSource(VIEWPORT_SOURCE_ID);
-  }
+  client?.interactions.removeOverlay(VIEWPORT_SOURCE_ID);
 }

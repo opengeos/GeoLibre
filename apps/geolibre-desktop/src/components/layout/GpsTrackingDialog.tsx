@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Feature, FeatureCollection } from "geojson";
-import maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient, MapMarkerHandle } from "@geolibre/map";
 import { useAppStore } from "@geolibre/core";
 import {
   Button,
@@ -56,7 +55,7 @@ import { saveTextFileWithFallback } from "../../lib/tauri-io";
 interface GpsTrackingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 /** Transient map sources for the live position overlays (not store layers, so
@@ -121,61 +120,8 @@ function createMarkerElement(): { root: HTMLDivElement; arrow: HTMLDivElement } 
   return { root, arrow };
 }
 
-/** Lazily (re-)register the overlay sources/layers; heals basemap switches. */
-function ensureGpsSources(map: maplibregl.Map): void {
-  // addSource/addLayer throw while a replacement style is still loading; skip
-  // and let the styledata subscription (or the next fix) register them once
-  // the style has settled.
-  if (!map.isStyleLoaded()) return;
-  if (!map.getSource(ACCURACY_SOURCE)) {
-    map.addSource(ACCURACY_SOURCE, { type: "geojson", data: EMPTY_FC });
-  }
-  if (!map.getLayer(`${ACCURACY_SOURCE}-fill`)) {
-    map.addLayer({
-      id: `${ACCURACY_SOURCE}-fill`,
-      type: "fill",
-      source: ACCURACY_SOURCE,
-      paint: { "fill-color": GPS_COLOR, "fill-opacity": 0.15 },
-    });
-  }
-  if (!map.getSource(TRACK_SOURCE)) {
-    map.addSource(TRACK_SOURCE, { type: "geojson", data: EMPTY_FC });
-  }
-  if (!map.getLayer(`${TRACK_SOURCE}-line`)) {
-    map.addLayer({
-      id: `${TRACK_SOURCE}-line`,
-      type: "line",
-      source: TRACK_SOURCE,
-      paint: {
-        "line-color": TRACK_COLOR,
-        "line-width": 3,
-        "line-opacity": 0.9,
-      },
-    });
-  }
-}
-
-function setSourceData(
-  map: maplibregl.Map,
-  sourceId: string,
-  data: FeatureCollection | Feature,
-): void {
-  const src = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-  src?.setData(data);
-}
-
-function removeGpsSources(map: maplibregl.Map): void {
-  try {
-    for (const id of [`${ACCURACY_SOURCE}-fill`, `${TRACK_SOURCE}-line`]) {
-      if (map.getLayer(id)) map.removeLayer(id);
-    }
-    for (const id of [ACCURACY_SOURCE, TRACK_SOURCE]) {
-      if (map.getSource(id)) map.removeSource(id);
-    }
-  } catch {
-    // Mid-style-switch the overlays are already gone with the old style;
-    // there is nothing left to tear down.
-  }
+function asFeatureCollection(feature: Feature): FeatureCollection {
+  return { type: "FeatureCollection", features: [feature] };
 }
 
 type RecordingState = "off" | "recording" | "paused";
@@ -210,7 +156,7 @@ export function GpsTrackingDialog({
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const markerRef = useRef<MapMarkerHandle | null>(null);
   const markerArrowRef = useRef<HTMLDivElement | null>(null);
   // Logged track fixes as pause/resume segments; a ref so the high-frequency
   // watch callback appends in place without re-creating itself, with
@@ -236,7 +182,7 @@ export function GpsTrackingDialog({
     settingsRef.current = settings;
   }, [settings]);
 
-  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
+  const getClient = useCallback(() => mapControllerRef.current, [mapControllerRef]);
 
   const handleFix = useCallback(
     (fix: GpsFix) => {
@@ -264,25 +210,31 @@ export function GpsTrackingDialog({
         }
       }
 
-      const map = getMap();
-      if (map) {
-        ensureGpsSources(map);
-        setSourceData(map, ACCURACY_SOURCE, accuracyCircle(fix));
-        // Redraw the track only when a fix was actually logged; the styledata
-        // listener below re-seeds the source if a basemap switch wipes it.
+      const client = getClient();
+      if (client) {
+        client.interactions.upsertGeoJsonOverlay({
+          id: ACCURACY_SOURCE,
+          data: asFeatureCollection(accuracyCircle(fix)),
+          style: { fillColor: GPS_COLOR, fillOpacity: 0.15 },
+        });
+        // Redraw the track only when a fix was actually logged. The engine
+        // retains transient overlays across renderer style replacement.
         if (logged) {
-          setSourceData(map, TRACK_SOURCE, trackPreview(fixesRef.current));
+          client.interactions.upsertGeoJsonOverlay({
+            id: TRACK_SOURCE,
+            data: trackPreview(fixesRef.current),
+            style: { lineColor: TRACK_COLOR, lineWidth: 3, lineOpacity: 0.9 },
+          });
         }
         if (!markerRef.current) {
           const { root, arrow } = createMarkerElement();
           markerArrowRef.current = arrow;
-          markerRef.current = new maplibregl.Marker({
+          markerRef.current = client.interactions.createMarker({
+            lngLat: [fix.lng, fix.lat],
             element: root,
             rotationAlignment: "map",
             pitchAlignment: "map",
-          })
-            .setLngLat([fix.lng, fix.lat])
-            .addTo(map);
+          });
         } else {
           markerRef.current.setLngLat([fix.lng, fix.lat]);
         }
@@ -292,16 +244,20 @@ export function GpsTrackingDialog({
         if (fix.heading != null) markerRef.current.setRotation(fix.heading);
 
         if (followRef.current) {
-          map.easeTo({
-            center: [fix.lng, fix.lat],
-            duration: 500,
-            ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
-          });
+          const view = client.camera.readView();
+          client.camera.applyView(
+            {
+              ...view,
+              center: [fix.lng, fix.lat],
+              zoom: zoomedRef.current ? view.zoom : Math.max(view.zoom, 15),
+            },
+            { mode: "ease", durationMs: 500 },
+          );
           zoomedRef.current = true;
         }
       }
     },
-    [getMap, setGpsStatus],
+    [getClient, setGpsStatus],
   );
 
   // The watchPosition subscription follows `tracking`.
@@ -331,31 +287,18 @@ export function GpsTrackingDialog({
 
   // Map subscriptions while tracking. Manual panning turns follow mode off,
   // QGIS-style, so the map stays where the user dragged it instead of snapping
-  // back on the next fix; the styledata listener re-registers the overlay
-  // sources after a basemap switch (map.setStyle wipes custom sources) and
-  // re-seeds them from the recorded fixes. The map may not be mounted yet when
-  // tracking starts, so retry until it is rather than silently skipping the
-  // subscriptions for the whole session.
+  // back on the next fix. The engine owns overlay restoration after renderer
+  // style replacement. The client may not be mounted yet when tracking starts,
+  // so retry until it is rather than silently skipping the subscription.
   useEffect(() => {
     if (!tracking) return;
     const onDragStart = () => setFollow(false);
-    // Gated on the source actually being gone, so the frequent styledata
-    // events fired by ordinary style mutations cost one getSource() check.
-    const onStyleData = () => {
-      const m = getMap();
-      if (!m || m.getSource(TRACK_SOURCE)) return;
-      ensureGpsSources(m);
-      const fix = lastFixRef.current;
-      if (fix) setSourceData(m, ACCURACY_SOURCE, accuracyCircle(fix));
-      setSourceData(m, TRACK_SOURCE, trackPreview(fixesRef.current));
-    };
-    let map: maplibregl.Map | null = null;
+    let unsubscribe: (() => void) | null = null;
     let timer: number | undefined;
     const attach = () => {
-      map = getMap();
-      if (map) {
-        map.on("dragstart", onDragStart);
-        map.on("styledata", onStyleData);
+      const client = getClient();
+      if (client) {
+        unsubscribe = client.on("dragstart", onDragStart);
         return;
       }
       timer = window.setTimeout(attach, 500);
@@ -363,18 +306,18 @@ export function GpsTrackingDialog({
     attach();
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
-      map?.off("dragstart", onDragStart);
-      map?.off("styledata", onStyleData);
+      unsubscribe?.();
     };
-  }, [tracking, getMap]);
+  }, [tracking, getClient]);
 
   const clearMapArtifacts = useCallback(() => {
     markerRef.current?.remove();
     markerRef.current = null;
     markerArrowRef.current = null;
-    const map = getMap();
-    if (map) removeGpsSources(map);
-  }, [getMap]);
+    const client = getClient();
+    client?.interactions.removeOverlay(ACCURACY_SOURCE);
+    client?.interactions.removeOverlay(TRACK_SOURCE);
+  }, [getClient]);
 
   // When tracking stops, clear the overlays and the status-bar readout. An
   // in-progress recording pauses (rather than being lost) so the fixes can
@@ -419,9 +362,12 @@ export function GpsTrackingDialog({
   const clearTrack = useCallback(() => {
     fixesRef.current = [[]];
     setFixCount(0);
-    const map = getMap();
-    if (map) setSourceData(map, TRACK_SOURCE, EMPTY_FC);
-  }, [getMap]);
+    getClient()?.interactions.upsertGeoJsonOverlay({
+      id: TRACK_SOURCE,
+      data: EMPTY_FC,
+      style: { lineColor: TRACK_COLOR, lineWidth: 3, lineOpacity: 0.9 },
+    });
+  }, [getClient]);
 
   const handleStartRecording = useCallback(() => {
     clearTrack();
