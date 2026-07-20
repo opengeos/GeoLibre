@@ -1,14 +1,17 @@
 import type { MapControlPosition, MapEngineClient } from "../engine/types";
+import type maplibregl from "maplibre-gl";
 
 /**
  * Adapter-private context passed to a dynamically loaded MapLibre runtime.
  *
- * It intentionally contains only the engine client for the first runtime
- * slice. Subsequent runtime moves can extend this type with private MapLibre
- * facilities without exposing any of them to applications or external plugins.
+ * It is never exported through `MapEngineClient`: only a loaded runtime inside
+ * this package can receive native controls or a map instance.
  */
 export interface MapLibreHostedRuntimeContext {
   readonly client: MapEngineClient;
+  readonly map?: maplibregl.Map;
+  addControl?(control: maplibregl.IControl, position?: MapControlPosition): boolean;
+  removeControl?(control: maplibregl.IControl): void;
 }
 
 export interface MapLibreHostedRuntimeActivation {

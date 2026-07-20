@@ -33,6 +33,7 @@ import type {
   ScreenPoint,
   Unsubscribe,
 } from "./types";
+import type { MapLibreHostedRuntimeContext } from "../maplibre-runtime/types";
 
 interface MapControllerContract {
   init(
@@ -87,6 +88,8 @@ interface MapControllerContract {
   ): void;
   clearFeatureHighlight(): void;
   setBuiltInControlVisible(control: BuiltInMapControl, visible: boolean): boolean;
+  addControl(control: maplibregl.IControl, position?: MapControlPosition): boolean;
+  removeControl(control: maplibregl.IControl): void;
   getBuiltInControlPosition(control: BuiltInMapControl): MapControlPosition;
   setBuiltInControlPosition(control: BuiltInMapControl, position: MapControlPosition): boolean;
   setCompassLabel(label: string): void;
@@ -175,7 +178,9 @@ export class MapLibreEngine implements MapEngine {
     ...defaultControlVisibility,
   };
   private overlays: MapLibreTransientOverlays | null = null;
-  private readonly hostedRuntimes = createMapLibreHostedRuntimeRegistry(this);
+  private readonly hostedRuntimes = createMapLibreHostedRuntimeRegistry(this, undefined, () =>
+    this.createHostedRuntimeContext(),
+  );
   private controller: MapControllerContract | null = null;
   private map: maplibregl.Map | null = null;
   private pendingConfiguration: PendingConfiguration = {};
@@ -680,6 +685,17 @@ export class MapLibreEngine implements MapEngine {
   private closePopup(id: string): void {
     this.popups.get(id)?.remove();
     this.popups.delete(id);
+  }
+
+  private createHostedRuntimeContext(): MapLibreHostedRuntimeContext {
+    const { controller, map } = this;
+    if (!controller || !map) throw new Error("MapLibre engine is not mounted.");
+    return {
+      client: this,
+      map,
+      addControl: (control, position) => controller.addControl(control, position),
+      removeControl: (control) => controller.removeControl(control),
+    };
   }
 }
 

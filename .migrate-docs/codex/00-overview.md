@@ -75,8 +75,9 @@ Status values: not started · in progress · partial · blocked · done
   version gate and restore activation context are complete; public native API
   removal follows with first-party runtime relocation.
 - Implemented: the MapLibre adapter now owns a per-engine lazy hosted-runtime
-  registry. The Layer Control is the first relocated descriptor/runtime pair;
-  a runtime-import failure reaches the existing plugin activation rollback.
+  registry. Layer Control and Street View are relocated descriptor/runtime
+  pairs; a runtime-import failure reaches the existing plugin activation
+  rollback.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

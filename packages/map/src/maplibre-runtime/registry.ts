@@ -9,6 +9,7 @@ import type {
 const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-layer-control": async () =>
     (await import("./layer-control")).maplibreLayerControlRuntime,
+  "maplibre-gl-streetview": async () => (await import("./streetview")).maplibreStreetViewRuntime,
 };
 
 /**
@@ -23,6 +24,9 @@ export class MapLibreHostedRuntimeRegistry {
     private readonly loaders: Readonly<
       Record<string, MapLibreHostedRuntimeLoader>
     > = runtimeLoaders,
+    private readonly createContext: () => MapLibreHostedRuntimeContext = () => ({
+      client: this.client,
+    }),
   ) {}
 
   activate(pluginId: string, input: MapLibreHostedRuntimeActivation): boolean | Promise<boolean> {
@@ -62,15 +66,16 @@ export class MapLibreHostedRuntimeRegistry {
   }
 
   private context(): MapLibreHostedRuntimeContext {
-    return { client: this.client };
+    return this.createContext();
   }
 }
 
 export function createMapLibreHostedRuntimeRegistry(
   client: MapEngineClient,
   loaders?: Readonly<Record<string, MapLibreHostedRuntimeLoader>>,
+  createContext?: () => MapLibreHostedRuntimeContext,
 ): MapLibreHostedRuntimeRegistry {
-  return new MapLibreHostedRuntimeRegistry(client, loaders);
+  return new MapLibreHostedRuntimeRegistry(client, loaders, createContext);
 }
 
 function normalizeActivation(

@@ -566,3 +566,34 @@
 - Follow-up: relocate annotations and the remaining simple MapLibre controls
   into this registry while preserving their ids, state, and restore behavior;
   Codex, 2026-07-20.
+
+## 2026-07-20 — Street View `IControl` plugin → adapter-private hosted runtime
+
+- Source: MapLibre — `StreetViewControl` construction, native
+  `addControl`/`removeControl`, and runtime environment credential refresh were
+  implemented in the public first-party plugin module.
+- Files touched: `packages/plugins/src/plugins/maplibre-streetview.ts` before
+  → engine-neutral hosted descriptor; moved concrete control lifecycle to
+  `packages/map/src/maplibre-runtime/streetview.ts`; runtime registry/types and
+  `MapLibreEngine` before → adapter-private native-control context.
+- ArcGIS approach: an ArcGIS implementation can bind the same stable plugin id
+  to a lazily loaded `MapView`-owned street-level panel; application and plugin
+  descriptor code has no access to either MapLibre or an ArcGIS SDK object.
+- What changed: the adapter now constructs/removes the Street View control,
+  repositions it, and handles runtime credential changes. The descriptor
+  preserves its id, title, version, and position while sending lifecycle work
+  through `MapEngineClient.invoke`.
+- Gap / limitation: Street View remains a MapLibre control with provider-owned
+  Google/Mapillary UI; no ArcGIS `MapView` equivalent is selected yet.
+- Workaround: confine the provider-specific control and its DOM lifecycle to
+  the `MapLibreEngine` runtime context. Removal criteria: replace the runtime
+  with an ArcGIS-backed street-level panel with the same plugin-id contract.
+- Tradeoff accepted: refreshing runtime environment credentials now flows
+  through an adapter-owned context, adding an internal indirection but keeping
+  native controls out of public plugin code.
+- Status: partial.
+- Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
+  tests/maplibre-engine.test.ts tests/plugin-manager.test.ts` → 41 passed;
+  `npm run build` → passed.
+- Follow-up: relocate the next self-contained control runtimes and retain the
+  lazy registry as the only MapLibre mounting path; Codex, 2026-07-20.
