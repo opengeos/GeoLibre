@@ -1,0 +1,51 @@
+# Android 16 KB page-size support (Google Play requirement).
+#
+# Since 2025-11-01 Google Play rejects uploads whose native libraries are not
+# 16 KB-aligned when the app targets Android 15+ (GeoLibre targets API 36).
+# Devices with 16 KB memory pages cannot load a .so whose ELF LOAD segments are
+# aligned to the older 4 KB boundary.
+#
+# NDK r28+ emits 16 KB-aligned segments by default, but this repo pins NDK r27
+# (the line Tauri v2 supports — see docs/android.md and .github/workflows/
+# android.yml), so the alignment has to be requested explicitly at link time.
+# `common-page-size` is advisory and `max-page-size` is what actually moves the
+# segment boundaries; the NDK guide sets both for r27 and lower.
+#
+# Scoped per Android target on purpose: these flags must NOT reach the desktop
+# builds. If NDK_HOME is ever bumped to r28+, they become redundant but stay
+# harmless, so removal is optional rather than urgent.
+#
+# Verified in CI by the "Verify 16 KB alignment" step, which fails the build if
+# any packaged .so regresses to 4 KB.
+
+[target.aarch64-linux-android]
+rustflags = [
+  "-C",
+  "link-arg=-Wl,-z,max-page-size=16384",
+  "-C",
+  "link-arg=-Wl,-z,common-page-size=16384",
+]
+
+[target.armv7-linux-androideabi]
+rustflags = [
+  "-C",
+  "link-arg=-Wl,-z,max-page-size=16384",
+  "-C",
+  "link-arg=-Wl,-z,common-page-size=16384",
+]
+
+[target.i686-linux-android]
+rustflags = [
+  "-C",
+  "link-arg=-Wl,-z,max-page-size=16384",
+  "-C",
+  "link-arg=-Wl,-z,common-page-size=16384",
+]
+
+[target.x86_64-linux-android]
+rustflags = [
+  "-C",
+  "link-arg=-Wl,-z,max-page-size=16384",
+  "-C",
+  "link-arg=-Wl,-z,common-page-size=16384",
+]

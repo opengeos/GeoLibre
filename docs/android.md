@@ -36,8 +36,8 @@ export JAVA_HOME=/path/to/jdk-21
 export ANDROID_HOME="$HOME/Android/Sdk"
 yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses
 sdkmanager --sdk_root="$ANDROID_HOME" \
-  "platform-tools" "platforms;android-34" \
-  "build-tools;34.0.0" "ndk;27.3.13750724"
+  "platform-tools" "platforms;android-36" \
+  "build-tools;36.0.0" "ndk;27.3.13750724"
 export NDK_HOME="$ANDROID_HOME/ndk/27.3.13750724"   # Tauri needs NDK_HOME
 
 # 3. Rust + the four Android targets (install rustup if you don't have it)
@@ -48,12 +48,33 @@ rustup target add aarch64-linux-android armv7-linux-androideabi \
 NDK **r27 (LTS)** is the supported line for Tauri v2. Add the four `export`s to
 your shell profile so every session has them.
 
+API **36** (Android 16), not 34: the Tauri v2.11 Android template generates
+`compileSdk = 36` / `targetSdk = 36`, so Gradle needs the matching platform
+installed. It is also Google Play's floor — from **2026-08-31** new apps and
+updates must target API 36 to be accepted.
+
+### 16 KB page sizes
+
+Google Play rejects apps targeting Android 15+ whose native libraries are not
+aligned for 16 KB memory pages, and such libraries fail to load on 16 KB
+devices. NDK r28+ does this by default; **r27 does not**, so
+`src-tauri/.cargo/config.toml` passes `-Wl,-z,max-page-size=16384` (plus
+`common-page-size`) for the four Android targets. The flags are scoped per
+target so they never reach the desktop builds. CI verifies every packaged `.so`
+and fails the build on a regression; to check locally:
+
+```bash
+"$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -l lib.so \
+  | awk '$1 == "LOAD" { print $NF }'   # every value must be >= 0x4000
+```
+
 ## Build
 
 ```bash
 cd apps/geolibre-desktop
 npx tauri android init                          # generate src-tauri/gen/android (once)
 npx tauri android build --apk --split-per-abi    # release APKs, one per ABI (~40 MB each)
+npx tauri android build --aab                    # universal AAB for Google Play
 ```
 
 - `gen/android` is generated (git-ignored) and regenerated on demand.
@@ -65,9 +86,20 @@ npx tauri android build --apk --split-per-abi    # release APKs, one per ABI (~4
 - Output:
   `src-tauri/gen/android/app/build/outputs/apk/<abi>/release/app-<abi>-release-unsigned.apk`.
 
+- Sideload/GitHub-release path: the per-ABI **APKs**.
+- Google Play path: the universal **AAB** (Play generates per-device splits from
+  it). Don't `--split-per-abi` the AAB — Play wants the one bundle.
+
 The app is named **GeoLibre** on Android (the desktop build is "GeoLibre
-Desktop"), set via `src-tauri/tauri.android.conf.json`, which also drops the
-Python backend from the Android bundle.
+Desktop") and uses the package id **`org.geolibre.app`**, both set via
+`src-tauri/tauri.android.conf.json`, which also drops the Python backend from
+the Android bundle.
+
+The Android id is overridden there rather than in `tauri.conf.json` on purpose:
+`identifier` is shared by every platform and also determines the macOS bundle ID,
+the Linux AppStream id, and the webview data directory. Changing it globally
+would orphan existing desktop users' settings and break the Linux/COPR/Homebrew
+packaging, all of which still key off `org.geolibre.desktop`.
 
 ## Signing
 
@@ -98,6 +130,11 @@ published GitHub release (and on demand via the "Run workflow" button) and
 uploads them as the `geolibre-android-release-apks` artifact. It signs with your release keystore when these repository secrets are
 set, and otherwise falls back to a throwaway debug key so the artifact is still
 installable for testing:
+
+It also builds a universal **AAB** and uploads it as the separate
+`geolibre-android-play-aab` artifact — but *only* on runs that have the real
+release keystore, since Play rejects a debug-signed bundle. The AAB is not
+attached to the GitHub Release (an `.aab` is not user-installable).
 
 - `ANDROID_KEYSTORE_BASE64` — `base64 -w0 upload.jks`
 - `ANDROID_KEYSTORE_PASSWORD`
@@ -130,9 +167,43 @@ adb install -r geolibre-arm64.apk
 ```
 
 > If you ever rebuild with a **different** signing key, uninstall the old copy
-> first (`adb uninstall org.geolibre.desktop`) — Android rejects updates whose
-> signature changed. The package id stays `org.geolibre.desktop` even though the
-> visible name is "GeoLibre".
+> first (`adb uninstall org.geolibre.app`) — Android rejects updates whose
+> signature changed. This also applies when moving between a sideloaded APK and
+> the Play build: Play App Signing re-signs with Google's key, so the two are not
+> upgrade-compatible.
+
+## Publishing to Google Play
+
+The build side is covered by the CI workflow above; the rest is Play Console
+onboarding.
+
+1. **Developer account** ($25, one-time). Register as an **organization** rather
+   than a personal account if you can: personal accounts created after
+   2023-11-13 must run a closed test with **12 opted-in testers for 14
+   consecutive days** before they can apply for production access. Organization
+   accounts are exempt.
+2. **Play App Signing.** Upload `upload.jks` as the *upload* key; Google holds
+   the actual app signing key and re-signs each bundle. The repository's
+   `ANDROID_KEYSTORE_*` secrets are that upload key — keep the keystore backed
+   up, since losing it requires a Play support reset.
+3. **Upload the AAB** from the `geolibre-android-play-aab` CI artifact. The
+   `versionCode` is derived from the version in `tauri.conf.json` and must
+   increase on every upload.
+4. **Store listing assets:** 512×512 icon, a **1024×500 feature graphic**, and
+   at least two phone screenshots. Add 7-inch and 10-inch tablet screenshots
+   too — Play down-ranks apps without them, and a GIS workspace is genuinely
+   tablet-appropriate.
+5. **Privacy policy URL** — point at the published [privacy policy](privacy.md).
+6. **Data safety form.** Declare each network destination honestly: geocoding,
+   the AI assistant, basemap/tile fetches, and Google OAuth for Earth Engine.
+   Note which are *transmitted* versus *collected* — GeoLibre does not operate a
+   backend that retains user data, but the form asks per-purpose.
+7. **Content rating** questionnaire and target audience.
+
+Before the first public release, re-read *Known limitations* below: several Add
+Data paths are inert on Android. A reviewer tapping one and getting nothing is a
+one-star review, so consider gating them on mobile the way the sidecar tools
+already are via `isMobile()`.
 
 ## Known limitations / follow-ups
 

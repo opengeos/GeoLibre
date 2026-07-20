@@ -20,9 +20,16 @@ concurrency:
 
 env:
   # Keep these in sync with docs/android.md and the local setup.
-  ANDROID_PLATFORM: "platforms;android-34"
-  ANDROID_BUILD_TOOLS: "build-tools;34.0.0"
-  # NDK r27 LTS — Tauri v2's supported line. Bump deliberately.
+  #
+  # API 36 (Android 16), not 34: the Tauri v2.11 Android template generates
+  # `compileSdk = 36` / `targetSdk = 36`, so Gradle needs the matching platform
+  # installed. It is also the Google Play floor — from 2026-08-31 new apps and
+  # updates must target API 36 or the upload is rejected.
+  ANDROID_PLATFORM: "platforms;android-36"
+  ANDROID_BUILD_TOOLS: "build-tools;36.0.0"
+  # NDK r27 LTS — Tauri v2's supported line. Bump deliberately. Note r27 does
+  # not emit 16 KB-aligned .so files on its own; src-tauri/.cargo/config.toml
+  # passes the linker flags that do, and a CI step below verifies the result.
   ANDROID_NDK_VERSION: "27.3.13750724"
 
 jobs:
@@ -107,13 +114,79 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
-      - name: Sign APKs
+      - name: Build release AAB (universal)
+        # Google Play requires an Android App Bundle, not an APK, for new apps —
+        # Play generates the per-device splits itself from this single artifact.
+        # Deliberately NOT --split-per-abi: that would emit one AAB per ABI, and
+        # Play wants the universal bundle containing all four. The per-ABI APKs
+        # above remain the sideload/GitHub-release path.
+        # The Rust objects are already built by the previous step, so this is
+        # mostly a Gradle repackage rather than a second cross-compile.
+        working-directory: apps/geolibre-desktop
+        run: npx tauri android build --aab
+        env:
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+
+      - name: Verify 16 KB page alignment
+        # Play rejects apps targeting Android 15+ whose native libs are not
+        # 16 KB-aligned. The linker flags live in src-tauri/.cargo/config.toml;
+        # this step is the gate that proves they actually took effect, so a
+        # silent regression (flags dropped, NDK/toolchain change) fails here
+        # rather than at upload time. Checks every packaged .so, not a sample.
+        run: |
+          set -euo pipefail
+          objdump="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
+          checked=0
+          bad=0
+          while IFS= read -r so; do
+            checked=$((checked + 1))
+            # `objdump -p` prints one line per segment ending in `align 2**N`
+            # (readelf wraps LOAD across two lines, which makes it far easier to
+            # parse the wrong column). 2**14 == 16384 is the required minimum.
+            # awk strips the `2**` prefix, not the shell: in a `${x#2**}`
+            # expansion `*` is a glob, so that form silently yields `**14` and
+            # every comparison below becomes a no-op that passes.
+            while read -r exp; do
+              # Treat unparseable output as a failure, never as a pass — a
+              # tooling change that breaks the format must not read as "aligned".
+              case "$exp" in
+                '' | *[!0-9]*)
+                  echo "::error::$so: could not parse segment alignment ('$exp')"
+                  bad=$((bad + 1))
+                  ;;
+                *)
+                  if [ "$exp" -lt 14 ]; then
+                    echo "::error::$so has a LOAD segment aligned to 2**$exp (< 2**14)"
+                    bad=$((bad + 1))
+                  fi
+                  ;;
+              esac
+            done < <("$objdump" -p "$so" |
+              awk '$1 == "LOAD" { split($NF, a, /\*\*/); print a[2] }')
+          done < <(find apps/geolibre-desktop/src-tauri/gen/android \
+            -path '*/release/*' -name '*.so')
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::No .so files found to verify — the check would pass vacuously"
+            exit 1
+          fi
+          if [ "$bad" -gt 0 ]; then
+            echo "::error::$bad segment(s) are not 16 KB-aligned; Play will reject this build"
+            exit 1
+          fi
+          echo "All $checked native libraries are 16 KB-aligned."
+
+      - name: Sign APKs and AAB
         id: sign
-        # With release-keystore secrets set, the APKs are signed for distribution.
-        # Without them, they're signed with a throwaway debug keystore so the CI
-        # artifacts are still installable for testing (do NOT publish those).
-        # Emits signed=release|debug so the release-upload step can refuse to
-        # attach debug-signed APKs to a public GitHub Release.
+        # With release-keystore secrets set, the artifacts are signed for
+        # distribution. Without them, they're signed with a throwaway debug
+        # keystore so the CI APKs are still installable for testing (do NOT
+        # publish those). Emits signed=release|debug so the release-upload step
+        # can refuse to attach debug-signed APKs to a public GitHub Release.
+        #
+        # For Play, the keystore secrets hold the *upload* key, not the app
+        # signing key: Play App Signing re-signs the bundle with the key Google
+        # holds. A debug-signed AAB is useless — Play rejects it — so the AAB is
+        # only produced when the release keystore is present.
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -168,12 +241,37 @@ jobs:
             echo "signed $signed ($(du -h "$signed" | cut -f1))"
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
             -name '*release-unsigned.apk')
-          rm -f "$store_pass_file" "$key_pass_file"
           if [ "$found" -eq 0 ]; then
+            rm -f "$store_pass_file" "$key_pass_file"
             echo "::error::No release-unsigned APKs found"; exit 1
           fi
-          # Emit the outcome only after every APK has signed and verified, so a
-          # downstream always() step can never read signed=release on a failure.
+
+          # AAB for Google Play. jarsigner, not apksigner: apksigner only handles
+          # APKs. Only signed with a real upload key — a debug-signed bundle is
+          # rejected by Play, so shipping one would just be a confusing artifact.
+          if [ "$sign_mode" = release ]; then
+            aab_out="$RUNNER_TEMP/aab"; mkdir -p "$aab_out"
+            aab="$(find apps/geolibre-desktop/src-tauri/gen/android \
+              -name '*.aab' -path '*release*' | head -1)"
+            if [ -z "$aab" ]; then
+              rm -f "$store_pass_file" "$key_pass_file"
+              echo "::error::No release AAB found"; exit 1
+            fi
+            signed_aab="$aab_out/geolibre-android.aab"
+            cp "$aab" "$signed_aab"
+            "$JAVA_HOME/bin/jarsigner" -keystore "$keystore" \
+              -storepass:file "$store_pass_file" -keypass:file "$key_pass_file" \
+              -sigalg SHA256withRSA -digestalg SHA-256 "$signed_aab" "$alias"
+            "$JAVA_HOME/bin/jarsigner" -verify "$signed_aab"
+            echo "signed $signed_aab ($(du -h "$signed_aab" | cut -f1))"
+          else
+            echo "::warning::Skipping AAB signing — no release keystore. The Play upload artifact is not produced on this run."
+          fi
+
+          rm -f "$store_pass_file" "$key_pass_file"
+          # Emit the outcome only after every artifact has signed and verified,
+          # so a downstream always() step can never read signed=release on a
+          # failure.
           echo "signed=$sign_mode" >> "$GITHUB_OUTPUT"
 
       - name: Upload signed APKs
@@ -181,6 +279,19 @@ jobs:
         with:
           name: geolibre-android-release-apks
           path: ${{ runner.temp }}/apks/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Play AAB
+        # Separate artifact from the APKs: this is the file you upload to the
+        # Play Console, and it only exists on release-keystore runs. Deliberately
+        # NOT attached to the GitHub Release — an .aab is not user-installable
+        # and would only confuse people looking for a sideload download.
+        if: steps.sign.outputs.signed == 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: geolibre-android-play-aab
+          path: ${{ runner.temp }}/aab/*.aab
           if-no-files-found: error
           retention-days: 14
 
