@@ -127,27 +127,23 @@ interface SecondaryMapPaneProps {
 
 function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
-  const cesiumAvailable = Boolean(cesiumToken);
+  const cesiumAvailable = true; // ArcGIS 3D is always available keyless
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
   const setSecondaryMapLabel = useAppStore((s) => s.setSecondaryMapLabel);
   const setSecondaryViewKind = useAppStore((s) => s.setSecondaryViewKind);
   const label = useAppStore((s) => s.secondaryMapViews.find((p) => p.id === viewId)?.label ?? "");
   // Absent viewKind means the default 2D map (back-compat with older panes).
-  // Only honor a 3D pane when Cesium is actually available (a token is present);
-  // otherwise a project saved with a globe pane silently opens as the 2D map.
+  // 3D is always available using ArcGIS Maps SDK keyless mode.
   const wantsCesium = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.viewKind === "cesium",
   );
-  const is3d = cesiumAvailable && wantsCesium;
+  const is3d = wantsCesium;
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       {is3d ? (
-        // Key on the token so changing the Cesium Ion token in Settings remounts
-        // the globe: `Cesium.Ion.defaultAccessToken` is applied once at viewer
-        // creation, so without a remount a swapped (e.g. corrected) token would
-        // never take effect on an already-mounted pane.
-        <CesiumCanvas key={cesiumToken} viewId={viewId} ionToken={cesiumToken} />
+        // Key on the viewId so mounting/remounting is tied to layout cell changes
+        <CesiumCanvas key={viewId} viewId={viewId} />
       ) : (
         <SecondaryMapCanvas viewId={viewId} />
       )}
