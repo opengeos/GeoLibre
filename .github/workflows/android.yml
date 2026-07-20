@@ -301,17 +301,28 @@ jobs:
           # APKs would leave the Play artifact unverified.
           #
           # Each archive extracts into its own subdirectory and is checked for a
-          # non-empty result immediately. `unzip || true` is needed because
-          # unzip exits 11 on "no matching files", but that is exactly the
-          # symptom of an archive shipping no native code at all — a worse
-          # regression than misalignment. The aggregate `checked -eq 0` guard
-          # below cannot catch it, since the other archives still contribute
-          # libraries and the total stays non-zero.
+          # non-empty result immediately. Exit 11 ("no matching files") is
+          # tolerated rather than fatal, because it is exactly the symptom of an
+          # archive shipping no native code at all — a worse regression than
+          # misalignment, and one the aggregate `checked -eq 0` guard below
+          # cannot catch, since the other archives still contribute libraries
+          # and the total stays non-zero. Every *other* non-zero exit (a
+          # truncated archive, a full disk) is a real failure and is reported as
+          # itself, so it is not misattributed to "no native libraries".
           archives=0
           while IFS= read -r apk; do
             archives=$((archives + 1))
             dest="$workdir/$archives"
-            unzip -o -q "$apk" 'lib/*/*.so' -d "$dest" || true
+            # `|| status=$?`, not `; status=$?`: under `set -e` the bare form
+            # aborts the step at the failing unzip and never reaches the
+            # assignment, which would turn the tolerated exit 11 into a build
+            # failure.
+            status=0
+            unzip -o -q "$apk" 'lib/*/*.so' -d "$dest" || status=$?
+            if [ "$status" -ne 0 ] && [ "$status" -ne 11 ]; then
+              echo "::error::unzip failed on $apk (exit $status)"
+              exit 1
+            fi
             if [ "$(find "$dest" -name '*.so' 2>/dev/null | wc -l)" -eq 0 ]; then
               echo "::error::$apk contains no native libraries under lib/"
               bad=$((bad + 1))
@@ -327,7 +338,12 @@ jobs:
           while IFS= read -r aab; do
             archives=$((archives + 1))
             dest="$workdir/$archives"
-            unzip -o -q "$aab" 'base/lib/*/*.so' -d "$dest" || true
+            status=0
+            unzip -o -q "$aab" 'base/lib/*/*.so' -d "$dest" || status=$?
+            if [ "$status" -ne 0 ] && [ "$status" -ne 11 ]; then
+              echo "::error::unzip failed on $aab (exit $status)"
+              exit 1
+            fi
             if [ "$(find "$dest" -name '*.so' 2>/dev/null | wc -l)" -eq 0 ]; then
               echo "::error::$aab contains no native libraries under base/lib/"
               bad=$((bad + 1))
