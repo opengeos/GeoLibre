@@ -19,6 +19,8 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-gl-usgs-lidar": async () => (await import("./usgs-lidar")).maplibreUsgsLidarRuntime,
   "maplibre-gl-esri-wayback": async () =>
     (await import("./esri-wayback")).maplibreEsriWaybackRuntime,
+  "maplibre-gl-overture-maps": async () =>
+    (await import("./overture-maps")).maplibreOvertureMapsRuntime,
 };
 
 /**

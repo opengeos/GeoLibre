@@ -805,3 +805,39 @@
   `npm run build` → passed.
 - Follow-up: move Overture Maps onto this stateful hosted-runtime contract;
   Codex, 2026-07-20.
+
+## 2026-07-20 — Overture Maps control/store mirror → stateful lazy MapLibre runtime
+
+- Source: MapLibre — `OvertureMapsControl` owned PMTiles theme layers, native
+  control mounting, panel state, and a bidirectional custom-layer store mirror
+  in the first-party plugin package.
+- Files touched: moved
+  `packages/plugins/src/plugins/maplibre-overture-maps.ts` before →
+  `packages/map/src/maplibre-runtime/overture-maps.ts`; original plugin module
+  before → stateful hosted descriptor; hosted registry, package manifests/
+  lockfile, and boundary fixture updated.
+- ArcGIS approach: a future adapter can build theme-specific `VectorTileLayer`
+  instances or a custom layer view behind an ArcGIS widget, reporting the same
+  serializable theme/release/panel state and normalized store-layer records.
+- What changed: the adapter now owns Overture's native PMTiles layer/control
+  lifecycle, state-event reporting, and desktop text-export bridge. The
+  existing store synchronizer still mirrors control visibility/opacity into
+  normalized external-native custom layers and adopts Layer Panel edits; it
+  remains the application source of truth and data ingest is unchanged.
+- Gap / limitation: Overture's per-theme PMTiles source/layer-id mechanics and
+  its deck/MapLibre rendering implementation have no validated ArcGIS
+  equivalent yet.
+- Workaround: retain the MapLibre-specific reconciler inside the adapter and
+  persist only renderer-neutral state plus store records. Removal criteria: an
+  ArcGIS implementation recreates the theme/release semantics and passes the
+  same store-state/restore tests without MapLibre source ids.
+- Tradeoff accepted: state changes travel through one extra callback and first
+  activation loads a dedicated runtime chunk, trading small bookkeeping and
+  delay for exact project persistence without renderer imports in plugins.
+- Status: partial.
+- Verification: `npm run build` → passed; `node --import tsx --test
+  tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 45 passed; the
+  reviewed boundary ratchet fell from 135 to 134 violations.
+- Follow-up: relocate the next controls that depend on adapter-owned map
+  callbacks, starting with Basemap Control; Codex, 2026-07-20.

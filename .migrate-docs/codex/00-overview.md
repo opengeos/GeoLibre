@@ -93,6 +93,10 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: stateful hosted controls can now pass validated serializable
   project state and the existing text-export host service through typed
   `MapEngineClient` activation commands, without exposing a renderer object.
+- Implemented: Overture Maps now owns its PMTiles control/runtime and
+  bidirectional store mirror inside the MapLibre adapter while the plugin keeps
+  only a validated stateful descriptor; the boundary ratchet is 134 reviewed
+  violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
