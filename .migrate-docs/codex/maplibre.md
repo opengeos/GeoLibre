@@ -1149,3 +1149,50 @@
   engine-boundary baseline fell from 128 to 125 violations.
 - Follow-up: relocate the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — Planetary Computer `PlanetaryComputerControl`/TiTiler raster sources → ArcGIS `WebTileLayer` or `ImageryLayer`
+
+- Source: MapLibre — `maplibre-gl-planetary-computer`'s native
+  `PlanetaryComputerControl`, `STACClient`, `TiTilerClient`, direct
+  `map.addSource`/`addLayer`, and private control layer-manager state used to
+  replay saved raster layers with stable GeoLibre IDs.
+- Files touched: `packages/plugins/src/plugins/maplibre-planetary-computer.ts`
+  before → renderer-neutral lifecycle façade;
+  `packages/map/src/maplibre-runtime/planetary-computer.ts` added for the
+  MapLibre control, STAC/TiTiler clients, native source/layer restore, and
+  store mirror; hosted-runtime registry, workspace manifests/lockfile, boundary
+  fixture, and `tests/planetary-computer-plugin.test.ts` added/updated.
+- ArcGIS approach: a future adapter should create adapter-owned `WebTileLayer`
+  records from TiTiler URLs, using `ImageryLayer` only where the provider
+  exposes a compatible image service. The current app-facing façade needs only
+  the typed hosted lifecycle, so that provider choice remains adapter-private.
+- What changed: opening and closing the Processing-menu panel now activates or
+  deactivates the lazy MapLibre hosted runtime. Project restoration first checks
+  for normalized Planetary Computer store layers, then sends a private hosted
+  activation request to replay them. The adapter retains the prior native
+  control lifecycle, stable-ID restoration, private upstream layer-manager
+  bridge, and bidirectional visible/opacity store synchronization; data ingest
+  and the `GeoLibreLayer` project representation are unchanged.
+- Gap / limitation: ArcGIS has no drop-in equivalent to the upstream Planetary
+  Computer control's STAC search UX, TiTiler URL generation, or undocumented
+  layer-manager registry needed to reattach a saved layer under its original
+  native ID.
+- Workaround: isolate the control and its version-pinned private API usage in a
+  lazy MapLibre runtime while preserving only normalized, store-authoritative
+  raster records at the seam. Removal criteria: replace it when an ArcGIS
+  runtime can search/select the supported STAC sources, create equivalent tile
+  layers, preserve project restore IDs/order/opacity/visibility, and pass the
+  same teardown tests without MapLibre control internals.
+- Tradeoff accepted: the adapter keeps the existing private upstream restore
+  bridge and owns the Planetary Computer dependency, trading ongoing dependency
+  compatibility checks for lazy loading and a strict renderer boundary.
+- Status: partial.
+- Verification: `node --import tsx --test tests/planetary-computer-plugin.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
+  `npm run build` → passed (normal JupyterLite-unavailable notice and browser
+  externalization warnings were non-fatal); the production build emitted a
+  separate `planetary-computer` runtime chunk; the reviewed engine-boundary
+  baseline fell from 125 to 124 violations.
+- Follow-up: relocate the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.

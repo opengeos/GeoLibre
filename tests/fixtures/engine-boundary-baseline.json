@@ -376,10 +376,6 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-planetary-computer.ts",
-    "pattern": "maplibre-gl-planetary-computer"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-raster.ts",
     "pattern": "@deck.gl/core"
   },

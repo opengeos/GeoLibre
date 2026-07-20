@@ -124,6 +124,10 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: GeoAgent now uses the generic hosted-plugin descriptor while its
   native MapLibre/deck.gl/Earth Engine tools and store-backed overlay mirror run
   in a lazy adapter runtime. The boundary ratchet is 125 reviewed violations.
+- Implemented: Planetary Computer's native control, STAC/TiTiler clients, and
+  saved-layer replay now run in a lazy MapLibre adapter runtime. The app only
+  sends hosted lifecycle requests for open, close, and store-layer restoration;
+  the boundary ratchet is 124 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
