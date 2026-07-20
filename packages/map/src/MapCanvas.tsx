@@ -24,6 +24,7 @@ import { createMapController, type MapController } from "./map-controller";
 import { getEngineIdFromUrl } from "./engine/types";
 import type { MapEngine } from "./engine/types";
 import { MapLibreEngine } from "./engine/maplibre-engine";
+import { ArcGISMapEngine } from "./engine/arcgis-map-engine";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
@@ -929,10 +930,13 @@ export const MapCanvas = memo(function MapCanvas({
 
   const engineRef = useRef<MapEngine | null>(null);
 
-  useEffect(() => {
-    if (!containerRef.current || engineRef.current) return;
-
-    const engine = new MapLibreEngine();
+    const engineId = getEngineIdFromUrl();
+    let engine: MapEngine;
+    if (engineId === "arcgis-map") {
+      engine = new ArcGISMapEngine("main");
+    } else {
+      engine = new MapLibreEngine();
+    }
     engineRef.current = engine;
     let destroyed = false;
 
@@ -957,16 +961,18 @@ export const MapCanvas = memo(function MapCanvas({
       const map = mc.getMap();
       if (!map) return;
 
-      map.on("mousemove", (e) => {
-        setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
-      });
-      map.on("mouseout", () => setPointerCoords(null));
-      map.on("error", (event) => {
-        // Cancelled tile fetches are already surfaced (as info) by the
-        // network capture; logging them here would double-count aborts.
-        if (isAbortError(event.error)) return;
-        onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
-      });
+      if (engineId === "maplibre") {
+        map.on("mousemove", (e) => {
+          setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+        });
+        map.on("mouseout", () => setPointerCoords(null));
+        map.on("error", (event) => {
+          // Cancelled tile fetches are already surfaced (as info) by the
+          // network capture; logging them here would double-count aborts.
+          if (isAbortError(event.error)) return;
+          onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
+        });
+      }
 
       const updateView = (event?: { originalEvent?: unknown }) => {
         // While presenting a story map the presenter owns the camera. Syncing its
@@ -978,14 +984,15 @@ export const MapCanvas = memo(function MapCanvas({
         if (useAppStore.getState().ui.storymapPresenting) return;
         setMapView(mc.readView(), Boolean(event?.originalEvent));
       };
-      map.on("moveend", updateView);
+      engine.on("moveend", updateView);
 
       // Persist projection toggles (the GlobeControl) into project preferences so
       // a project reopens with the projection it was saved in. getProjection()
       // returns the configured type, so the internal globe→mercator switch at high
       // zoom (which also fires this event) leaves the stored preference unchanged.
       const updateProjection = () => {
-        const projection = mc.readProjection();
+        if (!("readProjection" in mc)) return;
+        const projection = (mc as any).readProjection();
         // Functional update so a concurrent preference change (zoom-limit edit,
         // loadProject) between read and write is not clobbered by a stale snapshot.
         useAppStore.setState((s) => {
@@ -999,16 +1006,20 @@ export const MapCanvas = memo(function MapCanvas({
           };
         });
       };
-      map.on("projectiontransition", updateProjection);
-      map.on("load", () => {
+      if (engineId === "maplibre") {
+        map.on("projectiontransition", updateProjection);
+      }
+      engine.on("load", () => {
         const state = useAppStore.getState();
         mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
         mc.setBasemapVisible(state.basemapVisible);
         mc.setBasemapOpacity(state.basemapOpacity);
-        mc.highlightFeature(
-          state.layers.find((layer) => layer.id === state.selectedLayerId),
-          resolveHighlightIds(state),
-        );
+        if ("highlightFeature" in mc) {
+          (mc as any).highlightFeature(
+            state.layers.find((layer) => layer.id === state.selectedLayerId),
+            resolveHighlightIds(state),
+          );
+        }
         updateView();
         onControllerReadyRef.current?.();
       });
@@ -1080,17 +1091,27 @@ export const MapCanvas = memo(function MapCanvas({
     const map = controller.current?.getMap();
     if (!map || prevBasemap.current === basemapStyleUrl) return;
     prevBasemap.current = basemapStyleUrl;
-    map.once("style.load", () => {
+    if (getEngineIdFromUrl() === "maplibre") {
+      map.once("style.load", () => {
+        const state = useAppStore.getState();
+        controller.current?.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
+        controller.current?.setBasemapVisible(state.basemapVisible);
+        controller.current?.setBasemapOpacity(state.basemapOpacity);
+        if (controller.current && "highlightFeature" in controller.current) {
+          (controller.current as any).highlightFeature(
+            state.layers.find((layer) => layer.id === state.selectedLayerId),
+            resolveHighlightIds(state),
+          );
+        }
+        onControllerReadyRef.current?.();
+      });
+    } else {
       const state = useAppStore.getState();
       controller.current?.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       controller.current?.setBasemapVisible(state.basemapVisible);
       controller.current?.setBasemapOpacity(state.basemapOpacity);
-      controller.current?.highlightFeature(
-        state.layers.find((layer) => layer.id === state.selectedLayerId),
-        resolveHighlightIds(state),
-      );
       onControllerReadyRef.current?.();
-    });
+    }
     controller.current?.setStyle(basemapStyleUrl);
   }, [basemapStyleUrl]);
 
@@ -1165,6 +1186,7 @@ export const MapCanvas = memo(function MapCanvas({
   }, [layers, selectedLayerId, selectedFeatureId, selectedFeatureIds, zoomToSelectedFeature]);
 
   useEffect(() => {
+    if (getEngineIdFromUrl() !== "maplibre") return;
     const map = controller.current?.getMap();
     const layer = layers.find((item) => item.id === identifyLayerId);
     if (!map || !layer) {
@@ -1305,6 +1327,7 @@ export const MapCanvas = memo(function MapCanvas({
   // photo, without needing the Identify tool. The popup is photo-specific, and
   // its box uses CSS `resize` so the thumbnail enlarges as it is dragged bigger.
   useEffect(() => {
+    if (getEngineIdFromUrl() !== "maplibre") return;
     const map = controller.current?.getMap();
     if (!map) return;
     const photoLayerIds = photoLayerKey ? photoLayerKey.split(",") : [];

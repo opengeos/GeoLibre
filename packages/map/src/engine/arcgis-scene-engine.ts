@@ -86,6 +86,18 @@ export class ArcGISSceneController {
     this.engine.applyView(view);
   }
 
+  highlightFeature(layer: any, highlightIds: any, options?: any) {
+    // No-op stub
+  }
+
+  fitBounds(bounds: [number, number, number, number], options?: any) {
+    // No-op stub
+  }
+
+  readProjection() {
+    return "mercator";
+  }
+
   destroy() {
     this.engine.destroy();
   }
