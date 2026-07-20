@@ -129,7 +129,13 @@ jobs:
           # Tolerant of spacing so a cosmetic change to the Tauri template
           # (`applicationId="x"`, extra indentation) fails the build only when
           # the id is actually wrong, not when the formatting moved.
-          if ! grep -qE "applicationId[[:space:]]*=[[:space:]]*\"$EXPECTED_PACKAGE\"" "$gradle_file"; then
+          #
+          # The dots in the package id are regex metacharacters, so escape them
+          # before interpolating: the point of this step is that the id is
+          # *exactly* right (it is irreversible once uploaded to Play), and an
+          # unescaped pattern would also accept e.g. `orgXgeolibreYapp`.
+          escaped_package="${EXPECTED_PACKAGE//./\\.}"
+          if ! grep -qE "applicationId[[:space:]]*=[[:space:]]*\"$escaped_package\"" "$gradle_file"; then
             echo "::error::applicationId is not $EXPECTED_PACKAGE in $gradle_file"
             grep -nE 'applicationId|namespace' "$gradle_file" || true
             exit 1
@@ -154,8 +160,9 @@ jobs:
 
       - name: Verify built APK package id
         # Second assertion, on the shipped bytes rather than the build script.
-        # `aapt2 dump badging` reads the merged manifest, so this also catches a
-        # package id changed by manifest merging after Gradle configuration.
+        # `aapt2 dump packagename` reads the merged manifest, so this also
+        # catches a package id changed by manifest merging after Gradle
+        # configuration.
         run: |
           set -euo pipefail
           build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
