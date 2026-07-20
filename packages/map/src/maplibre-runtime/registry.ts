@@ -23,6 +23,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
     (await import("./overture-maps")).maplibreOvertureMapsRuntime,
   "maplibre-gl-basemap-control": async () =>
     (await import("./basemap-control")).maplibreBasemapControlRuntime,
+  "geolibre-sun": async () => (await import("./sun")).maplibreSunRuntime,
 };
 
 /**

@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_SUN_SETTINGS,
   advanceSunClock,
+  closeSunPanel,
   getSunSettings,
+  maplibreSunPlugin,
   normalizeSunSettings,
   setSunSettings,
   SUN_SHADE_MAX,
@@ -13,6 +15,7 @@ import {
   sunEquatorialPosition,
   sunPositionAt,
 } from "../packages/plugins/src/plugins/maplibre-sun";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 describe("normalizeSunSettings", () => {
   it("fills defaults for missing/invalid fields", () => {
@@ -100,6 +103,31 @@ describe("advanceSunClock", () => {
     assert.equal(next.getHours(), 0);
     assert.equal(next.getMinutes(), 1);
 
+    setSunSettings(DEFAULT_SUN_SETTINGS);
+  });
+});
+
+describe("Sun Simulation descriptor", () => {
+  it("routes renderer lifecycle and state updates only through MapEngineClient", () => {
+    const commands: Array<{ command: string; input: unknown }> = [];
+    const app = {
+      map: {
+        invoke: (command: string, input: unknown) => {
+          commands.push({ command, input });
+          return true;
+        },
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    maplibreSunPlugin.activate(app);
+    setSunSettings({ shadeOpacity: 0.4 });
+    maplibreSunPlugin.deactivate?.(app);
+
+    assert.deepEqual(
+      commands.map(({ command }) => command),
+      ["hosted-plugin.activate", "hosted-plugin.apply-state", "hosted-plugin.deactivate"],
+    );
+    closeSunPanel();
     setSunSettings(DEFAULT_SUN_SETTINGS);
   });
 });

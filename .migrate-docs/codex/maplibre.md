@@ -921,3 +921,42 @@
   133 to 132 violations.
 - Follow-up: relocate another first-party MapLibre plugin that still reaches a
   native map object; Codex, 2026-07-20.
+
+## 2026-07-20 — Sun Simulation canvas/light renderer → lazy MapLibre runtime
+
+- Source: MapLibre — the Sun Simulation plugin directly used a MapLibre
+  `CanvasSource`, raster layer, `Map#setLight`, style-data listener, and
+  animation frame loop beside its renderer-neutral solar clock and panel state.
+- Files touched: `packages/plugins/src/plugins/maplibre-sun.ts` before →
+  renderer-neutral descriptor/state façade;
+  `packages/map/src/maplibre-runtime/sun.ts` added for native rendering;
+  `packages/core/src/sun-simulation.ts` added for shared pure model; core
+  exports, hosted-runtime registry, tests, and boundary fixture updated.
+- ArcGIS approach: a future ArcGIS adapter can drive
+  `SceneView.environment.lighting` from the shared clock and render the night
+  mask through an adapter-owned `MediaLayer` or graphics overlay, while keeping
+  the same normalized plugin state and hosted-runtime callback.
+- What changed: pure astronomy, settings normalization, and panel subscriptions
+  remain renderer-neutral. The descriptor invokes only typed hosted-plugin
+  commands; the lazy MapLibre runtime owns canvas/source/layer lifecycle,
+  style restoration, scene-light restoration, and RAF playback. Runtime clock
+  updates report normalized settings through the existing typed state callback.
+  No map data is ingested or persisted by this feature.
+- Gap / limitation: ArcGIS has different 2D canvas-overlay and 3D environment
+  lighting models; the `MediaLayer`/graphics implementation has not yet been
+  prototyped or matched for mask resampling and light restoration.
+- Workaround: retain the MapLibre renderer only inside its lazy runtime and
+  share the clock/astronomy contract through `@geolibre/core`. Removal criteria:
+  replace that runtime when an ArcGIS adapter passes the same state restore,
+  animation, style-reload, and previous-light restoration tests.
+- Tradeoff accepted: a small pure module is now shared by core and the adapter,
+  and first activation loads a runtime chunk, trading minor module plumbing and
+  a short delay for strict renderer isolation and reusable ArcGIS input state.
+- Status: partial.
+- Verification: `node --import tsx --test tests/sun-simulation.test.ts
+  tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 58 passed;
+  `npm run build` → passed; the reviewed engine-boundary baseline fell from
+  132 to 131 violations.
+- Follow-up: move another first-party renderer-owning plugin into a lazy
+  adapter runtime; Codex, 2026-07-20.

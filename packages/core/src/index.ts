@@ -103,3 +103,4 @@ export {
   resolveThreeDTilesRequestHeaders,
   stripGoogleMapsApiKeyHeader,
 } from "./three-d-tiles";
+export * from "./sun-simulation";
