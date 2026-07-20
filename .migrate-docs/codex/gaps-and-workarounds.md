@@ -10,3 +10,6 @@
 - 2026-07-20 — The strict boundary begins with 197 reviewed violations; the
   checked-in ratchet permits only monotonic removal until the fixture is empty.
   See [the boundary step](maplibre.md#2026-07-20--public-mapcontroller-dependency-graph--strict-mapengine-contract-and-ratchet).
+- 2026-07-20 — Cesium lacks several capabilities required by 2D consumers;
+  capability checks plus typed errors prevent silent behavior loss. See
+  [the Cesium adapter step](cesium.md#2026-07-20--react-owned-cesiumviewer--lazy-cesiumengine-adapter).

@@ -36,6 +36,17 @@ export interface HitFeature {
 
 export type Unsubscribe = () => void;
 
+export class MapEngineCapabilityError extends Error {
+  readonly name = "MapEngineCapabilityError";
+
+  constructor(
+    readonly engineId: MapEngineId,
+    readonly capability: MapEngineCapability,
+  ) {
+    super(`Map engine "${engineId}" does not support the "${capability}" capability.`);
+  }
+}
+
 export interface MapEngineEventMap {
   readonly load: { readonly reason: "mount" | "style" };
   readonly idle: undefined;

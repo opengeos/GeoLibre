@@ -26,7 +26,7 @@ const descriptors: Readonly<Record<MapEngineId, MapEngineDescriptor>> = {
   },
   cesium: {
     id: "cesium",
-    available: false,
+    available: true,
     capabilities: [],
   },
 };
@@ -47,8 +47,8 @@ export async function loadRegisteredMapEngine(id: MapEngineId): Promise<MapEngin
     const { createMapLibreEngine } = await import("./maplibre-engine");
     return createMapLibreEngine();
   }
-
-  throw new Error(`Map engine "${id}" is not available yet.`);
+  const { createCesiumEngine } = await import("./cesium-engine");
+  return createCesiumEngine();
 }
 
 export function resolvePrimaryEngineId(search: string): "maplibre" {

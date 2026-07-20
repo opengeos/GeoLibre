@@ -8,7 +8,7 @@ Last updated: 2026-07-20
 | MapLibre GL JS | in progress | Strict Phase 0 implementation started on `codex-migrate-to-arcgisjsapi` |
 | deck.gl        | not started | —                    |
 | three.js       | not started | —                    |
-| Cesium         | not started | —                    |
+| Cesium         | in progress | Adapter complete; ArcGIS `SceneView` replacement remains |
 
 Status values: not started · in progress · partial · blocked · done
 
@@ -36,3 +36,6 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: `createMapEngineHandle("maplibre")` is synchronous, queues
   ordered pre-ready mutations, forwards normalized events, and lazy-loads a
   `MapLibreEngine` that keeps `MapController` private to the adapter.
+- Implemented: Cesium viewer/camera/layer ownership is behind `CesiumEngine`;
+  the compatibility canvas now talks only to the seam, and unsupported optional
+  capabilities throw `MapEngineCapabilityError`.

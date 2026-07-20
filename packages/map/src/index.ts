@@ -50,6 +50,11 @@ export type {
   ScreenPoint,
   Unsubscribe,
 } from "./engine/types";
+export { MapEngineCapabilityError } from "./engine/types";
+export {
+  createCesiumEngine,
+  type CesiumEngineOptions,
+} from "./engine/cesium-engine";
 export { createMapEngineHandle } from "./engine/handle";
 export {
   getMapEngineDescriptor,
