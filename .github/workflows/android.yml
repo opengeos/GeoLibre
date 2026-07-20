@@ -178,17 +178,28 @@ jobs:
           bad=0
           workdir="$(mktemp -d)"
           trap 'rm -rf "$workdir"' EXIT
-          # Unpack every release APK's native libs into one tree, then check all.
-          apks=0
+          # Unpack the native libs from every release APK *and* the AAB into one
+          # tree, then check all of them. The AAB matters most — it is what Play
+          # receives — and it stores libraries under `base/lib/<abi>/`, not
+          # `lib/<abi>/`, so it needs its own extract pattern. Checking only the
+          # APKs would leave the Play artifact unverified.
+          archives=0
           while IFS= read -r apk; do
-            apks=$((apks + 1))
-            unzip -o -q "$apk" 'lib/*/*.so' -d "$workdir/$apks" || true
+            archives=$((archives + 1))
+            unzip -o -q "$apk" 'lib/*/*.so' -d "$workdir/$archives" || true
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
             -name '*release*.apk')
-          if [ "$apks" -eq 0 ]; then
+          if [ "$archives" -eq 0 ]; then
             echo "::error::No release APKs found to verify"
             exit 1
           fi
+          # The AAB is only built on release-keystore runs, so its absence here
+          # is not an error — but when present it must be verified too.
+          while IFS= read -r aab; do
+            archives=$((archives + 1))
+            unzip -o -q "$aab" 'base/lib/*/*.so' -d "$workdir/$archives" || true
+          done < <(find apps/geolibre-desktop/src-tauri/gen/android \
+            -path '*/outputs/bundle/*' -name '*.aab')
           while IFS= read -r so; do
             checked=$((checked + 1))
             # Per-file segment count. If objdump errors or emits no LOAD lines
@@ -327,16 +338,33 @@ jobs:
           # rejected by Play, so shipping one would just be a confusing artifact.
           if [ "$sign_mode" = release ]; then
             aab_out="$RUNNER_TEMP/aab"; mkdir -p "$aab_out"
-            # Match on filename only. A `-path '*release*'` filter would repeat
-            # the directory-casing trap that broke the APK check (Gradle writes
-            # `universalRelease/`, not `release/`), and only a release AAB is
-            # ever produced in this tree, so the extra filter buys nothing.
-            aab="$(find apps/geolibre-desktop/src-tauri/gen/android \
-              -name '*.aab' | head -1)"
-            if [ -z "$aab" ]; then
+            # Scope to outputs/bundle/. A bare `-name '*.aab'` is NOT enough:
+            # the build also leaves AGP's internal
+            #   app/build/intermediates/intermediary_bundle/.../intermediary-bundle.aab
+            # so an unscoped match plus `head -1` depends on find's traversal
+            # order and can select the intermediate — signing and uploading the
+            # wrong artifact to Play. Verified locally: two .aab exist after a
+            # successful build.
+            #
+            # `outputs/bundle` are literal lowercase directories, so this does
+            # not reintroduce the camelCase trap (`universalRelease/` is matched
+            # by the wildcard, never spelled out).
+            mapfile -t aab_candidates < <(find \
+              apps/geolibre-desktop/src-tauri/gen/android \
+              -path '*/outputs/bundle/*' -name '*.aab' | sort)
+            if [ "${#aab_candidates[@]}" -eq 0 ]; then
               rm -f "$store_pass_file" "$key_pass_file"
-              echo "::error::No AAB found"; exit 1
+              echo "::error::No AAB found under outputs/bundle/"; exit 1
             fi
+            if [ "${#aab_candidates[@]}" -gt 1 ]; then
+              # Ambiguity must not be resolved by picking one arbitrarily.
+              rm -f "$store_pass_file" "$key_pass_file"
+              echo "::error::Expected exactly one AAB, found ${#aab_candidates[@]}:"
+              printf '::error::  %s\n' "${aab_candidates[@]}"
+              exit 1
+            fi
+            aab="${aab_candidates[0]}"
+            echo "Using AAB: $aab"
             signed_aab="$aab_out/geolibre-android.aab"
             cp "$aab" "$signed_aab"
             "$JAVA_HOME/bin/jarsigner" -keystore "$keystore" \
