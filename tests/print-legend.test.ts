@@ -213,6 +213,26 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches[0].marker, undefined);
   });
 
+  it("suppresses the marker when the point renderer is not single (cluster/heatmap)", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Clustered",
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#123456",
+          markerEnabled: true,
+          markerShape: "star",
+          markerColor: "#ff8800",
+          pointRenderer: "cluster",
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    // The map draws clustered circles, not markers, so the legend falls back to
+    // the fill swatch with no marker (mirrors the layer-sync render gate).
+    assert.equal(legend[0].swatches[0].color, "#123456");
+    assert.equal(legend[0].swatches[0].marker, undefined);
+  });
+
   it("keeps the marker on the primary swatch of a marker + diagram multi-swatch entry", () => {
     const pointGeojson = {
       type: "FeatureCollection",

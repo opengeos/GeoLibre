@@ -125,6 +125,11 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
  */
 function pointMarkerSwatch(style: LayerStyle): LegendSwatch | null {
   if (styleValue(style, "markerEnabled") !== true) return null;
+  // Mirror the map (layer-sync gates the marker overlay on the "single" point
+  // renderer): cluster/heatmap draw clustered circles or a density surface with
+  // no individual markers, so the legend must not advertise a marker the map
+  // isn't drawing. Sibling guard to diagramsSuppressedByPointRenderer.
+  if (styleValue(style, "pointRenderer") !== "single") return null;
   const shape = styleValue(style, "markerShape") as MarkerShape;
   const color = normalizeHexColor(styleValue(style, "markerColor")) ?? "#3b82f6";
   if (shape === "custom") {

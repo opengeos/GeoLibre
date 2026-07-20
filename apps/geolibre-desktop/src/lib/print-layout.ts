@@ -1935,6 +1935,11 @@ function drawLegendMarker(
     const icon = marker.svg ? markerIcons?.get(marker.svg) : undefined;
     if (icon) {
       ctx.drawImage(icon, sx, sy, size, size);
+      // Border for parity with every other swatch (built-in shapes, the
+      // fallback square, fill/ramp squares), so a light or transparent-edged
+      // SVG still reads as a bounded swatch.
+      ctx.strokeStyle = BORDER;
+      ctx.strokeRect(sx, sy, size, size);
       return;
     }
     // SVG not available: fall back to a neutral color square.

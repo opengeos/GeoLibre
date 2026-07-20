@@ -3020,7 +3020,11 @@ export function PrintLayoutDialog({
                                 return (
                                   <span
                                     className="h-3.5 w-3.5 shrink-0 rounded-sm border bg-contain bg-center bg-no-repeat"
-                                    style={{ backgroundImage: `url(${svgSrc})` }}
+                                    // Quote the url(): resolveSvgSource encodes markup with
+                                    // encodeURIComponent, which leaves ( ) unescaped, and an
+                                    // unquoted ) (common in SVG: translate(), rgba(), url(#id))
+                                    // would prematurely close the CSS url() token.
+                                    style={{ backgroundImage: `url("${svgSrc}")` }}
                                   />
                                 );
                               }
