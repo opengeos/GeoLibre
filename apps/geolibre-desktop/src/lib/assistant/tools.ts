@@ -369,10 +369,11 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
         // A projected GeoJSON declares a non-WGS84 CRS via a legacy top-level
         // `crs` member; reproject to WGS84 so MapLibre receives lon/lat. The
         // DuckDB loader is pulled in only when such a member is present.
-        const geojson = projectedGeoJsonCrs(parsed)
+        const sourceCrs = projectedGeoJsonCrs(parsed);
+        const geojson = sourceCrs
           ? await (
               await import("../duckdb-vector-loader")
-            ).reprojectFeatureCollectionToWgs84(parsed)
+            ).reprojectFeatureCollectionToWgs84(parsed, sourceCrs)
           : parsed;
         const name =
           input.name?.trim() || input.url.split("/").pop()?.split("?")[0] || "Remote layer";

@@ -212,12 +212,10 @@ describe("projectedGeoJsonCrs", () => {
     features: [],
   });
 
-  it("returns the projected CRS name from a legacy crs member (URN and short form)", () => {
-    assert.equal(
-      projectedGeoJsonCrs(withCrs("urn:ogc:def:crs:EPSG::26911")),
-      "urn:ogc:def:crs:EPSG::26911",
-    );
+  it("normalizes the projected CRS to EPSG:<code> from the URN and short forms", () => {
+    assert.equal(projectedGeoJsonCrs(withCrs("urn:ogc:def:crs:EPSG::26911")), "EPSG:26911");
     assert.equal(projectedGeoJsonCrs(withCrs("EPSG:3857")), "EPSG:3857");
+    assert.equal(projectedGeoJsonCrs(withCrs("epsg:32617")), "EPSG:32617");
   });
 
   it("returns null for a WGS84/CRS84 member", () => {
@@ -226,9 +224,10 @@ describe("projectedGeoJsonCrs", () => {
     assert.equal(projectedGeoJsonCrs(withCrs("urn:ogc:def:crs:OGC:1.3:CRS84")), null);
   });
 
-  it("returns null when the crs member is absent or malformed", () => {
+  it("returns null when the crs member is absent, malformed, or not an EPSG code", () => {
     assert.equal(projectedGeoJsonCrs({ type: "FeatureCollection", features: [] }), null);
     assert.equal(projectedGeoJsonCrs({ crs: { properties: {} } }), null);
+    assert.equal(projectedGeoJsonCrs(withCrs("ESRI:102100")), null);
     assert.equal(projectedGeoJsonCrs(null), null);
     assert.equal(projectedGeoJsonCrs("not an object"), null);
   });

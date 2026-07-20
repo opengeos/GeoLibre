@@ -27,24 +27,31 @@ export function isGeographicCrs(crs: string | undefined): boolean {
 }
 
 /**
- * Reads the name of a legacy top-level GeoJSON `crs` member when it declares a
- * projected (non-WGS84) CRS, or null otherwise.
+ * Reads a legacy top-level GeoJSON `crs` member and, when it names a projected
+ * (non-WGS84) EPSG CRS, returns it as the canonical `EPSG:<code>` string to
+ * reproject from. Returns null otherwise.
  *
  * RFC 7946 mandates WGS84 for GeoJSON, but GDAL/QGIS still emit the pre-RFC form
  * with a `"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::26911" } }`
  * member and coordinates in the projected CRS. Such coordinates (metres) cannot
- * be rendered by MapLibre and must be reprojected to WGS84 first. A member that
- * is absent, malformed, or already WGS84/CRS84 returns null so the caller keeps
- * the cheap, DuckDB-free path.
+ * be rendered by MapLibre and must be reprojected to WGS84 first. The `EPSG:+`
+ * pattern accepts both the URN form (`urn:ogc:def:crs:EPSG::26911`) and the
+ * short form (`EPSG:26911`), normalizing either to `EPSG:26911`. A member that
+ * is absent, malformed, already WGS84/CRS84, or not an EPSG code returns null so
+ * the caller keeps the cheap, DuckDB-free path.
  *
- * The returned name is handed as-is to `reprojectFeatureCollectionToWgs84`,
- * which parses the EPSG code from it, so both the URN and short forms work.
+ * The returned value is passed as the explicit source CRS to
+ * `reprojectFeatureCollectionToWgs84`, so it is already in the `AUTHORITY:CODE`
+ * form `ST_Transform` expects.
  *
  * @param value - A parsed GeoJSON object that may carry a `crs` member
- * @returns The projected CRS name to reproject from, or null when none is needed
+ * @returns The source CRS as `EPSG:<code>`, or null when no reprojection is needed
  */
 export function projectedGeoJsonCrs(value: unknown): string | null {
   const name = (value as { crs?: { properties?: { name?: unknown } } })?.crs?.properties?.name;
-  if (typeof name !== "string") return null;
-  return isGeographicCrs(name) ? null : name;
+  if (typeof name !== "string" || isGeographicCrs(name)) return null;
+  // Extract the trailing EPSG code from either the URN (`EPSG::26911`) or short
+  // (`EPSG:26911`) form; `:+` tolerates the URN's double colon.
+  const match = name.toUpperCase().match(/EPSG:+(\d+)/);
+  return match ? `EPSG:${match[1]}` : null;
 }

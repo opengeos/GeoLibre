@@ -422,9 +422,10 @@ async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
   // one is present, reproject to WGS84 (the heavy DuckDB loader is pulled in
   // only then). A blank/WGS84 member takes the cheap path below and never loads
   // DuckDB, keeping the common case light.
-  if (projectedGeoJsonCrs(fc)) {
+  const sourceCrs = projectedGeoJsonCrs(fc);
+  if (sourceCrs) {
     const { reprojectFeatureCollectionToWgs84 } = await import("./duckdb-vector-loader");
-    return reprojectFeatureCollectionToWgs84(fc);
+    return reprojectFeatureCollectionToWgs84(fc, sourceCrs);
   }
   // Drop the deprecated `crs` member (RFC 7946 mandates WGS84) so it does not
   // linger on an already-WGS84 collection.
