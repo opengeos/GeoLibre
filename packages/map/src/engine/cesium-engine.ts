@@ -147,6 +147,7 @@ export class CesiumEngine implements MapEngine {
     pickPoint: async (): Promise<LngLat | null> => this.unsupported("interactions"),
     drawBounds: async (): Promise<BBox | null> => this.unsupported("interactions"),
     setDoubleClickZoomEnabled: (): void => this.unsupported("interactions"),
+    suspendNavigation: (): Unsubscribe => this.unsupported("interactions"),
     createMarker: (_options: MapMarkerOptions): MapMarkerHandle => this.unsupported("markers"),
     upsertGeoJsonOverlay: (_spec: GeoJsonOverlaySpec): void =>
       this.unsupported("transient-overlays"),

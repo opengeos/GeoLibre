@@ -224,6 +224,7 @@ export interface MapInteractionPort {
     readonly onPreview?: (bounds: BBox | null) => void;
   }): Promise<BBox | null>;
   setDoubleClickZoomEnabled(enabled: boolean): void;
+  suspendNavigation(): Unsubscribe;
   createMarker(options: MapMarkerOptions): MapMarkerHandle;
   upsertGeoJsonOverlay(spec: GeoJsonOverlaySpec): void;
   setOverlayVisible(id: string, visible: boolean): void;

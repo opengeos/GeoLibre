@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   ArrowDown,
@@ -50,7 +50,7 @@ import {
 interface RecordTourDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
@@ -460,8 +460,8 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     mapControllerRef.current?.camera.applyView(kf, { mode: "fly" });
 
   const handleRecord = async () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || keyframes.length < 2) return;
+    const client = mapControllerRef.current;
+    if (!client || keyframes.length < 2) return;
     setError(null);
     setSavedName(null);
     setSaveCancelled(false);
@@ -472,7 +472,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     abortRef.current = controller;
     try {
       const blob = await recordTour({
-        map,
+        client,
         keyframes,
         fps,
         signal: controller.signal,

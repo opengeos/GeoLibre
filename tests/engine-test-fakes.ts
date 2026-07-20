@@ -95,6 +95,7 @@ export function createTestMapEngine(
       pickPoint: async () => null,
       drawBounds: async () => null,
       setDoubleClickZoomEnabled: () => operations.push("interactions.setDoubleClickZoomEnabled"),
+      suspendNavigation: () => () => operations.push("interactions.restoreNavigation"),
       createMarker: createMarkerHandle,
       upsertGeoJsonOverlay: () => operations.push("interactions.upsertGeoJsonOverlay"),
       setOverlayVisible: () => operations.push("interactions.setOverlayVisible"),

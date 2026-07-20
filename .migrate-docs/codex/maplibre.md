@@ -38,6 +38,40 @@
 - Follow-up: move map/video and tour recording plus inset-map lifecycle into
   the same engine boundary in Task 10.
 
+## 2026-07-20 — MapLibre canvas stream and camera tour → engine capture, camera, and interaction ports
+
+- Source: MapLibre — `canvas.captureStream`, direct `map.getCanvas()` frame
+  reads, `triggerRepaint`, `jumpTo`/`flyTo`/`moveend`, and native navigation
+  handler enable/disable during map and tour video recording.
+- Files touched: `apps/geolibre-desktop/src/lib/{map-recorder.ts,tour-recorder.ts}`
+  before → compatibility re-exports; new
+  `packages/map/src/capture/{map-recorder.ts,tour-recorder.ts}`; recorder
+  dialogs before → `MapEngineClient` consumers; `packages/map/src/engine/{types.ts,maplibre-engine.ts,handle.ts,cesium-engine.ts}`;
+  `packages/map/package.json` and lockfile.
+- ArcGIS approach: a future ArcGIS adapter supplies `MapView.takeScreenshot`
+  through `viewport.capture`, `goTo` through `camera.applyView`/`whenIdle`, and
+  navigation suppression through `interactions.suspendNavigation`.
+- What changed: recorders create a stable output canvas and sample it with
+  `MediaRecorder`, but receive every input frame from the engine rather than a
+  MapLibre canvas. Tour keyframes use engine camera transitions, engine idle
+  waits, and a restoration closure for navigation state. Existing app imports
+  remain thin compatibility re-exports while ownership is in `@geolibre/map`.
+- Gap / limitation: MapLibre can repaint continuously on demand; other engines
+  may deliver screenshots more slowly than the requested video frame rate.
+- Workaround: permit only one capture request at a time and retain the latest
+  output frame until the adapter resolves the next capture. Removal criteria:
+  remove this throttle when the ArcGIS adapter exposes a tested continuous
+  capture stream with equivalent backpressure semantics.
+- Tradeoff accepted: screenshot capture can duplicate frame memory and drop
+  intermediate frames under load, trading peak frame-rate fidelity for a strict
+  renderer boundary and a portable recorder contract.
+- Status: done.
+- Verification: `node --import tsx --test tests/map-recorder.test.ts
+  tests/tour-recorder.test.ts tests/engine-contracts.test.ts` → 59 passed;
+  `npm run build` → passed.
+- Follow-up: migrate the story presentation's inset-map and marker lifecycle
+  through an engine-owned React host in Task 10.
+
 ## 2026-07-20 — Flat native controller surface → typed `MapEngine` capability groups
 
 - Source: MapLibre — the broad `MapController` API and native

@@ -166,6 +166,8 @@ class StableMapEngineHandle implements MapEngine {
     setDoubleClickZoomEnabled: (enabled: boolean): void => {
       this.enqueue((engine) => engine.interactions.setDoubleClickZoomEnabled(enabled));
     },
+    suspendNavigation: (): Unsubscribe =>
+      this.adapter?.interactions.suspendNavigation() ?? (() => undefined),
     createMarker: (options: MapMarkerOptions): MapMarkerHandle =>
       this.createDeferredMarker(options),
     upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => {

@@ -62,6 +62,10 @@ Status values: not started · in progress · partial · blocked · done
   snapshots, while camera bounds/zoom range, graticule inspection, hidden
   transient overlays, and story opacity effects stay behind typed engine ports.
   The boundary ratchet is down to 151 reviewed violations.
+- Implemented: map-video and tour-video recording now build their output canvas
+  from `viewport.capture`; tours use engine camera transitions/idle waits and a
+  restorable navigation suspension. The boundary ratchet is down to 149 reviewed
+  violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

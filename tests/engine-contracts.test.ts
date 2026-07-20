@@ -79,6 +79,7 @@ function createCompleteFake(): MapEngine {
       pickPoint: async () => null,
       drawBounds: async () => null,
       setDoubleClickZoomEnabled: () => undefined,
+      suspendNavigation: () => () => undefined,
       createMarker: createMarkerHandle,
       upsertGeoJsonOverlay: () => undefined,
       setOverlayVisible: () => undefined,

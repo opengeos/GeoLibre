@@ -1,4 +1,4 @@
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   Circle,
@@ -33,7 +33,7 @@ import { RegionSelectOverlay } from "./RegionSelectOverlay";
 interface RecordVideoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
@@ -198,8 +198,8 @@ export function RecordVideoDialog({
   };
 
   const startRecording = async () => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || busy) return;
+    const client = mapControllerRef.current;
+    if (!client || busy) return;
     if (mode === "region" && !region) {
       setError(t("recordVideo.needRegion"));
       return;
@@ -221,12 +221,13 @@ export function RecordVideoDialog({
     // Collect the on-map info panels (HTML, legend, colorbar) to burn in, if the
     // user opted in. Queried live so a panel added/removed since the dialog
     // opened is reflected (the checkbox availability tracks this too).
+    const container = client.viewport.getElement();
     const domOverlays = includePanels
-      ? Array.from(map.getContainer().querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR))
+      ? Array.from(container?.querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR) ?? [])
       : null;
     try {
       const rec = await recordMapCanvas({
-        map,
+        client,
         region: mode === "region" ? region : null,
         caption: hasCaptionText(captionOptions) ? captionOptions : null,
         domOverlays,
@@ -277,7 +278,7 @@ export function RecordVideoDialog({
   // recordings updates the checkbox without reopening the dialog.
   useEffect(() => {
     if (!open) return;
-    const container = mapControllerRef.current?.getMap()?.getContainer();
+    const container = mapControllerRef.current?.viewport.getElement();
     // Observe the control container specifically (not the whole map) to avoid
     // tile/marker churn. A control's own internal DOM updates (e.g. legend
     // swatches) can still fire the callback, but refresh() is a cheap querySelector

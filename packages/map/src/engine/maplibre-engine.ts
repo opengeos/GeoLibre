@@ -336,6 +336,26 @@ export class MapLibreEngine implements MapEngine {
       if (enabled) this.map?.doubleClickZoom.enable();
       else this.map?.doubleClickZoom.disable();
     },
+    suspendNavigation: (): Unsubscribe => {
+      if (!this.map) return () => undefined;
+      const handlers = [
+        this.map.dragPan,
+        this.map.scrollZoom,
+        this.map.boxZoom,
+        this.map.dragRotate,
+        this.map.keyboard,
+        this.map.doubleClickZoom,
+        this.map.touchZoomRotate,
+        this.map.touchPitch,
+      ];
+      const enabled = handlers.map((handler) => handler.isEnabled());
+      for (const handler of handlers) handler.disable();
+      return () => {
+        handlers.forEach((handler, index) => {
+          if (enabled[index]) handler.enable();
+        });
+      };
+    },
     createMarker: (options: MapMarkerOptions): MapMarkerHandle => {
       if (!this.map) throw new Error("MapLibre engine is not mounted.");
       return createMapLibreMarker(this.map, options);

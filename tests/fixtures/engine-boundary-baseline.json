@@ -32,14 +32,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/RecordTourDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/RecordVideoDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/toolbar/constants.ts",
     "pattern": "@geolibre/map#MapController"
   },
@@ -172,10 +164,6 @@
     "pattern": "maplibre-gl-lidar/style.css?inline"
   },
   {
-    "path": "apps/geolibre-desktop/src/lib/map-recorder.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "apps/geolibre-desktop/src/lib/mbtiles.ts",
     "pattern": "maplibre-gl"
   },
@@ -189,10 +177,6 @@
   },
   {
     "path": "apps/geolibre-desktop/src/lib/rtl-text.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/lib/tour-recorder.ts",
     "pattern": "maplibre-gl"
   },
   {
