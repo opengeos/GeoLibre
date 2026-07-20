@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { MapLibreEngine } from "../packages/map/src/engine/maplibre-engine";
 import { ArcGISSceneEngine } from "../packages/map/src/engine/arcgis-scene-engine";
+import { ArcGISMapEngine } from "../packages/map/src/engine/arcgis-map-engine";
 import { createMapController } from "../packages/map/src/map-controller";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 
@@ -149,6 +150,77 @@ describe("Engine Conformance — MapLibreEngine", () => {
 
     it("handles hit testing correctly", async () => {
       const engine = new ArcGISSceneEngine("view1");
+      const mockView = {
+        hitTest: async (point: any) => {
+          return {
+            results: [
+              {
+                type: "graphic",
+                graphic: {
+                  layer: { id: "layer1" },
+                  uid: "feat1",
+                  attributes: { name: "Feature 1" }
+                },
+                mapPoint: { longitude: -122, latitude: 37 }
+              }
+            ]
+          };
+        }
+      };
+      (engine as any).view = mockView;
+
+      const hits = await engine.hitTest({ x: 50, y: 50 });
+      assert.equal(hits.length, 1);
+      assert.equal(hits[0].layerId, "layer1");
+      assert.equal(hits[0].featureId, "feat1");
+      assert.deepEqual(hits[0].properties, { name: "Feature 1" });
+      assert.deepEqual(hits[0].coordinate, [-122, 37]);
+    });
+  });
+
+  describe("ArcGISMapEngine", () => {
+    it("satisfies basic MapEngine contract and properties", () => {
+      const engine = new ArcGISMapEngine("view1");
+      assert.equal(engine.supportsLayer({ id: "test", type: "geojson" } as GeoLibreLayer), true);
+      assert.equal(engine.supportsLayer({ id: "test", type: "3d-tiles" } as GeoLibreLayer), false);
+    });
+
+    it("reads and applies view state correctly", () => {
+      const engine = new ArcGISMapEngine("view1");
+      const calls: any[] = [];
+      const mockView = {
+        center: { longitude: -100, latitude: 40 },
+        zoom: 4,
+        rotation: 0,
+        goTo: (target: any, options: any) => {
+          calls.push({ method: "goTo", target, options });
+        }
+      };
+      (engine as any).view = mockView;
+
+      const view = engine.readView();
+      assert.deepEqual(view.center, [-100, 40]);
+      assert.equal(view.zoom, 4);
+
+      const targetView: MapViewState = {
+        center: [-122, 37],
+        zoom: 10,
+        bearing: 15,
+        pitch: 45,
+      };
+      engine.applyView(targetView);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].method, "goTo");
+      assert.deepEqual(calls[0].target, {
+        target: [-122, 37],
+        zoom: 10,
+        rotation: 15,
+      });
+    });
+
+    it("handles hit testing correctly", async () => {
+      const engine = new ArcGISMapEngine("view1");
       const mockView = {
         hitTest: async (point: any) => {
           return {
