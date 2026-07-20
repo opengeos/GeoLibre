@@ -20,6 +20,7 @@ import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import maplibregl from "maplibre-gl";
 import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre-gl-layer-control";
+import { CollapsedAttributionControl } from "./collapsed-attribution-control";
 import {
   circleLayerId,
   fillExtrusionLayerId,
@@ -2322,9 +2323,7 @@ export class MapController {
     if (!this.map || this.attributionControl || !this.controlVisibility.attribution) {
       return false;
     }
-    this.attributionControl = new maplibregl.AttributionControl({
-      compact: true,
-    });
+    this.attributionControl = new CollapsedAttributionControl();
     this.map.addControl(this.attributionControl, this.controlPositions.attribution);
     return true;
   }
