@@ -42,7 +42,10 @@ const SNAPSHOT_OUT = resolve(
 const GROUPS = [
   ["conversion", "toolbar.item.conversion", (c) => c.startsWith("Conversion")],
   ["hydrology", "toolbar.item.hydrology", (c) => c.startsWith("Hydrology")],
-  ["lidar", "toolbar.item.lidar", (c) => c.startsWith("LiDAR")],
+  // Whitebox catalog tools use "LiDAR"; GeoLibre-authored WASM tools carry the
+  // bare `ToolCategory::Lidar` form "Lidar" (e.g. assign_projection_lidar), so
+  // match both or the geolibre-authored LiDAR tools drop out of the menu.
+  ["lidar", "toolbar.item.lidar", (c) => c.startsWith("LiDAR") || c === "Lidar"],
   ["network", "toolbar.item.network", (c) => c === "Vector - Network Analysis"],
   ["projection", "toolbar.item.projection", (c) => c.startsWith("Projection")],
   ["raster", "toolbar.item.raster", (c) => c === "Raster" || c.startsWith("Raster -")],

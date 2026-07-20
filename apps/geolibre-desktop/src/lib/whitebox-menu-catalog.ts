@@ -248,6 +248,12 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
     labelKey: "toolbar.item.lidar",
     subcategories: [
       {
+        label: "GeoLibre",
+        tools: [
+          { id: "assign_projection_lidar", name: "Assign Projection Lidar" },
+        ],
+      },
+      {
         label: "Analysis Metrics",
         tools: [
           { id: "colourize_based_on_class", name: "Colourize Based On Class" },
@@ -377,9 +383,6 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
       {
         label: "General",
         tools: [
-          { id: "assign_projection_lidar", name: "Assign Projection Lidar" },
-          { id: "assign_projection_raster", name: "Assign Projection Raster" },
-          { id: "assign_projection_vector", name: "Assign Projection Vector" },
           { id: "georeference_raster_from_control_points", name: "Georeference Raster From Control Points" },
           { id: "orthorectification", name: "Orthorectification" },
           { id: "reproject_lidar", name: "Reproject Lidar" },
@@ -395,6 +398,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
       {
         label: "GeoLibre",
         tools: [
+          { id: "assign_projection_raster", name: "Assign Projection Raster" },
           { id: "dem_filter", name: "DEM Filter" },
           { id: "extract_cog_subset", name: "Extract COG Subset" },
           { id: "extract_wms_subset", name: "Extract WMS Subset" },
@@ -950,6 +954,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
       {
         label: "GeoLibre",
         tools: [
+          { id: "assign_projection_vector", name: "Assign Projection Vector" },
           { id: "render_vector_png", name: "Render Vector to PNG" },
         ],
       },
