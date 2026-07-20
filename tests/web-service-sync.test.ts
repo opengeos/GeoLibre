@@ -10,7 +10,7 @@ import {
   type WebServiceAdapter,
   type WebServiceLayerEntry,
   type WebServiceStoreSync,
-} from "../packages/plugins/src/plugins/web-service-sync";
+} from "../packages/map/src/maplibre-runtime/web-service-sync";
 
 const KIND = "test-service";
 

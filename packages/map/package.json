@@ -27,7 +27,11 @@
     "fast-xml-parser": "^5.10.0",
     "html2canvas-pro": "^2.2.4",
     "maplibre-gl": "^5.24.0",
+    "maplibre-gl-enviroatlas": "^0.1.1",
+    "maplibre-gl-fema-wms": "^0.1.2",
     "maplibre-gl-layer-control": "^0.17.4",
+    "maplibre-gl-nasa-earthdata": "^0.1.4",
+    "maplibre-gl-national-map": "^0.1.1",
     "pmtiles": "^4.4.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

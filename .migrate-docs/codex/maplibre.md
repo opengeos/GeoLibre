@@ -597,3 +597,39 @@
   `npm run build` → passed.
 - Follow-up: relocate the next self-contained control runtimes and retain the
   lazy registry as the only MapLibre mounting path; Codex, 2026-07-20.
+
+## 2026-07-20 — Provider control plugins → lazy adapter-owned Web Services runtimes
+
+- Source: MapLibre — FEMA NFHL, NASA Earthdata, EnviroAtlas, and National Map
+  controls created native raster sources/layers and synchronized them with the
+  project store from public plugin modules.
+- Files touched: moved `maplibre-{fema-wms,nasa-earthdata,enviroatlas,national-map}.ts`
+  and `web-service-sync.ts` from `packages/plugins/src/plugins/` to
+  `packages/map/src/maplibre-runtime/`; originals before → hosted descriptors;
+  registry/dependency manifests/lockfile and `web-service-sync` test import
+  updated.
+- ArcGIS approach: future adapter-specific provider panels resolve the same
+  store-layer records to `MapView` layers privately. Their UI code, source
+  objects, and native map operations remain behind the engine rather than a
+  plugin API escape hatch.
+- What changed: all four control lifecycles now dynamically load under the
+  MapLibre adapter and receive native add/remove-control capability only in its
+  private runtime context. The common store synchronizer moved with those
+  runtimes; it still mirrors provider state into the existing store and adopts
+  restored store layers without creating a second source of truth.
+- Gap / limitation: each provider's MapLibre control still owns service-specific
+  native layer state, including source ids and upstream panel behavior.
+- Workaround: retain provider-specific state adapter-private and persist only
+  normalized layer records through `@geolibre/core`. Removal criteria: an ArcGIS
+  provider implementation can rebuild the same records without the MapLibre
+  controls.
+- Tradeoff accepted: four independently split chunks add activation latency and
+  move package ownership dependencies into `@geolibre/map`, in exchange for
+  eliminating renderer imports and native control calls from `@geolibre/plugins`.
+- Status: partial.
+- Verification: `node --import tsx --test tests/web-service-sync.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 55 passed; `npm run build` → passed.
+- Follow-up: move remaining self-contained controls (starting with annotations,
+  basemap, and Overture) and then eliminate the legacy public renderer methods;
+  Codex, 2026-07-20.

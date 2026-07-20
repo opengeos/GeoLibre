@@ -10,6 +10,12 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-layer-control": async () =>
     (await import("./layer-control")).maplibreLayerControlRuntime,
   "maplibre-gl-streetview": async () => (await import("./streetview")).maplibreStreetViewRuntime,
+  "maplibre-gl-fema-wms": async () => (await import("./fema-wms")).maplibreFemaWmsRuntime,
+  "maplibre-gl-national-map": async () =>
+    (await import("./national-map")).maplibreNationalMapRuntime,
+  "maplibre-gl-nasa-earthdata": async () =>
+    (await import("./nasa-earthdata")).maplibreNasaEarthdataRuntime,
+  "maplibre-gl-enviroatlas": async () => (await import("./enviroatlas")).maplibreEnviroAtlasRuntime,
 };
 
 /**

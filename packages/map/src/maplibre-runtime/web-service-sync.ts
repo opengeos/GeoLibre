@@ -16,22 +16,6 @@ import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/
  *   adopt restored project layers the control does not know about yet
  */
 
-/**
- * Plugin ids grouped under the Plugins menu's "Web Services" submenu.
- * The corresponding store-layer `metadata.sourceKind` values live in
- * WEB_SERVICE_SOURCE_KINDS in `@geolibre/map`'s layer-sync, which rebuilds
- * these layers after style reloads.
- */
-export const WEB_SERVICE_PLUGIN_IDS = [
-  "maplibre-gl-fema-wms",
-  "maplibre-gl-nasa-earthdata",
-  "maplibre-gl-enviroatlas",
-  "maplibre-gl-national-map",
-  "maplibre-gl-openaerialmap",
-  "maplibre-gl-source-coop",
-  "maplibre-gl-natural-earth",
-] as const;
-
 /** One active layer reported by a web service control. */
 export interface WebServiceLayerEntry {
   /** Store layer id. Must equal the control's native maplibre layer id. */

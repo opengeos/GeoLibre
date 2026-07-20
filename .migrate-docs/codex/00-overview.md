@@ -78,6 +78,9 @@ Status values: not started · in progress · partial · blocked · done
   registry. Layer Control and Street View are relocated descriptor/runtime
   pairs; a runtime-import failure reaches the existing plugin activation
   rollback.
+- Implemented: FEMA NFHL, NASA Earthdata, EnviroAtlas, and National Map now
+  run as lazy MapLibre provider-control runtimes. Their bidirectional
+  store-sync helper moved with them; store layers remain authoritative.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

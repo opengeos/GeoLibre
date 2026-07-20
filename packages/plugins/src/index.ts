@@ -494,7 +494,7 @@ export {
   type TimeValueKind,
   type TimeWindow,
 } from "./plugins/time-slider-binding";
-export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";
+export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-plugin-ids";
 export {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,
   ROUTE_ANIM_SPEED_MAX,
