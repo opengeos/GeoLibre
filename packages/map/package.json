@@ -47,6 +47,7 @@
     "maplibre-gl-time-slider": "^1.5.0",
     "maplibre-gl-usgs-lidar": "^0.11.1",
     "maplibre-gl-lidar": "^0.16.2",
+    "mapillary-js": "^4.1.2",
     "pmtiles": "^4.4.1",
     "proj4": "^2.20.9",
     "react": "^19.2.7",

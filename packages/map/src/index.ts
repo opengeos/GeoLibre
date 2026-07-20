@@ -24,6 +24,10 @@ export {
 } from "./map-controller";
 export type {
   MapEngineExtensionMap,
+  MapEngineExternalLayerHost,
+  MapEngineExternalNativeLayerRegistration,
+  MapEngineFloatingPanelHost,
+  MapEngineFloatingPanelRegistration,
   MapEngineRightPanelHost,
   MapEngineRightPanelRegistration,
 } from "./engine/extensions";

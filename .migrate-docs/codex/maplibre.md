@@ -1522,3 +1522,42 @@
   reviewed engine-boundary baseline 119 → 118.
 - Follow-up: implement the ArcGIS `GraphicsLayer` grid adapter and compare
   antimeridian/UTM labeling and capture behavior; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre Mapillary vector layers/viewer → ArcGIS `FeatureLayer` coverage and oriented imagery
+
+- Source: MapLibre — the Mapillary plugin directly created vector-tile/GeoJSON
+  sources and line/circle layers, listened to native feature events, mounted a
+  `mapillary-js` WebGL viewer, and registered floating-panel/store-layer hooks
+  from the public plugin package.
+- Files touched: `packages/plugins/src/plugins/maplibre-mapillary.ts` before →
+  renderer-neutral hosted descriptor; `packages/map/src/maplibre-runtime/mapillary.ts`
+  added for native coverage/viewer lifecycle; hosted runtime registration,
+  typed floating-panel/external-layer host contracts, map manifest/lockfile,
+  boundary fixture, and `tests/mapillary-plugin.test.ts` updated.
+- ArcGIS approach: an ArcGIS adapter can represent coverage through a
+  `FeatureLayer`/`VectorTileLayer` and open compatible oriented-imagery media
+  in an adapter-owned panel, while store layer records remain host-owned.
+- What changed: MapLibre sources, layers, pointer handlers, style recovery,
+  Mapillary viewer dynamic import, floating-card DOM, and external native layer
+  registration now live in a lazily loaded MapLibre runtime. The descriptor
+  sends only typed MapEngine lifecycle, position, localized-copy, floating-panel,
+  and store-layer bridge data; it no longer imports a renderer object.
+- Gap / limitation: ArcGIS oriented-imagery workflows do not directly consume
+  Mapillary's public vector-tile coverage plus `mapillary-js` viewer API as a
+  single drop-in control.
+- Workaround: keep the Mapillary-specific implementation adapter-private while
+  its store entries flow through a typed host bridge. Removal criteria: an
+  ArcGIS adapter provides equivalent token handling, coverage selection,
+  selected-sequence highlighting, map recentering, and panel viewer behavior.
+- Tradeoff accepted: the hosted activation contract adds typed floating-panel
+  and external-layer callbacks, but preserves store authority and avoids
+  leaking MapLibre APIs into plugins.
+- Status: partial.
+- Verification: `node --import tsx --test tests/mapillary-plugin.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/engine-boundary.test.ts` → 12 passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser externalization warnings were
+  non-fatal); `git diff --check` → passed; reviewed boundary baseline 118 → 117.
+- Follow-up: implement equivalent ArcGIS coverage/oriented-imagery runtime and
+  validate authenticated coverage selection against the Mapillary workflow;
+  Codex, 2026-07-20.

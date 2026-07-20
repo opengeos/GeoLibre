@@ -154,6 +154,9 @@ Status values: not started · in progress · partial · blocked · done
   `line`/`symbol` layers, control, events, and sidebar panel are a lazy adapter
   runtime. The typed panel host preserves the existing UI and reduces the
   boundary baseline to 118 without changing project state or ingest.
+- Implemented: Mapillary coverage, selection, viewer, and floating-panel DOM
+  are a lazy MapLibre runtime. Typed panel and store-layer bridges keep layer
+  records host-owned and reduce the boundary baseline to 117.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

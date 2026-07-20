@@ -35,6 +35,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-gl-annotations": async () => (await import("./annotations")).maplibreAnnotationsRuntime,
   "maplibre-gl-time-slider": async () => (await import("./time-slider")).maplibreTimeSliderRuntime,
   "maplibre-gl-graticule": async () => (await import("./graticule")).maplibreGraticuleRuntime,
+  "maplibre-gl-mapillary": async () => (await import("./mapillary")).maplibreMapillaryRuntime,
 };
 
 /**
