@@ -1631,3 +1631,30 @@
   browser-externalization warnings were non-fatal.
 - Follow-up: implement the lazy `ArcGISMapEngine`, set its local asset path,
   and register `?engine=arcgis`; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre `center`/`zoom`/`bearing` camera → ArcGIS `MapView` viewpoint
+
+- Source: MapLibre — the shared `MapViewState` is shaped around MapLibre's
+  center, zoom, bearing, and pitch camera values.
+- Files touched: new `packages/map/src/engine/arcgis-camera.ts` and
+  `tests/arcgis-camera.test.ts`.
+- ArcGIS approach: map `center`, `zoom`, and `bearing` to documented ArcGIS
+  `MapView` `center`, `zoom`, and `rotation` properties, keeping conversion as
+  an SDK-free pure module so it is testable and adapter-private.
+- What changed: normalized bearing conversion, defensive MapView-state reads,
+  and an echo comparison now translate between the shared store camera and a
+  serializable ArcGIS snapshot. The adapter preserves the existing store pitch
+  because a 2D MapView has no pitch dimension.
+- Gap / limitation: ArcGIS `MapView` cannot display the MapLibre pitch value;
+  only a future `SceneView` can represent that camera dimension.
+- Workaround: retain the stored pitch when ArcGIS reports a 2D view. Removal
+  criteria: replace the 2D host with a SceneView-capable engine or define an
+  engine-neutral migration policy that explicitly discards pitch.
+- Tradeoff accepted: an ArcGIS 2D pane can preserve, but not visually match, a
+  tilted MapLibre camera; this avoids destructive project-state changes when a
+  user toggles engines.
+- Status: done.
+- Verification: `node --import tsx --test tests/arcgis-camera.test.ts` → 5
+  passed; `git diff --check` → passed.
+- Follow-up: use the conversion in `ArcGISMapEngine` lifecycle/view events and
+  add its conformance harness; Codex, 2026-07-20.

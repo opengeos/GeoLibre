@@ -163,6 +163,8 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: the ArcGIS JavaScript SDK is package-local and its runtime
   workers/styles/locales are staged under the app base path for a lazy opt-in
   `MapView`; MapLibre remains the default engine.
+- Implemented: a pure `MapViewState` ↔ ArcGIS `MapView` camera conversion
+  retains project pitch and detects only floating-point camera echoes.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
