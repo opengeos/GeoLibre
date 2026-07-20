@@ -372,6 +372,9 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setStatisticsToolOpen("kernel-density")}>
                       {t("toolbar.statisticsTool.kernelDensity")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("emerging-hot-spot")}>
+                      {t("toolbar.statisticsTool.emergingHotSpot")}
+                    </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}

@@ -128,7 +128,8 @@ export type StatisticsToolKind =
   | "local-morans-i"
   | "getis-ord-gi"
   | "average-nearest-neighbor"
-  | "kernel-density";
+  | "kernel-density"
+  | "emerging-hot-spot";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the

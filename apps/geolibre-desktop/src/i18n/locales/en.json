@@ -1965,7 +1965,8 @@
       "localMoransI": "Local Moran's I (LISA)",
       "getisOrd": "Getis-Ord Gi* hotspots",
       "averageNearestNeighbor": "Average nearest neighbor",
-      "kernelDensity": "Kernel density (heatmap)"
+      "kernelDensity": "Kernel density (heatmap)",
+      "emergingHotSpot": "Emerging Hot Spot (space-time cube)"
     },
     "rasterTool": {
       "hillshade": "Hillshade",

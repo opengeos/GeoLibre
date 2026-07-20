@@ -6,14 +6,16 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import type { ProcessingAlgorithm, ProcessingContext } from "./types";
+import { parseTimestamp } from "./vector-tools";
 
 /**
  * Spatial Statistics processing tools (issue #342): global and local Moran's I
- * (LISA), Getis-Ord Gi* hotspot analysis, kernel density estimation, and
- * average nearest neighbor. These run entirely client-side in TypeScript — the
- * spatial-weights matrices and statistics are implemented here, with
- * conditional-permutation inference for the autocorrelation measures (matching
- * PySAL's pseudo p-value convention). They are NOT sidecar-capable.
+ * (LISA), Getis-Ord Gi* hotspot analysis, kernel density estimation, average
+ * nearest neighbor, and Emerging Hot Spot Analysis over a space-time cube. These
+ * run entirely client-side in TypeScript — the spatial-weights matrices and
+ * statistics are implemented here, with conditional-permutation inference for
+ * the autocorrelation measures (matching PySAL's pseudo p-value convention).
+ * They are NOT sidecar-capable.
  */
 
 /** O(n²)-bounded tools (weights/nearest-neighbor) cap features to stay snappy. */
@@ -779,12 +781,431 @@ export const kernelDensityTool: ProcessingAlgorithm = {
   },
 };
 
+// -- Emerging Hot Spot Analysis (space-time cube) ----------------------------
+
+/**
+ * Milliseconds per supported time-step unit. Months/years are intentionally
+ * omitted: they are not a fixed duration, and a fishnet cube needs uniform time
+ * steps. Use days/weeks for those ranges.
+ */
+const TIME_STEP_MS: Record<string, number> = {
+  hours: 3_600_000,
+  days: 86_400_000,
+  weeks: 604_800_000,
+};
+
+/** Critical z for a two-sided test at each confidence level. */
+const CONFIDENCE_CRIT: Record<string, number> = {
+  "90": 1.645,
+  "95": 1.96,
+  "99": 2.576,
+};
+
+/** Two-sided alpha matching a confidence level, for the Mann-Kendall trend. */
+const CONFIDENCE_ALPHA: Record<string, number> = {
+  "90": 0.1,
+  "95": 0.05,
+  "99": 0.01,
+};
+
+/** Cap on space-time bins (cols × rows × time steps) to bound the Gi* sweep. */
+const MAX_STCUBE_BINS = 2_000_000;
+/** Cap on input points so aggregation can't exhaust memory. */
+const MAX_STCUBE_POINTS = 1_000_000;
+
+interface MannKendall {
+  s: number;
+  tau: number;
+  z: number;
+  p: number;
+}
+
+/**
+ * Mann-Kendall trend test on an ordered series, with the standard tie
+ * correction to the variance of S and the continuity correction on Z. Returns
+ * S, Kendall's tau (S over the number of pairs), the normal Z, and its
+ * two-sided p-value. A series shorter than 3 has no meaningful trend (Z = 0).
+ */
+function mannKendall(series: number[]): MannKendall {
+  const n = series.length;
+  if (n < 3) return { s: 0, tau: 0, z: 0, p: 1 };
+  let s = 0;
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const diff = series[j] - series[i];
+      s += diff > 0 ? 1 : diff < 0 ? -1 : 0;
+    }
+  }
+  // Tie correction: group equal values and subtract their contribution.
+  const ties = new Map<number, number>();
+  for (const v of series) ties.set(v, (ties.get(v) ?? 0) + 1);
+  let tieTerm = 0;
+  for (const t of ties.values()) tieTerm += t * (t - 1) * (2 * t + 5);
+  const varS = (n * (n - 1) * (2 * n + 5) - tieTerm) / 18;
+  let z = 0;
+  if (varS > 0) {
+    if (s > 0) z = (s - 1) / Math.sqrt(varS);
+    else if (s < 0) z = (s + 1) / Math.sqrt(varS);
+  }
+  const pairs = (n * (n - 1)) / 2;
+  const tau = pairs > 0 ? s / pairs : 0;
+  return { s, tau, z, p: twoSidedP(z) };
+}
+
+/**
+ * Classify a cell's per-time-step Gi* z-score series into an ArcGIS-style
+ * emerging-hot-spot pattern. `crit` is the significance threshold for a bin to
+ * count as a significant hot/cold spot; `mk` is the Mann-Kendall trend of the
+ * z-series; `alpha` its significance. Returns a label and a signed bin code
+ * (positive = hot family, negative = cold family, 0 = no pattern) for styling.
+ */
+function emergingPattern(
+  zSeries: number[],
+  crit: number,
+  mk: MannKendall,
+  alpha: number,
+): { pattern: string; bin: number } {
+  const n = zSeries.length;
+  const hot = zSeries.map((z) => z >= crit);
+  const cold = zSeries.map((z) => z <= -crit);
+  const hotCount = hot.filter(Boolean).length;
+  const coldCount = cold.filter(Boolean).length;
+  const finalHot = hot[n - 1];
+  const finalCold = cold[n - 1];
+  const trendUp = mk.p < alpha && mk.s > 0;
+  const trendDown = mk.p < alpha && mk.s < 0;
+
+  // Length of the significant run ending at the final step (for New/Consecutive).
+  const trailingRun = (flags: boolean[]): number => {
+    let run = 0;
+    for (let i = flags.length - 1; i >= 0 && flags[i]; i--) run++;
+    return run;
+  };
+
+  if (finalHot) {
+    if (coldCount > 0) return { pattern: "Oscillating Hot Spot", bin: 2 };
+    const run = trailingRun(hot);
+    if (hotCount / n >= 0.9) {
+      if (trendUp) return { pattern: "Intensifying Hot Spot", bin: 4 };
+      if (trendDown) return { pattern: "Diminishing Hot Spot", bin: 4 };
+      return { pattern: "Persistent Hot Spot", bin: 3 };
+    }
+    if (run === 1 && hotCount === 1) return { pattern: "New Hot Spot", bin: 1 };
+    if (run === hotCount) return { pattern: "Consecutive Hot Spot", bin: 2 };
+    return { pattern: "Sporadic Hot Spot", bin: 1 };
+  }
+  if (finalCold) {
+    if (hotCount > 0) return { pattern: "Oscillating Cold Spot", bin: -2 };
+    const run = trailingRun(cold);
+    if (coldCount / n >= 0.9) {
+      if (trendDown) return { pattern: "Intensifying Cold Spot", bin: -4 };
+      if (trendUp) return { pattern: "Diminishing Cold Spot", bin: -4 };
+      return { pattern: "Persistent Cold Spot", bin: -3 };
+    }
+    if (run === 1 && coldCount === 1) return { pattern: "New Cold Spot", bin: -1 };
+    if (run === coldCount) return { pattern: "Consecutive Cold Spot", bin: -2 };
+    return { pattern: "Sporadic Cold Spot", bin: -1 };
+  }
+  // Final step is not significant: it may still be a historical hot/cold spot.
+  if (hotCount / n >= 0.9) return { pattern: "Historical Hot Spot", bin: 1 };
+  if (coldCount / n >= 0.9) return { pattern: "Historical Cold Spot", bin: -1 };
+  return { pattern: "No Pattern Detected", bin: 0 };
+}
+
+export const emergingHotSpotTool: ProcessingAlgorithm = {
+  id: "emerging-hot-spot",
+  name: "Emerging Hot Spot (space-time cube)",
+  description:
+    "Build a space-time cube from timestamped points (a fishnet grid × equal time steps) and classify each cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot/cold spot. Runs Getis-Ord Gi* per time slice, then a Mann-Kendall trend test on each cell's Gi* series. Client-side, like ArcGIS Emerging Hot Spot Analysis.",
+  group: "Spatial Statistics",
+  parameters: [
+    {
+      id: "layer",
+      label: "Point layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    {
+      id: "timeField",
+      label: "Time field",
+      type: "field",
+      required: true,
+      description:
+        "Timestamp per point: an ISO date/time string or an epoch (seconds or milliseconds).",
+    },
+    {
+      id: "cellSize",
+      label: "Cell size (km)",
+      type: "number",
+      default: 5,
+      min: 0,
+      step: 0.5,
+      required: true,
+      description: "Edge length of each square spatial bin, in kilometres.",
+    },
+    {
+      id: "timeStep",
+      label: "Time-step interval",
+      type: "number",
+      default: 1,
+      min: 0,
+      step: 1,
+      required: true,
+    },
+    {
+      id: "timeStepUnit",
+      label: "Time-step unit",
+      type: "select",
+      default: "days",
+      options: [
+        { value: "hours", label: "Hours" },
+        { value: "days", label: "Days" },
+        { value: "weeks", label: "Weeks" },
+      ],
+    },
+    {
+      id: "weightField",
+      label: "Weight field (optional)",
+      type: "field",
+      description:
+        "Numeric field summed per space-time bin instead of counting points; blank = count points.",
+    },
+    {
+      id: "confidence",
+      label: "Confidence level",
+      type: "select",
+      default: "95",
+      options: [
+        { value: "90", label: "90%" },
+        { value: "95", label: "95%" },
+        { value: "99", label: "99%" },
+      ],
+      description:
+        "Significance threshold for a bin to count as a hot/cold spot and for the trend.",
+    },
+  ],
+  run: (ctx) => {
+    const layer = getLayer(ctx);
+    if (!layer?.geojson) {
+      ctx.log("Error: layer has no GeoJSON data");
+      return;
+    }
+    const timeField = (ctx.parameters.timeField as string)?.trim();
+    if (!timeField) {
+      ctx.log("Error: a time field is required");
+      return;
+    }
+    const cellSizeKm = Number(ctx.parameters.cellSize);
+    const timeStep = Number(ctx.parameters.timeStep);
+    const unit = (ctx.parameters.timeStepUnit as string) || "days";
+    const stepMs = TIME_STEP_MS[unit] * timeStep;
+    if (!(cellSizeKm > 0)) {
+      ctx.log("Error: cell size must be positive.");
+      return;
+    }
+    if (!(stepMs > 0)) {
+      ctx.log("Error: time-step interval must be positive.");
+      return;
+    }
+    const weightField = (ctx.parameters.weightField as string) || "";
+    const confidence = (ctx.parameters.confidence as string) || "95";
+    const crit = CONFIDENCE_CRIT[confidence] ?? 1.96;
+    const alpha = CONFIDENCE_ALPHA[confidence] ?? 0.05;
+
+    // Collect timed points with a location, timestamp, and (optional) weight.
+    const allCoords = featureCoords(layer.geojson.features);
+    interface TimedEvent {
+      lon: number;
+      lat: number;
+      time: number;
+      weight: number;
+    }
+    const events: TimedEvent[] = [];
+    let skipped = 0;
+    layer.geojson.features.forEach((feature, index) => {
+      const position = allCoords[index];
+      const time = parseTimestamp(feature.properties?.[timeField]);
+      if (!position || time === null) {
+        skipped++;
+        return;
+      }
+      let weight = 1;
+      if (weightField) {
+        const raw = feature.properties?.[weightField];
+        const value = typeof raw === "number" ? raw : Number(raw);
+        if (!Number.isFinite(value)) return;
+        weight = value;
+      }
+      events.push({ lon: position[0], lat: position[1], time, weight });
+    });
+    if (events.length > MAX_STCUBE_POINTS) {
+      ctx.log(
+        `Error: ${events.length} timed points exceeds the ${MAX_STCUBE_POINTS.toLocaleString()}-point limit; filter or split the layer first.`,
+      );
+      return;
+    }
+    if (events.length < 3) {
+      ctx.log(
+        `Error: need at least 3 points with a location and a parseable "${timeField}" (found ${events.length}).`,
+      );
+      return;
+    }
+
+    // Spatial extent → fishnet dimensions (km→degrees via the mid-latitude).
+    let minLon = Infinity;
+    let minLat = Infinity;
+    let maxLon = -Infinity;
+    let maxLat = -Infinity;
+    let minTime = Infinity;
+    let maxTime = -Infinity;
+    for (const e of events) {
+      if (e.lon < minLon) minLon = e.lon;
+      if (e.lon > maxLon) maxLon = e.lon;
+      if (e.lat < minLat) minLat = e.lat;
+      if (e.lat > maxLat) maxLat = e.lat;
+      if (e.time < minTime) minTime = e.time;
+      if (e.time > maxTime) maxTime = e.time;
+    }
+    if (!(maxLon > minLon) || !(maxLat > minLat)) {
+      ctx.log("Error: the points have zero spatial extent (all coincide); a cube needs an area.");
+      return;
+    }
+    const midLat = (minLat + maxLat) / 2;
+    const kmPerDegLat = 111.32;
+    const kmPerDegLon = 111.32 * Math.cos((midLat * Math.PI) / 180) || 1e-6;
+    const cellLon = cellSizeKm / kmPerDegLon;
+    const cellLat = cellSizeKm / kmPerDegLat;
+    const cols = Math.max(1, Math.ceil((maxLon - minLon) / cellLon));
+    const rows = Math.max(1, Math.ceil((maxLat - minLat) / cellLat));
+    const timeSteps = Math.floor((maxTime - minTime) / stepMs) + 1;
+    if (timeSteps < 2) {
+      ctx.log(
+        "Error: the data spans fewer than 2 time steps; reduce the time-step interval so events fall into at least 2 bins.",
+      );
+      return;
+    }
+    const nCells = cols * rows;
+    if (nCells * timeSteps > MAX_STCUBE_BINS) {
+      ctx.log(
+        `Error: ${cols}×${rows} cells × ${timeSteps} time steps = ${(nCells * timeSteps).toLocaleString()} bins exceeds the ${MAX_STCUBE_BINS.toLocaleString()}-bin limit. Increase the cell size or the time-step interval.`,
+      );
+      return;
+    }
+
+    // Aggregate events into the cube: cube[step][cell] = summed count/weight.
+    const cube: Float64Array[] = Array.from({ length: timeSteps }, () => new Float64Array(nCells));
+    const cellTotal = new Float64Array(nCells);
+    for (const e of events) {
+      const col = Math.min(cols - 1, Math.max(0, Math.floor((e.lon - minLon) / cellLon)));
+      const row = Math.min(rows - 1, Math.max(0, Math.floor((e.lat - minLat) / cellLat)));
+      const cell = row * cols + col;
+      const step = Math.min(timeSteps - 1, Math.max(0, Math.floor((e.time - minTime) / stepMs)));
+      cube[step][cell] += e.weight;
+      cellTotal[cell] += e.weight;
+    }
+
+    // Queen-contiguity neighbor offsets on the fishnet (self added in the loop).
+    const gi = Array.from({ length: timeSteps }, () => new Float64Array(nCells));
+    for (let s = 0; s < timeSteps; s++) {
+      const slice = cube[s];
+      // Gi* uses every cell in the study area, so mean/std cover empty cells too.
+      let sum = 0;
+      for (let i = 0; i < nCells; i++) sum += slice[i];
+      const mean = sum / nCells;
+      let sq = 0;
+      for (let i = 0; i < nCells; i++) sq += (slice[i] - mean) ** 2;
+      const std = Math.sqrt(sq / nCells);
+      if (std === 0) continue; // constant slice (e.g. all empty) → z = 0 everywhere
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const i = row * cols + col;
+          let localSum = 0;
+          let w = 0;
+          for (let dr = -1; dr <= 1; dr++) {
+            const r = row + dr;
+            if (r < 0 || r >= rows) continue;
+            for (let dc = -1; dc <= 1; dc++) {
+              const c = col + dc;
+              if (c < 0 || c >= cols) continue;
+              localSum += slice[r * cols + c];
+              w += 1;
+            }
+          }
+          const denom = std * Math.sqrt((nCells * w - w * w) / (nCells - 1));
+          gi[s][i] = denom > 0 ? (localSum - mean * w) / denom : 0;
+        }
+      }
+    }
+
+    // Per cell: Mann-Kendall on the Gi* series, then emerging classification.
+    // Only cells that ever recorded an event are emitted (the meaningful ones).
+    const cells: Feature<Geometry>[] = [];
+    const patternCounts = new Map<string, number>();
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const i = row * cols + col;
+        if (cellTotal[i] <= 0) continue;
+        const zSeries: number[] = [];
+        for (let s = 0; s < timeSteps; s++) zSeries.push(gi[s][i]);
+        const mk = mannKendall(zSeries);
+        const { pattern, bin } = emergingPattern(zSeries, crit, mk, alpha);
+        patternCounts.set(pattern, (patternCounts.get(pattern) ?? 0) + 1);
+        const cellWest = minLon + col * cellLon;
+        const cellEast = cellWest + cellLon;
+        const cellSouth = minLat + row * cellLat;
+        const cellNorth = cellSouth + cellLat;
+        cells.push(
+          turfPolygon(
+            [
+              [
+                [cellWest, cellSouth],
+                [cellEast, cellSouth],
+                [cellEast, cellNorth],
+                [cellWest, cellNorth],
+                [cellWest, cellSouth],
+              ],
+            ],
+            {
+              pattern,
+              pattern_bin: bin,
+              total: Number(cellTotal[i].toFixed(4)),
+              time_steps: timeSteps,
+              mk_tau: Number(mk.tau.toFixed(4)),
+              mk_z: Number(mk.z.toFixed(4)),
+              mk_p: Number(mk.p.toFixed(4)),
+              final_gi_z: Number(zSeries[timeSteps - 1].toFixed(4)),
+            },
+          ),
+        );
+      }
+    }
+
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no location or parseable time.`);
+    ctx.log(
+      `Emerging Hot Spot: ${cols}×${rows} cells × ${timeSteps} time steps; classified ${cells.length} non-empty cell(s).`,
+    );
+    for (const [pattern, n] of [...patternCounts].sort((a, b) => b[1] - a[1])) {
+      ctx.log(`  ${pattern}: ${n}`);
+    }
+    if (!cells.length) {
+      ctx.log("No cells to classify — check the time field and cell size.");
+      return;
+    }
+    ctx.addResultLayer?.(
+      `${layer.name} — Emerging Hot Spot`,
+      featureCollection(cells) as FeatureCollection,
+    );
+  },
+};
+
 export const STATISTICS_TOOLS: ProcessingAlgorithm[] = [
   globalMoransITool,
   localMoransITool,
   getisOrdTool,
   averageNearestNeighborTool,
   kernelDensityTool,
+  emergingHotSpotTool,
 ];
 
 export function getStatisticsTool(id: string): ProcessingAlgorithm | undefined {

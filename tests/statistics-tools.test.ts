@@ -5,6 +5,7 @@ import {
   type ProcessingAlgorithm,
   STATISTICS_TOOLS,
   averageNearestNeighborTool,
+  emergingHotSpotTool,
   getStatisticsTool,
   getisOrdTool,
   globalMoransITool,
@@ -76,11 +77,12 @@ function gradientLine(values: number[]): GeoLibreLayer {
 }
 
 describe("statistics tools registry", () => {
-  it("exposes all five spatial-statistics tools", () => {
+  it("exposes all spatial-statistics tools", () => {
     // The sorted-id comparison below fully pins membership; no separate
     // (fragile) length assertion is needed.
     assert.deepEqual(STATISTICS_TOOLS.map((t) => t.id).sort(), [
       "average-nearest-neighbor",
+      "emerging-hot-spot",
       "getis-ord-gi",
       "global-morans-i",
       "kernel-density",
@@ -268,5 +270,106 @@ describe("kernel density", () => {
       cellSize: 0.25,
     });
     assert.ok(messages.some((m) => m.includes("must be positive")));
+  });
+});
+
+describe("emerging hot spot (space-time cube)", () => {
+  const DAY_MS = 86_400_000;
+  const BASE = 1_600_000_000_000; // fixed epoch (ms) so the cube is deterministic
+
+  /**
+   * A 5×5 fishnet of background cells (one point per cell per day, 5 days),
+   * plus a corner cell at the origin that fills up on days 3 and 4 — a location
+   * that becomes a hot spot only in the final time steps.
+   */
+  function spaceTimeLayer(): GeoLibreLayer {
+    const pts: Array<[number, number, Record<string, unknown>]> = [];
+    for (let day = 0; day < 5; day++) {
+      const t = BASE + day * DAY_MS;
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          pts.push([col * 0.05, row * 0.05, { t }]);
+        }
+      }
+    }
+    // Pile events into the origin cell late in the series.
+    for (let i = 0; i < 8; i++) pts.push([0.001, 0.001, { t: BASE + 3 * DAY_MS }]);
+    for (let i = 0; i < 20; i++) pts.push([0.001, 0.001, { t: BASE + 4 * DAY_MS }]);
+    return pointLayer(pts);
+  }
+
+  const cubeParams = {
+    timeField: "t",
+    cellSize: 5,
+    timeStep: 1,
+    timeStepUnit: "days",
+    confidence: "95",
+  };
+
+  it("builds the cube and flags a late-emerging hot spot", () => {
+    const { results } = run(emergingHotSpotTool, spaceTimeLayer(), cubeParams);
+    assert.equal(results.length, 1);
+    const fc = results[0].geojson;
+    // One polygon per non-empty cell (the 5×5 background; the origin overlaps a
+    // background cell, so it is not a 26th cell).
+    assert.equal(fc.features.length, 25);
+    const props = fc.features[0].properties ?? {};
+    for (const key of ["pattern", "pattern_bin", "mk_z", "mk_p", "mk_tau", "total", "time_steps"]) {
+      assert.ok(key in props, `expected property "${key}"`);
+    }
+    assert.equal(props.time_steps, 5);
+
+    // Exactly one cell — the origin — turns hot, and it holds the most events.
+    const hot = fc.features.filter((f) => (f.properties?.pattern_bin as number) > 0);
+    assert.equal(hot.length, 1);
+    assert.match(String(hot[0].properties?.pattern), /Hot Spot/);
+    const totals = fc.features.map((f) => f.properties?.total as number);
+    assert.equal(hot[0].properties?.total, Math.max(...totals));
+  });
+
+  it("sums a weight field per bin instead of counting", () => {
+    const layer = spaceTimeLayer();
+    // Tag every feature with weight 2; the hot cell's total should double.
+    for (const f of layer.geojson!.features) (f.properties as Record<string, unknown>).w = 2;
+    const { results } = run(emergingHotSpotTool, layer, { ...cubeParams, weightField: "w" });
+    const fc = results[0].geojson;
+    const totals = fc.features.map((f) => f.properties?.total as number);
+    // 33 events in the origin cell × weight 2 = 66.
+    assert.equal(Math.max(...totals), 66);
+  });
+
+  it("errors when the data spans fewer than two time steps", () => {
+    const pts: Array<[number, number, Record<string, unknown>]> = [];
+    for (let row = 0; row < 3; row++)
+      for (let col = 0; col < 3; col++) pts.push([col * 0.05, row * 0.05, { t: BASE }]);
+    const { messages, results } = run(emergingHotSpotTool, pointLayer(pts), cubeParams);
+    assert.equal(results.length, 0);
+    assert.ok(messages.some((m) => m.includes("fewer than 2 time steps")));
+  });
+
+  it("errors when the points have zero spatial extent", () => {
+    const pts: Array<[number, number, Record<string, unknown>]> = [
+      [0, 0, { t: BASE }],
+      [0, 0, { t: BASE + DAY_MS }],
+      [0, 0, { t: BASE + 2 * DAY_MS }],
+    ];
+    const { messages, results } = run(emergingHotSpotTool, pointLayer(pts), cubeParams);
+    assert.equal(results.length, 0);
+    assert.ok(messages.some((m) => m.includes("zero spatial extent")));
+  });
+
+  it("errors without a time field and on too few points", () => {
+    const noTime = run(emergingHotSpotTool, spaceTimeLayer(), { ...cubeParams, timeField: "" });
+    assert.ok(noTime.messages.some((m) => m.includes("time field is required")));
+
+    const few = run(
+      emergingHotSpotTool,
+      pointLayer([
+        [0, 0, { t: BASE }],
+        [0.05, 0.05, { t: BASE + DAY_MS }],
+      ]),
+      cubeParams,
+    );
+    assert.ok(few.messages.some((m) => m.includes("at least 3 points")));
   });
 });

@@ -1980,7 +1980,7 @@ function numberField(props: GeoJsonProperties, field: string | undefined): numbe
  * unheard of in GPS tracks; use ISO-8601 strings if either is ever needed.
  * Returns null when unparseable.
  */
-function parseTimestamp(value: unknown): number | null {
+export function parseTimestamp(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return null;
