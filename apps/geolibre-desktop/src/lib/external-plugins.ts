@@ -1,6 +1,6 @@
 import type {
   GeoLibreAppAPI,
-  GeoLibreExternalPluginManifest,
+  GeoLibreExternalPlugin,
   GeoLibrePlugin,
   PluginManager,
 } from "@geolibre/plugins";
@@ -11,17 +11,13 @@ import {
   putPluginArchive,
   type StoredPluginArchive,
 } from "./plugin-archive-store";
+import { bundleFromZipBytes, type ExternalPluginBundle } from "./plugin-archive-unpack";
+import { isManagedUrlSource, pluginAssetUrlFromSource } from "./plugin-asset-url";
 import {
-  bundleFromZipBytes,
-  type ExternalPluginBundle,
-  isExternalPluginManifest,
-  MAX_PLUGIN_ASSET_BYTES,
-} from "./plugin-archive-unpack";
-import {
-  isManagedUrlSource,
-  pluginAssetUrlFromSource,
-  resolvePluginAssetUrl,
-} from "./plugin-asset-url";
+  assertExternalPlugin,
+  loadPluginUrlBundle,
+  validateManifestMatchesPlugin,
+} from "./external-plugin-validation";
 import {
   computePluginBundleHash,
   pinPluginBundle,
@@ -246,96 +242,7 @@ async function loadPluginUrlBundles(
   return bundles;
 }
 
-async function loadPluginUrlBundle(
-  manifestUrl: string,
-  signal?: AbortSignal,
-): Promise<ExternalPluginBundle> {
-  // Revalidate every request (manifest, entry, style) instead of serving from
-  // the HTTP cache. A static host can hand the manifest and the entry very
-  // different cache lifetimes (e.g. GitHub Pages / Fastly cache JSON for ~10
-  // minutes but JS for hours), so after a version bump the loader can otherwise
-  // read a fresh plugin.json against a stale, still-cached entry and reject the
-  // pair with "Exported plugin version does not match plugin.json." Forcing
-  // revalidation keeps the manifest and entry version-consistent. `no-cache`
-  // still allows a cheap 304 when nothing changed, so this is not a full
-  // re-download on every load.
-  const manifestResponse = await fetch(manifestUrl, {
-    cache: "no-cache",
-    signal,
-  });
-  if (!manifestResponse.ok) {
-    throw new Error(`Could not fetch plugin manifest: HTTP ${manifestResponse.status}`);
-  }
-
-  const manifest = (await manifestResponse.json()) as unknown;
-  if (!isExternalPluginManifest(manifest)) {
-    throw new Error("Plugin manifest is invalid.");
-  }
-
-  const entryUrl = resolvePluginAssetUrl(manifestUrl, manifest.entry);
-  const styleUrl = manifest.style ? resolvePluginAssetUrl(manifestUrl, manifest.style) : null;
-  const [entrySource, styleSource] = await Promise.all([
-    fetchPluginText(entryUrl, "plugin entry", signal),
-    styleUrl ? fetchPluginText(styleUrl, "plugin style", signal) : Promise.resolve(null),
-  ]);
-
-  return {
-    archiveName: manifestUrl,
-    sourceUrl: manifestUrl,
-    manifest,
-    entrySource,
-    styleSource,
-  };
-}
-
-async function fetchPluginText(url: string, label: string, signal?: AbortSignal): Promise<string> {
-  // `no-cache` revalidates so the entry/style stay in sync with the manifest
-  // version even when a static host caches them for much longer than the
-  // manifest (see loadPluginUrlBundle).
-  const response = await fetch(url, { cache: "no-cache", signal });
-  if (!response.ok) {
-    throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
-  }
-
-  // Fast-fail when the server declares the size; the streaming reader below
-  // is the real enforcement for responses without a content-length header.
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_PLUGIN_ASSET_BYTES) {
-    throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > MAX_PLUGIN_ASSET_BYTES) {
-      throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
-    }
-    return text;
-  }
-
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > MAX_PLUGIN_ASSET_BYTES) {
-      await reader.cancel();
-      throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
-    }
-    chunks.push(value);
-  }
-
-  const merged = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(merged);
-}
-
-async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLibrePlugin> {
+async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLibreExternalPlugin> {
   const moduleUrl = URL.createObjectURL(
     new Blob([bundle.entrySource], { type: "text/javascript" }),
   );
@@ -346,9 +253,7 @@ async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLi
       plugin?: unknown;
     };
     const candidate = module.default ?? module.plugin;
-    if (!isGeoLibrePlugin(candidate)) {
-      throw new Error("Entry must export a GeoLibrePlugin as default or plugin.");
-    }
+    assertExternalPlugin(candidate);
     validateManifestMatchesPlugin(bundle.manifest, candidate);
     if (candidate.activeByDefault) {
       throw new Error("External plugins cannot use activeByDefault.");
@@ -356,33 +261,6 @@ async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLi
     return candidate;
   } finally {
     URL.revokeObjectURL(moduleUrl);
-  }
-}
-
-function isGeoLibrePlugin(value: unknown): value is GeoLibrePlugin {
-  if (!value || typeof value !== "object") return false;
-  const plugin = value as Partial<GeoLibrePlugin>;
-  return (
-    typeof plugin.id === "string" &&
-    typeof plugin.name === "string" &&
-    typeof plugin.version === "string" &&
-    typeof plugin.activate === "function" &&
-    typeof plugin.deactivate === "function"
-  );
-}
-
-function validateManifestMatchesPlugin(
-  manifest: GeoLibreExternalPluginManifest,
-  plugin: GeoLibrePlugin,
-): void {
-  if (plugin.id !== manifest.id) {
-    throw new Error("Exported plugin id does not match plugin.json.");
-  }
-  if (plugin.name !== manifest.name) {
-    throw new Error("Exported plugin name does not match plugin.json.");
-  }
-  if (plugin.version !== manifest.version) {
-    throw new Error("Exported plugin version does not match plugin.json.");
   }
 }
 

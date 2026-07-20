@@ -137,7 +137,7 @@ export class PluginManager {
     const plugin = this.plugins.get(id);
     if (!plugin || this.active.has(id)) return;
     const scopedApp = scopeAppToPlugin(app, id);
-    const activated = plugin.activate(scopedApp);
+    const activated = plugin.activate(scopedApp, {});
     if (activated === false) return;
     const generation = this.nextActivationGeneration(id);
     this.active.add(id);
@@ -412,7 +412,9 @@ export class PluginManager {
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
       const scopedApp = scopeForRestore(id);
-      const activated = plugin.activate(scopedApp);
+      const activated = plugin.activate(scopedApp, {
+        collapsed: !plugin.restoresPanelCollapseState,
+      });
       if (activated === false) continue;
       const generation = this.nextActivationGeneration(id);
       this.active.add(id);

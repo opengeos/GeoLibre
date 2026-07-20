@@ -1,6 +1,15 @@
 import type { GeoLibreLayer, LayerStyle } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
+import { GEOLIBRE_PLUGIN_API_VERSION } from "./api-version";
+
+export { GEOLIBRE_PLUGIN_API_VERSION } from "./api-version";
+
+/** Context supplied when a plugin is activated or restored from a project. */
+export interface GeoLibrePluginActivationContext {
+  /** Whether project restore requests a control/panel start collapsed. */
+  readonly collapsed?: boolean;
+}
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -612,6 +621,8 @@ export interface GeoLibreRightPanelRegistration {
 }
 
 export interface GeoLibrePlugin {
+  /** Built-ins omit this transitional field; external loaders require v2. */
+  apiVersion?: typeof GEOLIBRE_PLUGIN_API_VERSION;
   id: string;
   name: string;
   version: string;
@@ -632,7 +643,10 @@ export interface GeoLibrePlugin {
    * deferring the expand by more than one tick would defeat that and leave the
    * panel open after restore.
    */
-  activate: (app: GeoLibreAppAPI) => boolean | void | Promise<boolean | void>;
+  activate: (
+    app: GeoLibreAppAPI,
+    context?: GeoLibrePluginActivationContext,
+  ) => boolean | void | Promise<boolean | void>;
   deactivate: (app: GeoLibreAppAPI) => void;
   /**
    * Called once per URL context after the map and plugins are ready.
@@ -665,7 +679,13 @@ export interface GeoLibrePlugin {
   restoresPanelCollapseState?: boolean;
 }
 
+/** Public external-plugin shape, validated before its entry module executes. */
+export interface GeoLibreExternalPlugin extends GeoLibrePlugin {
+  apiVersion: typeof GEOLIBRE_PLUGIN_API_VERSION;
+}
+
 export interface GeoLibreExternalPluginManifest {
+  apiVersion: typeof GEOLIBRE_PLUGIN_API_VERSION;
   id: string;
   name: string;
   version: string;

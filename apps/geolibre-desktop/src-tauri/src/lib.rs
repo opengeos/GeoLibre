@@ -108,6 +108,8 @@ struct JupyterProcess {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExternalPluginManifest {
+    #[serde(default)]
+    api_version: Option<u32>,
     id: String,
     name: String,
     version: String,
@@ -1302,6 +1304,9 @@ fn read_zip_text_entry<R: Read + std::io::Seek>(
 }
 
 fn validate_external_plugin_manifest(manifest: &ExternalPluginManifest) -> Result<(), String> {
+    if manifest.api_version != Some(2) {
+        return Err("Plugin requires Plugin API 2.".to_string());
+    }
     validate_required_manifest_string("id", &manifest.id)?;
     validate_required_manifest_string("name", &manifest.name)?;
     validate_required_manifest_string("version", &manifest.version)?;
@@ -3068,7 +3073,7 @@ mod tests {
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         find_zip_manifest_path, is_allowed_local_vector_path, is_allowed_project_path,
         is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
-        resolve_sidecar_in_resource_dir,
+        resolve_sidecar_in_resource_dir, validate_external_plugin_manifest, ExternalPluginManifest,
     };
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
@@ -3321,6 +3326,30 @@ mod tests {
     #[test]
     fn returns_none_without_a_manifest() {
         assert_eq!(manifest_path(&["dist/plugin.js"]), None);
+    }
+
+    fn external_plugin_manifest(api_version: Option<u32>) -> ExternalPluginManifest {
+        ExternalPluginManifest {
+            api_version,
+            id: "demo-plugin".to_string(),
+            name: "Demo Plugin".to_string(),
+            version: "1.0.0".to_string(),
+            entry: "dist/plugin.js".to_string(),
+            description: None,
+            style: None,
+        }
+    }
+
+    #[test]
+    fn external_plugins_require_api_version_two() {
+        for api_version in [None, Some(1), Some(3)] {
+            assert_eq!(
+                validate_external_plugin_manifest(&external_plugin_manifest(api_version))
+                    .unwrap_err(),
+                "Plugin requires Plugin API 2."
+            );
+        }
+        assert!(validate_external_plugin_manifest(&external_plugin_manifest(Some(2))).is_ok());
     }
 
     #[test]

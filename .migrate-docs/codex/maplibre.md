@@ -484,3 +484,47 @@
   `ProcessingDialog` hook warning); `git diff --check` → passed.
 - Follow-up: migrate capture, print/graticule inspection, recording, and
   offline-style packaging through Task 10 engine ports.
+
+## 2026-07-20 — MapLibre-native external Plugin API v1 → versioned Plugin API v2 gate
+
+- Source: MapLibre — external `GeoLibreAppAPI.getMap`, MapLibre `IControl`,
+  `addMapControl`/`removeMapControl`, `getDeckGL`, and
+  `getMaplibreGlRaster` access previously available to unversioned external
+  plugin archives and URL manifests.
+- Files touched: `packages/plugins/src/{api-version.ts,types.ts,plugin-manager.ts}`
+  before → explicit v2 external manifest/export and activation context;
+  `apps/geolibre-desktop/src/lib/{plugin-archive-unpack.ts,external-plugins.ts}`
+  before → pre-execution validation; new
+  `external-plugin-validation.ts`; `apps/geolibre-desktop/src-tauri/src/lib.rs`
+  before → filesystem-manifest validation; `docs/plugin-api.md` and plugin
+  validation tests.
+- ArcGIS approach: expose `MapEngineClient` as the external renderer surface so
+  a future `MapView` or `SceneView` adapter supplies camera, layer, viewport,
+  and interaction behavior without an ArcGIS or MapLibre object crossing the
+  plugin boundary.
+- What changed: browser archive, URL, and Tauri filesystem loaders reject a
+  missing, v1, or unknown API version with `Plugin requires Plugin API 2.`
+  before fetching an entry source or executing entry code. Exported plugin and
+  manifest versions must agree. `PluginManager` supplies an activation context
+  that preserves the existing `restoresPanelCollapseState` behavior.
+- Gap / limitation: first-party plugin runtimes still use the legacy internal
+  `GeoLibreAppAPI` while their concrete MapLibre/deck.gl implementations are
+  relocated beneath the adapter in the following tasks; the public type cannot
+  yet be stripped without breaking those preserved runtimes.
+- Workaround: version-gate all external plugins immediately and maintain the
+  legacy surface only for in-repository first-party runtime migration. Removal
+  criteria: every first-party renderer runtime is hosted adapter-side and the
+  public API type can contain only store/UI helpers plus `MapEngineClient`.
+- Tradeoff accepted: v1 external plugins now fail rather than receiving a
+  compatibility native-map shim, and first-party runtime relocation is
+  deliberately staged; this favors a hard external seam over short-term
+  third-party compatibility.
+- Status: partial.
+- Verification: `node --import tsx --test tests/plugin-manager.test.ts
+  tests/plugin-archive-unpack.test.ts tests/plugin-integrity.test.ts
+  tests/external-plugin-assets.test.ts tests/external-plugin-api-version.test.ts`
+  → 54 passed; `cargo test --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml
+  external_plugins_require_api_version_two` → 1 passed; `npm run build` → passed.
+- Follow-up: move the concrete built-in MapLibre control runtimes to the lazy
+  adapter-owned hosted-runtime registry, then remove the legacy public native
+  API types; Codex, 2026-07-20.

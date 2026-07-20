@@ -21,6 +21,40 @@ function testPlugin(patch: Partial<GeoLibrePlugin> = {}): GeoLibrePlugin {
   };
 }
 
+it("passes the persisted-collapse intent to plugin activation during project restore", () => {
+  const contexts: Array<{ readonly collapsed?: boolean }> = [];
+  const manager = new PluginManager();
+  manager.register(
+    testPlugin({
+      id: "restored-context",
+      activate: (_app, context) => {
+        contexts.push(context);
+      },
+    }),
+  );
+  manager.register(
+    testPlugin({
+      id: "self-restored-context",
+      restoresPanelCollapseState: true,
+      activate: (_app, context) => {
+        contexts.push(context);
+      },
+    }),
+  );
+
+  manager.restoreProjectState(
+    {
+      manifestUrls: [],
+      activePluginIds: ["restored-context", "self-restored-context"],
+      mapControlPositions: {},
+      settings: {},
+    },
+    app,
+  );
+
+  assert.deepEqual(contexts, [{ collapsed: true }, { collapsed: false }]);
+});
+
 describe("PluginManager URL parameters", () => {
   it("runs matching active plugin URL parameter handlers once per context", async () => {
     const calls: string[] = [];

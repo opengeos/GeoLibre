@@ -1,16 +1,70 @@
 # GeoLibre Plugin API
 
-## Interface
+## Plugin API v2 (external plugins)
+
+External plugins must declare and export Plugin API version 2. GeoLibre rejects
+missing, v1, and unknown versions before fetching or executing an entry module
+with `Plugin requires Plugin API 2.` This is an intentional compatibility
+break: republish v1 plugins against the engine-neutral API; v1 packages do not
+load.
+
+```json
+{
+  "apiVersion": 2,
+  "id": "example-plugin",
+  "name": "Example Plugin",
+  "version": "1.0.0",
+  "entry": "dist/plugin.js"
+}
+```
+
+```typescript
+import type { MapEngineClient } from "@geolibre/map";
+
+export const GEOLIBRE_PLUGIN_API_VERSION = 2 as const;
+
+export interface GeoLibrePlugin {
+  apiVersion: typeof GEOLIBRE_PLUGIN_API_VERSION;
+  id: string;
+  name: string;
+  version: string;
+  activate(
+    app: GeoLibreAppAPI,
+    context: { collapsed?: boolean },
+  ): boolean | void | Promise<boolean | void>;
+  deactivate(app: GeoLibreAppAPI): void;
+}
+
+export interface GeoLibreAppAPI {
+  map: MapEngineClient;
+  // Store-backed layer/basemap/file helpers and UI panel/menu registration
+  // remain available. No renderer SDK object is exposed.
+}
+```
+
+### Migrating v1 code
+
+| Plugin API v1                           | Plugin API v2 replacement                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| `app.getMap()`                          | `app.map.camera`, `app.map.layers`, `app.map.viewport`, and `app.map.interactions`    |
+| `addMapControl` / `removeMapControl`    | Register a host panel/menu, or use a documented engine extension supplied by the host |
+| `getDeckGL()` / `getMaplibreGlRaster()` | No external renderer-module access; request an engine-neutral host capability instead |
+| native-layer registration               | Store-backed `addGeoJsonLayer`, tile, WMTS, WMS, and COG helpers                      |
+
+`context.collapsed` is supplied during project restore. A plugin that persists
+its own collapse state declares `restoresPanelCollapseState`; it then receives
+`collapsed: false` and remains responsible for restoring that saved state.
+
+## Internal legacy migration reference
+
+The remainder of this reference describes first-party wrappers being moved
+behind `@geolibre/map`. It is not a supported external Plugin API v2 surface.
 
 ```typescript
 import type { FeatureCollection } from "geojson";
 import type { IControl } from "maplibre-gl";
 
-export type GeoLibreMapControlPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type GeoLibreBuiltInMapControl =
   | "navigation"
@@ -32,10 +86,7 @@ export interface GeoLibrePlugin {
   urlParameterNames?: string[];
   activate: (app: GeoLibreAppAPI) => boolean | void;
   deactivate: (app: GeoLibreAppAPI) => void;
-  handleUrlParameters?: (
-    app: GeoLibreAppAPI,
-    params: URLSearchParams,
-  ) => void | Promise<void>;
+  handleUrlParameters?: (app: GeoLibreAppAPI, params: URLSearchParams) => void | Promise<void>;
   getMapControlPosition?: () => GeoLibreMapControlPosition;
   setMapControlPosition?: (
     app: GeoLibreAppAPI,
@@ -57,50 +108,26 @@ export interface GeoLibreDeckGL {
 
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
-  addGeoJsonLayer: (
-    name: string,
-    data: FeatureCollection,
-    sourcePath?: string,
-  ) => string;
+  addGeoJsonLayer: (name: string, data: FeatureCollection, sourcePath?: string) => string;
   // Native raster/tile layers (see "Raster and tile layers" below). Each
   // returns the new layer's id and the layer appears in the Layers panel and
   // persists with the project, like addGeoJsonLayer does for vector data.
-  addTileLayer?: (
-    name: string,
-    url: string,
-    options?: GeoLibreTileLayerOptions,
-  ) => string;
-  addWmtsLayer?: (
-    name: string,
-    url: string,
-    options?: GeoLibreTileLayerOptions,
-  ) => string;
+  addTileLayer?: (name: string, url: string, options?: GeoLibreTileLayerOptions) => string;
+  addWmtsLayer?: (name: string, url: string, options?: GeoLibreTileLayerOptions) => string;
   addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
   // Native client-side COG (reads the GeoTIFF directly; band/rescale/colormap/
   // nodata controls). Resolves with the new layer's id (see "Raster and tile
   // layers" below).
-  addCogLayer?: (
-    name: string,
-    url: string,
-    options?: GeoLibreCogLayerOptions,
-  ) => Promise<string>;
+  addCogLayer?: (name: string, url: string, options?: GeoLibreCogLayerOptions) => Promise<string>;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => import("maplibre-gl").Map | null;
-  addMapControl: (
-    control: IControl,
-    position?: GeoLibreMapControlPosition,
-  ) => boolean;
+  addMapControl: (control: IControl, position?: GeoLibreMapControlPosition) => boolean;
   removeMapControl: (control: IControl) => void;
-  setBuiltInMapControlVisible: (
-    control: GeoLibreBuiltInMapControl,
-    visible: boolean,
-  ) => boolean;
-  getBuiltInMapControlPosition: (
-    control: GeoLibreBuiltInMapControl,
-  ) => GeoLibreMapControlPosition;
+  setBuiltInMapControlVisible: (control: GeoLibreBuiltInMapControl, visible: boolean) => boolean;
+  getBuiltInMapControlPosition: (control: GeoLibreBuiltInMapControl) => GeoLibreMapControlPosition;
   setBuiltInMapControlPosition: (
     control: GeoLibreBuiltInMapControl,
     position: GeoLibreMapControlPosition,
@@ -134,7 +161,14 @@ export interface GeoLibreToolbarMenu {
 }
 
 export type GeoLibreToolbarMenuItem =
-  | { type?: "action"; id: string; label: string; icon?: string; disabled?: boolean; onSelect: () => void }
+  | {
+      type?: "action";
+      id: string;
+      label: string;
+      icon?: string;
+      disabled?: boolean;
+      onSelect: () => void;
+    }
   | { type: "submenu"; id: string; label: string; icon?: string; items: GeoLibreToolbarMenuItem[] }
   | { type: "separator"; id?: string };
 
@@ -217,12 +251,13 @@ manager.activate("my-plugin", appApi);
 | `maplibre-gl-streetview`      | Adds street view controls                                                                                           |
 | `maplibre-gl-swipe`           | Adds map swipe controls                                                                                             |
 
-## Example plugin
+## Example Plugin API v2 plugin
 
 ```typescript
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "@geolibre/plugins";
 
 export const myPlugin: GeoLibrePlugin = {
+  apiVersion: 2,
   id: "my-plugin",
   name: "My Plugin",
   version: "0.1.0",
@@ -235,11 +270,14 @@ export const myPlugin: GeoLibrePlugin = {
 };
 ```
 
-Map control plugins can optionally expose `getMapControlPosition()` and `setMapControlPosition()` so the desktop Plugins menu can move the control between map corners. Position-aware plugins should remove and recreate or re-add their control when the position changes.
+Map control plugins can optionally expose `getMapControlPosition()` and `setMapControlPosition()` so the desktop Plugins menu can move the control between map corners. This is retained only for first-party hosted runtimes during the Phase 0 relocation; external v2 plugins must use host UI registrations or a documented engine extension.
 
 Plugins with serializable runtime settings can expose `getProjectState()` and `applyProjectState()` so GeoLibre can save and restore those settings in the project file. A wrapper should use these hooks to adapt upstream control APIs such as `getState()` without requiring every upstream package to implement a GeoLibre-specific interface.
 
-Plugins that render with deck.gl should call `app.getDeckGL()` (returns a promise) to obtain GeoLibre's own deck.gl modules — `core`, `layers`, `geoLayers`, `meshLayers`, and `mapbox` (use `mapbox.MapboxOverlay` for interleaved MapLibre rendering). Render on the host's single deck.gl instance rather than bundling a second copy: deck.gl and luma.gl throw on a version mismatch and share global singletons, so a bundled copy fails to render. Call it with optional chaining (`app.getDeckGL?.()`) since a host variant may not ship deck.gl.
+External Plugin API v2 does not expose deck.gl or MapLibre modules. First-party
+deck.gl runtimes are being relocated behind typed map-engine extensions; an
+external plugin must use an engine-neutral host capability instead of importing
+or obtaining a renderer module.
 
 Plugins can also declare URL query parameters and handle them when GeoLibre opens. URL parameter handlers run after the map is ready, external plugins are loaded, and project plugin state has been restored. GeoLibre calls handlers for plugins whose declared parameter names are present in the URL, and it suppresses repeated handling of the same URL context for the same plugin. If a matching plugin is registered (installed) but inactive, GeoLibre first attempts to activate it via `PluginManager.activate`; the handler runs only if activation succeeds (an `activate()` that returns `false` or throws leaves the plugin inactive and skips dispatch). Parameter names are case-sensitive, as URL query parameters are: declaring `exampleGeoJson` will not match `?ExampleGeoJson=…`.
 
@@ -345,11 +383,10 @@ app.addWmsLayer?.("LINZ Coverage", {
 });
 
 // COG — read the GeoTIFF directly (client-side), with raster controls.
-const cogId = await app.addCogLayer?.(
-  "LINZ DEM",
-  "https://cog.example.nz/dem.tif",
-  { colormap: "terrain", nodata: -9999 },
-);
+const cogId = await app.addCogLayer?.("LINZ DEM", "https://cog.example.nz/dem.tif", {
+  colormap: "terrain",
+  nodata: -9999,
+});
 ```
 
 `addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
@@ -401,7 +438,7 @@ Notes:
 - The panel is a flex sibling of the map, so opening it shrinks the map view (the map keeps filling the remaining space); no manual map padding is required.
 - **Dock position:** a panel docks at one of four positions (left to right): `left-of-layers`, `right-of-layers` (between Layers and the map), `left-of-style` (between the map and Style), or `right-of-style` (the default). Set `dock` on the registration to choose the initial position. The user steps the panel between positions at runtime with the two move buttons in the panel header (disabled at the ends), and a plugin can set it directly with `app.setActiveRightPanelDock?.(...)`. The position resets to the panel's declared `dock` when it closes or another panel opens.
 - **Shared-rail modes (`replace-style` / `replace-layers`):** two non-positional docks for workbench-style plugins that want to feel like a first-class sidebar workspace rather than a second rail beside Style (right) or Layers (left). Register with `dock: "replace-style"` (or `"replace-layers"`) and the host shows a single rail on that edge listing both your panel and the built-in panel; selecting one expands it while the other stays as a rail entry. The two are mutually exclusive, so the user never sees two adjacent rails. The built-in panel starts collapsed so the workbench reads as the active workspace, and the user can expand it (which collapses the workbench) at any time. Everything else (chrome, resize, collapse, close, lifecycle hooks) is unchanged.
-- **Switching modes at runtime:** the modes are not exclusive choices baked in at registration. In a positional dock the panel header shows a **merge** button that joins the shared rail on its current side — a layers-side panel (`left-of-layers`/`right-of-layers`) joins the Layers rail, a style-side panel the Style rail. In a shared rail it shows a **detach** button that pops the panel back out to a movable positional panel on the same side (`right-of-layers` / `right-of-style`), where the left/right move buttons return. A plugin can drive the same switch with `app.setActiveRightPanelDock?.("replace-style" | "replace-layers" | "right-of-style" | ...)`. The shared rails are not part of the left/right *step* sequence (the arrows only walk the four positional docks); merge/detach is the way in and out.
+- **Switching modes at runtime:** the modes are not exclusive choices baked in at registration. In a positional dock the panel header shows a **merge** button that joins the shared rail on its current side — a layers-side panel (`left-of-layers`/`right-of-layers`) joins the Layers rail, a style-side panel the Style rail. In a shared rail it shows a **detach** button that pops the panel back out to a movable positional panel on the same side (`right-of-layers` / `right-of-style`), where the left/right move buttons return. A plugin can drive the same switch with `app.setActiveRightPanelDock?.("replace-style" | "replace-layers" | "right-of-style" | ...)`. The shared rails are not part of the left/right _step_ sequence (the arrows only walk the four positional docks); merge/detach is the way in and out.
 - These methods are typed optional for forward-compatibility with host variants that have no right sidebar, so call them with optional chaining (`app.registerRightPanel?.(...)`).
 
 ## Toolbar menus
@@ -418,9 +455,7 @@ const unregister = app.registerToolbarMenu?.({
       type: "submenu",
       id: "tools",
       label: "Tools",
-      items: [
-        { id: "qa", label: "Data QA", onSelect: () => app.openFloatingPanel?.("my-qa") },
-      ],
+      items: [{ id: "qa", label: "Data QA", onSelect: () => app.openFloatingPanel?.("my-qa") }],
     },
     { type: "separator" },
     { id: "about", label: "About", disabled: false, onSelect: () => {} },
@@ -449,9 +484,9 @@ const unregister = app.registerFloatingPanel?.({
   },
 });
 
-app.openFloatingPanel?.("my-qa");   // open (or bring to front)
-app.closeFloatingPanel?.("my-qa");  // close
-app.getOpenFloatingPanels?.();      // -> string[] of open ids, stacking order
+app.openFloatingPanel?.("my-qa"); // open (or bring to front)
+app.closeFloatingPanel?.("my-qa"); // close
+app.getOpenFloatingPanels?.(); // -> string[] of open ids, stacking order
 ```
 
 Use a right panel for a primary, persistent workspace and a floating panel for an ancillary tool or dashboard the user positions over the map. As with the other surfaces, call these methods with optional chaining since they are typed optional.

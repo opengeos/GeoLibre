@@ -4,6 +4,7 @@ import { strToU8, zipSync } from "fflate";
 import { bundleFromZipBytes } from "../apps/geolibre-desktop/src/lib/plugin-archive-unpack";
 
 const VALID_MANIFEST = {
+  apiVersion: 2,
   id: "demo-plugin",
   name: "Demo Plugin",
   version: "1.0.0",
@@ -81,6 +82,16 @@ describe("bundleFromZipBytes", () => {
       "dist/plugin.txt": "nope",
     });
     await assert.rejects(bundleFromZipBytes("demo.zip", zip), /manifest is invalid/);
+  });
+
+  it("rejects missing, v1, and unknown Plugin API versions before reading the entry", async () => {
+    for (const apiVersion of [undefined, 1, 3]) {
+      const zip = makeZip({
+        "plugin.json": JSON.stringify({ ...VALID_MANIFEST, apiVersion, style: undefined }),
+        "dist/plugin.js": "export default {};",
+      });
+      await assert.rejects(bundleFromZipBytes("demo.zip", zip), /requires Plugin API 2/);
+    }
   });
 
   it("accepts a boolean activeByDefault and rejects other types", async () => {

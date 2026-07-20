@@ -4,6 +4,7 @@
 // file" flow (in-browser unzip). The heavier external-plugin loader re-exports
 // what it needs from here.
 
+import { GEOLIBRE_PLUGIN_API_VERSION } from "@geolibre/plugins/api-version";
 import type { GeoLibreExternalPluginManifest } from "@geolibre/plugins";
 import { unzip } from "fflate";
 
@@ -26,10 +27,13 @@ function isRequiredManifestString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.trim() === value;
 }
 
-export function isExternalPluginManifest(value: unknown): value is GeoLibreExternalPluginManifest {
-  if (!value || typeof value !== "object") return false;
+export function externalPluginManifestError(value: unknown): string | null {
+  if (!value || typeof value !== "object") return "Plugin manifest is invalid.";
   const manifest = value as Partial<GeoLibreExternalPluginManifest>;
-  return (
+  if (manifest.apiVersion !== GEOLIBRE_PLUGIN_API_VERSION) {
+    return `Plugin requires Plugin API ${GEOLIBRE_PLUGIN_API_VERSION}.`;
+  }
+  const valid =
     isRequiredManifestString(manifest.id) &&
     isRequiredManifestString(manifest.name) &&
     isRequiredManifestString(manifest.version) &&
@@ -38,8 +42,19 @@ export function isExternalPluginManifest(value: unknown): value is GeoLibreExter
     (manifest.description === undefined || typeof manifest.description === "string") &&
     (manifest.style === undefined ||
       (typeof manifest.style === "string" && manifest.style.endsWith(".css"))) &&
-    (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean")
-  );
+    (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean");
+  return valid ? null : "Plugin manifest is invalid.";
+}
+
+export function isExternalPluginManifest(value: unknown): value is GeoLibreExternalPluginManifest {
+  return externalPluginManifestError(value) === null;
+}
+
+export function assertExternalPluginManifest(
+  value: unknown,
+): asserts value is GeoLibreExternalPluginManifest {
+  const error = externalPluginManifestError(value);
+  if (error) throw new Error(error);
 }
 
 function unzipToRecord(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
@@ -121,9 +136,7 @@ export async function bundleFromZipBytes(
   } catch {
     throw new Error("Could not parse plugin.json.");
   }
-  if (!isExternalPluginManifest(manifest)) {
-    throw new Error("Plugin manifest is invalid.");
-  }
+  assertExternalPluginManifest(manifest);
 
   assertSafeArchivePath("entry", manifest.entry);
   const entryBytes = files[prefix + manifest.entry];

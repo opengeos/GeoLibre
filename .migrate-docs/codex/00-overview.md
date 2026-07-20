@@ -70,6 +70,10 @@ Status values: not started · in progress · partial · blocked · done
   viewport portal through `MapEngineClient`; an `@geolibre/map` inset host mounts
   and tears down a restricted lazy engine handle. The boundary ratchet is down
   to 147 reviewed violations.
+- Implemented: external plugin manifests and entry exports now require Plugin
+  API v2 before archive extraction, URL entry fetch, or module execution. The
+  version gate and restore activation context are complete; public native API
+  removal follows with first-party runtime relocation.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
