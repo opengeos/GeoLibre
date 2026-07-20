@@ -20,14 +20,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/MapContextMenu.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/MapContextMenu.tsx",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/MapModeBanner.tsx",
     "pattern": "@geolibre/map#MapController"
   },

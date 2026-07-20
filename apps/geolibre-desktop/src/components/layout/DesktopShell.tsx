@@ -1090,27 +1090,33 @@ export function DesktopShell({
   // language change (t identity changes), since that native control lives
   // outside React.
   useEffect(() => {
-    mapEngineRef.current?.controls.setLabels({
+    const engine = mapEngineRef.current;
+    if (!engine || primaryEngineId !== "maplibre") return;
+    engine.controls.setLabels({
       compass: t("toolbar.item.resetPitchBearing"),
     });
-  }, [t, mapReadyGeneration]);
+  }, [t, mapReadyGeneration, primaryEngineId]);
 
   // Keep the on-map terrain control's tooltip translated (it lives outside
   // React). Re-runs on controller (re)init and language change.
   useEffect(() => {
-    mapEngineRef.current?.controls.setLabels({
+    const engine = mapEngineRef.current;
+    if (!engine || primaryEngineId !== "maplibre") return;
+    engine.controls.setLabels({
       terrain: t("terrainSettings.controlLabel"),
     });
-  }, [t, mapReadyGeneration]);
+  }, [t, mapReadyGeneration, primaryEngineId]);
 
   // Keep the Layer Swipe panel's grouped base-layer label translated. That
   // panel lives outside React and reads labels from the controller bridge, so
   // re-push on language change (t identity) and controller (re)init.
   useEffect(() => {
-    mapEngineRef.current?.controls.setLabels({
+    const engine = mapEngineRef.current;
+    if (!engine || primaryEngineId !== "maplibre") return;
+    engine.controls.setLabels({
       background: t("layers.background"),
     });
-  }, [t, mapReadyGeneration]);
+  }, [t, mapReadyGeneration, primaryEngineId]);
 
   const handleMapDiagnosticEvent = useCallback((event: MapDiagnosticEvent) => {
     appendDiagnostic({

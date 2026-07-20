@@ -33,6 +33,12 @@ const descriptors: Readonly<Record<MapEngineId, MapEngineDescriptor>> = {
     capabilities: [],
     supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts", "3d-tiles"],
   },
+  arcgis: {
+    id: "arcgis",
+    available: true,
+    capabilities: [],
+    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
+  },
 };
 
 export function getMapEngineDescriptor(id: MapEngineId): MapEngineDescriptor {
@@ -56,15 +62,21 @@ export async function loadRegisteredMapEngine(id: MapEngineId): Promise<MapEngin
     const { createMapLibreEngine } = await import("./maplibre-engine");
     return createMapLibreEngine();
   }
-  const { createCesiumEngine } = await import("./cesium-engine");
-  return createCesiumEngine();
+  if (id === "cesium") {
+    const { createCesiumEngine } = await import("./cesium-engine");
+    return createCesiumEngine();
+  }
+  const { createArcGISMapEngine } = await import("./arcgis-map-engine");
+  return createArcGISMapEngine();
 }
 
-export function resolvePrimaryEngineId(search: string): "maplibre" {
+export function resolvePrimaryEngineId(search: string): "maplibre" | "arcgis" {
   const requested = new URLSearchParams(search).get("engine");
   if (requested === null || requested === "" || requested === "maplibre") {
     return "maplibre";
   }
+
+  if (requested === "arcgis") return "arcgis";
 
   if (requested === "cesium") {
     console.warn('Map engine "cesium" is not available for the primary pane; using "maplibre".');

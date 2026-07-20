@@ -6,17 +6,10 @@ import {
 } from "@geolibre/core";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { MapCanvas, type MapDiagnosticEvent } from "./MapCanvas";
-import {
-  createMapEngineHandleWithFactory,
-} from "./engine/handle";
+import { createMapEngineHandleWithFactory } from "./engine/handle";
 import { createMapEngineClientForController } from "./engine/maplibre-engine";
 import { loadRegisteredMapEngine } from "./engine/registry";
-import type {
-  MapEngine,
-  MapEngineClient,
-  MapEngineId,
-  Unsubscribe,
-} from "./engine/types";
+import type { MapEngine, MapEngineClient, MapEngineId, Unsubscribe } from "./engine/types";
 import type { MapController } from "./map-controller";
 
 export interface EngineCanvasProps {
@@ -133,7 +126,7 @@ const StoreEngineCanvas = memo(function StoreEngineCanvas({
         const { createCesiumEngine } = await import("./engine/cesium-engine");
         return createCesiumEngine({ ionToken: ionTokenRef.current });
       }
-      return loadRegisteredMapEngine("maplibre");
+      return loadRegisteredMapEngine(engineId);
     });
     mountedEngineRef.current = engine;
     if (engineRef) engineRef.current = engine;
@@ -168,9 +161,7 @@ const StoreEngineCanvas = memo(function StoreEngineCanvas({
       ? state.secondaryMapViews.find((entry) => entry.id === viewId)
       : undefined;
     const initialView: MapViewState =
-      !primary && !state.mapLayout.syncView && livePane
-        ? livePane.view
-        : state.mapView;
+      !primary && !state.mapLayout.syncView && livePane ? livePane.view : state.mapView;
     engine.configure({
       preferences: state.preferences.map,
       basemapStyleUrl: state.basemapStyleUrl,
@@ -234,7 +225,11 @@ const StoreEngineCanvas = memo(function StoreEngineCanvas({
     <div
       ref={containerRef}
       className="h-full w-full"
-      data-testid={engineId === "cesium" ? "cesium-canvas" : primary ? "map-canvas" : "secondary-map-canvas"}
+      data-testid={
+        engineId === "cesium" ? "cesium-canvas" : primary ? "map-canvas" : "secondary-map-canvas"
+      }
+      data-engine-id={engineId}
+      data-engine-ready={ready ? "true" : "false"}
       data-view-id={viewId}
     />
   );

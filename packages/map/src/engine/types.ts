@@ -9,7 +9,7 @@ import type {
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { MapEngineExtensionMap } from "./extensions";
 
-export type MapEngineId = "maplibre" | "cesium";
+export type MapEngineId = "maplibre" | "cesium" | "arcgis";
 
 export type MapEngineCapability =
   | "capture"
@@ -276,6 +276,7 @@ export interface MapEngineClient {
   readonly viewport: MapViewportPort;
   readonly interactions: MapInteractionPort;
   readonly controls: MapControlPort;
+  supports(capability: MapEngineCapability): boolean;
   invoke<K extends keyof MapEngineExtensionMap>(
     command: K,
     input: MapEngineExtensionMap[K]["input"],
@@ -298,7 +299,6 @@ export interface MapEngine extends MapEngineClient {
   applyView(view: MapViewState): void;
   readView(): MapViewState;
   syncLayers(layers: readonly GeoLibreLayer[]): void;
-  supports(capability: MapEngineCapability): boolean;
   supportsLayer(layer: GeoLibreLayer): boolean;
   hitTest(point: ScreenPoint): Promise<readonly HitFeature[]>;
 }

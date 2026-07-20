@@ -23,17 +23,22 @@ function layer(type: GeoLibreLayer["type"]): GeoLibreLayer {
 test("registry metadata describes lazy current-engine capabilities", () => {
   const maplibre = getMapEngineDescriptor("maplibre");
   const cesium = getMapEngineDescriptor("cesium");
+  const arcgis = getMapEngineDescriptor("arcgis");
 
   assert.equal(maplibre.available, true);
   assert.equal(maplibre.capabilities.includes("controls"), true);
   assert.equal(cesium.available, true);
   assert.deepEqual(cesium.capabilities, []);
+  assert.equal(arcgis.available, true);
+  assert.deepEqual(arcgis.capabilities, []);
   assert.equal(isMapEngineLayerSupported("maplibre", layer("vector-tiles")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("geojson")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("vector-tiles")), false);
+  assert.equal(isMapEngineLayerSupported("arcgis", layer("geojson")), true);
+  assert.equal(isMapEngineLayerSupported("arcgis", layer("vector-tiles")), false);
 });
 
-test("primary selection remains MapLibre throughout strict Phase 0", () => {
+test("primary selection keeps MapLibre default while accepting the ArcGIS opt-in", () => {
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (message): void => {
@@ -42,6 +47,7 @@ test("primary selection remains MapLibre throughout strict Phase 0", () => {
   try {
     assert.equal(resolvePrimaryEngineId(""), "maplibre");
     assert.equal(resolvePrimaryEngineId("?engine=maplibre"), "maplibre");
+    assert.equal(resolvePrimaryEngineId("?engine=arcgis"), "arcgis");
     assert.equal(resolvePrimaryEngineId("?engine=cesium"), "maplibre");
   } finally {
     console.warn = originalWarn;

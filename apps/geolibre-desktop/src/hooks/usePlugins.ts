@@ -739,8 +739,13 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     fetchArrayBuffer: fetchRemoteArrayBuffer,
     resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,
     fitBounds: (bounds: [number, number, number, number]) =>
-      mapControllerRef?.current?.fitBounds(bounds),
-    getMap: () => mapControllerRef?.current?.getMap() ?? null,
+      (
+        mapControllerRef?.current as unknown as MapEngineClient | null | undefined
+      )?.camera.fitBounds(bounds),
+    getMap: () => {
+      const controller = mapControllerRef?.current;
+      return typeof controller?.getMap === "function" ? controller.getMap() : null;
+    },
     pickLocalDirectoryFiles,
     // Present only on desktop (filesystem access); the Vector panel keys off its
     // presence to auto-discover shapefile sidecars instead of forcing the user

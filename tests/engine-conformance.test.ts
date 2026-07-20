@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { GeoLibreLayer, MapViewState } from "../packages/core/src/index";
+import { ArcGISMapEngine } from "../packages/map/src/engine/arcgis-map-engine";
 import {
   CesiumEngine,
   type CesiumEngineDependencies,
@@ -16,6 +17,7 @@ import {
   type MapEngine,
   type MapEngineCapability,
 } from "../packages/map/src/engine/types";
+import { createArcGISFakeRuntime } from "./arcgis-engine-fake";
 
 interface EngineHarness {
   readonly engine: MapEngine;
@@ -46,7 +48,7 @@ function layer(id: string, type: GeoLibreLayer["type"]): GeoLibreLayer {
     id,
     name: id,
     type,
-    source: {},
+    source: type === "xyz" ? { tiles: ["https://tiles.example.test/{z}/{x}/{y}.png"] } : {},
     visible: true,
     opacity: 1,
     style: {},
@@ -315,6 +317,22 @@ function createCesiumHarness(): EngineHarness {
   };
 }
 
+function createArcGISHarness(): EngineHarness {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  return {
+    engine,
+    get syncedLayerOrders(): string[][] {
+      return runtime.layerOrders.map((order) => order.map((id) => id.replace(/^geolibre-/, "")));
+    },
+    destroyed: runtime.destroyed,
+    emitUserMove: () => {
+      assert.ok(runtime.view);
+      runtime.view.emitUserMove();
+    },
+  };
+}
+
 export function runEngineConformance(
   name: string,
   createHarness: EngineHarnessFactory,
@@ -339,7 +357,10 @@ export function runEngineConformance(
       for (const [capability, supported] of Object.entries(expectations.capabilities)) {
         assert.equal(harness.engine.supports(capability as MapEngineCapability), supported);
       }
-      assert.equal(harness.engine.supportsLayer(layer("geo", "geojson")), expectations.supportsGeoJson);
+      assert.equal(
+        harness.engine.supportsLayer(layer("geo", "geojson")),
+        expectations.supportsGeoJson,
+      );
       assert.equal(
         harness.engine.supportsLayer(layer("vector", "vector-tiles")),
         expectations.supportsVectorTiles,
@@ -399,7 +420,8 @@ export function runEngineConformance(
       const pending = new Promise<MapEngine>((next) => {
         resolve = next;
       });
-      const handle = createMapEngineHandleForTesting(name === "Cesium" ? "cesium" : "maplibre", () => pending);
+      const engineId = name === "Cesium" ? "cesium" : name === "ArcGIS" ? "arcgis" : "maplibre";
+      const handle = createMapEngineHandleForTesting(engineId, () => pending);
       const mounted = handle.mount({} as HTMLElement, initialView);
       const queuedView = { ...initialView, zoom: 12 };
       handle.applyView(queuedView);
@@ -444,6 +466,16 @@ runEngineConformance("MapLibre", createMapLibreHarness, {
 });
 
 runEngineConformance("Cesium", createCesiumHarness, {
+  capabilities: Object.fromEntries(
+    Object.keys(allCapabilities).map((capability) => [capability, false]),
+  ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
+  supportsGeoJson: true,
+  supportsVectorTiles: false,
+  hitCount: 0,
+  unsupportedHitCapability: "feature-query",
+});
+
+runEngineConformance("ArcGIS", createArcGISHarness, {
   capabilities: Object.fromEntries(
     Object.keys(allCapabilities).map((capability) => [capability, false]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,

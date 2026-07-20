@@ -32,9 +32,11 @@ export function RemoteCursorsOverlay({
 
   useEffect(() => {
     const client = mapControllerRef.current;
-    if (!client || !isActive) {
+    if (!client || !isActive || !client.supports("transient-overlays")) {
       // Clean up any lingering markers/overlay when the session ends.
-      safely(() => clearAll(client, markersRef.current));
+      if (client?.supports("transient-overlays")) {
+        safely(() => clearAll(client, markersRef.current));
+      }
       return;
     }
 
@@ -46,7 +48,12 @@ export function RemoteCursorsOverlay({
 
   // Remove everything on unmount.
   useEffect(
-    () => () => safely(() => clearAll(mapControllerRef.current, markersRef.current)),
+    () => () => {
+      const client = mapControllerRef.current;
+      if (client?.supports("transient-overlays")) {
+        safely(() => clearAll(client, markersRef.current));
+      }
+    },
     [mapControllerRef],
   );
 

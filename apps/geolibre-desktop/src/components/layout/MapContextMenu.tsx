@@ -1,4 +1,4 @@
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,7 +7,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import type maplibregl from "maplibre-gl";
 import { BookOpen, Braces, Crosshair, Earth, MapIcon, MapPin, ZoomIn } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -56,7 +55,7 @@ async function copyText(value: string): Promise<void> {
 /**
  * Renders the map's right-click context menu (issue #829).
  *
- * Listening to MapLibre's own `contextmenu` event (rather than a raw DOM
+ * Listening to the engine-neutral `contextmenu` event (rather than a raw DOM
  * handler) yields the clicked geographic coordinate directly. The top item
  * shows that coordinate and copies it to the clipboard on click, Google-Maps
  * style; below it sits a curated set of quick actions that operate on the
@@ -67,16 +66,16 @@ async function copyText(value: string): Promise<void> {
  * a monotonic id so each new right-click remounts it at the fresh anchor instead
  * of leaving the popup stuck at the previous location.
  *
- * @param mapControllerRef - Ref to the live primary map controller.
- * @param mapReadyGeneration - Bumped when the controller (re)initialises, so the
- *   `contextmenu` listener re-attaches once the map is ready.
+ * @param mapControllerRef - Ref to the live primary map engine.
+ * @param mapReadyGeneration - Bumped when the engine (re)initialises, so the
+ *   `contextmenu` listener re-attaches once it is ready.
  */
 export function MapContextMenu({
   mapControllerRef,
   mapReadyGeneration,
   onExplorePlace,
 }: {
-  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
   mapReadyGeneration: number;
   /** Open a Wikipedia knowledge card for the clicked coordinate. */
   onExplorePlace?: (lat: number, lng: number) => void;
@@ -89,25 +88,20 @@ export function MapContextMenu({
   const seqRef = useRef(0);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const engine = mapControllerRef.current;
+    if (!engine) return;
 
-    const handleContextMenu = (event: maplibregl.MapMouseEvent) => {
+    return engine.on("contextmenu", ({ lngLat, point }) => {
       seqRef.current += 1;
       setMenu({
         id: seqRef.current,
-        lng: event.lngLat.lng,
-        lat: event.lngLat.lat,
-        x: event.originalEvent.clientX,
-        y: event.originalEvent.clientY,
+        lng: lngLat[0],
+        lat: lngLat[1],
+        x: point.x,
+        y: point.y,
       });
       setOpen(true);
-    };
-
-    map.on("contextmenu", handleContextMenu);
-    return () => {
-      map.off("contextmenu", handleContextMenu);
-    };
+    });
   }, [mapControllerRef, mapReadyGeneration]);
 
   const copyCoords = useCallback(() => {

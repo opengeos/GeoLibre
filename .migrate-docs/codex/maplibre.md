@@ -1658,3 +1658,58 @@
   passed; `git diff --check` → passed.
 - Follow-up: use the conversion in `ArcGISMapEngine` lifecycle/view events and
   add its conformance harness; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre primary 2D host/layer sync → ArcGIS `Map` + `MapView` opt-in
+
+- Source: MapLibre — the primary `EngineCanvas` always lazily created the
+  MapLibre adapter, reconciled its controller layers from the store, and
+  exposed native controller assumptions to the context menu and legacy plugin
+  bridge.
+- Files touched: `packages/map/src/EngineCanvas.tsx`,
+  `packages/map/src/engine/registry.ts`, and `packages/map/src/engine/types.ts`
+  before → registered `arcgis` selection and client capability checks; new
+  `packages/map/src/engine/arcgis-map-engine.ts` before → lazy adapter;
+  `apps/geolibre-desktop/src/components/layout/MapContextMenu.tsx`,
+  `RemoteCursorsOverlay.tsx`, and `src/hooks/usePlugins.ts` before →
+  engine-neutral/capability-gated consumers; ArcGIS adapter/conformance and
+  `?engine=arcgis` browser tests added under `tests/` and `e2e/`.
+- ArcGIS approach: instantiate documented `@arcgis/core/Map`, `Basemap`, and
+  2D `MapView` APIs only after the engine is selected; set the staged local
+  `esriConfig.assetsPath`, use `reactiveUtils.watch` for camera settlement,
+  and use `WebTileLayer`, `GeoJSONLayer`, `WMSLayer`, and `WMTSLayer` for the
+  reviewed store-layer subset.
+- What changed: `?engine=arcgis` selects a code-split `ArcGISMapEngine` while
+  the absent/MapLibre query remains the default. The adapter keeps only a
+  store snapshot, recreates native layers on `syncLayers`, preserves store
+  camera pitch, forwards neutral pointer/context-menu events, and has no
+  public ArcGIS object escape hatch. It starts with an attributed OpenStreetMap
+  base layer and leaves ArcGIS's native attribution visible. The context menu
+  now subscribes through `MapEngineClient`; collaborative overlays and
+  MapLibre-only legacy plugins are explicitly gated by capabilities instead of
+  invoking a concrete renderer.
+- Gap / limitation: ArcGIS 2D cannot consume an arbitrary MapLibre style URL
+  or display pitch. Capture, native controls, feature queries, transient
+  overlays, markers, popups, and MapLibre-hosted runtimes are not implemented
+  in this adapter.
+- Workaround: render a keyless OpenStreetMap `WebTileLayer` baseline and retain
+  the existing MapLibre path for unsupported capabilities. Removal criteria:
+  add renderer-neutral style translation/capability implementations and
+  adapter-owned replacements for the affected runtimes, then promote ArcGIS
+  beyond opt-in.
+- Tradeoff accepted: ArcGIS remains an intentionally partial 2D engine and
+  increases the production PWA precache to about 46 MiB because the SDK assets
+  and code-split modules must remain local and version matched; this avoids
+  changing ingest or project/store ownership.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/engine-conformance.test.ts tests/engine-registry.test.ts
+  tests/map-engine-handle.test.ts` → 29 passed; `npm run lint` → passed;
+  `npm run test:frontend` → 3,455 passed, 1 skipped (including the reviewed
+  engine-boundary baseline reduced 117 → 115);
+  `npm run build` → passed (normal JupyterLite-unavailable notice and Vite
+  browser-externalization warnings were non-fatal); `npx playwright test
+  e2e/engine-param.spec.ts --reporter=line` → 3 passed, including ready
+  ArcGIS opt-in with zero diagnostics. A Chromium screenshot of
+  `?engine=arcgis` showed the native OpenStreetMap and Esri attribution.
+- Follow-up: add ArcGIS renderers for style translation and optional
+  MapEngine capabilities before changing the default engine; Codex, 2026-07-20.

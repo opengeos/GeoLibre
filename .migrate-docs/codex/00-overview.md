@@ -5,7 +5,7 @@ Last updated: 2026-07-20
 
 | Source library | Status      | Blockers / open gaps |
 | -------------- | ----------- | -------------------- |
-| MapLibre GL JS | in progress | Strict Phase 0 implementation started on `codex-migrate-to-arcgisjsapi` |
+| MapLibre GL JS | in progress | ArcGIS `MapView` opt-in is 2D/core-layer only; MapLibre style and optional runtime parity remain |
 | deck.gl        | not started | —                    |
 | three.js       | not started | —                    |
 | Cesium         | in progress | Adapter complete; ArcGIS `SceneView` replacement remains |
@@ -165,6 +165,11 @@ Status values: not started · in progress · partial · blocked · done
   `MapView`; MapLibre remains the default engine.
 - Implemented: a pure `MapViewState` ↔ ArcGIS `MapView` camera conversion
   retains project pitch and detects only floating-point camera echoes.
+- Implemented: `?engine=arcgis` now selects a lazy, store-first ArcGIS 2D
+  `MapView` adapter. It mounts an attributed OpenStreetMap `WebTileLayer`,
+  reconciles GeoJSON/raster/XYZ/WMS/WMTS store records, and enters the shared
+  engine conformance suite; the engine-boundary baseline fell 117 → 115;
+  MapLibre remains the default engine.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
