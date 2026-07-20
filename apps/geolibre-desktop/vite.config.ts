@@ -905,7 +905,6 @@ export default defineConfig({
       // full-page reload to re-optimize. Cesium locates its Workers/Assets via
       // the CESIUM_BASE_URL global (never `import.meta.url`), so pre-bundling
       // does not mangle any asset reference.
-      "cesium",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
