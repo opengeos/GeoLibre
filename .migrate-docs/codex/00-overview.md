@@ -39,3 +39,6 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: Cesium viewer/camera/layer ownership is behind `CesiumEngine`;
   the compatibility canvas now talks only to the seam, and unsupported optional
   capabilities throw `MapEngineCapabilityError`.
+- Implemented: the shared conformance suite runs the same lifecycle, view,
+  layer-order, hit, event-unsubscribe, pre-ready queue, and unsupported-operation
+  assertions against MapLibre and Cesium.
