@@ -94,6 +94,9 @@ export interface GeoLibreAppAPI {
     position?: GeoLibreMapControlPosition,
   ) => boolean;
   removeMapControl: (control: IControl) => void;
+  // Note: showing the "terrain" control (visible: true) also switches 3D
+  // terrain on, mirroring the Controls menu so the user doesn't have to click
+  // the control button as a second step. Hiding it turns terrain back off.
   setBuiltInMapControlVisible: (
     control: GeoLibreBuiltInMapControl,
     visible: boolean,

@@ -1086,7 +1086,7 @@ describe("MapController terrain auto-enable", () => {
     }
   });
 
-  it("does not enable terrain when the style (and DEM source) is not ready", () => {
+  it("defers the enable while the style loads, then turns terrain on once ready", () => {
     const prevDoc = (globalThis as { document?: unknown }).document;
     (globalThis as { document?: unknown }).document = makeTerrainDomStub();
     try {
@@ -1109,15 +1109,31 @@ describe("MapController terrain auto-enable", () => {
         off() {},
       };
       const controller = createMapController();
-      const internal = controller as unknown as { map: unknown; styleReady: boolean };
+      const internal = controller as unknown as {
+        map: unknown;
+        styleReady: boolean;
+        terrainEnablePending: boolean;
+        addTerrainSource(): boolean;
+        autoEnableTerrain(): void;
+      };
       internal.map = map;
-      // Style not ready: addTerrainSource no-ops, so there is no source for
-      // setTerrain to point at and auto-enable must be skipped rather than throw.
+      // Style not ready: addTerrainSource no-ops, so there is no source yet for
+      // setTerrain to point at. Auto-enable must be deferred, not dropped.
       internal.styleReady = false;
 
       controller.setBuiltInControlVisible("terrain", true);
 
       assert.equal(terrain, null);
+      assert.equal(internal.terrainEnablePending, true);
+
+      // Emulate handleStyleReady: the DEM source lands, and the deferred enable
+      // is reconciled so terrain turns on without the user re-toggling.
+      internal.styleReady = true;
+      internal.addTerrainSource();
+      if (internal.terrainEnablePending) internal.autoEnableTerrain();
+
+      assert.equal(terrain?.source, "geolibre-terrain-dem");
+      assert.equal(internal.terrainEnablePending, false);
     } finally {
       if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document;
       else (globalThis as { document?: unknown }).document = prevDoc;
