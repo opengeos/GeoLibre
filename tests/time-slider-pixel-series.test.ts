@@ -6,7 +6,7 @@ import {
   type PixelTimeSeriesResult,
   seriesToFeatureCollection,
   valueAtBand,
-} from "../packages/plugins/src/plugins/time-slider-pixel-series";
+} from "../packages/core/src/time-slider-pixel-series";
 
 describe("downsampleSteps", () => {
   it("keeps every step when under the cap", () => {

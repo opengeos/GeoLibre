@@ -1371,3 +1371,40 @@
 - Follow-up: move the pixel-series COG read helper into an adapter-owned,
   lazy renderer extension or explicitly classify it as data-ingest-adjacent
   and retain it under the no-ingest contract; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre COG pixel-series DTOs → ArcGIS identify/query result model
+
+- Source: MapLibre — the Time Slider COG pixel-series module combined
+  MapLibre-raster reader types with renderer-neutral chart result DTOs,
+  downsampling, band selection, and GeoJSON export transformation.
+- Files touched: `packages/plugins/src/plugins/time-slider-pixel-series.ts`
+  before → compatibility query module; `packages/core/src/time-slider-pixel-series.ts`
+  added for shared result types and pure transformations; core exports and
+  `tests/time-slider-pixel-series.test.ts` updated.
+- ArcGIS approach: an ArcGIS adapter will return the same result model from an
+  `ImageryLayer` identify/query or compatible image-service sampling operation;
+  charting, export, and cancellation remain renderer-neutral consumers.
+- What changed: pixel-band, timestep, source-series, query-result, and query
+  option types plus downsampling, band normalization, and long-format GeoJSON
+  export now live in `@geolibre/core`. The legacy plugin remains a temporary
+  compatibility wrapper for the concrete COG range reader, so store/project
+  state and all ingest behavior are unchanged.
+- Gap / limitation: ArcGIS image-service identify/query payloads do not expose
+  the same per-band COG metadata and arbitrary template-URL range-read behavior
+  as `maplibre-gl-raster`.
+- Workaround: stabilize an SDK-neutral result contract first, then implement
+  renderer-specific sampling behind the MapEngine seam. Removal criteria: an
+  ArcGIS adapter produces the model for supported temporal imagery sources and
+  the plugin compatibility reader no longer imports MapLibre-era raster APIs.
+- Tradeoff accepted: the shared DTO module adds a small package boundary while
+  the native reader is relocated, but it prevents chart/export code from
+  inheriting renderer dependencies.
+- Status: partial.
+- Verification: `node --import tsx --test tests/time-slider-pixel-series.test.ts
+  tests/time-slider-binding.test.ts tests/time-slider-config.test.ts
+  tests/engine-boundary.test.ts` → 39 passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser externalization warnings were
+  non-fatal).
+- Follow-up: route the COG range reader through a typed, lazy MapEngine
+  extension without changing its request, cancellation, or result behavior;
+  Codex, 2026-07-20.

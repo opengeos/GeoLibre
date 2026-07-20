@@ -1,18 +1,35 @@
+import { downsampleSteps } from "@geolibre/core";
+import type {
+  BandOption,
+  LabeledPixelTimeSeries,
+  PixelSeries,
+  PixelSeriesPoint,
+  PixelTimeSeriesOptions,
+  PixelTimeSeriesResult,
+} from "@geolibre/core";
 import {
   type CogSourceSpec,
   type TimeSliderConfig,
   generateSteps,
   resolveUrl,
 } from "maplibre-gl-time-slider";
-import {
-  type BandReading,
-  loadGeoTIFF,
-  type PixelReading,
-  readBandNames,
-  readPixelValues,
-} from "maplibre-gl-raster";
-import type { Feature, FeatureCollection, Point } from "geojson";
+import { loadGeoTIFF, type PixelReading, readBandNames, readPixelValues } from "maplibre-gl-raster";
 import { getTimeSliderProjectState } from "./maplibre-time-slider";
+
+export {
+  bandOptionsFromResults,
+  downsampleSteps,
+  seriesToFeatureCollection,
+  valueAtBand,
+} from "@geolibre/core";
+export type {
+  BandOption,
+  LabeledPixelTimeSeries,
+  PixelSeries,
+  PixelSeriesPoint,
+  PixelTimeSeriesOptions,
+  PixelTimeSeriesResult,
+} from "@geolibre/core";
 
 /**
  * Pixel time-series support for the Time Slider's raster stack.
@@ -29,81 +46,6 @@ import { getTimeSliderProjectState } from "./maplibre-time-slider";
  * client-side reader the single-COG Identify tool uses, so no Python sidecar or
  * full-file download is involved.
  */
-
-/** A single timestep's reading for one source. */
-export interface PixelSeriesPoint {
-  /** ISO date (`YYYY-MM-DD`) of the timeline step. */
-  date: string;
-  /** Epoch milliseconds of the step, for ordering and the chart x-axis. */
-  timestamp: number;
-  /** Concrete COG URL the source template resolved to for this date. */
-  url: string;
-  /**
-   * Every band's reading at the clicked pixel for this step. Empty when the
-   * pixel falls outside the image or the COG failed to load (renders as a gap).
-   * All bands are kept so the chart can switch bands without re-querying.
-   */
-  bands: BandReading[];
-}
-
-/** One source's value-over-time series. */
-export interface PixelSeries {
-  /** Source id (matches the mirrored store layer id). */
-  sourceId: string;
-  /** Human-readable source name. */
-  sourceName: string;
-  /** Ordered timestep points, each carrying all band readings. */
-  points: PixelSeriesPoint[];
-}
-
-/** A band available to chart, derived from the COG metadata. */
-export interface BandOption {
-  /** 1-based band index. */
-  index: number;
-  /** Band name from the COG metadata, when known. */
-  name: string | null;
-}
-
-/** Result of a pixel time-series query at one clicked location. */
-export interface PixelTimeSeriesResult {
-  /** The clicked location, `[lng, lat]` in WGS84. */
-  lngLat: [number, number];
-  /** One series per COG source in the stack. */
-  series: PixelSeries[];
-  /** Bands seen across the stack (union by index, ascending), for the picker. */
-  bands: BandOption[];
-  /**
-   * The band to chart by default: the first source's first configured band
-   * (`bidx`) when present in the data, otherwise the first available band. Null
-   * when no bands were read at all.
-   */
-  defaultBandIndex: number | null;
-  /** Number of timeline steps queried per source (after any downsampling). */
-  stepCount: number;
-  /** Full timeline step count before downsampling (equals stepCount when not
-   * truncated). */
-  originalStepCount: number;
-  /** True when the timeline had more steps than the cap and was downsampled. */
-  truncated: boolean;
-}
-
-/** A query result paired with the display label the UI assigns it. */
-export interface LabeledPixelTimeSeries {
-  /** Short label for the clicked location (e.g. "Point 1"). */
-  label: string;
-  /** The query result. */
-  result: PixelTimeSeriesResult;
-}
-
-/** Options for {@link queryPixelTimeSeries}. */
-export interface PixelTimeSeriesOptions {
-  /** Aborts in-flight COG reads. */
-  signal?: AbortSignal;
-  /** Reports progress as `(completed, total)` reads. */
-  onProgress?: (completed: number, total: number) => void;
-  /** Maximum timeline steps to query before downsampling. Defaults to 120. */
-  maxSteps?: number;
-}
 
 /** Default cap on timeline steps, balancing detail against many range reads. */
 const DEFAULT_MAX_STEPS = 120;
@@ -132,35 +74,6 @@ export function getTimeSliderCogSources(): CogSourceSpec[] {
  */
 export function hasTimeSliderRasterStack(): boolean {
   return getTimeSliderCogSources().length > 0;
-}
-
-/**
- * Downsamples a list of step dates to at most `maxSteps`, keeping the endpoints
- * and spreading the rest evenly so a daily timeline over many years still charts
- * without thousands of range reads.
- *
- * @param steps - The full ordered list of step dates.
- * @param maxSteps - Maximum steps to keep (coerced to >= 1).
- * @returns The kept steps and whether any were dropped.
- */
-export function downsampleSteps(
-  steps: Date[],
-  maxSteps: number,
-): { steps: Date[]; truncated: boolean } {
-  const cap = Math.max(1, Math.floor(maxSteps));
-  // Return a copy so callers cannot mutate the source array via the result.
-  if (steps.length <= cap) return { steps: steps.slice(), truncated: false };
-  // A cap of 1 keeps only the first step; the even-spacing formula below would
-  // divide by `cap - 1 === 0` and yield a NaN index (so `steps[NaN]` would be
-  // undefined), so handle it explicitly.
-  if (cap === 1) return { steps: [steps[0]], truncated: true };
-  const kept: Date[] = [];
-  // Even spacing across [0, length-1] inclusive of both ends.
-  for (let i = 0; i < cap; i++) {
-    const index = Math.round((i * (steps.length - 1)) / (cap - 1));
-    kept.push(steps[index]);
-  }
-  return { steps: kept, truncated: true };
 }
 
 /**
@@ -203,42 +116,6 @@ function getTimeSliderSteps(maxSteps: number): {
     state.granularity as TimeSliderConfig["granularity"],
   );
   return { ...downsampleSteps(steps, maxSteps), total: steps.length };
-}
-
-/**
- * Reads one band's chartable value from a timestep point.
- *
- * @param point - The timestep point, carrying all band readings.
- * @param bandIndex - The 1-based band index to read.
- * @returns The raw band value, or null when the band is missing for this step
- *   (failed read), its value is the source's nodata, or the value is non-finite
- *   (a stray NaN/Infinity would otherwise blank the whole chart via scaleY).
- *   Null renders as a gap.
- */
-export function valueAtBand(point: PixelSeriesPoint, bandIndex: number): number | null {
-  const band = point.bands.find((entry) => entry.index === bandIndex);
-  if (!band || band.isNodata || !Number.isFinite(band.value)) return null;
-  return band.value;
-}
-
-/**
- * The union of bands seen across a set of results, ascending by index, keeping
- * the first known name for each index. Lets a band picker offer every band any
- * loaded point exposes even if an individual COG read failed.
- *
- * @param results - The loaded query results.
- * @returns Band options sorted by index.
- */
-export function bandOptionsFromResults(results: PixelTimeSeriesResult[]): BandOption[] {
-  const byIndex = new Map<number, BandOption>();
-  for (const result of results) {
-    for (const band of result.bands) {
-      const existing = byIndex.get(band.index);
-      if (!existing) byIndex.set(band.index, band);
-      else if (existing.name == null && band.name != null) byIndex.set(band.index, band);
-    }
-  }
-  return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
 
 /**
@@ -461,73 +338,4 @@ export async function queryPixelTimeSeries(
  */
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-/**
- * Flattens labeled pixel time-series results into a long-format point
- * FeatureCollection for export. Every (location, source, timestep, band) becomes
- * a Point feature at the clicked location with the label, date, source, band,
- * and value as attributes, so the existing vector exporters write it straight to
- * CSV or GeoParquet. Long format keeps every band regardless of which one the
- * chart currently shows.
- *
- * @param items - The labeled results to export (one per clicked location).
- * @returns A FeatureCollection of one point per (location, source, step, band).
- */
-export function seriesToFeatureCollection(
-  items: LabeledPixelTimeSeries[],
-): FeatureCollection<Point> {
-  const features: Feature<Point>[] = [];
-  let id = 0;
-  const push = (lng: number, lat: number, properties: Record<string, unknown>) =>
-    features.push({
-      type: "Feature",
-      id: id++,
-      geometry: { type: "Point", coordinates: [lng, lat] },
-      properties,
-    });
-  for (const { label, result } of items) {
-    const [lng, lat] = result.lngLat;
-    for (const series of result.series) {
-      for (const point of series.points) {
-        const base = {
-          // Named "label", not "point": the latter is a PostgreSQL/PostGIS
-          // reserved type name that downstream SQL/GDAL tooling would need to
-          // quote everywhere.
-          label,
-          lng,
-          lat,
-          date: point.date,
-          source: series.sourceName,
-        };
-        if (point.bands.length > 0) {
-          // Emit a row per band so band selection in the chart never loses data
-          // from the export.
-          for (const band of point.bands) {
-            push(lng, lat, {
-              ...base,
-              band: band.index,
-              band_name: band.name,
-              // Mirror valueAtBand: a non-finite value exports as null so CSV /
-              // GeoParquet output stays consistent with the chart's semantics.
-              value: band.isNodata || !Number.isFinite(band.value) ? null : band.value,
-              is_nodata: band.isNodata,
-            });
-          }
-        } else {
-          // A failed read still emits one placeholder row so the timestep is
-          // represented in the export. is_nodata is null (not false) to mark the
-          // nodata status as unknown — distinct from a successful non-nodata read.
-          push(lng, lat, {
-            ...base,
-            band: null,
-            band_name: null,
-            value: null,
-            is_nodata: null,
-          });
-        }
-      }
-    }
-  }
-  return { type: "FeatureCollection", features };
 }
