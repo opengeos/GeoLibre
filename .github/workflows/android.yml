@@ -174,8 +174,14 @@ jobs:
               echo "::error::$apk has package '$pkg', expected '$EXPECTED_PACKAGE'"
               exit 1
             fi
+          # Scoped to outputs/apk/ for the same reason the AAB lookup below is
+          # scoped to outputs/bundle/: a bare `-name` searches the whole
+          # gen/android tree, including AGP's intermediates. No duplicate
+          # `*release-unsigned.apk` is known to exist there today, so this is
+          # precautionary rather than a fix — but the unscoped form is the one
+          # that already shipped the wrong artifact once for the AAB.
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
-            -name '*release-unsigned.apk')
+            -path '*/outputs/apk/*' -name '*release-unsigned.apk')
           if [ "$checked" -eq 0 ]; then
             echo "::error::No APKs found to verify the package id against"
             exit 1
@@ -265,7 +271,7 @@ jobs:
               bad=$((bad + 1))
             fi
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
-            -name '*release-unsigned.apk')
+            -path '*/outputs/apk/*' -name '*release-unsigned.apk')
           if [ "$archives" -eq 0 ]; then
             echo "::error::No release APKs found to verify"
             exit 1
@@ -353,6 +359,12 @@ jobs:
           build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           store_pass_file="$RUNNER_TEMP/ks.pass"
           key_pass_file="$RUNNER_TEMP/key.pass"
+          # Shred the password files on *every* exit path. Explicit `rm -f` at
+          # each error branch cannot cover an unexpected failure: under
+          # `set -e` a non-zero zipalign/apksigner/jarsigner aborts the script
+          # mid-step, leaving the keystore and key passwords readable in
+          # $RUNNER_TEMP for the rest of the job.
+          trap 'rm -f "$store_pass_file" "$key_pass_file"' EXIT
           if [ -n "${KEYSTORE_BASE64:-}" ]; then
             # Fail fast if the keystore secret is set but its companions are not,
             # instead of a cryptic apksigner error later.
@@ -407,14 +419,12 @@ jobs:
             # checking it here (post-sign) covers the bytes Play receives.
             "$build_tools/zipalign" -c -P 16 -v 4 "$signed" > /dev/null || {
               echo "::error::$signed is not 16 KB zip-aligned; Play will reject it"
-              rm -f "$store_pass_file" "$key_pass_file"
               exit 1
             }
             echo "signed $signed ($(du -h "$signed" | cut -f1))"
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
-            -name '*release-unsigned.apk')
+            -path '*/outputs/apk/*' -name '*release-unsigned.apk')
           if [ "$found" -eq 0 ]; then
-            rm -f "$store_pass_file" "$key_pass_file"
             echo "::error::No release-unsigned APKs found"; exit 1
           fi
 
@@ -438,12 +448,10 @@ jobs:
               apps/geolibre-desktop/src-tauri/gen/android \
               -path '*/outputs/bundle/*' -name '*.aab' | sort)
             if [ "${#aab_candidates[@]}" -eq 0 ]; then
-              rm -f "$store_pass_file" "$key_pass_file"
               echo "::error::No AAB found under outputs/bundle/"; exit 1
             fi
             if [ "${#aab_candidates[@]}" -gt 1 ]; then
               # Ambiguity must not be resolved by picking one arbitrarily.
-              rm -f "$store_pass_file" "$key_pass_file"
               echo "::error::Expected exactly one AAB, found ${#aab_candidates[@]}:"
               printf '::error::  %s\n' "${aab_candidates[@]}"
               exit 1
@@ -461,7 +469,6 @@ jobs:
             echo "::warning::Skipping AAB signing — no release keystore. The Play upload artifact is not produced on this run."
           fi
 
-          rm -f "$store_pass_file" "$key_pass_file"
           # Emit the outcome only after every artifact has signed and verified,
           # so a downstream always() step can never read signed=release on a
           # failure.
