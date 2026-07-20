@@ -43,6 +43,12 @@ env:
   # Set at workflow level so the APK and AAB steps agree — a mismatch changes
   # the cargo fingerprint and forces a full rebuild between them.
   RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
+  # The Android package id, asserted twice below. It comes from `identifier` in
+  # src-tauri/tauri.android.conf.json, which overrides the desktop
+  # `org.geolibre.desktop` for Android only. Google Play burns this permanently
+  # on first upload — it cannot be changed or reused afterwards — so it is
+  # verified rather than trusted.
+  EXPECTED_PACKAGE: "org.geolibre.app"
 
 jobs:
   build:
@@ -110,6 +116,23 @@ jobs:
         working-directory: apps/geolibre-desktop
         run: npx tauri android init
 
+      - name: Verify generated package id
+        # Fail fast, before the ~30 min build: assert the tauri.android.conf.json
+        # `identifier` override actually reached the generated Gradle project.
+        # A silent regression here ships an irreversible wrong package id to
+        # Play, so it is gated rather than assumed. The artifact itself is
+        # re-checked after the APK build.
+        working-directory: apps/geolibre-desktop
+        run: |
+          set -euo pipefail
+          gradle_file=src-tauri/gen/android/app/build.gradle.kts
+          if ! grep -q "applicationId = \"$EXPECTED_PACKAGE\"" "$gradle_file"; then
+            echo "::error::applicationId is not $EXPECTED_PACKAGE in $gradle_file"
+            grep -nE 'applicationId|namespace' "$gradle_file" || true
+            exit 1
+          fi
+          echo "applicationId = $EXPECTED_PACKAGE (generated Gradle project)"
+
       - name: Apply GeoLibre launcher icons
         # `tauri android init` writes default Tauri icons; overwrite the generated
         # mipmaps with the GeoLibre launcher icons checked in under src-tauri/icons.
@@ -126,20 +149,51 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
+      - name: Verify built APK package id
+        # Second assertion, on the shipped bytes rather than the build script.
+        # `aapt2 dump badging` reads the merged manifest, so this also catches a
+        # package id changed by manifest merging after Gradle configuration.
+        run: |
+          set -euo pipefail
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          checked=0
+          while IFS= read -r apk; do
+            checked=$((checked + 1))
+            pkg="$("$build_tools/aapt2" dump packagename "$apk")"
+            if [ "$pkg" != "$EXPECTED_PACKAGE" ]; then
+              echo "::error::$apk has package '$pkg', expected '$EXPECTED_PACKAGE'"
+              exit 1
+            fi
+          done < <(find apps/geolibre-desktop/src-tauri/gen/android \
+            -name '*release*.apk')
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::No APKs found to verify the package id against"
+            exit 1
+          fi
+          echo "All $checked APKs report package $EXPECTED_PACKAGE."
+
       - name: Check for release keystore
         id: keystore
         # `secrets` cannot be used in a step-level `if:`, so presence is turned
         # into an output here and gated on below. Deliberately keyed on the
         # keystore rather than `event_name == 'release'` so a workflow_dispatch
         # run with the secrets set can still exercise the full Play path.
+        #
+        # Checks all three secrets the signing step needs, not just the
+        # keystore: a partially-configured set (typo'd secret name, one value
+        # missing) would otherwise report present=true, spend several minutes on
+        # the Gradle bundle build, and only then hard-fail at signing.
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+          if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${KEYSTORE_PASSWORD:-}" ] \
+            && [ -n "${KEY_ALIAS:-}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No release keystore — skipping the AAB build (it could not be signed or uploaded anyway)."
+            echo "::notice::No complete release keystore — skipping the AAB build (it could not be signed or uploaded anyway)."
           fi
 
       - name: Build release AAB (universal)
