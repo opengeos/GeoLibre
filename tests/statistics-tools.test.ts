@@ -347,7 +347,7 @@ describe("emerging hot spot (space-time cube)", () => {
     assert.ok(messages.some((m) => m.includes("fewer than 2 time steps")));
   });
 
-  it("errors when the points have zero spatial extent", () => {
+  it("errors when every point shares one location", () => {
     const pts: Array<[number, number, Record<string, unknown>]> = [
       [0, 0, { t: BASE }],
       [0, 0, { t: BASE + DAY_MS }],
@@ -355,7 +355,38 @@ describe("emerging hot spot (space-time cube)", () => {
     ];
     const { messages, results } = run(emergingHotSpotTool, pointLayer(pts), cubeParams);
     assert.equal(results.length, 0);
-    assert.ok(messages.some((m) => m.includes("zero spatial extent")));
+    assert.ok(messages.some((m) => m.includes("share one location")));
+  });
+
+  it("analyzes a collinear transect (1-D extent) instead of rejecting it", () => {
+    // All points share a longitude but span latitude → a valid N×1 fishnet.
+    const pts: Array<[number, number, Record<string, unknown>]> = [];
+    for (let day = 0; day < 4; day++)
+      for (let row = 0; row < 5; row++) pts.push([0, row * 0.05, { t: BASE + day * DAY_MS }]);
+    const { results } = run(emergingHotSpotTool, pointLayer(pts), cubeParams);
+    assert.equal(results.length, 1);
+    assert.ok(results[0].geojson.features.length > 0);
+  });
+
+  it("keeps cells with net-negative summed weight (cold spots)", () => {
+    // A signed weight field can sum to a negative total in a busy cell; the
+    // cell recorded events and must not be dropped from the output.
+    const layer = spaceTimeLayer();
+    for (const f of layer.geojson!.features) (f.properties as Record<string, unknown>).w = -1;
+    const { results } = run(emergingHotSpotTool, layer, { ...cubeParams, weightField: "w" });
+    const fc = results[0].geojson;
+    assert.equal(fc.features.length, 25);
+    assert.ok(fc.features.every((f) => (f.properties?.total as number) < 0));
+  });
+
+  it("counts features dropped for a missing/invalid weight in the skip tally", () => {
+    const layer = spaceTimeLayer();
+    // Give only some features a numeric weight; the rest are dropped as skipped.
+    layer.geojson!.features.forEach((f, i) => {
+      (f.properties as Record<string, unknown>).w = i % 2 === 0 ? 1 : "n/a";
+    });
+    const { messages } = run(emergingHotSpotTool, layer, { ...cubeParams, weightField: "w" });
+    assert.ok(messages.some((m) => /Skipped \d+ feature\(s\).*valid weight/.test(m)));
   });
 
   it("errors without a time field and on too few points", () => {

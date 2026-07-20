@@ -812,6 +812,14 @@ const CONFIDENCE_ALPHA: Record<string, number> = {
 const MAX_STCUBE_BINS = 2_000_000;
 /** Cap on input points so aggregation can't exhaust memory. */
 const MAX_STCUBE_POINTS = 1_000_000;
+/**
+ * Cap on time steps, independent of the bins cap. `mannKendall` is O(steps²)
+ * per cell, and the bins cap alone does not bound `timeSteps` — a coarse grid
+ * with fine time granularity could push it into the millions and freeze the
+ * (synchronous) run. 1000 steps is far more than any real trend analysis needs
+ * (1000 daily steps ≈ 2.7 years) and keeps the per-cell trend test cheap.
+ */
+const MAX_STCUBE_STEPS = 1000;
 
 interface MannKendall {
   s: number;
@@ -825,6 +833,7 @@ interface MannKendall {
  * correction to the variance of S and the continuity correction on Z. Returns
  * S, Kendall's tau (S over the number of pairs), the normal Z, and its
  * two-sided p-value. A series shorter than 3 has no meaningful trend (Z = 0).
+ * The S sum is O(n²); callers keep n bounded (see {@link MAX_STCUBE_STEPS}).
  */
 function mannKendall(series: number[]): MannKendall {
   const n = series.length;
@@ -1034,7 +1043,12 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
       if (weightField) {
         const raw = feature.properties?.[weightField];
         const value = typeof raw === "number" ? raw : Number(raw);
-        if (!Number.isFinite(value)) return;
+        // Count a bad weight as skipped so the end-of-run tally is accurate
+        // (a feature dropped for a missing/non-numeric weight is still dropped).
+        if (!Number.isFinite(value)) {
+          skipped++;
+          return;
+        }
         weight = value;
       }
       events.push({ lon: position[0], lat: position[1], time, weight });
@@ -1067,8 +1081,14 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
       if (e.time < minTime) minTime = e.time;
       if (e.time > maxTime) maxTime = e.time;
     }
-    if (!(maxLon > minLon) || !(maxLat > minLat)) {
-      ctx.log("Error: the points have zero spatial extent (all coincide); a cube needs an area.");
+    // Reject only when every point shares one location (zero extent in both
+    // dimensions). A collinear set (all one longitude or one latitude) still
+    // yields a valid 1×N / N×1 fishnet — cols/rows clamp to at least 1 — so a
+    // straight transect is analyzable rather than wrongly called "coincident".
+    if (!(maxLon > minLon) && !(maxLat > minLat)) {
+      ctx.log(
+        "Error: all points share one location; a space-time cube needs points spread over space.",
+      );
       return;
     }
     const midLat = (minLat + maxLat) / 2;
@@ -1085,6 +1105,12 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
       );
       return;
     }
+    if (timeSteps > MAX_STCUBE_STEPS) {
+      ctx.log(
+        `Error: ${timeSteps.toLocaleString()} time steps exceeds the ${MAX_STCUBE_STEPS.toLocaleString()}-step limit (the trend test is O(steps²) per cell); increase the time-step interval.`,
+      );
+      return;
+    }
     const nCells = cols * rows;
     if (nCells * timeSteps > MAX_STCUBE_BINS) {
       ctx.log(
@@ -1096,6 +1122,11 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
     // Aggregate events into the cube: cube[step][cell] = summed count/weight.
     const cube: Float64Array[] = Array.from({ length: timeSteps }, () => new Float64Array(nCells));
     const cellTotal = new Float64Array(nCells);
+    // Presence is tracked separately from the summed weight: with a signed
+    // weight field (a delta, an anomaly) a cell's events can sum to zero or a
+    // negative total, so `cellTotal` alone can't tell "no events" from
+    // "events that cancelled" — and a genuine cold spot must not be dropped.
+    const cellHasEvent = new Uint8Array(nCells);
     for (const e of events) {
       const col = Math.min(cols - 1, Math.max(0, Math.floor((e.lon - minLon) / cellLon)));
       const row = Math.min(rows - 1, Math.max(0, Math.floor((e.lat - minLat) / cellLat)));
@@ -1103,6 +1134,7 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
       const step = Math.min(timeSteps - 1, Math.max(0, Math.floor((e.time - minTime) / stepMs)));
       cube[step][cell] += e.weight;
       cellTotal[cell] += e.weight;
+      cellHasEvent[cell] = 1;
     }
 
     // Queen-contiguity neighbor offsets on the fishnet (self added in the loop).
@@ -1145,7 +1177,7 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const i = row * cols + col;
-        if (cellTotal[i] <= 0) continue;
+        if (!cellHasEvent[i]) continue;
         const zSeries: number[] = [];
         for (let s = 0; s < timeSteps; s++) zSeries.push(gi[s][i]);
         const mk = mannKendall(zSeries);
@@ -1181,7 +1213,8 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
       }
     }
 
-    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no location or parseable time.`);
+    if (skipped)
+      ctx.log(`Skipped ${skipped} feature(s) with no location, parseable time, or valid weight.`);
     ctx.log(
       `Emerging Hot Spot: ${cols}×${rows} cells × ${timeSteps} time steps; classified ${cells.length} non-empty cell(s).`,
     );
