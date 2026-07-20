@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   autoMetricStep,
+  DEFAULT_GRATICULE_LABELS,
   DEFAULT_GRATICULE_SETTINGS,
   formatEasting,
   formatLat,
@@ -209,5 +210,39 @@ describe("UTM settings project round-trip", () => {
     assert.equal(restored.spacingMeters, 50000);
 
     setGraticuleSettings({ ...DEFAULT_GRATICULE_SETTINGS }); // leave defaults for other tests
+  });
+
+  it("sends native lifecycle, panel hosting, and state changes only through MapEngine", () => {
+    const calls: Array<{ command: string; input: Record<string, unknown> }> = [];
+    const app = {
+      registerRightPanel: () => () => undefined,
+      openRightPanel: () => true,
+      map: {
+        invoke: (command: string, input: Record<string, unknown>) => {
+          calls.push({ command, input });
+          return command === "hosted-plugin.activate" || command === "hosted-plugin.apply-state";
+        },
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    assert.equal(maplibreGraticulePlugin.activate(app), true);
+    const activation = calls[0];
+    assert.equal(activation.command, "hosted-plugin.activate");
+    assert.equal(activation.input.pluginId, "maplibre-gl-graticule");
+    assert.equal(typeof activation.input.onStateChange, "function");
+    assert.deepEqual(activation.input.state, {
+      settings: DEFAULT_GRATICULE_SETTINGS,
+      labels: DEFAULT_GRATICULE_LABELS,
+    });
+    assert.equal(
+      typeof (activation.input.rightPanelHost as { register?: unknown }).register,
+      "function",
+    );
+
+    setGraticuleSettings({ gridType: "utm" });
+    assert.equal(calls[1].command, "hosted-plugin.apply-state");
+    maplibreGraticulePlugin.deactivate(app);
+    assert.equal(calls[2].command, "hosted-plugin.deactivate");
+    setGraticuleSettings({ ...DEFAULT_GRATICULE_SETTINGS });
   });
 });

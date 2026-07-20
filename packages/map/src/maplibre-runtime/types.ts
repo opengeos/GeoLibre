@@ -1,4 +1,5 @@
 import type { PixelTimeSeriesRequest, PixelTimeSeriesResult } from "@geolibre/core";
+import type { MapEngineRightPanelHost } from "../engine/extensions";
 import type { MapControlPosition, MapEngineClient } from "../engine/types";
 import type maplibregl from "maplibre-gl";
 
@@ -26,6 +27,8 @@ export interface MapLibreHostedRuntimeActivation {
   readonly exportTextFile?: (filename: string, content: string) => void;
   /** Host confirmation for an adapter-owned style-basemap replacement. */
   readonly confirmStyleReplace?: (basemapName: string, count: number) => boolean;
+  /** Optional host bridge for an adapter-owned docked settings panel. */
+  readonly rightPanelHost?: MapEngineRightPanelHost;
 }
 
 /** A concrete renderer runtime, addressed only by its stable plugin id. */

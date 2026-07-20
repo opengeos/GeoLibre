@@ -1482,3 +1482,43 @@
   `git diff --check` → passed.
 - Follow-up: move the native MapLibre control, layers, and sidebar panel into a
   lazy hosted runtime through MapEngine; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre `line`/`symbol` graticule control → ArcGIS `GraphicsLayer` grid runtime
+
+- Source: MapLibre — Gridlines directly owned `GeoJSONSource`/`line`/`symbol`
+  layers, `IControl`, map move/style events, and a DOM settings panel from the
+  public plugin package.
+- Files touched: `packages/plugins/src/plugins/maplibre-graticule.ts` before →
+  renderer-neutral descriptor; `packages/map/src/maplibre-runtime/graticule.ts`
+  added for native layers/control/panel; hosted runtime registry, typed
+  MapEngine panel-host activation contract, map manifest/lockfile, boundary
+  fixture, and Gridlines tests updated.
+- ArcGIS approach: an ArcGIS adapter can create a lazy `GraphicsLayer` with
+  line/text graphics or `LabelClass` equivalents from the shared core settings,
+  while the descriptor continues to use only `MapEngineClient` lifecycle/state
+  commands.
+- What changed: native MapLibre imports, `proj4` UTM geometry construction,
+  map lifecycle listeners, control DOM, and sidebar rendering now exist only in
+  the lazy MapLibre adapter runtime. The descriptor owns serializable settings
+  and labels, forwards them through typed hosted-plugin commands, and supplies
+  a typed plain-DOM right-panel host bridge without exposing a native map. The
+  store remains untouched and project settings retain their existing shape.
+- Gap / limitation: ArcGIS labels follow feature geometry and do not provide a
+  direct MapLibre-style edge-label layer that is guaranteed to track all four
+  viewport edges during wraparound/UTM rendering.
+- Workaround: retain the private MapLibre geometry/label implementation behind
+  the seam. Removal criteria: the ArcGIS runtime renders equivalent wrapped
+  geographic and UTM grid lines with edge-label/capture behavior from the core
+  model, then this adapter runtime and `proj4` dependency can be removed.
+- Tradeoff accepted: the hosted-runtime activation now accepts a small typed
+  host-panel callback surface, trading a cross-package UI callback for lazy
+  renderer ownership and unchanged first-class sidebar behavior.
+- Status: partial.
+- Verification: `node --import tsx --test tests/graticule.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/engine-boundary.test.ts` → 30 passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser externalization warnings were
+  non-fatal), emitting lazy `graticule-Vy2UK-ng.js`; `git diff --check` → passed;
+  reviewed engine-boundary baseline 119 → 118.
+- Follow-up: implement the ArcGIS `GraphicsLayer` grid adapter and compare
+  antimeridian/UTM labeling and capture behavior; Codex, 2026-07-20.

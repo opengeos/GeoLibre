@@ -22,7 +22,11 @@ export {
   TERRAIN_SETTINGS_EVENT,
   TERRAIN_SETTINGS_CLOSE_EVENT,
 } from "./map-controller";
-export type { MapEngineExtensionMap } from "./engine/extensions";
+export type {
+  MapEngineExtensionMap,
+  MapEngineRightPanelHost,
+  MapEngineRightPanelRegistration,
+} from "./engine/extensions";
 export type {
   BBox,
   BuiltInMapControl,

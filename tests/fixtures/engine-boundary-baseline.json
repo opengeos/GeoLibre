@@ -356,10 +356,6 @@
     "pattern": "maplibre-gl-geo-editor"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-graticule.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-mapillary.ts",
     "pattern": "maplibre-gl"
   },

@@ -150,9 +150,10 @@ Status values: not started · in progress · partial · blocked · done
   belong to core, and COG pixel reads now run through a typed lazy MapEngine
   extension; the adapter preserves the existing request semantics without
   changing ingest.
-- Implemented: Gridlines' serialized settings, labels, UTM helpers, and
-  coordinate formatting now belong to core, preparing its native renderer for
-  relocation without changing project state or ingest.
+- Implemented: Gridlines' serialized model is in core and its MapLibre
+  `line`/`symbol` layers, control, events, and sidebar panel are a lazy adapter
+  runtime. The typed panel host preserves the existing UI and reduces the
+  boundary baseline to 118 without changing project state or ingest.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
