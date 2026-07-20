@@ -1,6 +1,6 @@
 import type { MapViewState, GeoLibreLayer } from "@geolibre/core";
 
-export type EngineId = "maplibre" | "arcgis-scene";
+export type EngineId = "maplibre" | "arcgis-scene" | "arcgis-map";
 
 export function getEngineIdFromUrl(): EngineId {
   if (typeof window === "undefined") return "maplibre";
@@ -8,6 +8,9 @@ export function getEngineIdFromUrl(): EngineId {
   const engine = params.get("engine")?.toLowerCase();
   if (engine === "arcgis-scene") {
     return "arcgis-scene";
+  }
+  if (engine === "arcgis-map") {
+    return "arcgis-map";
   }
   return "maplibre";
 }
