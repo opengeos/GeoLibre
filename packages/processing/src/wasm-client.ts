@@ -188,9 +188,20 @@ export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
  * metadata but takes the manifest's parameters; the GeoLibre-authored tools that
  * never appear in the catalog are appended.
  *
+ * When the WASM manifests loaded, the binary's tool set is the ground truth for
+ * what can actually run locally, so a catalog tool the binary does **not**
+ * implement is dropped: it cannot run in WASM mode and would otherwise render as
+ * a dead-end form (the `assign_projection_*` tools carry no catalog params, so
+ * the dialog just says "This tool has no parameters", GeoLibre#1355) or, for
+ * ones the catalog does parameterize (`reproject_lidar`, the colour composites),
+ * fail on Run with "tool not found". This mirrors how locked "pro" tools that
+ * cannot run are hidden entirely. When manifest enumeration failed (an empty
+ * `wasmTools`), the whole catalog is kept as a display-only fallback rather than
+ * emptying the toolbox.
+ *
  * @param catalogTools - Tools from the Whitebox catalog snapshot.
  * @param wasmTools - Every WASM tool manifest ({@link listWasmToolManifests}).
- * @returns Catalog tools with WASM parameters, plus WASM-only GeoLibre tools.
+ * @returns Runnable catalog tools with WASM parameters, plus WASM-only GeoLibre tools.
  */
 /** Scalar catalog kinds trusted to correct a mislabeled WASM manifest param. */
 const CATALOG_SCALAR_KINDS = new Set(["string", "int", "double"]);
@@ -261,9 +272,12 @@ export function mergeWasmToolManifests(
   wasmTools: WhiteboxTool[],
 ): WhiteboxTool[] {
   const wasmById = new Map(wasmTools.map((tool) => [tool.id, tool] as const));
-  const merged = catalogTools.map((tool) => {
+  // With manifests loaded, drop a catalog tool the binary lacks (it can't run
+  // locally); with none loaded, keep the catalog as a display-only fallback.
+  const haveWasmManifests = wasmTools.length > 0;
+  const merged = catalogTools.flatMap((tool) => {
     const wasm = wasmById.get(tool.id);
-    if (!wasm) return tool;
+    if (!wasm) return haveWasmManifests ? [] : [tool];
     // Consume the match so a WASM-only-appended tool (below) can never duplicate
     // a catalog tool's id.
     wasmById.delete(tool.id);
@@ -273,11 +287,13 @@ export function mergeWasmToolManifests(
     // tool that also has a catalog stub keeps its "geolibre" marker for the
     // source filter. A same-named catalog param still corrects a WASM kind that
     // mislabels a scalar expression as a dataset/bool (GeoLibre#1073).
-    return {
-      ...tool,
-      params: reconcileToolParams(tool.params, wasm.params),
-      source: wasm.source ?? tool.source,
-    };
+    return [
+      {
+        ...tool,
+        params: reconcileToolParams(tool.params, wasm.params),
+        source: wasm.source ?? tool.source,
+      },
+    ];
   });
   const geolibreOnly = [...wasmById.values()].filter((tool) => tool.source === "geolibre");
   return [...merged, ...geolibreOnly];

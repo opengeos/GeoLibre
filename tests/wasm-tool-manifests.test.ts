@@ -56,7 +56,11 @@ describe("mergeWasmToolManifests", () => {
     assert.equal(tool.category, "Projection and Georeferencing");
   });
 
-  it("keeps catalog params when the WASM binary lacks the tool", () => {
+  it("keeps the whole catalog as a fallback when no manifests loaded", () => {
+    // An empty wasmTools means the manifest enumeration failed, not that the
+    // binary lacks every tool: keep the catalog (with its own params) as a
+    // display-only fallback rather than emptying the toolbox. Contrast with the
+    // #1355 case below, where a loaded manifest set does drop WASM-absent tools.
     const merged = mergeWasmToolManifests([catalogReprojectVector], []);
     const tool = merged.find((item) => item.id === "reproject_vector");
     assert.deepEqual(
@@ -212,6 +216,28 @@ describe("mergeWasmToolManifests", () => {
     const [tool] = mergeWasmToolManifests([catalog], [wasm]);
     // Kind stays unset so parameterKind resolves the WASM vector_out.
     assert.equal(tool.params?.[0]?.kind, undefined);
+  });
+
+  it("drops a catalog tool the WASM binary lacks once manifests loaded (#1355)", () => {
+    // assign_projection_* ship in the catalog with no params and are absent from
+    // the WASM binary, so in local mode they render a dead-end "no parameters"
+    // form and fail on Run with "tool not found". Once the manifests loaded (a
+    // non-empty wasmTools), such catalog-only tools are hidden, like locked ones.
+    const assignProjectionVector: WhiteboxTool = {
+      id: "assign_projection_vector",
+      display_name: "Assign Projection Vector",
+      category: "Projection and Georeferencing",
+      params: [],
+    };
+    const merged = mergeWasmToolManifests(
+      [catalogReprojectVector, assignProjectionVector],
+      [wasmReprojectVector],
+    );
+    assert.deepEqual(
+      merged.map((tool) => tool.id),
+      ["reproject_vector"],
+      "the WASM-absent catalog tool should be dropped",
+    );
   });
 
   it("does not append WASM-only Whitebox tools missing from the catalog", () => {
