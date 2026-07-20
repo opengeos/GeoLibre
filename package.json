@@ -41,6 +41,11 @@
     "typescript-eslint": "^8.64.0"
   },
   "overrides": {
+    "filelist": {
+      "minimatch": {
+        "brace-expansion": "^2.1.2"
+      }
+    },
     "sweepline-intersections": "^1.5.0",
     "uuid": "^14.0.0"
   },
