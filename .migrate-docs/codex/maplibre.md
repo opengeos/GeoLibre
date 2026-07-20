@@ -1100,3 +1100,52 @@
   reviewed engine-boundary baseline fell from 129 to 128 violations.
 - Follow-up: relocate the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — GeoAgent `GeoAgentControl`/native overlays → ArcGIS agent commands + `GraphicsLayer`
+
+- Source: MapLibre — the GeoAgent plugin directly lazy-loaded
+  `maplibre-gl-geoagent`, accessed its private MapLibre/Earth Engine tool
+  surface, mounted the native control, and synchronized its native overlay
+  registry to store records.
+- Files touched: `packages/plugins/src/plugins/maplibre-geoagent.ts` before →
+  generic renderer-neutral hosted descriptor;
+  `packages/map/src/maplibre-runtime/geoagent.ts` and
+  `geoagent-layer-sync.ts` added for native control/tool lifecycle and store
+  mirror; hosted-runtime registry, workspace manifests/lockfile, existing
+  GeoAgent sync-test import, and boundary fixture updated.
+- ArcGIS approach: a future agent adapter should translate approved agent
+  actions into `MapView` operations and adapter-owned `GraphicsLayer`,
+  `FeatureLayer`, and `WebTileLayer` records. The outer plugin remains a typed
+  hosted descriptor, so an ArcGIS implementation can retain activation,
+  positioning, rollback, and store-sync behavior without exposing `MapView` to
+  the agent package.
+- What changed: the public plugin now delegates all lifecycle and position work
+  through `MapEngineClient`'s hosted-plugin commands. The lazy MapLibre runtime
+  owns the GeoAgent control, MapLibre/Earth Engine imports, private tool patches,
+  OAuth enhancement, projection-independent native overlay mutations, and the
+  previous bidirectional store reconciliation. Agent-created layer records stay
+  store-authoritative; no data-ingest entry point or project schema changed.
+- Gap / limitation: the upstream GeoAgent tool runner emits MapLibre-specific
+  commands and exposes an undocumented overlay registry, while ArcGIS has no
+  drop-in equivalent for its script execution, layer ids, or Earth Engine
+  integration.
+- Workaround: isolate that control, its private types, and its overlay registry
+  inside the lazy adapter runtime while preserving normalized `GeoLibreLayer`
+  records at the boundary. Removal criteria: replace it once an ArcGIS-native
+  agent maps the supported tools to graphics/layers and passes the existing
+  add/remove/kind-switch/visibility/opacity/store-selection tests without
+  MapLibre or deck.gl handles.
+- Tradeoff accepted: the adapter now co-locates a substantial store-mirror
+  helper and relies on the same upstream private tool fields, trading some
+  adapter maintenance for a standard public descriptor and strict renderer
+  isolation.
+- Status: partial.
+- Verification: `node --import tsx --test tests/geoagent-layer-sync.test.ts
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 70 passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser externalization warnings were
+  non-fatal); the build retained dedicated GeoAgent runtime chunks; the reviewed
+  engine-boundary baseline fell from 128 to 125 violations.
+- Follow-up: relocate the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.

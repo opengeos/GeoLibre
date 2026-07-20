@@ -27,6 +27,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-gl-directions": async () => (await import("./directions")).maplibreDirectionsRuntime,
   "maplibre-gl-earth-engine": async () =>
     (await import("./earth-engine")).maplibreEarthEngineRuntime,
+  "maplibre-gl-geoagent": async () => (await import("./geoagent")).maplibreGeoAgentRuntime,
 };
 
 /**

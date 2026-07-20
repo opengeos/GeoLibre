@@ -37,6 +37,7 @@
     "maplibre-gl-earth-engine": "^0.4.2",
     "maplibre-gl-esri-wayback": "^0.2.2",
     "maplibre-gl-fema-wms": "^0.1.2",
+    "maplibre-gl-geoagent": "^0.5.5",
     "maplibre-gl-layer-control": "^0.17.4",
     "maplibre-gl-nasa-earthdata": "^0.1.4",
     "maplibre-gl-national-map": "^0.1.1",

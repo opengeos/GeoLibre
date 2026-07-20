@@ -10,7 +10,7 @@ import {
   unwireGeoAgentStoreSync,
   wireGeoAgentStoreSync,
   type GeoAgentOverlayRecord,
-} from "../packages/plugins/src/plugins/geoagent-layer-sync";
+} from "../packages/map/src/maplibre-runtime/geoagent-layer-sync";
 
 function overlayMap(...overlays: GeoAgentOverlayRecord[]): Map<string, GeoAgentOverlayRecord> {
   return new Map(overlays.map((overlay) => [overlay.name, overlay]));

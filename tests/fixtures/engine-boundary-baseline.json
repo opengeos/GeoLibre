@@ -364,18 +364,6 @@
     "pattern": "maplibre-gl-geo-editor"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-geoagent.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
-    "path": "packages/plugins/src/plugins/maplibre-geoagent.ts",
-    "pattern": "maplibre-gl-earth-engine"
-  },
-  {
-    "path": "packages/plugins/src/plugins/maplibre-geoagent.ts",
-    "pattern": "maplibre-gl-geoagent"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-graticule.ts",
     "pattern": "maplibre-gl"
   },

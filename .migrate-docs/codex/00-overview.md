@@ -121,6 +121,9 @@ Status values: not started · in progress · partial · blocked · done
   store-layer reconciliation are now a lazy MapLibre runtime. The toolbar holds
   only renderer-neutral visibility state and invokes typed lifecycle/hide
   commands; the boundary ratchet is 128 reviewed violations.
+- Implemented: GeoAgent now uses the generic hosted-plugin descriptor while its
+  native MapLibre/deck.gl/Earth Engine tools and store-backed overlay mirror run
+  in a lazy adapter runtime. The boundary ratchet is 125 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
