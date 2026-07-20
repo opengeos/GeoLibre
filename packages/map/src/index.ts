@@ -2,6 +2,8 @@ export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCa
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
+export * from "./engine/types";
+export { MapLibreEngine } from "./engine/maplibre-engine";
 export {
   applyMapViewToCamera,
   cesiumPitchToMapLibreDeg,
