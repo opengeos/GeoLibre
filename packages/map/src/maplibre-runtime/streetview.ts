@@ -1,7 +1,11 @@
 import { getGoogleMapsApiKey } from "@geolibre/core";
 import { StreetViewControl, type StreetViewControlOptions } from "maplibre-gl-streetview";
 import type { MapControlPosition } from "../engine/types";
-import type { MapLibreHostedRuntime, MapLibreHostedRuntimeContext } from "./types";
+import {
+  restoreHostedControlPanel,
+  type MapLibreHostedRuntime,
+  type MapLibreHostedRuntimeContext,
+} from "./types";
 
 const streetViewEnv = (
   import.meta as ImportMeta & {
@@ -69,7 +73,7 @@ function credentialsSignature(): string {
 }
 
 export const maplibreStreetViewRuntime: MapLibreHostedRuntime = {
-  activate: (context, { position }) => {
+  activate: (context, { position, collapsed }) => {
     activeContext = context;
     if (position) streetViewPosition = position;
     addRuntimeEnvListener();
@@ -84,7 +88,7 @@ export const maplibreStreetViewRuntime: MapLibreHostedRuntime = {
       return false;
     }
     appliedCredentialsSignature = credentialsSignature();
-    setTimeout(() => streetViewControl?.expand(), 0);
+    restoreHostedControlPanel(streetViewControl, collapsed);
   },
   deactivate: (context) => {
     if (streetViewControl) context.removeControl?.(streetViewControl);

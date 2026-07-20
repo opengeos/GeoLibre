@@ -633,3 +633,32 @@
 - Follow-up: move remaining self-contained controls (starting with annotations,
   basemap, and Overture) and then eliminate the legacy public renderer methods;
   Codex, 2026-07-20.
+
+## 2026-07-20 — PluginManager native-control restore hook → hosted runtime collapse contract
+
+- Source: MapLibre — project restore previously intercepted each plugin's
+  public `addMapControl` call to collapse a MapLibre panel after activation.
+- Files touched: `packages/map/src/maplibre-runtime/types.ts` before → shared
+  `restoreHostedControlPanel`; Street View and Web Services runtimes before →
+  consume `collapsed` activation context; hosted-runtime tests updated.
+- ArcGIS approach: retain the renderer-neutral activation context and let each
+  adapter apply it to the equivalent `MapView` widget/panel state, without
+  exposing a control object to `PluginManager`.
+- What changed: `createHostedMapPlugin` forwards PluginManager's existing
+  restore intent through the typed engine command. Adapter-owned controls
+  collapse immediately on restore and defer regular user activation expansion
+  to avoid the menu click-outside race.
+- Gap / limitation: the helper only covers controls already hosted in the
+  registry; unmoved legacy plugins still use the existing manager interception.
+- Workaround: every subsequent hosted control calls the shared helper. Removal
+  criteria: no plugin invokes public native `addMapControl`, after which the
+  old manager interception and native control type can be removed.
+- Tradeoff accepted: collapse behavior is now explicit in each adapter runtime
+  rather than automatic at the manager boundary, adding small lifecycle code
+  but preserving renderer isolation and exact restore semantics.
+- Status: partial.
+- Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 42 passed;
+  `npm run build` → passed.
+- Follow-up: include this helper in every remaining hosted control relocation;
+  Codex, 2026-07-20.

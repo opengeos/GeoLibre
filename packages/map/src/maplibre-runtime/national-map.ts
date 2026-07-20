@@ -6,7 +6,7 @@ import {
 } from "maplibre-gl-national-map";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapControlPosition } from "../engine/types";
-import type { MapLibreHostedRuntime } from "./types";
+import { restoreHostedControlPanel, type MapLibreHostedRuntime } from "./types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -125,7 +125,7 @@ const nationalMapAdapter: WebServiceAdapter<NationalMapControl> = {
 const nationalMapStoreSync = createWebServiceStoreSync(nationalMapAdapter);
 
 export const maplibreNationalMapRuntime: MapLibreHostedRuntime = {
-  activate: (context, { position }) => {
+  activate: (context, { position, collapsed }) => {
     if (position) nationalMapPosition = position;
     if (!nationalMapControl) {
       nationalMapControl = new NationalMapControl(getNationalMapControlOptions());
@@ -137,7 +137,7 @@ export const maplibreNationalMapRuntime: MapLibreHostedRuntime = {
       return false;
     }
     nationalMapStoreSync.attach(nationalMapControl);
-    setTimeout(() => nationalMapControl?.expand(), 0);
+    restoreHostedControlPanel(nationalMapControl, collapsed);
   },
   deactivate: (context) => {
     if (!nationalMapControl) return;

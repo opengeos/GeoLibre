@@ -8,7 +8,7 @@ import {
 } from "maplibre-gl-enviroatlas";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapControlPosition } from "../engine/types";
-import type { MapLibreHostedRuntime } from "./types";
+import { restoreHostedControlPanel, type MapLibreHostedRuntime } from "./types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -143,7 +143,7 @@ const enviroAtlasAdapter: WebServiceAdapter<EnviroAtlasControl> = {
 const enviroAtlasStoreSync = createWebServiceStoreSync(enviroAtlasAdapter);
 
 export const maplibreEnviroAtlasRuntime: MapLibreHostedRuntime = {
-  activate: (context, { position }) => {
+  activate: (context, { position, collapsed }) => {
     if (position) enviroAtlasPosition = position;
     if (!enviroAtlasControl) {
       enviroAtlasControl = new EnviroAtlasControl(getEnviroAtlasControlOptions());
@@ -155,7 +155,7 @@ export const maplibreEnviroAtlasRuntime: MapLibreHostedRuntime = {
       return false;
     }
     enviroAtlasStoreSync.attach(enviroAtlasControl);
-    setTimeout(() => enviroAtlasControl?.expand(), 0);
+    restoreHostedControlPanel(enviroAtlasControl, collapsed);
   },
   deactivate: (context) => {
     if (!enviroAtlasControl) return;

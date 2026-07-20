@@ -32,3 +32,16 @@ export interface MapLibreHostedRuntime {
 }
 
 export type MapLibreHostedRuntimeLoader = () => Promise<MapLibreHostedRuntime>;
+
+/** Apply the PluginManager project's restored panel-collapse intent. */
+export function restoreHostedControlPanel(
+  control: { collapse?: () => void; expand?: () => void },
+  collapsed: boolean | undefined,
+): void {
+  if (collapsed) {
+    control.collapse?.();
+    return;
+  }
+  // Avoid the activating menu click being processed as a click-outside event.
+  setTimeout(() => control.expand?.(), 0);
+}

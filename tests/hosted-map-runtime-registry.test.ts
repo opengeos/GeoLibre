@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createMapLibreHostedRuntimeRegistry } from "../packages/map/src/maplibre-runtime/registry";
+import { restoreHostedControlPanel } from "../packages/map/src/maplibre-runtime/types";
 import { createHostedMapPlugin } from "../packages/plugins/src/hosted-map-plugin";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import type { MapEngineClient } from "../packages/map/src/engine/types";
 
 describe("MapLibre hosted runtime registry", () => {
+  it("honors project restore collapse instead of scheduling an auto-expand", () => {
+    const calls: string[] = [];
+    const control = {
+      collapse: () => calls.push("collapse"),
+      expand: () => calls.push("expand"),
+    };
+    restoreHostedControlPanel(control, true);
+    assert.deepEqual(calls, ["collapse"]);
+  });
+
   it("loads a runtime only on activation and retains it for lifecycle commands", async () => {
     const calls: string[] = [];
     let loads = 0;

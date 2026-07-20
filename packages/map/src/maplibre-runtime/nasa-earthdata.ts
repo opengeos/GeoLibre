@@ -8,7 +8,7 @@ import {
 } from "maplibre-gl-nasa-earthdata";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapControlPosition } from "../engine/types";
-import type { MapLibreHostedRuntime } from "./types";
+import { restoreHostedControlPanel, type MapLibreHostedRuntime } from "./types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -152,7 +152,7 @@ function storeTiles(layerId: string): string[] | null {
 const nasaEarthdataStoreSync = createWebServiceStoreSync(nasaEarthdataAdapter);
 
 export const maplibreNasaEarthdataRuntime: MapLibreHostedRuntime = {
-  activate: (context, { position }) => {
+  activate: (context, { position, collapsed }) => {
     if (position) nasaEarthdataPosition = position;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
@@ -164,7 +164,7 @@ export const maplibreNasaEarthdataRuntime: MapLibreHostedRuntime = {
       return false;
     }
     nasaEarthdataStoreSync.attach(nasaEarthdataControl);
-    setTimeout(() => nasaEarthdataControl?.expand(), 0);
+    restoreHostedControlPanel(nasaEarthdataControl, collapsed);
   },
   deactivate: (context) => {
     if (!nasaEarthdataControl) return;

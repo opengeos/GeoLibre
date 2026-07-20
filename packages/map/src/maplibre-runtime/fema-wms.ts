@@ -6,7 +6,7 @@ import {
 } from "maplibre-gl-fema-wms";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapControlPosition } from "../engine/types";
-import type { MapLibreHostedRuntime } from "./types";
+import { restoreHostedControlPanel, type MapLibreHostedRuntime } from "./types";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -111,7 +111,7 @@ const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
 const femaWmsStoreSync = createWebServiceStoreSync(femaWmsAdapter);
 
 export const maplibreFemaWmsRuntime: MapLibreHostedRuntime = {
-  activate: (context, { position }) => {
+  activate: (context, { position, collapsed }) => {
     if (position) femaWmsPosition = position;
     if (!femaWmsControl) {
       femaWmsControl = new FemaWmsControl(getFemaWmsControlOptions());
@@ -123,7 +123,7 @@ export const maplibreFemaWmsRuntime: MapLibreHostedRuntime = {
       return false;
     }
     femaWmsStoreSync.attach(femaWmsControl);
-    setTimeout(() => femaWmsControl?.expand(), 0);
+    restoreHostedControlPanel(femaWmsControl, collapsed);
   },
   deactivate: (context) => {
     if (!femaWmsControl) return;
