@@ -694,3 +694,40 @@
   tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 43 passed.
 - Follow-up: relocate the next self-contained MapLibre controls and update the
   boundary ratchet in the same verified commit; Codex, 2026-07-20.
+
+## 2026-07-20 — USGS LiDAR `UsgsLidarControl` → lazy MapLibre adapter runtime
+
+- Source: MapLibre — the standalone `UsgsLidarControl` dynamically loaded a
+  deck.gl-backed point-cloud viewer, directly mounted/removed a native control,
+  forced the MapLibre projection to Mercator, and added the 3DEP coverage WMS
+  record from `@geolibre/plugins`.
+- Files touched: moved
+  `packages/plugins/src/plugins/maplibre-usgs-lidar.ts` before →
+  `packages/map/src/maplibre-runtime/usgs-lidar.ts`; moved the upstream type
+  shim with it; original plugin module before → hosted descriptor; hosted
+  registry, package manifests/lockfile, and boundary fixture updated.
+- ArcGIS approach: a future adapter can pair a `PointCloudLayer`-backed viewer
+  with a `WMSLayer` coverage overlay under the same plugin id, using its own
+  `MapView` widget lifecycle and the normalized store-layer record.
+- What changed: the adapter now owns the dynamic control import and native
+  control lifecycle. Projection preference and the coverage layer continue to
+  be updated through `@geolibre/core` store actions; the runtime neither changes
+  ingest nor retains a competing data model. Restore collapse intent reaches
+  the adapter-owned panel through `restoreHostedControlPanel`.
+- Gap / limitation: the upstream LiDAR viewer is deck.gl-specific and only
+  renders under its Mercator viewport assumptions; ArcGIS point-cloud service
+  compatibility is not yet validated for the USGS COPC search flow.
+- Workaround: retain the existing Mercator preference transition and 3DEP WMS
+  store layer inside the MapLibre runtime. Removal criteria: an ArcGIS runtime
+  reproduces the search/viewer interaction and store-layer semantics without
+  the deck.gl control.
+- Tradeoff accepted: activation now crosses both hosted-runtime and LiDAR
+  dynamic-import boundaries, trading initial panel latency for a smaller startup
+  bundle and no renderer SDK import in the plugin package.
+- Status: partial.
+- Verification: `node --import tsx --test tests/engine-boundary.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 44 passed; `npm run build` → passed; the
+  reviewed boundary ratchet fell from 145 to 137 violations.
+- Follow-up: relocate the Esri Wayback control next, preserving its normalized
+  store-layer synchronization and historical release state; Codex, 2026-07-20.

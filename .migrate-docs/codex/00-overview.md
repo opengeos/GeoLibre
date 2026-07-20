@@ -83,6 +83,10 @@ Status values: not started · in progress · partial · blocked · done
   run as lazy MapLibre provider-control runtimes. Their bidirectional
   store-sync helper moved with them; store layers remain authoritative and
   restored controls receive their collapse intent through the runtime contract.
+- Implemented: the USGS LiDAR viewer, its upstream type shim, and its dynamic
+  deck.gl loading path now belong to the MapLibre adapter. The source-of-truth
+  projection preference and 3DEP coverage layer remain store actions; the
+  boundary ratchet is down to 137 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

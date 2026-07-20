@@ -268,14 +268,6 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "packages/plugins/src/maplibre-gl-usgs-lidar.d.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
-    "path": "packages/plugins/src/maplibre-gl-usgs-lidar.d.ts",
-    "pattern": "maplibre-gl-lidar"
-  },
-  {
     "path": "packages/plugins/src/plugin-manager.ts",
     "pattern": "maplibre-gl"
   },
@@ -376,20 +368,12 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-enviroatlas.ts",
-    "pattern": "maplibre-gl-enviroatlas"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-esri-wayback.ts",
     "pattern": "maplibre-gl"
   },
   {
     "path": "packages/plugins/src/plugins/maplibre-esri-wayback.ts",
     "pattern": "maplibre-gl-esri-wayback"
-  },
-  {
-    "path": "packages/plugins/src/plugins/maplibre-fema-wms.ts",
-    "pattern": "maplibre-gl-fema-wms"
   },
   {
     "path": "packages/plugins/src/plugins/maplibre-geo-editor.ts",
@@ -418,14 +402,6 @@
   {
     "path": "packages/plugins/src/plugins/maplibre-mapillary.ts",
     "pattern": "maplibre-gl"
-  },
-  {
-    "path": "packages/plugins/src/plugins/maplibre-nasa-earthdata.ts",
-    "pattern": "maplibre-gl-nasa-earthdata"
-  },
-  {
-    "path": "packages/plugins/src/plugins/maplibre-national-map.ts",
-    "pattern": "maplibre-gl-national-map"
   },
   {
     "path": "packages/plugins/src/plugins/maplibre-openaerialmap.ts",
@@ -464,10 +440,6 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-streetview.ts",
-    "pattern": "maplibre-gl-streetview"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-sun.ts",
     "pattern": "maplibre-gl"
   },
@@ -486,10 +458,6 @@
   {
     "path": "packages/plugins/src/plugins/maplibre-timelapse.ts",
     "pattern": "maplibre-gl"
-  },
-  {
-    "path": "packages/plugins/src/plugins/maplibre-usgs-lidar.ts",
-    "pattern": "maplibre-gl-usgs-lidar"
   },
   {
     "path": "packages/plugins/src/plugins/maplibre-vector.ts",

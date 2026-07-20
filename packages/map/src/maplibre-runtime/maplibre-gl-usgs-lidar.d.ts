@@ -10,7 +10,7 @@ declare module "maplibre-gl-usgs-lidar" {
   import type { IControl, Map as MapLibreMap } from "maplibre-gl";
   // `maplibre-gl-usgs-lidar`'s own types re-export `lidarControlOptions` typed
   // as `Partial<LidarControlOptions>` from `maplibre-gl-lidar`, so that package
-  // must stay a direct dependency of @geolibre/plugins for this shim (the only
+  // must stay a direct dependency of @geolibre/map for this shim (the only
   // remaining consumer after the old LiDAR viewer was removed) to resolve.
   import type { LidarControlOptions } from "maplibre-gl-lidar";
 

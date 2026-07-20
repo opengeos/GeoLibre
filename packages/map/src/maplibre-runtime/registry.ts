@@ -16,6 +16,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-gl-nasa-earthdata": async () =>
     (await import("./nasa-earthdata")).maplibreNasaEarthdataRuntime,
   "maplibre-gl-enviroatlas": async () => (await import("./enviroatlas")).maplibreEnviroAtlasRuntime,
+  "maplibre-gl-usgs-lidar": async () => (await import("./usgs-lidar")).maplibreUsgsLidarRuntime,
 };
 
 /**
