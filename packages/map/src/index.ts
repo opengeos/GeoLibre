@@ -4,6 +4,7 @@ export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isArcGIS3DSupportedLayerType as isCesiumSupportedLayerType, ArcGISSceneEngine } from "./engine/arcgis-scene-engine";
 export * from "./engine/types";
 export { MapLibreEngine } from "./engine/maplibre-engine";
+export { ArcGISMapEngine } from "./engine/arcgis-map-engine";
 export {
   MapController,
   createMapController,
