@@ -230,52 +230,71 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // setState afterwards.
   useEffect(() => () => abortAll(), [abortAll]);
 
-  const runQueryForPoint = useCallback((id: number, lngLat: [number, number]) => {
-    abortControllers.current.get(id)?.abort();
-    const ac = new AbortController();
-    abortControllers.current.set(id, ac);
-    const clearProgress = () =>
-      setProgressById((prev) => {
-        if (!(id in prev)) return prev;
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-    queryPixelTimeSeries(lngLat, {
-      signal: ac.signal,
-      onProgress: (done, total) => {
-        if (ac.signal.aborted) return;
-        setProgressById((prev) => ({ ...prev, [id]: { done, total } }));
-      },
-    })
-      .then((res) => {
-        if (ac.signal.aborted) return;
+  const runQueryForPoint = useCallback(
+    (id: number, lngLat: [number, number]) => {
+      const client = mapControllerRef.current;
+      if (!client) {
         setPoints((prev) =>
-          prev.map((p) => (p.id === id ? { ...p, result: res, loading: false } : p)),
-        );
-        clearProgress();
-        // First loaded point seeds the charted band; later points keep it.
-        setSelectedBand((prev) => (prev == null ? res.defaultBandIndex : prev));
-      })
-      .catch((err) => {
-        if (ac.signal.aborted) return;
-        setPoints((prev) =>
-          prev.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  error: err instanceof Error ? err.message : String(err),
-                  loading: false,
-                }
-              : p,
+          prev.map((point) =>
+            point.id === id
+              ? { ...point, error: "The map engine is not ready.", loading: false }
+              : point,
           ),
         );
-        clearProgress();
+        setProgressById((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        return;
+      }
+      abortControllers.current.get(id)?.abort();
+      const ac = new AbortController();
+      abortControllers.current.set(id, ac);
+      const clearProgress = () =>
+        setProgressById((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      queryPixelTimeSeries(client, lngLat, {
+        signal: ac.signal,
+        onProgress: (done, total) => {
+          if (ac.signal.aborted) return;
+          setProgressById((prev) => ({ ...prev, [id]: { done, total } }));
+        },
       })
-      .finally(() => {
-        if (abortControllers.current.get(id) === ac) abortControllers.current.delete(id);
-      });
-  }, []);
+        .then((res) => {
+          if (ac.signal.aborted) return;
+          setPoints((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, result: res, loading: false } : p)),
+          );
+          clearProgress();
+          // First loaded point seeds the charted band; later points keep it.
+          setSelectedBand((prev) => (prev == null ? res.defaultBandIndex : prev));
+        })
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          setPoints((prev) =>
+            prev.map((p) =>
+              p.id === id
+                ? {
+                    ...p,
+                    error: err instanceof Error ? err.message : String(err),
+                    loading: false,
+                  }
+                : p,
+            ),
+          );
+          clearProgress();
+        })
+        .finally(() => {
+          if (abortControllers.current.get(id) === ac) abortControllers.current.delete(id);
+        });
+    },
+    [mapControllerRef],
+  );
 
   // While picking, swap the cursor to a crosshair and capture each map click as
   // another point (the mode stays active so consecutive clicks accumulate).

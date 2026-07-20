@@ -1,3 +1,4 @@
+import type { PixelTimeSeriesRequest, PixelTimeSeriesResult } from "@geolibre/core";
 import type { MapControlPosition, MapEngineClient } from "../engine/types";
 import type maplibregl from "maplibre-gl";
 
@@ -37,6 +38,11 @@ export interface MapLibreHostedRuntime {
   setPosition?(context: MapLibreHostedRuntimeContext, position: MapControlPosition): boolean | void;
   getState?(): unknown;
   applyState?(context: MapLibreHostedRuntimeContext, state: unknown): boolean | void;
+  /** Samples the runtime-owned Time Slider COG stack without exposing native APIs. */
+  queryTimeSliderPixels?(
+    context: MapLibreHostedRuntimeContext,
+    request: PixelTimeSeriesRequest,
+  ): Promise<PixelTimeSeriesResult>;
   /** Handles a named, typed engine command for this adapter-private runtime. */
   runCommand?(context: MapLibreHostedRuntimeContext, command: string): boolean | void;
 }

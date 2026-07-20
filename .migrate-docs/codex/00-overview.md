@@ -144,12 +144,12 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: Time Slider's native control, source adapters, theme observer,
   and MapLibre time filtering now run only in a lazy MapLibre hosted runtime.
   The plugin keeps validated serialized project state and typed MapEngine
-  calls; store layers remain authoritative. The boundary ratchet is 121
-  reviewed violations; COG pixel reads are explicitly deferred for the
-  no-ingest decision.
+  calls; store layers remain authoritative. The boundary ratchet is now 119
+  reviewed violations.
 - Implemented: pixel-series DTOs and pure chart/export transformations now
-  belong to core, preparing a typed MapEngine sampling result while preserving
-  the existing COG range-read behavior for the next adapter-runtime slice.
+  belong to core, and COG pixel reads now run through a typed lazy MapEngine
+  extension; the adapter preserves the existing request semantics without
+  changing ingest.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

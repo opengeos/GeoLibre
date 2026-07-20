@@ -1,3 +1,4 @@
+import type { PixelTimeSeriesRequest, PixelTimeSeriesResult } from "@geolibre/core";
 import type { MapControlPosition } from "./types";
 
 /**
@@ -49,6 +50,10 @@ export interface MapEngineExtensionMap {
   "hosted-plugin.apply-state": {
     input: { pluginId: string; state: unknown };
     output: boolean;
+  };
+  "time-slider.query-pixel-series": {
+    input: PixelTimeSeriesRequest;
+    output: Promise<PixelTimeSeriesResult>;
   };
   "directions.remove-last": {
     input: undefined;

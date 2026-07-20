@@ -575,6 +575,10 @@ export class MapLibreEngine implements MapEngine {
           input.state,
         ) as MapEngineExtensionMap[K]["output"];
       }
+      case "time-slider.query-pixel-series":
+        return this.hostedRuntimes.queryTimeSliderPixels(
+          _input as MapEngineExtensionMap["time-slider.query-pixel-series"]["input"],
+        ) as MapEngineExtensionMap[K]["output"];
       case "directions.remove-last":
       case "directions.clear":
         return this.hostedRuntimes.runCommand(

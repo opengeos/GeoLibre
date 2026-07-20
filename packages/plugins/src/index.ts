@@ -471,7 +471,6 @@ export {
 export {
   bandOptionsFromResults,
   downsampleSteps,
-  getTimeSliderCogSources,
   hasTimeSliderRasterStack,
   queryPixelTimeSeries,
   seriesToFeatureCollection,
@@ -481,6 +480,7 @@ export {
   type PixelSeries,
   type PixelSeriesPoint,
   type PixelTimeSeriesOptions,
+  type PixelTimeSeriesRequest,
   type PixelTimeSeriesResult,
 } from "./plugins/time-slider-pixel-series";
 export {

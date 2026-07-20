@@ -436,14 +436,6 @@
     "pattern": "maplibre-gl-components"
   },
   {
-    "path": "packages/plugins/src/plugins/time-slider-pixel-series.ts",
-    "pattern": "maplibre-gl-raster"
-  },
-  {
-    "path": "packages/plugins/src/plugins/time-slider-pixel-series.ts",
-    "pattern": "maplibre-gl-time-slider"
-  },
-  {
     "path": "packages/plugins/src/plugins/vector-layer-sync.ts",
     "pattern": "maplibre-gl"
   },

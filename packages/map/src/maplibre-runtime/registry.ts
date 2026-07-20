@@ -1,3 +1,4 @@
+import type { PixelTimeSeriesRequest, PixelTimeSeriesResult } from "@geolibre/core";
 import type { MapControlPosition, MapEngineClient } from "../engine/types";
 import type {
   MapLibreHostedRuntime,
@@ -108,6 +109,14 @@ export class MapLibreHostedRuntimeRegistry {
     const runtime = this.loaded.get(pluginId);
     if (!runtime?.applyState) return false;
     return runtime.applyState(this.context(), state) !== false;
+  }
+
+  async queryTimeSliderPixels(request: PixelTimeSeriesRequest): Promise<PixelTimeSeriesResult> {
+    const runtime = await this.load("maplibre-gl-time-slider");
+    if (!runtime.queryTimeSliderPixels) {
+      throw new Error("The active MapLibre Time Slider runtime cannot query COG pixels.");
+    }
+    return runtime.queryTimeSliderPixels(this.context(), request);
   }
 
   runCommand(pluginId: string, command: string): boolean {

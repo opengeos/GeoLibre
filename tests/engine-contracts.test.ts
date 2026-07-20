@@ -110,6 +110,16 @@ function createCompleteFake(): MapEngine {
         case "hosted-plugin.deactivate":
         case "hosted-plugin.get-state":
           return undefined;
+        case "time-slider.query-pixel-series":
+          return Promise.resolve({
+            lngLat: [0, 0],
+            series: [],
+            bands: [],
+            defaultBandIndex: null,
+            stepCount: 0,
+            originalStepCount: 0,
+            truncated: false,
+          });
       }
     },
     on: (event, handler): Unsubscribe => {
@@ -163,8 +173,12 @@ test("extension commands infer their declared result", async () => {
     pluginId: "example",
   });
   const hidden: boolean = engine.invoke("earth-engine.hide", undefined);
+  const pixels = await engine.invoke("time-slider.query-pixel-series", {
+    lngLat: [8.55, 47.37],
+  });
 
   assert.equal(activated, true);
   assert.equal(state, undefined);
   assert.equal(hidden, false);
+  assert.deepEqual(pixels.lngLat, [0, 0]);
 });

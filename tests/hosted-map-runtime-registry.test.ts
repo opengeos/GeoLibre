@@ -68,6 +68,32 @@ describe("MapLibre hosted runtime registry", () => {
     });
     await assert.rejects(() => registry.activate("unavailable", {}), /chunk unavailable/);
   });
+
+  it("lazy-loads the Time Slider runtime for pixel-series requests", async () => {
+    const calls: unknown[] = [];
+    const registry = createMapLibreHostedRuntimeRegistry({} as MapEngineClient, {
+      "maplibre-gl-time-slider": async () => ({
+        activate: () => true,
+        queryTimeSliderPixels: async (_context, request) => {
+          calls.push(request);
+          return {
+            lngLat: request.lngLat,
+            series: [],
+            bands: [],
+            defaultBandIndex: null,
+            stepCount: 0,
+            originalStepCount: 0,
+            truncated: false,
+          };
+        },
+      }),
+    });
+
+    const result = await registry.queryTimeSliderPixels({ lngLat: [8.55, 47.37] });
+
+    assert.deepEqual(result.lngLat, [8.55, 47.37]);
+    assert.deepEqual(calls, [{ lngLat: [8.55, 47.37] }]);
+  });
 });
 
 describe("hosted map plugin descriptor", () => {

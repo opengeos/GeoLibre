@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { maplibreTimeSliderPlugin } from "../packages/plugins/src/plugins/maplibre-time-slider";
+import {
+  hasTimeSliderRasterStack,
+  queryPixelTimeSeries,
+} from "../packages/plugins/src/plugins/time-slider-pixel-series";
+import type { MapEngineClient } from "../packages/map/src/engine/types";
 
 // applyProjectState / getProjectState touch no app methods while no control is
 // active (the plugin is never activated here), so a bare stub satisfies the type.
@@ -138,5 +143,35 @@ describe("Time Slider hosted descriptor", () => {
       ],
     );
     assert.deepEqual(saved(), runtimeState);
+  });
+
+  it("queries COG pixels only through the typed MapEngine command", async () => {
+    const invocations: Array<{ command: string; input: unknown }> = [];
+    const engine = {
+      invoke: (command: string, input: unknown) => {
+        invocations.push({ command, input });
+        return Promise.resolve({
+          lngLat: [8.55, 47.37],
+          series: [],
+          bands: [],
+          defaultBandIndex: null,
+          stepCount: 0,
+          originalStepCount: 0,
+          truncated: false,
+        });
+      },
+    } as unknown as MapEngineClient;
+
+    assert.equal(apply(baseConfig({ sources: [{ type: "cog", id: "annual" }] })), true);
+    assert.equal(hasTimeSliderRasterStack(), true);
+    const result = await queryPixelTimeSeries(engine, [8.55, 47.37], { maxSteps: 12 });
+
+    assert.deepEqual(result.lngLat, [8.55, 47.37]);
+    assert.deepEqual(invocations, [
+      {
+        command: "time-slider.query-pixel-series",
+        input: { lngLat: [8.55, 47.37], options: { maxSteps: 12 } },
+      },
+    ]);
   });
 });

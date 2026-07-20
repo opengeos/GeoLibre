@@ -78,6 +78,14 @@ export interface PixelTimeSeriesOptions {
   maxSteps?: number;
 }
 
+/** A renderer-neutral request to sample a Time Slider raster stack at one point. */
+export interface PixelTimeSeriesRequest {
+  /** Clicked location in WGS84 longitude/latitude order. */
+  lngLat: [number, number];
+  /** Cancellation, progress, and timeline-step cap controls. */
+  options?: PixelTimeSeriesOptions;
+}
+
 /**
  * Downsamples timeline steps while preserving their endpoints.
  *

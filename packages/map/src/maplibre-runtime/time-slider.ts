@@ -6,6 +6,8 @@ import {
   type GeoLibreLayer,
   type TimeBinding,
   type TimeGranularity,
+  type PixelTimeSeriesRequest,
+  type PixelTimeSeriesResult,
 } from "@geolibre/core";
 import {
   TimeSliderControl,
@@ -762,6 +764,15 @@ function applyTimeSliderState(context: MapLibreHostedRuntimeContext, state: unkn
   return true;
 }
 
+async function queryTimeSliderPixels(
+  _context: MapLibreHostedRuntimeContext,
+  request: PixelTimeSeriesRequest,
+): Promise<PixelTimeSeriesResult> {
+  const config = timeSliderControl?.getConfig() ?? savedConfig;
+  const { queryMapLibreTimeSliderPixels } = await import("./time-slider-pixel-series");
+  return queryMapLibreTimeSliderPixels(config, request);
+}
+
 /** Lazy MapLibre-only Time Slider control and store mirror. */
 export const maplibreTimeSliderRuntime: MapLibreHostedRuntime = {
   activate: activateTimeSlider,
@@ -769,4 +780,5 @@ export const maplibreTimeSliderRuntime: MapLibreHostedRuntime = {
   setPosition: setTimeSliderPosition,
   getState: () => serializableConfig(timeSliderControl?.getConfig() ?? savedConfig),
   applyState: applyTimeSliderState,
+  queryTimeSliderPixels,
 };

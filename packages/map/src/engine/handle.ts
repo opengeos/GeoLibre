@@ -303,7 +303,7 @@ class StableMapEngineHandle implements MapEngine {
       });
       return undefined as MapEngineExtensionMap[K]["output"];
     }
-    if (command === "hosted-plugin.activate") {
+    if (command === "hosted-plugin.activate" || command === "time-slider.query-pixel-series") {
       return this.whenReady().then((adapter) =>
         adapter.invoke(command, input),
       ) as MapEngineExtensionMap[K]["output"];

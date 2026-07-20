@@ -310,6 +310,8 @@ export class CesiumEngine implements MapEngine {
       case "hosted-plugin.deactivate":
       case "hosted-plugin.get-state":
         return undefined as MapEngineExtensionMap[K]["output"];
+      case "time-slider.query-pixel-series":
+        return this.unsupported("feature-query") as MapEngineExtensionMap[K]["output"];
       case "directions.remove-last":
       case "directions.clear":
       case "earth-engine.hide":
