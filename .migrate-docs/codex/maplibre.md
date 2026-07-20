@@ -32,8 +32,8 @@
   cost of transient memory/CPU during exports.
 - Status: done.
 - Verification: `node --import tsx --test tests/print-capture.test.ts
-tests/map-engine-interactions.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 25 passed;
+  tests/map-engine-interactions.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 25 passed;
   `npm run build` → passed.
 - Follow-up: move map/video and tour recording plus inset-map lifecycle into
   the same engine boundary in Task 10.
@@ -67,7 +67,7 @@ tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 25 passed;
   renderer boundary and a portable recorder contract.
 - Status: done.
 - Verification: `node --import tsx --test tests/map-recorder.test.ts
-tests/tour-recorder.test.ts tests/engine-contracts.test.ts` → 59 passed;
+  tests/tour-recorder.test.ts tests/engine-contracts.test.ts` → 59 passed;
   `npm run build` → passed.
 - Follow-up: migrate the story presentation's inset-map and marker lifecycle
   through an engine-owned React host in Task 10.
@@ -101,8 +101,8 @@ tests/tour-recorder.test.ts tests/engine-contracts.test.ts` → 59 passed;
   deterministic cleanup and no SDK leakage into the app.
 - Status: done.
 - Verification: `node --import tsx --test tests/inset-map-canvas.test.ts
-tests/engine-boundary.test.ts tests/map-engine-camera-consumers.test.ts
-tests/storymap-pdf.test.ts` → 22 passed; `npm run build` → passed.
+  tests/engine-boundary.test.ts tests/map-engine-camera-consumers.test.ts
+  tests/storymap-pdf.test.ts` → 22 passed; `npm run build` → passed.
 - Follow-up: introduce Plugin API v2 in Task 11; Codex, 2026-07-20.
 
 ## 2026-07-20 — Flat native controller surface → typed `MapEngine` capability groups
@@ -207,9 +207,9 @@ tests/storymap-pdf.test.ts` → 22 passed; `npm run build` → passed.
   while permitting small, behavior-preserving commits.
 - Status: done.
 - Verification: `node --import tsx --test tests/engine-contracts.test.ts
-tests/engine-boundary.test.ts` → 4 passed; `npx tsc --noEmit --strict
---skipLibCheck --moduleResolution bundler --module esnext --target es2022
---lib es2022,dom --types node tests/engine-contracts.test.ts` → passed;
+  tests/engine-boundary.test.ts` → 4 passed; `npx tsc --noEmit --strict
+  --skipLibCheck --moduleResolution bundler --module esnext --target es2022
+  --lib es2022,dom --types node tests/engine-contracts.test.ts` → passed;
   scoped ESLint and `git diff --check` → passed.
 - Follow-up: implement the stable synchronous handle and lazy MapLibre adapter,
   then begin deleting reviewed boundary entries.
@@ -245,8 +245,8 @@ tests/engine-boundary.test.ts` → 4 passed; `npx tsc --noEmit --strict
   adapter events reconcile those values once mounting completes.
 - Status: done.
 - Verification: `node --import tsx --test tests/map-engine-handle.test.ts
-tests/maplibre-engine.test.ts tests/map-controller.test.ts
-tests/engine-boundary.test.ts` → 51 passed; scoped strict TypeScript and ESLint
+  tests/maplibre-engine.test.ts tests/map-controller.test.ts
+  tests/engine-boundary.test.ts` → 51 passed; scoped strict TypeScript and ESLint
   checks → passed; `git diff --check` → passed.
 - Follow-up: extract the existing Cesium viewer lifecycle behind the same seam
   and encode unsupported capabilities explicitly.
@@ -284,10 +284,10 @@ tests/engine-boundary.test.ts` → 51 passed; scoped strict TypeScript and ESLin
 - Status: partial.
 - Verification: `npm run build -w geolibre-desktop` → passed;
   `node --import tsx --test tests/engine-registry.test.ts
-tests/engine-contracts.test.ts tests/engine-conformance.test.ts
-tests/engine-boundary.test.ts tests/maplibre-engine.test.ts
-tests/cesium-engine.test.ts` → 27 passed; `npx playwright test
-e2e/engine-param.spec.ts` → 2 passed; scoped ESLint and `git diff --check` →
+  tests/engine-contracts.test.ts tests/engine-conformance.test.ts
+  tests/engine-boundary.test.ts tests/maplibre-engine.test.ts
+  tests/cesium-engine.test.ts` → 27 passed; `npx playwright test
+  e2e/engine-param.spec.ts` → 2 passed; scoped ESLint and `git diff --check` →
   passed (two unrelated pre-existing hook warnings remain in `DesktopShell`).
 - Follow-up: migrate camera/view/control consumers to `MapEngineClient` and
   remove their corresponding boundary entries.
@@ -321,7 +321,7 @@ e2e/engine-param.spec.ts` → 2 passed; scoped ESLint and `git diff --check` →
   unsupported-command error.
 - Gap / limitation: consumers that also need source/style inspection, capture,
   or transient interactions retain a temporary `MapController &
-MapEngineClient` ref until the following capability slices migrate those
+  MapEngineClient` ref until the following capability slices migrate those
   operations. Cesium applies story chapter views but does not reproduce
   MapLibre's optional 30-second post-transition rotation.
 - Workaround: the primary adapter-private compatibility proxy satisfies the
@@ -338,9 +338,9 @@ MapEngineClient` ref until the following capability slices migrate those
 - Status: partial.
 - Verification: `npm run build -w geolibre-desktop` → passed;
   `node --import tsx --test tests/map-engine-camera-consumers.test.ts
-tests/engine-boundary.test.ts tests/maplibre-engine.test.ts
-tests/cesium-engine.test.ts tests/map-engine-handle.test.ts
-tests/core-project.test.ts tests/collab-protocol.test.ts` → 82 passed;
+  tests/engine-boundary.test.ts tests/maplibre-engine.test.ts
+  tests/cesium-engine.test.ts tests/map-engine-handle.test.ts
+  tests/core-project.test.ts tests/collab-protocol.test.ts` → 82 passed;
   `git diff --check` → passed.
 - Follow-up: migrate live layer/source/style queries and feature operations to
   `MapEngineClient.layers`, then remove the corresponding intersection types.
@@ -379,9 +379,9 @@ tests/core-project.test.ts tests/collab-protocol.test.ts` → 82 passed;
   implementable by ArcGIS adapters.
 - Status: partial.
 - Verification: `npm run build` → passed; `node --import tsx --test
-tests/geo-editor-view-import.test.ts tests/map-controller.test.ts
-tests/maplibre-engine.test.ts tests/feature-selection.test.ts
-tests/sql-query-layer.test.ts` → 112 passed; `git diff --check` → passed.
+  tests/geo-editor-view-import.test.ts tests/map-controller.test.ts
+  tests/maplibre-engine.test.ts tests/feature-selection.test.ts
+  tests/sql-query-layer.test.ts` → 112 passed; `git diff --check` → passed.
 - Follow-up: convert export, story, attribute-table, processing, style, editor,
   notebook, scripting, and assistant consumers to the layer port.
 
@@ -426,10 +426,10 @@ tests/sql-query-layer.test.ts` → 112 passed; `git diff --check` → passed.
   caches a renderer object.
 - Status: done.
 - Verification: `npm run build` → passed; `node --import tsx --test
-tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts
-tests/geo-editor-view-import.test.ts tests/map-controller.test.ts
-tests/maplibre-engine.test.ts tests/feature-selection.test.ts
-tests/sql-query-layer.test.ts` → 117 passed; `git diff --check` → passed.
+  tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts
+  tests/geo-editor-view-import.test.ts tests/map-controller.test.ts
+  tests/maplibre-engine.test.ts tests/feature-selection.test.ts
+  tests/sql-query-layer.test.ts` → 117 passed; `git diff --check` → passed.
 - Follow-up: extract point picking, bounds drawing, markers, and transient
   overlays for Task 9, starting with the remaining application-side source/layer
   mutations.
@@ -521,10 +521,10 @@ tests/sql-query-layer.test.ts` → 117 passed; `git diff --check` → passed.
   third-party compatibility.
 - Status: partial.
 - Verification: `node --import tsx --test tests/plugin-manager.test.ts
-tests/plugin-archive-unpack.test.ts tests/plugin-integrity.test.ts
-tests/external-plugin-assets.test.ts tests/external-plugin-api-version.test.ts`
+  tests/plugin-archive-unpack.test.ts tests/plugin-integrity.test.ts
+  tests/external-plugin-assets.test.ts tests/external-plugin-api-version.test.ts`
   → 54 passed; `cargo test --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml
-external_plugins_require_api_version_two` → 1 passed; `npm run build` → passed.
+  external_plugins_require_api_version_two` → 1 passed; `npm run build` → passed.
 - Follow-up: move the concrete built-in MapLibre control runtimes to the lazy
   adapter-owned hosted-runtime registry, then remove the legacy public native
   API types; Codex, 2026-07-20.
@@ -561,8 +561,8 @@ external_plugins_require_api_version_two` → 1 passed; `npm run build` → pass
   plugin-manager rollback rather than a permanently eager renderer bundle.
 - Status: partial.
 - Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts
-tests/engine-contracts.test.ts` → 44 passed; `npm run build` → passed.
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts
+  tests/engine-contracts.test.ts` → 44 passed; `npm run build` → passed.
 - Follow-up: relocate annotations and the remaining simple MapLibre controls
   into this registry while preserving their ids, state, and restore behavior;
   Codex, 2026-07-20.
@@ -593,7 +593,7 @@ tests/engine-contracts.test.ts` → 44 passed; `npm run build` → passed.
   native controls out of public plugin code.
 - Status: partial.
 - Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
-tests/maplibre-engine.test.ts tests/plugin-manager.test.ts` → 41 passed;
+  tests/maplibre-engine.test.ts tests/plugin-manager.test.ts` → 41 passed;
   `npm run build` → passed.
 - Follow-up: relocate the next self-contained control runtimes and retain the
   lazy registry as the only MapLibre mounting path; Codex, 2026-07-20.
@@ -628,8 +628,8 @@ tests/maplibre-engine.test.ts tests/plugin-manager.test.ts` → 41 passed;
   eliminating renderer imports and native control calls from `@geolibre/plugins`.
 - Status: partial.
 - Verification: `node --import tsx --test tests/web-service-sync.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
-tests/maplibre-engine.test.ts` → 55 passed; `npm run build` → passed.
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 55 passed; `npm run build` → passed.
 - Follow-up: move remaining self-contained controls (starting with annotations,
   basemap, and Overture) and then eliminate the legacy public renderer methods;
   Codex, 2026-07-20.
@@ -658,7 +658,7 @@ tests/maplibre-engine.test.ts` → 55 passed; `npm run build` → passed.
   but preserving renderer isolation and exact restore semantics.
 - Status: partial.
 - Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 42 passed;
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 42 passed;
   `npm run build` → passed.
 - Follow-up: include this helper in every remaining hosted control relocation;
   Codex, 2026-07-20.
@@ -691,7 +691,7 @@ tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 42 passed;
   avoiding an eager renderer runtime at application startup.
 - Status: partial.
 - Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 43 passed.
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 43 passed.
 - Follow-up: relocate the next self-contained MapLibre controls and update the
   boundary ratchet in the same verified commit; Codex, 2026-07-20.
 
@@ -726,8 +726,8 @@ tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 43 passed.
   bundle and no renderer SDK import in the plugin package.
 - Status: partial.
 - Verification: `node --import tsx --test tests/engine-boundary.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
-tests/maplibre-engine.test.ts` → 44 passed; `npm run build` → passed; the
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 44 passed; `npm run build` → passed; the
   reviewed boundary ratchet fell from 145 to 137 violations.
 - Follow-up: relocate the Esri Wayback control next, preserving its normalized
   store-layer synchronization and historical release state; Codex, 2026-07-20.
@@ -764,9 +764,9 @@ tests/maplibre-engine.test.ts` → 44 passed; `npm run build` → passed; the
   renderer-neutral plugin descriptor.
 - Status: partial.
 - Verification: `npm run build` → passed; `node --import tsx --test
-tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
-tests/maplibre-engine.test.ts` → 43 passed; `node --import tsx --test
-tests/engine-boundary.test.ts` → passed; the reviewed boundary ratchet fell
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 43 passed; `node --import tsx --test
+  tests/engine-boundary.test.ts` → passed; the reviewed boundary ratchet fell
   from 137 to 135 violations.
 - Follow-up: add stateful hosted-runtime support before moving controls whose
   persisted UI state must survive a project restore; Codex, 2026-07-20.
@@ -801,7 +801,7 @@ tests/engine-boundary.test.ts` → passed; the reviewed boundary ratchet fell
   fidelity and strict renderer isolation.
 - Status: done.
 - Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 44 passed;
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 44 passed;
   `npm run build` → passed.
 - Follow-up: move Overture Maps onto this stateful hosted-runtime contract;
   Codex, 2026-07-20.
@@ -836,8 +836,8 @@ tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 44 passed;
   delay for exact project persistence without renderer imports in plugins.
 - Status: partial.
 - Verification: `npm run build` → passed; `node --import tsx --test
-tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 45 passed; the
+  tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 45 passed; the
   reviewed boundary ratchet fell from 135 to 134 violations.
 - Follow-up: relocate the next controls that depend on adapter-owned map
   callbacks, starting with Basemap Control; Codex, 2026-07-20.
@@ -874,8 +874,8 @@ tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 45 passed; the
   handling.
 - Status: partial.
 - Verification: `node --import tsx --test tests/reverse-geocode.test.ts
-tests/engine-boundary.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts` → 15 passed; `npm run build` → passed; the
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts` → 15 passed; `npm run build` → passed; the
   reviewed engine-boundary baseline fell from 134 to 133 violations.
 - Follow-up: relocate Basemap Control through the lazy adapter runtime while
   retaining the store as the basemap source of truth; Codex, 2026-07-20.
@@ -915,8 +915,8 @@ tests/maplibre-engine.test.ts` → 15 passed; `npm run build` → passed; the
   package.
 - Status: partial.
 - Verification: `node --import tsx --test tests/basemap-control-plugin.test.ts
-tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 48 passed;
+  tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 48 passed;
   `npm run build` → passed; the reviewed engine-boundary baseline fell from
   133 to 132 violations.
 - Follow-up: relocate another first-party MapLibre plugin that still reaches a
@@ -954,8 +954,8 @@ tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 48 passed;
   a short delay for strict renderer isolation and reusable ArcGIS input state.
 - Status: partial.
 - Verification: `node --import tsx --test tests/sun-simulation.test.ts
-tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
-tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 58 passed;
+  tests/engine-boundary.test.ts tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 58 passed;
   `npm run build` → passed; the reviewed engine-boundary baseline fell from
   132 to 131 violations.
 - Follow-up: move another first-party renderer-owning plugin into a lazy
@@ -992,8 +992,8 @@ tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 58 passed;
   for store-first playback without a native map escape hatch.
 - Status: partial.
 - Verification: `node --import tsx --test tests/weather-layer.test.ts
-tests/maplibre-engine.test.ts tests/engine-contracts.test.ts
-tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts` → 25
+  tests/maplibre-engine.test.ts tests/engine-contracts.test.ts
+  tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts` → 25
   passed; `npm run build` → passed; the reviewed engine-boundary baseline fell
   from 131 to 130 violations.
 - Follow-up: move the next first-party plugin that still imports a concrete
@@ -1039,9 +1039,9 @@ tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts` → 25
   dedicated Directions runtime chunk.
 - Status: partial.
 - Verification: `node --import tsx --test tests/directions.test.ts
-tests/engine-boundary.test.ts tests/engine-contracts.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
-tests/maplibre-engine.test.ts` → 58 passed; `npm run build` → passed (the
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 58 passed; `npm run build` → passed (the
   normal JupyterLite-unavailable notice and browser externalization warnings
   remained non-fatal); the reviewed engine-boundary baseline fell from 130 to
   129 violations.
@@ -1091,9 +1091,9 @@ tests/maplibre-engine.test.ts` → 58 passed; `npm run build` → passed (the
   strict lazy renderer isolation and preservation of store authority.
 - Status: partial.
 - Verification: `node --import tsx --test tests/earth-engine-plugin.test.ts
-tests/engine-boundary.test.ts tests/engine-contracts.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
-tests/maplibre-engine.test.ts` → 49 passed; `npm run build` → passed (normal
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 49 passed; `npm run build` → passed (normal
   JupyterLite-unavailable notice and browser externalization warnings were
   non-fatal); the production build emitted separate `earth-engine`,
   `earth-engine-auth`, `maplibre-earth-engine`, and browser-SDK chunks; the
@@ -1141,9 +1141,9 @@ tests/maplibre-engine.test.ts` → 49 passed; `npm run build` → passed (normal
   isolation.
 - Status: partial.
 - Verification: `node --import tsx --test tests/geoagent-layer-sync.test.ts
-tests/engine-boundary.test.ts tests/engine-contracts.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
-tests/maplibre-engine.test.ts` → 70 passed; `npm run build` → passed (normal
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 70 passed; `npm run build` → passed (normal
   JupyterLite-unavailable notice and browser externalization warnings were
   non-fatal); the build retained dedicated GeoAgent runtime chunks; the reviewed
   engine-boundary baseline fell from 128 to 125 violations.
@@ -1188,8 +1188,8 @@ tests/maplibre-engine.test.ts` → 70 passed; `npm run build` → passed (normal
   compatibility checks for lazy loading and a strict renderer boundary.
 - Status: partial.
 - Verification: `node --import tsx --test tests/planetary-computer-plugin.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
   `npm run build` → passed (normal JupyterLite-unavailable notice and browser
   externalization warnings were non-fatal); the production build emitted a
   separate `planetary-computer` runtime chunk; the reviewed engine-boundary
@@ -1232,9 +1232,9 @@ tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
   a little lifecycle indirection for lazy loading and strict renderer isolation.
 - Status: partial.
 - Verification: `node --import tsx --test tests/effects-settings.test.ts
-tests/globe-halo-ellipse.test.ts tests/effects-plugin.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 30 passed;
+  tests/globe-halo-ellipse.test.ts tests/effects-plugin.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 30 passed;
   `npm run build` → passed (normal JupyterLite-unavailable notice and browser
   externalization warnings were non-fatal); the production build emitted a
   separate `effects` runtime chunk; the reviewed engine-boundary baseline fell
@@ -1279,8 +1279,8 @@ tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 30 passed;
   renderer boundary.
 - Status: partial.
 - Verification: `node --import tsx --test tests/annotations-plugin.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
   `npm run build` → passed (normal JupyterLite-unavailable notice and browser
   externalization warnings were non-fatal); the production build emitted a
   separate `annotations` runtime chunk; the reviewed engine-boundary baseline
@@ -1318,7 +1318,7 @@ tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
   stable public API and enabling adapter-specific filter translation.
 - Status: partial.
 - Verification: `node --import tsx --test tests/time-slider-binding.test.ts
-tests/time-slider-config.test.ts` → 24 passed.
+  tests/time-slider-config.test.ts` → 24 passed.
 - Follow-up: relocate the Time Slider control and its COG pixel-read runtime
   behind the lazy MapLibre hosted-runtime registry; Codex, 2026-07-20.
 
@@ -1361,9 +1361,9 @@ tests/time-slider-config.test.ts` → 24 passed.
   the native control is lazy and no longer exposed to plugins.
 - Status: partial.
 - Verification: `node --import tsx --test tests/time-slider-binding.test.ts
-tests/time-slider-config.test.ts tests/time-slider-pixel-series.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 54 passed;
+  tests/time-slider-config.test.ts tests/time-slider-pixel-series.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 54 passed;
   `npm run build` → passed (normal JupyterLite-unavailable notice and browser
   externalization warnings were non-fatal); the production build emitted a
   separate `time-slider` runtime chunk; the reviewed engine-boundary baseline
@@ -1401,8 +1401,8 @@ tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 54 passed;
   inheriting renderer dependencies.
 - Status: partial.
 - Verification: `node --import tsx --test tests/time-slider-pixel-series.test.ts
-tests/time-slider-binding.test.ts tests/time-slider-config.test.ts
-tests/engine-boundary.test.ts` → 39 passed; `npm run build` → passed (normal
+  tests/time-slider-binding.test.ts tests/time-slider-config.test.ts
+  tests/engine-boundary.test.ts` → 39 passed; `npm run build` → passed (normal
   JupyterLite-unavailable notice and browser externalization warnings were
   non-fatal).
 - Follow-up: route the COG range reader through a typed, lazy MapEngine
@@ -1444,9 +1444,9 @@ tests/engine-boundary.test.ts` → 39 passed; `npm run build` → passed (normal
   command boundary for lazy loading and a strict plugin renderer boundary.
 - Status: partial.
 - Verification: `node --import tsx --test tests/time-slider-binding.test.ts
-tests/time-slider-config.test.ts tests/time-slider-pixel-series.test.ts
-tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
-tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 56 passed;
+  tests/time-slider-config.test.ts tests/time-slider-pixel-series.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 56 passed;
   `npm run build` → passed (normal JupyterLite-unavailable notice and browser
   externalization warnings were non-fatal) and emitted a separate lazy
   `time-slider-pixel-series` chunk; the reviewed engine-boundary baseline fell
