@@ -183,10 +183,23 @@ jobs:
           # receives — and it stores libraries under `base/lib/<abi>/`, not
           # `lib/<abi>/`, so it needs its own extract pattern. Checking only the
           # APKs would leave the Play artifact unverified.
+          #
+          # Each archive extracts into its own subdirectory and is checked for a
+          # non-empty result immediately. `unzip || true` is needed because
+          # unzip exits 11 on "no matching files", but that is exactly the
+          # symptom of an archive shipping no native code at all — a worse
+          # regression than misalignment. The aggregate `checked -eq 0` guard
+          # below cannot catch it, since the other archives still contribute
+          # libraries and the total stays non-zero.
           archives=0
           while IFS= read -r apk; do
             archives=$((archives + 1))
-            unzip -o -q "$apk" 'lib/*/*.so' -d "$workdir/$archives" || true
+            dest="$workdir/$archives"
+            unzip -o -q "$apk" 'lib/*/*.so' -d "$dest" || true
+            if [ "$(find "$dest" -name '*.so' 2>/dev/null | wc -l)" -eq 0 ]; then
+              echo "::error::$apk contains no native libraries under lib/"
+              bad=$((bad + 1))
+            fi
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
             -name '*release*.apk')
           if [ "$archives" -eq 0 ]; then
@@ -197,7 +210,12 @@ jobs:
           # is not an error — but when present it must be verified too.
           while IFS= read -r aab; do
             archives=$((archives + 1))
-            unzip -o -q "$aab" 'base/lib/*/*.so' -d "$workdir/$archives" || true
+            dest="$workdir/$archives"
+            unzip -o -q "$aab" 'base/lib/*/*.so' -d "$dest" || true
+            if [ "$(find "$dest" -name '*.so' 2>/dev/null | wc -l)" -eq 0 ]; then
+              echo "::error::$aab contains no native libraries under base/lib/"
+              bad=$((bad + 1))
+            fi
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
             -path '*/outputs/bundle/*' -name '*.aab')
           while IFS= read -r so; do
@@ -241,7 +259,10 @@ jobs:
             exit 1
           fi
           if [ "$bad" -gt 0 ]; then
-            echo "::error::$bad segment(s) are not 16 KB-aligned; Play will reject this build"
+            # "problem(s)", not "segment(s)": $bad now also counts archives that
+            # shipped no native libraries and files objdump could not read, not
+            # just misaligned segments.
+            echo "::error::$bad problem(s) found; Play will reject this build"
             exit 1
           fi
           echo "All $checked native libraries are 16 KB-aligned."

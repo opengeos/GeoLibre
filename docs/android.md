@@ -130,7 +130,9 @@ testing; use a real key for distribution):
 ```bash
 BT="$ANDROID_HOME/build-tools/36.0.0"
 KS="$HOME/.android/debug.keystore"   # auto-created by Android tooling; or make your own
-"$BT/zipalign" -p -f 4 app-arm64-release-unsigned.apk aligned.apk
+# -P 16, not -p: -p only guarantees 4 KB, and Play requires the .so to sit on a
+# 16 KB boundary inside the zip. Same flag CI uses.
+"$BT/zipalign" -P 16 -f 4 app-arm64-release-unsigned.apk aligned.apk
 "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android \
   --ks-key-alias androiddebugkey --key-pass pass:android \
   --out geolibre-arm64.apk aligned.apk
