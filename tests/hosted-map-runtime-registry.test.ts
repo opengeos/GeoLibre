@@ -103,4 +103,44 @@ describe("hosted map plugin descriptor", () => {
       { command: "hosted-plugin.deactivate", input: { pluginId: "control" } },
     ]);
   });
+
+  it("caches validated project state and forwards it only through MapEngineClient", () => {
+    const calls: Array<{ command: string; input: Record<string, unknown> }> = [];
+    const app = {
+      exportTextFile: (filename: string, content: string) => {
+        calls.push({ command: "export", input: { filename, content } });
+      },
+      map: {
+        invoke: (command: string, input: Record<string, unknown>) => {
+          calls.push({ command, input });
+          if (command === "hosted-plugin.activate") {
+            (input.onStateChange as ((state: unknown) => void) | undefined)?.({ themes: {} });
+          }
+          return command === "hosted-plugin.apply-state";
+        },
+      } as unknown as MapEngineClient,
+    } as GeoLibreAppAPI;
+    const plugin = createHostedMapPlugin({
+      id: "stateful-control",
+      name: "Stateful control",
+      version: "1.0.0",
+      acceptsProjectState: (value) =>
+        typeof value === "object" && value !== null && "themes" in value,
+      forwardsTextFileExports: true,
+    });
+
+    plugin.activate(app, {});
+    assert.deepEqual(plugin.getProjectState?.(), { themes: {} });
+    assert.equal(plugin.applyProjectState?.(app, { themes: { buildings: true } }), true);
+    assert.equal(plugin.applyProjectState?.(app, { invalid: true }), false);
+
+    const activation = calls[0];
+    assert.equal(activation.command, "hosted-plugin.activate");
+    assert.equal(typeof activation.input.onStateChange, "function");
+    assert.equal(typeof activation.input.exportTextFile, "function");
+    assert.deepEqual(calls[1], {
+      command: "hosted-plugin.apply-state",
+      input: { pluginId: "stateful-control", state: { themes: { buildings: true } } },
+    });
+  });
 });

@@ -22,6 +22,9 @@ export interface MapEngineExtensionMap {
       pluginId: string;
       position?: MapControlPosition;
       collapsed?: boolean;
+      state?: unknown;
+      onStateChange?: (state: unknown) => void;
+      exportTextFile?: (filename: string, content: string) => void;
     };
     output: boolean | Promise<boolean>;
   };

@@ -770,3 +770,38 @@
   from 137 to 135 violations.
 - Follow-up: add stateful hosted-runtime support before moving controls whose
   persisted UI state must survive a project restore; Codex, 2026-07-20.
+
+## 2026-07-20 — Stateful MapLibre control callbacks → serializable hosted-runtime contract
+
+- Source: MapLibre — stateful controls such as Overture expose native
+  `getState`/`setState` and sometimes require a host-specific text-export
+  callback, neither of which can be retained on a renderer-neutral plugin
+  descriptor.
+- Files touched: `packages/map/src/engine/extensions.ts` before → state/export
+  fields on typed hosted-plugin activation; `packages/map/src/maplibre-runtime/types.ts`
+  before → adapter-private activation context; `packages/plugins/src/hosted-map-plugin.ts`
+  before → validated state cache and text-export forwarding; hosted registry
+  tests updated.
+- ArcGIS approach: an ArcGIS hosted widget reports serializable widget state
+  through the same callback and accepts the same project snapshot on
+  activation; any `MapView`-specific export remains adapter-side.
+- What changed: a descriptor can validate and cache project state without
+  importing a renderer. On activation it sends that state and a state-change
+  callback through `MapEngineClient`; an optional host text-export callback is
+  likewise forwarded only to the adapter runtime. A loaded runtime applies
+  valid state immediately, while an inactive one restores it on next activate.
+- Gap / limitation: these callbacks are intentionally narrow and do not model
+  arbitrary host services or native control instances.
+- Workaround: add a named, typed activation field only when a concrete runtime
+  needs a portable value/callback. Removal criteria: none before Phase 6; a
+  future ArcGIS runtime reuses the contract instead of widening it to a native
+  map escape hatch.
+- Tradeoff accepted: descriptor closures retain a serializable state snapshot
+  and an extra callback path, trading minor plumbing for project-restore
+  fidelity and strict renderer isolation.
+- Status: done.
+- Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts` → 44 passed;
+  `npm run build` → passed.
+- Follow-up: move Overture Maps onto this stateful hosted-runtime contract;
+  Codex, 2026-07-20.

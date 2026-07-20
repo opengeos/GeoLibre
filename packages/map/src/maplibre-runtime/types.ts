@@ -17,6 +17,12 @@ export interface MapLibreHostedRuntimeContext {
 export interface MapLibreHostedRuntimeActivation {
   readonly position?: MapControlPosition;
   readonly collapsed?: boolean;
+  /** Last serializable project state captured by the hosted descriptor. */
+  readonly state?: unknown;
+  /** Reports a new serializable state snapshot back to the hosted descriptor. */
+  readonly onStateChange?: (state: unknown) => void;
+  /** Host-provided text export for controls that cannot rely on anchor downloads. */
+  readonly exportTextFile?: (filename: string, content: string) => void;
 }
 
 /** A concrete renderer runtime, addressed only by its stable plugin id. */
