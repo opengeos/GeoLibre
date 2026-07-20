@@ -378,6 +378,7 @@ export class MapLibreEngine implements MapEngine {
       readonly content: HTMLElement;
       readonly closeOnClick?: boolean;
       readonly maxWidth?: string;
+      readonly onClose?: () => void;
     }): void => this.showPopup(options),
     closePopup: (id: string): void => this.closePopup(id),
   } satisfies MapEngine["interactions"];
@@ -669,6 +670,7 @@ export class MapLibreEngine implements MapEngine {
     readonly content: HTMLElement;
     readonly closeOnClick?: boolean;
     readonly maxWidth?: string;
+    readonly onClose?: () => void;
   }): void {
     if (!this.map) return;
     this.closePopup(options.id);
@@ -680,6 +682,11 @@ export class MapLibreEngine implements MapEngine {
       .setDOMContent(options.content)
       .addTo(this.map);
     this.popups.set(options.id, popup);
+    popup.on("close", () => {
+      if (this.popups.get(options.id) !== popup) return;
+      this.popups.delete(options.id);
+      options.onClose?.();
+    });
   }
 
   private closePopup(id: string): void {

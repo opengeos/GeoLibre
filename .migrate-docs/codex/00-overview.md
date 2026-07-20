@@ -97,9 +97,14 @@ Status values: not started · in progress · partial · blocked · done
   bidirectional store mirror inside the MapLibre adapter while the plugin keeps
   only a validated stateful descriptor; the boundary ratchet is 134 reviewed
   violations.
+- Implemented: Reverse Geocode now subscribes, changes its cursor, and owns
+  loading/result popup lifecycle solely through `MapEngineClient`; a typed
+  popup-close callback prevents stale lookup results from reopening a dismissed
+  popup, and the boundary ratchet is 133 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
   field collection, georeferencing, raster/basemap subset selection, time-series
   picking, region selection, print extent, and processing consumers are
-  renderer-neutral. The boundary ratchet is down to 154 reviewed violations.
+  renderer-neutral. That earlier slice reduced the boundary baseline to 154
+  reviewed violations; later entries record subsequent reductions.

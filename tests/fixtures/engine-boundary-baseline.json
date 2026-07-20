@@ -416,10 +416,6 @@
     "pattern": "maplibre-gl-raster"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-reverse-geocode.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-route-animation.ts",
     "pattern": "@deck.gl/core"
   },

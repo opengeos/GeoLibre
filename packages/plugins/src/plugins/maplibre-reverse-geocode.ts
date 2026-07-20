@@ -1,5 +1,5 @@
 import { geocodeReverse } from "@geolibre/core";
-import type { Map as MapLibreMap, MapMouseEvent, Popup } from "maplibre-gl";
+import type { MapEngineClient } from "@geolibre/map";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 /**
@@ -16,13 +16,15 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  * {@link restoreReverseGeocode}; it carries no project state of its own.
  */
 export const REVERSE_GEOCODE_PLUGIN_ID = "maplibre-reverse-geocode";
+const REVERSE_GEOCODE_POPUP_ID = "geolibre-reverse-geocode-popup";
 
-let popup: Popup | null = null;
-// The map the click handler is bound to, so restoreReverseGeocode can detect a
-// map re-initialization (a brand-new Map object) and rebind.
-let boundMap: MapLibreMap | null = null;
-let clickHandler: ((event: MapMouseEvent) => void) | null = null;
+// The MapEngine client the click handler is bound to, so restoreReverseGeocode
+// can detect a map re-initialization and rebind without seeing a native map.
+let boundMap: MapEngineClient | null = null;
+let unsubscribeClick: (() => void) | null = null;
+let cursorElement: HTMLElement | null = null;
 let previousCursor = "";
+let popupVisible = false;
 // Bumped on every attach/teardown and before each lookup. A reverse lookup that
 // resolves with a stale token (the user toggled off, or clicked again) is
 // discarded so it does not render into a popup that is no longer current.
@@ -91,81 +93,123 @@ function buildPopupContent(title: string, body: string, copyLabel: string): HTML
 }
 
 /**
- * Resolve and render the address for a clicked point. The maplibre-gl `Popup`
- * class is lazy-imported (mirroring how the Directions plugin defers its heavy
- * library) so this module stays free of a runtime maplibre-gl dependency; the
- * import resolves from cache instantly since the app already loaded maplibre-gl
- * for the map.
+ * Render a renderer-neutral popup and track user closure so a delayed lookup
+ * result cannot reopen it.
  */
+function renderReverseGeocodePopup(
+  map: MapEngineClient,
+  lng: number,
+  lat: number,
+  content: HTMLElement,
+  requestToken: number,
+): void {
+  map.interactions.showPopup({
+    id: REVERSE_GEOCODE_POPUP_ID,
+    lngLat: [lng, lat],
+    content,
+    closeOnClick: false,
+    maxWidth: "260px",
+    onClose: () => {
+      if (requestToken === lookupToken) popupVisible = false;
+    },
+  });
+  popupVisible = true;
+}
+
+/** Resolve and render the address for a clicked point through MapEngine. */
 async function showReverseGeocodePopup(
-  map: MapLibreMap,
+  map: MapEngineClient,
   lng: number,
   lat: number,
   requestToken: number,
   signal: AbortSignal,
 ): Promise<void> {
-  const { Popup } = await import("maplibre-gl");
-  // A teardown or a newer click during the import supersedes this lookup.
-  if (requestToken !== lookupToken) return;
-  popup?.remove();
-  popup = new Popup({ closeButton: true, closeOnClick: false })
-    .setLngLat([lng, lat])
-    .setText(labels.lookingUp)
-    .addTo(map);
+  renderReverseGeocodePopup(
+    map,
+    lng,
+    lat,
+    buildPopupContent("", labels.lookingUp, labels.copyAddress),
+    requestToken,
+  );
 
   try {
     const resolved = await geocodeReverse(lng, lat, { signal });
-    if (requestToken !== lookupToken || !popup) return;
+    if (requestToken !== lookupToken || !popupVisible) return;
     const label = resolved?.displayName ?? labels.noAddress;
-    popup.setDOMContent(buildPopupContent(resolved?.displayName ?? "", label, labels.copyAddress));
+    renderReverseGeocodePopup(
+      map,
+      lng,
+      lat,
+      buildPopupContent(resolved?.displayName ?? "", label, labels.copyAddress),
+      requestToken,
+    );
   } catch {
     // A superseded/aborted request fails the token check and is ignored; only a
     // still-current failure surfaces the error text.
-    if (requestToken !== lookupToken || !popup) return;
-    popup.setText(labels.failed);
+    if (requestToken !== lookupToken || !popupVisible) return;
+    renderReverseGeocodePopup(
+      map,
+      lng,
+      lat,
+      buildPopupContent("", labels.failed, labels.copyAddress),
+      requestToken,
+    );
   }
 }
 
-function attach(app: GeoLibreAppAPI): void {
-  const map = app.getMap?.();
-  if (!map) return;
-  if (boundMap === map && clickHandler) return; // already bound to this map
+function mapClientFor(app: GeoLibreAppAPI): MapEngineClient | null {
+  try {
+    return app.map;
+  } catch {
+    // Preserve the legacy no-op behavior when activation happens before the
+    // map engine mounts; restoreReverseGeocode will bind once it is ready.
+    return null;
+  }
+}
 
-  previousCursor = map.getCanvas().style.cursor;
-  map.getCanvas().style.cursor = "crosshair";
+function attachMap(map: MapEngineClient): void {
+  if (boundMap === map && unsubscribeClick) return; // already bound to this map
 
-  clickHandler = (event: MapMouseEvent) => {
+  cursorElement = map.viewport.getElement();
+  previousCursor = cursorElement?.style.cursor ?? "";
+  if (cursorElement) cursorElement.style.cursor = "crosshair";
+
+  unsubscribeClick = map.on("click", ({ lngLat }) => {
     const requestToken = ++lookupToken;
     // Cancel any request from a previous click before starting a new one.
     currentAbortController?.abort();
     currentAbortController = new AbortController();
     void showReverseGeocodePopup(
       map,
-      event.lngLat.lng,
-      event.lngLat.lat,
+      lngLat[0],
+      lngLat[1],
       requestToken,
       currentAbortController.signal,
     );
-  };
+  });
 
-  map.on("click", clickHandler);
   boundMap = map;
 }
 
-function teardown(app: GeoLibreAppAPI): void {
+function attach(app: GeoLibreAppAPI): void {
+  const map = mapClientFor(app);
+  if (!map) return;
+  if (boundMap && boundMap !== map) teardown();
+  attachMap(map);
+}
+
+function teardown(): void {
   ++lookupToken;
   // Cancel an in-flight reverse request so it does not complete after the tool
   // is disabled.
   currentAbortController?.abort();
   currentAbortController = null;
-  const map = boundMap ?? app.getMap?.() ?? null;
-  if (map && clickHandler) {
-    map.off("click", clickHandler);
-    map.getCanvas().style.cursor = previousCursor;
-  }
-  clickHandler = null;
-  popup?.remove();
-  popup = null;
+  unsubscribeClick?.();
+  unsubscribeClick = null;
+  if (cursorElement) cursorElement.style.cursor = previousCursor;
+  cursorElement = null;
+  boundMap?.interactions.closePopup(REVERSE_GEOCODE_POPUP_ID);
+  popupVisible = false;
   boundMap = null;
 }
 
@@ -176,13 +220,13 @@ function teardown(app: GeoLibreAppAPI): void {
  */
 export function restoreReverseGeocode(app: GeoLibreAppAPI, active: boolean): void {
   if (!active) {
-    teardown(app);
+    teardown();
     return;
   }
-  const map = app.getMap?.();
-  if (boundMap && boundMap === map && clickHandler) return; // already bound
-  teardown(app);
-  attach(app);
+  const map = mapClientFor(app);
+  if (boundMap && boundMap === map && unsubscribeClick) return; // already bound
+  teardown();
+  if (map) attachMap(map);
 }
 
 export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
@@ -190,5 +234,5 @@ export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
   name: "Reverse Geocode",
   version: "1.0.0",
   activate: (app: GeoLibreAppAPI) => attach(app),
-  deactivate: (app: GeoLibreAppAPI) => teardown(app),
+  deactivate: () => teardown(),
 };

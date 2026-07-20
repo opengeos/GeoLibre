@@ -235,6 +235,8 @@ export interface MapInteractionPort {
     readonly content: HTMLElement;
     readonly closeOnClick?: boolean;
     readonly maxWidth?: string;
+    /** Called when this popup is closed by the user or the engine. */
+    readonly onClose?: () => void;
   }): void;
   closePopup(id: string): void;
 }

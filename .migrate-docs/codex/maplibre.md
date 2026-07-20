@@ -841,3 +841,41 @@
   reviewed boundary ratchet fell from 135 to 134 violations.
 - Follow-up: relocate the next controls that depend on adapter-owned map
   callbacks, starting with Basemap Control; Codex, 2026-07-20.
+
+## 2026-07-20 — Reverse Geocode `Map.on`/`Popup` → MapEngine click and popup ports
+
+- Source: MapLibre — Reverse Geocode directly registered a `map.on("click")`
+  handler, changed `map.getCanvas().style.cursor`, and lazy-imported
+  `maplibregl.Popup` to render/update/remove the lookup result.
+- Files touched: `packages/plugins/src/plugins/maplibre-reverse-geocode.ts`
+  before → MapEngine-only plugin lifecycle; `packages/map/src/engine/types.ts`
+  before → popup close lifecycle callback; `packages/map/src/engine/maplibre-engine.ts`
+  before → MapLibre adapter implementation; reverse-geocode and engine-boundary
+  tests before → MapEngine fakes and lower reviewed baseline.
+- ArcGIS approach: a future ArcGIS adapter maps the normalized click subscription
+  to `MapView.on("click")` and the popup lifecycle to `MapView.popup.open()` /
+  close events, keeping the plugin dependent only on the MapEngine contract.
+- What changed: the plugin now receives normalized `LngLat` tuples through
+  `app.map.on`, obtains its cursor element through `viewport.getElement()`, and
+  uses `interactions.showPopup`/`closePopup` with a stable popup id. An optional
+  `onClose` callback was added to the typed interaction port and implemented in
+  the MapLibre adapter, so a lookup that resolves after the user closes its
+  popup cannot reopen it. Geocoder requests remain untouched and no data is
+  persisted outside the existing store.
+- Gap / limitation: ArcGIS popup content and close event behavior have not yet
+  been implemented by an ArcGIS MapEngine adapter.
+- Workaround: preserve the existing custom DOM popup as a renderer-neutral
+  interaction payload and translate it adapter-side. Removal criteria: replace
+  the MapLibre implementation when the ArcGIS adapter passes the same click,
+  close-during-fetch, and teardown tests through `MapView.popup`.
+- Tradeoff accepted: popup content is rebuilt for the loading/result states and
+  the MapEngine gains one lifecycle callback, trading small port surface area
+  for no direct renderer import in the plugin package and correct async closure
+  handling.
+- Status: partial.
+- Verification: `node --import tsx --test tests/reverse-geocode.test.ts
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts` → 15 passed; `npm run build` → passed; the
+  reviewed engine-boundary baseline fell from 134 to 133 violations.
+- Follow-up: relocate Basemap Control through the lazy adapter runtime while
+  retaining the store as the basemap source of truth; Codex, 2026-07-20.
