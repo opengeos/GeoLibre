@@ -1241,3 +1241,49 @@
   from 124 to 123 violations.
 - Follow-up: relocate the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre annotation toolbar/preview layers → ArcGIS `SketchViewModel` + `GraphicsLayer`
+
+- Source: MapLibre — the Annotations plugin directly implemented a
+  `maplibregl.IControl`, installed map pointer/keyboard handlers, created native
+  preview sources/layers, and wrote completed GeoJSON annotation features into
+  the application store.
+- Files touched: `packages/plugins/src/plugins/maplibre-annotations.ts` before
+  → renderer-neutral hosted descriptor; `packages/map/src/maplibre-runtime/annotations.ts`
+  added for the native control, MapLibre interaction, and preview lifecycle;
+  hosted-runtime registry, boundary fixture, and
+  `tests/annotations-plugin.test.ts` added/updated.
+- ArcGIS approach: a future ArcGIS adapter should use `SketchViewModel` for
+  text, arrow, rectangle, ellipse, and freehand interaction, with an
+  adapter-owned `GraphicsLayer` for live preview. On completion it must persist
+  the normalized GeoJSON annotation layer through the existing store actions,
+  rather than treating ArcGIS graphics as project authority.
+- What changed: the public plugin now contains only labels, its control
+  position, and typed `MapEngineClient` hosted lifecycle/state/position calls.
+  Its lazy MapLibre runtime owns the native toolbar, DOM text editor, pointer
+  handlers, temporary preview layers, and concrete map binding. The persisted
+  annotation layer remains store-authoritative, including its stable source
+  kind and project representation; data ingest was not changed.
+- Gap / limitation: the legacy control supports a lightweight map-canvas text
+  input and simple-style feature encoding, neither of which maps one-for-one to
+  ArcGIS Sketch's stock UI or graphic-symbol serialization.
+- Workaround: keep the legacy interaction and preview implementation private to
+  the lazy MapLibre adapter while exposing only serializable labels and control
+  position at the seam. Removal criteria: replace it when an ArcGIS runtime can
+  create/edit all five annotation tools, maintain an equivalent transient
+  preview, and round-trip the same normalized store GeoJSON without MapLibre
+  controls, sources, or event handlers.
+- Tradeoff accepted: label changes and activation now cross a small hosted
+  runtime state boundary, and the MapLibre interaction remains maintained until
+  the ArcGIS drawing UX is complete; this buys lazy loading and a strict public
+  renderer boundary.
+- Status: partial.
+- Verification: `node --import tsx --test tests/annotations-plugin.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 17 passed;
+  `npm run build` → passed (normal JupyterLite-unavailable notice and browser
+  externalization warnings were non-fatal); the production build emitted a
+  separate `annotations` runtime chunk; the reviewed engine-boundary baseline
+  fell from 123 to 122 violations.
+- Follow-up: relocate the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.

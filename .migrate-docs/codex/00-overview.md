@@ -132,6 +132,11 @@ Status values: not started · in progress · partial · blocked · done
   renderer-neutral while the MapLibre canvas stack, map events, and globe math
   run in a lazy adapter runtime. The boundary ratchet is 123 reviewed
   violations.
+- Implemented: Annotations now exposes only serialized labels, position, and
+  hosted MapEngine commands; its MapLibre toolbar, pointer/text interactions,
+  and transient preview layers are lazy adapter runtime code. The persisted
+  GeoJSON annotation layer remains store-authoritative, and the boundary
+  ratchet is 122 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

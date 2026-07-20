@@ -320,10 +320,6 @@
     "pattern": "maplibre-gl-3d-tiles"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-annotations.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-components.ts",
     "pattern": "@deck.gl/core"
   },
