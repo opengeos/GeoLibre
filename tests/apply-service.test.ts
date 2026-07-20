@@ -357,7 +357,7 @@ describe("applyServiceEntry", () => {
             added.push({ layer, beforeLayerId });
           },
           mapControllerRef: {
-            current: { fitLayer: (layer: GeoLibreLayer) => fitted.push(layer) },
+            current: { camera: { fitLayer: (layer: GeoLibreLayer) => fitted.push(layer) } },
           } as unknown as Parameters<typeof applyServiceEntry>[1]["mapControllerRef"],
         },
       );
