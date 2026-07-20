@@ -50,4 +50,12 @@ export interface MapEngineExtensionMap {
     input: { pluginId: string; state: unknown };
     output: boolean;
   };
+  "directions.remove-last": {
+    input: undefined;
+    output: boolean;
+  };
+  "directions.clear": {
+    input: undefined;
+    output: boolean;
+  };
 }

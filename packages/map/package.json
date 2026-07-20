@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@geolibre/core": "*",
+    "@maplibre/maplibre-gl-directions": "^0.9.1",
     "@maplibre/geojson-vt": "^6.1.1",
     "@maplibre/vt-pbf": "^4.3.2",
     "@protomaps/basemaps": "^5.7.2",

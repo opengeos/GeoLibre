@@ -125,6 +125,9 @@ export function createTestMapEngine(
       if (command === "viewport.resize") {
         return undefined as MapEngineExtensionMap[K]["output"];
       }
+      if (command === "directions.remove-last" || command === "directions.clear") {
+        return false as MapEngineExtensionMap[K]["output"];
+      }
       if (
         command === "hosted-plugin.activate" ||
         command === "hosted-plugin.set-position" ||

@@ -113,6 +113,10 @@ Status values: not started · in progress · partial · blocked · done
   source failures through the typed layer/event ports; their remote frame
   loading and store records remain untouched. The boundary ratchet is 130
   reviewed violations.
+- Implemented: Directions now owns its native MapLibre routing session and
+  loading control in a lazy adapter runtime. Its banner consumes validated,
+  transient session state and sends remove/clear requests through typed engine
+  commands; the boundary ratchet is 129 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

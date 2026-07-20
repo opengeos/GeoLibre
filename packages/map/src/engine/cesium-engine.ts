@@ -310,6 +310,9 @@ export class CesiumEngine implements MapEngine {
       case "hosted-plugin.deactivate":
       case "hosted-plugin.get-state":
         return undefined as MapEngineExtensionMap[K]["output"];
+      case "directions.remove-last":
+      case "directions.clear":
+        return false as MapEngineExtensionMap[K]["output"];
     }
   }
 

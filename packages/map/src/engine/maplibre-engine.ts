@@ -575,6 +575,12 @@ export class MapLibreEngine implements MapEngine {
           input.state,
         ) as MapEngineExtensionMap[K]["output"];
       }
+      case "directions.remove-last":
+      case "directions.clear":
+        return this.hostedRuntimes.runCommand(
+          "maplibre-gl-directions",
+          command,
+        ) as MapEngineExtensionMap[K]["output"];
     }
   }
 

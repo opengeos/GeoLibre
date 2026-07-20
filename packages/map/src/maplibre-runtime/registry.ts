@@ -24,6 +24,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-gl-basemap-control": async () =>
     (await import("./basemap-control")).maplibreBasemapControlRuntime,
   "geolibre-sun": async () => (await import("./sun")).maplibreSunRuntime,
+  "maplibre-gl-directions": async () => (await import("./directions")).maplibreDirectionsRuntime,
 };
 
 /**
@@ -99,6 +100,12 @@ export class MapLibreHostedRuntimeRegistry {
     const runtime = this.loaded.get(pluginId);
     if (!runtime?.applyState) return false;
     return runtime.applyState(this.context(), state) !== false;
+  }
+
+  runCommand(pluginId: string, command: string): boolean {
+    const runtime = this.loaded.get(pluginId);
+    if (!runtime?.runCommand) return false;
+    return runtime.runCommand(this.context(), command) !== false;
   }
 
   private async load(pluginId: string): Promise<MapLibreHostedRuntime> {

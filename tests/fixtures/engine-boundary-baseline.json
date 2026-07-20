@@ -348,10 +348,6 @@
     "pattern": "maplibre-gl-splat"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-directions.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-duckdb.ts",
     "pattern": "maplibre-gl-duckdb"
   },

@@ -12,6 +12,7 @@ import {
   removeLastDirectionsWaypoint,
   subscribeDirectionsState,
 } from "../packages/plugins/src/plugins/maplibre-directions";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 type DirectionsResponse = Parameters<typeof extractDirectionsRouteMetrics>[0];
 
@@ -21,6 +22,63 @@ describe("maplibreDirectionsPlugin", () => {
     assert.equal(maplibreDirectionsPlugin.activeByDefault, undefined);
     assert.equal(typeof maplibreDirectionsPlugin.activate, "function");
     assert.equal(typeof maplibreDirectionsPlugin.deactivate, "function");
+  });
+
+  it("uses only hosted lifecycle and typed engine commands", () => {
+    const invocations: Array<{ command: string; input: unknown }> = [];
+    let reportState: ((state: unknown) => void) | undefined;
+    const app = {
+      map: {
+        invoke: (command: string, input: unknown) => {
+          invocations.push({ command, input });
+          if (command === "hosted-plugin.activate") {
+            reportState = (input as { onStateChange?: (state: unknown) => void }).onStateChange;
+          }
+          return true;
+        },
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    const unsubscribe = subscribeDirectionsState(() => {});
+    try {
+      assert.equal(maplibreDirectionsPlugin.activate(app), true);
+      reportState?.({
+        waypointCount: 2,
+        routeMetrics: {
+          totalDistanceMeters: 1234,
+          totalDurationSeconds: 456,
+          legs: [{ distanceMeters: 1234, durationSeconds: 456 }],
+        },
+        routeLoading: false,
+        removalInFlight: false,
+      });
+      assert.equal(getDirectionsWaypointCount(), 2);
+      assert.deepEqual(getDirectionsRouteMetrics(), {
+        totalDistanceMeters: 1234,
+        totalDurationSeconds: 456,
+        legs: [{ distanceMeters: 1234, durationSeconds: 456 }],
+      });
+
+      removeLastDirectionsWaypoint();
+      clearDirectionsWaypoints();
+      maplibreDirectionsPlugin.deactivate(app);
+
+      assert.deepEqual(
+        invocations.map(({ command }) => command),
+        [
+          "hosted-plugin.activate",
+          "directions.remove-last",
+          "directions.clear",
+          "hosted-plugin.deactivate",
+        ],
+      );
+      assert.equal(getDirectionsWaypointCount(), 0);
+      assert.equal(getDirectionsRouteMetrics(), null);
+    } finally {
+      unsubscribe();
+      // Keep the singleton descriptor state inert if an assertion above fails.
+      maplibreDirectionsPlugin.deactivate(app);
+    }
   });
 });
 

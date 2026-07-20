@@ -103,6 +103,9 @@ function createCompleteFake(): MapEngine {
         case "hosted-plugin.set-position":
         case "hosted-plugin.apply-state":
           return true;
+        case "directions.remove-last":
+        case "directions.clear":
+          return false;
         case "hosted-plugin.deactivate":
         case "hosted-plugin.get-state":
           return undefined;

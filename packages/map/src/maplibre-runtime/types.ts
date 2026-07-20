@@ -37,6 +37,8 @@ export interface MapLibreHostedRuntime {
   setPosition?(context: MapLibreHostedRuntimeContext, position: MapControlPosition): boolean | void;
   getState?(): unknown;
   applyState?(context: MapLibreHostedRuntimeContext, state: unknown): boolean | void;
+  /** Handles a named, typed engine command for this adapter-private runtime. */
+  runCommand?(context: MapLibreHostedRuntimeContext, command: string): boolean | void;
 }
 
 export type MapLibreHostedRuntimeLoader = () => Promise<MapLibreHostedRuntime>;

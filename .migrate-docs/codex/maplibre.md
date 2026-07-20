@@ -998,3 +998,52 @@
   from 131 to 130 violations.
 - Follow-up: move the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — Directions `MapLibreGlDirections` session/control → ArcGIS `RouteTask` + `GraphicsLayer`
+
+- Source: MapLibre — the Directions plugin directly lazy-imported
+  `@maplibre/maplibre-gl-directions`, constructed its interactive native session,
+  attached a `LoadingIndicatorControl`, and owned native waypoint/route events.
+- Files touched: `packages/plugins/src/plugins/maplibre-directions.ts` before →
+  renderer-neutral descriptor and banner-state façade;
+  `packages/map/src/maplibre-runtime/directions.ts` added for the native runtime;
+  `packages/core/src/directions.ts` added for shared structural route metrics;
+  hosted-runtime registry, typed extension map, MapLibre/Cesium adapters,
+  workspace manifests/lockfile, contract fakes, directions tests, and boundary
+  fixture updated.
+- ArcGIS approach: a future ArcGIS adapter will use `RouteTask.solve()` for
+  routing, `GraphicsLayer` route/stop graphics, and `MapView.on("click")` for
+  interaction. It can preserve the same renderer-neutral route summary and
+  `directions.remove-last` / `directions.clear` commands without exposing an
+  ArcGIS object to the plugin or banner.
+- What changed: the descriptor now activates/deactivates only through the typed
+  hosted-runtime commands, accepts validated transient session snapshots, and
+  sends remove/clear actions through named `MapEngine` extensions. The lazy
+  adapter runtime owns the MapLibre Directions import, map instance, loading
+  control, native events, route request cancellation, and teardown. The
+  plugin's active state remains owned by the existing PluginManager/store path;
+  waypoint and route values are intentionally transient session UI state, as
+  before. Data ingest and persisted layer records were not changed.
+- Gap / limitation: MapLibre Directions supplies a ready-made interactive UI and
+  default OSRM demo-server workflow, while ArcGIS separates click/stop editing,
+  `RouteTask` solving, and route graphics; equivalent no-key routing behavior
+  also needs an explicit provider choice.
+- Workaround: keep the MapLibre-specific interactive session inside the lazy
+  adapter runtime and expose only normalized metrics and two typed commands.
+  Removal criteria: replace it when an ArcGIS runtime provides the same
+  add/drag/remove, cancellation, route-loading, and teardown behavior through
+  `RouteTask`/graphics tests without MapLibre imports or native handles.
+- Tradeoff accepted: the seam gains two focused extension commands and the
+  banner receives state through a callback, trading a little contract and
+  lifecycle plumbing for strict renderer isolation; first activation loads a
+  dedicated Directions runtime chunk.
+- Status: partial.
+- Verification: `node --import tsx --test tests/directions.test.ts
+  tests/engine-boundary.test.ts tests/engine-contracts.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 58 passed; `npm run build` → passed (the
+  normal JupyterLite-unavailable notice and browser externalization warnings
+  remained non-fatal); the reviewed engine-boundary baseline fell from 130 to
+  129 violations.
+- Follow-up: relocate the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.
