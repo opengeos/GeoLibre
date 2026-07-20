@@ -41,7 +41,6 @@
     "maplibre-gl-components": "^0.26.0",
     "maplibre-gl-duckdb": "^0.2.3",
     "maplibre-gl-earth-engine": "^0.4.2",
-    "maplibre-gl-esri-wayback": "^0.2.2",
     "maplibre-gl-geo-editor": "^0.10.1",
     "maplibre-gl-geoagent": "^0.5.5",
     "maplibre-gl-lidar": "^0.16.2",

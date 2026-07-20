@@ -731,3 +731,42 @@
   reviewed boundary ratchet fell from 145 to 137 violations.
 - Follow-up: relocate the Esri Wayback control next, preserving its normalized
   store-layer synchronization and historical release state; Codex, 2026-07-20.
+
+## 2026-07-20 — Esri Wayback `EsriWaybackControl` → lazy MapLibre adapter runtime
+
+- Source: MapLibre — the Historical Imagery plugin constructed and mounted
+  `EsriWaybackControl`, amended native source attribution, and synchronized
+  current/persistent Wayback imagery into store-layer records from
+  `@geolibre/plugins`.
+- Files touched: moved
+  `packages/plugins/src/plugins/maplibre-esri-wayback.ts` before →
+  `packages/map/src/maplibre-runtime/esri-wayback.ts`; original plugin module
+  before → hosted descriptor; hosted registry, package manifests/lockfile, and
+  boundary fixture updated.
+- ArcGIS approach: a future adapter can represent the selected historical
+  release with adapter-owned `WebTileLayer`/`ImageryLayer` equivalents and keep
+  the same normalized records in the store for layer panels and persistence.
+- What changed: all concrete control lifecycle, MapLibre attribution mutation,
+  and release/persistent-layer reconciliation now run within the lazy adapter
+  runtime. The control still updates the existing store records through its
+  previous actions; the runtime does not change ingest or create a second data
+  authority. Restore collapse intent is now applied through the hosted-runtime
+  contract before deferred layer synchronization.
+- Gap / limitation: Wayback's upstream control owns MapLibre source/layer ids
+  and Esri release-specific raster implementation details that do not map
+  directly to a single ArcGIS layer type.
+- Workaround: preserve stable normalized store metadata (release id, URL,
+  date, attribution) while confining source mutation to MapLibre. Removal
+  criteria: an ArcGIS Wayback runtime can rebuild matching store records and
+  attribution from the selected release without native MapLibre objects.
+- Tradeoff accepted: Historical Imagery loads as a separate runtime chunk on
+  first activation, trading a small delay for a strict package boundary and
+  renderer-neutral plugin descriptor.
+- Status: partial.
+- Verification: `npm run build` → passed; `node --import tsx --test
+  tests/hosted-map-runtime-registry.test.ts tests/plugin-manager.test.ts
+  tests/maplibre-engine.test.ts` → 43 passed; `node --import tsx --test
+  tests/engine-boundary.test.ts` → passed; the reviewed boundary ratchet fell
+  from 137 to 135 violations.
+- Follow-up: add stateful hosted-runtime support before moving controls whose
+  persisted UI state must survive a project restore; Codex, 2026-07-20.

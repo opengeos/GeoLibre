@@ -87,6 +87,9 @@ Status values: not started · in progress · partial · blocked · done
   deck.gl loading path now belong to the MapLibre adapter. The source-of-truth
   projection preference and 3DEP coverage layer remain store actions; the
   boundary ratchet is down to 137 reviewed violations.
+- Implemented: Historical Imagery now loads as an adapter-owned Esri Wayback
+  runtime. Its release/persistent imagery records remain synchronized through
+  the store; the boundary ratchet is down to 135 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
