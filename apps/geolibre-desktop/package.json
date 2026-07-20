@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
+    "@arcgis/core": "^5.1.12",
     "@carbonplan/zarr-layer": "^0.6.0",
     "@cereusdb/standard": "^0.2.0",
     "@deck.gl/aggregation-layers": "9.3.6",

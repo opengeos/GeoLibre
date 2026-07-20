@@ -9,6 +9,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
+import { copyArcGISAssets } from "./vite-plugins/copy-arcgis-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
@@ -296,6 +297,8 @@ function manualChunks(id: string): string | undefined {
   // graph.
   if (id.includes("/node_modules/cesium/") || id.includes("/node_modules/@cesium/"))
     return "cesium";
+  if (id.includes("/node_modules/@arcgis/core/"))
+    return "arcgis";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:
   // that produced a circular manual-chunks warning. Do not re-add a catch-all
@@ -848,6 +851,7 @@ export default defineConfig({
     ),
     copyRtlText(path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js")),
     copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
+    copyArcGISAssets(path.resolve(__dirname, "public/esri")),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
