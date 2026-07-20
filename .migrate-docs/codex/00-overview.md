@@ -137,6 +137,10 @@ Status values: not started · in progress · partial · blocked · done
   and transient preview layers are lazy adapter runtime code. The persisted
   GeoJSON annotation layer remains store-authoritative, and the boundary
   ratchet is 122 reviewed violations.
+- Implemented: Time Slider's persisted time-binding model and timestamp/date
+  helpers now belong to core; MapLibre expression translation remains isolated
+  pending relocation of the native slider runtime. This preserves store metadata
+  and gives ArcGIS a direct `FeatureFilter`-model input.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

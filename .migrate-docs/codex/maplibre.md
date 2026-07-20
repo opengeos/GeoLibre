@@ -1287,3 +1287,37 @@
   fell from 123 to 122 violations.
 - Follow-up: relocate the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre time-filter expressions → ArcGIS `FeatureFilter` predicate model
+
+- Source: MapLibre — the Time Slider's persisted binding model, timestamp
+  parsing, granularity selection, and Mapbox-style filter-expression builder
+  were co-located in the plugin package.
+- Files touched: `packages/plugins/src/plugins/time-slider-binding.ts` before
+  → thin compatibility/export module; `packages/core/src/time-slider.ts` added
+  for renderer-neutral time-binding model and date helpers; core index updated.
+- ArcGIS approach: a future ArcGIS adapter will translate the shared
+  `TimeBinding` model into `FeatureFilter`/definition-expression predicates.
+  The existing MapLibre expression builder remains renderer-specific until the
+  Time Slider runtime moves under the lazy MapLibre adapter.
+- What changed: `TimeBinding`, timestamp detection, date-window calculations,
+  granularity selection, and bind-model construction now live in
+  `@geolibre/core`. The plugin continues to expose the same symbols, but only
+  retains the MapLibre filter-expression translation. Store metadata and layer
+  ingest behavior are unchanged.
+- Gap / limitation: MapLibre filter arrays and ArcGIS `FeatureFilter`/SQL
+  predicates use different syntax and coercion semantics, especially for mixed
+  epoch and ISO timestamp fields.
+- Workaround: persist the renderer-neutral binding metadata and defer
+  renderer-specific predicate construction to the adapter. Removal criteria:
+  delete the MapLibre expression builder after its adapter runtime is retired
+  and an ArcGIS implementation passes the same date-only, datetime, epoch-second,
+  and calendar-window tests.
+- Tradeoff accepted: the temporary plugin compatibility module adds an import
+  hop while the native Time Slider relocation is in progress, preserving the
+  stable public API and enabling adapter-specific filter translation.
+- Status: partial.
+- Verification: `node --import tsx --test tests/time-slider-binding.test.ts
+  tests/time-slider-config.test.ts` → 24 passed.
+- Follow-up: relocate the Time Slider control and its COG pixel-read runtime
+  behind the lazy MapLibre hosted-runtime registry; Codex, 2026-07-20.
