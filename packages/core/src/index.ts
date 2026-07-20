@@ -87,6 +87,7 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getArcGISApiKey,
   getCesiumIonToken,
   getGoogleMapsApiKey,
   getProtomapsApiKey,

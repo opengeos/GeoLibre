@@ -112,6 +112,20 @@ export function getCesiumIonToken(env?: Record<string, string | undefined>): str
 }
 
 /**
+ * The 3D-globe view's terrain and search services can use an ArcGIS API key.
+ * Set at runtime through Settings → Environment variables (ARCGIS_API_KEY).
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed API key, or undefined when unset.
+ */
+export function getArcGISApiKey(env?: Record<string, string | undefined>): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed = runtimeEnv.VITE_ARCGIS_API_KEY?.trim() || runtimeEnv.ARCGIS_API_KEY?.trim();
+  return trimmed || undefined;
+}
+
+/**
  * Builds a full Protomaps v5 style URL for a flavor, injecting the API key.
  *
  * @param flavor - The Protomaps flavor name (e.g. `light`, `dark`, `white`,
