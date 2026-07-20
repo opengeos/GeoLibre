@@ -215,6 +215,10 @@ export function applyLegendConfig(base: LegendEntry[], config: LegendConfig): Le
         label: hasLabelOverride(override?.label)
           ? renderedLabel(override?.label, swatch.label ?? "")
           : swatch.label,
+        // Preserve the marker so a point layer with both a marker icon and
+        // diagram symbology (a multi-swatch entry: [marker primary, ...diagrams])
+        // still draws its marker rather than regressing to a color square.
+        marker: swatch.marker,
       });
     });
     // Every class hidden: drop the whole entry rather than render an empty box.
@@ -347,6 +351,7 @@ export function legendEditorRows(base: LegendEntry[], config: LegendConfig): Leg
         layerId: entry.id,
         kind: "class",
         color: swatch.color,
+        marker: swatch.marker,
         defaultLabel,
         label: hasLabelOverride(override?.label) ? (override?.label as string) : defaultLabel,
         hidden: Boolean(override?.hidden),

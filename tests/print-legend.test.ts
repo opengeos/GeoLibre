@@ -213,6 +213,40 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches[0].marker, undefined);
   });
 
+  it("keeps the marker on the primary swatch of a marker + diagram multi-swatch entry", () => {
+    const pointGeojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { votes_a: 1 },
+        },
+      ],
+    } as GeoJSON.FeatureCollection;
+    const style = {
+      vectorStyleMode: "single",
+      markerEnabled: true,
+      markerShape: "star",
+      markerColor: "#ff8800",
+      diagramType: "pie",
+      diagramFields: [{ property: "votes_a", color: "#111111" }],
+    } as unknown as LayerStyle;
+    const base = buildLegend([
+      makeLayer({ id: "m", name: "Marker+Diagram", geojson: pointGeojson, style }),
+    ]);
+    // Multi-swatch entry: marker primary + one diagram swatch.
+    assert.equal(base[0].swatches.length, 2);
+    assert.deepEqual(base[0].swatches[0].marker, { shape: "star", color: "#ff8800" });
+    // applyLegendConfig's multi-swatch rebuild must not drop the marker.
+    const applied = applyLegendConfig(base, config());
+    assert.deepEqual(applied[0].swatches[0].marker, { shape: "star", color: "#ff8800" });
+    // The editor's per-class row must preview the marker too.
+    const rows = legendEditorRows(base, config());
+    const primaryClass = rows.find((r) => r.kind === "class");
+    assert.deepEqual(primaryClass?.marker, { shape: "star", color: "#ff8800" });
+  });
+
   it("surfaces the entry marker on the editor row for a single-symbol point layer", () => {
     const base = buildLegend([
       makeLayer({

@@ -6,8 +6,7 @@ import {
   useAppStore,
   VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
-import { loadMarkerSvgImage } from "@geolibre/map";
+import { loadMarkerSvgImage, type MapController } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
 import {
   Button,

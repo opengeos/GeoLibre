@@ -2001,7 +2001,9 @@ function drawLegend(
     } else {
       if (opts.groupByLayer) rows.push({ color: "", text: entry.name });
       for (const sw of entry.swatches) {
-        rows.push({ color: sw.color, text: sw.label ?? "" });
+        // Carry the marker so a marker + diagram layer (a multi-swatch entry
+        // whose primary swatch is the marker) draws its marker, not a square.
+        rows.push({ color: sw.color, text: sw.label ?? "", marker: sw.marker });
       }
     }
   }

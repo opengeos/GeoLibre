@@ -247,6 +247,32 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("draws the marker of a multi-swatch entry's primary swatch as a shape", () => {
+    const { canvas, polylines, fillRects } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "md",
+            name: "Marker+Diagram",
+            swatches: [
+              { color: "#00aa55", marker: { shape: "triangle", color: "#00aa55" } },
+              { color: "#111111", label: "votes" },
+            ],
+          },
+        ],
+      }),
+    );
+    // The primary swatch's marker is a triangle path; the diagram swatch is a
+    // plain color square.
+    assert.ok(polylines.length > 0, "expected the primary marker shape to be drawn");
+    assert.ok(
+      fillRects.some((r) => r.fillStyle === "#111111" && r.w === r.h),
+      "expected the diagram class swatch to still be a color square",
+    );
+  });
+
   it("left-aligns legend rows when a legend title is present", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(canvas, baseOptions({ legendTitle: "Key" }));
