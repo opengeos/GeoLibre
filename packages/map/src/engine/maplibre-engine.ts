@@ -9,6 +9,7 @@ import type {
 import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import { captureMapLibreViewport } from "../capture/maplibre-capture";
+import { createMapLibreHostedRuntimeRegistry } from "../maplibre-runtime/registry";
 import type { MapEngineExtensionMap } from "./extensions";
 import { drawMapLibreBounds } from "./draw-bounds";
 import { createMapLibreMarker } from "./markers";
@@ -174,6 +175,7 @@ export class MapLibreEngine implements MapEngine {
     ...defaultControlVisibility,
   };
   private overlays: MapLibreTransientOverlays | null = null;
+  private readonly hostedRuntimes = createMapLibreHostedRuntimeRegistry(this);
   private controller: MapControllerContract | null = null;
   private map: maplibregl.Map | null = null;
   private pendingConfiguration: PendingConfiguration = {};
@@ -524,13 +526,36 @@ export class MapLibreEngine implements MapEngine {
       case "story.restore-layer-styles":
         this.controller?.restoreLayerStyles();
         return undefined as MapEngineExtensionMap[K]["output"];
-      case "hosted-plugin.activate":
-      case "hosted-plugin.set-position":
-      case "hosted-plugin.apply-state":
-        return false as MapEngineExtensionMap[K]["output"];
-      case "hosted-plugin.deactivate":
-      case "hosted-plugin.get-state":
+      case "hosted-plugin.activate": {
+        const input = _input as MapEngineExtensionMap["hosted-plugin.activate"]["input"];
+        return this.hostedRuntimes.activate(
+          input.pluginId,
+          input,
+        ) as MapEngineExtensionMap[K]["output"];
+      }
+      case "hosted-plugin.deactivate": {
+        const input = _input as MapEngineExtensionMap["hosted-plugin.deactivate"]["input"];
+        this.hostedRuntimes.deactivate(input.pluginId);
         return undefined as MapEngineExtensionMap[K]["output"];
+      }
+      case "hosted-plugin.set-position": {
+        const input = _input as MapEngineExtensionMap["hosted-plugin.set-position"]["input"];
+        return this.hostedRuntimes.setPosition(
+          input.pluginId,
+          input.position,
+        ) as MapEngineExtensionMap[K]["output"];
+      }
+      case "hosted-plugin.get-state": {
+        const input = _input as MapEngineExtensionMap["hosted-plugin.get-state"]["input"];
+        return this.hostedRuntimes.getState(input.pluginId) as MapEngineExtensionMap[K]["output"];
+      }
+      case "hosted-plugin.apply-state": {
+        const input = _input as MapEngineExtensionMap["hosted-plugin.apply-state"]["input"];
+        return this.hostedRuntimes.applyState(
+          input.pluginId,
+          input.state,
+        ) as MapEngineExtensionMap[K]["output"];
+      }
     }
   }
 

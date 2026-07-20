@@ -528,3 +528,41 @@
 - Follow-up: move the concrete built-in MapLibre control runtimes to the lazy
   adapter-owned hosted-runtime registry, then remove the legacy public native
   API types; Codex, 2026-07-20.
+
+## 2026-07-20 — Eager Layer Control descriptor → lazy MapLibre hosted runtime
+
+- Source: MapLibre — the built-in Layer Control plugin directly called the
+  MapLibre controller's built-in-control visibility and position methods from
+  `@geolibre/plugins`, causing the plugin package to own renderer behavior.
+- Files touched: `packages/plugins/src/plugins/layer-control.ts` before → thin
+  `createHostedMapPlugin` descriptor; new
+  `packages/plugins/src/hosted-map-plugin.ts`; moved implementation to
+  `packages/map/src/maplibre-runtime/layer-control.ts`; new adapter-private
+  `maplibre-runtime/{types.ts,registry.ts}`; `MapLibreEngine` before → hosted
+  extension-command dispatcher; `createAppAPI` before → `MapEngineClient` host
+  reference; new runtime-registry tests.
+- ArcGIS approach: descriptors address `MapEngineClient.invoke` only. A future
+  ArcGIS adapter can register a plugin-id runtime backed by `MapView` UI
+  components without loading or exposing a MapLibre controller.
+- What changed: the MapLibre runtime registry keeps implementations per engine
+  instance and dynamically imports a runtime only when that plugin activates.
+  The descriptor preserves its id, name, version, default active flag, and
+  persisted corner position while forwarding activation, deactivation, and
+  position changes through the typed hosted-plugin commands.
+- Gap / limitation: only the Layer Control is relocated in this initial
+  registry commit; other first-party controls still own concrete renderer code
+  under `@geolibre/plugins` until their focused moves land.
+- Workaround: keep the registry's narrow runtime context engine-only and add
+  one concrete runtime family at a time. Removal criteria: every first-party
+  renderer runtime has moved adapter-side and no plugin source imports a
+  renderer SDK or native controller type.
+- Tradeoff accepted: first activation incurs a dynamic-import boundary and can
+  fail asynchronously, trading a small initial delay for adapter ownership and
+  plugin-manager rollback rather than a permanently eager renderer bundle.
+- Status: partial.
+- Verification: `node --import tsx --test tests/hosted-map-runtime-registry.test.ts
+  tests/plugin-manager.test.ts tests/maplibre-engine.test.ts
+  tests/engine-contracts.test.ts` → 44 passed; `npm run build` → passed.
+- Follow-up: relocate annotations and the remaining simple MapLibre controls
+  into this registry while preserving their ids, state, and restore behavior;
+  Codex, 2026-07-20.

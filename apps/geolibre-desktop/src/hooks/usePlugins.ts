@@ -54,7 +54,7 @@ import {
   closeFloatingPanel,
   getOpenFloatingPanels,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import type {
   GeoLibreCogLayerOptions,
   GeoLibreDeckGL,
@@ -620,6 +620,11 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
   // itself (e.g. addCogLayer -> addCogRasterLayer) can pass `api`. Only read
   // when those methods are called, which is always after assignment.
   const api = {
+    get map(): MapEngineClient {
+      const client = mapControllerRef?.current as MapEngineClient | null | undefined;
+      if (!client) throw new Error("Map engine is not ready.");
+      return client;
+    },
     setBasemap: (url: string) => store.setBasemapStyleUrl(url),
     addGeoJsonLayer: (name: string, data: GeoJSON.FeatureCollection, sourcePath?: string) => {
       const id = store.addGeoJsonLayer(name, data, sourcePath);

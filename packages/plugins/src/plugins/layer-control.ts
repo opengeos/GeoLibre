@@ -1,19 +1,9 @@
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { createHostedMapPlugin } from "../hosted-map-plugin";
 
-let layerControlPosition: GeoLibreMapControlPosition = "top-right";
-
-export const maplibreLayerControlPlugin: GeoLibrePlugin = {
+export const maplibreLayerControlPlugin = createHostedMapPlugin({
   id: "maplibre-layer-control",
   name: "Layer Control",
   version: "0.16.0",
   activeByDefault: true,
-  activate: (app: GeoLibreAppAPI) => app.setBuiltInMapControlVisible("layer-control", true),
-  deactivate: (app: GeoLibreAppAPI) => {
-    app.setBuiltInMapControlVisible("layer-control", false);
-  },
-  getMapControlPosition: () => layerControlPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    layerControlPosition = position;
-    return app.setBuiltInMapControlPosition("layer-control", position);
-  },
-};
+  initialPosition: "top-right",
+});

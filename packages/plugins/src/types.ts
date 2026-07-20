@@ -1,4 +1,5 @@
 import type { GeoLibreLayer, LayerStyle } from "@geolibre/core";
+import type { MapEngineClient } from "@geolibre/map";
 import type { FeatureCollection } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import { GEOLIBRE_PLUGIN_API_VERSION } from "./api-version";
@@ -192,6 +193,8 @@ export interface GeoLibrePickedVectorFile {
 }
 
 export interface GeoLibreAppAPI {
+  /** The sole renderer access point for public and hosted plugin descriptors. */
+  readonly map: MapEngineClient;
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (name: string, data: FeatureCollection, sourcePath?: string) => string;
   /**
