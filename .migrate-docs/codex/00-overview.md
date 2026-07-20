@@ -128,6 +128,10 @@ Status values: not started · in progress · partial · blocked · done
   saved-layer replay now run in a lazy MapLibre adapter runtime. The app only
   sends hosted lifecycle requests for open, close, and store-layer restoration;
   the boundary ratchet is 124 reviewed violations.
+- Implemented: Atmospheric Effects now keeps its serializable settings model
+  renderer-neutral while the MapLibre canvas stack, map events, and globe math
+  run in a lazy adapter runtime. The boundary ratchet is 123 reviewed
+  violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

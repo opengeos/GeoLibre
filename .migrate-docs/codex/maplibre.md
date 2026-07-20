@@ -1196,3 +1196,48 @@
   baseline fell from 125 to 124 violations.
 - Follow-up: relocate the next first-party plugin that still imports a concrete
   renderer; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre globe canvas overlays → ArcGIS `SceneView` `RenderNode`
+
+- Source: MapLibre — the Atmospheric Effects plugin's direct `maplibregl.Map`
+  canvas/container access, `move`/`resize` events, globe projection checks, and
+  layered DOM canvases used for the starfield, comets, and atmosphere halo.
+- Files touched: `packages/plugins/src/plugins/maplibre-effects.ts` before →
+  renderer-neutral settings façade; `packages/core/src/effects-settings.ts`
+  added for the serializable settings model; `packages/map/src/maplibre-runtime/effects.ts`
+  added for MapLibre canvas/globe behavior; hosted-runtime registry, core index,
+  ellipse-test import, boundary fixture, and `tests/effects-plugin.test.ts`
+  added/updated.
+- ArcGIS approach: a future 3D adapter should implement the globe-bound visual
+  effect as a `SceneView` `RenderNode` (or a dedicated external-renderer
+  equivalent), using SceneView camera/view state instead of MapLibre DOM canvas
+  stacking. A future 2D variant can use a `BaseLayerViewGL2D` only if the effect
+  remains a required product capability.
+- What changed: the plugin now owns only normalized serializable settings and
+  invokes hosted lifecycle/state commands. The lazy MapLibre runtime owns every
+  concrete map/canvas/event operation and rebinds to a reinitialized map. The
+  active-by-default restore helper no longer loads a runtime when effects are
+  inactive. Store/project settings remain the authority and no data ingest code
+  changed.
+- Gap / limitation: MapLibre permits z-indexed DOM canvases beneath its globe;
+  ArcGIS SceneView has a managed WebGL render pipeline and no like-for-like DOM
+  canvas layer at the same depth.
+- Workaround: keep the existing stacked-canvas renderer private to the MapLibre
+  runtime while preserving the settings model independently. Removal criteria:
+  replace it when a SceneView render node reproduces the desired globe-only
+  ordering, camera tracking, resize/visibility lifecycle, and settings behavior
+  without MapLibre containers or events.
+- Tradeoff accepted: settings now flow through a small façade/runtime state
+  handshake and the legacy canvas technique remains MapLibre-specific, trading
+  a little lifecycle indirection for lazy loading and strict renderer isolation.
+- Status: partial.
+- Verification: `node --import tsx --test tests/effects-settings.test.ts
+  tests/globe-halo-ellipse.test.ts tests/effects-plugin.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 30 passed;
+  `npm run build` → passed (normal JupyterLite-unavailable notice and browser
+  externalization warnings were non-fatal); the production build emitted a
+  separate `effects` runtime chunk; the reviewed engine-boundary baseline fell
+  from 124 to 123 violations.
+- Follow-up: relocate the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.

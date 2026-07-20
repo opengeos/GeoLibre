@@ -105,3 +105,4 @@ export {
 } from "./three-d-tiles";
 export * from "./sun-simulation";
 export * from "./directions";
+export * from "./effects-settings";

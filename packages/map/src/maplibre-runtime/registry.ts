@@ -30,6 +30,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
   "maplibre-gl-geoagent": async () => (await import("./geoagent")).maplibreGeoAgentRuntime,
   "maplibre-gl-planetary-computer": async () =>
     (await import("./planetary-computer")).maplibrePlanetaryComputerRuntime,
+  "maplibre-atmosphere-effects": async () => (await import("./effects")).maplibreEffectsRuntime,
 };
 
 /**

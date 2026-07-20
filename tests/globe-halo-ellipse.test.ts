@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fitEllipse, type GlobeEllipse } from "../packages/plugins/src/plugins/maplibre-effects";
+import { fitEllipse, type GlobeEllipse } from "../packages/map/src/maplibre-runtime/effects";
 
 /**
  * Sample `n` boundary points by casting rays at uniform angles from `from` (an
