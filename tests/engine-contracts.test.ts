@@ -55,6 +55,7 @@ function createCompleteFake(): MapEngine {
     layers: {
       readGeoJson: async () => null,
       readRasterSource: () => null,
+      setRasterTiles: () => false,
       queryInView: () => [],
       listRenderTargets: () => [],
       hasRenderTarget: () => false,

@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
-import type { Map as MapLibreMap, RasterTileSource } from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
+import type { MapEngineEventMap, Unsubscribe } from "@geolibre/map";
 
 /**
  * Shared engine for the Weather overlays (Clouds, Precipitation).
@@ -76,11 +76,6 @@ export interface WeatherLayerController {
   subscribe: (listener: () => void) => () => void;
 }
 
-/** The live raster source id the map assigns to a store layer (`@geolibre/map`'s `sourceId`). */
-function rasterSourceId(layerId: string): string {
-  return `source-${layerId}`;
-}
-
 /**
  * Shallow equality for a layer's flat metadata record that ignores top-level
  * key order, so `syncStore` can skip a no-op write even after a JSON round-trip
@@ -110,7 +105,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
   const listeners = new Set<() => void>();
   /** Recent tile-load-failure timestamps for this layer's source (ms). */
   let errorTimestamps: number[] = [];
-  let mapErrorHandler: ((event: unknown) => void) | null = null;
+  let unsubscribeMapErrors: Unsubscribe | null = null;
   /**
    * Bumped on every activate() and deactivate() so an async activation (the
    * RainViewer fetch takes real network time) can tell it was superseded by a
@@ -126,9 +121,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
   /** Swap the live source to the current frame for an instant visual update. */
   const applyFrameToMap = (): void => {
     if (layerId === null || frames.length === 0) return;
-    const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
-    const source = map?.getSource(rasterSourceId(layerId)) as RasterTileSource | undefined;
-    source?.setTiles([frames[index].tileUrl]);
+    appRef?.map.layers.setRasterTiles(layerId, [frames[index].tileUrl]);
   };
 
   /**
@@ -200,11 +193,9 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
    * and stop the loop so the map stays responsive; the user can press Play to
    * retry. Only failures for THIS layer's source count.
    */
-  const handleMapError = (event: unknown): void => {
+  const handleMapError = (event: MapEngineEventMap["error"]): void => {
     if (!playing || layerId === null) return;
-    const record = event as { sourceId?: string; error?: { sourceId?: string } } | null | undefined;
-    const sourceId = record?.sourceId ?? record?.error?.sourceId;
-    if (sourceId !== rasterSourceId(layerId)) return;
+    if (event.source !== `source-${layerId}`) return;
     const now = Date.now();
     errorTimestamps.push(now);
     errorTimestamps = errorTimestamps.filter((t) => now - t < 2500);
@@ -266,13 +257,9 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
         });
       }
 
-      // Watch for this source's tile failures so a rate-limited animation can
-      // stop itself instead of spiralling (see handleMapError).
-      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
-      if (map) {
-        mapErrorHandler = handleMapError;
-        map.on("error", mapErrorHandler);
-      }
+      // Watch normalized source failures through the engine so a rate-limited
+      // animation can stop itself instead of spiralling (see handleMapError).
+      unsubscribeMapErrors = app.map.on("error", handleMapError);
 
       notify();
       return true;
@@ -289,9 +276,8 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
         frameTimer = null;
       }
       playing = false;
-      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
-      if (map && mapErrorHandler) map.off("error", mapErrorHandler);
-      mapErrorHandler = null;
+      unsubscribeMapErrors?.();
+      unsubscribeMapErrors = null;
       errorTimestamps = [];
       if (layerId !== null) {
         const store = useAppStore.getState();

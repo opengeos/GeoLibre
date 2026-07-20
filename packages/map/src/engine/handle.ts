@@ -117,6 +117,11 @@ class StableMapEngineHandle implements MapEngine {
     },
     readRasterSource: (layerId: string): Readonly<Record<string, unknown>> | null =>
       this.adapter?.layers.readRasterSource(layerId) ?? null,
+    setRasterTiles: (layerId: string, tiles: readonly string[]): boolean => {
+      if (this.adapter) return this.adapter.layers.setRasterTiles(layerId, tiles);
+      this.enqueue((engine) => engine.layers.setRasterTiles(layerId, tiles));
+      return true;
+    },
     queryInView: (layerId: string): readonly import("geojson").Feature[] =>
       this.adapter?.layers.queryInView(layerId) ?? [],
     listRenderTargets: (): readonly MapRenderTarget[] =>

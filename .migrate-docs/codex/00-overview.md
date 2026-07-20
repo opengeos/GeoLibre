@@ -109,6 +109,10 @@ Status values: not started · in progress · partial · blocked · done
   state renderer-neutral, while its MapLibre canvas mask, scene light, and
   animation loop are a lazy adapter runtime. The boundary ratchet is 131
   reviewed violations.
+- Implemented: animated Weather layers replace live raster tiles and observe
+  source failures through the typed layer/event ports; their remote frame
+  loading and store records remain untouched. The boundary ratchet is 130
+  reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

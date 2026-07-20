@@ -960,3 +960,41 @@
   132 to 131 violations.
 - Follow-up: move another first-party renderer-owning plugin into a lazy
   adapter runtime; Codex, 2026-07-20.
+
+## 2026-07-20 — Weather raster `setTiles`/error listener → MapEngine layer port
+
+- Source: MapLibre — shared Clouds/Precipitation playback directly obtained a
+  `RasterTileSource` to call `setTiles()` and registered a native `Map#error`
+  listener to pause after a source-specific failure burst.
+- Files touched: `packages/plugins/src/plugins/weather-layer.ts` before →
+  MapEngine layer/event operations; `packages/map/src/engine/types.ts`, handle,
+  MapLibre and Cesium adapters before → typed `setRasterTiles` support and
+  normalized source id; engine, weather, consumer, and boundary tests updated.
+- ArcGIS approach: an ArcGIS adapter can update an adapter-owned `WebTileLayer`
+  URL/template (or replace its layer source) through the same `setRasterTiles`
+  port and normalize layer load errors from `LayerView`/layer events.
+- What changed: weather playback now asks `app.map.layers` to replace a live
+  raster's templates and subscribes through `app.map.on("error")`. The MapLibre
+  adapter resolves the private source and calls `RasterTileSource#setTiles`; it
+  also exposes MapLibre's `sourceId` as the normalized error source. Frame
+  discovery, fetches, store synchronization, persistence, and activation
+  behavior remain unchanged, so the store is still authoritative and data
+  ingest was not touched.
+- Gap / limitation: ArcGIS tile-template replacement and source-load error
+  attribution differ by layer class and have not been implemented or
+  conformance-tested yet.
+- Workaround: keep the precise MapLibre mutation inside the adapter while the
+  portable port describes only an already-rendered logical raster layer and its
+  templates. Removal criteria: an ArcGIS adapter updates weather frames and
+  triggers the same source-specific circuit-breaker tests without MapLibre ids.
+- Tradeoff accepted: the core layer port grows by one focused write operation
+  and Cesium currently reports it unsupported, trading a small contract cost
+  for store-first playback without a native map escape hatch.
+- Status: partial.
+- Verification: `node --import tsx --test tests/weather-layer.test.ts
+  tests/maplibre-engine.test.ts tests/engine-contracts.test.ts
+  tests/engine-boundary.test.ts tests/map-engine-layer-consumers.test.ts` → 25
+  passed; `npm run build` → passed; the reviewed engine-boundary baseline fell
+  from 131 to 130 violations.
+- Follow-up: move the next first-party plugin that still imports a concrete
+  renderer; Codex, 2026-07-20.

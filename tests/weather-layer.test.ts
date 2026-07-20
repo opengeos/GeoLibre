@@ -16,9 +16,14 @@ const frame: WeatherFrame = {
   metadata: { title: "Test" },
 };
 
-// A map-less app: getMap() → null makes the engine skip all MapLibre work
-// (setTiles, the error listener), leaving the store-driven logic under test.
-const app = { getMap: () => null } as unknown as GeoLibreAppAPI;
+// A renderer-neutral app fake. The weather engine's live tile swap and error
+// breaker both use the MapEngine client, never a native map object.
+const app = {
+  map: {
+    layers: { setRasterTiles: () => false },
+    on: () => () => undefined,
+  },
+} as unknown as GeoLibreAppAPI;
 
 function makeConfig(over: Partial<WeatherLayerConfig> = {}): WeatherLayerConfig {
   return {
@@ -142,18 +147,44 @@ describe("createWeatherLayer", () => {
     assert.equal(ownedLayers().length, 1); // exactly one — adopted, no duplicate
   });
 
-  it("auto-pauses playback after a burst of tile errors from its own source", async () => {
-    // A fake map that captures the "error" listener the engine attaches.
-    let onError: ((e: unknown) => void) | undefined;
-    const fakeMap = {
-      on: (event: string, cb: (e: unknown) => void) => {
-        if (event === "error") onError = cb;
+  it("swaps a scrubbed frame through the MapEngine layer port", async () => {
+    const tileCalls: Array<{ layerId: string; tiles: readonly string[] }> = [];
+    const appWithEngine = {
+      map: {
+        layers: {
+          setRasterTiles: (layerId: string, tiles: readonly string[]) => {
+            tileCalls.push({ layerId, tiles });
+            return true;
+          },
+        },
+        on: () => () => undefined,
       },
-      off: () => {},
-      getSource: () => undefined, // setTiles is a no-op
+    } as unknown as GeoLibreAppAPI;
+    const secondFrame: WeatherFrame = {
+      ...frame,
+      tileUrl: "https://example.test/2/{z}/{x}/{y}.png",
     };
+    const c = createWeatherLayer(makeConfig({ loadFrames: async () => [frame, secondFrame] }));
+
+    await c.activate(appWithEngine);
+    const layerId = ownedLayers()[0].id;
+    c.setFrame(0);
+
+    assert.deepEqual(tileCalls, [{ layerId, tiles: [frame.tileUrl] }]);
+    c.deactivate();
+  });
+
+  it("auto-pauses playback after a burst of tile errors from its own source", async () => {
+    // Capture the normalized engine error subscription.
+    let onError: ((e: { source?: string }) => void) | undefined;
     const appWithMap = {
-      getMap: () => fakeMap,
+      map: {
+        layers: { setRasterTiles: () => true },
+        on: (event: string, cb: (e: { source?: string }) => void) => {
+          if (event === "error") onError = cb;
+          return () => undefined;
+        },
+      },
     } as unknown as GeoLibreAppAPI;
 
     const secondFrame: WeatherFrame = {
@@ -171,22 +202,23 @@ describe("createWeatherLayer", () => {
     assert.ok(onError, "error listener was attached");
 
     // A burst of tile-load failures for THIS layer's source trips the breaker.
-    for (let i = 0; i < 5; i += 1) onError?.({ sourceId: `source-${layerId}` });
+    for (let i = 0; i < 5; i += 1) onError?.({ source: `source-${layerId}` });
     assert.equal(c.getState().playing, false);
 
     c.deactivate();
   });
 
   it("ignores tile errors from other sources (no false auto-pause)", async () => {
-    let onError: ((e: unknown) => void) | undefined;
-    const fakeMap = {
-      on: (event: string, cb: (e: unknown) => void) => {
-        if (event === "error") onError = cb;
+    let onError: ((e: { source?: string }) => void) | undefined;
+    const appWithMap = {
+      map: {
+        layers: { setRasterTiles: () => true },
+        on: (event: string, cb: (e: { source?: string }) => void) => {
+          if (event === "error") onError = cb;
+          return () => undefined;
+        },
       },
-      off: () => {},
-      getSource: () => undefined,
-    };
-    const appWithMap = { getMap: () => fakeMap } as unknown as GeoLibreAppAPI;
+    } as unknown as GeoLibreAppAPI;
     const secondFrame: WeatherFrame = {
       ...frame,
       tileUrl: "https://example.test/2/{z}/{x}/{y}.png",
@@ -196,7 +228,7 @@ describe("createWeatherLayer", () => {
     );
     await c.activate(appWithMap);
     c.togglePlaying();
-    for (let i = 0; i < 20; i += 1) onError?.({ sourceId: "source-some-other-layer" });
+    for (let i = 0; i < 20; i += 1) onError?.({ source: "source-some-other-layer" });
     assert.equal(c.getState().playing, true); // unaffected by unrelated errors
     c.deactivate();
   });

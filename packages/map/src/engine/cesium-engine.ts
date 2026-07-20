@@ -123,6 +123,7 @@ export class CesiumEngine implements MapEngine {
     readGeoJson: async (layerId: string): Promise<FeatureCollection | null> =>
       this.layersSnapshot.find((layer) => layer.id === layerId)?.geojson ?? null,
     readRasterSource: (): Readonly<Record<string, unknown>> | null => null,
+    setRasterTiles: (): boolean => false,
     queryInView: (_layerId: string): readonly Feature[] => this.unsupported("feature-query"),
     listRenderTargets: (): readonly MapRenderTarget[] =>
       this.layersSnapshot

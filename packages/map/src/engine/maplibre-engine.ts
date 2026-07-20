@@ -9,6 +9,7 @@ import type {
 import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import { captureMapLibreViewport } from "../capture/maplibre-capture";
+import { sourceId } from "../geojson-loader";
 import { createMapLibreHostedRuntimeRegistry } from "../maplibre-runtime/registry";
 import type { MapEngineExtensionMap } from "./extensions";
 import { drawMapLibreBounds } from "./draw-bounds";
@@ -159,7 +160,11 @@ function normalizeError(error: unknown): MapEngineEventMap["error"] {
     return {
       message: typeof record.message === "string" ? record.message : "MapLibre error",
       ...(typeof record.detail === "string" ? { detail: record.detail } : {}),
-      ...(typeof record.source === "string" ? { source: record.source } : {}),
+      ...(typeof record.source === "string"
+        ? { source: record.source }
+        : typeof record.sourceId === "string"
+          ? { source: record.sourceId }
+          : {}),
       ...(typeof record.status === "number" ? { status: record.status } : {}),
       ...(typeof record.url === "string" ? { url: record.url } : {}),
     };
@@ -272,6 +277,14 @@ export class MapLibreEngine implements MapEngine {
       this.controller?.getLayerGeoJson(layerId) ?? null,
     readRasterSource: (layerId: string): Readonly<Record<string, unknown>> | null =>
       this.controller?.getLayerRasterSource(layerId) ?? null,
+    setRasterTiles: (layerId: string, tiles: readonly string[]): boolean => {
+      const source = this.map?.getSource(sourceId(layerId)) as
+        | maplibregl.RasterTileSource
+        | undefined;
+      if (!source?.setTiles) return false;
+      source.setTiles([...tiles]);
+      return true;
+    },
     queryInView: (layerId: string): readonly Feature[] =>
       this.controller?.queryLayerFeaturesInView?.(layerId) ?? [],
     listRenderTargets: (): readonly MapRenderTarget[] => {

@@ -71,6 +71,10 @@ export function createTestMapEngine(
     layers: {
       readGeoJson: async () => null,
       readRasterSource: () => null,
+      setRasterTiles: () => {
+        operations.push("layers.setRasterTiles");
+        return true;
+      },
       queryInView: () => [],
       listRenderTargets: () => [],
       hasRenderTarget: () => false,

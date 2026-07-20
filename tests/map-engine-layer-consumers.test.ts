@@ -58,6 +58,7 @@ function layerPort(readGeoJson: MapLayerPort["readGeoJson"]): MapLayerPort {
   return {
     readGeoJson,
     readRasterSource: () => null,
+    setRasterTiles: () => false,
     queryInView: () => [],
     listRenderTargets: () => [],
     hasRenderTarget: () => false,

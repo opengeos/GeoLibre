@@ -16,6 +16,7 @@ interface NavigationHandler {
 interface FakeNativeMap {
   readonly map: unknown;
   readonly navigation: readonly NavigationHandler[];
+  readonly rasterTileCalls: readonly (readonly string[])[];
   emit(event: string, payload?: Record<string, unknown>): void;
 }
 
@@ -37,6 +38,7 @@ function createNativeMap(): FakeNativeMap {
     };
   };
   const navigation = Array.from({ length: 8 }, createNavigationHandler);
+  const rasterTileCalls: string[][] = [];
   const map = {
     on: (event: string, handler: (payload: Record<string, unknown>) => void) => {
       const handlers = listeners.get(event) ?? new Set();
@@ -59,6 +61,10 @@ function createNativeMap(): FakeNativeMap {
     project: ([lng, lat]: [number, number]) => ({ x: lng * 10, y: lat * -10 }),
     unproject: ([x, y]: [number, number]) => ({ lng: x / 10, lat: y / -10 }),
     getContainer: () => container,
+    getSource: (id: string) =>
+      id === "source-weather"
+        ? { setTiles: (tiles: string[]) => rasterTileCalls.push(tiles) }
+        : undefined,
     dragPan: navigation[0],
     scrollZoom: navigation[1],
     boxZoom: navigation[2],
@@ -71,6 +77,7 @@ function createNativeMap(): FakeNativeMap {
   return {
     map,
     navigation,
+    rasterTileCalls,
     emit: (event, payload = {}) => {
       for (const handler of [...(listeners.get(event) ?? [])]) handler(payload);
     },
@@ -218,6 +225,15 @@ test("MapLibre exposes live layer snapshots and feature operations only through 
   const snapshot = await engine.layers.readGeoJson("cities");
   assert.equal(snapshot?.features[0].id, "zurich");
   assert.equal(engine.layers.readRasterSource("imagery")?.type, "raster");
+  assert.equal(
+    engine.layers.setRasterTiles("weather", ["https://example.com/{z}/{x}/{y}.png"]),
+    true,
+  );
+  assert.deepEqual(native.rasterTileCalls, [["https://example.com/{z}/{x}/{y}.png"]]);
+  assert.equal(
+    engine.layers.setRasterTiles("missing", ["https://example.com/{z}/{x}/{y}.png"]),
+    false,
+  );
   assert.deepEqual(
     engine.layers.queryInView("cities").map((feature) => feature.id),
     ["zurich"],
@@ -277,7 +293,7 @@ test("MapLibre converts native errors into engine-neutral diagnostics", async ()
   const native = createNativeMap();
   const controller = createControllerModule(native);
   const engine = new MapLibreEngine(async () => controller.module);
-  const errors: Array<{ message: string; status?: number }> = [];
+  const errors: Array<{ message: string; status?: number; source?: string }> = [];
   engine.on("error", (error) => errors.push(error));
   await engine.mount({} as HTMLElement, {
     center: [0, 0],
@@ -286,6 +302,8 @@ test("MapLibre converts native errors into engine-neutral diagnostics", async ()
     pitch: 0,
   });
 
-  native.emit("error", { error: { message: "tile failed", status: 503 } });
-  assert.deepEqual(errors, [{ message: "tile failed", status: 503 }]);
+  native.emit("error", {
+    error: { message: "tile failed", status: 503, sourceId: "source-weather" },
+  });
+  assert.deepEqual(errors, [{ message: "tile failed", status: 503, source: "source-weather" }]);
 });

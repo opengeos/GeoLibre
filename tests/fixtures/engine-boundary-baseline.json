@@ -488,10 +488,6 @@
     "pattern": "maplibre-gl-vector"
   },
   {
-    "path": "packages/plugins/src/plugins/weather-layer.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "packages/plugins/src/types.ts",
     "pattern": "@deck.gl/aggregation-layers"
   },

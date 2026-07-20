@@ -124,6 +124,8 @@ export interface MapRenderTarget {
 export interface MapLayerPort {
   readGeoJson(layerId: string): Promise<FeatureCollection | null>;
   readRasterSource(layerId: string): Readonly<Record<string, unknown>> | null;
+  /** Replace an already-rendered raster layer's tile templates without changing store state. */
+  setRasterTiles(layerId: string, tiles: readonly string[]): boolean;
   queryInView(layerId: string): readonly Feature[];
   listRenderTargets(): readonly MapRenderTarget[];
   hasRenderTarget(id: string): boolean;
