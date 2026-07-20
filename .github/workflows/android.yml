@@ -126,7 +126,27 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
+      - name: Check for release keystore
+        id: keystore
+        # `secrets` cannot be used in a step-level `if:`, so presence is turned
+        # into an output here and gated on below. Deliberately keyed on the
+        # keystore rather than `event_name == 'release'` so a workflow_dispatch
+        # run with the secrets set can still exercise the full Play path.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No release keystore — skipping the AAB build (it could not be signed or uploaded anyway)."
+          fi
+
       - name: Build release AAB (universal)
+        # Skipped without a release keystore: the AAB can only be signed and
+        # uploaded on `sign_mode = release` runs, so building it otherwise is a
+        # full Gradle bundle build for an artifact that is discarded.
+        if: steps.keystore.outputs.present == 'true'
         # Google Play requires an Android App Bundle, not an APK, for new apps —
         # Play generates the per-device splits itself from this single artifact.
         # Deliberately NOT --split-per-abi: that would emit one AAB per ABI, and
@@ -171,6 +191,11 @@ jobs:
           fi
           while IFS= read -r so; do
             checked=$((checked + 1))
+            # Per-file segment count. If objdump errors or emits no LOAD lines
+            # for this .so (corrupt artifact, foreign arch, tool change), the
+            # inner loop never runs, so without this the file would be counted
+            # as "checked" while nothing was actually inspected.
+            segments=0
             # `objdump -p` prints one line per segment ending in `align 2**N`
             # (readelf wraps LOAD across two lines, which makes it far easier to
             # parse the wrong column). 2**14 == 16384 is the required minimum.
@@ -178,6 +203,7 @@ jobs:
             # expansion `*` is a glob, so that form silently yields `**14` and
             # every comparison below becomes a no-op that passes.
             while read -r exp; do
+              segments=$((segments + 1))
               # Treat unparseable output as a failure, never as a pass — a
               # tooling change that breaks the format must not read as "aligned".
               case "$exp" in
@@ -194,6 +220,10 @@ jobs:
               esac
             done < <("$objdump" -p "$so" |
               awk '$1 == "LOAD" { split($NF, a, /\*\*/); print a[2] }')
+            if [ "$segments" -eq 0 ]; then
+              echo "::error::$so: objdump reported no LOAD segments — nothing was verified"
+              bad=$((bad + 1))
+            fi
           done < <(find "$workdir" -name '*.so')
           if [ "$checked" -eq 0 ]; then
             echo "::error::No .so files found inside the APKs — the check would pass vacuously"
@@ -261,13 +291,29 @@ jobs:
             abi="$(basename "$unsigned" | sed -E 's/^app-(.*)-release-unsigned\.apk$/\1/')"
             aligned="$RUNNER_TEMP/aligned-$abi.apk"
             signed="$out/geolibre-android-$abi.apk"
-            "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
+            # -P 16, not -p: the 16 KB requirement has two independent axes.
+            # The RUSTFLAGS above fix the ELF segment alignment *inside* the
+            # .so; this fixes the .so's byte offset *within the APK zip*, which
+            # is what lets the OS mmap it directly under extractNativeLibs=false.
+            # Lowercase -p only guarantees 4 KB. AGP currently happens to emit
+            # 16 KB-aligned offsets anyway, so -p passes today by luck; -P 16
+            # states the requirement so a future AGP change cannot silently
+            # regress it. (-P needs build-tools 35+; this workflow pins 36.)
+            "$build_tools/zipalign" -P 16 -f 4 "$unsigned" "$aligned"
             # Pass passwords via files (pass:file:) so they never appear in the
             # process argument list / CI logs.
             "$build_tools/apksigner" sign --ks "$keystore" \
               --ks-pass "file:$store_pass_file" --key-pass "file:$key_pass_file" \
               --ks-key-alias "$alias" --out "$signed" "$aligned"
             "$build_tools/apksigner" verify "$signed"
+            # Verify the zip-entry axis on the final artifact. The ELF axis is
+            # checked before signing; this is the one zipalign controls, and
+            # checking it here (post-sign) covers the bytes Play receives.
+            "$build_tools/zipalign" -c -P 16 -v 4 "$signed" > /dev/null || {
+              echo "::error::$signed is not 16 KB zip-aligned; Play will reject it"
+              rm -f "$store_pass_file" "$key_pass_file"
+              exit 1
+            }
             echo "signed $signed ($(du -h "$signed" | cut -f1))"
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
             -name '*release-unsigned.apk')
@@ -281,11 +327,15 @@ jobs:
           # rejected by Play, so shipping one would just be a confusing artifact.
           if [ "$sign_mode" = release ]; then
             aab_out="$RUNNER_TEMP/aab"; mkdir -p "$aab_out"
+            # Match on filename only. A `-path '*release*'` filter would repeat
+            # the directory-casing trap that broke the APK check (Gradle writes
+            # `universalRelease/`, not `release/`), and only a release AAB is
+            # ever produced in this tree, so the extra filter buys nothing.
             aab="$(find apps/geolibre-desktop/src-tauri/gen/android \
-              -name '*.aab' -path '*release*' | head -1)"
+              -name '*.aab' | head -1)"
             if [ -z "$aab" ]; then
               rm -f "$store_pass_file" "$key_pass_file"
-              echo "::error::No release AAB found"; exit 1
+              echo "::error::No AAB found"; exit 1
             fi
             signed_aab="$aab_out/geolibre-android.aab"
             cp "$aab" "$signed_aab"

@@ -152,15 +152,16 @@ uploads them as the `geolibre-android-release-apks` artifact. It signs with your
 set, and otherwise falls back to a throwaway debug key so the artifact is still
 installable for testing:
 
-It also builds a universal **AAB** and uploads it as the separate
-`geolibre-android-play-aab` artifact — but *only* on runs that have the real
-release keystore, since Play rejects a debug-signed bundle. The AAB is not
-attached to the GitHub Release (an `.aab` is not user-installable).
-
 - `ANDROID_KEYSTORE_BASE64` — `base64 -w0 upload.jks`
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
+
+It also builds a universal **AAB** and uploads it as the separate
+`geolibre-android-play-aab` artifact — but *only* on runs that have the real
+release keystore, since Play rejects a debug-signed bundle. Without the keystore
+the AAB build is skipped entirely rather than built and discarded. The AAB is
+not attached to the GitHub Release (an `.aab` is not user-installable).
 
 ## Install / test
 
@@ -184,7 +185,9 @@ sdkmanager --sdk_root="$ANDROID_HOME" \
 avdmanager create avd -n geolibre \
   -k "system-images;android-36;google_apis_playstore;x86_64" -d pixel_7
 emulator -avd geolibre
-adb install -r geolibre-arm64.apk
+# x86_64 APK to match the x86_64 system image — the emulator can translate the
+# arm64 build, but far slower, and it would not exercise the x86_64 libraries.
+adb install -r geolibre-x86_64.apk
 ```
 
 > If you ever rebuild with a **different** signing key, uninstall the old copy
