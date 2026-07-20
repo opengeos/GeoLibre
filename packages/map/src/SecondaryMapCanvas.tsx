@@ -6,6 +6,8 @@ import {
 } from "@geolibre/core";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { createMapController, type MapController } from "./map-controller";
+import type { MapEngine } from "./engine/types";
+import { MapLibreEngine } from "./engine/maplibre-engine";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface SecondaryMapCanvasProps {
@@ -68,78 +70,96 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
     });
   }, [layers, layerVisibility]);
 
+  const engineRef = useRef<MapEngine | null>(null);
+
   // Create the map exactly once. The deps are intentionally empty; everything
   // it reads is captured from the latest store state at mount time.
   useEffect(() => {
-    if (!containerRef.current || controller.current) return;
+    if (!containerRef.current || engineRef.current) return;
     const state = useAppStore.getState();
     const pane = state.secondaryMapViews.find((p) => p.id === viewIdRef.current);
     const initialView: MapViewState | undefined = state.mapLayout.syncView
       ? state.mapView
       : pane?.view;
 
-    const mc = createMapController();
-    const map = mc.init(containerRef.current, {
-      styleUrl: state.basemapStyleUrl,
-      mapView: initialView,
-      mapPreferences: state.preferences.map,
-      // No layer control: the shared layers/basemap are owned by the primary
-      // map and the global store, so a second control here would fight them.
-      controlVisibility: { "layer-control": false },
-    });
-    controller.current = mc;
+    const engine = new MapLibreEngine(viewIdRef.current);
+    engineRef.current = engine;
+    let destroyed = false;
 
-    const sameCamera = (a: MapViewState, b: MapViewState) =>
-      a.center[0] === b.center[0] &&
-      a.center[1] === b.center[1] &&
-      a.zoom === b.zoom &&
-      a.bearing === b.bearing &&
-      a.pitch === b.pitch;
-
-    const updateView = (event?: { originalEvent?: unknown }) => {
-      const view = mc.readView();
-      const userDriven = Boolean(event?.originalEvent);
-      const live = useAppStore.getState();
-      // A programmatic `applyView` (camera sync / initial load) fires "moveend"
-      // with the same camera it was just given. Skip the global write when the
-      // value is unchanged so a synced pane's echo doesn't cascade back through
-      // every sibling pane's sync effect.
-      if (live.mapLayout.syncView && !sameCamera(view, live.mapView)) {
-        // The shared camera lives in the global mapView; mirror this pane's move
-        // there so the primary and sibling panes follow.
-        live.setMapView(view, userDriven);
-      }
-      // Always keep this pane's own saved camera current so turning sync off (or
-      // saving the project) preserves where the pane is looking. The store skips
-      // value-identical writes, so a programmatic echo here is a no-op.
-      live.setSecondaryMapView(viewIdRef.current, view, userDriven);
-    };
-    map.on("moveend", updateView);
-
-    // Only the basemap visibility/opacity needs to wait for the style here; the
-    // layer-sync effect below already defers its own work to the style load, so
-    // syncing layers here too would just duplicate that pass.
-    map.on("load", () => {
-      const live = useAppStore.getState();
-      mc.setBasemapVisible(live.basemapVisible);
-      mc.setBasemapOpacity(live.basemapOpacity);
-    });
-
+    let resizeObserver: ResizeObserver | null = null;
     let resizeFrame: number | null = null;
-    const resizeMap = () => {
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
+
+    void (async () => {
+      await engine.mount(containerRef.current!, initialView ?? state.mapView);
+      if (destroyed) {
+        engine.destroy();
+        return;
+      }
+
+      const mc = engine.getController();
+      controller.current = mc;
+
+      if (!mc) return;
+      const map = mc.getMap();
+      if (!map) return;
+
+      const sameCamera = (a: MapViewState, b: MapViewState) =>
+        a.center[0] === b.center[0] &&
+        a.center[1] === b.center[1] &&
+        a.zoom === b.zoom &&
+        a.bearing === b.bearing &&
+        a.pitch === b.pitch;
+
+      const updateView = (event?: { originalEvent?: unknown }) => {
+        const view = mc.readView();
+        const userDriven = Boolean(event?.originalEvent);
+        const live = useAppStore.getState();
+        // A programmatic `applyView` (camera sync / initial load) fires "moveend"
+        // with the same camera it was just given. Skip the global write when the
+        // value is unchanged so a synced pane's echo doesn't cascade back through
+        // every sibling pane's sync effect.
+        if (live.mapLayout.syncView && !sameCamera(view, live.mapView)) {
+          // The shared camera lives in the global mapView; mirror this pane's move
+          // there so the primary and sibling panes follow.
+          live.setMapView(view, userDriven);
+        }
+        // Always keep this pane's own saved camera current so turning sync off (or
+        // saving the project) preserves where the pane is looking. The store skips
+        // value-identical writes, so a programmatic echo here is a no-op.
+        live.setSecondaryMapView(viewIdRef.current, view, userDriven);
+      };
+      map.on("moveend", updateView);
+
+      // Only the basemap visibility/opacity needs to wait for the style here; the
+      // layer-sync effect below already defers its own work to the style load, so
+      // syncing layers here too would just duplicate that pass.
+      map.on("load", () => {
+        const live = useAppStore.getState();
+        mc.setBasemapVisible(live.basemapVisible);
+        mc.setBasemapOpacity(live.basemapOpacity);
       });
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
+
+      const resizeMap = () => {
+        if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null;
+          mc.getMap()?.resize();
+        });
+      };
+      resizeObserver = new ResizeObserver(resizeMap);
+      resizeObserver.observe(containerRef.current!);
+    })();
 
     return () => {
-      resizeObserver.disconnect();
-      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
-      mc.destroy();
+      destroyed = true;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      engine.destroy();
+      engineRef.current = null;
       controller.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

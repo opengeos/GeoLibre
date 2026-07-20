@@ -21,6 +21,9 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { createMapController, type MapController } from "./map-controller";
+import { getEngineIdFromUrl } from "./engine/types";
+import type { MapEngine } from "./engine/types";
+import { MapLibreEngine } from "./engine/maplibre-engine";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
@@ -924,120 +927,146 @@ export const MapCanvas = memo(function MapCanvas({
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
   const photoPopup = useRef<maplibregl.Popup | null>(null);
 
+  const engineRef = useRef<MapEngine | null>(null);
+
   useEffect(() => {
-    if (!containerRef.current || controller.current) return;
+    if (!containerRef.current || engineRef.current) return;
 
-    const mc = createMapController();
-    const map = mc.init(containerRef.current, {
-      styleUrl: basemapStyleUrl,
-      mapView,
-      mapPreferences,
-    });
-    controller.current = mc;
-    if (controllerRef) controllerRef.current = mc;
+    const engine = new MapLibreEngine();
+    engineRef.current = engine;
+    let destroyed = false;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
-    });
-    map.on("mouseout", () => setPointerCoords(null));
-    map.on("error", (event) => {
-      // Cancelled tile fetches are already surfaced (as info) by the
-      // network capture; logging them here would double-count aborts.
-      if (isAbortError(event.error)) return;
-      onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
-    });
-
-    const updateView = (event?: { originalEvent?: unknown }) => {
-      // While presenting a story map the presenter owns the camera. Syncing its
-      // transient chapter flies and rotations back into the store would both
-      // overwrite the saved project view and, worse, re-enter the applyView
-      // effect below: its jumpTo cancels an in-flight chapter fly, after which
-      // the rotate handler starts orbiting the previous chapter instead of the
-      // one just clicked. Skipping the sync keeps the presenter authoritative.
-      if (useAppStore.getState().ui.storymapPresenting) return;
-      setMapView(mc.readView(), Boolean(event?.originalEvent));
-    };
-    map.on("moveend", updateView);
-
-    // Persist projection toggles (the GlobeControl) into project preferences so
-    // a project reopens with the projection it was saved in. getProjection()
-    // returns the configured type, so the internal globe→mercator switch at high
-    // zoom (which also fires this event) leaves the stored preference unchanged.
-    const updateProjection = () => {
-      const projection = mc.readProjection();
-      // Functional update so a concurrent preference change (zoom-limit edit,
-      // loadProject) between read and write is not clobbered by a stale snapshot.
-      useAppStore.setState((s) => {
-        if (s.preferences.map.projection === projection) return s;
-        return {
-          preferences: {
-            ...s.preferences,
-            map: { ...s.preferences.map, projection },
-          },
-          isDirty: true,
-        };
-      });
-    };
-    map.on("projectiontransition", updateProjection);
-    map.on("load", () => {
-      const state = useAppStore.getState();
-      mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
-      mc.setBasemapVisible(state.basemapVisible);
-      mc.setBasemapOpacity(state.basemapOpacity);
-      mc.highlightFeature(
-        state.layers.find((layer) => layer.id === state.selectedLayerId),
-        resolveHighlightIds(state),
-      );
-      updateView();
-      onControllerReadyRef.current?.();
-    });
-
+    let resizeObserver: ResizeObserver | null = null;
+    let onPanelResizeStart: () => void;
+    let onPanelResizeEnd: () => void;
+    let resizeMap: () => void;
     let resizeFrame: number | null = null;
-    let panelResizeActive = false;
-    let resizeAfterPanelResize = false;
-    const resizeMap = () => {
-      if (panelResizeActive) {
-        resizeAfterPanelResize = true;
+
+    void (async () => {
+      await engine.mount(containerRef.current!, mapView);
+      if (destroyed) {
+        engine.destroy();
         return;
       }
 
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
+      const mc = engine.getController();
+      controller.current = mc;
+      if (controllerRef) controllerRef.current = mc;
+
+      if (!mc) return;
+      const map = mc.getMap();
+      if (!map) return;
+
+      map.on("mousemove", (e) => {
+        setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
       });
-    };
-    const onPanelResizeStart = () => {
-      panelResizeActive = true;
-      resizeAfterPanelResize = false;
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = null;
-      }
-    };
-    const onPanelResizeEnd = () => {
-      panelResizeActive = false;
-      if (resizeAfterPanelResize) {
+      map.on("mouseout", () => setPointerCoords(null));
+      map.on("error", (event) => {
+        // Cancelled tile fetches are already surfaced (as info) by the
+        // network capture; logging them here would double-count aborts.
+        if (isAbortError(event.error)) return;
+        onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
+      });
+
+      const updateView = (event?: { originalEvent?: unknown }) => {
+        // While presenting a story map the presenter owns the camera. Syncing its
+        // transient chapter flies and rotations back into the store would both
+        // overwrite the saved project view and, worse, re-enter the applyView
+        // effect below: its jumpTo cancels an in-flight chapter fly, after which
+        // the rotate handler starts orbiting the previous chapter instead of the
+        // one just clicked. Skipping the sync keeps the presenter authoritative.
+        if (useAppStore.getState().ui.storymapPresenting) return;
+        setMapView(mc.readView(), Boolean(event?.originalEvent));
+      };
+      map.on("moveend", updateView);
+
+      // Persist projection toggles (the GlobeControl) into project preferences so
+      // a project reopens with the projection it was saved in. getProjection()
+      // returns the configured type, so the internal globe→mercator switch at high
+      // zoom (which also fires this event) leaves the stored preference unchanged.
+      const updateProjection = () => {
+        const projection = mc.readProjection();
+        // Functional update so a concurrent preference change (zoom-limit edit,
+        // loadProject) between read and write is not clobbered by a stale snapshot.
+        useAppStore.setState((s) => {
+          if (s.preferences.map.projection === projection) return s;
+          return {
+            preferences: {
+              ...s.preferences,
+              map: { ...s.preferences.map, projection },
+            },
+            isDirty: true,
+          };
+        });
+      };
+      map.on("projectiontransition", updateProjection);
+      map.on("load", () => {
+        const state = useAppStore.getState();
+        mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
+        mc.setBasemapVisible(state.basemapVisible);
+        mc.setBasemapOpacity(state.basemapOpacity);
+        mc.highlightFeature(
+          state.layers.find((layer) => layer.id === state.selectedLayerId),
+          resolveHighlightIds(state),
+        );
+        updateView();
+        onControllerReadyRef.current?.();
+      });
+
+      let panelResizeActive = false;
+      let resizeAfterPanelResize = false;
+      resizeMap = () => {
+        if (panelResizeActive) {
+          resizeAfterPanelResize = true;
+          return;
+        }
+
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame);
+        }
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null;
+          mc.getMap()?.resize();
+        });
+      };
+      onPanelResizeStart = () => {
+        panelResizeActive = true;
         resizeAfterPanelResize = false;
-      }
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame);
+          resizeFrame = null;
+        }
+      };
+      onPanelResizeEnd = () => {
+        panelResizeActive = false;
+        if (resizeAfterPanelResize) {
+          resizeAfterPanelResize = false;
+        }
+        resizeMap();
+      };
+      resizeObserver = new ResizeObserver(resizeMap);
+      resizeObserver.observe(containerRef.current!);
+      window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
+      window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
       resizeMap();
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
-    window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-    window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-    resizeMap();
+    })();
 
     return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-      window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
+      destroyed = true;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (onPanelResizeStart) {
+        window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
+      }
+      if (onPanelResizeEnd) {
+        window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
+      }
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
       }
-      mc.destroy();
+      engine.destroy();
+      engineRef.current = null;
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
     };
