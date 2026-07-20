@@ -141,6 +141,12 @@ Status values: not started · in progress · partial · blocked · done
   helpers now belong to core; MapLibre expression translation remains isolated
   pending relocation of the native slider runtime. This preserves store metadata
   and gives ArcGIS a direct `FeatureFilter`-model input.
+- Implemented: Time Slider's native control, source adapters, theme observer,
+  and MapLibre time filtering now run only in a lazy MapLibre hosted runtime.
+  The plugin keeps validated serialized project state and typed MapEngine
+  calls; store layers remain authoritative. The boundary ratchet is 121
+  reviewed violations; COG pixel reads are explicitly deferred for the
+  no-ingest decision.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

@@ -1,4 +1,9 @@
-import { type CogSourceSpec, generateSteps, resolveUrl } from "maplibre-gl-time-slider";
+import {
+  type CogSourceSpec,
+  type TimeSliderConfig,
+  generateSteps,
+  resolveUrl,
+} from "maplibre-gl-time-slider";
 import {
   type BandReading,
   loadGeoTIFF,
@@ -7,7 +12,7 @@ import {
   readPixelValues,
 } from "maplibre-gl-raster";
 import type { Feature, FeatureCollection, Point } from "geojson";
-import { getActiveTimeSliderControl } from "./maplibre-time-slider";
+import { getTimeSliderProjectState } from "./maplibre-time-slider";
 
 /**
  * Pixel time-series support for the Time Slider's raster stack.
@@ -112,9 +117,12 @@ const READ_CONCURRENCY = 6;
  *   has no COG sources (XYZ/WMS/GeoJSON sources are not pixel-readable here).
  */
 export function getTimeSliderCogSources(): CogSourceSpec[] {
-  const control = getActiveTimeSliderControl();
-  if (!control) return [];
-  return control.getSources().filter((spec): spec is CogSourceSpec => spec.type === "cog");
+  const config = getTimeSliderProjectState() as { sources?: unknown } | undefined;
+  if (!Array.isArray(config?.sources)) return [];
+  return config.sources.filter(
+    (spec): spec is CogSourceSpec =>
+      !!spec && typeof spec === "object" && (spec as { type?: unknown }).type === "cog",
+  );
 }
 
 /**
@@ -168,14 +176,31 @@ function getTimeSliderSteps(maxSteps: number): {
   truncated: boolean;
   total: number;
 } {
-  const control = getActiveTimeSliderControl();
-  if (!control) return { steps: [], truncated: false, total: 0 };
-  const state = control.getState();
+  const state = getTimeSliderProjectState() as
+    | {
+        startDate?: unknown;
+        endDate?: unknown;
+        interval?: unknown;
+        granularity?: unknown;
+      }
+    | undefined;
+  if (
+    typeof state?.startDate !== "string" ||
+    typeof state.granularity !== "string" ||
+    (state.endDate != null && typeof state.endDate !== "string")
+  ) {
+    return { steps: [], truncated: false, total: 0 };
+  }
+  const startDate = new Date(state.startDate);
+  const endDate = state.endDate ? new Date(state.endDate) : new Date();
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return { steps: [], truncated: false, total: 0 };
+  }
   const steps = generateSteps(
-    state.startDate,
-    state.endDate,
-    Math.max(1, state.interval),
-    state.granularity,
+    startDate,
+    endDate,
+    Math.max(1, typeof state.interval === "number" ? state.interval : 1),
+    state.granularity as TimeSliderConfig["granularity"],
   );
   return { ...downsampleSteps(steps, maxSteps), total: steps.length };
 }

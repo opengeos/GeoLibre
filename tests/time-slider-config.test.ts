@@ -92,3 +92,51 @@ describe("Time Slider mosaic source persistence", () => {
     );
   });
 });
+
+describe("Time Slider hosted descriptor", () => {
+  it("keeps project state in the facade and uses only hosted MapEngine commands", () => {
+    const invocations: Array<{ command: string; input: unknown }> = [];
+    const runtimeState = baseConfig({
+      endDate: "2024-12-31T00:00:00.000Z",
+      sources: [
+        {
+          type: "cog",
+          id: "landsat",
+          url: "https://example.test/landsat_{date:YYYY}.tif",
+        },
+      ],
+    });
+    const hostedApp = {
+      map: {
+        invoke: (command: string, input: unknown) => {
+          invocations.push({ command, input });
+          if (command === "hosted-plugin.get-state") return runtimeState;
+          return true;
+        },
+      },
+    } as unknown as Parameters<NonNullable<typeof maplibreTimeSliderPlugin.activate>>[0];
+
+    assert.equal(maplibreTimeSliderPlugin.activate(hostedApp), true);
+    const activation = invocations[0].input as {
+      onStateChange?: (state: unknown) => void;
+    };
+    activation.onStateChange?.(runtimeState);
+
+    assert.deepEqual(saved(), runtimeState);
+    assert.equal(maplibreTimeSliderPlugin.setMapControlPosition?.(hostedApp, "top-right"), true);
+    assert.equal(maplibreTimeSliderPlugin.applyProjectState?.(hostedApp, runtimeState), true);
+    maplibreTimeSliderPlugin.deactivate(hostedApp);
+
+    assert.deepEqual(
+      invocations.map(({ command }) => command),
+      [
+        "hosted-plugin.activate",
+        "hosted-plugin.set-position",
+        "hosted-plugin.apply-state",
+        "hosted-plugin.get-state",
+        "hosted-plugin.deactivate",
+      ],
+    );
+    assert.deepEqual(saved(), runtimeState);
+  });
+});

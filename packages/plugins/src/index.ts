@@ -431,7 +431,7 @@ export {
 export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
-  getActiveTimeSliderControl,
+  getTimeSliderProjectState,
   getLayerTimeBinding,
 } from "./plugins/maplibre-time-slider";
 export {

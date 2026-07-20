@@ -32,6 +32,7 @@ const runtimeLoaders: Readonly<Record<string, MapLibreHostedRuntimeLoader>> = {
     (await import("./planetary-computer")).maplibrePlanetaryComputerRuntime,
   "maplibre-atmosphere-effects": async () => (await import("./effects")).maplibreEffectsRuntime,
   "maplibre-gl-annotations": async () => (await import("./annotations")).maplibreAnnotationsRuntime,
+  "maplibre-gl-time-slider": async () => (await import("./time-slider")).maplibreTimeSliderRuntime,
 };
 
 /**

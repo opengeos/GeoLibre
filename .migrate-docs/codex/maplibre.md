@@ -1321,3 +1321,53 @@
   tests/time-slider-config.test.ts` → 24 passed.
 - Follow-up: relocate the Time Slider control and its COG pixel-read runtime
   behind the lazy MapLibre hosted-runtime registry; Codex, 2026-07-20.
+
+## 2026-07-20 — MapLibre `TimeSliderControl`/source adapters → ArcGIS `TimeSlider` + `FeatureLayer` `timeInfo`/`FeatureFilter`
+
+- Source: MapLibre — `maplibre-gl-time-slider`'s native `TimeSliderControl`,
+  COG/XYZ/WMS/GeoJSON source adapters, DOM theme observer, MapLibre filter
+  expressions, and direct control lifecycle formerly owned by the public plugin.
+- Files touched: `packages/plugins/src/plugins/maplibre-time-slider.ts` before
+  → renderer-neutral hosted descriptor; `packages/map/src/maplibre-runtime/time-slider.ts`
+  added for the native control, source/store reconciliation, theme lifecycle,
+  and MapLibre filter translation; hosted-runtime registry, map workspace
+  manifest/lockfile, plugin exports, pixel-series state reader, boundary
+  fixture, and `tests/time-slider-config.test.ts` updated.
+- ArcGIS approach: a future adapter should use `@arcgis/core/widgets/TimeSlider`
+  for the timeline UI, `FeatureLayer.timeInfo` and `FeatureFilter` or a
+  definition expression for vector time filtering, and adapter-owned
+  `ImageryLayer`/`WebTileLayer` records where a configured source is compatible.
+- What changed: the public Time Slider plugin now retains only validated,
+  serializable project state, control position, and typed
+  `hosted-plugin.*` MapEngine calls. Activating the plugin lazy-loads an
+  adapter-private MapLibre runtime; that runtime owns the native control,
+  its source events, control reconstruction, store-backed time-slider layer
+  mirror, theme synchronization, and renderer-specific time predicates. The
+  pixel series reads the serialized state rather than a live native control.
+  Store records remain the source of truth and data ingest is unchanged.
+- Gap / limitation: ArcGIS `TimeSlider` does not itself reproduce the upstream
+  control's arbitrary COG/XYZ/WMS/GeoJSON source-form UI or its MapLibre-native
+  source adapters, and its time filtering uses layer-specific `timeInfo` and
+  query semantics rather than MapLibre expression arrays.
+- Workaround: retain the upstream control and source adapters only in the lazy
+  MapLibre runtime while the façade exposes normalized JSON state and the core
+  time-binding model. Removal criteria: an ArcGIS runtime must create supported
+  source layers, bind their time fields and ranges, preserve store IDs/order/
+  visibility/opacity, restore project state, and pass equivalent lifecycle and
+  time-window tests without MapLibre control or source APIs.
+- Tradeoff accepted: the state callback and host-command handshake add a small
+  lifecycle boundary, and the pixel-series COG reader remains a separate
+  MapLibre-era data helper for a later no-ingest-change decision; in exchange
+  the native control is lazy and no longer exposed to plugins.
+- Status: partial.
+- Verification: `node --import tsx --test tests/time-slider-binding.test.ts
+  tests/time-slider-config.test.ts tests/time-slider-pixel-series.test.ts
+  tests/hosted-map-runtime-registry.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 54 passed;
+  `npm run build` → passed (normal JupyterLite-unavailable notice and browser
+  externalization warnings were non-fatal); the production build emitted a
+  separate `time-slider` runtime chunk; the reviewed engine-boundary baseline
+  fell from 122 to 121 violations.
+- Follow-up: move the pixel-series COG read helper into an adapter-owned,
+  lazy renderer extension or explicitly classify it as data-ingest-adjacent
+  and retain it under the no-ingest contract; Codex, 2026-07-20.

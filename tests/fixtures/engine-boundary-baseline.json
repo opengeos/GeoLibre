@@ -396,10 +396,6 @@
     "pattern": "maplibre-gl-swipe"
   },
   {
-    "path": "packages/plugins/src/plugins/maplibre-time-slider.ts",
-    "pattern": "maplibre-gl-time-slider"
-  },
-  {
     "path": "packages/plugins/src/plugins/maplibre-timelapse.ts",
     "pattern": "maplibre-gl"
   },
