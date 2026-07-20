@@ -126,7 +126,10 @@ jobs:
         run: |
           set -euo pipefail
           gradle_file=src-tauri/gen/android/app/build.gradle.kts
-          if ! grep -q "applicationId = \"$EXPECTED_PACKAGE\"" "$gradle_file"; then
+          # Tolerant of spacing so a cosmetic change to the Tauri template
+          # (`applicationId="x"`, extra indentation) fails the build only when
+          # the id is actually wrong, not when the formatting moved.
+          if ! grep -qE "applicationId[[:space:]]*=[[:space:]]*\"$EXPECTED_PACKAGE\"" "$gradle_file"; then
             echo "::error::applicationId is not $EXPECTED_PACKAGE in $gradle_file"
             grep -nE 'applicationId|namespace' "$gradle_file" || true
             exit 1
@@ -165,7 +168,7 @@ jobs:
               exit 1
             fi
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
-            -name '*release*.apk')
+            -name '*release-unsigned.apk')
           if [ "$checked" -eq 0 ]; then
             echo "::error::No APKs found to verify the package id against"
             exit 1
@@ -255,7 +258,7 @@ jobs:
               bad=$((bad + 1))
             fi
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
-            -name '*release*.apk')
+            -name '*release-unsigned.apk')
           if [ "$archives" -eq 0 ]; then
             echo "::error::No release APKs found to verify"
             exit 1
