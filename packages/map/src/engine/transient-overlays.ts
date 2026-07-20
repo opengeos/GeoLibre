@@ -11,6 +11,24 @@ export class MapLibreTransientOverlays {
     return [...this.specs.keys()];
   }
 
+  isVisible(id: string): boolean | undefined {
+    const spec = this.specs.get(id);
+    return spec ? spec.visible !== false : undefined;
+  }
+
+  async whileHidden<T>(ids: readonly string[], operation: () => Promise<T> | T): Promise<T> {
+    const states = ids.flatMap((id) => {
+      const visible = this.isVisible(id);
+      return visible === undefined ? [] : [{ id, visible }];
+    });
+    for (const { id } of states) this.setVisible(id, false);
+    try {
+      return await operation();
+    } finally {
+      for (const { id, visible } of states) this.setVisible(id, visible);
+    }
+  }
+
   upsert(spec: GeoJsonOverlaySpec): void {
     this.specs.set(spec.id, spec);
     this.apply(spec);

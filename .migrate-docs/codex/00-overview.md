@@ -57,6 +57,11 @@ Status values: not started · in progress · partial · blocked · done
   scripting, and assistant consumers use the layer/camera/viewport ports;
   renderer snapshots stay store-first and read-only. The boundary ratchet is
   down to 167 reviewed violations.
+- Implemented: viewport capture now belongs to `MapEngineClient.viewport`.
+  Print preview/atlas and story handouts receive composited renderer-neutral
+  snapshots, while camera bounds/zoom range, graticule inspection, hidden
+  transient overlays, and story opacity effects stay behind typed engine ports.
+  The boundary ratchet is down to 151 reviewed violations.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

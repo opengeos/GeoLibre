@@ -6,7 +6,7 @@ import {
   useAppStore,
   VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
 import {
   Button,
@@ -70,7 +70,6 @@ import {
 import {
   clearPrintExtent,
   drawPrintExtent,
-  setPrintExtentVisible,
   showPrintExtent,
   type PrintExtent,
 } from "../../lib/print-extent";
@@ -110,7 +109,7 @@ import {
 interface PrintLayoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 /** Common industry scale denominators offered as quick presets (GH #522). */
@@ -364,9 +363,11 @@ export function PrintLayoutDialog({
   const drawingRef = useRef(false);
   // Aborts an in-progress draw when the dialog unmounts mid-drag.
   const drawAbortRef = useRef<AbortController | null>(null);
-  // A pending "recapture once the map is idle" handler (from applyScale), kept
-  // so any newer capture can cancel it before it overwrites a fresh result.
-  const idleRecaptureRef = useRef<(() => void) | null>(null);
+  // Cancels a pending post-zoom idle wait when a newer capture supersedes it.
+  const scaleAbortRef = useRef<AbortController | null>(null);
+  // Monotonically identifies capture requests so a slower, stale capture can
+  // never overwrite the newest image.
+  const captureSequenceRef = useRef(0);
   // Tears down an in-progress dialog/splitter resize drag (removes the window
   // pointer listeners) if the dialog unmounts mid-drag.
   const resizeCleanupRef = useRef<(() => void) | null>(null);
@@ -377,10 +378,6 @@ export function PrintLayoutDialog({
   // Inline notice shown when a requested scale can't be reached at the map's
   // zoom limits, so a clamped result is never silently swallowed (GH #743).
   const [scaleNotice, setScaleNotice] = useState<string | null>(null);
-  // Fallback timer that forces a recapture if the map's "idle" event is delayed
-  // or never fires (e.g. WebKit throttling the occluded map canvas behind the
-  // dialog), so a scale change is never silently dropped (GH #743).
-  const idleFallbackRef = useRef<number | null>(null);
   // Width of the left controls column; dragged via the splitter handle.
   const [controlsWidth, setControlsWidth] = useState(CONTROLS_DEFAULT_WIDTH);
   // Mirror of controlsWidth so the resize handler can read the latest start
@@ -521,43 +518,32 @@ export function PrintLayoutDialog({
   );
 
   const recapture = useCallback(
-    (clipOverride?: PrintExtent | null) => {
+    async (clipOverride?: PrintExtent | null): Promise<void> => {
       const client = mapControllerRef.current;
-      const map = client?.getMap();
-      if (!client || !map) {
+      if (!client) {
         setError(t("printLayout.errors.mapNotReady"));
         setCaptured(null);
         return;
       }
-      // Cancel any pending post-zoom idle capture: this fresh capture supersedes
-      // it, so it must not fire later and overwrite the result (e.g. a viewport
-      // recapture clobbering an extent the user drew while tiles were loading).
-      if (idleRecaptureRef.current) {
-        map.off("idle", idleRecaptureRef.current);
-        idleRecaptureRef.current = null;
-      }
-      if (idleFallbackRef.current !== null) {
-        window.clearTimeout(idleFallbackRef.current);
-        idleFallbackRef.current = null;
-      }
+      scaleAbortRef.current?.abort();
+      scaleAbortRef.current = null;
+      const sequence = ++captureSequenceRef.current;
       // An explicit override wins (used right after drawing, before state has
       // settled); otherwise clip to the stored extent only in extent mode.
       const clip =
         clipOverride !== undefined ? clipOverride : captureMode === "extent" ? extentBbox : null;
       // An active graticule draws coordinate labels at the map edges; fit the
       // captured map with "contain" so the page crop does not trim them.
-      setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
-      // Hide the extent box while reading the drawing buffer so its outline is
-      // never baked into the captured image.
-      setPrintExtentVisible(client, false);
+      setMapFit(client.layers.hasRenderTarget(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
       try {
-        setCaptured(captureMapImage(map, clip));
+        const next = await captureMapImage(client, clip);
+        if (sequence !== captureSequenceRef.current) return;
+        setCaptured(next);
         setError(null);
       } catch {
+        if (sequence !== captureSequenceRef.current) return;
         setError(t("printLayout.errors.captureFailed"));
         setCaptured(null);
-      } finally {
-        setPrintExtentVisible(client, true);
       }
     },
     [mapControllerRef, t, captureMode, extentBbox],
@@ -590,7 +576,7 @@ export function PrintLayoutDialog({
       // viewport capture: the atlas auto-drive effect recaptures the current
       // page on this same transition, and the extra capture would flash an
       // incorrect preview first.
-      if (!atlasActiveRef.current) recapture();
+      if (!atlasActiveRef.current) void recapture();
     } else if (!open && wasOpenRef.current && !drawingRef.current) {
       // Closing for good (not to draw): take the extent box off the map.
       if (client) clearPrintExtent(client);
@@ -604,25 +590,16 @@ export function PrintLayoutDialog({
   useEffect(
     () => () => {
       drawAbortRef.current?.abort();
+      scaleAbortRef.current?.abort();
+      captureSequenceRef.current += 1;
       // Tear down an in-progress resize drag so its window listeners don't leak.
       resizeCleanupRef.current?.();
-      if (idleFallbackRef.current !== null) {
-        window.clearTimeout(idleFallbackRef.current);
-        idleFallbackRef.current = null;
-      }
       if (copiedTimeoutRef.current !== null) {
         window.clearTimeout(copiedTimeoutRef.current);
         copiedTimeoutRef.current = null;
       }
       const client = mapControllerRef.current;
-      const map = client?.getMap();
-      if (client && map) {
-        if (idleRecaptureRef.current) {
-          map.off("idle", idleRecaptureRef.current);
-          idleRecaptureRef.current = null;
-        }
-        clearPrintExtent(client);
-      }
+      if (client) clearPrintExtent(client);
     },
     [mapControllerRef],
   );
@@ -1104,20 +1081,7 @@ export function PrintLayoutDialog({
    * dialog and delay "idle" indefinitely (same failure mode as GH #743);
    * captureMapImage forces a redraw, so proceeding is safe. */
   const waitForAtlasSettle = useCallback(
-    (map: NonNullable<ReturnType<MapController["getMap"]>>) =>
-      new Promise<void>((resolve) => {
-        let done = false;
-        let timer = 0;
-        const finish = () => {
-          if (done) return;
-          done = true;
-          map.off("idle", finish);
-          window.clearTimeout(timer);
-          resolve();
-        };
-        map.on("idle", finish);
-        timer = window.setTimeout(finish, 2500);
-      }),
+    (client: MapEngineClient): Promise<void> => client.camera.whenIdle({ timeoutMs: 2500 }),
     [],
   );
 
@@ -1129,32 +1093,16 @@ export function PrintLayoutDialog({
   const captureAtlasPage = useCallback(
     async (page: AtlasPage): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
       const client = mapControllerRef.current;
-      const map = client?.getMap();
-      if (!client || !map) throw new Error("Map is not ready");
+      if (!client) throw new Error("Map is not ready");
       const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
-      map.fitBounds(
-        [
-          [w, s],
-          [e, n],
-        ],
-        { animate: false, padding: 0 },
-      );
-      await waitForAtlasSettle(map);
+      client.camera.fitBounds([w, s, e, n], { animate: false, padding: 0 });
+      await waitForAtlasSettle(client);
       // Mirror recapture: an active graticule draws coordinate labels at the
       // map edges, so fit with "contain" to keep them un-cropped on every
       // atlas page (mapFit is persistent state, so it must be set here too).
-      setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
-      // Hide the drawn print-extent box while reading the buffer, as recapture
-      // does, so its outline is never baked into a page.
-      const capture = () => {
-        setPrintExtentVisible(client, false);
-        try {
-          return captureMapImage(map, null);
-        } finally {
-          setPrintExtentVisible(client, true);
-        }
-      };
-      let cap = capture();
+      setMapFit(client.layers.hasRenderTarget(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
+      const capture = (): Promise<CapturedMap> => captureMapImage(client, null);
+      let cap = await capture();
       if (atlasExtentMode === "scale") {
         const target = Number(atlasScale);
         // Measure against the page's substituted text, not the raw templates:
@@ -1179,27 +1127,28 @@ export function PrintLayoutDialog({
           mapImageHeight: cap.height,
         });
         if (target > 0 && ratio > 0) {
-          const zoom = map.getZoom() + Math.log2(ratio / target);
-          const clamped = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), zoom));
+          const currentView = client.camera.readView();
+          const zoom = currentView.zoom + Math.log2(ratio / target);
+          const range = client.camera.readZoomRange();
+          const clamped = Math.max(range.min, Math.min(range.max, zoom));
           // A clamp means this page renders at the closest reachable scale,
           // not the requested one: surface that (like applyScale's notice)
           // instead of letting the substitution pass silently.
           setAtlasScaleNotice(
             Math.abs(clamped - zoom) > 1e-3 ? t("printLayout.errors.scaleOutOfRange") : null,
           );
-          if (Math.abs(clamped - map.getZoom()) > 1e-3) {
-            map.setZoom(clamped);
-            await waitForAtlasSettle(map);
-            cap = capture();
+          if (Math.abs(clamped - currentView.zoom) > 1e-3) {
+            client.camera.applyView({ ...currentView, zoom: clamped });
+            await waitForAtlasSettle(client);
+            cap = await capture();
           }
         }
       } else {
         setAtlasScaleNotice(null);
       }
-      const b = map.getBounds();
       return {
         cap,
-        viewBounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        viewBounds: client.camera.readBounds() ?? page.bounds,
       };
     },
     [
@@ -1330,69 +1279,46 @@ export function PrintLayoutDialog({
   const scaleEditable = Boolean(captured) && captureMode !== "extent";
   const applyScale = useCallback(
     (targetRatio: number) => {
-      const map = mapControllerRef.current?.getMap();
-      if (captureMode === "extent" || !map || !(targetRatio > 0) || !(currentRatio > 0)) {
+      const client = mapControllerRef.current;
+      if (captureMode === "extent" || !client || !(targetRatio > 0) || !(currentRatio > 0)) {
         return;
       }
-      const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
+      const currentView = client.camera.readView();
+      const newZoom = currentView.zoom + Math.log2(currentRatio / targetRatio);
       // Clamp to the map's own zoom limits (not a fixed 0–24) so the out-of-range
       // notice reflects what this map can actually reach.
-      const minZoom = map.getMinZoom();
-      const maxZoom = map.getMaxZoom();
-      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+      const range = client.camera.readZoomRange();
+      const clampedZoom = Math.max(range.min, Math.min(range.max, newZoom));
       // The requested scale needs a zoom past the map's limits, so it can only be
       // applied partially: surface that instead of letting the value snap back
       // with no explanation (GH #743). A reachable scale clears the notice.
       setScaleNotice(
         Math.abs(clampedZoom - newZoom) > 1e-3 ? t("printLayout.errors.scaleOutOfRange") : null,
       );
-      // Drop a still-pending idle handler / fallback timer from a prior applyScale
-      // before registering new ones, so two quick scale changes don't both fire.
-      if (idleRecaptureRef.current) {
-        map.off("idle", idleRecaptureRef.current);
-        idleRecaptureRef.current = null;
-      }
-      if (idleFallbackRef.current !== null) {
-        window.clearTimeout(idleFallbackRef.current);
-        idleFallbackRef.current = null;
-      }
+      scaleAbortRef.current?.abort();
       // No effective zoom change (already at target, or clamped): MapLibre won't
       // emit an "idle", so recapture directly rather than registering a handler
       // that would never fire and could later fire on an unrelated render.
-      if (Math.abs(clampedZoom - map.getZoom()) < 1e-6) {
-        recapture(null);
+      if (Math.abs(clampedZoom - currentView.zoom) < 1e-6) {
+        void recapture(null);
         return;
       }
-      map.setZoom(clampedZoom);
+      const controller = new AbortController();
+      scaleAbortRef.current = controller;
+      client.camera.applyView({ ...currentView, zoom: clampedZoom });
       // Recapture once the map is idle, so tiles for the new zoom have finished
       // loading and the snapshot is not blurry/blank mid-fetch. applyScale only
-      // runs in viewport mode, so pin the recapture to a null clip. Use map.on
-      // with manual self-removal (not map.once) so cancelling via map.off never
-      // depends on MapLibre's internal once-wrapper. The ref lets a capture that
-      // happens first (e.g. the user draws an extent while tiles load) cancel it.
-      const handler = () => {
-        map.off("idle", handler);
-        idleRecaptureRef.current = null;
-        if (idleFallbackRef.current !== null) {
-          window.clearTimeout(idleFallbackRef.current);
-          idleFallbackRef.current = null;
-        }
-        recapture(null);
-      };
-      idleRecaptureRef.current = handler;
-      map.on("idle", handler);
-      // Fallback: if "idle" is delayed or never arrives (some browsers throttle
-      // the occluded map canvas behind this dialog, so the zoom never settles and
-      // the scale would appear to silently do nothing), force the recapture after
-      // a short grace period. GH #743.
-      idleFallbackRef.current = window.setTimeout(() => {
-        idleFallbackRef.current = null;
-        if (idleRecaptureRef.current) {
-          map.off("idle", idleRecaptureRef.current);
-          idleRecaptureRef.current = null;
-          recapture(null);
-        }
-      }, 1500);
+      // runs in viewport mode, so pin the recapture to a null clip. The engine
+      // owns native idle listeners and applies the timeout fallback.
+      void client.camera
+        .whenIdle({ timeoutMs: 1500, signal: controller.signal })
+        .then(() => {
+          if (!controller.signal.aborted) void recapture(null);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (scaleAbortRef.current === controller) scaleAbortRef.current = null;
+        });
     },
     [mapControllerRef, captureMode, currentRatio, recapture, t],
   );
@@ -1419,7 +1345,7 @@ export function PrintLayoutDialog({
       if (extent) {
         setExtentBbox(extent);
         setCaptureMode("extent");
-        recapture(extent);
+        void recapture(extent);
       } else if (extentBbox) {
         // Cancelled drag: drop the half-drawn preview back to the prior extent.
         showPrintExtent(client, extentBbox);
@@ -1441,7 +1367,7 @@ export function PrintLayoutDialog({
     if (client) clearPrintExtent(client);
     setExtentBbox(null);
     setCaptureMode("viewport");
-    recapture(null);
+    void recapture(null);
   }, [mapControllerRef, recapture]);
 
   const setMode = useCallback(
@@ -1451,7 +1377,7 @@ export function PrintLayoutDialog({
       // notice from a viewport scale attempt must not linger (GH #743).
       if (mode === "extent") setScaleNotice(null);
       setCaptureMode(mode);
-      recapture(mode === "extent" ? extentBbox : null);
+      void recapture(mode === "extent" ? extentBbox : null);
     },
     [recapture, extentBbox, captureMode],
   );
@@ -3071,7 +2997,7 @@ export function PrintLayoutDialog({
                 disabled={atlasBusy}
                 onClick={() => {
                   if (atlasActive) void goToAtlasPage(clampedAtlasIndex);
-                  else recapture();
+                  else void recapture();
                 }}
               >
                 <RefreshCw className="me-2 h-3.5 w-3.5" />

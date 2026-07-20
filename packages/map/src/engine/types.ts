@@ -88,6 +88,8 @@ export interface MapCameraTransitionOptions {
 
 export interface MapCameraPort {
   readView(): MapViewState;
+  readBounds(): BBox | null;
+  readZoomRange(): { readonly min: number; readonly max: number };
   applyView(view: MapViewState, options?: MapCameraTransitionOptions): void;
   flyToLocation(location: StoryChapterLocation): void;
   playStoryChapter(
@@ -124,6 +126,7 @@ export interface MapLayerPort {
   readRasterSource(layerId: string): Readonly<Record<string, unknown>> | null;
   queryInView(layerId: string): readonly Feature[];
   listRenderTargets(): readonly MapRenderTarget[];
+  hasRenderTarget(id: string): boolean;
   queryAtLngLat(lngLat: LngLat, layerId?: string): Promise<readonly HitFeature[]>;
   setHighlight(
     layer: GeoLibreLayer | undefined,

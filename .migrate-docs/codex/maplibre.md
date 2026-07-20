@@ -1,5 +1,43 @@
 # MapLibre GL JS migration log — codex
 
+## 2026-07-20 — MapLibre canvas snapshot and story paint mutation → `MapEngineClient.viewport.capture` and typed story extensions
+
+- Source: MapLibre — `map.getCanvas()`, `getContainer().querySelectorAll("canvas")`,
+  `project`/`unproject`, `getBearing`, direct `idle` listeners, zoom/bounds
+  reads, and direct story layer opacity paint mutation in print, atlas, and
+  story-handout flows.
+- Files touched: `apps/geolibre-desktop/src/lib/print-layout-export.ts` before
+  → thin `MapEngineClient` capture consumer; new
+  `packages/map/src/capture/{canvas-surfaces.ts,maplibre-capture.ts}`;
+  `packages/map/src/engine/{types.ts,maplibre-engine.ts,handle.ts,cesium-engine.ts,transient-overlays.ts,extensions.ts}`;
+  `apps/geolibre-desktop/src/components/{layout/PrintLayoutDialog.tsx,storymap/StoryMapHandoutDialog.tsx}`;
+  `tests/{print-capture,map-engine-interactions,engine-contracts,maplibre-engine,engine-boundary}.test.ts`.
+- ArcGIS approach: a future ArcGIS adapter implements `MapView.takeScreenshot`
+  behind `viewport.capture`; `MapView` camera/viewpoint data supplies the same
+  capture metadata and camera operations. Story opacity remains a typed
+  engine-extension command rather than a renderer object escape hatch.
+- What changed: MapLibre canvas compositing, geographic clipping, pixel-scale
+  measurement, and bearing calculation are adapter-private. Print preview,
+  atlas export, and story handouts now depend only on capture, camera, layer,
+  and extension ports. Hidden transient overlays restore their exact prior
+  visibility even when capture fails.
+- Gap / limitation: MapLibre captures a composited set of DOM canvases, whereas
+  ArcGIS exposes a screenshot API with different overlay inclusion semantics.
+- Workaround: preserve the public `MapCaptureResult` canvas and metadata shape;
+  the MapLibre adapter composites full-viewport deck surfaces today. Removal
+  criteria: replace the MapLibre adapter in Phase 6 after the ArcGIS screenshot
+  adapter has conformance coverage for the same result contract.
+- Tradeoff accepted: capture allocates an offscreen canvas and performs a
+  best-effort redraw per request; this preserves current print fidelity at the
+  cost of transient memory/CPU during exports.
+- Status: done.
+- Verification: `node --import tsx --test tests/print-capture.test.ts
+  tests/map-engine-interactions.test.ts tests/engine-contracts.test.ts
+  tests/maplibre-engine.test.ts tests/engine-boundary.test.ts` → 25 passed;
+  `npm run build` → passed.
+- Follow-up: move map/video and tour recording plus inset-map lifecycle into
+  the same engine boundary in Task 10.
+
 ## 2026-07-20 — Flat native controller surface → typed `MapEngine` capability groups
 
 - Source: MapLibre — the broad `MapController` API and native

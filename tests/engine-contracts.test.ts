@@ -34,6 +34,8 @@ function createCompleteFake(): MapEngine {
   const fake: MapEngine = {
     camera: {
       readView: () => view,
+      readBounds: () => [7, 46, 9, 48],
+      readZoomRange: () => ({ min: 0, max: 24 }),
       applyView: (nextView) => {
         view = nextView;
       },
@@ -55,6 +57,7 @@ function createCompleteFake(): MapEngine {
       readRasterSource: () => null,
       queryInView: () => [],
       listRenderTargets: () => [],
+      hasRenderTarget: () => false,
       queryAtLngLat: async () => [],
       setHighlight: () => undefined,
       clearHighlight: () => undefined,

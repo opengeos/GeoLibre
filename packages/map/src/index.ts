@@ -52,6 +52,7 @@ export type {
   Unsubscribe,
 } from "./engine/types";
 export { MapEngineCapabilityError } from "./engine/types";
+export { isFullViewportMapCanvas } from "./capture/canvas-surfaces";
 export { createCesiumEngine, type CesiumEngineOptions } from "./engine/cesium-engine";
 export { createMapEngineHandle } from "./engine/handle";
 export {

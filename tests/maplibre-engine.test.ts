@@ -117,6 +117,8 @@ function createControllerModule(native: FakeNativeMap): {
     setBackgroundLabel: () => undefined,
     getTerrainExaggeration: () => 1,
     setTerrainExaggeration: () => undefined,
+    setStoryLayerOpacity: () => undefined,
+    restoreLayerStyles: () => undefined,
   };
   return {
     module: {

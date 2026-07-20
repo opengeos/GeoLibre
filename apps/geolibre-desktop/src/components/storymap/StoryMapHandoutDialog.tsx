@@ -1,8 +1,7 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
 import type { StoryActiveSlideMode, StoryChapter, StoryMap } from "@geolibre/core";
-import type { MapController, MapEngineClient } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -34,7 +33,7 @@ interface StoryMapHandoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   story: StoryMap;
-  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /** One exportable screen: a chapter or an intro/outro slide. */
@@ -283,8 +282,7 @@ export function StoryMapHandoutDialog({
     setError(null);
     setNotice(null);
     const controller = mapControllerRef.current;
-    const map = controller?.getMap();
-    if (!controller || !map) {
+    if (!controller) {
       setError(t("storymap.handout.noMap"));
       return;
     }
@@ -319,10 +317,14 @@ export function StoryMapHandoutDialog({
     // Reset to the store-backed layer styles first so the replay starts from
     // the same baseline as a fresh presentation, not whatever opacities a
     // prior preview or presentation left on the live map.
-    if (effectsApplied) controller.restoreLayerStyles();
+    if (effectsApplied) controller.invoke("story.restore-layer-styles", undefined);
     const applyEffects = (changes: StoryChapter["onChapterEnter"]) => {
       for (const change of changes) {
-        controller.setStoryLayerOpacity(change.layerId, change.opacity, 0);
+        controller.invoke("story.set-layer-opacity", {
+          layerId: change.layerId,
+          opacity: change.opacity,
+          durationMs: 0,
+        });
       }
     };
     let lastChapterIndex = -1;
@@ -353,7 +355,7 @@ export function StoryMapHandoutDialog({
             () => abortRef.current,
           );
           if (abortRef.current) break;
-          const slideShot = captureMapImage(map);
+          const slideShot = await captureMapImage(controller);
           captures.push({
             title: "",
             map: {
@@ -380,7 +382,7 @@ export function StoryMapHandoutDialog({
         }
         await jumpAndWaitIdle(controller, chapter.location, () => abortRef.current);
         if (abortRef.current) break;
-        const shot = captureMapImage(map);
+        const shot = await captureMapImage(controller);
         // Load the chapter's own photo (if any) so it appears beside the map.
         const photo = chapter.image ? await loadChapterPhoto(chapter.image) : null;
         captures.push({
@@ -422,7 +424,7 @@ export function StoryMapHandoutDialog({
     } finally {
       // Undo the replayed opacity effects (like the presenter does on exit) and
       // return the map to where the user left it, even on failure.
-      if (effectsApplied) controller.restoreLayerStyles();
+      if (effectsApplied) controller.invoke("story.restore-layer-styles", undefined);
       if (original) {
         controller.camera.applyView(original, {
           mode: "jump",

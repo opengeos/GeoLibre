@@ -87,6 +87,8 @@ export class CesiumEngine implements MapEngine {
 
   readonly camera = {
     readView: (): MapViewState => this.readView(),
+    readBounds: (): BBox | null => null,
+    readZoomRange: (): { readonly min: number; readonly max: number } => ({ min: 0, max: 24 }),
     applyView: (view: MapViewState, options?: { readonly tag?: string }): void => {
       this.pendingTag = options?.tag;
       this.applyView(view);
@@ -126,6 +128,7 @@ export class CesiumEngine implements MapEngine {
       this.layersSnapshot
         .filter(isCesiumSupportedLayerType)
         .map((layer) => ({ id: layer.id, scope: "content" as const })),
+    hasRenderTarget: (id: string): boolean => this.layersSnapshot.some((layer) => layer.id === id),
     queryAtLngLat: async (_lngLat: LngLat, _layerId?: string): Promise<readonly HitFeature[]> =>
       this.unsupported("feature-query"),
     setHighlight: (): void => this.unsupported("transient-overlays"),
@@ -294,6 +297,9 @@ export class CesiumEngine implements MapEngine {
     switch (command) {
       case "viewport.resize":
         this.viewer?.resize();
+        return undefined as MapEngineExtensionMap[K]["output"];
+      case "story.set-layer-opacity":
+      case "story.restore-layer-styles":
         return undefined as MapEngineExtensionMap[K]["output"];
       case "hosted-plugin.activate":
       case "hosted-plugin.set-position":

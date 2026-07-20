@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { isFullViewportMapCanvas } from "../apps/geolibre-desktop/src/lib/print-capture";
+import { isFullViewportMapCanvas } from "../packages/map/src/capture/canvas-surfaces";
+import { captureMapLibreViewport } from "../packages/map/src/capture/maplibre-capture";
 
 describe("isFullViewportMapCanvas", () => {
   const base = { width: 1920, height: 1080 };
@@ -50,5 +51,113 @@ describe("isFullViewportMapCanvas", () => {
     // ...but other canvases are dropped, so a 0x0 base cannot reintroduce the
     // colorbar-clobbering bug.
     assert.equal(isFullViewportMapCanvas({ width: 280, height: 24 }, unknownBase), false);
+  });
+});
+
+interface FakeCanvas {
+  width: number;
+  height: number;
+  clientWidth: number;
+  clientHeight: number;
+  readonly classList: { contains(name: string): boolean };
+  readonly draws: unknown[][];
+  readonly drawError?: Error;
+  getContext(kind: "2d"): { drawImage(...args: unknown[]): void } | null;
+}
+
+function fakeCanvas(
+  width: number,
+  height: number,
+  classNames: readonly string[] = [],
+  drawError?: Error,
+): FakeCanvas {
+  const draws: unknown[][] = [];
+  return {
+    width,
+    height,
+    clientWidth: width / 2,
+    clientHeight: height / 2,
+    classList: { contains: (name) => classNames.includes(name) },
+    draws,
+    ...(drawError ? { drawError } : {}),
+    getContext: () => ({
+      drawImage: (...args: unknown[]) => {
+        if ((args[0] as FakeCanvas).drawError) throw (args[0] as FakeCanvas).drawError;
+        draws.push(args);
+      },
+    }),
+  };
+}
+
+async function withFakeDocument<T>(run: (created: FakeCanvas[]) => Promise<T> | T): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const created: FakeCanvas[] = [];
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: (tag: string) => {
+        assert.equal(tag, "canvas");
+        const canvas = fakeCanvas(0, 0);
+        created.push(canvas);
+        return canvas;
+      },
+    },
+  });
+  try {
+    return await run(created);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original);
+    else Reflect.deleteProperty(globalThis, "document");
+  }
+}
+
+it("viewport capture composites map surfaces and returns geographic metadata", async () => {
+  await withFakeDocument((created) => {
+    const base = fakeCanvas(200, 100);
+    const deck = fakeCanvas(200, 100);
+    const effects = fakeCanvas(200, 100, ["geolibre-effects-canvas"]);
+    const colorbar = fakeCanvas(80, 20);
+    const map = {
+      redraw: () => undefined,
+      getCanvas: () => base,
+      getContainer: () => ({ querySelectorAll: () => [base, deck, effects, colorbar] }),
+      project: ([lng, lat]: [number, number]) => ({ x: lng * 10, y: lat * 10 }),
+      unproject: ([x, y]: [number, number]) => ({ lng: x / 10, lat: y / 10 }),
+      getBearing: () => 23,
+    };
+
+    const result = captureMapLibreViewport(map as never, { bounds: [1, 1, 5, 4] });
+
+    assert.equal(result.width, 80);
+    assert.equal(result.height, 60);
+    assert.equal(result.bearing, 23);
+    assert.ok(result.metersPerPixel > 0);
+    assert.equal(created.length, 2);
+    assert.deepEqual(
+      created[0].draws.map((draw) => draw[0]),
+      [base, deck],
+    );
+    assert.equal(created[1].draws.length, 1);
+  });
+});
+
+it("viewport capture skips a failed optional overlay but rejects an offscreen clip", async () => {
+  await withFakeDocument(() => {
+    const base = fakeCanvas(200, 100);
+    const brokenOverlay = fakeCanvas(200, 100, [], new Error("tainted overlay"));
+    const map = {
+      redraw: () => undefined,
+      getCanvas: () => base,
+      getContainer: () => ({ querySelectorAll: () => [base, brokenOverlay] }),
+      project: ([lng, lat]: [number, number]) => ({ x: lng * 10, y: lat * 10 }),
+      unproject: ([x, y]: [number, number]) => ({ lng: x / 10, lat: y / 10 }),
+      getBearing: () => 0,
+    };
+
+    assert.doesNotThrow(() => captureMapLibreViewport(map as never));
+    assert.throws(
+      () => captureMapLibreViewport(map as never, { bounds: [50, 50, 60, 60] }),
+      /outside the map viewport/,
+    );
   });
 });

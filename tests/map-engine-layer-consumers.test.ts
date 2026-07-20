@@ -60,6 +60,7 @@ function layerPort(readGeoJson: MapLayerPort["readGeoJson"]): MapLayerPort {
     readRasterSource: () => null,
     queryInView: () => [],
     listRenderTargets: () => [],
+    hasRenderTarget: () => false,
     queryAtLngLat: async () => [],
     setHighlight: () => undefined,
     clearHighlight: () => undefined,

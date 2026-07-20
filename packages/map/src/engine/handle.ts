@@ -71,6 +71,9 @@ class StableMapEngineHandle implements MapEngine {
 
   readonly camera = {
     readView: (): MapViewState => this.cachedView,
+    readBounds: (): BBox | null => this.adapter?.camera.readBounds() ?? null,
+    readZoomRange: (): { readonly min: number; readonly max: number } =>
+      this.adapter?.camera.readZoomRange() ?? { min: 0, max: 24 },
     applyView: (
       view: MapViewState,
       options?: Parameters<MapEngine["camera"]["applyView"]>[1],
@@ -118,6 +121,7 @@ class StableMapEngineHandle implements MapEngine {
       this.adapter?.layers.queryInView(layerId) ?? [],
     listRenderTargets: (): readonly MapRenderTarget[] =>
       this.adapter?.layers.listRenderTargets() ?? [],
+    hasRenderTarget: (id: string): boolean => this.adapter?.layers.hasRenderTarget(id) ?? false,
     queryAtLngLat: async (lngLat: LngLat, layerId?: string): Promise<readonly HitFeature[]> => {
       const adapter = await this.whenReady();
       return adapter.layers.queryAtLngLat(lngLat, layerId);
@@ -282,7 +286,11 @@ class StableMapEngineHandle implements MapEngine {
     input: MapEngineExtensionMap[K]["input"],
   ): MapEngineExtensionMap[K]["output"] {
     if (this.adapter) return this.adapter.invoke(command, input);
-    if (command === "viewport.resize") {
+    if (
+      command === "viewport.resize" ||
+      command === "story.set-layer-opacity" ||
+      command === "story.restore-layer-styles"
+    ) {
       this.enqueue((engine) => {
         engine.invoke(command, input);
       });

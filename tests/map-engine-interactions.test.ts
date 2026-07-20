@@ -152,7 +152,7 @@ test("bounds drawing commits geographic coordinates and aspect snapping is direc
   assert.equal(normalizeDrawLongitude(-180), 180);
 });
 
-test("transient overlays update, hide, restore after style replacement, and clean up", () => {
+test("transient overlays update, hide, restore after style replacement, and clean up", async () => {
   const sources = new Map<
     string,
     { data: FeatureCollection; setData(data: FeatureCollection): void }
@@ -212,11 +212,21 @@ test("transient overlays update, hide, restore after style replacement, and clea
   overlays.setVisible("presence", false);
   assert.deepEqual(layers.get(`${sourceId}-point`)?.layout, { visibility: "none" });
 
+  overlays.setVisible("presence", true);
+  await assert.rejects(
+    overlays.whileHidden(["presence"], async () => {
+      assert.deepEqual(layers.get(`${sourceId}-point`)?.layout, { visibility: "none" });
+      throw new Error("capture failed");
+    }),
+    /capture failed/,
+  );
+  assert.deepEqual(layers.get(`${sourceId}-point`)?.layout, { visibility: "visible" });
+
   sources.clear();
   layers.clear();
   overlays.restore();
   assert.equal(sources.get(sourceId)?.data, updated);
-  assert.deepEqual(layers.get(`${sourceId}-line`)?.layout, { visibility: "none" });
+  assert.deepEqual(layers.get(`${sourceId}-line`)?.layout, { visibility: "visible" });
 
   overlays.remove("presence");
   assert.deepEqual(overlays.ids(), []);

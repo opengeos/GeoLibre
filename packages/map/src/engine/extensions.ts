@@ -9,6 +9,14 @@ export interface MapEngineExtensionMap {
     input: undefined;
     output: void;
   };
+  "story.set-layer-opacity": {
+    input: { layerId: string; opacity: number; durationMs?: number };
+    output: void;
+  };
+  "story.restore-layer-styles": {
+    input: undefined;
+    output: void;
+  };
   "hosted-plugin.activate": {
     input: {
       pluginId: string;

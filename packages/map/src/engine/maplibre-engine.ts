@@ -8,6 +8,7 @@ import type {
 } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
+import { captureMapLibreViewport } from "../capture/maplibre-capture";
 import type { MapEngineExtensionMap } from "./extensions";
 import { drawMapLibreBounds } from "./draw-bounds";
 import { createMapLibreMarker } from "./markers";
@@ -92,6 +93,8 @@ interface MapControllerContract {
   setBackgroundLabel(label: string): void;
   getTerrainExaggeration(): number;
   setTerrainExaggeration(value: number): void;
+  setStoryLayerOpacity(layerId: string, opacity: number, durationMs?: number): void;
+  restoreLayerStyles(): void;
 }
 
 export interface MapControllerModule {
@@ -181,6 +184,16 @@ export class MapLibreEngine implements MapEngine {
 
   readonly camera = {
     readView: (): MapViewState => this.readView(),
+    readBounds: (): BBox | null => {
+      const bounds = this.map?.getBounds();
+      return bounds
+        ? [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
+        : null;
+    },
+    readZoomRange: (): { readonly min: number; readonly max: number } => ({
+      min: this.map?.getMinZoom() ?? 0,
+      max: this.map?.getMaxZoom() ?? 24,
+    }),
     applyView: (
       view: MapViewState,
       options?: {
@@ -274,6 +287,7 @@ export class MapLibreEngine implements MapEngine {
       }));
       return [...basemapTargets, ...contentTargets, ...overlayTargets];
     },
+    hasRenderTarget: (id: string): boolean => Boolean(this.map?.getLayer(id)),
     queryAtLngLat: async (lngLat: LngLat, layerId?: string): Promise<readonly HitFeature[]> =>
       this.controller?.identifyFeatures(lngLat, layerId) ?? [],
     setHighlight: (
@@ -298,21 +312,15 @@ export class MapLibreEngine implements MapEngine {
     },
     getElement: (): HTMLElement | null => this.map?.getContainer() ?? null,
     getRect: (): DOMRectReadOnly | null => this.map?.getContainer().getBoundingClientRect() ?? null,
-    capture: async (): ReturnType<MapEngine["viewport"]["capture"]> => {
+    capture: async (
+      options?: Parameters<MapEngine["viewport"]["capture"]>[0],
+    ): ReturnType<MapEngine["viewport"]["capture"]> => {
       if (!this.map) throw new Error("MapLibre engine is not mounted.");
-      const canvas = this.map.getCanvas();
-      const view = this.controller?.readView();
-      const latitude = view?.center[1] ?? 0;
-      const zoom = view?.zoom ?? 0;
-      const metersPerPixel =
-        (Math.cos((latitude * Math.PI) / 180) * 2 * Math.PI * 6378137) / (512 * 2 ** zoom);
-      return {
-        canvas,
-        width: canvas.width,
-        height: canvas.height,
-        metersPerPixel,
-        bearing: view?.bearing ?? 0,
-      };
+      const capture = (): ReturnType<typeof captureMapLibreViewport> =>
+        captureMapLibreViewport(this.map!, { bounds: options?.bounds });
+      return this.overlays
+        ? this.overlays.whileHidden(options?.hideOverlayIds ?? [], capture)
+        : capture();
     },
   } satisfies MapEngine["viewport"];
 
@@ -487,6 +495,14 @@ export class MapLibreEngine implements MapEngine {
     switch (command) {
       case "viewport.resize":
         this.map?.resize();
+        return undefined as MapEngineExtensionMap[K]["output"];
+      case "story.set-layer-opacity": {
+        const input = _input as MapEngineExtensionMap["story.set-layer-opacity"]["input"];
+        this.controller?.setStoryLayerOpacity(input.layerId, input.opacity, input.durationMs);
+        return undefined as MapEngineExtensionMap[K]["output"];
+      }
+      case "story.restore-layer-styles":
+        this.controller?.restoreLayerStyles();
         return undefined as MapEngineExtensionMap[K]["output"];
       case "hosted-plugin.activate":
       case "hosted-plugin.set-position":

@@ -32,10 +32,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/PrintLayoutDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/RecordTourDialog.tsx",
     "pattern": "@geolibre/map#MapController"
   },
@@ -102,14 +98,6 @@
   {
     "path": "apps/geolibre-desktop/src/components/storymap/StoryMapComposeBar.tsx",
     "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapHandoutDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/storymap/StoryMapHandoutDialog.tsx",
-    "pattern": "maplibre-gl"
   },
   {
     "path": "apps/geolibre-desktop/src/components/storymap/StoryMapPanel.tsx",

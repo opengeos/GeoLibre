@@ -7,8 +7,8 @@
  */
 import { zipSync } from "fflate";
 import jsPDF from "jspdf";
-import { isFullViewportMapCanvas } from "./print-capture";
 import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
+import type { MapEngineClient } from "@geolibre/map";
 import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
@@ -31,197 +31,27 @@ export interface CapturedMap {
   bearingDeg: number;
 }
 
-interface MapLike {
-  getCanvas(): HTMLCanvasElement;
-  getContainer(): HTMLElement;
-  getBearing(): number;
-  unproject(point: [number, number]): { lng: number; lat: number };
-  project(lngLat: [number, number]): { x: number; y: number };
-  /** Force a synchronous redraw so the preserved drawing buffer is current. */
-  redraw?(): void;
-}
-
 /**
- * A geographic crop box as `[west, south, east, north]`. Aliased to
- * {@link PrintExtent} (the draw tool's type) so the two stay a single concept.
+ * A geographic crop box as \`[west, south, east, north]\`.
  */
 export type CaptureClip = PrintExtent;
 
-/** Axis-aligned bounding rect (in CSS pixels) of a geographic extent's four
- * projected corners. A north-up box maps to an exact rect; a rotated box maps
- * to its bounding rectangle. */
-function projectClipRectCss(
-  map: Pick<MapLike, "project">,
-  clip: CaptureClip,
-): { minX: number; minY: number; maxX: number; maxY: number } {
-  const [w, s, e, n] = clip;
-  const corners: [number, number][] = [
-    [w, n],
-    [e, n],
-    [e, s],
-    [w, s],
-  ];
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const corner of corners) {
-    const p = map.project(corner);
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x);
-    maxY = Math.max(maxY, p.y);
-  }
-  return { minX, minY, maxX, maxY };
-}
-
-/**
- * Crop a composited capture to the CSS-pixel rectangle of a geographic extent.
- * Returns `null` when the projected rect is degenerate or falls entirely
- * outside the viewport, so the caller can fail rather than silently export the
- * full viewport at a scale measured for the (off-screen) clip centre.
- */
-function cropCaptureToClip(
-  source: HTMLCanvasElement,
-  rectCss: { minX: number; minY: number; maxX: number; maxY: number },
-  dpr: number,
-): HTMLCanvasElement | null {
-  // CSS px -> device px, clamped to the captured buffer.
-  const x0 = Math.max(0, Math.floor(rectCss.minX * dpr));
-  const y0 = Math.max(0, Math.floor(rectCss.minY * dpr));
-  const x1 = Math.min(source.width, Math.ceil(rectCss.maxX * dpr));
-  const y1 = Math.min(source.height, Math.ceil(rectCss.maxY * dpr));
-  const cw = x1 - x0;
-  const ch = y1 - y0;
-  if (cw < 1 || ch < 1) return null;
-  const cropped = document.createElement("canvas");
-  cropped.width = cw;
-  cropped.height = ch;
-  const cctx = cropped.getContext("2d");
-  if (!cctx) return null;
-  cctx.drawImage(source, x0, y0, cw, ch, 0, 0, cw, ch);
-  return cropped;
-}
-
-/**
- * Capture the current map view as a single composited canvas. All `<canvas>`
- * elements inside the map container (the MapLibre base canvas plus any deck.gl
- * overlay) are drawn in DOM order so the snapshot matches what is on screen.
- *
- * @param map - The MapLibre map instance.
- * @param clip - Optional geographic extent to crop the snapshot to (GH #523);
- *   when omitted the full viewport is captured.
- * @returns The composited image plus the ground scale and bearing needed to
- *   render a scale bar and north arrow.
- */
-export function captureMapImage(map: MapLike, clip?: CaptureClip | null): CapturedMap {
-  // Force a synchronous render first. MapLibre only paints on demand, so when
-  // the Print Layout modal opens without any recent camera movement the
-  // preserved drawing buffer can be stale or cleared -- which surfaced as a
-  // blank map (only the cartographic furniture rendered). redraw() guarantees
-  // the latest frame, including all active layers, is in the buffer we read.
-  try {
-    map.redraw?.();
-  } catch {
-    // A redraw failure (e.g. a transient GL state issue) must not block the
-    // capture; fall through and read whatever is in the buffer.
-  }
-  const base = map.getCanvas();
-  const out = document.createElement("canvas");
-  out.width = base.width;
-  out.height = base.height;
-  const ctx = out.getContext("2d");
-  // Throw rather than return a blank canvas: the dialog's recapture() catch then
-  // surfaces a clear error instead of letting the user export a white page.
-  if (!ctx) {
-    throw new Error("Could not acquire a 2D canvas context for map capture");
-  }
-  const canvases = map.getContainer().querySelectorAll("canvas");
-  canvases.forEach((c) => {
-    // Skip the decorative effects overlay (the effects plugin's space /
-    // starfield / atmosphere canvases). They are full-viewport but sit *behind*
-    // the map by z-index, so compositing them in DOM order would draw them over
-    // the map and blank it out -- which is exactly what happened to the globe
-    // in the print preview. They are a screen aesthetic, not map content.
-    if (c.classList.contains("geolibre-effects-canvas")) return;
-    // Composite only the full-viewport render surfaces (the MapLibre base
-    // canvas and any deck.gl overlay). Map controls also add canvases to the
-    // container -- the raster colorbar/colormap previews, the lidar profile
-    // chart -- and stretching one of those over the page would overwrite the
-    // map with, for example, a horizontal colormap ramp.
-    if (!isFullViewportMapCanvas(c, base)) return;
-    try {
-      ctx.drawImage(c, 0, 0, out.width, out.height);
-    } catch (err) {
-      // The base map canvas is unrecoverable (most likely cross-origin tile
-      // CORS tainting it): propagate so the dialog reports an error instead of
-      // exporting a blank page. A tainted/zero-size overlay (deck.gl) is only
-      // cosmetic, so skip it.
-      if (c === base) throw err;
-    }
+/** Capture a composited map snapshot through the engine viewport port. */
+export async function captureMapImage(
+  client: MapEngineClient,
+  clip?: CaptureClip | null,
+): Promise<CapturedMap> {
+  const result = await client.viewport.capture({
+    ...(clip ? { bounds: clip } : {}),
+    hideOverlayIds: ["print-extent"],
   });
-
-  const cssWidth = base.clientWidth || base.width;
-  const cssHeight = base.clientHeight || base.height;
-  const dpr = cssWidth > 0 ? out.width / cssWidth : 1;
-
-  // Measure the ground resolution at the centre of the region that will end up
-  // in the output. When cropping, that is the clip rect *clamped to the
-  // viewport* (the exported image is the visible part), not the full geographic
-  // extent: sampling at the full-extent centre would misreport the scale for an
-  // extent that is off-centre or partially off-screen. Otherwise use the
-  // viewport centre.
-  const rectCss = clip ? projectClipRectCss(map, clip) : null;
-  let centerX = cssWidth / 2;
-  let centerY = cssHeight / 2;
-  if (rectCss) {
-    // For a clip partially panned off-screen, this clamped centre lands toward
-    // the viewport edge rather than the drawn extent's true centre, so the
-    // reported scale can be marginally off (it varies only with latitude in Web
-    // Mercator, so the error is small). Acceptable for this preview/export use.
-    centerX = (Math.max(0, rectCss.minX) + Math.min(cssWidth, rectCss.maxX)) / 2;
-    centerY = (Math.max(0, rectCss.minY) + Math.min(cssHeight, rectCss.maxY)) / 2;
-  }
-  const span = Math.min(100, cssWidth / 2);
-  const left = map.unproject([centerX - span / 2, centerY]);
-  const right = map.unproject([centerX + span / 2, centerY]);
-  const metersPerCssPx = haversineMeters(left, right) / span;
-  const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
-
-  // Cropping changes the image dimensions but not the per-device-pixel ground
-  // resolution, so metersPerPixel carries through unchanged. A null crop means
-  // the extent is entirely off-screen: throw so the dialog reports a capture
-  // error instead of silently exporting the wrong (full-viewport) area.
-  let image = out;
-  if (rectCss) {
-    const cropped = cropCaptureToClip(out, rectCss, dpr);
-    if (!cropped) {
-      // null = the extent is off-screen, or a 2D context could not be acquired.
-      throw new Error(
-        "Could not crop to the print extent (it may be outside the map view, or a canvas context was unavailable)",
-      );
-    }
-    image = cropped;
-  }
-
   return {
-    image,
-    width: image.width,
-    height: image.height,
-    metersPerPixel,
-    bearingDeg: map.getBearing(),
+    image: result.canvas,
+    width: result.width,
+    height: result.height,
+    metersPerPixel: result.metersPerPixel,
+    bearingDeg: result.bearing,
   };
-}
-
-function haversineMeters(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
-  const R = 6371008.8;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const la1 = toRad(a.lat);
-  const la2 = toRad(b.lat);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /**
@@ -425,7 +255,7 @@ export async function exportAtlasPngZip(
       .toLowerCase();
   for (let i = 0; i < total; i++) {
     onProgress?.(i + 1, total);
-    const opts = await optionsForPage(i);
+    const opts = await source.optionsForPage(i);
     const canvas = renderToCanvas(opts, dpi);
     const bytes = await canvasToPngBytes(canvas);
     const base = entryName(i) || String(i + 1);

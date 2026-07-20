@@ -49,6 +49,8 @@ export function createTestMapEngine(
     state,
     camera: {
       readView: () => view,
+      readBounds: () => null,
+      readZoomRange: () => ({ min: 0, max: 24 }),
       applyView: (nextView) => {
         operations.push("camera.applyView");
         view = nextView;
@@ -71,6 +73,7 @@ export function createTestMapEngine(
       readRasterSource: () => null,
       queryInView: () => [],
       listRenderTargets: () => [],
+      hasRenderTarget: () => false,
       queryAtLngLat: async () => [],
       setHighlight: () => operations.push("layers.setHighlight"),
       clearHighlight: () => operations.push("layers.clearHighlight"),
