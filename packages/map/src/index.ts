@@ -5,17 +5,6 @@ export { isArcGIS3DSupportedLayerType as isCesiumSupportedLayerType, ArcGISScene
 export * from "./engine/types";
 export { MapLibreEngine } from "./engine/maplibre-engine";
 export {
-  applyMapViewToCamera,
-  cesiumPitchToMapLibreDeg,
-  groundResolution,
-  isSameView,
-  mapLibrePitchToCesiumDeg,
-  normalizeBearing,
-  rangeToZoom,
-  readMapViewFromCamera,
-  zoomToRange,
-} from "./cesium-camera";
-export {
   MapController,
   createMapController,
   type BuiltInMapControl,
