@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
 import {
   type GeocodeMatch,
   geocodeForward,
@@ -17,13 +16,13 @@ import {
   resolveGeocoderConfig,
   useAppStore,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient, MapMarkerHandle } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
 import { Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
 import { formatLatLon, parseLatLon } from "../../lib/coordinates";
 
 interface LayerPanelPlaceSearchProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
 }
 
 /** Fast-UI minimum debounce before firing a forward-geocode while typing. */
@@ -57,7 +56,7 @@ export function LayerPanelPlaceSearch({
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [activeIndex, setActiveIndex] = useState(-1);
   const abortRef = useRef<AbortController | null>(null);
-  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const markerRef = useRef<MapMarkerHandle | null>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Skip the debounce effect for the one query change caused by selecting a
   // result (which fills the input with the place name); without this the
@@ -134,7 +133,12 @@ export function LayerPanelPlaceSearch({
     if (coord) {
       abortRef.current?.abort();
       setResults([
-        { lat: coord.lat, lon: coord.lon, displayName: formatLatLon(coord), score: null },
+        {
+          lat: coord.lat,
+          lon: coord.lon,
+          displayName: formatLatLon(coord),
+          score: null,
+        },
       ]);
       setActiveIndex(0);
       setIsCoordinate(true);
@@ -150,19 +154,25 @@ export function LayerPanelPlaceSearch({
 
   const handleSelect = useCallback(
     (match: GeocodeMatch) => {
-      const map = mapControllerRef.current?.getMap();
+      const client = mapControllerRef.current;
       // Drop the previous marker unconditionally so it is never orphaned when
       // the map is briefly unavailable (mount/teardown/headless).
       markerRef.current?.remove();
       markerRef.current = null;
-      if (map) {
-        map.flyTo({
-          center: [match.lon, match.lat],
-          zoom: Math.max(map.getZoom(), 12),
+      if (client) {
+        const current = client.camera.readView();
+        client.camera.applyView(
+          {
+            ...current,
+            center: [match.lon, match.lat],
+            zoom: Math.max(current.zoom, 12),
+          },
+          { mode: "fly" },
+        );
+        markerRef.current = client.interactions.createMarker({
+          lngLat: [match.lon, match.lat],
+          color: "#ef4444",
         });
-        markerRef.current = new maplibregl.Marker({ color: "#ef4444" })
-          .setLngLat([match.lon, match.lat])
-          .addTo(map);
       }
       skipNextSearch.current = true;
       setQuery(match.displayName);

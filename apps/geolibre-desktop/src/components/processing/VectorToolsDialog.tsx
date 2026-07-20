@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import { detectGeometryProfile, type MapController, type MapEngineClient } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useTranslation } from "react-i18next";
 
 interface VectorToolsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
 }
 
 type Engine = "client" | "sidecar" | "pyodide";
@@ -111,7 +111,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     if (!getVectorTool(rerun.toolId)) {
       setLog((prev) => [
         ...prev,
-        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
+        `Error: ${t("processing.history.toolUnavailable", {
+          toolId: rerun.toolId,
+        })}`,
       ]);
       setProcessingRerun(null);
       return;
@@ -273,7 +275,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       const layerId = addGeoJsonLayer(name, fc);
       runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer) mapControllerRef.current?.camera.fitLayer(layer);
     },
     [addGeoJsonLayer, appendLog, mapControllerRef],
   );
@@ -313,7 +315,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       for (const message of result.messages) appendLog(message);
       // The engine response is untyped JSON; verify it is a FeatureCollection
       // before handing it to the map.
-      const remoteResult = result.geojson as { type?: string; features?: unknown } | null;
+      const remoteResult = result.geojson as {
+        type?: string;
+        features?: unknown;
+      } | null;
       if (remoteResult?.type === "FeatureCollection" && Array.isArray(remoteResult.features)) {
         addResultLayer(tool.name, remoteResult as unknown as FeatureCollection);
         return null;
@@ -373,7 +378,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
           layers,
           parameters: params,
           log: appendLog,
-          fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
+          fitBounds: (bounds) => mapControllerRef.current?.camera.fitBounds(bounds),
           addResultLayer,
           duckdb,
           viewportBounds: () => {

@@ -58,10 +58,7 @@ const defaultVisibleControls = new Set<BuiltInMapControl>([
 type QueuedMutation = (engine: MapEngine) => void;
 
 class StableMapEngineHandle implements MapEngine {
-  private readonly listeners = new Map<
-    keyof MapEngineEventMap,
-    Set<(payload: never) => void>
-  >();
+  private readonly listeners = new Map<keyof MapEngineEventMap, Set<(payload: never) => void>>();
   private readonly forwardingUnsubscribes: Unsubscribe[] = [];
   private readonly queuedMutations: QueuedMutation[] = [];
   private readonly controlStates = new Map<BuiltInMapControl, MapControlState>();
@@ -84,10 +81,13 @@ class StableMapEngineHandle implements MapEngine {
     flyToLocation: (location: Parameters<MapEngine["camera"]["flyToLocation"]>[0]): void => {
       this.enqueue((engine) => engine.camera.flyToLocation(location));
     },
-    fitBounds: (
-      bounds: BBox,
-      options?: Parameters<MapEngine["camera"]["fitBounds"]>[1],
+    playStoryChapter: (
+      location: Parameters<MapEngine["camera"]["playStoryChapter"]>[0],
+      options: Parameters<MapEngine["camera"]["playStoryChapter"]>[1],
     ): void => {
+      this.enqueue((engine) => engine.camera.playStoryChapter(location, options));
+    },
+    fitBounds: (bounds: BBox, options?: Parameters<MapEngine["camera"]["fitBounds"]>[1]): void => {
       this.enqueue((engine) => engine.camera.fitBounds(bounds, options));
     },
     fitLayer: (layer: GeoLibreLayer): void => {
@@ -101,9 +101,7 @@ class StableMapEngineHandle implements MapEngine {
     readProjection: (): ReturnType<MapEngine["camera"]["readProjection"]> =>
       this.adapter?.camera.readProjection() ?? "mercator",
     isMoving: (): boolean => this.adapter?.camera.isMoving() ?? false,
-    whenIdle: async (
-      options?: Parameters<MapEngine["camera"]["whenIdle"]>[0],
-    ): Promise<void> => {
+    whenIdle: async (options?: Parameters<MapEngine["camera"]["whenIdle"]>[0]): Promise<void> => {
       const adapter = await this.whenReady();
       await adapter.camera.whenIdle(options);
     },
@@ -161,7 +159,8 @@ class StableMapEngineHandle implements MapEngine {
       const adapter = await this.whenReady();
       return adapter.interactions.drawBounds(options);
     },
-    createMarker: (options: MapMarkerOptions): MapMarkerHandle => this.createDeferredMarker(options),
+    createMarker: (options: MapMarkerOptions): MapMarkerHandle =>
+      this.createDeferredMarker(options),
     upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => {
       this.enqueue((engine) => engine.interactions.upsertGeoJsonOverlay(spec));
     },
@@ -171,9 +170,7 @@ class StableMapEngineHandle implements MapEngine {
     removeOverlay: (id: string): void => {
       this.enqueue((engine) => engine.interactions.removeOverlay(id));
     },
-    showPopup: (
-      options: Parameters<MapEngine["interactions"]["showPopup"]>[0],
-    ): void => {
+    showPopup: (options: Parameters<MapEngine["interactions"]["showPopup"]>[0]): void => {
       this.enqueue((engine) => engine.interactions.showPopup(options));
     },
     closePopup: (id: string): void => {
@@ -184,10 +181,7 @@ class StableMapEngineHandle implements MapEngine {
   readonly controls = {
     getBuiltInState: (control: BuiltInMapControl): MapControlState =>
       this.adapter?.controls.getBuiltInState(control) ?? this.readCachedControlState(control),
-    setBuiltInState: (
-      control: BuiltInMapControl,
-      state: Partial<MapControlState>,
-    ): boolean => {
+    setBuiltInState: (control: BuiltInMapControl, state: Partial<MapControlState>): boolean => {
       const current = this.readCachedControlState(control);
       this.controlStates.set(control, { ...current, ...state });
       if (this.adapter) return this.adapter.controls.setBuiltInState(control, state);
@@ -292,7 +286,9 @@ class StableMapEngineHandle implements MapEngine {
       return undefined as MapEngineExtensionMap[K]["output"];
     }
     if (command === "hosted-plugin.activate") {
-      return this.whenReady().then((adapter) => adapter.invoke(command, input)) as MapEngineExtensionMap[K]["output"];
+      return this.whenReady().then((adapter) =>
+        adapter.invoke(command, input),
+      ) as MapEngineExtensionMap[K]["output"];
     }
     if (
       command === "hosted-plugin.deactivate" ||
@@ -383,14 +379,15 @@ class StableMapEngineHandle implements MapEngine {
     let draggable = options.draggable ?? false;
     let nativeMarker: MapMarkerHandle | null = null;
     let removed = false;
-    const listeners = new Map<
-      keyof MapMarkerEventMap,
-      Set<(payload: never) => void>
-    >();
+    const listeners = new Map<keyof MapMarkerEventMap, Set<(payload: never) => void>>();
     const nativeUnsubscribes: Unsubscribe[] = [];
 
     this.enqueue((engine) => {
-      nativeMarker = engine.interactions.createMarker({ ...options, lngLat, draggable });
+      nativeMarker = engine.interactions.createMarker({
+        ...options,
+        lngLat,
+        draggable,
+      });
       for (const [event, handlers] of listeners) {
         nativeUnsubscribes.push(
           nativeMarker.on(event, (payload) => {

@@ -4,9 +4,8 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
-import maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
 import { z } from "zod";
@@ -20,21 +19,18 @@ import { webSearch } from "./web-search";
 
 /** Dependencies the assistant tools need beyond the global store. */
 export interface AssistantToolDeps {
-  /** Returns the live map controller, or null before the map mounts. */
-  getMapController: () => MapController | null;
+  /** Returns the live map-engine client, or null before the map mounts. */
+  getMapController: () => (MapController & MapEngineClient) | null;
   /**
    * Ask the user to approve executing model-generated code before it runs.
    * Resolves true to proceed, false to decline. The assistant can be steered by
    * untrusted content (e.g. `web_search` results, layer attributes) into
-   * emitting a `run_python`/`run_maplibre_js` snippet that exfiltrates secrets
-   * or mutates the app, so these two tools are gated behind an explicit user
+   * emitting a `run_python` snippet that exfiltrates secrets or mutates the
+   * app, so this tool is gated behind an explicit user
    * confirmation. When omitted (e.g. in tests) code runs without a prompt; the
    * desktop UI always provides it.
    */
-  confirmCodeExecution?: (request: {
-    tool: "run_python" | "run_maplibre_js";
-    code: string;
-  }) => Promise<boolean>;
+  confirmCodeExecution?: (request: { tool: "run_python"; code: string }) => Promise<boolean>;
 }
 
 /** A short, model-facing description of one layer (no feature data leaked). */
@@ -252,20 +248,14 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
    * Gate model-authored code behind the user's confirmation hook. Returns true
    * when execution may proceed (approved, or no hook configured).
    */
-  const approveCodeExecution = (
-    toolName: "run_python" | "run_maplibre_js",
-    code: string,
-  ): Promise<boolean> =>
+  const approveCodeExecution = (toolName: "run_python", code: string): Promise<boolean> =>
     deps.confirmCodeExecution
       ? deps.confirmCodeExecution({ tool: toolName, code })
       : Promise.resolve(true);
 
   /** The current map viewport as [west, south, east, north], or null. */
   const viewBbox = (): [number, number, number, number] | null => {
-    const map = deps.getMapController()?.getMap();
-    if (!map) return null;
-    const b = map.getBounds();
-    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+    return deps.getMapController()?.camera.readView().bbox ?? null;
   };
 
   /** Reduce a STAC bbox (2D or 3D) to a 2D [w, s, e, n]. */
@@ -425,13 +415,19 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
 
   const addTileLayer = tool({
     name: "add_tile_layer",
-    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a custom XYZ url template containing {z}/{x}/{y}. The layer is placed underneath existing layers so it acts as a basemap.`,
+    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map(
+      (basemap) => basemap.id,
+    ).join(
+      ", ",
+    )}) or a custom XYZ url template containing {z}/{x}/{y}. The layer is placed underneath existing layers so it acts as a basemap.`,
     inputSchema: z.object({
       basemap: z
         .string()
         .optional()
         .describe(
-          `Known basemap name, one of: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}.`,
+          `Known basemap name, one of: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(
+            ", ",
+          )}.`,
         ),
       url: z
         .string()
@@ -452,7 +448,9 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
           attribution = attribution || found.attribution;
         } else if (!url) {
           throw new Error(
-            `Unknown basemap "${input.basemap}". Known: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")} — or pass a url.`,
+            `Unknown basemap "${input.basemap}". Known: ${NAMED_TILE_BASEMAPS.map(
+              (basemap) => basemap.id,
+            ).join(", ")} — or pass a url.`,
           );
         }
       }
@@ -517,7 +515,9 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
 
   const setBasemap = tool({
     name: "set_basemap",
-    description: `Switch the basemap. Accepts a known name (${OPENFREEMAP_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a full style URL.`,
+    description: `Switch the basemap. Accepts a known name (${OPENFREEMAP_BASEMAPS.map(
+      (basemap) => basemap.id,
+    ).join(", ")}) or a full style URL.`,
     inputSchema: z.object({
       basemap: z.string().describe("A basemap name/id or a style URL."),
     }),
@@ -546,16 +546,16 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
         message: "Provide either a layer or a bbox.",
       }),
     callback: (input) => {
-      const controller = deps.getMapController();
-      if (!controller) throw new Error("The map is not ready yet.");
+      const client = deps.getMapController();
+      if (!client) throw new Error("The map is not ready yet.");
       if (input.bbox) {
-        controller.fitBounds(input.bbox as [number, number, number, number]);
+        client.camera.fitBounds(input.bbox as [number, number, number, number]);
         return json({ fit: "bbox", bbox: input.bbox });
       }
       if (input.layer) {
         const layer = resolveLayer(input.layer);
         if (!layer) throw new Error(`No layer matching "${input.layer}".`);
-        controller.fitLayer(layer);
+        client.camera.fitLayer(layer);
         return json({ fit: "layer", layerId: layer.id });
       }
       throw new Error("Provide either a layer or a bbox.");
@@ -585,37 +585,6 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
           ? `${result.output.slice(0, MAX_OUTPUT)}\n[truncated]`
           : result.output;
       return json({ output, error: result.error });
-    },
-  });
-
-  const runMaplibreJs = tool({
-    name: "run_maplibre_js",
-    description:
-      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties, controls, markers). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) and `maplibregl` (the MapLibre GL JS module, e.g. `maplibregl.TerrainControl`, `maplibregl.Marker`) in scope, and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists; changes made here bypass the store and are NOT undoable.",
-    inputSchema: z.object({
-      code: z.string().describe("JavaScript function body; `map` and `maplibregl` are in scope."),
-    }),
-    callback: async (input) => {
-      if (!(await approveCodeExecution("run_maplibre_js", input.code))) {
-        return json({ ok: false, error: "The user declined to run this code." });
-      }
-      const map = deps.getMapController()?.getMap();
-      if (!map) throw new Error("The map is not ready yet.");
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-      const run = new Function("map", "maplibregl", input.code) as (
-        map: unknown,
-        maplibregl: unknown,
-      ) => unknown;
-      const result = run(map, maplibregl);
-      // Coerce to a JSON-safe value so non-serializable returns (e.g. the map
-      // object itself) don't blow up the tool result.
-      let safe: JSONValue = null;
-      try {
-        safe = JSON.parse(JSON.stringify(result ?? null)) as JSONValue;
-      } catch {
-        safe = String(result);
-      }
-      return json({ ok: true, result: safe });
     },
   });
 
@@ -739,8 +708,9 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
       name: z.string().optional(),
     }),
     callback: async (input) => {
-      const { STACClient, TiTilerClient, getDefaultPreset } =
-        await import("maplibre-gl-planetary-computer");
+      const { STACClient, TiTilerClient, getDefaultPreset } = await import(
+        "maplibre-gl-planetary-computer"
+      );
       const stac = new STACClient();
       let item;
       if (input.itemId) {
@@ -784,7 +754,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
       };
       const bottomBeforeId = store().layers[0]?.id ?? null;
       store().addLayer(layer, bottomBeforeId);
-      if (bounds) deps.getMapController()?.fitBounds(bounds);
+      if (bounds) deps.getMapController()?.camera.fitBounds(bounds);
       return json({
         addedLayerId: layer.id,
         itemId: item.id,
@@ -809,7 +779,6 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     setBasemap,
     zoomTo,
     applySymbology,
-    runMaplibreJs,
     runPython,
   ] as InvokableTool<unknown, unknown>[];
 }

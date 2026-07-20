@@ -2,7 +2,7 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } fro
 import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
 import type { StoryActiveSlideMode, StoryChapter, StoryMap } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -18,6 +18,7 @@ import {
 } from "@geolibre/ui";
 import { FileDown, Loader2 } from "lucide-react";
 import { captureMapImage } from "../../lib/print-layout-export";
+import { STORY_CAMERA_TAG } from "../../lib/map-engine-camera";
 import { PAPER_SIZES, type Orientation, type PaperSizeId } from "../../lib/print-layout";
 import { buildStoryMapHandoutPdf, singleLine, type HandoutChapter } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
@@ -33,7 +34,7 @@ interface StoryMapHandoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   story: StoryMap;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
 }
 
 /** One exportable screen: a chapter or an intro/outro slide. */
@@ -122,46 +123,25 @@ const PHOTO_TIMEOUT_MS = 3000;
  * when `isAborted()` becomes true so the Stop button takes effect mid-wait
  * instead of after the full timeout.
  */
-function jumpAndWaitIdle(
-  map: maplibregl.Map,
+async function jumpAndWaitIdle(
+  client: MapEngineClient,
   location: StoryMap["chapters"][number]["location"],
   isAborted: () => boolean,
 ): Promise<void> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      map.off("idle", finish);
-      clearTimeout(timer);
-      clearInterval(poll);
-      resolve();
-    };
-    const timer = setTimeout(finish, IDLE_TIMEOUT_MS);
-    // Poll the abort flag so Stop takes effect mid-wait instead of after the
-    // full timeout.
-    const poll = setInterval(() => {
-      if (isAborted()) finish();
-    }, 150);
-    const before = map.getCenter();
-    map.jumpTo({
-      center: location.center,
-      zoom: location.zoom,
-      pitch: location.pitch,
-      bearing: location.bearing,
-    });
-    // A no-op jump (an adjacent chapter sharing this exact location) changes
-    // nothing, so MapLibre fires no `idle` and the wait would hit the full
-    // timeout. The current frame is already rendered with tiles loaded, so
-    // resolve on the next frame instead.
-    const after = map.getCenter();
-    if (before.lng === after.lng && before.lat === after.lat && map.areTilesLoaded()) {
-      requestAnimationFrame(finish);
-    }
-    // Register after jumpTo so a pre-existing idle event isn't consumed before
-    // the new camera has started rendering.
-    map.on("idle", finish);
-  });
+  client.camera.applyView(location, { mode: "jump", tag: STORY_CAMERA_TAG });
+  let poll: ReturnType<typeof setInterval> | null = null;
+  try {
+    await Promise.race([
+      client.camera.whenIdle({ timeoutMs: IDLE_TIMEOUT_MS }),
+      new Promise<void>((resolve) => {
+        poll = setInterval(() => {
+          if (isAborted()) resolve();
+        }, 150);
+      }),
+    ]);
+  } finally {
+    if (poll !== null) clearInterval(poll);
+  }
 }
 
 /**
@@ -256,7 +236,10 @@ export function StoryMapHandoutDialog({
   const [byline, setByline] = useState("");
   const [footer, setFooter] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Neutral status line (e.g. "Export cancelled"), distinct from an error.
   const [notice, setNotice] = useState<string | null>(null);
@@ -320,7 +303,7 @@ export function StoryMapHandoutDialog({
     );
     if (defaultName === null) return;
 
-    const original = mapControllerRef.current?.readView();
+    const original = mapControllerRef.current?.camera.readView();
     abortRef.current = false;
     setGenerating(true);
     // Replay chapter layer-opacity effects so each captured page shows the
@@ -364,7 +347,11 @@ export function StoryMapHandoutDialog({
             });
             continue;
           }
-          await jumpAndWaitIdle(map, slideLocation(screen, chapters), () => abortRef.current);
+          await jumpAndWaitIdle(
+            controller,
+            slideLocation(screen, chapters),
+            () => abortRef.current,
+          );
           if (abortRef.current) break;
           const slideShot = captureMapImage(map);
           captures.push({
@@ -391,7 +378,7 @@ export function StoryMapHandoutDialog({
           applyEffects(chapter.onChapterEnter);
           lastChapterIndex = screen.index;
         }
-        await jumpAndWaitIdle(map, chapter.location, () => abortRef.current);
+        await jumpAndWaitIdle(controller, chapter.location, () => abortRef.current);
         if (abortRef.current) break;
         const shot = captureMapImage(map);
         // Load the chapter's own photo (if any) so it appears beside the map.
@@ -437,11 +424,9 @@ export function StoryMapHandoutDialog({
       // return the map to where the user left it, even on failure.
       if (effectsApplied) controller.restoreLayerStyles();
       if (original) {
-        map.jumpTo({
-          center: original.center,
-          zoom: original.zoom,
-          bearing: original.bearing,
-          pitch: original.pitch,
+        controller.camera.applyView(original, {
+          mode: "jump",
+          tag: STORY_CAMERA_TAG,
         });
       }
       setGenerating(false);

@@ -103,7 +103,7 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
  * along with the related dialog state (Open-from-URL, env-var strip prompt, and
  * the shared action-error dialog).
  *
- * @param mapControllerRef - Ref to the live MapController, read when serializing.
+ * @param mapControllerRef - Ref to the live map engine, read when serializing.
  * @returns Handlers and state consumed by the toolbar menus and dialogs.
  */
 export function useProjectFileActions(mapControllerRef: MapControllerRef) {
@@ -300,7 +300,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     );
     const project = projectFromStore({
       projectName: defaultProjectName,
-      mapView: mapControllerRef.current?.readView() ?? state.mapView,
+      mapView: mapControllerRef.current?.camera.readView() ?? state.mapView,
       basemapStyleUrl: state.basemapStyleUrl,
       basemapVisible: state.basemapVisible,
       basemapOpacity: state.basemapOpacity,

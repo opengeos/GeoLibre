@@ -6,7 +6,7 @@ import {
   type GeoLibreLayer,
   type SelectionMode,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import type { Feature, FeatureCollection } from "geojson";
 
 /**
@@ -23,7 +23,10 @@ export function selectionHolderLayer(): GeoLibreLayer | null {
 }
 
 /** The selected features of the active layer, in layer order. */
-function selectedFeatures(): { layer: GeoLibreLayer; features: Feature[] } | null {
+function selectedFeatures(): {
+  layer: GeoLibreLayer;
+  features: Feature[];
+} | null {
   const layer = selectionHolderLayer();
   if (!layer) return null;
   const selected = new Set(useAppStore.getState().selectedFeatureIds);
@@ -75,11 +78,11 @@ export function clearFeatureSelection(): void {
 }
 
 /** Fit the map to the selected features (re-using the highlight overlay). */
-export function zoomToSelection(controller: MapController | null): void {
+export function zoomToSelection(client: MapEngineClient | null): void {
   const store = useAppStore.getState();
   const layer = selectionHolderLayer();
   if (!layer || store.selectedFeatureIds.length === 0) return;
-  controller?.highlightFeature(layer, store.selectedFeatureIds, { fit: true });
+  client?.layers.setHighlight(layer, store.selectedFeatureIds, { fit: true });
 }
 
 /**

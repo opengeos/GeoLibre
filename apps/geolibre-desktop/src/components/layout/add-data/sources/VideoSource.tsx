@@ -88,7 +88,7 @@ export function VideoSource() {
     // Skip the fit for a degenerate (zero-area) bbox, which would otherwise
     // snap to a single point at max zoom.
     if (west !== east || south !== north) {
-      source.shell.mapControllerRef.current?.fitBounds(bounds);
+      source.shell.mapControllerRef.current?.camera.fitBounds(bounds);
     }
     source.shell.closeDialog();
   });

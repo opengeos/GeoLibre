@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   detectObjects,
   readRasterData,
@@ -34,7 +34,7 @@ import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loade
 import { BUILTIN_DETECTION_MODELS, fetchDetectionModel } from "../../lib/detection-models";
 
 interface ObjectDetectionDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff"] }];
@@ -384,7 +384,7 @@ export function ObjectDetectionDialog({
         }
       }
       if (Number.isFinite(minX)) {
-        mapControllerRef.current?.fitBounds([minX, minY, maxX, maxY]);
+        mapControllerRef.current?.camera.fitBounds([minX, minY, maxX, maxY]);
       }
       setResultMessage(
         t("objectDetection.added", {

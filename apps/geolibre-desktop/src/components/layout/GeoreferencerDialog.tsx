@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   Button,
@@ -48,7 +48,7 @@ import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 interface GeoreferencerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
 }
 
 interface LoadedImage {
@@ -110,7 +110,10 @@ export function GeoreferencerDialog({
 
   const [image, setImage] = useState<LoadedImage | null>(null);
   const [gcps, setGcps] = useState<KeyedGCP[]>([]);
-  const [pendingPixel, setPendingPixel] = useState<{ px: number; py: number } | null>(null);
+  const [pendingPixel, setPendingPixel] = useState<{
+    px: number;
+    py: number;
+  } | null>(null);
   const [linking, setLinking] = useState(false);
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -175,7 +178,10 @@ export function GeoreferencerDialog({
           // Reject images with no intrinsic pixel size (e.g. an SVG without a
           // width/height) — the GCP pixel math needs real raster dimensions.
           if (probe.naturalWidth === 0 || probe.naturalHeight === 0) {
-            setNotice({ msg: t("georeferencer.imageNoDimensions"), kind: "error" });
+            setNotice({
+              msg: t("georeferencer.imageNoDimensions"),
+              kind: "error",
+            });
             return;
           }
           setImage({
@@ -289,7 +295,7 @@ export function GeoreferencerDialog({
       },
     };
     addLayer(layer);
-    mapControllerRef.current?.fitBounds(bounds);
+    mapControllerRef.current?.camera.fitBounds(bounds);
     onOpenChange(false);
   }, [affine, image, opacity, gcps, addLayer, mapControllerRef, onOpenChange, t]);
 

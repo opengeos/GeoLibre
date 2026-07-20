@@ -3,6 +3,7 @@ import type {
   MapPreferences,
   MapProjection,
   MapViewState,
+  StoryChapterAnimation,
   StoryChapterLocation,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -53,6 +54,11 @@ interface MapControllerContract {
   fitLayer(layer: GeoLibreLayer): void;
   fitBounds(bounds: BBox): void;
   flyToView(location: StoryChapterLocation): void;
+  applyStoryChapterCamera(
+    location: StoryChapterLocation,
+    animation: StoryChapterAnimation,
+    rotate: boolean,
+  ): void;
   flyTo(camera: {
     readonly center?: LngLat;
     readonly zoom?: number;
@@ -75,10 +81,7 @@ interface MapControllerContract {
   clearFeatureHighlight(): void;
   setBuiltInControlVisible(control: BuiltInMapControl, visible: boolean): boolean;
   getBuiltInControlPosition(control: BuiltInMapControl): MapControlPosition;
-  setBuiltInControlPosition(
-    control: BuiltInMapControl,
-    position: MapControlPosition,
-  ): boolean;
+  setBuiltInControlPosition(control: BuiltInMapControl, position: MapControlPosition): boolean;
   setCompassLabel(label: string): void;
   setTerrainLabel(label: string): void;
   setBackgroundLabel(label: string): void;
@@ -98,6 +101,7 @@ interface MapLibreNativeEvent {
   readonly lngLat?: { readonly lng: number; readonly lat: number };
   readonly error?: unknown;
   readonly geolibreTag?: string;
+  readonly storyCameraToken?: number;
 }
 
 interface PendingConfiguration {
@@ -156,10 +160,7 @@ function geometryFromFeature(feature: maplibregl.MapGeoJSONFeature): Geometry | 
 }
 
 export class MapLibreEngine implements MapEngine {
-  private readonly listeners = new Map<
-    keyof MapEngineEventMap,
-    Set<(payload: never) => void>
-  >();
+  private readonly listeners = new Map<keyof MapEngineEventMap, Set<(payload: never) => void>>();
   private readonly nativeListeners: Array<{
     readonly event: string;
     readonly handler: (event: MapLibreNativeEvent) => void;
@@ -202,6 +203,15 @@ export class MapLibreEngine implements MapEngine {
     },
     flyToLocation: (location: StoryChapterLocation): void => {
       this.controller?.flyToView(location);
+    },
+    playStoryChapter: (
+      location: StoryChapterLocation,
+      options: {
+        readonly animation: StoryChapterAnimation;
+        readonly rotate: boolean;
+      },
+    ): void => {
+      this.controller?.applyStoryChapterCamera(location, options.animation, options.rotate);
     },
     fitBounds: (
       bounds: BBox,
@@ -269,10 +279,8 @@ export class MapLibreEngine implements MapEngine {
       }));
       return [...basemapTargets, ...contentTargets, ...overlayTargets];
     },
-    queryAtLngLat: async (
-      lngLat: LngLat,
-      layerId?: string,
-    ): Promise<readonly HitFeature[]> => this.controller?.identifyFeatures(lngLat, layerId) ?? [],
+    queryAtLngLat: async (lngLat: LngLat, layerId?: string): Promise<readonly HitFeature[]> =>
+      this.controller?.identifyFeatures(lngLat, layerId) ?? [],
     setHighlight: (
       layer: GeoLibreLayer | undefined,
       featureIds: readonly string[],
@@ -294,8 +302,7 @@ export class MapLibreEngine implements MapEngine {
       return normalizeLngLat(this.map.unproject([point.x, point.y]));
     },
     getElement: (): HTMLElement | null => this.map?.getContainer() ?? null,
-    getRect: (): DOMRectReadOnly | null =>
-      this.map?.getContainer().getBoundingClientRect() ?? null,
+    getRect: (): DOMRectReadOnly | null => this.map?.getContainer().getBoundingClientRect() ?? null,
     capture: async (): ReturnType<MapEngine["viewport"]["capture"]> => {
       if (!this.map) throw new Error("MapLibre engine is not mounted.");
       const canvas = this.map.getCanvas();
@@ -303,8 +310,7 @@ export class MapLibreEngine implements MapEngine {
       const latitude = view?.center[1] ?? 0;
       const zoom = view?.zoom ?? 0;
       const metersPerPixel =
-        (Math.cos((latitude * Math.PI) / 180) * 2 * Math.PI * 6378137) /
-        (512 * 2 ** zoom);
+        (Math.cos((latitude * Math.PI) / 180) * 2 * Math.PI * 6378137) / (512 * 2 ** zoom);
       return {
         canvas,
         width: canvas.width,
@@ -344,23 +350,19 @@ export class MapLibreEngine implements MapEngine {
       visible: this.controlVisibility[control],
       position: this.controller?.getBuiltInControlPosition(control) ?? "top-right",
     }),
-    setBuiltInState: (
-      control: BuiltInMapControl,
-      state: Partial<MapControlState>,
-    ): boolean => {
+    setBuiltInState: (control: BuiltInMapControl, state: Partial<MapControlState>): boolean => {
       let applied = true;
       if (typeof state.visible === "boolean") {
         this.controlVisibility[control] = state.visible;
         applied = this.controller?.setBuiltInControlVisible(control, state.visible) ?? false;
       }
       if (state.position) {
-        applied = (this.controller?.setBuiltInControlPosition(control, state.position) ?? false) && applied;
+        applied =
+          (this.controller?.setBuiltInControlPosition(control, state.position) ?? false) && applied;
       }
       return applied;
     },
-    setLabels: (
-      labels: Partial<Record<"compass" | "terrain" | "background", string>>,
-    ): void => {
+    setLabels: (labels: Partial<Record<"compass" | "terrain" | "background", string>>): void => {
       if (labels.compass) this.controller?.setCompassLabel(labels.compass);
       if (labels.terrain) this.controller?.setTerrainLabel(labels.terrain);
       if (labels.background) this.controller?.setBackgroundLabel(labels.background);
@@ -444,12 +446,14 @@ export class MapLibreEngine implements MapEngine {
   }
 
   readView(): MapViewState {
-    return this.controller?.readView() ?? {
-      center: [-100, 40],
-      zoom: 2,
-      bearing: 0,
-      pitch: 0,
-    };
+    return (
+      this.controller?.readView() ?? {
+        center: [-100, 40],
+        zoom: 2,
+        bearing: 0,
+        pitch: 0,
+      }
+    );
   }
 
   syncLayers(layers: readonly GeoLibreLayer[]): void {
@@ -499,10 +503,7 @@ export class MapLibreEngine implements MapEngine {
     return () => handlers.delete(handler as (payload: never) => void);
   }
 
-  private emit<K extends keyof MapEngineEventMap>(
-    event: K,
-    payload: MapEngineEventMap[K],
-  ): void {
+  private emit<K extends keyof MapEngineEventMap>(event: K, payload: MapEngineEventMap[K]): void {
     const handlers = this.listeners.get(event);
     if (!handlers) return;
     for (const handler of handlers) handler(payload as never);
@@ -541,7 +542,8 @@ export class MapLibreEngine implements MapEngine {
       this.emit("moveend", {
         view: this.readView(),
         userDriven: Boolean(event.originalEvent),
-        tag: event.geolibreTag,
+        tag:
+          event.geolibreTag ?? (event.storyCameraToken === undefined ? undefined : "story-camera"),
       });
     });
     for (const [nativeEvent, engineEvent] of [
@@ -643,6 +645,7 @@ export class MapLibreEngine implements MapEngine {
     if (!this.map) throw new Error("MapLibre engine is not mounted.");
     const marker = new maplibregl.Marker({
       element: options.element,
+      color: options.color,
       draggable: options.draggable,
       anchor: options.anchor,
       offset: options.offset ? [options.offset.x, options.offset.y] : undefined,

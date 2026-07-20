@@ -1,6 +1,7 @@
 import type { MapViewState } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { STORY_CAMERA_TAG, VIEWPORT_HISTORY_RESTORE_TAG } from "../lib/map-engine-camera";
 
 /**
  * How many distinct viewports the history keeps. The oldest entries are trimmed
@@ -42,7 +43,7 @@ export interface ViewportHistory {
  * actually change.
  *
  * Args:
- *     mapControllerRef: Ref to the live MapController.
+ *     mapControllerRef: Ref to the live map-engine client.
  *     mapReadyGeneration: Counter that increments when the map (re)initialises,
  *         used to (re)attach the `moveend` listener once a map exists.
  *     projectGeneration: Counter that increments when a different project is
@@ -53,18 +54,12 @@ export interface ViewportHistory {
  *     The current navigability flags and the back/forward actions.
  */
 export function useViewportHistory(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngineClient | null>,
   mapReadyGeneration: number,
   projectGeneration: number,
 ): ViewportHistory {
   const historyRef = useRef<MapViewState[]>([]);
   const indexRef = useRef(-1);
-  // Counts camera moves we drive ourselves whose `moveend` is still pending, so
-  // those events are not recorded as new history entries. A counter (not a
-  // boolean) is needed because rapid back/forward clicks cancel each in-flight
-  // `easeTo`, firing one `moveend` per call — a boolean would be cleared by the
-  // first and let a later cancelled-midway position leak into the stack.
-  const restoringCountRef = useRef(0);
   // The project the current stack belongs to, so a project switch resets it.
   const projectGenerationRef = useRef(projectGeneration);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false });
@@ -80,9 +75,8 @@ export function useViewportHistory(
   }, []);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map) return;
-    const controller = mapControllerRef.current;
+    const client = mapControllerRef.current;
+    if (!client) return;
 
     // Loading a different project clears the stack so navigation can't cross
     // project boundaries. A basemap change (which only bumps mapReadyGeneration)
@@ -94,9 +88,7 @@ export function useViewportHistory(
       syncNav();
     }
 
-    const record = () => {
-      const view = controller?.readView();
-      if (!view) return;
+    const record = (view: MapViewState) => {
       // Seed the stack with the first view we see.
       if (indexRef.current < 0) {
         historyRef.current = [view];
@@ -117,44 +109,29 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = (event: { storyCameraToken?: number }) => {
-      // Story presenter / chapter-preview camera moves carry a storyCameraToken
-      // in their event data. Those are scripted playback, not user navigation,
-      // so don't record them (checked before the restore counter so a story
-      // move never consumes a pending restore's slot).
-      if (event?.storyCameraToken !== undefined) return;
-      if (restoringCountRef.current > 0) {
-        restoringCountRef.current--;
-        return;
-      }
-      record();
+    const onMoveEnd = ({ view, tag }: { view: MapViewState; tag?: string }) => {
+      if (tag === STORY_CAMERA_TAG || tag === VIEWPORT_HISTORY_RESTORE_TAG) return;
+      record(view);
     };
 
-    map.on("moveend", onMoveEnd);
-    // Clear any pending count left by a restore that was in flight when a prior
-    // map was torn down (its `moveend` never fired), so this map starts clean.
-    restoringCountRef.current = 0;
+    const unsubscribe = client.on("moveend", onMoveEnd);
     // Seed from the current camera right away (no-op if already seeded).
-    record();
+    record(client.camera.readView());
 
-    return () => {
-      map.off("moveend", onMoveEnd);
-      restoringCountRef.current = 0;
-    };
+    return unsubscribe;
   }, [mapControllerRef, mapReadyGeneration, projectGeneration, syncNav]);
 
   const restore = useCallback(
     (nextIndex: number) => {
       const view = historyRef.current[nextIndex];
       if (!view) return;
-      const controller = mapControllerRef.current;
-      // Bail before touching the flag if there's no map to drive — otherwise it
-      // would stay `true` (no `moveend` to clear it) and swallow the next pan.
-      if (!controller) return;
+      const client = mapControllerRef.current;
+      if (!client) return;
       indexRef.current = nextIndex;
-      restoringCountRef.current++;
-      // Animate (easeTo) rather than jump, matching the browser-style framing.
-      controller.easeToView(view);
+      client.camera.applyView(view, {
+        mode: "ease",
+        tag: VIEWPORT_HISTORY_RESTORE_TAG,
+      });
       syncNav();
     },
     [mapControllerRef, syncNav],

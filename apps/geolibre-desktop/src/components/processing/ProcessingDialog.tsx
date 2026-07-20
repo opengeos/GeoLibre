@@ -1,5 +1,5 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchWhiteboxJob,
@@ -67,7 +67,7 @@ import {
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
 interface ProcessingDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
   // Renders a raster tool output (a Cloud Optimized GeoTIFF, from the WASM
   // runner) as a new map layer. Wired by the desktop shell, which owns the
   // raster control / app API.
@@ -1082,7 +1082,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     // Cancel any in-flight draw so its late-resolving box can't overwrite the
     // extent the user just asked for from the current view.
     drawAbortRef.current?.abort();
-    applyBboxExtent(mapControllerRef.current?.readView().bbox);
+    applyBboxExtent(mapControllerRef.current?.camera.readView().bbox);
   };
 
   // Rubber-band a box on the map to fill the bbox (only workable because the
@@ -1197,7 +1197,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           // not valid JSON; fall back to raw bytes
         }
       }
-      browsedInputsRef.current.set(paramName, { name: fileName, bytes, geojson });
+      browsedInputsRef.current.set(paramName, {
+        name: fileName,
+        bytes,
+        geojson,
+      });
       setValues((prev) => ({ ...prev, [paramName]: fileName }));
     },
     [],
@@ -1232,7 +1236,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         const layerId = addGeoJsonLayer(layerName, data, path || undefined);
         historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
         const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-        if (layer) mapControllerRef.current?.fitLayer(layer);
+        if (layer) mapControllerRef.current?.camera.fitLayer(layer);
       }
 
       // Binary outputs come back from the WASM runner inline. Raster (COG) bytes

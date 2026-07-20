@@ -1,5 +1,9 @@
 import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
-import { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, type MapController } from "@geolibre/map";
+import {
+  DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+  type MapController,
+  type MapEngineClient,
+} from "@geolibre/map";
 import {
   closeDuckDBLayerPanel,
   closeEarthEnginePanel,
@@ -144,7 +148,7 @@ import {
 interface TopToolbarProps {
   compact?: boolean;
   diagnosticsErrorCount: number;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
   mapReadyGeneration: number;
   showLabels?: boolean;
   showProjectInfo?: boolean;
@@ -503,13 +507,14 @@ export function TopToolbar({
     });
 
     for (const control of ALL_BUILT_IN_CONTROL_IDS) {
-      mapControllerRef.current?.setBuiltInControlPosition(control, "top-right");
+      mapControllerRef.current?.controls.setBuiltInState(control, {
+        position: "top-right",
+      });
     }
     for (const control of ALL_BUILT_IN_CONTROL_IDS) {
-      mapControllerRef.current?.setBuiltInControlVisible(
-        control,
-        NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control),
-      );
+      mapControllerRef.current?.controls.setBuiltInState(control, {
+        visible: NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control),
+      });
     }
     setControlsVisible(newProjectToolbarControlVisibility());
   };
@@ -534,7 +539,10 @@ export function TopToolbar({
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
-      const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
+      const updated =
+        mapControllerRef.current?.controls.setBuiltInState(control, {
+          visible,
+        }) ?? false;
       return updated ? { ...current, [control]: visible } : current;
     });
   };
@@ -882,7 +890,7 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.view"),
       keywords: "zoom in closer magnify scale",
       icon: ZoomIn,
-      run: () => mapControllerRef.current?.zoomIn(),
+      run: () => mapControllerRef.current?.camera.zoomIn(),
     },
     {
       id: "view.zoom-out",
@@ -890,7 +898,7 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.view"),
       keywords: "zoom out farther wider scale",
       icon: ZoomOut,
-      run: () => mapControllerRef.current?.zoomOut(),
+      run: () => mapControllerRef.current?.camera.zoomOut(),
     },
     {
       id: "view.previous",
@@ -921,7 +929,7 @@ export function TopToolbar({
       // never clashes with ⌘/Ctrl+N (New project) and leaves MapLibre's own
       // arrow/zoom keys untouched.
       shortcut: { key: "n" },
-      run: () => mapControllerRef.current?.resetNorth(),
+      run: () => mapControllerRef.current?.camera.resetNorth(),
     },
     {
       id: "view.reset-pitch",
@@ -931,7 +939,7 @@ export function TopToolbar({
       icon: Grid2x2,
       // Plain "U" resets pitch to a top-down view (Google Earth Pro's shortcut).
       shortcut: { key: "u" },
-      run: () => mapControllerRef.current?.resetPitch(),
+      run: () => mapControllerRef.current?.camera.resetPitch(),
     },
     {
       id: "view.reset-pitch-bearing",
@@ -941,7 +949,7 @@ export function TopToolbar({
       icon: Mountain,
       // Plain "R" resets pitch and bearing (like Google Earth Pro's reset view).
       shortcut: { key: "r" },
-      run: () => mapControllerRef.current?.resetNorthPitch(),
+      run: () => mapControllerRef.current?.camera.resetNorthPitch(),
     },
     {
       id: "view.set-view",
@@ -1144,9 +1152,9 @@ export function TopToolbar({
               maxZoom: map.getMaxZoom(),
             };
           }}
-          onResetNorth={() => mapControllerRef.current?.resetNorth()}
-          onResetPitch={() => mapControllerRef.current?.resetPitch()}
-          onResetPitchBearing={() => mapControllerRef.current?.resetNorthPitch()}
+          onResetNorth={() => mapControllerRef.current?.camera.resetNorth()}
+          onResetPitch={() => mapControllerRef.current?.camera.resetPitch()}
+          onResetPitchBearing={() => mapControllerRef.current?.camera.resetNorthPitch()}
           onSetView={() => setSetViewOpen(true)}
           onViewInGoogleEarth={() => {
             const map = mapControllerRef.current?.getMap();
@@ -1160,8 +1168,8 @@ export function TopToolbar({
             const center = map.getCenter();
             void openExternalLink(googleMapsUrl(center.lat, center.lng, map.getZoom()));
           }}
-          onZoomIn={() => mapControllerRef.current?.zoomIn()}
-          onZoomOut={() => mapControllerRef.current?.zoomOut()}
+          onZoomIn={() => mapControllerRef.current?.camera.zoomIn()}
+          onZoomOut={() => mapControllerRef.current?.camera.zoomOut()}
         />
       )}
       <NewProjectDialog

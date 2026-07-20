@@ -42,10 +42,7 @@ export interface CesiumEngineOptions {
 /** Package-private dependency seam used by adapter tests. */
 export interface CesiumEngineDependencies {
   readonly loadCesium?: () => Promise<CesiumNamespace>;
-  readonly createLayerSync?: (
-    Cesium: CesiumNamespace,
-    viewer: Viewer,
-  ) => CesiumLayerSynchronizer;
+  readonly createLayerSync?: (Cesium: CesiumNamespace, viewer: Viewer) => CesiumLayerSynchronizer;
   readonly prepareEnvironment?: () => void;
 }
 
@@ -66,15 +63,10 @@ export function prepareCesiumEnvironment(): void {
 }
 
 export class CesiumEngine implements MapEngine {
-  private readonly listeners = new Map<
-    keyof MapEngineEventMap,
-    Set<(payload: never) => void>
-  >();
+  private readonly listeners = new Map<keyof MapEngineEventMap, Set<(payload: never) => void>>();
   private readonly removeCesiumListeners: Array<() => void> = [];
   private readonly removeInputListeners: Array<() => void> = [];
-  private readonly options: Required<
-    CesiumEngineDependencies
-  > &
+  private readonly options: Required<CesiumEngineDependencies> &
     Pick<CesiumEngineOptions, "ionToken">;
   private Cesium: CesiumNamespace | null = null;
   private viewer: Viewer | null = null;
@@ -95,14 +87,18 @@ export class CesiumEngine implements MapEngine {
 
   readonly camera = {
     readView: (): MapViewState => this.readView(),
-    applyView: (
-      view: MapViewState,
-      options?: { readonly tag?: string },
-    ): void => {
+    applyView: (view: MapViewState, options?: { readonly tag?: string }): void => {
       this.pendingTag = options?.tag;
       this.applyView(view);
     },
     flyToLocation: (location: StoryChapterLocation): void => this.applyView(location),
+    playStoryChapter: (
+      location: StoryChapterLocation,
+      _options: Parameters<MapEngine["camera"]["playStoryChapter"]>[1],
+    ): void => {
+      this.pendingTag = "story-camera";
+      this.applyView(location);
+    },
     fitBounds: (bounds: BBox): void => this.fitBounds(bounds),
     fitLayer: (layer: GeoLibreLayer): void => {
       const bounds = getLayerBounds(layer);
@@ -112,8 +108,7 @@ export class CesiumEngine implements MapEngine {
     zoomOut: (): void => this.applyView({ ...this.readView(), zoom: this.readView().zoom - 1 }),
     resetNorth: (): void => this.applyView({ ...this.readView(), bearing: 0 }),
     resetPitch: (): void => this.applyView({ ...this.readView(), pitch: 0 }),
-    resetNorthPitch: (): void =>
-      this.applyView({ ...this.readView(), bearing: 0, pitch: 0 }),
+    resetNorthPitch: (): void => this.applyView({ ...this.readView(), bearing: 0, pitch: 0 }),
     readProjection: (): MapProjection => "globe",
     isMoving: (): boolean => this.moving,
     whenIdle: async (options?: {
@@ -126,16 +121,13 @@ export class CesiumEngine implements MapEngine {
     readGeoJson: async (layerId: string): Promise<FeatureCollection | null> =>
       this.layersSnapshot.find((layer) => layer.id === layerId)?.geojson ?? null,
     readRasterSource: (): Readonly<Record<string, unknown>> | null => null,
-    queryInView: (_layerId: string): readonly Feature[] =>
-      this.unsupported("feature-query"),
+    queryInView: (_layerId: string): readonly Feature[] => this.unsupported("feature-query"),
     listRenderTargets: (): readonly MapRenderTarget[] =>
       this.layersSnapshot
         .filter(isCesiumSupportedLayerType)
         .map((layer) => ({ id: layer.id, scope: "content" as const })),
-    queryAtLngLat: async (
-      _lngLat: LngLat,
-      _layerId?: string,
-    ): Promise<readonly HitFeature[]> => this.unsupported("feature-query"),
+    queryAtLngLat: async (_lngLat: LngLat, _layerId?: string): Promise<readonly HitFeature[]> =>
+      this.unsupported("feature-query"),
     setHighlight: (): void => this.unsupported("transient-overlays"),
     clearHighlight: (): void => this.unsupported("transient-overlays"),
   } satisfies MapEngine["layers"];
@@ -145,8 +137,7 @@ export class CesiumEngine implements MapEngine {
     unproject: (_point: ScreenPoint): LngLat | null => null,
     getElement: (): HTMLElement | null => this.container,
     getRect: (): DOMRectReadOnly | null => this.container?.getBoundingClientRect() ?? null,
-    capture: async (): ReturnType<MapEngine["viewport"]["capture"]> =>
-      this.unsupported("capture"),
+    capture: async (): ReturnType<MapEngine["viewport"]["capture"]> => this.unsupported("capture"),
   } satisfies MapEngine["viewport"];
 
   readonly interactions = {
@@ -162,24 +153,19 @@ export class CesiumEngine implements MapEngine {
   } satisfies MapEngine["interactions"];
 
   readonly controls = {
-    getBuiltInState: (_control: BuiltInMapControl): MapControlState =>
-      this.unsupported("controls"),
+    getBuiltInState: (_control: BuiltInMapControl): MapControlState => this.unsupported("controls"),
     setBuiltInState: (): boolean => this.unsupported("controls"),
     setLabels: (): void => this.unsupported("controls"),
     getTerrainExaggeration: (): number => this.unsupported("controls"),
     setTerrainExaggeration: (): void => this.unsupported("controls"),
   } satisfies MapEngine["controls"];
 
-  constructor(
-    options: CesiumEngineOptions = {},
-    dependencies: CesiumEngineDependencies = {},
-  ) {
+  constructor(options: CesiumEngineOptions = {}, dependencies: CesiumEngineDependencies = {}) {
     this.options = {
       ionToken: options.ionToken,
       loadCesium: dependencies.loadCesium ?? (async () => import("cesium")),
       createLayerSync:
-        dependencies.createLayerSync ??
-        ((Cesium, viewer) => new CesiumLayerSync(Cesium, viewer)),
+        dependencies.createLayerSync ?? ((Cesium, viewer) => new CesiumLayerSync(Cesium, viewer)),
       prepareEnvironment: dependencies.prepareEnvironment ?? prepareCesiumEnvironment,
     };
   }
@@ -328,10 +314,7 @@ export class CesiumEngine implements MapEngine {
     return () => handlers.delete(handler as (payload: never) => void);
   }
 
-  private emit<K extends keyof MapEngineEventMap>(
-    event: K,
-    payload: MapEngineEventMap[K],
-  ): void {
+  private emit<K extends keyof MapEngineEventMap>(event: K, payload: MapEngineEventMap[K]): void {
     const handlers = this.listeners.get(event);
     if (!handlers) return;
     for (const handler of handlers) handler(payload as never);

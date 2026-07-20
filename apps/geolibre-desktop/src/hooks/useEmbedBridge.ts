@@ -1,6 +1,6 @@
 import { parseProject, serializeProject, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 
@@ -47,7 +47,7 @@ type InboundMessage = LoadProjectMessage | RequestStateMessage;
  * @param mapControllerRef - Ref to the live map controller, read so the emitted
  *   snapshot captures the current camera (pan/zoom) rather than only the store.
  */
-export function useEmbedBridge(mapControllerRef: RefObject<MapController | null>): void {
+export function useEmbedBridge(mapControllerRef: RefObject<MapEngineClient | null>): void {
   useEffect(() => {
     if (!isEmbedded()) return;
     // The host is the embedding parent (the Jupyter/embed widget). The shared

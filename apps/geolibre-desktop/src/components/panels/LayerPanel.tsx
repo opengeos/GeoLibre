@@ -37,7 +37,7 @@ import {
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   applyMapboxStyleImport,
   applyQmlImport,
@@ -176,7 +176,7 @@ import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 
 interface LayerPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Id of the layer currently in a geometry-edit session, or null. */
   geometryEditLayerId: string | null;
@@ -801,7 +801,10 @@ export function LayerPanel({
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
-        [layer.id]: { type: "success", message: t("layers.styleCopied", { name: layer.name }) },
+        [layer.id]: {
+          type: "success",
+          message: t("layers.styleCopied", { name: layer.name }),
+        },
       }));
       scheduleStatusClear(layer.id);
     },
@@ -819,7 +822,10 @@ export function LayerPanel({
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
-        [layer.id]: { type: "success", message: t("layers.stylePasted", { name: sourceName }) },
+        [layer.id]: {
+          type: "success",
+          message: t("layers.stylePasted", { name: sourceName }),
+        },
       }));
       scheduleStatusClear(layer.id);
     },
@@ -1057,7 +1063,10 @@ export function LayerPanel({
       fileMeta: {
         defaultName: string;
         filters: { name: string; extensions: string[] }[];
-        browserTypes: { description: string; accept: Record<string, string[]> }[];
+        browserTypes: {
+          description: string;
+          accept: Record<string, string[]>;
+        }[];
         mimeType: string;
       },
     ) => {
@@ -1181,7 +1190,12 @@ export function LayerPanel({
         {
           defaultName: `${sanitizeExportFileName(layer.name)}.qml`,
           filters: [{ name: "QGIS QML", extensions: ["qml"] }],
-          browserTypes: [{ description: "QGIS QML", accept: { "application/xml": [".qml"] } }],
+          browserTypes: [
+            {
+              description: "QGIS QML",
+              accept: { "application/xml": [".qml"] },
+            },
+          ],
           mimeType: "application/xml",
         },
       ),
@@ -1501,7 +1515,10 @@ export function LayerPanel({
           ? { unit: binding.granularity, before: 1, after: 1 }
           : { unit: binding.granularity, before: 0, after: 1 };
     updateLayer(layer.id, {
-      metadata: { ...layer.metadata, timeBinding: { ...binding, window: timeWindow } },
+      metadata: {
+        ...layer.metadata,
+        timeBinding: { ...binding, window: timeWindow },
+      },
       timeFilter: undefined,
     });
     if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
@@ -2183,7 +2200,7 @@ export function LayerPanel({
                 Boolean(layer.source.layers.trim()) &&
                 Boolean(
                   (typeof layer.source.url === "string" && layer.source.url.trim()) ||
-                  layer.sourcePath,
+                    layer.sourcePath,
                 )) ||
               layer.type === "vector-tiles" ||
               (layer.type === "mbtiles" && layer.metadata.tileType === "vector") ||
@@ -2343,7 +2360,9 @@ export function LayerPanel({
                           type="text"
                           className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
                           value={editingName}
-                          aria-label={t("layers.renameNamed", { name: layer.name })}
+                          aria-label={t("layers.renameNamed", {
+                            name: layer.name,
+                          })}
                           onChange={(e) => setEditingName(e.target.value)}
                           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                           onFocus={(e) => e.currentTarget.select()}
@@ -2472,7 +2491,7 @@ export function LayerPanel({
                         aria-label={t("layers.zoomToLayer")}
                         onClick={(e) => {
                           e.stopPropagation();
-                          mapControllerRef.current?.fitLayer(layer);
+                          mapControllerRef.current?.camera.fitLayer(layer);
                         }}
                       >
                         <ZoomIn className="h-3.5 w-3.5" />

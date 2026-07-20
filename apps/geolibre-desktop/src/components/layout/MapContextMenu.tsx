@@ -1,4 +1,4 @@
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +76,7 @@ export function MapContextMenu({
   mapReadyGeneration,
   onExplorePlace,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   mapReadyGeneration: number;
   /** Open a Wikipedia knowledge card for the clicked coordinate. */
   onExplorePlace?: (lat: number, lng: number) => void;
@@ -127,7 +127,12 @@ export function MapContextMenu({
 
   const centerHere = useCallback(() => {
     if (!menu) return;
-    mapControllerRef.current?.flyTo({ center: [menu.lng, menu.lat] });
+    const client = mapControllerRef.current;
+    if (!client) return;
+    client.camera.applyView(
+      { ...client.camera.readView(), center: [menu.lng, menu.lat] },
+      { mode: "fly" },
+    );
   }, [menu, mapControllerRef]);
 
   const zoomInHere = useCallback(() => {
@@ -135,11 +140,13 @@ export function MapContextMenu({
     // Read the live zoom; if the map was torn down between right-click and
     // selection, omit zoom so the move still recenters instead of snapping to
     // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
-    const currentZoom = mapControllerRef.current?.getMap()?.getZoom();
-    mapControllerRef.current?.flyTo({
-      center: [menu.lng, menu.lat],
-      ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
-    });
+    const client = mapControllerRef.current;
+    if (!client) return;
+    const current = client.camera.readView();
+    client.camera.applyView(
+      { ...current, center: [menu.lng, menu.lat], zoom: current.zoom + 1 },
+      { mode: "fly" },
+    );
   }, [menu, mapControllerRef]);
 
   // Open a Wikipedia knowledge card for the clicked point (Google Earth-style
@@ -154,13 +161,13 @@ export function MapContextMenu({
   // city-level view rather than dropping the action.
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    const zoom = mapControllerRef.current?.camera.readView().zoom ?? 12;
     void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    const zoom = mapControllerRef.current?.camera.readView().zoom ?? 12;
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 

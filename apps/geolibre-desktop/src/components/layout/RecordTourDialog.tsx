@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   ArrowDown,
@@ -50,7 +50,7 @@ import {
 interface RecordTourDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
@@ -210,7 +210,10 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     if ((event.target as Element).closest("button, a, [role='button']")) return;
     const rect = panelRef.current?.getBoundingClientRect();
     if (!rect) return;
-    dragOffset.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    dragOffset.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
     setPos({ x: rect.left, y: rect.top });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -341,7 +344,12 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     if (!rect) return;
     applyResize(
       corner,
-      { width: rect.width, height: rect.height, left: rect.left, top: rect.top },
+      {
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+      },
       dx,
       dy,
     );
@@ -349,7 +357,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
 
   /** Read the live map camera, rounded for compact display. */
   const captureView = () => {
-    const view = mapControllerRef.current?.readView();
+    const view = mapControllerRef.current?.camera.readView();
     if (!view) return null;
     return {
       center: [round(view.center[0], 6), round(view.center[1], 6)] as [number, number],
@@ -449,12 +457,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   };
 
   const previewKeyframe = (kf: TourKeyframe) =>
-    mapControllerRef.current?.flyTo({
-      center: kf.center,
-      zoom: kf.zoom,
-      pitch: kf.pitch,
-      bearing: kf.bearing,
-    });
+    mapControllerRef.current?.camera.applyView(kf, { mode: "fly" });
 
   const handleRecord = async () => {
     const map = mapControllerRef.current?.getMap();
@@ -1193,9 +1196,9 @@ function KeyframeRow({
   const { t } = useTranslation();
   const isFirst = index === 0;
   // Full camera, shown as a hover tooltip so the visible row stays uncluttered.
-  const coords = `${keyframe.center[1].toFixed(4)}, ${keyframe.center[0].toFixed(
+  const coords = `${keyframe.center[1].toFixed(
     4,
-  )} · z${keyframe.zoom.toFixed(1)}`;
+  )}, ${keyframe.center[0].toFixed(4)} · z${keyframe.zoom.toFixed(1)}`;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-input p-2 text-xs">

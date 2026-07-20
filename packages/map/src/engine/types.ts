@@ -3,6 +3,7 @@ import type {
   MapPreferences,
   MapProjection,
   MapViewState,
+  StoryChapterAnimation,
   StoryChapterLocation,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -59,8 +60,14 @@ export interface MapEngineEventMap {
   };
   readonly click: { readonly point: ScreenPoint; readonly lngLat: LngLat };
   readonly dblclick: { readonly point: ScreenPoint; readonly lngLat: LngLat };
-  readonly contextmenu: { readonly point: ScreenPoint; readonly lngLat: LngLat };
-  readonly pointermove: { readonly point: ScreenPoint; readonly lngLat: LngLat };
+  readonly contextmenu: {
+    readonly point: ScreenPoint;
+    readonly lngLat: LngLat;
+  };
+  readonly pointermove: {
+    readonly point: ScreenPoint;
+    readonly lngLat: LngLat;
+  };
   readonly pointerleave: undefined;
   readonly dragstart: undefined;
   readonly resize: undefined;
@@ -83,7 +90,17 @@ export interface MapCameraPort {
   readView(): MapViewState;
   applyView(view: MapViewState, options?: MapCameraTransitionOptions): void;
   flyToLocation(location: StoryChapterLocation): void;
-  fitBounds(bounds: BBox, options?: { readonly padding?: number; readonly animate?: boolean }): void;
+  playStoryChapter(
+    location: StoryChapterLocation,
+    options: {
+      readonly animation: StoryChapterAnimation;
+      readonly rotate: boolean;
+    },
+  ): void;
+  fitBounds(
+    bounds: BBox,
+    options?: { readonly padding?: number; readonly animate?: boolean },
+  ): void;
   fitLayer(layer: GeoLibreLayer): void;
   zoomIn(): void;
   zoomOut(): void;
@@ -147,6 +164,7 @@ export type MapMarkerAnchor =
 export interface MapMarkerOptions {
   readonly id?: string;
   readonly lngLat: LngLat;
+  readonly color?: string;
   readonly element?: HTMLElement;
   readonly draggable?: boolean;
   readonly anchor?: MapMarkerAnchor;
@@ -230,10 +248,7 @@ export interface MapControlState {
 
 export interface MapControlPort {
   getBuiltInState(control: BuiltInMapControl): MapControlState;
-  setBuiltInState(
-    control: BuiltInMapControl,
-    state: Partial<MapControlState>,
-  ): boolean;
+  setBuiltInState(control: BuiltInMapControl, state: Partial<MapControlState>): boolean;
   setLabels(labels: Partial<Record<"compass" | "terrain" | "background", string>>): void;
   getTerrainExaggeration(): number;
   setTerrainExaggeration(value: number): void;

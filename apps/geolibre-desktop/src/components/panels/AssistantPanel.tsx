@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { Button, Select, Textarea, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -64,7 +64,10 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   { id: "openai", envs: ["OPENAI_API_KEY"] },
   { id: "ollama", envs: ["OLLAMA_BASE_URL"] },
   { id: "bedrock", envs: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] },
-  { id: "custom", envs: ["OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_MODEL"] },
+  {
+    id: "custom",
+    envs: ["OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_MODEL"],
+  },
 ];
 
 /** Read a persisted string setting, ignoring storage failures. */
@@ -100,7 +103,7 @@ interface Turn {
 }
 
 interface AssistantPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
 }
 
 /** Short human-readable summary of a finished tool call. */
@@ -164,7 +167,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   });
   const [model, setModel] = useState<string>(() => loadStored(MODEL_STORAGE_KEY) ?? "");
 
-  // Queue of model-generated code snippets (run_python / run_maplibre_js)
+  // Queue of model-generated Python snippets
   // awaiting the user's approval, each with the promise resolver its tool
   // callback is blocked on. A queue (not a single slot) so two tool calls
   // dispatched before the user responds to the first don't drop the first
@@ -175,7 +178,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // must not carry side effects). The state only mirrors the ref for rendering.
   type PendingCode = {
     id: number;
-    tool: "run_python" | "run_maplibre_js";
+    tool: "run_python";
     code: string;
     resolve: (approved: boolean) => void;
   };
@@ -682,34 +685,27 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       )}
 
       {codeQueue.length > 0 ? (
-        <CodeApprovalOverlay
-          key={codeQueue[0].id}
-          tool={codeQueue[0].tool}
-          code={codeQueue[0].code}
-          onDecide={decideCode}
-        />
+        <CodeApprovalOverlay key={codeQueue[0].id} code={codeQueue[0].code} onDecide={decideCode} />
       ) : null}
     </section>
   );
 }
 
 /**
- * Modal shown before the assistant runs a `run_python` / `run_maplibre_js`
+ * Modal shown before the assistant runs a `run_python`
  * snippet. Displays the code and requires an explicit decision, with an opt-in
  * to skip the prompt for the rest of the session.
  */
 function CodeApprovalOverlay({
-  tool,
   code,
   onDecide,
 }: {
-  tool: "run_python" | "run_maplibre_js";
   code: string;
   onDecide: (approved: boolean, alwaysAllow: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [alwaysAllow, setAlwaysAllow] = useState(false);
-  const language = tool === "run_python" ? "Python" : "JavaScript";
+  const language = "Python";
   // Move focus to the safe default (Decline) when the prompt opens so keyboard
   // users land inside the dialog, and let Escape dismiss it as a decline.
   const dialogRef = useRef<HTMLDivElement>(null);

@@ -186,3 +186,56 @@
   passed (two unrelated pre-existing hook warnings remain in `DesktopShell`).
 - Follow-up: migrate camera/view/control consumers to `MapEngineClient` and
   remove their corresponding boundary entries.
+
+## 2026-07-20 — Native camera/control calls → `MapEngineClient` ports
+
+- Source: MapLibre — `MapController` camera methods, native `moveend` and
+  pointer listeners, MapLibre markers used by place search, built-in control
+  setters, terrain exaggeration, story-camera tokens, and the assistant's
+  `run_maplibre_js` native-map escape hatch.
+- Files touched: `apps/geolibre-desktop/src/components/{layout,panels,processing,storymap}/**`
+  and `hooks/{useCollaboration,useCommandBridge,useEmbedBridge,useNotebookBridge,useProjectFileActions,useViewportHistory}.ts`
+  before → camera/control/event/marker operations through `MapEngineClient`;
+  `apps/geolibre-desktop/src/lib/{map-engine-camera.ts,build-project-snapshot.ts,selection-actions.ts,scripting/**,assistant/**,pyodide/**}`
+  before → engine-neutral helpers and scripting errors;
+  `packages/map/src/engine/{types,handle,maplibre-engine,cesium-engine}.ts`
+  before → story-camera and marker-color support; boundary fixture 196 → 178
+  entries; new `tests/map-engine-camera-consumers.test.ts`.
+- ArcGIS approach: future ArcGIS adapters implement camera movement with
+  `MapView.goTo`/`SceneView.goTo`, pointer and move events through the view event
+  API, graphics-backed markers, and ArcGIS widget/ground settings behind the
+  same engine-neutral ports. Application code depends only on those ports and
+  never receives an ArcGIS view or MapLibre map.
+- What changed: project snapshots and collaboration retain store authority but
+  read the live camera through `camera.readView`; collaboration presence uses
+  normalized engine events; history restores and story playback carry typed
+  tags; zoom/reset/fit/projection/terrain/control-label operations use the
+  camera and control ports; place search creates an engine marker; partial fly
+  operations preserve the remaining view fields; native assistant JavaScript
+  execution was deleted and old command callers receive an actionable
+  unsupported-command error.
+- Gap / limitation: consumers that also need source/style inspection, capture,
+  or transient interactions retain a temporary `MapController &
+  MapEngineClient` ref until the following capability slices migrate those
+  operations. Cesium applies story chapter views but does not reproduce
+  MapLibre's optional 30-second post-transition rotation.
+- Workaround: the primary adapter-private compatibility proxy satisfies the
+  temporary intersection while every migrated operation goes through a public
+  port. Removal criteria: layer-query, capture, interaction, and plugin-runtime
+  slices reach zero `MapController` consumers. The Cesium story limitation is
+  removed when the ArcGIS `SceneView` adapter implements the neutral story
+  camera sequence.
+- Tradeoff accepted: the history implementation now classifies scripted moves
+  by explicit string tags instead of counters/native event fields, and mixed
+  consumers carry a temporary intersection type; this adds short-lived typing
+  churn but makes event provenance portable and prevents native objects from
+  entering new code.
+- Status: partial.
+- Verification: `npm run build -w geolibre-desktop` → passed;
+  `node --import tsx --test tests/map-engine-camera-consumers.test.ts
+  tests/engine-boundary.test.ts tests/maplibre-engine.test.ts
+  tests/cesium-engine.test.ts tests/map-engine-handle.test.ts
+  tests/core-project.test.ts tests/collab-protocol.test.ts` → 82 passed;
+  `git diff --check` → passed.
+- Follow-up: migrate live layer/source/style queries and feature operations to
+  `MapEngineClient.layers`, then remove the corresponding intersection types.

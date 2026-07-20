@@ -6,12 +6,12 @@
  */
 
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { createContext, useContext, type RefObject } from "react";
 import type { MartinConnection } from "./useMartinConnection";
 
 export interface AddDataShellContextValue {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
   existingLayers: GeoLibreLayer[];
   isSubmitting: boolean;

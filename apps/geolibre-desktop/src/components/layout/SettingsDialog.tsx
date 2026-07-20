@@ -36,7 +36,7 @@ import {
   Select,
   cn,
 } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   Bot,
   Braces,
@@ -160,7 +160,7 @@ interface SettingsDialogProps {
   buttonClassName?: string;
   buttonSize?: "default" | "sm" | "lg" | "icon" | null;
   iconClassName?: string;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngineClient | null>;
   showLabels?: boolean;
   onOpenManagePlugins: () => void;
   /** Toggleable plugins for the Interface (UI profile) section (issue #500). */
@@ -565,7 +565,7 @@ export function SettingsDialog({
     setAiProvider(availableProviders(seededEnv)[0] ?? "google");
     setRevealedValueIds(new Set());
     setError(null);
-    setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
+    setLiveProjection(mapControllerRef.current?.camera.readProjection() ?? null);
   }, [open, mapControllerRef]);
 
   // Let other panels deep-link into a specific Settings section (e.g. the AI
@@ -795,7 +795,7 @@ export function SettingsDialog({
   };
 
   const applyCurrentViewBounds = () => {
-    const bounds = mapControllerRef.current?.readView().bbox;
+    const bounds = mapControllerRef.current?.camera.readView().bbox;
     if (!bounds) {
       setError(t("settings.map.errorBoundsUnavailable"));
       return;
@@ -944,7 +944,10 @@ export function SettingsDialog({
   const updateCesiumIonToken = (value: string) => {
     // Draft-only until Save, like the share token above (a secret field should
     // not persist on every keystroke).
-    setDraftDesktopSettings((current) => ({ ...current, cesiumIonToken: value }));
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      cesiumIonToken: value,
+    }));
   };
 
   const updateUiProfile = (patch: Partial<UiProfileSettings>) => {
@@ -1285,7 +1288,9 @@ export function SettingsDialog({
                   <span
                     aria-hidden
                     className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
-                    style={{ backgroundColor: desktopSettings.theme.customColor }}
+                    style={{
+                      backgroundColor: desktopSettings.theme.customColor,
+                    }}
                   />
                   {t("settings.appearance.custom")}
                 </DropdownMenuRadioItem>

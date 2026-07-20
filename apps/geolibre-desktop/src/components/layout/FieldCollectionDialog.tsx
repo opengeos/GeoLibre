@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   getAttributeFormField,
   isAttributeFormFieldVisible,
@@ -65,7 +65,7 @@ import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 interface FieldCollectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<(MapController & MapEngineClient) | null>;
 }
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
@@ -112,7 +112,11 @@ function syncDrawPreview(map: maplibregl.Map, geometry: GeometryType, verts: Ver
     type: "line",
     source: DRAW_SOURCE,
     filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": DRAW_COLOR, "line-width": 2, "line-dasharray": [2, 1] },
+    paint: {
+      "line-color": DRAW_COLOR,
+      "line-width": 2,
+      "line-dasharray": [2, 1],
+    },
   });
   map.addLayer({
     id: `${DRAW_SOURCE}-pt`,
@@ -281,12 +285,15 @@ export function FieldCollectionDialog({
 
   const recenter = useCallback(
     (lng: number, lat: number) => {
-      mapControllerRef.current?.flyTo({
-        center: [lng, lat],
-        zoom: Math.max(getMap()?.getZoom() ?? 0, 15),
-      });
+      const client = mapControllerRef.current;
+      if (!client) return;
+      const current = client.camera.readView();
+      client.camera.applyView(
+        { ...current, center: [lng, lat], zoom: Math.max(current.zoom, 15) },
+        { mode: "fly" },
+      );
     },
-    [mapControllerRef, getMap],
+    [mapControllerRef],
   );
 
   // ---- Point capture (single coordinate) -------------------------------------
@@ -553,7 +560,9 @@ export function FieldCollectionDialog({
     );
     const name = layerName.trim() || t("fieldCollection.layerNamePlaceholder");
     const id = addGeoJsonLayer(name, emptyFeatureCollection());
-    updateLayer(id, { metadata: collectionMetadata(collectionSchema, geometry) });
+    updateLayer(id, {
+      metadata: collectionMetadata(collectionSchema, geometry),
+    });
     setLayerId(id);
     setNotice(null);
   }, [drafts, layerName, geometry, addGeoJsonLayer, updateLayer, t]);

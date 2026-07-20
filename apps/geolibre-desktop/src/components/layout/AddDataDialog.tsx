@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { Database } from "lucide-react";
 import { useCallback, useMemo, useState, type RefObject } from "react";
@@ -30,7 +30,7 @@ export type { AddDataKind } from "./add-data/types";
 
 interface AddDataDialogProps {
   kind: AddDataKind | null;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   onOpenChange: (open: boolean) => void;
   /**
    * Deck.gl Layer kind to pre-select when the dialog opens as `deckgl-viz`

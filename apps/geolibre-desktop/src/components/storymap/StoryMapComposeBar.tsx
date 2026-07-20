@@ -1,12 +1,12 @@
 import { type RefObject, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { Button } from "@geolibre/ui";
 import { Check, Frame, X } from "lucide-react";
 
 interface StoryMapComposeBarProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
 }
 
 /**
@@ -40,7 +40,7 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
 
   const handleSave = useCallback(() => {
     if (!composingId) return;
-    const view = mapControllerRef.current?.readView();
+    const view = mapControllerRef.current?.camera.readView();
     // The controller is always initialized while the bar is visible, so this is
     // an unreachable guard; surface it in dev rather than silently no-op if the
     // invariant ever breaks (the bar stays open so the user can retry).

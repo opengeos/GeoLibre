@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
@@ -30,7 +30,7 @@ const CONNECTION_ID_PREFIX = "connection:";
 const FOLDER_ID_PREFIX = "folder:";
 
 interface BrowserPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   /**
    * Open a recent project by path (shared with the toolbar's instance).
    * Resolves to an error message to show inline, or null on success.

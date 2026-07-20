@@ -200,9 +200,9 @@ export function GpxSource() {
       null,
     );
     if (combinedBounds) {
-      source.shell.mapControllerRef.current?.fitBounds(combinedBounds);
+      source.shell.mapControllerRef.current?.camera.fitBounds(combinedBounds);
     } else {
-      source.shell.mapControllerRef.current?.fitLayer(layers[0]);
+      source.shell.mapControllerRef.current?.camera.fitLayer(layers[0]);
     }
     source.shell.closeDialog();
   });

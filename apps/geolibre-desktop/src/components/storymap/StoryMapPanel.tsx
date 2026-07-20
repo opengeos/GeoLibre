@@ -18,7 +18,7 @@ import {
   type StoryMap,
   type StorySlideMode,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import {
   Button,
   ColorField,
@@ -60,7 +60,7 @@ import { buildStoryMapHtml } from "../../lib/storymap-export";
 import { StoryMapHandoutDialog } from "./StoryMapHandoutDialog";
 
 interface StoryMapPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
 }
 
 function createId(): string {
@@ -221,7 +221,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const hasStoryContent = storyMapHasContent(story);
 
   const handleAddChapter = useCallback(() => {
-    const view = mapControllerRef.current?.readView();
+    const view = mapControllerRef.current?.camera.readView();
     const chapter: StoryChapter = {
       id: createId(),
       title: t("storymap.defaultChapterTitle", {
@@ -250,7 +250,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     setStorymap(sample);
     setExpandedId(null);
     const first = sample.chapters[0];
-    if (first) mapControllerRef.current?.flyToView(first.location);
+    if (first) mapControllerRef.current?.camera.flyToLocation(first.location);
   }, [mapControllerRef, setStorymap]);
 
   const handleReset = useCallback(() => {
@@ -264,7 +264,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const handleCaptureView = useCallback(
     (id: string) => {
-      const view = mapControllerRef.current?.readView();
+      const view = mapControllerRef.current?.camera.readView();
       if (!view) return;
       updateChapter(id, {
         location: {
@@ -280,7 +280,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const handlePreview = useCallback(
     (chapter: StoryChapter) => {
-      mapControllerRef.current?.flyToView(chapter.location);
+      mapControllerRef.current?.camera.flyToLocation(chapter.location);
     },
     [mapControllerRef],
   );
@@ -291,7 +291,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
       // otherwise hides the map), fly to the chapter's saved view so composing
       // starts from where the slide currently sits, then enter compose mode.
       // The floating compose bar takes over from here to save or cancel.
-      mapControllerRef.current?.flyToView(chapter.location);
+      mapControllerRef.current?.camera.flyToLocation(chapter.location);
       setComposing(chapter.id);
       setOpen(false);
     },
@@ -1061,7 +1061,12 @@ function LayerEffectsEditor({
           onClick={() =>
             onChange([
               ...changes,
-              { id: createId(), layerId: layers[0].id, opacity: 1, duration: 1000 },
+              {
+                id: createId(),
+                layerId: layers[0].id,
+                opacity: 1,
+                duration: 1000,
+              },
             ])
           }
         >

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  GeoLibreLayer,
-  MapProjection,
-  MapViewState,
-} from "../packages/core/src/index";
+import type { GeoLibreLayer, MapProjection, MapViewState } from "../packages/core/src/index";
 import type {
   MapEngine,
   MapEngineCapability,
@@ -41,6 +37,7 @@ function createCompleteFake(): MapEngine {
         view = nextView;
       },
       flyToLocation: () => undefined,
+      playStoryChapter: () => undefined,
       fitBounds: () => undefined,
       fitLayer: () => undefined,
       zoomIn: () => undefined,

@@ -53,6 +53,7 @@ export function createTestMapEngine(
         view = nextView;
       },
       flyToLocation: () => operations.push("camera.flyToLocation"),
+      playStoryChapter: () => operations.push("camera.playStoryChapter"),
       fitBounds: () => operations.push("camera.fitBounds"),
       fitLayer: () => operations.push("camera.fitLayer"),
       zoomIn: () => operations.push("camera.zoomIn"),

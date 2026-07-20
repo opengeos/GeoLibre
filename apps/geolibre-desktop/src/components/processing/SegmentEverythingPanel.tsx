@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import {
   readRasterData,
   segmentEverything,
@@ -38,7 +38,7 @@ import {
 } from "../../lib/segment-models";
 
 interface SegmentEverythingPanelProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff"] }];
@@ -119,7 +119,10 @@ export function SegmentEverythingPanel({
   const [minSize, setMinSize] = useState(0.08); // percent of image area
   const [running, setRunning] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
 
@@ -248,7 +251,7 @@ export function SegmentEverythingPanel({
       const fc = await reprojectFeatureCollectionToWgs84(tagged);
       const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer) mapControllerRef.current?.camera.fitLayer(layer);
       setResultMessage(t("segmentEverything.added", { count: masks.length }));
     } catch (err) {
       if (controller.signal.aborted) return;

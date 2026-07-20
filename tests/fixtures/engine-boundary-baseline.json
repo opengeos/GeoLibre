@@ -16,10 +16,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/CollaborationStatusBadge.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx",
     "pattern": "@geolibre/map#MapController"
   },
@@ -96,18 +92,6 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/layout/SettingsDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/SetViewDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/layout/TerrainSettingsDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/layout/toolbar/constants.ts",
     "pattern": "@geolibre/map#MapController"
   },
@@ -140,14 +124,6 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/panels/LayerPanelPlaceSearch.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/panels/LayerPanelPlaceSearch.tsx",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/panels/NotebookPanel.tsx",
     "pattern": "@geolibre/map#MapController"
   },
@@ -176,19 +152,7 @@
     "pattern": "@geolibre/map#MapController"
   },
   {
-    "path": "apps/geolibre-desktop/src/components/processing/GeocodeDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/components/processing/ModelBuilderDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/processing/NetworkToolsDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/processing/ObjectDetectionDialog.tsx",
     "pattern": "@geolibre/map#MapController"
   },
   {
@@ -197,14 +161,6 @@
   },
   {
     "path": "apps/geolibre-desktop/src/components/processing/RasterToolsDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/processing/SegmentationDialog.tsx",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/components/processing/SegmentEverythingPanel.tsx",
     "pattern": "@geolibre/map#MapController"
   },
   {
@@ -240,24 +196,12 @@
     "pattern": "maplibre-gl"
   },
   {
-    "path": "apps/geolibre-desktop/src/hooks/useCollaboration.ts",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/hooks/useCollaboration.ts",
-    "pattern": "maplibre-gl"
-  },
-  {
     "path": "apps/geolibre-desktop/src/hooks/useCommandBridge.ts",
     "pattern": "@geolibre/map#MapController"
   },
   {
     "path": "apps/geolibre-desktop/src/hooks/useCommandBridge.ts",
     "pattern": "maplibre-gl"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/hooks/useEmbedBridge.ts",
-    "pattern": "@geolibre/map#MapController"
   },
   {
     "path": "apps/geolibre-desktop/src/hooks/useNotebookBridge.ts",
@@ -300,24 +244,12 @@
     "pattern": "maplibre-gl-raster"
   },
   {
-    "path": "apps/geolibre-desktop/src/hooks/useViewportHistory.ts",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
     "path": "apps/geolibre-desktop/src/lib/assistant/tools.ts",
     "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/lib/assistant/tools.ts",
-    "pattern": "maplibre-gl"
   },
   {
     "path": "apps/geolibre-desktop/src/lib/assistant/tools.ts",
     "pattern": "maplibre-gl-planetary-computer"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/lib/build-project-snapshot.ts",
-    "pattern": "@geolibre/map#MapController"
   },
   {
     "path": "apps/geolibre-desktop/src/lib/collada-to-glb.ts",
@@ -361,10 +293,6 @@
   },
   {
     "path": "apps/geolibre-desktop/src/lib/scripting/scriptingApi.ts",
-    "pattern": "@geolibre/map#MapController"
-  },
-  {
-    "path": "apps/geolibre-desktop/src/lib/selection-actions.ts",
     "pattern": "@geolibre/map#MapController"
   },
   {

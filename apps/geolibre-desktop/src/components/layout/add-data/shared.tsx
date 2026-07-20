@@ -30,7 +30,7 @@ export function useAddDataSource(defaultLayerName: string) {
 
   const addAndClose = (layer: GeoLibreLayer, options: { fit?: boolean } = {}) => {
     shell.addLayer(layer, beforeLayer);
-    if (options.fit) shell.mapControllerRef.current?.fitLayer(layer);
+    if (options.fit) shell.mapControllerRef.current?.camera.fitLayer(layer);
     shell.closeDialog();
   };
 

@@ -20,7 +20,7 @@
  */
 
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 // Type-only: erased at compile time, so importing it does not pull maplibre-gl
 // (which `xyz-url` imports at runtime) into the pure builder surface.
 import type { ArcGISLayerType, ArcGISSourceType } from "@geolibre/plugins";
@@ -326,7 +326,7 @@ export interface ApplyServiceDeps {
   /** Store action to add the built layer. */
   addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
   /** Map controller ref, used for the ArcGIS plugin path and to fit new layers. */
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   /** Insert-before layer id, or null/undefined for the top of the stack. */
   beforeLayerId?: string | null;
 }
@@ -444,7 +444,7 @@ export async function applyServiceEntry(
         srsName: request.srsName,
       });
       addLayer(layer, beforeLayerId);
-      mapControllerRef.current?.fitLayer(layer);
+      mapControllerRef.current?.camera.fitLayer(layer);
       return;
     }
     default: {

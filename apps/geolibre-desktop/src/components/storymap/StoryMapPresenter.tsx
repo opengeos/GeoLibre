@@ -17,7 +17,7 @@ import {
   type StoryChapter,
   type StoryMap,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { Button, cn } from "@geolibre/ui";
 import { GripVertical, List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
@@ -30,12 +30,17 @@ import {
 } from "../../lib/storymap-constants";
 
 interface StoryMapPresenterProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
 }
 
 /** One scroll step in the presentation: a chapter card or an intro/outro slide. */
 type PresenterStep =
-  | { key: string; kind: "chapter"; chapter: StoryChapter; chapterIndex: number }
+  | {
+      key: string;
+      kind: "chapter";
+      chapter: StoryChapter;
+      chapterIndex: number;
+    }
   | {
       key: string;
       kind: "slide";
@@ -366,11 +371,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
       // Drive the camera through the controller (which handles the optional
       // rotation) rather than mutating the MapLibre instance directly.
-      controller.applyStoryChapterCamera(
-        chapter.location,
-        chapter.mapAnimation || "flyTo",
-        chapter.rotateAnimation,
-      );
+      controller.camera.playStoryChapter(chapter.location, {
+        animation: chapter.mapAnimation || "flyTo",
+        rotate: chapter.rotateAnimation,
+      });
       // Re-show the marker in case it was hidden by a preceding global slide.
       setMarkersVisible(true);
       moveCameraTo(chapter.location);
@@ -411,7 +415,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
           : step.position === "start"
             ? (chapters[0]?.location ?? STORY_GLOBAL_VIEW)
             : (chapters[chapters.length - 1]?.location ?? STORY_GLOBAL_VIEW);
-      controller.applyStoryChapterCamera(location, "flyTo", false);
+      controller.camera.playStoryChapter(location, {
+        animation: "flyTo",
+        rotate: false,
+      });
       // The global overview shows no marker; the adjacent preview keeps the
       // chapter's marker and moves it to that chapter.
       if (step.mode === "global") {
@@ -687,7 +694,11 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
             className={`glsm-footer ${themeClass}`}
             style={slideActive ? { visibility: "hidden" } : undefined}
           >
-            <p dangerouslySetInnerHTML={{ __html: sanitizeStoryHtml(storymap.footer) }} />
+            <p
+              dangerouslySetInnerHTML={{
+                __html: sanitizeStoryHtml(storymap.footer),
+              }}
+            />
           </div>
         ) : null}
       </div>

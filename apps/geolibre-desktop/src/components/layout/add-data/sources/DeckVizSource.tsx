@@ -194,7 +194,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       }
       parsed = {
         format: "csv-rows",
-        columns: Object.keys(rows[0]).map((key) => ({ value: key, label: key })),
+        columns: Object.keys(rows[0]).map((key) => ({
+          value: key,
+          label: key,
+        })),
         rows,
         rowCount: rows.length,
       };
@@ -242,9 +245,9 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     // GeoJSON fits from its geometry; row-based layers fit from the stored
     // bounds (also used by the layer panel's "Zoom to layer").
     if (def.format === "geojson") {
-      source.shell.mapControllerRef.current?.fitLayer(layer);
+      source.shell.mapControllerRef.current?.camera.fitLayer(layer);
     } else if (bounds) {
-      source.shell.mapControllerRef.current?.fitBounds(bounds);
+      source.shell.mapControllerRef.current?.camera.fitBounds(bounds);
     }
     if (closeAfterDeckVizAdd) {
       source.shell.closeDialog();

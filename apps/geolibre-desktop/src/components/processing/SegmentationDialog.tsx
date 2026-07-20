@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import { fetchMlStatus, mlSegment, type MlSegmentMode, type MlStatus } from "@geolibre/processing";
 import {
   Button,
@@ -32,7 +32,7 @@ import { UPDATE_URL } from "../../lib/updates";
 import { SidecarHelpBanner, SIDECAR_PORT, SIDECAR_URL } from "./SidecarHelpBanner";
 
 interface SegmentationDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff", "png", "jpg", "jpeg"] }];
@@ -183,7 +183,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
           : t("segmentation.layerNameDefault");
       const layerId = addGeoJsonLayer(name, fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer) mapControllerRef.current?.camera.fitLayer(layer);
       setResultMessage(t("segmentation.added", { count: features.length, name }));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("segmentation.error.failed"));

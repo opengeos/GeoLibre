@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useNotebookBridge } from "../../hooks/useNotebookBridge";
 import { useNotebookThemeSync } from "../../hooks/useNotebookThemeSync";
@@ -35,7 +35,7 @@ async function resolveNotebookUrl(): Promise<string> {
 
 interface NotebookPanelProps {
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>;
   themeMode: ThemeMode;
 }
 

@@ -46,3 +46,8 @@ Status values: not started · in progress · partial · blocked · done
   ids. The boundary ratchet is down to 196 reviewed violations; the primary
   controller compatibility bridge remains package-private pending consumer
   migration.
+- Implemented: camera, viewport-history, collaboration-presence, project
+  snapshot, story-camera, built-in-control, terrain, place-search, scripting,
+  and assistant consumers now use engine ports. Tagged engine events replace
+  native move payloads, `run_maplibre_js` is removed, and the boundary ratchet
+  is down to 178 reviewed violations.

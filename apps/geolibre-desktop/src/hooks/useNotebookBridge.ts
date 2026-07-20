@@ -1,8 +1,9 @@
 import { useAppStore } from "@geolibre/core";
 import type maplibregl from "maplibre-gl";
 import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
+import { unsupportedScriptingCommandMessage } from "../lib/scripting/errors";
 
 // The host side of the notebook scripting bridge. This is the MIRROR of
 // useCommandBridge: there, the app is the embedded iframe talking up to a host;
@@ -40,7 +41,7 @@ interface CommandMessage {
  */
 export function useNotebookBridge(
   iframeRef: RefObject<HTMLIFrameElement | null>,
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<(MapController & MapEngineClient) | null>,
 ): void {
   useEffect(() => {
     const controller = () => mapControllerRef.current;
@@ -81,7 +82,7 @@ export function useNotebookBridge(
         : undefined;
       if (!handler) {
         reply(message.requestId, false, {
-          error: `Unknown command "${message.method}"`,
+          error: unsupportedScriptingCommandMessage(message.method),
         });
         return;
       }

@@ -2,7 +2,7 @@ import {
   DEFAULT_TERRAIN_EXAGGERATION,
   TERRAIN_SETTINGS_CLOSE_EVENT,
   TERRAIN_SETTINGS_EVENT,
-  type MapController,
+  type MapEngineClient,
 } from "@geolibre/map";
 import {
   Button,
@@ -28,7 +28,7 @@ import {
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
 
 export interface TerrainSettingsDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 /**
@@ -57,7 +57,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       // too (not just via the exaggeration effect) so reopening after an
       // uncommitted/invalid draft was abandoned via Escape shows the real value.
       const value = clampExaggeration(
-        mapControllerRef.current?.getTerrainExaggeration() ?? DEFAULT_EXAGGERATION,
+        mapControllerRef.current?.controls.getTerrainExaggeration() ?? DEFAULT_EXAGGERATION,
       );
       setExaggeration(value);
       setDraft(String(value));
@@ -95,7 +95,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
         frameRef.current = null;
         const next = pendingRef.current;
         pendingRef.current = null;
-        if (next !== null) mapControllerRef.current?.setTerrainExaggeration(next);
+        if (next !== null) mapControllerRef.current?.controls.setTerrainExaggeration(next);
       });
     }
   };

@@ -568,11 +568,12 @@ export function DesktopShell({
   // mid-drag still detaches the global listeners and restores document.body.
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
-  // Transitional alias: existing consumers infer their legacy controller ref
-  // from the project hook while the public ref is already MapEngineClient.
-  // The adapter supplies compatibility methods until the consumer slices land.
-  const mapControllerRef = useRef(null) as Parameters<typeof useProjectFileActions>[0];
-  const mapEngineRef = mapControllerRef as unknown as MutableRefObject<MapEngineClient | null>;
+  // Transitional intersection: migrated consumers see MapEngineClient while
+  // the remaining slices can still consume the adapter-private compatibility
+  // methods. The MapController half disappears when those slices land.
+  type LegacyController = NonNullable<Parameters<typeof useProjectFileActions>[0]["current"]>;
+  const mapControllerRef = useRef<(LegacyController & MapEngineClient) | null>(null);
+  const mapEngineRef: MutableRefObject<MapEngineClient | null> = mapControllerRef;
   const [primaryEngineId] = useState(() => resolvePrimaryEngineId(window.location.search));
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
   // `pendingKnowledgePlace` holds the target while the one-time consent notice
@@ -599,10 +600,17 @@ export function DesktopShell({
   // Stable identity (mapControllerRef is a ref) so the card's openNearby
   // useCallback, which depends on this, keeps its memoization across renders.
   const handleKnowledgeFlyTo = useCallback((lat: number, lon: number) => {
-    mapControllerRef.current?.flyTo({
-      center: [lon, lat],
-      zoom: Math.max(mapControllerRef.current?.getMap()?.getZoom() ?? 12, 14),
-    });
+    const client = mapEngineRef.current;
+    if (!client) return;
+    const view = client.camera.readView();
+    client.camera.applyView(
+      {
+        ...view,
+        center: [lon, lat],
+        zoom: Math.max(view.zoom, 14),
+      },
+      { mode: "fly" },
+    );
   }, []);
   // The COG/WMS/XYZ layer whose bounding-box subset is being extracted in the
   // floating Extract Subset panel, or null when that panel is closed.
@@ -910,7 +918,7 @@ export function DesktopShell({
         }
         const id = addGeoJsonLayer(`${layer.name} (editable)`, result.geojson);
         const created = useAppStore.getState().layers.find((candidate) => candidate.id === id);
-        if (created) mapControllerRef.current?.fitLayer(created);
+        if (created) mapEngineRef.current?.camera.fitLayer(created);
         setDropMessage(`Materialized ${result.geojson.features.length.toLocaleString()} features.`);
       } catch (error) {
         setDropMessage(null);
@@ -995,7 +1003,9 @@ export function DesktopShell({
         const cog = await convertGeoTiffToCog(bytes);
         // The cast is required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
         // which is not directly assignable to BlobPart's ArrayBufferView.
-        const file = new File([cog as BlobPart], name, { type: "image/tiff" });
+        const file = new File([cog as BlobPart], name, {
+          type: "image/tiff",
+        });
         await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
         // Drop the failed layer only after the replacement is fully loaded, so
         // any failure above (conversion or re-add) leaves the original errored
@@ -1093,20 +1103,26 @@ export function DesktopShell({
   // language change (t identity changes), since that native control lives
   // outside React.
   useEffect(() => {
-    mapControllerRef.current?.setCompassLabel(t("toolbar.item.resetPitchBearing"));
+    mapEngineRef.current?.controls.setLabels({
+      compass: t("toolbar.item.resetPitchBearing"),
+    });
   }, [t, mapReadyGeneration]);
 
   // Keep the on-map terrain control's tooltip translated (it lives outside
   // React). Re-runs on controller (re)init and language change.
   useEffect(() => {
-    mapControllerRef.current?.setTerrainLabel(t("terrainSettings.controlLabel"));
+    mapEngineRef.current?.controls.setLabels({
+      terrain: t("terrainSettings.controlLabel"),
+    });
   }, [t, mapReadyGeneration]);
 
   // Keep the Layer Swipe panel's grouped base-layer label translated. That
   // panel lives outside React and reads labels from the controller bridge, so
   // re-push on language change (t identity) and controller (re)init.
   useEffect(() => {
-    mapControllerRef.current?.setBackgroundLabel(t("layers.background"));
+    mapEngineRef.current?.controls.setLabels({
+      background: t("layers.background"),
+    });
   }, [t, mapReadyGeneration]);
 
   const handleMapDiagnosticEvent = useCallback((event: MapDiagnosticEvent) => {
@@ -1197,12 +1213,12 @@ export function DesktopShell({
             requestAnimationFrame(() => {
               window.setTimeout(() => {
                 const current = useAppStore.getState().layers.find((layer) => layer.id === layerId);
-                if (current) mapControllerRef.current?.fitLayer(current);
+                if (current) mapEngineRef.current?.camera.fitLayer(current);
               }, 50);
             });
           });
         } else {
-          mapControllerRef.current?.fitLayer(importedLayer);
+          mapEngineRef.current?.camera.fitLayer(importedLayer);
         }
       }
     },
@@ -1222,7 +1238,7 @@ export function DesktopShell({
       if (!result || result.located === 0) return 0;
       const layerId = addGeoJsonLayer(t("addData.photos.defaultName"), result.featureCollection);
       const layer = useAppStore.getState().layers.find((existing) => existing.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer) mapEngineRef.current?.camera.fitLayer(layer);
       // Report skipped (no-GPS) photos too, mirroring the Add Data dialog's
       // summary, so a partially-skipped drop isn't silent.
       const summary = t("addData.photos.addedSummary", {
@@ -1398,7 +1414,7 @@ export function DesktopShell({
                     layers,
                   );
                   if (added > 0 && layers.bounds) {
-                    mapControllerRef.current?.fitBounds(layers.bounds);
+                    mapEngineRef.current?.camera.fitBounds(layers.bounds);
                   }
                   setDropMessage(
                     added > 0
@@ -1412,7 +1428,9 @@ export function DesktopShell({
                   setDropError(
                     err instanceof OsmPbfTooLargeError
                       ? t("toolbar.error.osmPbfTooLarge")
-                      : `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
+                      : `Could not parse ${name}: ${
+                          err instanceof Error ? err.message : String(err)
+                        }`,
                   );
                 }
               }
@@ -1535,7 +1553,9 @@ export function DesktopShell({
             setDropError(
               err instanceof OsmPbfTooLargeError
                 ? t("toolbar.error.osmPbfTooLarge")
-                : `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+                : `Could not parse ${file.name}: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`,
             );
             continue;
           }
@@ -1546,7 +1566,7 @@ export function DesktopShell({
             layers,
           );
           if (added > 0 && layers.bounds) {
-            mapControllerRef.current?.fitBounds(layers.bounds);
+            mapEngineRef.current?.camera.fitBounds(layers.bounds);
           }
           setDropMessage(
             added > 0
@@ -2193,7 +2213,9 @@ export function DesktopShell({
             const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
               type: "image/tiff",
             });
-            await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+            await addRasterToMap(createAppAPI(mapControllerRef), file, {
+              name,
+            });
           }}
         />
       </Suspense>

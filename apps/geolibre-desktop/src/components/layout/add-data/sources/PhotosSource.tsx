@@ -63,7 +63,7 @@ export function PhotosSource() {
       // A single photo with no GPS pivots to manual placement instead of a hard
       // stop; multiple no-GPS photos still report the original error.
       if (selectedFiles.length === 1) {
-        const center = source.shell.mapControllerRef.current?.readView().center ?? null;
+        const center = source.shell.mapControllerRef.current?.camera.readView().center ?? null;
         if (center) {
           setManualCenter([center[0], center[1]]);
           return;
@@ -88,7 +88,7 @@ export function PhotosSource() {
       geojson: result.featureCollection,
     };
     source.shell.addLayer(layer, source.beforeLayer);
-    source.shell.mapControllerRef.current?.fitLayer(layer);
+    source.shell.mapControllerRef.current?.camera.fitLayer(layer);
     // Keep the dialog open on a summary panel so the skipped/no-thumbnail
     // counts are reported clearly before the user dismisses it.
     setSummary(result);

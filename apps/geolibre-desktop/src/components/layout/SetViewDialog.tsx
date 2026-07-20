@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngineClient } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
 import { ChevronDown, ClipboardPaste, Info } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -31,7 +31,7 @@ import {
 interface SetViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngineClient | null>;
 }
 
 /**
@@ -90,7 +90,7 @@ function round(value: number, digits: number): string {
  * latitude (as decimal degrees, degrees/minutes/seconds, or degrees/decimal-
  * minutes), zoom, pitch, and bearing — the editable counterpart to the View
  * State readout. Prefilled with the live camera each time it opens; submitting
- * animates the map there via the controller's `flyTo`.
+ * animates the map there through the engine camera port.
  */
 export function SetViewDialog({ open, onOpenChange, mapControllerRef }: SetViewDialogProps) {
   const { t } = useTranslation();
@@ -137,7 +137,7 @@ export function SetViewDialog({ open, onOpenChange, mapControllerRef }: SetViewD
   // dialog opens, so switching DD/DMS/DDM shows the same point either way.
   useEffect(() => {
     if (!open) return;
-    const view = mapControllerRef.current?.readView();
+    const view = mapControllerRef.current?.camera.readView();
     if (!view) return;
     const [longitude, latitude] = view.center;
     setFields({
@@ -307,12 +307,10 @@ export function SetViewDialog({ open, onOpenChange, mapControllerRef }: SetViewD
     }
 
     // MapLibre clamps zoom/pitch to the map's configured limits.
-    mapControllerRef.current?.flyTo({
-      center: [longitude, latitude],
-      zoom,
-      pitch,
-      bearing,
-    });
+    mapControllerRef.current?.camera.applyView(
+      { center: [longitude, latitude], zoom, pitch, bearing },
+      { mode: "fly" },
+    );
     onOpenChange(false);
   };
 

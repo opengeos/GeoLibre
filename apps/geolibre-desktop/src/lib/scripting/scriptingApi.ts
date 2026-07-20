@@ -9,9 +9,10 @@ import {
 } from "@geolibre/processing";
 import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapEngineClient } from "@geolibre/map";
 import { beginProcessingRun } from "../processing-history";
 import { captureMapImage } from "../print-layout-export";
+import { flyToCamera } from "../map-engine-camera";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -26,7 +27,7 @@ export type ScriptingHandlers = Record<string, ScriptingHandler>;
 
 export interface ScriptingDeps {
   /** Lazily resolve the live map controller (it is created asynchronously). */
-  getController: () => MapController | null;
+  getController: () => (MapController & MapEngineClient) | null;
 }
 
 /**
@@ -59,15 +60,21 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
 
   return {
     // -- view / camera ------------------------------------------------------
-    getView: () => getController()?.readView() ?? null,
-    getCenter: () => getController()?.readView().center ?? null,
-    getBounds: () => getController()?.readView().bbox ?? null,
+    getView: () => getController()?.camera.readView() ?? null,
+    getCenter: () => getController()?.camera.readView().center ?? null,
+    getBounds: () => getController()?.camera.readView().bbox ?? null,
     flyTo: (params) => {
-      getController()?.flyTo(params as Parameters<MapController["flyTo"]>[0]);
+      flyToCamera(getController(), {
+        ...(Array.isArray(params.center) ? { center: params.center as [number, number] } : {}),
+        ...(typeof params.zoom === "number" ? { zoom: params.zoom } : {}),
+        ...(typeof params.bearing === "number" ? { bearing: params.bearing } : {}),
+        ...(typeof params.pitch === "number" ? { pitch: params.pitch } : {}),
+        ...(typeof params.duration === "number" ? { durationMs: params.duration } : {}),
+      });
       return null;
     },
     fitBounds: (params) => {
-      getController()?.fitBounds(params.bounds as [number, number, number, number]);
+      getController()?.camera.fitBounds(params.bounds as [number, number, number, number]);
       return null;
     },
     setView: (params) => {
@@ -81,7 +88,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     identify: (params) => {
       const lngLat = params.lngLat as [number, number];
       const layerId = typeof params.layerId === "string" ? params.layerId : undefined;
-      return getController()?.identifyFeatures(lngLat, layerId) ?? [];
+      return getController()?.layers.queryAtLngLat(lngLat, layerId) ?? [];
     },
     getLayerFeatures: (params) => {
       const layerId = requireLayerId(params);
@@ -169,7 +176,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const layerId = requireLayerId(params);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
-      getController()?.fitLayer(layer);
+      getController()?.camera.fitLayer(layer);
       return null;
     },
 
@@ -217,7 +224,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             }
             logs.push(message);
           },
-          fitBounds: (bounds) => getController()?.fitBounds(bounds),
+          fitBounds: (bounds) => getController()?.camera.fitBounds(bounds),
           addResultLayer: (name: string, fc: FeatureCollection) => {
             if (!fc.features.length) {
               logs.push(`No features produced for "${name}"`);
@@ -227,14 +234,11 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             tracker.addOutputLayer(name);
             resultLayerIds.push(layerId);
             const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-            if (layer) getController()?.fitLayer(layer);
+            if (layer) getController()?.camera.fitLayer(layer);
           },
           duckdb: createDuckDbCapability(),
           viewportBounds: () => {
-            const map = getController()?.getMap();
-            if (!map) return null;
-            const b = map.getBounds();
-            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            return getController()?.camera.readView().bbox ?? null;
           },
         };
         await algo.run(ctx);

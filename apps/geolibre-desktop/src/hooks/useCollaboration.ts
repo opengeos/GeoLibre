@@ -9,8 +9,7 @@ import {
 } from "@geolibre/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
-import type { MapController } from "@geolibre/map";
-import type { Map as MapLibreMap } from "maplibre-gl";
+import type { MapEngineClient } from "@geolibre/map";
 import i18n from "../i18n";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
 import {
@@ -64,7 +63,7 @@ export interface CollaborationApi {
  * @returns The session control API consumed by the Collaborate dialog.
  */
 export function useCollaboration(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngineClient | null>,
 ): CollaborationApi {
   const baseUrl = useMemo(() => resolveCollabBaseUrl(), []);
   const enabled = baseUrl !== null;
@@ -153,15 +152,16 @@ export function useCollaboration(
     // Keep each participant's own camera: replace the incoming view with the
     // local one before applying, so a peer's edit never yanks our viewport.
     // Where others are looking is conveyed by presence viewport rectangles.
-    const localView = mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
+    const localView = mapControllerRef.current?.camera.readView() ?? useAppStore.getState().mapView;
     const merged: GeoLibreProject = { ...project, mapView: localView };
     if (initial) {
       // First bootstrap (the welcome snapshot): a one-time full loadProject is
       // fine and runs the plugin/native-layer restoration so the joiner sees
       // the host's existing 3D-tiles/deck/raster layers.
-      useAppStore
-        .getState()
-        .loadProject(merged, null, { rememberRecent: false, presenting: false });
+      useAppStore.getState().loadProject(merged, null, {
+        rememberRecent: false,
+        presenting: false,
+      });
     } else {
       // Incremental remote edit: apply the project slice immediately so
       // MapLibre-native layers (geojson, vector/raster tiles, …) reconcile via
@@ -245,7 +245,7 @@ export function useCollaboration(
         store.updateCollaborationPresence(message.clientId, presence);
         // Follow mode: mirror the host's camera onto the local map.
         if (collab.followHost && participant?.role === "host" && message.view) {
-          mapControllerRef.current?.applyView(message.view);
+          mapControllerRef.current?.camera.applyView(message.view);
         }
         break;
       }
@@ -298,8 +298,8 @@ export function useCollaboration(
       if (projectChanged(state, prev)) scheduleSnapshot();
     });
 
-    const map = mapControllerRef.current?.getMap() ?? null;
-    const detachMap = map ? bindPresence(map, conn) : () => {};
+    const client = mapControllerRef.current;
+    const detachMap = client ? bindPresence(client, conn) : () => {};
 
     // Send join once the socket is open (attach runs from onOpen).
     conn.send({
@@ -317,32 +317,32 @@ export function useCollaboration(
     };
   };
 
-  const bindPresence = (map: MapLibreMap, conn: CollabConnection): (() => void) => {
+  const bindPresence = (client: MapEngineClient, conn: CollabConnection): (() => void) => {
     let lastCursor = 0;
-    const onMouseMove = (e: { lngLat: { lng: number; lat: number } }) => {
+    const onPointerMove = ({ lngLat }: { lngLat: readonly [number, number] }) => {
       const now = Date.now();
       if (now - lastCursor < CURSOR_THROTTLE_MS) return;
       lastCursor = now;
       conn.send({
         type: "presence",
-        cursor: { lng: e.lngLat.lng, lat: e.lngLat.lat },
+        cursor: { lng: lngLat[0], lat: lngLat[1] },
       });
     };
     const onMouseOut = () => conn.send({ type: "presence", cursor: null });
     const onMoveEnd = () =>
       conn.send({
         type: "presence",
-        view: mapControllerRef.current?.readView() ?? null,
+        view: mapControllerRef.current?.camera.readView() ?? null,
       });
-    map.on("mousemove", onMouseMove);
-    map.on("mouseout", onMouseOut);
-    map.on("moveend", onMoveEnd);
+    const unsubscribes = [
+      client.on("pointermove", onPointerMove),
+      client.on("pointerleave", onMouseOut),
+      client.on("moveend", onMoveEnd),
+    ];
     // Announce our initial viewport immediately.
     onMoveEnd();
     return () => {
-      map.off("mousemove", onMouseMove);
-      map.off("mouseout", onMouseOut);
-      map.off("moveend", onMoveEnd);
+      for (const unsubscribe of unsubscribes) unsubscribe();
     };
   };
 
@@ -472,7 +472,7 @@ export function useCollaboration(
     // effect now rather than only on the host's next move.
     const host = store.collaboration.participants.find((p) => p.role === "host");
     const view = host ? store.collaboration.presence[host.clientId]?.view : null;
-    if (view) mapControllerRef.current?.applyView(view);
+    if (view) mapControllerRef.current?.camera.applyView(view);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
