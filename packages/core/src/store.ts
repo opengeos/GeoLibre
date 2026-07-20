@@ -101,6 +101,7 @@ export type VectorToolKind =
   | "attribute-join"
   | "select-by-value"
   | "select-by-location"
+  | "random-extract"
   | "reproject"
   | "explode"
   | "aggregate"

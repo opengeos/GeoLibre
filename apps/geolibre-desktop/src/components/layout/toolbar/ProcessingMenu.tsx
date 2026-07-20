@@ -290,6 +290,9 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("select-by-location")}>
                       {t("toolbar.vectorTool.selectByLocation")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("random-extract")}>
+                      {t("toolbar.vectorTool.randomExtract")}
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupH3")}

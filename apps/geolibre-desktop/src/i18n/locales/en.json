@@ -1937,6 +1937,7 @@
       "attributeJoin": "Attribute join",
       "selectByValue": "Select by value",
       "selectByLocation": "Select by location",
+      "randomExtract": "Random extract",
       "reproject": "Reproject",
       "explode": "Explode",
       "aggregate": "Aggregate by attribute",

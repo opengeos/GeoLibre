@@ -492,6 +492,59 @@ describe("processing registry", () => {
     assert.equal(runHex({ operator: "eq", value: "0x10" }), 1);
   });
 
+  it("extracts a random subset of features", () => {
+    const tool = getVectorTool("random-extract");
+    assert.ok(tool);
+    // 10 features with distinct, ordered ids so we can check membership + order.
+    const many: GeoLibreLayer = {
+      ...layer,
+      id: "many",
+      name: "Many",
+      geojson: {
+        type: "FeatureCollection",
+        features: Array.from({ length: 10 }, (_, i) => ({
+          type: "Feature" as const,
+          properties: { idx: i },
+          geometry: { type: "Point" as const, coordinates: [i, 0] },
+        })),
+      },
+    };
+    const run = (parameters: Record<string, unknown>): FeatureCollection => {
+      let out: FeatureCollection = { type: "FeatureCollection", features: [] };
+      tool.run({
+        layers: [many],
+        parameters: { layer: "many", ...parameters },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          out = g;
+        },
+      });
+      return out;
+    };
+
+    // By count: exactly N features, all drawn from the input, no duplicates,
+    // and the input's feature order is preserved in the output.
+    const byCount = run({ method: "count", count: 3 });
+    assert.equal(byCount.features.length, 3);
+    const idxs = byCount.features.map((f) => f.properties?.idx as number);
+    assert.ok(idxs.every((i) => i >= 0 && i < 10));
+    assert.equal(new Set(idxs).size, 3);
+    assert.deepEqual(
+      idxs,
+      [...idxs].sort((a, b) => a - b),
+    );
+
+    // By percentage: 40% of 10 → 4 features.
+    assert.equal(run({ method: "percentage", percentage: 40 }).features.length, 4);
+    // 0% (and a count of 0) select nothing.
+    assert.equal(run({ method: "percentage", percentage: 0 }).features.length, 0);
+    assert.equal(run({ method: "count", count: 0 }).features.length, 0);
+    // A count larger than the input is clamped to every feature, not an error.
+    assert.equal(run({ method: "count", count: 999 }).features.length, 10);
+    // Likewise a percentage above 100 clamps to the full input.
+    assert.equal(run({ method: "percentage", percentage: 150 }).features.length, 10);
+  });
+
   it("selects features by location, including disjoint", () => {
     const tool = getVectorTool("select-by-location");
     assert.ok(tool);

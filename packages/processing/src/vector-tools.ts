@@ -1200,6 +1200,79 @@ export const selectByLocationTool: ProcessingAlgorithm = {
   },
 };
 
+export const randomExtractTool: ProcessingAlgorithm = {
+  id: "random-extract",
+  name: "Random extract",
+  description:
+    "Extract a random subset of features into a new layer, sized by a feature count or a percentage of the input.",
+  group: "Select",
+  parameters: [
+    { id: "layer", label: "Input layer", type: "layer", required: true },
+    {
+      id: "method",
+      label: "Method",
+      type: "select",
+      default: "count",
+      options: [
+        { value: "count", label: "Number of features" },
+        { value: "percentage", label: "Percentage of features" },
+      ],
+    },
+    {
+      id: "count",
+      label: "Number of features",
+      type: "number",
+      default: 10,
+      min: 0,
+      step: 1,
+      description: "Clamped to the number of input features when larger.",
+      visibleWhen: { param: "method", in: ["count"] },
+    },
+    {
+      id: "percentage",
+      label: "Percentage of features",
+      type: "number",
+      default: 10,
+      min: 0,
+      max: 100,
+      step: 1,
+      visibleWhen: { param: "method", in: ["percentage"] },
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx, "layer");
+    if (!fc) return;
+    const total = fc.features.length;
+    const method = (ctx.parameters.method as string) || "count";
+
+    // Resolve the requested sample size, then clamp to [0, total] so an
+    // oversized count or a >100 percentage yields every feature rather than
+    // erroring, and a negative value yields none.
+    let requested: number;
+    if (method === "percentage") {
+      const pct = numberParam(ctx, "percentage", 10);
+      requested = Math.round((pct / 100) * total);
+    } else {
+      requested = Math.round(numberParam(ctx, "count", 10));
+    }
+    const sampleSize = Math.max(0, Math.min(total, requested));
+
+    // Partial Fisher-Yates: draw `sampleSize` distinct indices uniformly
+    // without replacement, without shuffling the whole array.
+    const indices = Array.from({ length: total }, (_, i) => i);
+    for (let i = 0; i < sampleSize; i += 1) {
+      const j = i + Math.floor(Math.random() * (total - i));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    // Sort the chosen indices so the output keeps the input's feature order.
+    const chosen = indices.slice(0, sampleSize).sort((a, b) => a - b);
+    const selected = chosen.map((i) => fc.features[i]);
+
+    ctx.log(`Random extract: selected ${selected.length} of ${total} feature(s)`);
+    ctx.addResultLayer?.("Random extract", featureCollection(selected));
+  },
+};
+
 export const reprojectTool: ProcessingAlgorithm = {
   id: "reproject",
   name: "Reproject",
@@ -2610,6 +2683,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   attributeJoinTool,
   selectByValueTool,
   selectByLocationTool,
+  randomExtractTool,
   reprojectTool,
   explodeTool,
   aggregateTool,
