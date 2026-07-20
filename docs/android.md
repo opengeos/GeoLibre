@@ -139,6 +139,11 @@ KS="$HOME/.android/debug.keystore"   # auto-created by Android tooling; or make 
 "$BT/apksigner" verify geolibre-arm64.apk
 ```
 
+The example signs the arm64 APK. Substitute the ABI you need throughout —
+`app-x86_64-release-unsigned.apk` → `geolibre-x86_64.apk`, and likewise for
+`armeabi-v7a` / `x86`. The emulator section below installs `geolibre-x86_64.apk`,
+which is this same walkthrough with `arm64` swapped for `x86_64`.
+
 For a real upload/release key:
 
 ```bash

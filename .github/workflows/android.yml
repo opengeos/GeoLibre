@@ -245,11 +245,20 @@ jobs:
         env:
           # Pinned; bump deliberately like the other tool versions above.
           BUNDLETOOL_VERSION: "1.18.3"
+          # Pinned by digest, not just version, for the same reason the third-party
+          # Actions above are pinned to full commit SHAs: a release asset can be
+          # deleted and re-uploaded under the same tag. This one is executed
+          # (`java -jar`) inside a job that holds contents: write and, further
+          # down, the release signing secrets, so an unpinned binary would be the
+          # softest link in an otherwise pinned workflow.
+          BUNDLETOOL_SHA256: "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29"
         run: |
           set -euo pipefail
           jar="$RUNNER_TEMP/bundletool.jar"
           curl -fsSL -o "$jar" \
             "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          # Verify before the jar is ever handed to java.
+          echo "$BUNDLETOOL_SHA256  $jar" | sha256sum -c -
           mapfile -t aabs < <(find \
             apps/geolibre-desktop/src-tauri/gen/android \
             -path '*/outputs/bundle/*' -name '*.aab' | sort)
