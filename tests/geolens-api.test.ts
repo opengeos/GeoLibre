@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   authHeaders,
   bboxFromGeometry,
+  datasetPageUrl,
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
@@ -144,6 +145,15 @@ describe("itemsUrl / stac URLs", () => {
     );
     assert.equal(stacCatalogUrl(opts), "http://localhost:8080/api/stac");
     assert.equal(stacCollectionsUrl(opts), "http://localhost:8080/api/stac/collections");
+  });
+});
+
+describe("datasetPageUrl", () => {
+  it("builds the GeoLens dataset detail page URL", () => {
+    assert.equal(
+      datasetPageUrl({ baseUrl: "http://localhost:8080" }, "abc-123"),
+      "http://localhost:8080/datasets/abc-123",
+    );
   });
 });
 

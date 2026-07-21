@@ -340,6 +340,11 @@ export function itemsUrl(options: GeoLensClientOptions, datasetId: string, limit
   return `${options.baseUrl}/api/collections/${encodeURIComponent(datasetId)}/items?limit=${limit}`;
 }
 
+/** The dataset's human-readable detail page on the GeoLens web UI. */
+export function datasetPageUrl(options: GeoLensClientOptions, datasetId: string): string {
+  return `${options.baseUrl}/datasets/${encodeURIComponent(datasetId)}`;
+}
+
 /** STAC 1.0 landing page URL. */
 export function stacCatalogUrl(options: GeoLensClientOptions): string {
   return `${options.baseUrl}/api/stac`;

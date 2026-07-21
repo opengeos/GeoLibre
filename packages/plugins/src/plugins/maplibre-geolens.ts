@@ -25,6 +25,7 @@ import type { FeatureCollection } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   authHeaders,
+  datasetPageUrl,
   defaultGeoLensFetch,
   itemsUrl,
   mintTileToken,
@@ -78,6 +79,8 @@ export interface GeoLensLabels {
   added: string;
   addGeoJson: string;
   addGeoJsonTitle: string;
+  metadata: string;
+  metadataTitle: string;
   addError: (message: string) => string;
   features: (count: number) => string;
 }
@@ -105,6 +108,8 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   addGeoJson: "Add GeoJSON",
   addGeoJsonTitle:
     "Load features as editable GeoJSON (first 100) for the attribute table and export",
+  metadata: "Metadata",
+  metadataTitle: "Open this dataset's page on the GeoLens server in a new tab",
   addError: (message) => `Could not add layer: ${message}`,
   features: (count) => `${count.toLocaleString()} features`,
 };
@@ -542,6 +547,15 @@ function buildPanel(
       });
       actions.append(geoJsonButton);
     }
+
+    // Opens the dataset's page on the GeoLens server for the full record.
+    const metadataButton = button(labels.metadata, CSS.action, labels.metadataTitle);
+    metadataButton.addEventListener("click", () => {
+      if (state.client) {
+        window.open(datasetPageUrl(state.client, dataset.id), "_blank", "noopener,noreferrer");
+      }
+    });
+    actions.append(metadataButton);
 
     card.append(actions);
     return card;
