@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@maplibre/maplibre-gl-style-spec": "^24.10.0",
+    "@maplibre/maplibre-gl-style-spec": "^26.1.0",
     "uuid": "^14.0.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.14"
