@@ -183,9 +183,11 @@ jobs:
           # signing secret rather than duplicating it.
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # Passed via env, not interpolated into the run script, so a workflow
+          # context expression can't be injected into the shell.
+          EXPORT_METHOD: ${{ github.event.inputs.export_method || 'app-store-connect' }}
         run: |
-          npx tauri ios build \
-            --export-method "${{ github.event.inputs.export_method || 'app-store-connect' }}"
+          npx tauri ios build --export-method "$EXPORT_METHOD"
 
       - name: Verify built bundle id
         if: steps.signing.outputs.present == 'true'

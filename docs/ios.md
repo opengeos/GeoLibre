@@ -17,7 +17,7 @@ Vector tools (Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace
 (DuckDB-WASM and PGlite/PostGIS), the Python Console (Pyodide), geocoding,
 statistics, the AI assistant, story maps, and plugins.
 
-Tools that depend on a **local desktop process** are hidden on mobile, because
+Tools that depend on a **local desktop process** are hidden on mobile because
 iOS has no Python sidecar or local helper binaries and its sandbox forbids
 spawning subprocesses:
 
@@ -86,6 +86,7 @@ npx tauri ios build                    # release archive → signed .ipa (needs 
   Android (`identifier` in `tauri.conf.json` stays `org.geolibre.desktop` so it
   keeps keying desktop settings and the Linux/macOS packaging).
 - Verify the location string landed after a build:
+
   ```bash
   /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' \
     src-tauri/gen/apple/geolibre_iOS/Info.plist
