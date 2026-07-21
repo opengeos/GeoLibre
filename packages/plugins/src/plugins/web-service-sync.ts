@@ -30,6 +30,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-openaerialmap",
   "maplibre-gl-source-coop",
   "maplibre-gl-natural-earth",
+  "maplibre-gl-geolens",
 ] as const;
 
 /** One active layer reported by a web service control. */

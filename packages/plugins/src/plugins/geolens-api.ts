@@ -74,6 +74,22 @@ export interface GeoLensVectorTiles {
   sourceLayer: string;
 }
 
+/**
+ * A server-rendered raster-tile source (Titiler PNG). Unlike a vector token,
+ * the raster token carries no signature or expiry — access is authorized
+ * per-request from the session/API key/embed token, so the URL needs no
+ * refresh (a public dataset renders anonymously).
+ */
+export interface GeoLensRasterTiles {
+  /** Absolute `{z}/{x}/{y}.png` XYZ template. */
+  tiles: string;
+  /** `[minLon, minLat, maxLon, maxLat]`, or null when unknown. */
+  bounds: [number, number, number, number] | null;
+  minzoom: number;
+  maxzoom: number;
+  tileSize: number;
+}
+
 /** Minimal response shape, so tests can stub the network without a DOM. */
 export interface GeoLensHttpResponse {
   ok: boolean;
@@ -267,6 +283,47 @@ export function vectorTileTemplate(
   return {
     tiles: `${options.baseUrl}/api/tiles/${table}/{z}/{x}/{y}.pbf?${query}`,
     sourceLayer: table,
+  };
+}
+
+function asBounds(value: unknown): [number, number, number, number] | null {
+  if (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((n) => typeof n === "number" && Number.isFinite(n))
+  ) {
+    return value as [number, number, number, number];
+  }
+  return null;
+}
+
+/**
+ * Resolve a raster dataset's server-rendered tile source. Hits the same token
+ * endpoint as {@link mintTileToken}, but reads the raster shape: the response
+ * carries a relative `tile_url` (the Titiler PNG path) plus bounds and a zoom
+ * range. The `tile_url` is joined onto the base URL to give MapLibre an
+ * absolute XYZ template. Throws when the dataset is not a raster tile source.
+ */
+export async function resolveRasterTiles(
+  options: GeoLensClientOptions,
+  datasetId: string,
+  fetchImpl: GeoLensFetch = defaultGeoLensFetch,
+  signal?: AbortSignal,
+): Promise<GeoLensRasterTiles> {
+  const url = `${options.baseUrl}/api/tiles/token/${encodeURIComponent(datasetId)}/`;
+  const body = (await getJson(url, options, fetchImpl, signal)) as Record<string, unknown>;
+  const tileUrl = asString(body.tile_url);
+  if (asString(body.kind) !== "raster" || !tileUrl) {
+    throw new Error("GeoLens dataset is not a raster tile source");
+  }
+  // `tile_url` is relative and keeps its literal {z}/{x}/{y} placeholders; a
+  // plain join preserves them (they must not be URL-encoded).
+  return {
+    tiles: `${options.baseUrl}${tileUrl}`,
+    bounds: asBounds(body.bounds),
+    minzoom: asNumber(body.minzoom) ?? 0,
+    maxzoom: asNumber(body.maxzoom) ?? 22,
+    tileSize: asNumber(body.tile_size) ?? 256,
   };
 }
 

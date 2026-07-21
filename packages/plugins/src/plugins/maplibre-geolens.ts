@@ -29,6 +29,7 @@ import {
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
+  resolveRasterTiles,
   searchDatasets,
   vectorTileTemplate,
   type GeoLensClientOptions,
@@ -300,6 +301,47 @@ async function addVectorTilesLayer(
 }
 
 /**
+ * Add a raster dataset as server-rendered Titiler PNG tiles. The raster token
+ * carries no signature/expiry, so no refresh is scheduled; access is authorized
+ * per tile request (a public dataset renders anonymously). Built as an `"xyz"`
+ * raster layer directly (rather than `app.addTileLayer`) so it carries the same
+ * `sourcePath` the vector path uses for add/remove state.
+ */
+async function addRasterTilesLayer(
+  app: GeoLibreAppAPI,
+  client: GeoLensClientOptions,
+  dataset: GeoLensDataset,
+  fetchImpl: GeoLensFetch,
+): Promise<void> {
+  const raster = await resolveRasterTiles(client, dataset.id, fetchImpl);
+  const layer: GeoLibreLayer = {
+    id: createLayerId(),
+    name: dataset.title,
+    type: "xyz",
+    source: {
+      type: "raster",
+      tiles: [raster.tiles],
+      tileSize: raster.tileSize,
+      minzoom: raster.minzoom,
+      maxzoom: raster.maxzoom,
+      ...(raster.bounds ? { bounds: raster.bounds } : {}),
+    },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      sourceKind: "geolens-raster-tiles",
+      geolensBaseUrl: client.baseUrl,
+      geolensDatasetId: dataset.id,
+    },
+    sourcePath: sourcePathFor(client, dataset),
+  };
+  useAppStore.getState().addLayer(layer);
+  const bounds = raster.bounds ?? dataset.bbox;
+  if (bounds) app.fitBounds?.(bounds);
+}
+
+/**
  * Add a vector dataset as GeoJSON via OGC API Features. Reads one page (GeoLens
  * caps `limit`); the vector-tile path is preferred for large datasets. Uses the
  * host GeoJSON layer so styling/attribute-table/export all apply.
@@ -441,10 +483,13 @@ function buildPanel(
     const addedId = findAddedLayerId(state.client!, dataset);
     const addButton = button(addedId ? labels.added : labels.add, CSS.action, dataset.title);
     if (addedId) addButton.disabled = true;
+    // Raster datasets render as server-side Titiler PNG tiles; vector datasets
+    // as signed MVT vector tiles.
+    const addPrimary = dataset.isRaster
+      ? () => addRasterTilesLayer(app!, state.client!, dataset, fetchImpl)
+      : () => addVectorTilesLayer(app!, state.client!, dataset, fetchImpl);
     addButton.addEventListener("click", () => {
-      void handleAdd(dataset, addButton, () =>
-        addVectorTilesLayer(app!, state.client!, dataset, fetchImpl),
-      );
+      void handleAdd(dataset, addButton, addPrimary);
     });
     actions.append(addButton);
 

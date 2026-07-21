@@ -7,6 +7,7 @@ import {
   mintTileToken,
   normalizeBaseUrl,
   parseDataset,
+  resolveRasterTiles,
   searchDatasets,
   stacCatalogUrl,
   stacCollectionsUrl,
@@ -192,6 +193,33 @@ describe("mintTileToken", () => {
     await assert.rejects(
       () => mintTileToken({ baseUrl: "http://h" }, "id", fetchImpl),
       /malformed/,
+    );
+  });
+});
+
+describe("resolveRasterTiles", () => {
+  it("joins the relative tile_url onto the base and parses bounds/zoom", async () => {
+    const { fetchImpl, calls } = stubFetch({
+      kind: "raster",
+      tile_url: "/raster-tiles/abc/tiles/{z}/{x}/{y}.png",
+      bounds: [-74, 40, -73, 41],
+      minzoom: 0,
+      maxzoom: 16,
+      tile_size: 256,
+    });
+    const out = await resolveRasterTiles({ baseUrl: "http://localhost:8080" }, "abc", fetchImpl);
+    assert.equal(out.tiles, "http://localhost:8080/raster-tiles/abc/tiles/{z}/{x}/{y}.png");
+    assert.deepEqual(out.bounds, [-74, 40, -73, 41]);
+    assert.equal(out.maxzoom, 16);
+    assert.equal(out.tileSize, 256);
+    assert.match(calls[0].url, /\/api\/tiles\/token\/abc\/$/);
+  });
+
+  it("rejects a vector token as not a raster source", async () => {
+    const { fetchImpl } = stubFetch({ kind: "vector", sig: "s", exp: 1, scope: "t" });
+    await assert.rejects(
+      () => resolveRasterTiles({ baseUrl: "http://h" }, "id", fetchImpl),
+      /not a raster/,
     );
   });
 });
