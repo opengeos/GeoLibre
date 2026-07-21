@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 755 tools across 9 categories. */
+/** 757 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -955,7 +955,9 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
         label: "GeoLibre",
         tools: [
           { id: "assign_projection_vector", name: "Assign Projection Vector" },
+          { id: "regularize_building_footprints", name: "Regularize Building Footprints" },
           { id: "render_vector_png", name: "Render Vector to PNG" },
+          { id: "smooth_natural_features", name: "Smooth Natural Features" },
         ],
       },
       {
