@@ -252,7 +252,7 @@ jobs:
         if: ${{ env.AUR_SSH_PRIVATE_KEY != '' }}
         # Pinned to a commit SHA (not a mutable tag) because this step receives
         # the AUR SSH private key. Update deliberately when bumping the version.
-        uses: KSXGitHub/github-actions-deploy-aur@da03e160361ce01bf087e790b6ffd196d7dccff7 # v4.1.3
+        uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050 # v4.2.0
         with:
           pkgname: geolibre-bin
           pkgbuild: aur/PKGBUILD
