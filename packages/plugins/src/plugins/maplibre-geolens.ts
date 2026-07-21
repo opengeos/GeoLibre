@@ -124,6 +124,12 @@ const CSS = {
     "box-sizing:border-box;width:100%;padding:5px 8px;font-size:12px;" +
     "border-radius:6px;border:1px solid hsl(var(--border));" +
     "background:hsl(var(--background));color:hsl(var(--foreground));",
+  // Like `input`, but flexes to share a row with the Search button instead of
+  // claiming the full width (which would push the button onto its own line).
+  searchInput:
+    "flex:1 1 auto;min-width:0;box-sizing:border-box;padding:5px 8px;font-size:12px;" +
+    "border-radius:6px;border:1px solid hsl(var(--border));" +
+    "background:hsl(var(--background));color:hsl(var(--foreground));",
   row: "display:flex;gap:4px;",
   primaryButton:
     "padding:5px 10px;border-radius:6px;border:1px solid hsl(var(--primary));" +
@@ -419,7 +425,7 @@ function buildPanel(
   connectRow.append(connectButton);
 
   const searchRow = el("div", CSS.row);
-  const searchInput = el("input", CSS.input) as HTMLInputElement;
+  const searchInput = el("input", CSS.searchInput) as HTMLInputElement;
   searchInput.placeholder = labels.searchPlaceholder;
   const searchButton = button(labels.search, CSS.primaryButton);
   searchRow.append(searchInput, searchButton);
@@ -557,8 +563,10 @@ function buildPanel(
     connectButton.textContent = labels.connect;
     // Reveal search only once a connection produced a catalog. On failure, drop
     // the client so a later attempt starts clean and the search row stays hidden.
+    // Restore "flex" (not "") so the row keeps its flex layout and gap — setting
+    // display to "" would wipe the inline `display:flex` and collapse to block.
     if (!connected) state.client = null;
-    searchRow.style.display = connected ? "" : "none";
+    searchRow.style.display = connected ? "flex" : "none";
   };
 
   connectButton.addEventListener("click", () => void connect());
