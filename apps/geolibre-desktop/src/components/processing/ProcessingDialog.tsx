@@ -697,8 +697,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
   const handleCopyLink = useCallback(() => {
     if (!shareUrl) return;
+    // The Clipboard API is absent in insecure contexts (HTTP over a LAN) or when
+    // blocked; surface a failure message instead of silently doing nothing.
+    if (!navigator.clipboard) {
+      setError(t("processing.whitebox.copyLinkFailed"));
+      return;
+    }
     void navigator.clipboard
-      ?.writeText(shareUrl)
+      .writeText(shareUrl)
       .then(() => {
         if (linkCopyTimer.current !== null) window.clearTimeout(linkCopyTimer.current);
         setLinkCopied(true);
