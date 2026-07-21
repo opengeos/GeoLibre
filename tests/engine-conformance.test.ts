@@ -525,7 +525,10 @@ runEngineConformance("Cesium", createCesiumHarness, {
 
 runEngineConformance("ArcGIS", createArcGISHarness, {
   capabilities: Object.fromEntries(
-    Object.keys(allCapabilities).map((capability) => [capability, capability === "feature-query"]),
+    Object.keys(allCapabilities).map((capability) => [
+      capability,
+      capability === "feature-query" || capability === "popups",
+    ]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
   supportsVectorTiles: false,
@@ -534,7 +537,10 @@ runEngineConformance("ArcGIS", createArcGISHarness, {
 
 runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
   capabilities: Object.fromEntries(
-    Object.keys(allCapabilities).map((capability) => [capability, capability === "feature-query"]),
+    Object.keys(allCapabilities).map((capability) => [
+      capability,
+      capability === "feature-query" || capability === "popups",
+    ]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
   supportsVectorTiles: false,

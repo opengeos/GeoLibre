@@ -119,3 +119,30 @@ test("ArcGISSceneEngine identifies only store-backed GeoJSON features", async ()
   ]);
   engine.destroy();
 });
+
+test("ArcGISSceneEngine owns one public View popup and reports closure", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount({} as HTMLElement, initialView);
+  const content = {} as HTMLElement;
+  let closed = 0;
+
+  engine.interactions.showPopup({
+    id: "reverse-geocode",
+    lngLat: [8.55, 47.37],
+    content,
+    closeOnClick: false,
+    onClose: () => {
+      closed += 1;
+    },
+  });
+  await Promise.resolve();
+  assert.deepEqual(runtime.view?.popupOpenOptions?.location, { longitude: 8.55, latitude: 47.37 });
+  assert.equal(runtime.view?.popupOpenOptions?.content, content);
+  runtime.view?.closePopup();
+  assert.equal(runtime.view?.closePopupCount, 1);
+  assert.equal(closed, 1);
+  engine.interactions.closePopup("reverse-geocode");
+  assert.equal(closed, 1);
+  engine.destroy();
+});

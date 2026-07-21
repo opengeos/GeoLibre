@@ -57,12 +57,22 @@ export class FakeMapView {
   center: { longitude: number; latitude: number };
   zoom: number;
   rotation: number;
+  readonly popup = { visible: false };
+  popupOpenOptions: {
+    readonly location: { readonly longitude: number; readonly latitude: number };
+    readonly content: HTMLElement;
+  } | null = null;
+  closePopupCount = 0;
   private stationaryValue = true;
   private readonly eventHandlers = new Map<
     string,
     Set<(event: { readonly x?: number; readonly y?: number }) => void>
   >();
-  private readonly stationaryHandlers = new Set<(stationary: boolean) => void>();
+  private readonly reactiveWatchers = new Set<{
+    readonly getValue: () => boolean;
+    readonly callback: (value: boolean) => void;
+    value: boolean;
+  }>();
 
   get stationary(): boolean {
     return this.stationaryValue;
@@ -118,9 +128,10 @@ export class FakeMapView {
     return new FakeHandle(() => handlers.delete(handler));
   }
 
-  watch(_property: "stationary", handler: (stationary: boolean) => void): FakeHandle {
-    this.stationaryHandlers.add(handler);
-    return new FakeHandle(() => this.stationaryHandlers.delete(handler));
+  watch(getValue: () => boolean, callback: (value: boolean) => void): FakeHandle {
+    const watcher = { getValue, callback, value: getValue() };
+    this.reactiveWatchers.add(watcher);
+    return new FakeHandle(() => this.reactiveWatchers.delete(watcher));
   }
 
   toScreen(point: { readonly longitude: number; readonly latitude: number }): {
@@ -147,6 +158,21 @@ export class FakeMapView {
     return { results: this.onHitTest() };
   }
 
+  async openPopup(options: {
+    readonly location: { readonly longitude: number; readonly latitude: number };
+    readonly content: HTMLElement;
+  }): Promise<void> {
+    this.popupOpenOptions = options;
+    this.popup.visible = true;
+    this.notifyReactiveWatchers();
+  }
+
+  closePopup(): void {
+    this.closePopupCount += 1;
+    this.popup.visible = false;
+    this.notifyReactiveWatchers();
+  }
+
   emitUserMove(): void {
     for (const handler of this.eventHandlers.get("mouse-wheel") ?? []) handler({});
     this.zoom += 1;
@@ -156,7 +182,16 @@ export class FakeMapView {
 
   private setStationary(stationary: boolean): void {
     this.stationaryValue = stationary;
-    for (const handler of this.stationaryHandlers) handler(stationary);
+    this.notifyReactiveWatchers();
+  }
+
+  private notifyReactiveWatchers(): void {
+    for (const watcher of this.reactiveWatchers) {
+      const value = watcher.getValue();
+      if (value === watcher.value) continue;
+      watcher.value = value;
+      watcher.callback(value);
+    }
   }
 
   constructor(
@@ -245,7 +280,7 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
     config,
     reactiveUtils: {
       watch: (_getValue, callback) =>
-        runtime.view?.watch("stationary", callback) ?? new FakeHandle(() => undefined),
+        runtime.view?.watch(_getValue, callback) ?? new FakeHandle(() => undefined),
     },
     Map: MapFake,
     Basemap: BasemapFake,
@@ -346,7 +381,7 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
     config,
     reactiveUtils: {
       watch: (_getValue, callback) =>
-        runtime.view?.watch("stationary", callback) ?? new FakeHandle(() => undefined),
+        runtime.view?.watch(_getValue, callback) ?? new FakeHandle(() => undefined),
     },
     Map: MapFake,
     Basemap: BasemapFake,

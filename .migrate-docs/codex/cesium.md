@@ -129,3 +129,35 @@
   browser-externalization warnings were non-fatal).
 - Follow-up: assess explicit I3S and terrain result DTOs before enabling any
   3D-layer picking beyond GeoJSON; Codex, 2026-07-21.
+
+## 2026-07-21 — Cesium overlay popup gap → ArcGIS `SceneView.openPopup`
+
+- Source: Cesium — the seam-level secondary-globe path had no popup capability,
+  so renderer-neutral tools could not present their existing DOM content in an
+  ArcGIS 3D pane.
+- Files touched: `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → SceneView popup capability and deterministic view fake.
+- ArcGIS approach: call documented `SceneView.openPopup({ location, content })`
+  and `closePopup()`, observing the public popup `visible` property through
+  `reactiveUtils.watch` for user closure.
+- What changed: the SceneView adapter accepts the neutral DOM-content popup
+  command, owns one active popup, maps its anchor to the documented location,
+  and forwards user/programmatic closure only through `onClose`.
+- Gap / limitation: SceneView offers one popup per view; no equivalent for
+  multiple Cesium overlay popups, per-call MapLibre max width, or close-on-click
+  policy is implemented.
+- Workaround: automatic feature popups are disabled and the adapter serializes
+  one application-owned popup lifecycle. Removal criteria: define and test a
+  product-level multi-popup policy using supported SceneView APIs.
+- Tradeoff accepted: native ArcGIS popup layout and docking may differ from the
+  former overlay appearance, but preserves SDK keyboard and close semantics.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/reverse-geocode.test.ts` → 43 passed;
+  `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: evaluate SceneView popup placement against 3D terrain only when
+  I3S/terrain interaction support is explicitly scoped; Codex, 2026-07-21.

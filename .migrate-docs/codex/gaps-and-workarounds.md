@@ -10,6 +10,14 @@
   reports `3d-tiles` unsupported. Remove this guard when a tested metadata probe
   and explicit I3S adapter path land. See [Cesium log](cesium.md).
 
+## 2026-07-21 — Multiple MapLibre popups → one ArcGIS view popup
+
+- `MapView` and `SceneView` expose one documented view popup. The ArcGIS
+  adapters therefore serialize MapEngine popup ownership and do not map the
+  MapLibre-specific `maxWidth` or per-popup `closeOnClick` options. See the
+  [MapLibre log](maplibre.md#2026-07-21--maplibre-popupsetdomcontent--arcgis-mapviewopenpopup)
+  and [Cesium log](cesium.md#2026-07-21--cesium-overlay-popup-gap--arcgis-sceneviewopenpopup).
+
 - 2026-07-20 — Native canvas capture and legacy external MapLibre plugins need
   adapter-private compatibility, but the public seam will expose only typed
   capture/extension capabilities—not an SDK object or `unknown` native handle.

@@ -1749,3 +1749,37 @@
 - Follow-up: add ArcGIS highlight and popup implementations, then broaden
   query coverage only where the store-to-renderer correspondence is explicit;
   Codex, 2026-07-21.
+
+## 2026-07-21 — MapLibre `Popup#setDOMContent` → ArcGIS `MapView.openPopup`
+
+- Source: MapLibre — `MapLibreEngine` owns id-addressable DOM-content popups
+  for renderer-neutral tools such as Reverse Geocode and reports native close
+  events through `MapEngineClient.interactions`.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → MapView popup capability and deterministic view fake.
+- ArcGIS approach: use documented `MapView.openPopup({ location, content })`,
+  `closePopup()`, and `reactiveUtils.watch(() => view.popup?.visible)`; keep
+  `popupEnabled: false` so only the engine contract opens application popups.
+- What changed: the adapter now owns one active popup id, passes the existing
+  application DOM node and longitude/latitude to the SDK, and invokes the
+  supplied neutral close callback exactly once for programmatic or user close.
+- Gap / limitation: ArcGIS supplies one view popup rather than MapLibre's
+  independent popup instances. The contract's `maxWidth` and `closeOnClick`
+  options have no per-call MapView equivalent in this implementation.
+- Workaround: serialize popup ownership through the adapter and retain the
+  existing DOM content and close callback. Automatic SDK feature popups are
+  disabled. Removal criteria: add an approved engine-neutral popup presentation
+  policy if simultaneous popups or width/click-option parity becomes required.
+- Tradeoff accepted: replacing a different active popup closes it, favoring the
+  documented SDK popup lifecycle and accessibility over emulating multiple
+  renderer-specific overlays.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/reverse-geocode.test.ts` → 43 passed;
+  `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: add store-backed feature highlighting before enabling broader
+  selection UI parity; Codex, 2026-07-21.

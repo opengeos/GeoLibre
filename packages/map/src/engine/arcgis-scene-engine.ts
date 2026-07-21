@@ -70,8 +70,14 @@ interface ArcGISViewInputEvent {
 interface ArcGISSceneView extends ArcGISSceneViewSnapshot, ArcGISHitTestView {
   readonly stationary: boolean;
   readonly container: HTMLElement | null;
+  readonly popup?: { readonly visible?: boolean } | null;
   when(): Promise<void>;
   destroy(): void;
+  openPopup(options: {
+    readonly location: { readonly longitude: number; readonly latitude: number };
+    readonly content: HTMLElement;
+  }): Promise<void>;
+  closePopup(): void;
   goTo(target: ArcGISSceneViewProperties | Record<string, unknown>, options?: unknown): Promise<unknown>;
   on(event: string, handler: (event: ArcGISViewInputEvent) => void): ArcGISHandle;
   toScreen(point: { readonly longitude: number; readonly latitude: number }): ScreenPoint | null;
@@ -81,7 +87,11 @@ interface ArcGISSceneView extends ArcGISSceneViewSnapshot, ArcGISHitTestView {
 /** Private runtime seam for deterministic SceneView adapter tests. */
 export interface ArcGISSceneEngineModules extends Omit<ArcGISMapEngineModules, "MapView"> {
   readonly SceneView: new (
-    properties: { readonly container: HTMLElement; readonly map: ArcGISMap } & ArcGISSceneViewProperties,
+    properties: {
+      readonly container: HTMLElement;
+      readonly map: ArcGISMap;
+      readonly popupEnabled?: boolean;
+    } & ArcGISSceneViewProperties,
   ) => ArcGISSceneView;
 }
 
@@ -181,6 +191,7 @@ export class ArcGISSceneEngine implements MapEngine {
   private layersSnapshot: readonly GeoLibreLayer[] = [];
   private cachedView: MapViewState = { center: [-100, 40], zoom: 2, bearing: 0, pitch: 0 };
   private lastAppliedView: MapViewState | null = null;
+  private activePopup: { readonly id: string; readonly onClose?: () => void } | null = null;
   private userMoved = false;
   private moving = false;
   private destroyed = false;
@@ -264,8 +275,8 @@ export class ArcGISSceneEngine implements MapEngine {
     upsertGeoJsonOverlay: (_spec: GeoJsonOverlaySpec): void => this.unsupported("transient-overlays"),
     setOverlayVisible: (): void => this.unsupported("transient-overlays"),
     removeOverlay: (): void => this.unsupported("transient-overlays"),
-    showPopup: (): void => this.unsupported("popups"),
-    closePopup: (): void => this.unsupported("popups"),
+    showPopup: (options): void => this.showPopup(options),
+    closePopup: (id: string): void => this.closePopup(id),
   } satisfies MapEngine["interactions"];
 
   readonly controls = {
@@ -299,7 +310,12 @@ export class ArcGISSceneEngine implements MapEngine {
         copyright: "© OpenStreetMap contributors",
       }) as unknown as ArcGISLayer;
       const map = new modules.Map({ basemap: new modules.Basemap({ baseLayers: [basemapLayer] }) }) as unknown as ArcGISMap;
-      const view = new modules.SceneView({ container, map, ...mapViewStateToArcGISSceneView(initialView) });
+      const view = new modules.SceneView({
+        container,
+        map,
+        popupEnabled: false,
+        ...mapViewStateToArcGISSceneView(initialView),
+      });
       if (this.destroyed) {
         view.destroy();
         return;
@@ -357,7 +373,7 @@ export class ArcGISSceneEngine implements MapEngine {
   }
 
   supports(capability: MapEngineCapability): boolean {
-    return capability === "feature-query";
+    return capability === "feature-query" || capability === "popups";
   }
 
   supportsLayer(layer: GeoLibreLayer): boolean {
@@ -409,6 +425,9 @@ export class ArcGISSceneEngine implements MapEngine {
       this.modules!.reactiveUtils.watch(() => view.stationary, (stationary) => {
         this.moving = !stationary;
         if (stationary) this.handleStationary();
+      }),
+      this.modules!.reactiveUtils.watch(() => view.popup?.visible === true, (visible) => {
+        if (!visible) this.notifyPopupClosed();
       }),
     );
   }
@@ -500,6 +519,43 @@ export class ArcGISSceneEngine implements MapEngine {
     if (include.length === 0) return [];
     const result = await this.view.hitTest(point, { include });
     return toArcGISHitFeatures(result, this.layersSnapshot, layerId);
+  }
+
+  private showPopup(options: {
+    readonly id: string;
+    readonly lngLat: LngLat;
+    readonly content: HTMLElement;
+    readonly closeOnClick?: boolean;
+    readonly maxWidth?: string;
+    readonly onClose?: () => void;
+  }): void {
+    if (!this.view) return;
+    this.closeActivePopup();
+    this.activePopup = { id: options.id, onClose: options.onClose };
+    void this.view
+      .openPopup({
+        location: { longitude: options.lngLat[0], latitude: options.lngLat[1] },
+        content: options.content,
+      })
+      .catch(() => this.notifyPopupClosed());
+  }
+
+  private closePopup(id: string): void {
+    if (this.activePopup?.id !== id) return;
+    this.closeActivePopup();
+  }
+
+  private closeActivePopup(): void {
+    if (!this.activePopup) return;
+    this.view?.closePopup();
+    this.notifyPopupClosed();
+  }
+
+  private notifyPopupClosed(): void {
+    const popup = this.activePopup;
+    if (!popup) return;
+    this.activePopup = null;
+    popup.onClose?.();
   }
 
   private revokeObjectUrls(): void {
