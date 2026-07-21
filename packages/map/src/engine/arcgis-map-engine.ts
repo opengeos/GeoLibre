@@ -86,6 +86,22 @@ export class ArcGISMapController {
     this.engine.applyView(view);
   }
 
+  readView() {
+    return this.engine.readView();
+  }
+
+  highlightFeature(layer: any, highlightIds: any, options?: any) {
+    // No-op stub
+  }
+
+  fitBounds(bounds: [number, number, number, number], options?: any) {
+    // No-op stub
+  }
+
+  readProjection() {
+    return "mercator";
+  }
+
   destroy() {
     this.engine.destroy();
   }
@@ -143,6 +159,18 @@ export class ArcGISMapEngine implements MapEngine {
       ui: {
         components: [] // disable default UI controls in grid panes
       }
+    });
+
+    const viewAny = this.view as any;
+    viewAny.getLayer = () => null;
+    viewAny.getSource = () => null;
+    viewAny.addSource = () => {};
+    viewAny.removeSource = () => {};
+    viewAny.addLayer = () => {};
+    viewAny.removeLayer = () => {};
+    viewAny.once = (event: string, handler: any) => {};
+    viewAny.getCanvas = () => ({
+      style: { cursor: "" }
     });
 
     this.applyView(initialView);

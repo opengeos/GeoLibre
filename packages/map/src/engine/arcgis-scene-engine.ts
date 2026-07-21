@@ -86,6 +86,10 @@ export class ArcGISSceneController {
     this.engine.applyView(view);
   }
 
+  readView() {
+    return this.engine.readView();
+  }
+
   highlightFeature(layer: any, highlightIds: any, options?: any) {
     // No-op stub
   }
@@ -161,6 +165,18 @@ export class ArcGISSceneEngine implements MapEngine {
       ui: {
         components: [] // disable default UI controls in grid panes
       }
+    });
+
+    const viewAny = this.view as any;
+    viewAny.getLayer = () => null;
+    viewAny.getSource = () => null;
+    viewAny.addSource = () => {};
+    viewAny.removeSource = () => {};
+    viewAny.addLayer = () => {};
+    viewAny.removeLayer = () => {};
+    viewAny.once = (event: string, handler: any) => {};
+    viewAny.getCanvas = () => ({
+      style: { cursor: "" }
     });
 
     this.applyView(initialView);
