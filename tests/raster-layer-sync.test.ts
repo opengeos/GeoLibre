@@ -459,6 +459,35 @@ describe("wireRasterStoreSync", () => {
 
     assert.deepEqual(calls, []);
   });
+
+  it("pushes the min/max zoom range through setRasterState when the style changes", () => {
+    const { control, calls } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer("raster-1", {
+      style: { ...layer.style, minZoom: 6, maxZoom: 12 },
+    });
+
+    assert.deepEqual(calls, [
+      { method: "setRasterState", args: ["raster-1", { minZoom: 6, maxZoom: 12 }] },
+    ]);
+  });
+
+  it("does not push a zoom range when the style zoom bounds are unchanged", () => {
+    const { control, calls } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    const layer = useAppStore.getState().layers[0];
+    // A style edit that leaves minZoom/maxZoom untouched must not push a range.
+    useAppStore.getState().updateLayer("raster-1", {
+      style: { ...layer.style, fillOpacity: 0.5 },
+    });
+
+    assert.deepEqual(calls, []);
+  });
 });
 
 describe("removeRasterStoreLayers", () => {

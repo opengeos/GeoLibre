@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { styleValue, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type {
   RasterControl,
@@ -411,6 +411,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
                 ...savedRasterState(layer),
                 opacity: layer.opacity,
                 visible: layer.visible,
+                // The zoom range lives on layer.style (the shared Style-panel
+                // control), not in metadata.rasterState, so it is replayed here
+                // to survive a project reload / map reinitialisation.
+                minZoom: styleValue(layer.style, "minZoom"),
+                maxZoom: styleValue(layer.style, "maxZoom"),
               },
               zoomTo: false,
             })

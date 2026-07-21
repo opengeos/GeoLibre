@@ -1,4 +1,4 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState } from "maplibre-gl-raster";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
@@ -259,6 +259,8 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
         }
         const patch = rasterStatePatch(layer, current);
         if (patch) activeControl.setRasterState(layer.id, patch);
+        const zoomPatch = zoomRangePatch(layer, current);
+        if (zoomPatch) activeControl.setRasterState(layer.id, zoomPatch);
       }
     });
   });
@@ -303,6 +305,32 @@ function rasterStatePatch(
     }
   }
   return changed ? (patch as Partial<RasterLayerState>) : null;
+}
+
+/**
+ * Diffs a raster layer's min/max zoom between two store snapshots and returns
+ * the range to push through setRasterState, or null when unchanged.
+ *
+ * The zoom-range control lives on `layer.style` (the shared Style-panel widget),
+ * not in `metadata.rasterState`, so it is diffed separately from the symbology
+ * fields. A control-managed COG is an external custom layer, so layer-sync skips
+ * the native `map.setLayerZoomRange` path for it; the range reaches the raster
+ * only through this bridge.
+ *
+ * @param previous - The prior store layer.
+ * @param current - The current store layer.
+ * @returns A `{ minZoom, maxZoom }` patch, or null.
+ */
+function zoomRangePatch(
+  previous: GeoLibreLayer,
+  current: GeoLibreLayer,
+): Partial<RasterLayerState> | null {
+  const beforeMin = styleValue(previous.style, "minZoom");
+  const beforeMax = styleValue(previous.style, "maxZoom");
+  const afterMin = styleValue(current.style, "minZoom");
+  const afterMax = styleValue(current.style, "maxZoom");
+  if (beforeMin === afterMin && beforeMax === afterMax) return null;
+  return { minZoom: afterMin, maxZoom: afterMax };
 }
 
 function rasterStateRecord(layer: GeoLibreLayer): Record<string, unknown> {
