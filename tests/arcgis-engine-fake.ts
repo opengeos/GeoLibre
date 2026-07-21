@@ -38,6 +38,11 @@ class FakeLayerCollection {
   removeAll(): void {
     this.values = [];
   }
+
+  remove(layer: FakeLayer): void {
+    this.values = this.values.filter((candidate) => candidate !== layer);
+    this.onAdd(this.values);
+  }
 }
 
 class FakeMap {
@@ -221,6 +226,7 @@ export interface ArcGISFakeRuntime {
   readonly destroyed: { value: boolean };
   readonly resizeCount: { value: number };
   readonly basemapLayers: FakeLayer[];
+  currentLayers: FakeLayer[];
   hitTestResults: Array<{
     readonly type: "graphic";
     readonly layer: { readonly id: string };
@@ -243,6 +249,7 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
     destroyed,
     resizeCount,
     basemapLayers,
+    currentLayers: [],
     hitTestResults: [],
     view: null,
   };
@@ -255,7 +262,10 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
 
   class MapFake extends FakeMap {
     constructor(properties: Readonly<{ basemap: unknown }>) {
-      super(properties, (layers) => layerOrders.push(layers.map((layer) => layer.id)));
+      super(properties, (layers) => {
+        runtime.currentLayers = [...layers];
+        layerOrders.push(layers.map((layer) => layer.id));
+      });
     }
   }
 
@@ -299,6 +309,7 @@ export interface ArcGISSceneFakeRuntime {
   readonly layerOrders: string[][];
   readonly destroyed: { value: boolean };
   readonly basemapLayers: FakeLayer[];
+  currentLayers: FakeLayer[];
   hitTestResults: Array<{
     readonly type: "graphic";
     readonly layer: { readonly id: string };
@@ -347,6 +358,7 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
     layerOrders,
     destroyed,
     basemapLayers,
+    currentLayers: [],
     hitTestResults: [],
     view: null,
   };
@@ -359,7 +371,10 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
 
   class MapFake extends FakeMap {
     constructor(properties: Readonly<{ basemap: unknown }>) {
-      super(properties, (layers) => layerOrders.push(layers.map((layer) => layer.id)));
+      super(properties, (layers) => {
+        runtime.currentLayers = [...layers];
+        layerOrders.push(layers.map((layer) => layer.id));
+      });
     }
   }
 

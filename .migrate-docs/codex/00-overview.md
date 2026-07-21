@@ -185,6 +185,11 @@ Status values: not started · in progress · partial · blocked · done
   MapEngine-owned DOM-content popup and report user closure through the existing
   neutral callback. Automatic SDK feature popups remain disabled so application
   event routing stays authoritative.
+- Implemented: ArcGIS `MapView` and `SceneView` now mount transient GeoJSON
+  overlays and store-backed selection highlights as lazy, adapter-owned
+  `GeoJSONLayer` instances. The store layer snapshot remains authoritative;
+  preview and highlight layers are removed/recreated with the view runtime and
+  never enter it.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

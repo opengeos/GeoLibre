@@ -165,3 +165,45 @@ test("ArcGISMapEngine owns one public View popup and reports closure", async () 
   assert.equal(closed, 1);
   engine.destroy();
 });
+
+test("ArcGISMapEngine keeps transient overlays out of the store layer snapshot", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const geo = {
+    ...layer("geo", "geojson"),
+    geojson: {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          id: "zurich",
+          properties: { name: "Zürich" },
+          geometry: { type: "Point" as const, coordinates: [8.55, 47.37] },
+        },
+      ],
+    },
+  };
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([geo]);
+  await engine.mount({} as HTMLElement, initialView);
+
+  engine.interactions.upsertGeoJsonOverlay({
+    id: "preview",
+    data: geo.geojson,
+    visible: true,
+  });
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-overlay-preview"]);
+  engine.interactions.setOverlayVisible("preview", false);
+  assert.equal(runtime.currentLayers.at(-1)?.visible, false);
+  engine.layers.setHighlight(geo, ["zurich"]);
+  assert.equal(runtime.currentLayers.at(-1)?.id, "geolibre-overlay-geolibre-selection-highlight");
+  engine.syncLayers([geo]);
+  assert.deepEqual(runtime.layerOrders.at(-1), [
+    "geolibre-geo",
+    "geolibre-overlay-preview",
+    "geolibre-overlay-geolibre-selection-highlight",
+  ]);
+  engine.interactions.removeOverlay("preview");
+  engine.layers.clearHighlight();
+  assert.deepEqual(runtime.currentLayers.map((nativeLayer) => nativeLayer.id), ["geolibre-geo"]);
+  engine.destroy();
+});

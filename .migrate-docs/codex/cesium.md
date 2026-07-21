@@ -161,3 +161,37 @@
   non-fatal).
 - Follow-up: evaluate SceneView popup placement against 3D terrain only when
   I3S/terrain interaction support is explicitly scoped; Codex, 2026-07-21.
+
+## 2026-07-21 — Cesium transient entities/selection → ArcGIS `SceneView` `GeoJSONLayer`
+
+- Source: Cesium — temporary GeoJSON entities and selected features are
+  renderer presentation state, not persisted project layers; the MapEngine seam
+  exposes them through transient-overlay and highlight commands.
+- Files touched: `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → SceneView transient-overlay capability and deterministic
+  layer collection fake.
+- ArcGIS approach: create public, blob-backed `GeoJSONLayer` instances and
+  manage them exclusively in the SceneView map's public `layers` collection;
+  derive selection geometry from the current store GeoJSON snapshot.
+- What changed: the lazy SceneView adapter supports creation, visibility,
+  removal, highlight derivation, and remount restoration of transient overlays,
+  while keeping those layers absent from `syncLayers` input and store state.
+- Gap / limitation: generic Cesium entity rendering and selection styling do not
+  have a direct SDK-neutral equivalent here; supplied style and fit options are
+  retained by the seam but currently render as GeoJSONLayer defaults.
+- Workaround: use supported GeoJSONLayer lifecycle APIs for preview/selection.
+  Removal criteria: approve an engine-neutral symbol/fit contract then map it to
+  documented ArcGIS renderers and navigation.
+- Tradeoff accepted: this intentionally supports GeoJSON overlay parity first,
+  not arbitrary Cesium entity types or private SceneView internals.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 44
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal); `npx playwright test e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS
+  SceneView" --reporter=line` → 2 passed.
+- Follow-up: scope 3D-native overlay types only after explicit data-model and
+  interaction requirements exist; Codex, 2026-07-21.

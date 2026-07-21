@@ -46,6 +46,7 @@ interface ArcGISLayer {
 
 interface ArcGISLayerCollection {
   addMany(layers: readonly ArcGISLayer[]): void;
+  remove(layer: ArcGISLayer): void;
   removeAll(): void;
 }
 
@@ -101,6 +102,7 @@ export interface ArcGISSceneEngineDependencies {
 }
 
 const OPEN_STREET_MAP_TILES = "https://tile.openstreetmap.org/{level}/{col}/{row}.png";
+const HIGHLIGHT_OVERLAY_ID = "geolibre-selection-highlight";
 const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "geojson",
   "raster",
@@ -181,6 +183,7 @@ export class ArcGISSceneEngine implements MapEngine {
   private readonly listeners = new Map<keyof MapEngineEventMap, Set<(payload: never) => void>>();
   private readonly handles: ArcGISHandle[] = [];
   private readonly objectUrls = new Set<string>();
+  private readonly overlayObjectUrls = new Map<string, string>();
   private readonly options: Required<ArcGISSceneEngineDependencies>;
   private modules: ArcGISSceneEngineModules | null = null;
   private map: ArcGISMap | null = null;
@@ -188,6 +191,8 @@ export class ArcGISSceneEngine implements MapEngine {
   private container: HTMLElement | null = null;
   private basemapLayer: ArcGISLayer | null = null;
   private readonly nativeLayers = new Map<string, ArcGISLayer>();
+  private readonly overlays = new Map<string, GeoJsonOverlaySpec>();
+  private readonly transientLayers = new Map<string, ArcGISLayer>();
   private layersSnapshot: readonly GeoLibreLayer[] = [];
   private cachedView: MapViewState = { center: [-100, 40], zoom: 2, bearing: 0, pitch: 0 };
   private lastAppliedView: MapViewState | null = null;
@@ -248,8 +253,9 @@ export class ArcGISSceneEngine implements MapEngine {
       const point = this.viewport.project(lngLat);
       return point ? this.queryAtScreenPoint(point, layerId) : [];
     },
-    setHighlight: (): void => this.unsupported("transient-overlays"),
-    clearHighlight: (): void => this.unsupported("transient-overlays"),
+    setHighlight: (layer, featureIds, options): void =>
+      this.setHighlight(layer, featureIds, options),
+    clearHighlight: (): void => this.removeOverlay(HIGHLIGHT_OVERLAY_ID),
   } satisfies MapEngine["layers"];
 
   readonly viewport = {
@@ -272,9 +278,9 @@ export class ArcGISSceneEngine implements MapEngine {
     setDoubleClickZoomEnabled: (): void => this.unsupported("interactions"),
     suspendNavigation: (): Unsubscribe => this.unsupported("interactions"),
     createMarker: (_options: MapMarkerOptions): MapMarkerHandle => this.unsupported("markers"),
-    upsertGeoJsonOverlay: (_spec: GeoJsonOverlaySpec): void => this.unsupported("transient-overlays"),
-    setOverlayVisible: (): void => this.unsupported("transient-overlays"),
-    removeOverlay: (): void => this.unsupported("transient-overlays"),
+    upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => this.upsertOverlay(spec),
+    setOverlayVisible: (id: string, visible: boolean): void => this.setOverlayVisible(id, visible),
+    removeOverlay: (id: string): void => this.removeOverlay(id),
     showPopup: (options): void => this.showPopup(options),
     closePopup: (id: string): void => this.closePopup(id),
   } satisfies MapEngine["interactions"];
@@ -341,12 +347,15 @@ export class ArcGISSceneEngine implements MapEngine {
     this.destroyed = true;
     for (const handle of this.handles.splice(0)) handle.remove();
     this.revokeObjectUrls();
+    this.revokeOverlayObjectUrls();
     this.view?.destroy();
     this.view = null;
     this.map = null;
     this.modules = null;
     this.basemapLayer = null;
     this.nativeLayers.clear();
+    this.transientLayers.clear();
+    this.overlays.clear();
     this.container = null;
     this.listeners.clear();
   }
@@ -373,7 +382,11 @@ export class ArcGISSceneEngine implements MapEngine {
   }
 
   supports(capability: MapEngineCapability): boolean {
-    return capability === "feature-query" || capability === "popups";
+    return (
+      capability === "feature-query" ||
+      capability === "popups" ||
+      capability === "transient-overlays"
+    );
   }
 
   supportsLayer(layer: GeoLibreLayer): boolean {
@@ -469,6 +482,8 @@ export class ArcGISSceneEngine implements MapEngine {
     this.revokeObjectUrls();
     this.map.layers.removeAll();
     this.nativeLayers.clear();
+    this.revokeOverlayObjectUrls();
+    this.transientLayers.clear();
     const nativeLayers: ArcGISLayer[] = [];
     for (const layer of this.layersSnapshot) {
       const nativeLayer = this.createLayer(layer);
@@ -477,6 +492,7 @@ export class ArcGISSceneEngine implements MapEngine {
       nativeLayers.push(nativeLayer);
     }
     this.map.layers.addMany(nativeLayers);
+    for (const spec of this.overlays.values()) this.mountOverlay(spec);
   }
 
   private createLayer(layer: GeoLibreLayer): ArcGISLayer | null {
@@ -519,6 +535,93 @@ export class ArcGISSceneEngine implements MapEngine {
     if (include.length === 0) return [];
     const result = await this.view.hitTest(point, { include });
     return toArcGISHitFeatures(result, this.layersSnapshot, layerId);
+  }
+
+  private setHighlight(
+    layer: GeoLibreLayer | undefined,
+    featureIds: readonly string[],
+    _options?: { readonly fit?: boolean },
+  ): void {
+    if (!layer?.geojson || featureIds.length === 0) {
+      this.removeOverlay(HIGHLIGHT_OVERLAY_ID);
+      return;
+    }
+    const selected = new Set(featureIds);
+    const features = layer.geojson.features.filter((feature, index) =>
+      selected.has(String(feature.id ?? index)),
+    );
+    if (features.length === 0) {
+      this.removeOverlay(HIGHLIGHT_OVERLAY_ID);
+      return;
+    }
+    this.upsertOverlay({
+      id: HIGHLIGHT_OVERLAY_ID,
+      data: { type: "FeatureCollection", features },
+      visible: true,
+      style: {
+        fillColor: "#38bdf8",
+        fillOpacity: 0.2,
+        lineColor: "#0284c7",
+        lineWidth: 3,
+        pointColor: "#0284c7",
+        pointRadius: 8,
+      },
+    });
+  }
+
+  private upsertOverlay(spec: GeoJsonOverlaySpec): void {
+    this.overlays.set(spec.id, spec);
+    const map = this.map;
+    const existing = this.transientLayers.get(spec.id);
+    if (map && existing) map.layers.remove(existing);
+    this.revokeOverlayObjectUrl(spec.id);
+    this.transientLayers.delete(spec.id);
+    if (map) this.mountOverlay(spec);
+  }
+
+  private setOverlayVisible(id: string, visible: boolean): void {
+    const spec = this.overlays.get(id);
+    if (!spec) return;
+    this.overlays.set(id, { ...spec, visible });
+    const nativeLayer = this.transientLayers.get(id);
+    if (nativeLayer) nativeLayer.visible = visible;
+  }
+
+  private removeOverlay(id: string): void {
+    const nativeLayer = this.transientLayers.get(id);
+    if (nativeLayer) this.map?.layers.remove(nativeLayer);
+    this.transientLayers.delete(id);
+    this.overlays.delete(id);
+    this.revokeOverlayObjectUrl(id);
+  }
+
+  private mountOverlay(spec: GeoJsonOverlaySpec): void {
+    const modules = this.modules;
+    const map = this.map;
+    if (!modules || !map) return;
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(spec.data)], { type: "application/geo+json" }),
+    );
+    this.overlayObjectUrls.set(spec.id, url);
+    const layer = new modules.GeoJSONLayer({
+      id: `geolibre-overlay-${spec.id}`,
+      title: spec.id,
+      visible: spec.visible !== false,
+      url,
+    }) as unknown as ArcGISLayer;
+    this.transientLayers.set(spec.id, layer);
+    map.layers.addMany([layer]);
+  }
+
+  private revokeOverlayObjectUrl(id: string): void {
+    const url = this.overlayObjectUrls.get(id);
+    if (url) URL.revokeObjectURL(url);
+    this.overlayObjectUrls.delete(id);
+  }
+
+  private revokeOverlayObjectUrls(): void {
+    for (const url of this.overlayObjectUrls.values()) URL.revokeObjectURL(url);
+    this.overlayObjectUrls.clear();
   }
 
   private showPopup(options: {

@@ -1783,3 +1783,39 @@
   non-fatal).
 - Follow-up: add store-backed feature highlighting before enabling broader
   selection UI parity; Codex, 2026-07-21.
+
+## 2026-07-21 — MapLibre transient sources/layers and feature-state selection → ArcGIS `GeoJSONLayer`
+
+- Source: MapLibre — transient GeoJSON sources/layers and selection highlighting
+  are renderer-owned runtime presentation, commanded through the neutral
+  `MapEngineClient.interactions` and `layers` ports without changing store data.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → MapView transient-overlay capability and deterministic
+  layer collection fake.
+- ArcGIS approach: serialize each transient GeoJSON snapshot to an object URL,
+  create a documented `GeoJSONLayer`, and add/remove it through the public
+  `Map.layers` collection. Build store-backed selection as a separate transient
+  GeoJSONLayer rather than mutating the authoritative source layer.
+- What changed: `upsertGeoJsonOverlay`, visibility changes, removal, and
+  `setHighlight`/`clearHighlight` now work for the ArcGIS MapView adapter;
+  remount reconciliation restores live transient layers after rebuilding the
+  store-derived layer stack.
+- Gap / limitation: the neutral overlay style and highlight fit options are not
+  yet translated to ArcGIS renderers/navigation, so GeoJSONLayer defaults render
+  the overlay and selection.
+- Workaround: retain the typed neutral options and document the unsupported
+  visual parity. Removal criteria: add supported ArcGIS renderer and goTo
+  mappings after an approved cross-engine style/fit contract is defined.
+- Tradeoff accepted: a blob-backed GeoJSONLayer is recreated on reconciliation,
+  which favors clean ownership and store isolation over incremental source edits.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 44
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal); `npx playwright test e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS
+  SceneView" --reporter=line` → 2 passed.
+- Follow-up: translate the existing neutral style tokens to documented ArcGIS
+  renderers before declaring visual selection parity; Codex, 2026-07-21.
