@@ -15,6 +15,7 @@ import { useThemeMode } from "./hooks/useThemeMode";
 import { useThemeScheme } from "./hooks/useThemeScheme";
 import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
 import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
+import { useWhiteboxToolUrl } from "./hooks/useWhiteboxToolUrl";
 import { languageDirection } from "./i18n/languages";
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
   useRuntimeEnvironmentVariables();
   useUndoRedoShortcuts();
   useBeforeUnloadGuard();
+  useWhiteboxToolUrl();
   return (
     <DirectionProvider dir={languageDirection(i18n.language)}>
       <DesktopShell

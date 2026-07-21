@@ -20,22 +20,41 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 
 ## URL parameters
 
-| Parameter | Example | Description |
-| --- | --- | --- |
-| `url` | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL. |
-| `layout` | `layout=compact` | Compact embed layout: icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases. |
-| `toolbar` | `toolbar=icons` | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases. |
-| `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
-| `hidePanels` | `hidePanels=true` | Alternative way to hide those panels. |
-| `maponly` | `maponly` | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it. |
-| `welcome` | `welcome=0` | Hides the first-launch welcome wizard. Accepts `0`, `false`, `off`, or `no`. A `url=` deep link already suppresses it automatically. |
-| `theme` | `theme=dark` | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward. |
+| Parameter    | Example                                                    | Description                                                                                                                           |
+| ------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`        | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                                   |
+| `layout`     | `layout=compact`                                           | Compact embed layout: icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases.                        |
+| `toolbar`    | `toolbar=icons`                                            | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases.                                        |
+| `panels`     | `panels=none`                                              | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases.                                         |
+| `hidePanels` | `hidePanels=true`                                          | Alternative way to hide those panels.                                                                                                 |
+| `maponly`    | `maponly`                                                  | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it.        |
+| `welcome`    | `welcome=0`                                                | Hides the first-launch welcome wizard. Accepts `0`, `false`, `off`, or `no`. A `url=` deep link already suppresses it automatically.  |
+| `theme`      | `theme=dark`                                               | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward.       |
+| `tool`       | `tool=adaptive_filter`                                     | Opens the Processing (Whitebox toolbox) dialog on a specific tool by its id. Unknown ids open the dialog without preselecting a tool. |
 
 Parameters combine. For a narrow, chrome-free, dark embed of a shared project:
 
 ```text
 https://web.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.json&maponly&theme=dark
 ```
+
+### Deep-linking a Processing tool
+
+`tool=<id>` opens the Processing (Whitebox toolbox) dialog preselected to a tool.
+Any **additional** query parameters pre-fill that tool's form, using the tool's
+own parameter names, so a link can arrive ready to run:
+
+```text
+https://web.geolibre.app/?tool=extract_cog_subset&url=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fdem.tif&bbox_crs=4326
+```
+
+When `tool=` is present the app is in **tool mode**: `url` names a tool input
+(here, the COG to subset) rather than a project to load, so the project loader
+stands down. App/embed parameters above (`theme`, `layout`, `panels`, `maponly`,
+`locale`, …) keep their own meaning and are never passed to the tool. An id the
+current engine doesn't expose (WASM in the browser, the Python sidecar on
+desktop) simply isn't preselected. Tool ids match the Processing menu — the same
+ids used across the [Whitebox toolbox](processing.md).
 
 ## Embedding in a page
 
