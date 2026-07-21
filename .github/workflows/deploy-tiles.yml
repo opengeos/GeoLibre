@@ -24,7 +24,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Unlike the viewer/collab workers, this one has a real runtime dependency
       # (upng-js) that wrangler must bundle, so the workspace deps have to be

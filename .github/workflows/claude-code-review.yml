@@ -91,7 +91,7 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR head for review context (read-only; never executed)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Check out the PR head so Read/Grep/Glob show the *proposed* file
           # contents (and newly added files) that Claude is reviewing — the base

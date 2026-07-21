@@ -42,7 +42,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Match ci.yml: don't leave the GITHUB_TOKEN in .git/config where an
           # npm lifecycle script during `npm ci`/`npm run build` could read it.
