@@ -36,13 +36,13 @@ const descriptors: Readonly<Record<MapEngineId, MapEngineDescriptor>> = {
   arcgis: {
     id: "arcgis",
     available: true,
-    capabilities: [],
+    capabilities: ["feature-query"],
     supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
   },
   "arcgis-scene": {
     id: "arcgis-scene",
     available: true,
-    capabilities: [],
+    capabilities: ["feature-query"],
     supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
   },
 };

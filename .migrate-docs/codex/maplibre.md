@@ -1713,3 +1713,39 @@
   `?engine=arcgis` showed the native OpenStreetMap and Esri attribution.
 - Follow-up: add ArcGIS renderers for style translation and optional
   MapEngine capabilities before changing the default engine; Codex, 2026-07-20.
+
+## 2026-07-21 — MapLibre rendered-feature identify → ArcGIS `MapView.hitTest`
+
+- Source: MapLibre — `MapController.identifyFeatures()` queries rendered
+  MapLibre style layers and returns normalized feature DTOs to scripting and
+  selection consumers.
+- Files touched: new `packages/map/src/engine/arcgis-feature-query.ts`; updated
+  `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → MapView feature-query capability.
+- ArcGIS approach: call documented `MapView.hitTest(point, { include })` only
+  for adapter-owned `GeoJSONLayer` instances, then resolve the returned private
+  feature index against the current store `GeoJSON` snapshot.
+- What changed: each native GeoJSON serialization gets a private deterministic
+  index. `hitTest` and `layers.queryAtLngLat` now return neutral `HitFeature`
+  DTOs with store-owned id, properties, and geometry; no ArcGIS graphic, layer,
+  or generated object id crosses the MapEngine interface.
+- Gap / limitation: ArcGIS feature query currently covers only store-backed
+  GeoJSON. MapLibre vector-tile identify, highlight, popup, and raster query
+  behavior are still unsupported.
+- Workaround: capability advertisement is limited to `feature-query`, while
+  calls only include native GeoJSON layers and resolve their data from the
+  store. Removal criteria: implement and test renderer-neutral equivalents for
+  the remaining query targets and presentation capabilities.
+- Tradeoff accepted: serializing one private feature-index attribute into each
+  adapter-owned GeoJSON blob adds a small per-layer payload, in exchange for
+  stable lookup without treating the SDK graphic as application state.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 36 passed; `npm run lint -- --quiet` →
+  passed; `npm run build` → passed (normal JupyterLite-unavailable notice and
+  browser-externalization warnings were non-fatal).
+- Follow-up: add ArcGIS highlight and popup implementations, then broaden
+  query coverage only where the store-to-renderer correspondence is explicit;
+  Codex, 2026-07-21.

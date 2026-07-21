@@ -1,6 +1,11 @@
 import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import { getLayerBounds } from "../geojson-loader";
+import {
+  toArcGISHitFeatures,
+  type ArcGISHitTestView,
+  withArcGISFeatureIndices,
+} from "./arcgis-feature-query";
 import type { ArcGISMapEngineModules } from "./arcgis-map-engine";
 import {
   arcGISSceneViewToMapViewState,
@@ -62,7 +67,7 @@ interface ArcGISViewInputEvent {
   readonly mapPoint?: ArcGISPoint | null;
 }
 
-interface ArcGISSceneView extends ArcGISSceneViewSnapshot {
+interface ArcGISSceneView extends ArcGISSceneViewSnapshot, ArcGISHitTestView {
   readonly stationary: boolean;
   readonly container: HTMLElement | null;
   when(): Promise<void>;
@@ -228,7 +233,10 @@ export class ArcGISSceneEngine implements MapEngine {
       })),
     hasRenderTarget: (id: string): boolean =>
       this.layersSnapshot.some((layer) => layer.id === id && this.supportsLayer(layer)),
-    queryAtLngLat: async (): Promise<readonly HitFeature[]> => this.unsupported("feature-query"),
+    queryAtLngLat: async (lngLat: LngLat, layerId?: string): Promise<readonly HitFeature[]> => {
+      const point = this.viewport.project(lngLat);
+      return point ? this.queryAtScreenPoint(point, layerId) : [];
+    },
     setHighlight: (): void => this.unsupported("transient-overlays"),
     clearHighlight: (): void => this.unsupported("transient-overlays"),
   } satisfies MapEngine["layers"];
@@ -348,16 +356,16 @@ export class ArcGISSceneEngine implements MapEngine {
     this.reconcileLayers();
   }
 
-  supports(_capability: MapEngineCapability): boolean {
-    return false;
+  supports(capability: MapEngineCapability): boolean {
+    return capability === "feature-query";
   }
 
   supportsLayer(layer: GeoLibreLayer): boolean {
     return supportedLayerTypes.has(layer.type);
   }
 
-  async hitTest(_point: ScreenPoint): Promise<readonly HitFeature[]> {
-    return this.unsupported("feature-query");
+  async hitTest(point: ScreenPoint): Promise<readonly HitFeature[]> {
+    return this.queryAtScreenPoint(point);
   }
 
   invoke<K extends keyof MapEngineExtensionMap>(command: K, _input: MapEngineExtensionMap[K]["input"]): MapEngineExtensionMap[K]["output"] {
@@ -457,7 +465,11 @@ export class ArcGISSceneEngine implements MapEngine {
     if (!modules) return null;
     const properties: Record<string, unknown> = { id: toArcGISLayerId(layer.id), title: layer.name, visible: layer.visible, opacity: layer.opacity };
     if (layer.type === "geojson" && layer.geojson) {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(layer.geojson)], { type: "application/geo+json" }));
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(withArcGISFeatureIndices(layer.geojson))], {
+          type: "application/geo+json",
+        }),
+      );
       this.objectUrls.add(url);
       return new modules.GeoJSONLayer({ ...properties, url }) as unknown as ArcGISLayer;
     }
@@ -474,6 +486,20 @@ export class ArcGISSceneEngine implements MapEngine {
       if (urlTemplate) return new modules.WebTileLayer({ ...properties, urlTemplate }) as unknown as ArcGISLayer;
     }
     return null;
+  }
+
+  private async queryAtScreenPoint(
+    point: ScreenPoint,
+    layerId?: string,
+  ): Promise<readonly HitFeature[]> {
+    if (!this.view) return [];
+    const include = [...this.nativeLayers.entries()]
+      .filter(([id]) => !layerId || id === layerId)
+      .filter(([id]) => this.layersSnapshot.find((layer) => layer.id === id)?.type === "geojson")
+      .map(([, layer]) => layer);
+    if (include.length === 0) return [];
+    const result = await this.view.hitTest(point, { include });
+    return toArcGISHitFeatures(result, this.layersSnapshot, layerId);
   }
 
   private revokeObjectUrls(): void {

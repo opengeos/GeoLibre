@@ -137,6 +137,16 @@ export class FakeMapView {
     return { longitude: point.x, latitude: point.y };
   }
 
+  async hitTest(): Promise<{
+    readonly results: readonly {
+      readonly type: "graphic";
+      readonly layer: { readonly id: string };
+      readonly graphic: { readonly attributes: Readonly<Record<string, unknown>> };
+    }[];
+  }> {
+    return { results: this.onHitTest() };
+  }
+
   emitUserMove(): void {
     for (const handler of this.eventHandlers.get("mouse-wheel") ?? []) handler({});
     this.zoom += 1;
@@ -154,6 +164,11 @@ export class FakeMapView {
     container: HTMLElement,
     private readonly onDestroy: () => void,
     private readonly onResize: () => void,
+    private readonly onHitTest: () => readonly {
+      readonly type: "graphic";
+      readonly layer: { readonly id: string };
+      readonly graphic: { readonly attributes: Readonly<Record<string, unknown>> };
+    }[],
   ) {
     this.properties = properties;
     this.container = container;
@@ -171,6 +186,11 @@ export interface ArcGISFakeRuntime {
   readonly destroyed: { value: boolean };
   readonly resizeCount: { value: number };
   readonly basemapLayers: FakeLayer[];
+  hitTestResults: Array<{
+    readonly type: "graphic";
+    readonly layer: { readonly id: string };
+    readonly graphic: { readonly attributes: Readonly<Record<string, unknown>> };
+  }>;
   view: FakeMapView | null;
 }
 
@@ -188,6 +208,7 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
     destroyed,
     resizeCount,
     basemapLayers,
+    hitTestResults: [],
     view: null,
   };
 
@@ -214,6 +235,7 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
         () => {
           resizeCount.value += 1;
         },
+        () => runtime.hitTestResults,
       );
       runtime.view = this;
     }
@@ -242,6 +264,11 @@ export interface ArcGISSceneFakeRuntime {
   readonly layerOrders: string[][];
   readonly destroyed: { value: boolean };
   readonly basemapLayers: FakeLayer[];
+  hitTestResults: Array<{
+    readonly type: "graphic";
+    readonly layer: { readonly id: string };
+    readonly graphic: { readonly attributes: Readonly<Record<string, unknown>> };
+  }>;
   view: FakeSceneView | null;
 }
 
@@ -252,8 +279,13 @@ export class FakeSceneView extends FakeMapView {
     properties: Readonly<Record<string, unknown>>,
     container: HTMLElement,
     onDestroy: () => void,
+    onHitTest: () => readonly {
+      readonly type: "graphic";
+      readonly layer: { readonly id: string };
+      readonly graphic: { readonly attributes: Readonly<Record<string, unknown>> };
+    }[],
   ) {
-    super(properties, container, onDestroy, () => undefined);
+    super(properties, container, onDestroy, () => undefined, onHitTest);
     this.camera = {
       heading: typeof properties.heading === "number" ? properties.heading : 0,
       tilt: typeof properties.tilt === "number" ? properties.tilt : 0,
@@ -280,6 +312,7 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
     layerOrders,
     destroyed,
     basemapLayers,
+    hitTestResults: [],
     view: null,
   };
 
@@ -297,9 +330,14 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
 
   class SceneViewFake extends FakeSceneView {
     constructor(properties: Readonly<Record<string, unknown>>) {
-      super(properties, properties.container as HTMLElement, () => {
-        destroyed.value = true;
-      });
+      super(
+        properties,
+        properties.container as HTMLElement,
+        () => {
+          destroyed.value = true;
+        },
+        () => runtime.hitTestResults,
+      );
       runtime.view = this;
     }
   }

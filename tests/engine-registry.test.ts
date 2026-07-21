@@ -31,9 +31,9 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   assert.equal(cesium.available, true);
   assert.deepEqual(cesium.capabilities, []);
   assert.equal(arcgis.available, true);
-  assert.deepEqual(arcgis.capabilities, []);
+  assert.deepEqual(arcgis.capabilities, ["feature-query"]);
   assert.equal(arcgisScene.available, true);
-  assert.deepEqual(arcgisScene.capabilities, []);
+  assert.deepEqual(arcgisScene.capabilities, ["feature-query"]);
   assert.equal(isMapEngineLayerSupported("maplibre", layer("vector-tiles")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("geojson")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("vector-tiles")), false);

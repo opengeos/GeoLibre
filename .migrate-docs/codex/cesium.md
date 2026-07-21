@@ -95,3 +95,37 @@
   → 1 passed in headless Chromium, with zero diagnostic errors.
 - Follow-up: add I3S 3D-layer support and an elevation/API-key path before
   replacing Cesium as the secondary-globe default.
+
+## 2026-07-21 — Cesium globe picking → ArcGIS `SceneView.hitTest`
+
+- Source: Cesium — the secondary globe had no seam-level feature-picking
+  implementation; store-backed GeoJSON was therefore rendered but could not be
+  identified through the shared `MapEngine` query contract.
+- Files touched: new `packages/map/src/engine/arcgis-feature-query.ts`; updated
+  `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → SceneView feature-query capability.
+- ArcGIS approach: use documented `SceneView.hitTest(point, { include })` with
+  the adapter's own `GeoJSONLayer` instances, then translate only `graphic`
+  results into store-owned neutral DTOs.
+- What changed: SceneView GeoJSON serialization carries a private feature
+  index; `hitTest` and `layers.queryAtLngLat` resolve it against the store
+  snapshot. The adapter now advertises `feature-query` while keeping all
+  renderer objects private.
+- Gap / limitation: 3D Tiles, terrain intersections, raster/WMS/WMTS results,
+  highlights, and popups remain unsupported; SceneView may also omit graphics
+  occluded by ground according to its documented hit-test behavior.
+- Workaround: restrict inclusion and result translation to known store GeoJSON
+  layers. Removal criteria: add explicit, conformance-tested DTO mappings for
+  each additional layer family or interaction behavior.
+- Tradeoff accepted: the 3D adapter deliberately returns no generic ground or
+  SDK-layer results, favoring store fidelity over broad but renderer-specific
+  picking.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 36 passed; `npm run lint -- --quiet` →
+  passed; `npm run build` → passed (normal JupyterLite-unavailable notice and
+  browser-externalization warnings were non-fatal).
+- Follow-up: assess explicit I3S and terrain result DTOs before enabling any
+  3D-layer picking beyond GeoJSON; Codex, 2026-07-21.

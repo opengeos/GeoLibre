@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { GeoLibreLayer, MapViewState } from "../packages/core/src/index";
 import { ArcGISSceneEngine } from "../packages/map/src/engine/arcgis-scene-engine";
+import { ARC_GIS_FEATURE_INDEX } from "../packages/map/src/engine/arcgis-feature-query";
 import { MapEngineCapabilityError } from "../packages/map/src/engine/types";
 import { createArcGISSceneFakeRuntime } from "./arcgis-engine-fake";
 
@@ -77,5 +78,44 @@ test("ArcGISSceneEngine preserves 3D camera pitch and emits only user navigation
   runtime.view?.emitUserMove();
   assert.deepEqual(events, [{ zoom: 9, userDriven: true }]);
   assert.deepEqual(engine.viewport.unproject({ x: 8, y: 47 }), [8, 47]);
+  engine.destroy();
+});
+
+test("ArcGISSceneEngine identifies only store-backed GeoJSON features", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const geo = {
+    ...layer("geo", "geojson"),
+    geojson: {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          id: "zurich",
+          properties: { name: "Zürich" },
+          geometry: { type: "Point" as const, coordinates: [8.55, 47.37] },
+        },
+      ],
+    },
+  };
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([geo]);
+  await engine.mount({} as HTMLElement, initialView);
+  runtime.hitTestResults = [
+    {
+      type: "graphic",
+      layer: { id: "geolibre-geo" },
+      graphic: { attributes: { [ARC_GIS_FEATURE_INDEX]: 0 } },
+    },
+  ];
+
+  assert.equal(engine.supports("feature-query"), true);
+  assert.deepEqual(await engine.hitTest({ x: 8.55, y: 47.37 }), [
+    {
+      layerId: "geo",
+      featureId: "zurich",
+      properties: { name: "Zürich" },
+      geometry: { type: "Point", coordinates: [8.55, 47.37] },
+    },
+  ]);
   engine.destroy();
 });

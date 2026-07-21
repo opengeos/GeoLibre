@@ -177,6 +177,10 @@ Status values: not started · in progress · partial · blocked · done
   secondary 3D globe. It is conformance- and browser-tested for store-driven
   GeoJSON/raster/XYZ/WMS/WMTS layers; generic Cesium 3D Tiles remain unsupported
   pending explicit I3S layer classification.
+- Implemented: ArcGIS `MapView` and `SceneView` now advertise feature-query
+  support for store-backed GeoJSON only. ArcGIS hit results are translated into
+  neutral DTOs from the current store snapshot; raster, vector-tile, highlight,
+  and popup parity remain open.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import type { GeoLibreLayer, MapViewState } from "../packages/core/src/index";
 import { ArcGISMapEngine } from "../packages/map/src/engine/arcgis-map-engine";
 import { ArcGISSceneEngine } from "../packages/map/src/engine/arcgis-scene-engine";
+import { ARC_GIS_FEATURE_INDEX } from "../packages/map/src/engine/arcgis-feature-query";
 import {
   CesiumEngine,
   type CesiumEngineDependencies,
@@ -58,7 +59,14 @@ function layer(id: string, type: GeoLibreLayer["type"]): GeoLibreLayer {
       ? {
           geojson: {
             type: "FeatureCollection" as const,
-            features: [],
+            features: [
+              {
+                type: "Feature" as const,
+                id: "feature-1",
+                properties: { name: "test" },
+                geometry: { type: "Point" as const, coordinates: [8.55, 47.37] },
+              },
+            ],
           },
         }
       : {}),
@@ -321,6 +329,14 @@ function createCesiumHarness(): EngineHarness {
 function createArcGISHarness(): EngineHarness {
   const runtime = createArcGISFakeRuntime();
   const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([layer("geo", "geojson")]);
+  runtime.hitTestResults = [
+    {
+      type: "graphic",
+      layer: { id: "geolibre-geo" },
+      graphic: { attributes: { [ARC_GIS_FEATURE_INDEX]: 0 } },
+    },
+  ];
   return {
     engine,
     get syncedLayerOrders(): string[][] {
@@ -337,6 +353,14 @@ function createArcGISHarness(): EngineHarness {
 function createArcGISSceneHarness(): EngineHarness {
   const runtime = createArcGISSceneFakeRuntime();
   const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([layer("geo", "geojson")]);
+  runtime.hitTestResults = [
+    {
+      type: "graphic",
+      layer: { id: "geolibre-geo" },
+      graphic: { attributes: { [ARC_GIS_FEATURE_INDEX]: 0 } },
+    },
+  ];
   return {
     engine,
     get syncedLayerOrders(): string[][] {
@@ -501,20 +525,18 @@ runEngineConformance("Cesium", createCesiumHarness, {
 
 runEngineConformance("ArcGIS", createArcGISHarness, {
   capabilities: Object.fromEntries(
-    Object.keys(allCapabilities).map((capability) => [capability, false]),
+    Object.keys(allCapabilities).map((capability) => [capability, capability === "feature-query"]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
   supportsVectorTiles: false,
-  hitCount: 0,
-  unsupportedHitCapability: "feature-query",
+  hitCount: 1,
 });
 
 runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
   capabilities: Object.fromEntries(
-    Object.keys(allCapabilities).map((capability) => [capability, false]),
+    Object.keys(allCapabilities).map((capability) => [capability, capability === "feature-query"]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
   supportsVectorTiles: false,
-  hitCount: 0,
-  unsupportedHitCapability: "feature-query",
+  hitCount: 1,
 });
