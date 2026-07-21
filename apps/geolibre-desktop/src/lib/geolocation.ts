@@ -27,7 +27,7 @@ import { isTauri } from "./is-tauri";
  * WebView. Only the packaged mobile app: a phone browser matches `isMobile()`
  * but isn't Tauri (no plugin), so it correctly stays on `navigator.geolocation`.
  */
-export function useNativeGeolocation(): boolean {
+export function nativeGeolocationAvailable(): boolean {
   return isTauri() && isMobile();
 }
 
@@ -92,7 +92,7 @@ async function ensureNativePermission(): Promise<void> {
  * `navigator.geolocation.getCurrentPosition`.
  */
 export async function getCurrentPosition(options?: PositionOptions): Promise<GeolocationPosition> {
-  if (useNativeGeolocation()) {
+  if (nativeGeolocationAvailable()) {
     await ensureNativePermission();
     const { getCurrentPosition: nativeGet } = await import("@tauri-apps/plugin-geolocation");
     return fromPlugin(await nativeGet(toPluginOptions(options)));
@@ -120,7 +120,7 @@ export async function watchPosition(
   onError: (err: GeolocationError) => void,
   options?: PositionOptions,
 ): Promise<() => void> {
-  if (useNativeGeolocation()) {
+  if (nativeGeolocationAvailable()) {
     await ensureNativePermission();
     const { watchPosition: nativeWatch, clearWatch } =
       await import("@tauri-apps/plugin-geolocation");

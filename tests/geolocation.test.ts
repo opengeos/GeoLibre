@@ -3,12 +3,12 @@ import { afterEach, describe, it } from "node:test";
 import {
   GeolocationError,
   getCurrentPosition,
-  useNativeGeolocation,
+  nativeGeolocationAvailable,
   watchPosition,
 } from "../apps/geolibre-desktop/src/lib/geolocation";
 
 // These cover the browser/desktop path (navigator.geolocation). The native Tauri
-// mobile path is gated behind useNativeGeolocation() (isTauri && isMobile) and
+// mobile path is gated behind nativeGeolocationAvailable() (isTauri && isMobile) and
 // dynamically imports @tauri-apps/plugin-geolocation, which can't run under
 // node --test — it's exercised on-device instead.
 
@@ -58,17 +58,17 @@ afterEach(() => {
   setNavigator();
 });
 
-describe("useNativeGeolocation", () => {
+describe("nativeGeolocationAvailable", () => {
   it("is false outside Tauri even on a mobile user agent", () => {
     setWindow(false);
     setNavigator(undefined, "Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
-    assert.equal(useNativeGeolocation(), false);
+    assert.equal(nativeGeolocationAvailable(), false);
   });
 
   it("is false in Tauri on a desktop user agent", () => {
     setWindow(true);
     setNavigator(undefined, "Mozilla/5.0 (X11; Linux x86_64)");
-    assert.equal(useNativeGeolocation(), false);
+    assert.equal(nativeGeolocationAvailable(), false);
   });
 });
 
