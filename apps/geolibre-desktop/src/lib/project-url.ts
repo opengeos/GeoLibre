@@ -1,5 +1,6 @@
 import { parseProject, type GeoLibreProject } from "@geolibre/core";
 import { normalizeProjectUrl } from "./urls";
+import { WHITEBOX_TOOL_PARAM } from "./whitebox-tool-url";
 
 // Query parameters that carry a `.geolibre.json` project URL deep link. A bare
 // `?https://...` query (no key) is also accepted by `projectUrlFromLocation`.
@@ -24,7 +25,7 @@ export function projectUrlFromLocation(): string | null {
   // `whitebox-tool-url.ts`). Suppress the project loader so the two features
   // don't both claim `url` — otherwise the loader would try to parse a raster as
   // a `.geolibre.json` project and surface an error.
-  if (params.get("tool")?.trim()) return null;
+  if (params.get(WHITEBOX_TOOL_PARAM)?.trim()) return null;
   for (const key of PROJECT_URL_PARAMS) {
     const value = params.get(key);
     const url = normalizeProjectUrl(value);

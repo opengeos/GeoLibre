@@ -51,10 +51,13 @@ https://web.geolibre.app/?tool=extract_cog_subset&url=https%3A%2F%2Fdata.source.
 When `tool=` is present the app is in **tool mode**: `url` names a tool input
 (here, the COG to subset) rather than a project to load, so the project loader
 stands down. App/embed parameters above (`theme`, `layout`, `panels`, `maponly`,
-`locale`, …) keep their own meaning and are never passed to the tool. An id the
-current engine doesn't expose (WASM in the browser, the Python sidecar on
-desktop) simply isn't preselected. Tool ids match the Processing menu — the same
-ids used across the [Whitebox toolbox](processing.md).
+`locale`, …) keep their own meaning and are never passed to the tool.
+Preselection and parameter prefilling apply only to an id that matches the
+Processing menu: an id not in the menu still opens the dialog, but without
+preselecting a tool or applying any parameters. A known id the current engine
+doesn't expose (WASM in the browser, the Python sidecar on desktop) likewise
+isn't preselected. Tool ids match the Processing menu — the same ids used across
+the [Whitebox toolbox](processing.md).
 
 ## Embedding in a page
 
