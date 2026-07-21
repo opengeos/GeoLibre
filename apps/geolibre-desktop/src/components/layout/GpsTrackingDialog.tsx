@@ -51,6 +51,7 @@ import {
   trackPreview,
   trackStats,
 } from "../../lib/gps-tracking";
+import { watchPosition } from "../../lib/geolocation";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 
 interface GpsTrackingDialogProps {
@@ -304,19 +305,20 @@ export function GpsTrackingDialog({
     [getMap, setGpsStatus],
   );
 
-  // The watchPosition subscription follows `tracking`.
+  // The watchPosition subscription follows `tracking`. On Tauri mobile this
+  // routes through the native geolocation plugin (which requests the OS location
+  // permission first); elsewhere it wraps navigator.geolocation. Starting a
+  // native watch is async, so the effect tracks cancellation and unsubscribes
+  // once the watch resolves. See lib/geolocation.ts.
   useEffect(() => {
     if (!tracking) return;
-    if (!("geolocation" in navigator)) {
-      setError(t("gps.noGeolocation"));
-      setTracking(false);
-      return;
-    }
     zoomedRef.current = false;
-    const id = navigator.geolocation.watchPosition(
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    watchPosition(
       (pos) => handleFix(fixFromPosition(pos)),
       (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
+        if (err.permissionDenied) {
           setError(t("gps.permissionDenied"));
           setTracking(false);
         } else {
@@ -325,8 +327,19 @@ export function GpsTrackingDialog({
         }
       },
       { enableHighAccuracy: true, maximumAge: 0 },
-    );
-    return () => navigator.geolocation.clearWatch(id);
+    )
+      .then((unsub) => {
+        if (cancelled) unsub();
+        else unsubscribe = unsub;
+      })
+      .catch((err) => {
+        setError(t(err?.permissionDenied ? "gps.permissionDenied" : "gps.noGeolocation"));
+        setTracking(false);
+      });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [tracking, handleFix, t]);
 
   // Map subscriptions while tracking. Manual panning turns follow mode off,

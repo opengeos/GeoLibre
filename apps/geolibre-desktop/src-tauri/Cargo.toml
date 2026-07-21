@@ -32,6 +32,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = { version = "2", features = ["watch"] }
+# Native geolocation on Android/iOS: ships the location manifest permissions and
+# drives the OS permission dialog for Field Collection / GPS Tracking, which the
+# WebView's navigator.geolocation cannot do on Android. On desktop it is inert
+# (the frontend only invokes it on mobile).
+tauri-plugin-geolocation = "2"
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 # Persists the fs scope the folder picker grants, so Browser-panel pinned
