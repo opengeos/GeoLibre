@@ -428,6 +428,8 @@ function buildPanel(
   const apiKeyInput = el("input", CSS.input) as HTMLInputElement;
   apiKeyInput.placeholder = labels.apiKeyPlaceholder;
   apiKeyInput.autocomplete = "off";
+  // Mask the key like a password so it isn't shown in the clear when pasted.
+  apiKeyInput.type = "password";
 
   const connectRow = el("div", CSS.row);
   const connectButton = button(labels.connect, CSS.primaryButton);
