@@ -198,6 +198,15 @@ export interface ValidateMapExpressionOptions {
 }
 
 /**
+ * The `rootKey` `createExpression` (style-spec v26+) requires as its second
+ * argument — a location label it only surfaces when attaching a runtime
+ * warning to `console.warn` during evaluation. These expressions come from the
+ * Expression Builder dialog, not a style JSON layer, so a generic label is the
+ * honest value; it never appears in the parsing errors we report.
+ */
+const EXPRESSION_ROOT_KEY = "expression";
+
+/**
  * Builds the minimal property spec that makes `createExpression` enforce a
  * result type while still allowing zoom- and feature-dependent input.
  *
@@ -205,16 +214,17 @@ export interface ValidateMapExpressionOptions {
  * `@maplibre/maplibre-gl-style-spec` expects — the cast below means the
  * compiler cannot catch a change to that contract, so whenever the
  * style-spec package is bumped (including Dependabot PRs) re-check that
- * expected-type enforcement still works. The "enforces an expected result
- * type" test in `tests/expressions.test.ts` fails if this shape stops
- * being honored.
+ * expected-type enforcement still works, and that the property spec is still
+ * `createExpression`'s third parameter (v26 inserted a `rootKey` at index 1,
+ * shifting it from `[1]` to `[2]`). The "enforces an expected result type"
+ * test in `tests/expressions.test.ts` fails if this shape stops being honored.
  */
 function propertySpecFor(expectedType: ExpressionExpectedType) {
   return {
     type: expectedType,
     "property-type": "data-driven",
     expression: { parameters: ["zoom", "feature"] },
-  } as unknown as Parameters<typeof createExpression>[1];
+  } as unknown as NonNullable<Parameters<typeof createExpression>[2]>;
 }
 
 /** Outcome of validating an expression source string. */
@@ -286,6 +296,7 @@ function compileMapExpression(
   const substituted = substituteExpressionVariables(parsed, options.variables ?? []) as unknown[];
   const compiled = createExpression(
     substituted,
+    EXPRESSION_ROOT_KEY,
     options.expectedType ? propertySpecFor(options.expectedType) : undefined,
   );
   if (compiled.result === "error") {
