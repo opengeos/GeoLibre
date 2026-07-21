@@ -359,6 +359,13 @@ export {
   type SourceCoopPinnedProduct,
 } from "./plugins/maplibre-source-coop";
 export {
+  DEFAULT_GEOLENS_LABELS,
+  GEOLENS_PLUGIN_ID,
+  maplibreGeoLensPlugin,
+  setGeoLensLabels,
+  type GeoLensLabels,
+} from "./plugins/maplibre-geolens";
+export {
   buildListObjectsUrl,
   buildObjectUrl,
   classifyKey,
