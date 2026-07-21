@@ -24,11 +24,13 @@ import { Button, Input, Label, ScrollArea, Select, cn } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   FolderOpen,
   GripHorizontal,
+  Link2,
   Loader2,
   Play,
   RefreshCw,
@@ -57,6 +59,7 @@ import {
   subsetUrlFieldValues,
   subsetUrlToolKind,
 } from "../../lib/subset-tool-url";
+import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
@@ -426,6 +429,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // terminal job (never "pending"/"running"), so without this flag the Run
   // button would stay enabled mid-execution and allow concurrent runs.
   const [runningLocal, setRunningLocal] = useState(false);
+  // Transient "Copied!" state for the share-link button, cleared after 2s.
+  const [linkCopied, setLinkCopied] = useState(false);
+  const linkCopyTimer = useRef<number | null>(null);
 
   // Floating, non-modal panel (GH: whitebox modal -> floating panel). Rendered
   // as a draggable `fixed` window instead of a Radix modal so the map stays
@@ -664,6 +670,49 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // Whether any GeoLibre-authored tools are present (WASM mode), gating the
   // source filter — pointless when every tool is from Whitebox.
   const hasGeolibreTools = useMemo(() => tools.some((tool) => tool.source === "geolibre"), [tools]);
+
+  // A shareable `?tool=` deep link for the selected tool: the tool id plus the
+  // parameters the user changed from their defaults. Local file paths
+  // (`*_in`/`*_out`) are excluded — they are machine-specific and either useless
+  // or leaky to a recipient — while an HTTP `url` (a `string` param) is kept. The
+  // web build links to its own origin; the desktop build, whose window origin is
+  // a non-shareable `tauri://…`, links to the hosted web app.
+  const shareUrl = useMemo(() => {
+    if (!selectedTool) return "";
+    const defaults = createDefaultValues(selectedTool);
+    const asString = (value: unknown) =>
+      typeof value === "string" ? value : value == null ? "" : String(value);
+    const parameters: Record<string, string> = {};
+    for (const param of selectedTool.params ?? []) {
+      const name = param.name;
+      if (!name) continue;
+      const kind = parameterKind(param);
+      if (kind.endsWith("_in") || kind.endsWith("_out")) continue;
+      const value = asString(values[name]);
+      if (!value.trim() || value === asString(defaults[name])) continue;
+      parameters[name] = value;
+    }
+    return buildWhiteboxToolShareUrl(selectedTool.id, parameters, whiteboxToolShareBase(desktop));
+  }, [selectedTool, values, desktop]);
+
+  const handleCopyLink = useCallback(() => {
+    if (!shareUrl) return;
+    void navigator.clipboard
+      ?.writeText(shareUrl)
+      .then(() => {
+        if (linkCopyTimer.current !== null) window.clearTimeout(linkCopyTimer.current);
+        setLinkCopied(true);
+        linkCopyTimer.current = window.setTimeout(() => setLinkCopied(false), 2000);
+      })
+      .catch(() => setError(t("processing.whitebox.copyLinkFailed")));
+  }, [shareUrl, t]);
+
+  useEffect(
+    () => () => {
+      if (linkCopyTimer.current !== null) window.clearTimeout(linkCopyTimer.current);
+    },
+    [],
+  );
 
   // Ignore the source filter when no GeoLibre tools are present (e.g. sidecar
   // mode), so a stale "geolibre" selection can't empty the whole list.
@@ -1674,6 +1723,19 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                 />
                 {t("processing.whitebox.runLocal")}
               </label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCopyLink}
+                disabled={!selectedTool}
+                title={t("processing.whitebox.copyLinkHint")}
+                aria-label={t("processing.whitebox.copyLink")}
+              >
+                {linkCopied ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                {linkCopied
+                  ? t("processing.whitebox.copyLinkCopied")
+                  : t("processing.whitebox.copyLink")}
+              </Button>
               <Button
                 type="button"
                 onClick={runSelectedTool}

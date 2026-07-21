@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildWhiteboxToolShareUrl,
+  GEOLIBRE_WEB_APP_URL,
   isKnownWhiteboxToolId,
   WHITEBOX_TOOL_PARAM,
   whiteboxToolFromSearch,
+  whiteboxToolShareBase,
 } from "../apps/geolibre-desktop/src/lib/whitebox-tool-url";
 
 describe("isKnownWhiteboxToolId", () => {
@@ -93,5 +96,54 @@ describe("whiteboxToolFromSearch", () => {
       whiteboxToolFromSearch("?tool=extract_cog_subset&url=a&url=b")?.parameters.url,
       "a",
     );
+  });
+});
+
+describe("buildWhiteboxToolShareUrl", () => {
+  const BASE = "https://web.geolibre.app/";
+
+  it("builds a ?tool= link with the tool id and each parameter", () => {
+    const url = buildWhiteboxToolShareUrl(
+      "extract_cog_subset",
+      { url: "https://data.source.coop/giswqs/opengeos/dem.tif", bbox_crs: "4326" },
+      BASE,
+    );
+    const params = new URLSearchParams(new URL(url).search);
+    assert.equal(params.get("tool"), "extract_cog_subset");
+    assert.equal(params.get("url"), "https://data.source.coop/giswqs/opengeos/dem.tif");
+    assert.equal(params.get("bbox_crs"), "4326");
+  });
+
+  it("round-trips through whiteboxToolFromSearch", () => {
+    const parameters = {
+      url: "https://data.source.coop/giswqs/opengeos/dem.tif",
+      bbox_crs: "4326",
+    };
+    const url = buildWhiteboxToolShareUrl("extract_cog_subset", parameters, BASE);
+    const parsed = whiteboxToolFromSearch(new URL(url).search);
+    assert.deepEqual(parsed, { toolId: "extract_cog_subset", known: true, parameters });
+  });
+
+  it("emits just ?tool= when there are no parameters", () => {
+    assert.equal(
+      buildWhiteboxToolShareUrl("slope", {}, BASE),
+      "https://web.geolibre.app/?tool=slope",
+    );
+  });
+
+  it("drops any query and hash already on the base so the link is deterministic", () => {
+    const url = buildWhiteboxToolShareUrl("slope", { z_factor: "2" }, `${BASE}?tool=old&x=1#frag`);
+    assert.equal(url, "https://web.geolibre.app/?tool=slope&z_factor=2");
+  });
+});
+
+describe("whiteboxToolShareBase", () => {
+  it("uses the hosted web app URL for the desktop build", () => {
+    assert.equal(whiteboxToolShareBase(true), GEOLIBRE_WEB_APP_URL);
+  });
+
+  it("falls back to the hosted web app URL when there is no window (web build, no DOM)", () => {
+    // node:test runs without a `window`, standing in for the SSR/no-DOM case.
+    assert.equal(whiteboxToolShareBase(false), GEOLIBRE_WEB_APP_URL);
   });
 });

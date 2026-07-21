@@ -112,3 +112,52 @@ export function whiteboxToolFromLocation(): WhiteboxToolUrlTarget | null {
   if (typeof window === "undefined") return null;
   return whiteboxToolFromSearch(window.location.search);
 }
+
+/**
+ * Canonical public URL of the hosted web app, used as the base for a shareable
+ * tool link from the **desktop** build — there `window.location` is a
+ * `tauri://…` origin that recipients can't open. The web build shares its own
+ * origin instead (see `whiteboxToolShareBase`).
+ */
+export const GEOLIBRE_WEB_APP_URL = "https://web.geolibre.app/";
+
+/**
+ * The base URL a "Copy link" share should build on.
+ *
+ * @param desktop - Whether the app is the desktop (Tauri) build, whose
+ *   `window.location` is not shareable.
+ * @returns `GEOLIBRE_WEB_APP_URL` on desktop; otherwise the current app's
+ *   origin + path (so a self-hosted web deployment links to itself), falling
+ *   back to the canonical URL when there is no window.
+ */
+export function whiteboxToolShareBase(desktop: boolean): string {
+  if (desktop || typeof window === "undefined") return GEOLIBRE_WEB_APP_URL;
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+/**
+ * Builds a shareable `?tool=` deep link, the inverse of
+ * {@link whiteboxToolFromSearch}: `<base>?tool=<toolId>` plus one query
+ * parameter per entry in `parameters`. Any query string already on `base` is
+ * dropped so the link is deterministic. The caller decides which parameters to
+ * include (the dialog omits local file paths and values left at their default).
+ *
+ * @param toolId - The tool id to preselect.
+ * @param parameters - Tool parameter values to prefill, each a string.
+ * @param base - The base URL (see {@link whiteboxToolShareBase}).
+ * @returns The absolute share URL.
+ */
+export function buildWhiteboxToolShareUrl(
+  toolId: string,
+  parameters: Record<string, string>,
+  base: string,
+): string {
+  const url = new URL(base);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set(WHITEBOX_TOOL_PARAM, toolId);
+  for (const [key, value] of Object.entries(parameters)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}

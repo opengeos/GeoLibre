@@ -2916,6 +2916,10 @@
       "runLocal": "Run locally (WASM)",
       "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
       "runningLocally": "Running locally with WebAssembly. No sidecar required.",
+      "copyLink": "Copy link",
+      "copyLinkCopied": "Copied!",
+      "copyLinkHint": "Copy a shareable link that opens this tool with the current settings",
+      "copyLinkFailed": "Could not copy the link to the clipboard.",
       "catalogSnapshotError": "Could not load Whitebox catalog snapshot.",
       "localRunnerError": "Could not load the local (WASM) tool runner. Refresh and try again, or use the sidecar if it is available.",
       "output": {
