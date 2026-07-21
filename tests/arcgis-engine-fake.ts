@@ -1,4 +1,5 @@
 import type { ArcGISMapEngineModules } from "../packages/map/src/engine/arcgis-map-engine";
+import type { ArcGISSceneEngineModules } from "../packages/map/src/engine/arcgis-scene-engine";
 
 type ArcGISLayerProperties = Readonly<Record<string, unknown>>;
 
@@ -227,6 +228,91 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
     Map: MapFake,
     Basemap: BasemapFake,
     MapView: MapViewFake,
+    WebTileLayer: FakeLayer,
+    GeoJSONLayer: FakeLayer,
+    WMSLayer: FakeLayer,
+    WMTSLayer: FakeLayer,
+  };
+  return runtime;
+}
+
+export interface ArcGISSceneFakeRuntime {
+  readonly modules: ArcGISSceneEngineModules;
+  readonly config: { assetsPath: string };
+  readonly layerOrders: string[][];
+  readonly destroyed: { value: boolean };
+  readonly basemapLayers: FakeLayer[];
+  view: FakeSceneView | null;
+}
+
+export class FakeSceneView extends FakeMapView {
+  readonly camera: { heading: number; tilt: number };
+
+  constructor(
+    properties: Readonly<Record<string, unknown>>,
+    container: HTMLElement,
+    onDestroy: () => void,
+  ) {
+    super(properties, container, onDestroy, () => undefined);
+    this.camera = {
+      heading: typeof properties.heading === "number" ? properties.heading : 0,
+      tilt: typeof properties.tilt === "number" ? properties.tilt : 0,
+    };
+  }
+
+  override async goTo(target: Record<string, unknown>): Promise<void> {
+    const applied = super.goTo(target);
+    if (typeof target.heading === "number") this.camera.heading = target.heading;
+    if (typeof target.tilt === "number") this.camera.tilt = target.tilt;
+    await applied;
+  }
+}
+
+/** Deterministic, SDK-free SceneView fake used by the 3D adapter tests. */
+export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
+  const config = { assetsPath: "" };
+  const layerOrders: string[][] = [];
+  const destroyed = { value: false };
+  const basemapLayers: FakeLayer[] = [];
+  const runtime: ArcGISSceneFakeRuntime = {
+    modules: undefined as unknown as ArcGISSceneEngineModules,
+    config,
+    layerOrders,
+    destroyed,
+    basemapLayers,
+    view: null,
+  };
+
+  class BasemapFake {
+    constructor(properties: Readonly<{ baseLayers: readonly FakeLayer[] }>) {
+      basemapLayers.push(...properties.baseLayers);
+    }
+  }
+
+  class MapFake extends FakeMap {
+    constructor(properties: Readonly<{ basemap: unknown }>) {
+      super(properties, (layers) => layerOrders.push(layers.map((layer) => layer.id)));
+    }
+  }
+
+  class SceneViewFake extends FakeSceneView {
+    constructor(properties: Readonly<Record<string, unknown>>) {
+      super(properties, properties.container as HTMLElement, () => {
+        destroyed.value = true;
+      });
+      runtime.view = this;
+    }
+  }
+
+  runtime.modules = {
+    config,
+    reactiveUtils: {
+      watch: (_getValue, callback) =>
+        runtime.view?.watch("stationary", callback) ?? new FakeHandle(() => undefined),
+    },
+    Map: MapFake,
+    Basemap: BasemapFake,
+    SceneView: SceneViewFake,
     WebTileLayer: FakeLayer,
     GeoJSONLayer: FakeLayer,
     WMSLayer: FakeLayer,

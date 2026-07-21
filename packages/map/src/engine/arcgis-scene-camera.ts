@@ -59,10 +59,13 @@ export function arcGISSceneViewToMapViewState(
         ? [longitude, latitude]
         : fallback.center,
     zoom: Number.isFinite(view.zoom) ? view.zoom : fallback.zoom,
-    bearing: Number.isFinite(view.camera.heading)
+    bearing: typeof view.camera.heading === "number" && Number.isFinite(view.camera.heading)
       ? normalizeArcGISRotation(view.camera.heading)
       : fallback.bearing,
-    pitch: Number.isFinite(view.camera.tilt) ? clamp(view.camera.tilt, 0, 85) : fallback.pitch,
+    pitch:
+      typeof view.camera.tilt === "number" && Number.isFinite(view.camera.tilt)
+        ? clamp(view.camera.tilt, 0, 85)
+        : fallback.pitch,
   };
 }
 

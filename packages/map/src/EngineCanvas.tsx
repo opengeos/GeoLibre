@@ -226,7 +226,13 @@ const StoreEngineCanvas = memo(function StoreEngineCanvas({
       ref={containerRef}
       className="h-full w-full"
       data-testid={
-        engineId === "cesium" ? "cesium-canvas" : primary ? "map-canvas" : "secondary-map-canvas"
+        engineId === "cesium"
+          ? "cesium-canvas"
+          : engineId === "arcgis-scene"
+            ? "arcgis-scene-canvas"
+            : primary
+              ? "map-canvas"
+              : "secondary-map-canvas"
       }
       data-engine-id={engineId}
       data-engine-ready={ready ? "true" : "false"}

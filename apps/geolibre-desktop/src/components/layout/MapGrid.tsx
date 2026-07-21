@@ -1,5 +1,5 @@
 import { getCesiumIonToken, useAppStore } from "@geolibre/core";
-import { EngineCanvas, isMapEngineLayerSupported } from "@geolibre/map";
+import { EngineCanvas, isMapEngineLayerSupported, type MapEngineId } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -127,31 +127,35 @@ interface SecondaryMapPaneProps {
 
 function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
-  const cesiumAvailable = Boolean(cesiumToken);
+  // Cesium remains the default until retirement. This is an explicit, reversible
+  // SceneView opt-in and intentionally leaves persisted pane state unchanged.
+  const sceneEngine: Extract<MapEngineId, "cesium" | "arcgis-scene"> =
+    new URLSearchParams(globalThis.location?.search ?? "").get("sceneEngine") === "arcgis"
+      ? "arcgis-scene"
+      : "cesium";
+  const sceneAvailable = sceneEngine === "arcgis-scene" || Boolean(cesiumToken);
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
   const setSecondaryMapLabel = useAppStore((s) => s.setSecondaryMapLabel);
   const setSecondaryViewKind = useAppStore((s) => s.setSecondaryViewKind);
   const label = useAppStore((s) => s.secondaryMapViews.find((p) => p.id === viewId)?.label ?? "");
   // Absent viewKind means the default 2D map (back-compat with older panes).
-  // Only honor a 3D pane when Cesium is actually available (a token is present);
-  // otherwise a project saved with a globe pane silently opens as the 2D map.
+  // Cesium needs an Ion token; the ArcGIS SceneView opt-in uses its keyless
+  // OpenStreetMap fallback and can therefore render a saved 3D pane directly.
   const wantsCesium = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.viewKind === "cesium",
   );
-  const is3d = cesiumAvailable && wantsCesium;
+  const is3d = sceneAvailable && wantsCesium;
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       {is3d ? (
-        // Key on the token so changing the Cesium Ion token in Settings remounts
-        // the globe: `Cesium.Ion.defaultAccessToken` is applied once at viewer
-        // creation, so without a remount a swapped (e.g. corrected) token would
-        // never take effect on an already-mounted pane.
+        // Key on the active engine (and Cesium token where relevant) so a token
+        // correction or SceneView opt-in remounts the renderer cleanly.
         <EngineCanvas
-          key={cesiumToken}
-          engineId="cesium"
+          key={sceneEngine === "cesium" ? cesiumToken : sceneEngine}
+          engineId={sceneEngine}
           viewId={viewId}
-          ionToken={cesiumToken}
+          ionToken={sceneEngine === "cesium" ? cesiumToken : undefined}
         />
       ) : (
         <EngineCanvas engineId="maplibre" viewId={viewId} />
@@ -164,10 +168,10 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
         {/* Both the 2D map and the 3D globe render the shared layers, so the
             per-pane layer-visibility toggle applies to either. */}
-        <PaneLayerToggle viewId={viewId} index={index} is3d={is3d} />
-        {/* The 2D/3D toggle only appears when Cesium is available (a token is
-            configured); otherwise the globe is not offered. */}
-        {cesiumAvailable ? (
+        <PaneLayerToggle viewId={viewId} index={index} is3d={is3d} engineId={sceneEngine} />
+        {/* SceneView is keyless with the open basemap; Cesium still requires a
+            configured Ion token. */}
+        {sceneAvailable ? (
           <button
             type="button"
             className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
@@ -200,6 +204,7 @@ interface PaneLayerToggleProps {
   index: number;
   /** When true this is a 3D-globe pane, so layers it can't render are flagged. */
   is3d: boolean;
+  engineId: Extract<MapEngineId, "cesium" | "arcgis-scene">;
 }
 
 /**
@@ -208,7 +213,7 @@ interface PaneLayerToggleProps {
  * (the pane's override, or the primary map's visibility when not overridden). On
  * a 3D-globe pane, layer kinds the globe cannot render are tagged "2D only".
  */
-function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
+function PaneLayerToggle({ viewId, index, is3d, engineId }: PaneLayerToggleProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const layerVisibility = useAppStore(
@@ -238,7 +243,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
           layers.map((layer) => {
             const override = layerVisibility?.[layer.id];
             const visible = override === undefined ? layer.visible : override;
-            const only2d = is3d && !isMapEngineLayerSupported("cesium", layer);
+            const only2d = is3d && !isMapEngineLayerSupported(engineId, layer);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}

@@ -8,7 +8,7 @@ Last updated: 2026-07-20
 | MapLibre GL JS | in progress | ArcGIS `MapView` opt-in is 2D/core-layer only; MapLibre style and optional runtime parity remain |
 | deck.gl        | not started | —                    |
 | three.js       | not started | —                    |
-| Cesium         | in progress | ArcGIS `SceneView` camera seam is in place; layer and browser parity remain |
+| Cesium         | in progress | ArcGIS `SceneView` is a core-layer opt-in; I3S/terrain/keyed parity remains |
 
 Status values: not started · in progress · partial · blocked · done
 
@@ -173,6 +173,10 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: ArcGIS `SceneView` camera conversion now maps the store's
   center/zoom/bearing/pitch through documented SceneView zoom/heading/tilt
   properties; the lazy 3D adapter and browser parity remain in progress.
+- Implemented: `?sceneEngine=arcgis` selects a lazy, keyless `SceneView` for a
+  secondary 3D globe. It is conformance- and browser-tested for store-driven
+  GeoJSON/raster/XYZ/WMS/WMTS layers; generic Cesium 3D Tiles remain unsupported
+  pending explicit I3S layer classification.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

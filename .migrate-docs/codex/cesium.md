@@ -59,3 +59,39 @@
   3 passed.
 - Follow-up: use this helper in the lazy `ArcGISSceneEngine` and test it against
   the existing MapEngine conformance contract.
+
+## 2026-07-21 — Cesium `Viewer` secondary globe → lazy ArcGIS `SceneView` opt-in
+
+- Source: Cesium — `CesiumEngine` renders the token-gated secondary 3D globe
+  through `EngineCanvas`, with store-owned layers and camera events.
+- Files touched: new `packages/map/src/engine/arcgis-scene-engine.ts`; updated
+  `packages/map/src/engine/{types,registry}.ts`, `packages/map/src/{EngineCanvas,index}.ts`,
+  `apps/geolibre-desktop/src/components/layout/MapGrid.tsx`, and
+  `tests/{arcgis-engine-fake,arcgis-scene-engine,engine-conformance,engine-registry}.test.ts`;
+  updated `e2e/engine-param.spec.ts`.
+- ArcGIS approach: lazy-load public `@arcgis/core/views/SceneView` plus `Map`,
+  `Basemap`, `WebTileLayer`, `GeoJSONLayer`, `WMSLayer`, and `WMTSLayer`; use
+  `reactiveUtils.watch(() => view.stationary)` for navigation completion.
+- What changed: added the `arcgis-scene` MapEngine adapter. It configures the
+  existing local ArcGIS asset path, retains native OSM and Esri attribution,
+  rebuilds SceneView layers exclusively from store snapshots, enters the shared
+  conformance suite, and is selected for secondary globe panes only with
+  `?sceneEngine=arcgis`. Cesium remains the default and fallback.
+- Gap / limitation: Cesium `3d-tiles` URLs are not yet translated. ArcGIS
+  `SceneLayer` versus `IntegratedMeshLayer` selection requires I3S service
+  metadata and cannot safely be guessed from a generic Cesium 3D Tiles URL.
+- Workaround: the SceneView adapter advertises only GeoJSON/raster/XYZ/WMS/WMTS
+  support and labels unsupported 3D Tiles as 2D-only in the pane menu. Removal
+  criteria: implement an I3S metadata probe with explicit `SceneLayer` /
+  `IntegratedMeshLayer` tests.
+- Tradeoff accepted: SceneView is a lazy opt-in but adds an approximately 814 kB
+  uncompressed SceneView chunk when requested; no API key or Cesium Ion token
+  is needed for the keyless OSM baseline.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-scene-camera.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 35 passed; `npm run build` → passed;
+  `npx playwright test e2e/engine-param.spec.ts -g "SceneView" --reporter=line`
+  → 1 passed in headless Chromium, with zero diagnostic errors.
+- Follow-up: add I3S 3D-layer support and an elevation/API-key path before
+  replacing Cesium as the secondary-globe default.

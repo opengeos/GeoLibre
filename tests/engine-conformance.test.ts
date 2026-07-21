@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { GeoLibreLayer, MapViewState } from "../packages/core/src/index";
 import { ArcGISMapEngine } from "../packages/map/src/engine/arcgis-map-engine";
+import { ArcGISSceneEngine } from "../packages/map/src/engine/arcgis-scene-engine";
 import {
   CesiumEngine,
   type CesiumEngineDependencies,
@@ -17,7 +18,7 @@ import {
   type MapEngine,
   type MapEngineCapability,
 } from "../packages/map/src/engine/types";
-import { createArcGISFakeRuntime } from "./arcgis-engine-fake";
+import { createArcGISFakeRuntime, createArcGISSceneFakeRuntime } from "./arcgis-engine-fake";
 
 interface EngineHarness {
   readonly engine: MapEngine;
@@ -333,6 +334,22 @@ function createArcGISHarness(): EngineHarness {
   };
 }
 
+function createArcGISSceneHarness(): EngineHarness {
+  const runtime = createArcGISSceneFakeRuntime();
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  return {
+    engine,
+    get syncedLayerOrders(): string[][] {
+      return runtime.layerOrders.map((order) => order.map((id) => id.replace(/^geolibre-/, "")));
+    },
+    destroyed: runtime.destroyed,
+    emitUserMove: () => {
+      assert.ok(runtime.view);
+      runtime.view.emitUserMove();
+    },
+  };
+}
+
 export function runEngineConformance(
   name: string,
   createHarness: EngineHarnessFactory,
@@ -420,7 +437,14 @@ export function runEngineConformance(
       const pending = new Promise<MapEngine>((next) => {
         resolve = next;
       });
-      const engineId = name === "Cesium" ? "cesium" : name === "ArcGIS" ? "arcgis" : "maplibre";
+      const engineId =
+        name === "Cesium"
+          ? "cesium"
+          : name === "ArcGIS Scene"
+            ? "arcgis-scene"
+            : name === "ArcGIS"
+              ? "arcgis"
+              : "maplibre";
       const handle = createMapEngineHandleForTesting(engineId, () => pending);
       const mounted = handle.mount({} as HTMLElement, initialView);
       const queuedView = { ...initialView, zoom: 12 };
@@ -476,6 +500,16 @@ runEngineConformance("Cesium", createCesiumHarness, {
 });
 
 runEngineConformance("ArcGIS", createArcGISHarness, {
+  capabilities: Object.fromEntries(
+    Object.keys(allCapabilities).map((capability) => [capability, false]),
+  ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
+  supportsGeoJson: true,
+  supportsVectorTiles: false,
+  hitCount: 0,
+  unsupportedHitCapability: "feature-query",
+});
+
+runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
   capabilities: Object.fromEntries(
     Object.keys(allCapabilities).map((capability) => [capability, false]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,

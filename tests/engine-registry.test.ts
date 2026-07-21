@@ -24,6 +24,7 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   const maplibre = getMapEngineDescriptor("maplibre");
   const cesium = getMapEngineDescriptor("cesium");
   const arcgis = getMapEngineDescriptor("arcgis");
+  const arcgisScene = getMapEngineDescriptor("arcgis-scene");
 
   assert.equal(maplibre.available, true);
   assert.equal(maplibre.capabilities.includes("controls"), true);
@@ -31,11 +32,15 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   assert.deepEqual(cesium.capabilities, []);
   assert.equal(arcgis.available, true);
   assert.deepEqual(arcgis.capabilities, []);
+  assert.equal(arcgisScene.available, true);
+  assert.deepEqual(arcgisScene.capabilities, []);
   assert.equal(isMapEngineLayerSupported("maplibre", layer("vector-tiles")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("geojson")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("vector-tiles")), false);
   assert.equal(isMapEngineLayerSupported("arcgis", layer("geojson")), true);
   assert.equal(isMapEngineLayerSupported("arcgis", layer("vector-tiles")), false);
+  assert.equal(isMapEngineLayerSupported("arcgis-scene", layer("geojson")), true);
+  assert.equal(isMapEngineLayerSupported("arcgis-scene", layer("3d-tiles")), false);
 });
 
 test("primary selection keeps MapLibre default while accepting the ArcGIS opt-in", () => {

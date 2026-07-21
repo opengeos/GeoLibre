@@ -1,5 +1,15 @@
 # ArcGIS migration gaps and workarounds — codex
 
+## 2026-07-21 — Cesium 3D Tiles → ArcGIS SceneView I3S layer classification
+
+- `ArcGISSceneEngine` deliberately does not accept generic `3d-tiles` store
+  records. ArcGIS requires choosing `SceneLayer` or `IntegratedMeshLayer` from
+  I3S `layerType` metadata; treating a Cesium Tileset URL as either class would
+  fail at runtime.
+- Current workaround: `?sceneEngine=arcgis` renders only core draped layers and
+  reports `3d-tiles` unsupported. Remove this guard when a tested metadata probe
+  and explicit I3S adapter path land. See [Cesium log](cesium.md).
+
 - 2026-07-20 — Native canvas capture and legacy external MapLibre plugins need
   adapter-private compatibility, but the public seam will expose only typed
   capture/extension capabilities—not an SDK object or `unknown` native handle.

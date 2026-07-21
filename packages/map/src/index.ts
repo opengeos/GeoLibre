@@ -63,6 +63,7 @@ export type {
 export { MapEngineCapabilityError } from "./engine/types";
 export { isFullViewportMapCanvas } from "./capture/canvas-surfaces";
 export { createCesiumEngine, type CesiumEngineOptions } from "./engine/cesium-engine";
+export { createArcGISSceneEngine } from "./engine/arcgis-scene-engine";
 export { createMapEngineHandle } from "./engine/handle";
 export {
   getMapEngineDescriptor,

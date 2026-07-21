@@ -39,6 +39,12 @@ const descriptors: Readonly<Record<MapEngineId, MapEngineDescriptor>> = {
     capabilities: [],
     supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
   },
+  "arcgis-scene": {
+    id: "arcgis-scene",
+    available: true,
+    capabilities: [],
+    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
+  },
 };
 
 export function getMapEngineDescriptor(id: MapEngineId): MapEngineDescriptor {
@@ -65,6 +71,10 @@ export async function loadRegisteredMapEngine(id: MapEngineId): Promise<MapEngin
   if (id === "cesium") {
     const { createCesiumEngine } = await import("./cesium-engine");
     return createCesiumEngine();
+  }
+  if (id === "arcgis-scene") {
+    const { createArcGISSceneEngine } = await import("./arcgis-scene-engine");
+    return createArcGISSceneEngine();
   }
   const { createArcGISMapEngine } = await import("./arcgis-map-engine");
   return createArcGISMapEngine();

@@ -9,7 +9,7 @@ import type {
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { MapEngineExtensionMap } from "./extensions";
 
-export type MapEngineId = "maplibre" | "cesium" | "arcgis";
+export type MapEngineId = "maplibre" | "cesium" | "arcgis" | "arcgis-scene";
 
 export type MapEngineCapability =
   | "capture"
