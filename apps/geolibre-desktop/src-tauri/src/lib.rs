@@ -194,6 +194,7 @@ pub fn run() {
         // not revoke its (persisted) read scope. Accepted for durable pins;
         // revisit if a narrower per-source scope or a revoke path is wanted.
         .plugin(tauri_plugin_persisted_scope::init())
+        .plugin(tauri_plugin_geolocation::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .manage(EarthEngineOAuthState::default())

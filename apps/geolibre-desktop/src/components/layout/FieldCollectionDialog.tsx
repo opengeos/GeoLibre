@@ -60,6 +60,7 @@ import {
   type Vertex,
 } from "../../lib/field-collection";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
+import { getCurrentPosition } from "../../lib/geolocation";
 import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 
 interface FieldCollectionDialogProps {
@@ -466,18 +467,17 @@ export function FieldCollectionDialog({
 
   const handleUseGps = useCallback(
     (asVertex: boolean) => {
-      if (!("geolocation" in navigator)) {
-        setNotice(t("fieldCollection.noGeolocation"));
-        return;
-      }
       setLocating(true);
       setNotice(null);
       const seq = (gpsSeqRef.current += 1);
       // Ignore a fix that resolves after the tool was dismissed or superseded by
       // a newer capture (e.g. the user picked/drew a point while GPS was pending).
       const stale = () => !activeRef.current || seq !== gpsSeqRef.current;
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
+      // On Tauri mobile this routes through the native geolocation plugin, which
+      // requests the OS location permission first; elsewhere it wraps
+      // navigator.geolocation. See lib/geolocation.ts.
+      getCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+        .then((pos) => {
           if (stale()) return;
           setLocating(false);
           const { longitude, latitude } = pos.coords;
@@ -488,14 +488,18 @@ export function FieldCollectionDialog({
             // capturePoint(..., true) already recenters the map.
             capturePoint(longitude, latitude, true);
           }
-        },
-        () => {
+        })
+        .catch((err) => {
           if (stale()) return;
           setLocating(false);
-          setNotice(t("fieldCollection.geolocationDenied"));
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-      );
+          setNotice(
+            t(
+              err?.unavailable
+                ? "fieldCollection.noGeolocation"
+                : "fieldCollection.geolocationDenied",
+            ),
+          );
+        });
     },
     [t, pushVertex, capturePoint, recenter],
   );

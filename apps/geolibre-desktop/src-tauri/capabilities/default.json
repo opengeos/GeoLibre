@@ -14,6 +14,11 @@
     "fs:allow-write-text-file",
     "fs:allow-watch",
     "fs:allow-unwatch",
+    "geolocation:allow-check-permissions",
+    "geolocation:allow-request-permissions",
+    "geolocation:allow-get-current-position",
+    "geolocation:allow-watch-position",
+    "geolocation:allow-clear-watch",
     {
       "comment": "Cleanup of the temporary GeoJSON the sidecar writes when a File Geodatabase layer is added (GdbSource); scoped to exactly that filename pattern so nothing else becomes deletable.",
       "identifier": "fs:allow-remove",
