@@ -19,7 +19,9 @@ type GeolocationLike = {
 };
 
 function setNavigator(geolocation?: GeolocationLike, userAgent = "node-test") {
-  const nav = geolocation ? { userAgent, maxTouchPoints: 0, geolocation } : { userAgent, maxTouchPoints: 0 };
+  const nav = geolocation
+    ? { userAgent, maxTouchPoints: 0, geolocation }
+    : { userAgent, maxTouchPoints: 0 };
   Object.defineProperty(globalThis, "navigator", {
     value: nav,
     configurable: true,
@@ -42,7 +44,13 @@ const okPosition = {
 
 // A GeolocationPositionError with the PERMISSION_DENIED discriminant the wrapper reads.
 function positionError(code: number): GeolocationPositionError {
-  return { code, message: "err", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError;
+  return {
+    code,
+    message: "err",
+    PERMISSION_DENIED: 1,
+    POSITION_UNAVAILABLE: 2,
+    TIMEOUT: 3,
+  } as GeolocationPositionError;
 }
 
 afterEach(() => {

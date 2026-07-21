@@ -75,9 +75,7 @@ function toPluginOptions(o?: PositionOptions): PluginPositionOptions {
  * Throws {@link GeolocationError} (permissionDenied) if the user refuses.
  */
 async function ensureNativePermission(): Promise<void> {
-  const { checkPermissions, requestPermissions } = await import(
-    "@tauri-apps/plugin-geolocation"
-  );
+  const { checkPermissions, requestPermissions } = await import("@tauri-apps/plugin-geolocation");
   let status = await checkPermissions();
   const undecided = (s: string) => s === "prompt" || s === "prompt-with-rationale";
   if (undecided(status.location) || undecided(status.coarseLocation)) {
@@ -93,14 +91,10 @@ async function ensureNativePermission(): Promise<void> {
  * Native mobile requests OS permission first; elsewhere this wraps
  * `navigator.geolocation.getCurrentPosition`.
  */
-export async function getCurrentPosition(
-  options?: PositionOptions,
-): Promise<GeolocationPosition> {
+export async function getCurrentPosition(options?: PositionOptions): Promise<GeolocationPosition> {
   if (useNativeGeolocation()) {
     await ensureNativePermission();
-    const { getCurrentPosition: nativeGet } = await import(
-      "@tauri-apps/plugin-geolocation"
-    );
+    const { getCurrentPosition: nativeGet } = await import("@tauri-apps/plugin-geolocation");
     return fromPlugin(await nativeGet(toPluginOptions(options)));
   }
   if (!("geolocation" in navigator)) {
@@ -109,10 +103,7 @@ export async function getCurrentPosition(
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       resolve,
-      (err) =>
-        reject(
-          new GeolocationError(err.message, err.code === err.PERMISSION_DENIED),
-        ),
+      (err) => reject(new GeolocationError(err.message, err.code === err.PERMISSION_DENIED)),
       options,
     );
   });
@@ -131,9 +122,8 @@ export async function watchPosition(
 ): Promise<() => void> {
   if (useNativeGeolocation()) {
     await ensureNativePermission();
-    const { watchPosition: nativeWatch, clearWatch } = await import(
-      "@tauri-apps/plugin-geolocation"
-    );
+    const { watchPosition: nativeWatch, clearWatch } =
+      await import("@tauri-apps/plugin-geolocation");
     const id = await nativeWatch(toPluginOptions(options), (pos, err) => {
       if (pos) onFix(fromPlugin(pos));
       // A watch error after start is treated as transient (signal loss): keep
@@ -149,8 +139,7 @@ export async function watchPosition(
   }
   const id = navigator.geolocation.watchPosition(
     onFix,
-    (err) =>
-      onError(new GeolocationError(err.message, err.code === err.PERMISSION_DENIED)),
+    (err) => onError(new GeolocationError(err.message, err.code === err.PERMISSION_DENIED)),
     options,
   );
   return () => navigator.geolocation.clearWatch(id);
