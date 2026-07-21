@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  iOS-only Info.plist keys, merged into the generated
+  gen/apple/geolibre_iOS/Info.plist at build time (gen/apple is generated and
+  git-ignored, so per-key overrides must live here to survive regeneration).
+  Tauri v2 merges src-tauri/Info.plist (all Apple), Info.ios.plist (iOS), and
+  Info.macos.plist (macOS).
+
+  The location string is REQUIRED, not cosmetic: unlike Android — where the
+  geolocation plugin declares the runtime permission and the OS shows a generic
+  dialog — iOS *terminates the app* the instant it requests location if no
+  NSLocation*UsageDescription is present. This is the iOS analogue of the
+  AndroidManifest ACCESS_FINE/COARSE_LOCATION entries the plugin injects. It
+  covers all three location consumers: Field Collection, GPS Tracking, and the
+  Controls -> GeoLocate map control. "WhenInUse" (not "Always") because GeoLibre
+  only reads location while the app is foregrounded — there is no background
+  tracking.
+-->
+<plist version="1.0">
+  <dict>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>GeoLibre uses your location to center the map, capture GPS points during Field Collection, and record GPS tracks.</string>
+  </dict>
+</plist>

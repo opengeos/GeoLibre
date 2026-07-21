@@ -72,6 +72,7 @@ nav:
   - Reference:
       - Architecture: architecture.md
       - Android: android.md
+      - iOS: ios.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
       - UI Profiles: ui-profiles.md

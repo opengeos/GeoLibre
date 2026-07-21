@@ -1,0 +1,220 @@
+name: iOS
+
+# iOS builds run on published releases (matching release.yml / android.yml), not
+# on every PR — the Rust cross-compile + Xcode archive is slow and needs a macOS
+# runner. Use the manual "Run workflow" button (workflow_dispatch) to build on
+# demand from any branch.
+#
+# NOTE: iOS cannot be cross-compiled from Linux, so this runs on macOS. Unlike
+# Android — where a throwaway debug keystore makes every CI run installable — a
+# device/App Store build REQUIRES an Apple Developer account (signing certificate
+# + provisioning profile + team id). Without those secrets the job still runs a
+# no-signing compile check so CI catches iOS build breakage; it just can't
+# produce an installable .ipa.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: "IPA export method (needs signing secrets)"
+        type: choice
+        default: app-store-connect
+        options:
+          - app-store-connect # TestFlight / App Store upload
+          - release-testing # ad-hoc: registered UDIDs only
+          - debugging # development devices
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Apple bundle identifier, asserted after the build. Comes from
+  # `identifier` in src-tauri/tauri.ios.conf.json, which overrides the desktop
+  # `org.geolibre.desktop` for iOS only (same value Android uses — different
+  # stores, so the shared reverse-DNS id is fine). Burned permanently on first
+  # App Store Connect upload, so it is verified rather than trusted.
+  EXPECTED_BUNDLE_ID: "org.geolibre.app"
+
+jobs:
+  build:
+    name: Build iOS app
+    # Apple Silicon macOS image; ships a recent Xcode + CocoaPods. Pin the major
+    # image so a runner update can't silently change the Xcode/SDK under us.
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable with iOS targets
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          # aarch64-apple-ios: real devices + the signed .ipa. The two simulator
+          # triples back the no-signing compile check (aarch64-sim on Apple
+          # Silicon runners; x86_64 kept for completeness).
+          targets: >-
+            aarch64-apple-ios,
+            aarch64-apple-ios-sim,
+            x86_64-apple-ios
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: apps/geolibre-desktop/src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        # tauri-build reads frontendDist (../dist) at compile time and errors if
+        # it's missing, so the web bundle must exist before `tauri ios` runs.
+        run: npm run build
+        env:
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+
+      - name: Generate iOS project
+        # gen/apple is not committed; regenerate it on the clean runner. The
+        # Tauri CLI is resolved through the geolibre-desktop workspace. This also
+        # merges src-tauri/tauri.ios.conf.json (bundle id, drops the Python
+        # backend) and src-tauri/Info.ios.plist (the NSLocation usage string) into
+        # the generated Xcode project.
+        working-directory: apps/geolibre-desktop
+        run: npx tauri ios init
+
+      - name: Check for Apple signing secrets
+        id: signing
+        # `secrets` can't be used in a step-level `if:`, so presence is turned
+        # into an output and gated on below. All three are required to sign: a
+        # partial set would spend the whole archive and only then fail.
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          if [ -n "${APPLE_CERTIFICATE_BASE64:-}" ] \
+            && [ -n "${APPLE_PROVISIONING_PROFILE_BASE64:-}" ] \
+            && [ -n "${APPLE_DEVELOPMENT_TEAM:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No complete Apple signing secret set — building an unsigned compile check only (no installable .ipa). Set APPLE_CERTIFICATE_BASE64, APPLE_CERTIFICATE_PASSWORD, APPLE_PROVISIONING_PROFILE_BASE64, and APPLE_DEVELOPMENT_TEAM to produce a signed build."
+          fi
+
+      # ---- No-signing path: prove the iOS build compiles ---------------------
+      - name: Compile check (no signing)
+        if: steps.signing.outputs.present != 'true'
+        # Cross-compile the Tauri library for a real device target. This catches
+        # iOS-specific breakage (a dependency that won't build for aarch64-apple-
+        # ios, a bad cfg) without an Apple account. It deliberately stops short of
+        # the Xcode archive, which needs a signing identity.
+        working-directory: apps/geolibre-desktop/src-tauri
+        run: cargo build --lib --release --target aarch64-apple-ios
+
+      # ---- Signing path: import the identity, archive, export a signed .ipa ---
+      - name: Import signing identity
+        if: steps.signing.outputs.present == 'true'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          # A dedicated, throwaway keychain (random password) rather than the
+          # login keychain, so the imported private key never lingers on the
+          # runner beyond this job.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_pass="$(openssl rand -base64 24)"
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+          security create-keychain -p "$keychain_pass" "$keychain"
+          # Auto-lock after 6h; keep unlocked for the archive.
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_pass" "$keychain"
+
+          cert="$RUNNER_TEMP/cert.p12"
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$cert"
+          security import "$cert" -k "$keychain" \
+            -P "${APPLE_CERTIFICATE_PASSWORD:-}" \
+            -T /usr/bin/codesign -T /usr/bin/xcodebuild
+          rm -f "$cert"
+
+          # Put the temp keychain on the search list so xcodebuild finds the
+          # identity, and grant codesign non-interactive access to the key.
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$keychain_pass" "$keychain" >/dev/null
+
+          # Install the provisioning profile where Xcode looks for it.
+          profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles"
+          echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode \
+            > "$profiles/geolibre.mobileprovision"
+
+      - name: Build signed IPA
+        if: steps.signing.outputs.present == 'true'
+        working-directory: apps/geolibre-desktop
+        env:
+          # Tauri passes this through to the Xcode DEVELOPMENT_TEAM setting.
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+        run: |
+          npx tauri ios build \
+            --export-method "${{ github.event.inputs.export_method || 'app-store-connect' }}"
+
+      - name: Verify built bundle id
+        if: steps.signing.outputs.present == 'true'
+        # Assert on the shipped bytes, not the config: the App Store burns the
+        # bundle id from the .ipa on first upload and it can never be changed, so
+        # it is checked rather than assumed (mirrors android.yml's package-id
+        # gate).
+        run: |
+          set -euo pipefail
+          ipa="$(find apps/geolibre-desktop/src-tauri/gen/apple -name '*.ipa' | head -1)"
+          if [ -z "$ipa" ]; then
+            echo "::error::No .ipa produced under gen/apple"
+            exit 1
+          fi
+          workdir="$(mktemp -d)"
+          unzip -o -q "$ipa" -d "$workdir"
+          plist="$(find "$workdir/Payload" -maxdepth 2 -name Info.plist | head -1)"
+          bid="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
+          if [ "$bid" != "$EXPECTED_BUNDLE_ID" ]; then
+            echo "::error::$ipa has bundle id '$bid', expected '$EXPECTED_BUNDLE_ID'"
+            exit 1
+          fi
+          echo "IPA $ipa reports bundle id $EXPECTED_BUNDLE_ID."
+          echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+      - name: Clean up the signing keychain
+        # Runs even on failure so the imported key never outlives the job.
+        if: always() && steps.signing.outputs.present == 'true'
+        run: |
+          if [ -n "${SIGNING_KEYCHAIN:-}" ] && [ -f "$SIGNING_KEYCHAIN" ]; then
+            security delete-keychain "$SIGNING_KEYCHAIN" || true
+          fi
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/geolibre.mobileprovision" || true
+
+      - name: Upload signed IPA
+        if: steps.signing.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: geolibre-ios-ipa
+          path: ${{ env.IPA_PATH }}
+          if-no-files-found: error
+          retention-days: 14
