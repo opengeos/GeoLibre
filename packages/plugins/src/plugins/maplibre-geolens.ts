@@ -424,7 +424,9 @@ function buildPanel(
   const connectButton = button(labels.connect, CSS.primaryButton);
   connectRow.append(connectButton);
 
-  const searchRow = el("div", CSS.row);
+  // Wider gap than CSS.row: the input's focus ring renders a few px outside its
+  // border box, and a 4px gap lets that ring touch the Search button on focus.
+  const searchRow = el("div", "display:flex;gap:8px;");
   const searchInput = el("input", CSS.searchInput) as HTMLInputElement;
   searchInput.placeholder = labels.searchPlaceholder;
   const searchButton = button(labels.search, CSS.primaryButton);
