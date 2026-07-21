@@ -70,10 +70,14 @@ export interface GeoLensLabels {
   showing: (count: number) => string;
   vectorBadge: string;
   rasterBadge: string;
-  add: string;
+  addVectorTiles: string;
+  addVectorTilesTitle: string;
+  addRasterTiles: string;
+  addRasterTilesTitle: string;
   adding: string;
   added: string;
-  addFeatures: string;
+  addGeoJson: string;
+  addGeoJsonTitle: string;
   addError: (message: string) => string;
   features: (count: number) => string;
 }
@@ -92,10 +96,15 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   showing: (count) => `${count} dataset${count === 1 ? "" : "s"}.`,
   vectorBadge: "vector",
   rasterBadge: "raster",
-  add: "Add",
+  addVectorTiles: "Add vector tiles",
+  addVectorTilesTitle: "Add as vector tiles — the whole dataset, best for viewing and styling",
+  addRasterTiles: "Add raster tiles",
+  addRasterTilesTitle: "Add as server-rendered raster tiles",
   adding: "Adding…",
   added: "Added",
-  addFeatures: "Features",
+  addGeoJson: "Add GeoJSON",
+  addGeoJsonTitle:
+    "Load features as editable GeoJSON (first 100) for the attribute table and export",
   addError: (message) => `Could not add layer: ${message}`,
   features: (count) => `${count.toLocaleString()} features`,
 };
@@ -507,10 +516,12 @@ function buildPanel(
 
     const actions = el("div", CSS.actions);
     const addedId = findAddedLayerId(state.client!, dataset);
-    const addButton = button(addedId ? labels.added : labels.add, CSS.action, dataset.title);
-    if (addedId) addButton.disabled = true;
     // Raster datasets render as server-side Titiler PNG tiles; vector datasets
-    // as signed MVT vector tiles.
+    // as signed MVT vector tiles. The button says which.
+    const addLabel = dataset.isRaster ? labels.addRasterTiles : labels.addVectorTiles;
+    const addTitle = dataset.isRaster ? labels.addRasterTilesTitle : labels.addVectorTilesTitle;
+    const addButton = button(addedId ? labels.added : addLabel, CSS.action, addTitle);
+    if (addedId) addButton.disabled = true;
     const addPrimary = dataset.isRaster
       ? () => addRasterTilesLayer(app!, state.client!, dataset, fetchImpl)
       : () => addVectorTilesLayer(app!, state.client!, dataset, fetchImpl);
@@ -521,13 +532,13 @@ function buildPanel(
 
     // Full-feature GeoJSON is only meaningful for vector datasets.
     if (dataset.isVector) {
-      const featuresButton = button(labels.addFeatures, CSS.action, labels.addFeatures);
-      featuresButton.addEventListener("click", () => {
-        void handleAdd(dataset, featuresButton, () =>
+      const geoJsonButton = button(labels.addGeoJson, CSS.action, labels.addGeoJsonTitle);
+      geoJsonButton.addEventListener("click", () => {
+        void handleAdd(dataset, geoJsonButton, () =>
           addFeaturesLayer(app!, state.client!, dataset, fetchImpl),
         );
       });
-      actions.append(featuresButton);
+      actions.append(geoJsonButton);
     }
 
     card.append(actions);
