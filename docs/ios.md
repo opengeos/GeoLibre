@@ -115,13 +115,27 @@ Linux, this is the only mobile workflow that needs a macOS runner.
 - **With Apple signing secrets set**, it imports the identity into a throwaway
   keychain, archives, exports a signed `.ipa`, verifies its bundle id, and
   uploads it as the `geolibre-ios-ipa` artifact:
-  - `APPLE_CERTIFICATE_BASE64` — `base64 -i dist.p12`
-  - `APPLE_CERTIFICATE_PASSWORD`
-  - `APPLE_PROVISIONING_PROFILE_BASE64` — `base64 -i profile.mobileprovision`
-  - `APPLE_DEVELOPMENT_TEAM` — your 10-char Team ID
+  - `APPLE_IOS_CERTIFICATE_BASE64` — `base64 -i dist.p12`
+  - `APPLE_IOS_CERTIFICATE_PASSWORD`
+  - `APPLE_IOS_PROVISIONING_PROFILE_BASE64` — `base64 -i profile.mobileprovision`
+  - `APPLE_TEAM_ID` — **reused** from the existing macOS/Homebrew signing
+    secrets; the Team ID is account-wide.
 - **Without them**, it falls back to a no-signing **compile check**
   (`cargo build --lib --target aarch64-apple-ios`) so CI still catches iOS build
   breakage; it just can't produce an installable `.ipa`.
+
+### Reusing the macOS/Homebrew signing secrets?
+
+Only the **Team ID**. The repo's release workflow already signs and notarizes the
+macOS build for the Homebrew cask, but its `APPLE_CERTIFICATE` is a **Developer ID
+Application** certificate — that type signs macOS apps distributed *outside* the
+App Store and **cannot sign an iOS app**. iOS needs its own **Apple Distribution**
+certificate and a **provisioning profile** (Developer ID distribution has
+neither), so those are the `APPLE_IOS_*` secrets above, deliberately named apart
+from the macOS ones to avoid feeding in the wrong cert/password. The good news:
+they're created under the **same paid Apple Developer account** at no extra cost —
+add an Apple Distribution certificate and an App Store provisioning profile for
+`org.geolibre.app` in the Developer portal, and reuse the existing `APPLE_TEAM_ID`.
 
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc

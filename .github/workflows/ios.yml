@@ -102,18 +102,26 @@ jobs:
         # `secrets` can't be used in a step-level `if:`, so presence is turned
         # into an output and gated on below. All three are required to sign: a
         # partial set would spend the whole archive and only then fail.
+        #
+        # The iOS cert/profile use APPLE_IOS_* names, deliberately distinct from
+        # the release.yml macOS secrets (APPLE_CERTIFICATE / APPLE_CERTIFICATE_
+        # PASSWORD): that identity is a *Developer ID Application* cert for the
+        # notarized Homebrew build and cannot sign an iOS app — iOS needs its own
+        # Apple Distribution cert + provisioning profile. Reusing the name would
+        # feed the wrong cert/password in. APPLE_TEAM_ID *is* shared, though — the
+        # Team ID is account-wide, not per-certificate — so it is reused as-is.
         env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_IOS_CERTIFICATE_BASE64: ${{ secrets.APPLE_IOS_CERTIFICATE_BASE64 }}
+          APPLE_IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "${APPLE_CERTIFICATE_BASE64:-}" ] \
-            && [ -n "${APPLE_PROVISIONING_PROFILE_BASE64:-}" ] \
-            && [ -n "${APPLE_DEVELOPMENT_TEAM:-}" ]; then
+          if [ -n "${APPLE_IOS_CERTIFICATE_BASE64:-}" ] \
+            && [ -n "${APPLE_IOS_PROVISIONING_PROFILE_BASE64:-}" ] \
+            && [ -n "${APPLE_TEAM_ID:-}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No complete Apple signing secret set — building an unsigned compile check only (no installable .ipa). Set APPLE_CERTIFICATE_BASE64, APPLE_CERTIFICATE_PASSWORD, APPLE_PROVISIONING_PROFILE_BASE64, and APPLE_DEVELOPMENT_TEAM to produce a signed build."
+            echo "::notice::No complete Apple iOS signing secret set — building an unsigned compile check only (no installable .ipa). Set APPLE_IOS_CERTIFICATE_BASE64, APPLE_IOS_CERTIFICATE_PASSWORD, APPLE_IOS_PROVISIONING_PROFILE_BASE64 (and reuse the existing APPLE_TEAM_ID) to produce a signed build."
           fi
 
       # ---- No-signing path: prove the iOS build compiles ---------------------
@@ -130,9 +138,9 @@ jobs:
       - name: Import signing identity
         if: steps.signing.outputs.present == 'true'
         env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_IOS_CERTIFICATE_BASE64: ${{ secrets.APPLE_IOS_CERTIFICATE_BASE64 }}
+          APPLE_IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_IOS_CERTIFICATE_PASSWORD }}
+          APPLE_IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROVISIONING_PROFILE_BASE64 }}
         run: |
           set -euo pipefail
           # A dedicated, throwaway keychain (random password) rather than the
@@ -148,9 +156,9 @@ jobs:
           security unlock-keychain -p "$keychain_pass" "$keychain"
 
           cert="$RUNNER_TEMP/cert.p12"
-          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$cert"
+          echo "$APPLE_IOS_CERTIFICATE_BASE64" | base64 --decode > "$cert"
           security import "$cert" -k "$keychain" \
-            -P "${APPLE_CERTIFICATE_PASSWORD:-}" \
+            -P "${APPLE_IOS_CERTIFICATE_PASSWORD:-}" \
             -T /usr/bin/codesign -T /usr/bin/xcodebuild
           rm -f "$cert"
 
@@ -163,15 +171,17 @@ jobs:
           # Install the provisioning profile where Xcode looks for it.
           profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$profiles"
-          echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode \
+          echo "$APPLE_IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode \
             > "$profiles/geolibre.mobileprovision"
 
       - name: Build signed IPA
         if: steps.signing.outputs.present == 'true'
         working-directory: apps/geolibre-desktop
         env:
-          # Tauri passes this through to the Xcode DEVELOPMENT_TEAM setting.
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          # Tauri passes this through to the Xcode DEVELOPMENT_TEAM setting. The
+          # Team ID is account-wide, so this reuses the existing macOS/Homebrew
+          # signing secret rather than duplicating it.
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
         run: |
           npx tauri ios build \
