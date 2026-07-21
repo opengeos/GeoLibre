@@ -33,3 +33,29 @@
   checks → passed; `git diff --check` → passed.
 - Follow-up: register both current adapters in the common conformance suite,
   then replace concrete React hosts with `EngineCanvas`.
+
+## 2026-07-21 — Cesium range/heading camera → ArcGIS `SceneView` zoom/heading/tilt camera
+
+- Source: Cesium — `cesium-camera.ts` converts `MapViewState` through a metric
+  camera range and Cesium's horizon-referenced pitch before reading it back.
+- Files touched: new `packages/map/src/engine/arcgis-scene-camera.ts`; new
+  `tests/arcgis-scene-camera.test.ts`.
+- ArcGIS approach: use the installed ArcGIS SDK's documented `SceneView.zoom`
+  plus `goTo({ center, zoom, heading, tilt })`; its camera tilt is already
+  nadir-referenced, so it maps directly from the store pitch.
+- What changed: introduced pure store ↔ SceneView camera conversion, including
+  angle normalization, a 0–85° tilt guard, invalid-snapshot fallback, and
+  floating-point echo suppression.
+- Gap / limitation: a `SceneView` can alter scale/camera state while resolving
+  elevation, so exact metric parity with Cesium's range-based conversion is not
+  guaranteed.
+- Workaround: use the public SceneView zoom/camera fields and suppress only
+  negligible floating-point echoes. Removal criteria: replace this helper only
+  if a tested SceneView scale mismatch requires a measured range conversion.
+- Tradeoff accepted: keeps the adapter simple and lazy at the cost of deferring
+  elevation-aware camera-parity calibration until real SceneView validation.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-scene-camera.test.ts` →
+  3 passed.
+- Follow-up: use this helper in the lazy `ArcGISSceneEngine` and test it against
+  the existing MapEngine conformance contract.

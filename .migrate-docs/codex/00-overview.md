@@ -8,7 +8,7 @@ Last updated: 2026-07-20
 | MapLibre GL JS | in progress | ArcGIS `MapView` opt-in is 2D/core-layer only; MapLibre style and optional runtime parity remain |
 | deck.gl        | not started | —                    |
 | three.js       | not started | —                    |
-| Cesium         | in progress | Adapter complete; ArcGIS `SceneView` replacement remains |
+| Cesium         | in progress | ArcGIS `SceneView` camera seam is in place; layer and browser parity remain |
 
 Status values: not started · in progress · partial · blocked · done
 
@@ -170,6 +170,9 @@ Status values: not started · in progress · partial · blocked · done
   reconciles GeoJSON/raster/XYZ/WMS/WMTS store records, and enters the shared
   engine conformance suite; the engine-boundary baseline fell 117 → 115;
   MapLibre remains the default engine.
+- Implemented: ArcGIS `SceneView` camera conversion now maps the store's
+  center/zoom/bearing/pitch through documented SceneView zoom/heading/tilt
+  properties; the lazy 3D adapter and browser parity remain in progress.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
