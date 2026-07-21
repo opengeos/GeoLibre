@@ -47,6 +47,8 @@ const FEATURES_LIMIT = 100;
 const TOKEN_REFRESH_LEAD_SECONDS = 30;
 /** Floor on the refresh delay, so a tiny/expired TTL cannot busy-loop. */
 const TOKEN_REFRESH_MIN_SECONDS = 10;
+/** Cap on the backoff delay after repeated mint failures. */
+const TOKEN_REFRESH_MAX_RETRY_SECONDS = 300;
 
 // ---------------------------------------------------------------------------
 // i18n. Plugins cannot read the host's locale JSON, so — like source-coop —
@@ -230,9 +232,14 @@ function scheduleTokenRefresh(
   datasetId: string,
   expiresIn: number,
   fetchImpl: GeoLensFetch,
+  // When set (retry path), wait exactly this long instead of refreshing ahead
+  // of expiry — it carries the capped exponential backoff between failures.
+  retryBackoffSeconds?: number,
 ): void {
   clearRefreshTimer(layerId);
-  const delaySeconds = Math.max(TOKEN_REFRESH_MIN_SECONDS, expiresIn - TOKEN_REFRESH_LEAD_SECONDS);
+  const delaySeconds =
+    retryBackoffSeconds ??
+    Math.max(TOKEN_REFRESH_MIN_SECONDS, expiresIn - TOKEN_REFRESH_LEAD_SECONDS);
   const timer = setTimeout(() => {
     refreshTimers.delete(layerId);
     const store = useAppStore.getState();
@@ -247,11 +254,18 @@ function scheduleTokenRefresh(
         useAppStore
           .getState()
           .updateLayer(layerId, { source: { ...current.source, tiles: [tiles] } });
+        // Success resets the backoff (no retry argument).
         scheduleTokenRefresh(client, layerId, datasetId, token.expiresIn, fetchImpl);
       })
       .catch(() => {
         if (useAppStore.getState().layers.some((l) => l.id === layerId)) {
-          scheduleTokenRefresh(client, layerId, datasetId, TOKEN_REFRESH_MIN_SECONDS, fetchImpl);
+          // Capped exponential backoff so a persistently failing token endpoint
+          // is not hammered every TOKEN_REFRESH_MIN_SECONDS forever.
+          const nextBackoff =
+            retryBackoffSeconds === undefined
+              ? TOKEN_REFRESH_MIN_SECONDS
+              : Math.min(retryBackoffSeconds * 2, TOKEN_REFRESH_MAX_RETRY_SECONDS);
+          scheduleTokenRefresh(client, layerId, datasetId, 0, fetchImpl, nextBackoff);
         }
       });
   }, delaySeconds * 1000);
@@ -428,8 +442,10 @@ function buildPanel(
     errorLine.style.display = "none";
   };
 
-  const runSearch = async (query: string): Promise<void> => {
-    if (!state.client) return;
+  // Resolves true when the search completed and populated the catalog, false
+  // on error or when superseded — so the caller can gate UI on a real result.
+  const runSearch = async (query: string): Promise<boolean> => {
+    if (!state.client) return false;
     state.controller?.abort();
     const controller = new AbortController();
     state.controller = controller;
@@ -444,14 +460,16 @@ function buildPanel(
         fetchImpl,
         controller.signal,
       );
-      if (generation !== state.generation) return; // superseded
+      if (generation !== state.generation) return false; // superseded
       state.datasets = datasets;
       renderList();
       status.textContent = datasets.length ? labels.showing(datasets.length) : labels.noResults;
+      return true;
     } catch (error) {
-      if (isAbort(error) || generation !== state.generation) return;
+      if (isAbort(error) || generation !== state.generation) return false;
       status.textContent = "";
       showError(labels.loadError(messageOf(error)));
+      return false;
     }
   };
 
@@ -534,11 +552,13 @@ function buildPanel(
     state.client = { baseUrl, apiKey: apiKeyInput.value.trim() || undefined };
     connectButton.disabled = true;
     connectButton.textContent = labels.connecting;
-    await runSearch("");
+    const connected = await runSearch("");
     connectButton.disabled = false;
     connectButton.textContent = labels.connect;
-    // Reveal search only once a connection produced a catalog.
-    searchRow.style.display = state.client ? "" : "none";
+    // Reveal search only once a connection produced a catalog. On failure, drop
+    // the client so a later attempt starts clean and the search row stays hidden.
+    if (!connected) state.client = null;
+    searchRow.style.display = connected ? "" : "none";
   };
 
   connectButton.addEventListener("click", () => void connect());
