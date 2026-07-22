@@ -255,6 +255,47 @@ describe("mergeWasmToolManifests", () => {
       ["some_wasm_only_whitebox_tool"],
     );
   });
+
+  it("keeps catalog params when the WASM manifest declares none", () => {
+    // geolibre-wasm ships 138 manifests with an empty `params` array — every
+    // Hydrology → Flow Routing tool among them (d8_pointer, fill_depressions,
+    // aspect, basins, …) — while the binary still requires those parameters:
+    // running any of the 138 with no arguments fails with "validation error:
+    // missing required parameter '…'". Trusting the empty set showed "This tool
+    // has no parameters." in the Processing dialog and left the tool unrunnable
+    // in local (WASM) mode. The catalog's params are the fallback, exactly as
+    // the sidecar path does via mergeCatalogParameterFallbacks.
+    const catalogD8Pointer: WhiteboxTool = {
+      id: "d8_pointer",
+      display_name: "D8 Pointer",
+      category: "Hydrology - Flow Routing",
+      params: [
+        { name: "dem", kind: "raster_in", required: true },
+        { name: "esri_pntr", kind: "bool", required: false, default: false },
+        { name: "output", kind: "raster_out", required: true },
+      ],
+    };
+    const wasmD8Pointer: WhiteboxTool = {
+      id: "d8_pointer",
+      display_name: "D8 Pointer",
+      category: "Raster",
+      params: [],
+    };
+    const [tool] = mergeWasmToolManifests([catalogD8Pointer], [wasmD8Pointer]);
+    assert.deepEqual(
+      tool.params?.map((param) => param.name),
+      ["dem", "esri_pntr", "output"],
+    );
+    // Still a catalog merge, not a passthrough: display metadata is the catalog's.
+    assert.equal(tool.category, "Hydrology - Flow Routing");
+  });
+
+  it("leaves a WASM-only tool with no params alone", () => {
+    // Nothing to fall back to when the catalog does not list the tool at all;
+    // it must still be listed rather than dropped.
+    const merged = mergeWasmToolManifests([], [{ id: "some_tool", params: [] }]);
+    assert.deepEqual(merged[0].params, []);
+  });
 });
 
 describe("normalizeVectorOutputFormat", () => {
