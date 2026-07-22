@@ -281,9 +281,16 @@ function healRestoredGeoLensLayers(): void {
   }
 }
 
-// Heal on any store change (covers project load and late additions), plus once
-// now for layers already present when this module loads.
-useAppStore.subscribe(healRestoredGeoLensLayers);
+// Heal when the layer set changes (covers project load and late additions),
+// plus once now for layers already present when this module loads. Guarded on
+// the `layers` reference so unrelated store churn (pointer, selection, map view)
+// doesn't re-run the scan — useAppStore has no selector-subscribe middleware.
+let lastLayersRef: readonly GeoLibreLayer[] | null = null;
+useAppStore.subscribe((state) => {
+  if (state.layers === lastLayersRef) return;
+  lastLayersRef = state.layers;
+  healRestoredGeoLensLayers();
+});
 healRestoredGeoLensLayers();
 
 /**

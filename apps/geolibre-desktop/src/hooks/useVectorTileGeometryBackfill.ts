@@ -61,8 +61,18 @@ function dominantGeometry(
   return "point";
 }
 
-/** Keep vector-tile layers' `metadata.geometryType` populated from their tiles. */
-export function useVectorTileGeometryBackfill(app: ReturnType<typeof createAppAPI>): void {
+/**
+ * Keep vector-tile layers' `metadata.geometryType` populated from their tiles.
+ *
+ * @param app - The host app API (stably memoized by the caller).
+ * @param mapReadyGeneration - Bumped when the map (re)initializes; a dependency
+ *   so the effect re-runs once `app.getMap()` is available (an early mount
+ *   before map init returns before attaching the `idle` listener).
+ */
+export function useVectorTileGeometryBackfill(
+  app: ReturnType<typeof createAppAPI>,
+  mapReadyGeneration: number,
+): void {
   const layers = useAppStore((state) => state.layers);
 
   useEffect(() => {
@@ -98,5 +108,5 @@ export function useVectorTileGeometryBackfill(app: ReturnType<typeof createAppAP
     return () => {
       map.off("idle", backfill);
     };
-  }, [app, layers]);
+  }, [app, layers, mapReadyGeneration]);
 }

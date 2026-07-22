@@ -426,8 +426,10 @@ export function TopToolbar({
   const panels = useToolbarPanels(appApi);
   // Fill in the geometry kind for vector-tile layers that arrived without it
   // (older projects, sources that don't record it), so their swatch/legend
-  // symbols are a dot/line/square rather than a neutral square.
-  useVectorTileGeometryBackfill(appApi);
+  // symbols are a dot/line/square rather than a neutral square. Keyed on
+  // mapReadyGeneration so it re-runs once the map exists (an early mount before
+  // map init would otherwise miss its only chance to attach the idle listener).
+  useVectorTileGeometryBackfill(appApi, mapReadyGeneration);
   // Feed the visible layers' symbology into the Legend panel while it is open,
   // so it auto-updates as layers are shown/hidden.
   useAutoLegend(appApi, panels.legend.visible, t("toolbar.item.legend"));
