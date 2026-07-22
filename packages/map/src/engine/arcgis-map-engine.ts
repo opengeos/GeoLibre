@@ -136,6 +136,7 @@ export interface ArcGISMapEngineModules extends ArcGISControlModules {
   readonly WMTSLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
   readonly VectorTileLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
   readonly MediaLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
+  readonly ImageryTileLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
 }
 
 export interface ArcGISMapEngineDependencies {
@@ -154,6 +155,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "vector-tiles",
   "image",
   "video",
+  "cog",
 ]);
 
 function localArcGISAssetsPath(): string {
@@ -173,6 +175,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     { default: WMTSLayer },
     { default: VectorTileLayer },
     { default: MediaLayer },
+    { default: ImageryTileLayer },
     { default: Zoom },
     { default: Compass },
     { default: Fullscreen },
@@ -190,6 +193,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     import("@arcgis/core/layers/WMTSLayer"),
     import("@arcgis/core/layers/VectorTileLayer"),
     import("@arcgis/core/layers/MediaLayer"),
+    import("@arcgis/core/layers/ImageryTileLayer"),
     import("@arcgis/core/widgets/Zoom"),
     import("@arcgis/core/widgets/Compass"),
     import("@arcgis/core/widgets/Fullscreen"),
@@ -214,6 +218,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     WMTSLayer: WMTSLayer as unknown as ArcGISMapEngineModules["WMTSLayer"],
     VectorTileLayer: VectorTileLayer as unknown as ArcGISMapEngineModules["VectorTileLayer"],
     MediaLayer: MediaLayer as unknown as ArcGISMapEngineModules["MediaLayer"],
+    ImageryTileLayer: ImageryTileLayer as unknown as ArcGISMapEngineModules["ImageryTileLayer"],
     Zoom: Zoom as unknown as ArcGISMapEngineModules["Zoom"],
     Compass: Compass as unknown as ArcGISMapEngineModules["Compass"],
     Fullscreen: Fullscreen as unknown as ArcGISMapEngineModules["Fullscreen"],
@@ -257,6 +262,11 @@ function videoUrl(source: Readonly<Record<string, unknown>>): string | null {
     typeof candidate === "string" && candidate.trim().length > 0,
   );
   return url?.trim() ?? null;
+}
+
+function cogUrl(source: Readonly<Record<string, unknown>>): string | null {
+  const url = stringSourceValue(source, "url");
+  return url?.startsWith("cog://") ? url.slice("cog://".length) : url;
 }
 
 function toArcGISLayerId(id: string): string {
@@ -751,6 +761,10 @@ export class ArcGISMapEngine implements MapEngine {
           source: { type: "video", video, georeference },
         });
       }
+    }
+    if (layer.type === "cog") {
+      const url = cogUrl(layer.source);
+      if (url) return new modules.ImageryTileLayer({ ...properties, url });
     }
     if (
       layer.type === "raster" ||

@@ -133,6 +133,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "vector-tiles",
   "image",
   "video",
+  "cog",
 ]);
 const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 
@@ -153,6 +154,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     { default: WMTSLayer },
     { default: VectorTileLayer },
     { default: MediaLayer },
+    { default: ImageryTileLayer },
     { default: SceneLayer },
     { default: IntegratedMeshLayer },
     { default: Zoom },
@@ -172,6 +174,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     import("@arcgis/core/layers/WMTSLayer"),
     import("@arcgis/core/layers/VectorTileLayer"),
     import("@arcgis/core/layers/MediaLayer"),
+    import("@arcgis/core/layers/ImageryTileLayer"),
     import("@arcgis/core/layers/SceneLayer"),
     import("@arcgis/core/layers/IntegratedMeshLayer"),
     import("@arcgis/core/widgets/Zoom"),
@@ -194,6 +197,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     WMTSLayer: WMTSLayer as unknown as ArcGISSceneEngineModules["WMTSLayer"],
     VectorTileLayer: VectorTileLayer as unknown as ArcGISSceneEngineModules["VectorTileLayer"],
     MediaLayer: MediaLayer as unknown as ArcGISSceneEngineModules["MediaLayer"],
+    ImageryTileLayer: ImageryTileLayer as unknown as ArcGISSceneEngineModules["ImageryTileLayer"],
     SceneLayer: SceneLayer as unknown as ArcGISSceneEngineModules["SceneLayer"],
     IntegratedMeshLayer: IntegratedMeshLayer as unknown as ArcGISSceneEngineModules["IntegratedMeshLayer"],
     Zoom: Zoom as unknown as ArcGISSceneEngineModules["Zoom"],
@@ -266,6 +270,11 @@ function videoUrl(source: Readonly<Record<string, unknown>>): string | null {
     typeof candidate === "string" && candidate.trim().length > 0,
   );
   return url?.trim() ?? null;
+}
+
+function cogUrl(source: Readonly<Record<string, unknown>>): string | null {
+  const url = stringSourceValue(source, "url");
+  return url?.startsWith("cog://") ? url.slice("cog://".length) : url;
 }
 
 function toArcGISLayerId(id: string): string {
@@ -701,6 +710,10 @@ export class ArcGISSceneEngine implements MapEngine {
           source: { type: "video", video, georeference },
         }) as unknown as ArcGISLayer;
       }
+    }
+    if (layer.type === "cog") {
+      const url = cogUrl(layer.source);
+      if (url) return new modules.ImageryTileLayer({ ...properties, url }) as unknown as ArcGISLayer;
     }
     if (layer.type === "raster" || layer.type === "xyz" || layer.type === "wms" || layer.type === "wmts") {
       const urlTemplate = tileTemplate(layer);

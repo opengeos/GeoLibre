@@ -222,6 +222,8 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: store-backed video overlays now map their first valid source URL
   and four WGS84 corners to lazy ArcGIS `MediaLayer` video sources; additional
   MapLibre format fallbacks remain a documented gap.
+- Implemented: COG records now reconcile to ArcGIS `ImageryTileLayer` in both
+  views, including the persisted `cog://` URL wrapper.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

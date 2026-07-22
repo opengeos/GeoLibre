@@ -2109,3 +2109,23 @@
   passed; `git diff --check` → passed.
 - Follow-up: run browser validation with CORS-enabled media before claiming
   playback parity; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre/deck COG runtime → ArcGIS `ImageryTileLayer`
+
+- Source: MapLibre — COG records are store-backed raster sources rendered by an
+  adapter-private runtime, with URLs sometimes persisted as `cog://https://…`.
+- Files touched: ArcGIS MapView/SceneView adapters, registry, fake runtime, and
+  ArcGIS adapter/registry tests before → documented ImageryTileLayer creation.
+- ArcGIS approach: use public `ImageryTileLayer({ url })`, which supports COG
+  files; unwrap only the existing `cog://` transport marker before mounting.
+- What changed: both ArcGIS adapters advertise `cog` and reconcile a valid COG
+  URL into a private native imagery-tile layer while retaining store authority.
+- Gap / limitation: this does not port custom COG color rendering or pixel
+  inspection; ArcGIS COG requests still need browser/server CORS support.
+- Workaround: mount the source URL only. Removal criteria: a reviewed neutral
+  raster-renderer and pixel-query capability.
+- Tradeoff accepted: native COG display arrives before styling/query parity.
+- Status: partial.
+- Verification: focused ArcGIS MapView/SceneView/registry tests → 25 passed;
+  `git diff --check` → passed.
+- Follow-up: add browser validation for a public COG; Codex, 2026-07-22.

@@ -119,6 +119,15 @@ test("ArcGISMapEngine derives bounds from public projected view corners", async 
   assert.deepEqual(engine.camera.readBounds(), [0, 0, 120, 80]);
 });
 
+test("ArcGISMapEngine mounts store COG URLs as public ImageryTileLayers", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([{ ...layer("cog", "cog"), source: { url: "cog://https://example.test/image.tif" } }]);
+  await engine.mount({} as HTMLElement, initialView);
+  assert.equal(runtime.currentLayers[0]?.properties.url, "https://example.test/image.tif");
+  assert.equal(engine.supportsLayer(layer("cog", "cog")), true);
+});
+
 test("ArcGISMapEngine owns supported public controls while preserving native attribution", async () => {
   const runtime = createArcGISFakeRuntime();
   const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
