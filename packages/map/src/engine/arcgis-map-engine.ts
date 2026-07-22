@@ -89,6 +89,17 @@ interface ArcGISMapView extends ArcGISMapViewSnapshot, ArcGISHitTestView, ArcGIS
   on(event: string, handler: (event: ArcGISViewInputEvent) => void): ArcGISHandle;
   toScreen(point: { readonly longitude: number; readonly latitude: number }): ScreenPoint | null;
   toMap(point: ScreenPoint): ArcGISPoint | null;
+  readonly navigation: {
+    readonly actionMap: {
+      dragPrimary: string;
+      dragSecondary: string;
+      dragTertiary: string;
+      mouseWheel: string;
+    };
+    browserTouchPanEnabled: boolean;
+    momentumEnabled: boolean;
+    readonly gamepad?: { enabled: boolean };
+  };
 }
 
 /**
@@ -230,6 +241,7 @@ export class ArcGISMapEngine implements MapEngine {
   };
   private lastAppliedView: MapViewState | null = null;
   private activePopup: { readonly id: string; readonly onClose?: () => void } | null = null;
+  private doubleClickZoomHandle: ArcGISHandle | null = null;
   private userMoved = false;
   private moving = false;
   private destroyed = false;
@@ -315,8 +327,8 @@ export class ArcGISMapEngine implements MapEngine {
       this.view ? pickArcGISPoint(this.view, options) : null,
     drawBounds: async (options): Promise<BBox | null> =>
       this.view ? drawArcGISBounds(this.view, options) : null,
-    setDoubleClickZoomEnabled: (): void => this.unsupported("interactions"),
-    suspendNavigation: (): Unsubscribe => this.unsupported("interactions"),
+    setDoubleClickZoomEnabled: (enabled: boolean): void => this.setDoubleClickZoomEnabled(enabled),
+    suspendNavigation: (): Unsubscribe => this.suspendNavigation(),
     createMarker: (_options: MapMarkerOptions): MapMarkerHandle => this.unsupported("markers"),
     upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => this.upsertOverlay(spec),
     setOverlayVisible: (id: string, visible: boolean): void => this.setOverlayVisible(id, visible),
@@ -390,6 +402,8 @@ export class ArcGISMapEngine implements MapEngine {
     if (this.destroyed) return;
     this.destroyed = true;
     for (const handle of this.handles.splice(0)) handle.remove();
+    this.doubleClickZoomHandle?.remove();
+    this.doubleClickZoomHandle = null;
     this.revokeObjectUrls();
     this.revokeOverlayObjectUrls();
     this.view?.destroy();
@@ -658,6 +672,49 @@ export class ArcGISMapEngine implements MapEngine {
     } finally {
       for (const { layer, visible } of hidden) layer.visible = visible;
     }
+  }
+
+  private setDoubleClickZoomEnabled(enabled: boolean): void {
+    if (enabled) {
+      this.doubleClickZoomHandle?.remove();
+      this.doubleClickZoomHandle = null;
+      return;
+    }
+    if (!this.view || this.doubleClickZoomHandle) return;
+    this.doubleClickZoomHandle = this.view.on("double-click", (event) => event.stopPropagation?.());
+  }
+
+  private suspendNavigation(): Unsubscribe {
+    const navigation = this.view?.navigation;
+    if (!navigation) return () => undefined;
+    const actionMap = navigation.actionMap;
+    const previous = {
+      dragPrimary: actionMap.dragPrimary,
+      dragSecondary: actionMap.dragSecondary,
+      dragTertiary: actionMap.dragTertiary,
+      mouseWheel: actionMap.mouseWheel,
+      browserTouchPanEnabled: navigation.browserTouchPanEnabled,
+      momentumEnabled: navigation.momentumEnabled,
+      gamepadEnabled: navigation.gamepad?.enabled,
+    };
+    actionMap.dragPrimary = "none";
+    actionMap.dragSecondary = "none";
+    actionMap.dragTertiary = "none";
+    actionMap.mouseWheel = "none";
+    navigation.browserTouchPanEnabled = false;
+    navigation.momentumEnabled = false;
+    if (navigation.gamepad) navigation.gamepad.enabled = false;
+    return () => {
+      actionMap.dragPrimary = previous.dragPrimary;
+      actionMap.dragSecondary = previous.dragSecondary;
+      actionMap.dragTertiary = previous.dragTertiary;
+      actionMap.mouseWheel = previous.mouseWheel;
+      navigation.browserTouchPanEnabled = previous.browserTouchPanEnabled;
+      navigation.momentumEnabled = previous.momentumEnabled;
+      if (navigation.gamepad && previous.gamepadEnabled !== undefined) {
+        navigation.gamepad.enabled = previous.gamepadEnabled;
+      }
+    };
   }
 
   private setHighlight(

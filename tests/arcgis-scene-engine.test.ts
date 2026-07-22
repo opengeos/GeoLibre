@@ -140,6 +140,40 @@ test("ArcGISSceneEngine resolves cancelable point and bounds gestures through pu
   assert.equal(await cancelled, null);
 });
 
+test("ArcGISSceneEngine suspends public navigation actions and restores them exactly", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount({} as HTMLElement, initialView);
+  engine.interactions.setDoubleClickZoomEnabled(false);
+  let stopped = 0;
+  runtime.view?.emitInput("double-click", { stopPropagation: () => { stopped += 1; } });
+  assert.equal(stopped, 1);
+  engine.interactions.setDoubleClickZoomEnabled(true);
+  runtime.view?.emitInput("double-click", { stopPropagation: () => { stopped += 1; } });
+  assert.equal(stopped, 1);
+
+  const restore = engine.interactions.suspendNavigation();
+  assert.deepEqual(runtime.view?.navigation.actionMap, {
+    dragPrimary: "none",
+    dragSecondary: "none",
+    dragTertiary: "none",
+    mouseWheel: "none",
+  });
+  assert.equal(runtime.view?.navigation.browserTouchPanEnabled, false);
+  assert.equal(runtime.view?.navigation.momentumEnabled, false);
+  assert.equal(runtime.view?.navigation.gamepad.enabled, false);
+  restore();
+  assert.deepEqual(runtime.view?.navigation.actionMap, {
+    dragPrimary: "pan",
+    dragSecondary: "rotate",
+    dragTertiary: "zoom",
+    mouseWheel: "zoom",
+  });
+  assert.equal(runtime.view?.navigation.browserTouchPanEnabled, true);
+  assert.equal(runtime.view?.navigation.momentumEnabled, true);
+  assert.equal(runtime.view?.navigation.gamepad.enabled, true);
+});
+
 test("ArcGISSceneEngine identifies only store-backed GeoJSON features", async () => {
   const runtime = createArcGISSceneFakeRuntime();
   const geo = {

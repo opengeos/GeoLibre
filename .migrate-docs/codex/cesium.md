@@ -300,3 +300,35 @@
 - Follow-up: add only the remaining reviewed interaction commands, then make the
   capability advertisement and conformance matrix change together; Codex,
   2026-07-22.
+
+## 2026-07-22 — Cesium camera-input suspension → ArcGIS `SceneView.navigation` action map
+
+- Source: Cesium — globe interaction consumers need a reversible way to suspend
+  camera navigation and to suppress double-click zoom while application gestures
+  own the input stream.
+- Files touched: `packages/map/src/engine/arcgis-scene-engine.ts` and ArcGIS
+  fake/adapter tests under `tests/` before → SceneView navigation action-map and
+  event-handle restoration.
+- ArcGIS approach: use the documented `SceneView.navigation.actionMap`, touch,
+  momentum, and gamepad properties, plus public double-click event propagation
+  control; no private SceneView input manager is accessed.
+- What changed: SceneView supports neutral double-click policy and reversible
+  suspension of primary/secondary/tertiary drag, wheel, touch, momentum, and
+  gamepad navigation.
+- Gap / limitation: the aggregate ArcGIS action map is not a one-to-one Cesium
+  camera-controller surface and cannot preserve mutations made concurrently by
+  external SDK code while suspended.
+- Workaround: snapshot and restore the complete reviewed public state. Removal
+  criteria: add a neutral navigation lease protocol only if concurrent adapters
+  are introduced.
+- Tradeoff accepted: restoration intentionally reasserts application state to
+  avoid leaving SceneView partially disabled after a temporary gesture.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 51
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: port marker presentation/drag lifecycle before advertising the
+  interaction capability; Codex, 2026-07-22.

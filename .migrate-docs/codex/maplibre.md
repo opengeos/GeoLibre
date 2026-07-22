@@ -1888,3 +1888,36 @@
   non-fatal).
 - Follow-up: port double-click navigation suspension and marker lifecycle
   before advertising the whole interactions capability; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre navigation handlers → ArcGIS `MapView.navigation` action map
+
+- Source: MapLibre — `doubleClickZoom.enable/disable` and the grouped map input
+  handlers provide reversible zoom policy and temporary navigation suspension
+  for drawing, recording, and inset-map consumers.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts` and ArcGIS
+  fake/adapter tests under `tests/` before → public MapView event/action-map
+  navigation management.
+- ArcGIS approach: intercept documented `double-click` events with
+  `stopPropagation()` when disabled; snapshot and set public
+  `navigation.actionMap`, `browserTouchPanEnabled`, `momentumEnabled`, and
+  `navigation.gamepad.enabled` for suspension.
+- What changed: double-click policy now has one removable adapter-owned event
+  handle, and `suspendNavigation()` disables all reviewed input paths then
+  restores exactly the prior action-map/touch/momentum/gamepad values.
+- Gap / limitation: ArcGIS does not expose MapLibre's individual handler
+  objects, so unusual third-party navigation customizations made after
+  suspension begins are intentionally overwritten on restore.
+- Workaround: snapshot the documented aggregate settings at suspension time.
+  Removal criteria: none unless the neutral contract gains concurrent navigation
+  lease semantics.
+- Tradeoff accepted: exact restoration of the captured state favors predictable
+  application ownership over merging concurrent external SDK mutations.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 51
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: implement neutral marker lifecycle before advertising interactions
+  as fully supported; Codex, 2026-07-22.

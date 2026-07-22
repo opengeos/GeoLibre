@@ -64,6 +64,17 @@ export class FakeMapView {
   zoom: number;
   rotation: number;
   readonly popup = { visible: false };
+  readonly navigation = {
+    actionMap: {
+      dragPrimary: "pan",
+      dragSecondary: "rotate",
+      dragTertiary: "zoom",
+      mouseWheel: "zoom",
+    },
+    browserTouchPanEnabled: true,
+    momentumEnabled: true,
+    gamepad: { enabled: true },
+  };
   popupOpenOptions: {
     readonly location: { readonly longitude: number; readonly latitude: number };
     readonly content: HTMLElement;
