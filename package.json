@@ -41,6 +41,7 @@
     "typescript-eslint": "^8.65.0"
   },
   "overrides": {
+    "fast-uri": "^3.1.4",
     "filelist": {
       "minimatch": {
         "brace-expansion": "^2.1.2"

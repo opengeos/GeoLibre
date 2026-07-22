@@ -32,8 +32,12 @@ jobs:
       # Reads package-lock.json and queries the registry — no install needed, so
       # this stays fast. Blocking at `high` catches high/critical advisories
       # without reddening CI for the moderate/low noise Dependabot handles via PR.
+      # Scoped to production deps: `--omit=dev` drops advisories that only reach
+      # local build/dev tooling (e.g. sharp/libvips via wrangler+miniflare, which
+      # never ships in a GeoLibre artifact), while still blocking anything that
+      # reaches users. Dependabot bumps the dev toolchain separately.
       - name: Audit npm dependencies (high and critical)
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
   e2e:
     name: E2E smoke (Playwright)
