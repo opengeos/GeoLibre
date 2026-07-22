@@ -26,6 +26,7 @@
 
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import { addPMTilesLayerFromUrl } from "./maplibre-components";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
 import {
@@ -697,7 +698,12 @@ function buildPanel(
       const added = await addObjectToMap(app, object, mode);
       if (!added) error = labels.addError(labels.unsupportedTitle);
     } catch (caught) {
-      error = labels.addError(errorMessage(caught));
+      // Dismissing the vector control's multi-layer picker rejects the add, but
+      // the user chose to load nothing: leave the card as it was instead of
+      // reporting a failure.
+      if (!isVectorLayerSelectionCancelled(caught)) {
+        error = labels.addError(errorMessage(caught));
+      }
     } finally {
       addInFlight.delete(object.key);
       render();

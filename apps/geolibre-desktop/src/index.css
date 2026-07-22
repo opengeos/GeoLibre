@@ -2654,11 +2654,16 @@ body,
    selectors outrank the upstream prefers-color-scheme block regardless of
    stylesheet order. The attribute picker popup is themed through the same
    variables; it mounts in MapLibre's popup container without a hook for a
-   custom class, so it is keyed off html:not(.dark)/.dark instead. */
+   custom class, so it is keyed off html:not(.dark)/.dark instead. The
+   multi-layer picker modal mounts straight into the map container (so it
+   stays visible while the panel is hidden), which has no custom-class hook
+   either, so it is keyed the same way. */
 .vector-control.geolibre-vector-control,
 .vector-control-panel.geolibre-vector-panel,
 html:not(.dark) .vector-control-popup,
-.dark .vector-control-popup {
+html:not(.dark) .vector-control-layer-picker,
+.dark .vector-control-popup,
+.dark .vector-control-layer-picker {
   --vc-bg: hsl(var(--popover));
   --vc-text: hsl(var(--popover-foreground));
   --vc-text-strong: hsl(var(--foreground));
@@ -2684,7 +2689,8 @@ html:not(.dark) .vector-control-popup,
 
 .dark .vector-control.geolibre-vector-control,
 .dark .vector-control-panel.geolibre-vector-panel,
-.dark .vector-control-popup {
+.dark .vector-control-popup,
+.dark .vector-control-layer-picker {
   --vc-shadow: 0 0 0 2px hsl(0 0% 0% / 0.4);
 
   color-scheme: dark;
