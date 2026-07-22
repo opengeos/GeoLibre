@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 874 tools across 9 categories. */
+/** 881 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -480,6 +480,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "find_patch_edge_cells", name: "Find Patch Edge Cells" },
           { id: "floor", name: "Floor" },
           { id: "greater_than", name: "Greater Than" },
+          { id: "greater_than_or_equal_to", name: "GreaterThanOrEqualTo" },
           { id: "heat_map", name: "Heat Map" },
           { id: "idw_interpolation", name: "Idw Interpolation" },
           { id: "image_autocorrelation", name: "Image Autocorrelation" },
@@ -496,6 +497,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "kappa_index", name: "Kappa Index" },
           { id: "ks_normality_test", name: "Ks Normality Test" },
           { id: "less_than", name: "Less Than" },
+          { id: "less_than_or_equal_to", name: "LessThanOrEqualTo" },
           { id: "list_unique_values_raster", name: "List Unique Values Raster" },
           { id: "ln", name: "Ln" },
           { id: "log10", name: "Log10" },
@@ -508,6 +510,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "negate", name: "Negate" },
           { id: "nibble", name: "Nibble" },
           { id: "not_equal_to", name: "Not Equal To" },
+          { id: "ordinary_cokriging", name: "Ordinary CoKriging Interpolation" },
           { id: "paired_sample_t_test", name: "Paired Sample T Test" },
           { id: "phi_coefficient", name: "Phi Coefficient" },
           { id: "principal_component_analysis", name: "Principal Component Analysis" },
@@ -1076,6 +1079,15 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "time_series_forecast", name: "Time Series Forecast" },
           { id: "trace_proximity_events", name: "Trace Proximity Events" },
           { id: "transform_fields", name: "Transform Fields" },
+        ],
+      },
+      {
+        label: "General",
+        tools: [
+          { id: "buffer_vector", name: "Buffer Vector" },
+          { id: "directional_variogram", name: "Directional Variogram Analysis" },
+          { id: "estimate_variogram", name: "Estimate Variogram" },
+          { id: "fit_variogram", name: "Fit Variogram Model" },
         ],
       },
       {
