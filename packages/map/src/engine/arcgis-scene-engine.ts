@@ -259,7 +259,7 @@ export class ArcGISSceneEngine implements MapEngine {
 
   readonly camera = {
     readView: (): MapViewState => this.readView(),
-    readBounds: (): BBox | null => null,
+    readBounds: (): BBox | null => this.readBounds(),
     readZoomRange: (): { readonly min: number; readonly max: number } => ({ min: 0, max: 24 }),
     applyView: (view: MapViewState): void => this.applyView(view),
     flyToLocation: (location: MapViewState): void => this.applyView(location),
@@ -549,6 +549,33 @@ export class ArcGISSceneEngine implements MapEngine {
     if (!this.view) return;
     this.lastAppliedView = null;
     void this.view.goTo({ target: { type: "extent", xmin: bounds[0], ymin: bounds[1], xmax: bounds[2], ymax: bounds[3], spatialReference: { wkid: 4326 } } }, { animate: false }).catch(() => undefined);
+  }
+
+  private readBounds(): BBox | null {
+    const view = this.view;
+    const rect = this.container?.getBoundingClientRect();
+    if (!view || !rect || !(rect.width > 0) || !(rect.height > 0)) return null;
+    const corners = [
+      view.toMap({ x: 0, y: 0 }),
+      view.toMap({ x: rect.width, y: 0 }),
+      view.toMap({ x: rect.width, y: rect.height }),
+      view.toMap({ x: 0, y: rect.height }),
+    ];
+    const lngLats = corners.map((point) => {
+      const longitude = point?.longitude ?? point?.x;
+      const latitude = point?.latitude ?? point?.y;
+      return typeof longitude === "number" && typeof latitude === "number"
+        ? ([longitude, latitude] as const)
+        : null;
+    });
+    if (lngLats.some((point) => point === null)) return null;
+    const points = lngLats as Array<readonly [number, number]>;
+    return [
+      Math.min(...points.map((point) => point[0])),
+      Math.min(...points.map((point) => point[1])),
+      Math.max(...points.map((point) => point[0])),
+      Math.max(...points.map((point) => point[1])),
+    ];
   }
 
   private reconcileLayers(): void {

@@ -364,3 +364,27 @@
   non-fatal).
 - Follow-up: run GPU/browser validation against real SceneView terrain before
   claiming globe-marker visual parity; Codex, 2026-07-22.
+
+## 2026-07-22 — Cesium camera footprint → ArcGIS `SceneView.toMap` corner bounds
+
+- Source: Cesium — globe/print consumers need a renderer-neutral visible bbox
+  without exposing the native camera or globe object.
+- Files touched: `packages/map/src/engine/arcgis-scene-engine.ts` and ArcGIS
+  adapter tests under `tests/` before → SceneView public corner projection.
+- ArcGIS approach: project four public screen corners with `SceneView.toMap`
+  and return normalized longitude/latitude bounds through the existing camera
+  port.
+- What changed: SceneView now returns a neutral bbox for a measurable mounted
+  viewport instead of `null`.
+- Gap / limitation: terrain, pitch, and horizon make this a conservative
+  geographic bbox, not a terrain-clipped camera footprint.
+- Workaround: preserve the current bbox contract. Removal criteria: approve a
+  terrain-aware neutral footprint model before adding one.
+- Tradeoff accepted: conservative bounds make current print consumers work
+  without leaking SceneView geometries.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 55
+  passed; `npm run lint -- --quiet` → passed.
+- Follow-up: none; Codex, 2026-07-22.

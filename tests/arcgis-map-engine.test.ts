@@ -76,6 +76,16 @@ test("ArcGISMapEngine lazy-loads MapView, uses local assets, and reconciles stor
   assert.equal(runtime.destroyed.value, true);
 });
 
+test("ArcGISMapEngine derives bounds from public projected view corners", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount(
+    { getBoundingClientRect: () => ({ width: 120, height: 80 }) } as unknown as HTMLElement,
+    initialView,
+  );
+  assert.deepEqual(engine.camera.readBounds(), [0, 0, 120, 80]);
+});
+
 test("ArcGISMapEngine ignores store camera echoes and emits user navigation", async () => {
   const runtime = createArcGISFakeRuntime();
   const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });

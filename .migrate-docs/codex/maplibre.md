@@ -1955,3 +1955,27 @@
   non-fatal).
 - Follow-up: test real MapView/SceneView marker drag and viewport refresh in
   browser automation; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre `getBounds` → ArcGIS `MapView.toMap` corner bounds
+
+- Source: MapLibre — `Map#getBounds()` supplies a neutral visible extent to
+  print-layout/export consumers through `MapEngineClient.camera.readBounds()`.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts` and ArcGIS
+  adapter tests under `tests/` before → MapView four-corner public projection.
+- ArcGIS approach: transform each public screen corner through `MapView.toMap`
+  and normalize longitude/latitude min/max, avoiding SDK extent coordinates or
+  private spatial-reference conversion.
+- What changed: the MapView adapter now returns a neutral bbox when its mounted
+  container has a measurable viewport.
+- Gap / limitation: the bbox encloses rotated view corners and is therefore not
+  a rotated polygon equivalent to the precise visible footprint.
+- Workaround: retain the existing bbox contract. Removal criteria: introduce a
+  reviewed neutral visible-footprint geometry contract if required.
+- Tradeoff accepted: a conservative bbox is portable across engines and enough
+  for existing print layout, at the cost of rotated-map precision.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 55
+  passed; `npm run lint -- --quiet` → passed.
+- Follow-up: none; Codex, 2026-07-22.

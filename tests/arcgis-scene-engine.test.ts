@@ -66,6 +66,16 @@ test("ArcGISSceneEngine lazy-loads SceneView, uses local assets, and reconciles 
   assert.equal(runtime.destroyed.value, true);
 });
 
+test("ArcGISSceneEngine derives bounds from public projected view corners", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount(
+    { getBoundingClientRect: () => ({ width: 120, height: 80 }) } as unknown as HTMLElement,
+    initialView,
+  );
+  assert.deepEqual(engine.camera.readBounds(), [0, 0, 120, 80]);
+});
+
 test("ArcGISSceneEngine classifies explicit ArcGIS I3S layers before mounting", async () => {
   const runtime = createArcGISSceneFakeRuntime();
   const metadataUrls: string[] = [];
