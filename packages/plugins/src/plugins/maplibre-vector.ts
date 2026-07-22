@@ -1,5 +1,10 @@
 import { getSpatialExtensionPath, hasPathTraversal, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
+// Imported from the `/errors` subpath, a standalone entry point holding just
+// these helpers. The package root re-exports VectorControl, so importing from
+// there would statically pull the control's module graph in and undo the
+// deliberate lazy `import("maplibre-gl-vector")` in getVectorControlClass.
+import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import type {
   VectorControl,
   VectorControlEventHandler,
@@ -708,6 +713,11 @@ export type VectorDataSink = Pick<VectorControl, "addData">;
  * loose `.shp` loads as a single layer. Each file is added independently; an
  * empty list (e.g. a cancelled dialog) loads nothing.
  *
+ * A multi-layer container (a GeoPackage with several feature tables) opens the
+ * control's layer picker. Dismissing it rejects that file's load as a
+ * cancellation, which is skipped here rather than aborting the files behind it:
+ * declining one container must not silently drop the rest of the selection.
+ *
  * @param control - The vector control (or anything with `addData`).
  * @param picked - The picked files (empty when the dialog was cancelled).
  */
@@ -717,11 +727,17 @@ export async function addPickedVectorFiles(
 ): Promise<void> {
   for (const { file, companionFiles, sourcePath, nativeData } of picked) {
     const source = nativeData ? nativeGeoJsonFile(file, nativeData) : file;
-    await control.addData(source, {
-      ...(nativeData ? { name: file.name } : {}),
-      ...(!nativeData && companionFiles.length > 0 ? { companionFiles } : {}),
-      ...(sourcePath ? { sourcePath } : {}),
-    });
+    try {
+      await control.addData(source, {
+        ...(nativeData ? { name: file.name } : {}),
+        ...(!nativeData && companionFiles.length > 0 ? { companionFiles } : {}),
+        ...(sourcePath ? { sourcePath } : {}),
+      });
+    } catch (error) {
+      // A real load failure still propagates (the caller logs it, and the
+      // control already surfaced it through its 'error' event).
+      if (!isVectorLayerSelectionCancelled(error)) throw error;
+    }
   }
 }
 

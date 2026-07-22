@@ -100,4 +100,37 @@ describe("addPickedVectorFiles", () => {
 
     assert.equal(calls.length, 0);
   });
+
+  it("keeps loading the rest when a multi-layer picker is dismissed", async () => {
+    const { sink, calls } = createSink();
+    const cancelled = new Error("No layers were selected from city.");
+    cancelled.name = "VectorLayerSelectionCancelledError";
+    const inner = sink.addData;
+    sink.addData = (async (source: File, options?: never) => {
+      if (source.name === "city.gpkg") throw cancelled;
+      return inner(source, options);
+    }) as typeof sink.addData;
+
+    await addPickedVectorFiles(sink, [
+      { file: new File(["x"], "city.gpkg"), companionFiles: [] },
+      { file: new File(["x"], "after.geojson"), companionFiles: [] },
+    ]);
+
+    assert.deepEqual(
+      calls.map((call) => call.name),
+      ["after.geojson"],
+    );
+  });
+
+  it("still propagates a real load failure", async () => {
+    const { sink } = createSink();
+    sink.addData = (async () => {
+      throw new Error("boom");
+    }) as typeof sink.addData;
+
+    await assert.rejects(
+      addPickedVectorFiles(sink, [{ file: new File(["x"], "a.geojson"), companionFiles: [] }]),
+      /boom/,
+    );
+  });
 });
