@@ -53,13 +53,20 @@ test("ArcGISMapEngine lazy-loads MapView, uses local assets, and reconciles stor
         coordinates: [[8, 48], [9, 48], [9, 47], [8, 47]],
       },
     },
+    {
+      ...layer("video", "video"),
+      source: {
+        urls: ["", "https://example.test/overlay.mp4", "https://example.test/fallback.webm"],
+        coordinates: [[8, 48], [9, 48], [9, 47], [8, 47]],
+      },
+    },
   ]);
   assert.equal(loads, 0);
   await engine.mount({} as HTMLElement, initialView);
 
   assert.equal(loads, 1);
   assert.equal(runtime.config.assetsPath, "/app/arcgis-assets");
-  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector", "geolibre-image"]);
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector", "geolibre-image", "geolibre-video"]);
   assert.equal(runtime.basemapLayers[0]?.properties.title, "OpenStreetMap");
   assert.equal(runtime.basemapLayers[0]?.properties.copyright, "© OpenStreetMap contributors");
   assert.equal(engine.layers.hasRenderTarget("vector"), true);
@@ -75,6 +82,10 @@ test("ArcGISMapEngine lazy-loads MapView, uses local assets, and reconciles stor
       bottomLeft: { longitude: 8, latitude: 47, spatialReference: { wkid: 4326 } },
     },
   });
+  assert.equal(
+    (runtime.currentLayers[4]?.properties.source as { readonly video?: string }).video,
+    "https://example.test/overlay.mp4",
+  );
 
   engine.configure({ basemapVisible: false, basemapOpacity: 0.4 });
   assert.equal(runtime.basemapLayers[0]?.visible, false);

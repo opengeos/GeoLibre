@@ -219,6 +219,9 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: store-backed georeferenced image overlays now map their four
   WGS84 corners and image URL to lazy ArcGIS `MediaLayer` sources in MapView and
   SceneView.
+- Implemented: store-backed video overlays now map their first valid source URL
+  and four WGS84 corners to lazy ArcGIS `MediaLayer` video sources; additional
+  MapLibre format fallbacks remain a documented gap.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

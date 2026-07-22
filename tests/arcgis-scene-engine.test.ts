@@ -52,6 +52,13 @@ test("ArcGISSceneEngine lazy-loads SceneView, uses local assets, and reconciles 
         coordinates: [[8, 48], [9, 48], [9, 47], [8, 47]],
       },
     },
+    {
+      ...layer("video", "video"),
+      source: {
+        urls: ["https://example.test/overlay.mp4"],
+        coordinates: [[8, 48], [9, 48], [9, 47], [8, 47]],
+      },
+    },
     layer("tiles", "3d-tiles"),
   ]);
   assert.equal(loads, 0);
@@ -59,12 +66,16 @@ test("ArcGISSceneEngine lazy-loads SceneView, uses local assets, and reconciles 
 
   assert.equal(loads, 1);
   assert.equal(runtime.config.assetsPath, "/app/arcgis-assets");
-  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector", "geolibre-image"]);
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector", "geolibre-image", "geolibre-video"]);
   assert.equal(runtime.currentLayers[2]?.properties.url, "https://example.test/VectorTileServer");
   assert.equal(
     (runtime.currentLayers[3]?.properties.source as { readonly georeference?: { readonly type?: string } })
       .georeference?.type,
     "corners",
+  );
+  assert.equal(
+    (runtime.currentLayers[4]?.properties.source as { readonly video?: string }).video,
+    "https://example.test/overlay.mp4",
   );
   assert.equal(runtime.basemapLayers[0]?.properties.title, "OpenStreetMap");
   assert.equal(runtime.basemapLayers[0]?.properties.copyright, "© OpenStreetMap contributors");

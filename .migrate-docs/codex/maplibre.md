@@ -2081,3 +2081,31 @@
   Vite browser externalization warnings were non-fatal).
 - Follow-up: assess video overlays separately because ArcGIS MediaLayer accepts
   a different single-video source contract; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre video source → ArcGIS `MediaLayer` video source
+
+- Source: MapLibre — `syncVideoLayer` renders one georeferenced video from an
+  ordered `source.urls` fallback list and four stored corners.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/registry tests under
+  `tests/` before → lazy public MediaLayer video source creation.
+- ArcGIS approach: use a documented MediaLayer autocast `video` source with the
+  first non-empty URL and the public corners georeference used for image layers.
+- What changed: valid video records now render in both ArcGIS views in source
+  order, with visibility/opacity from the store and no native media object
+  exposed through MapEngine.
+- Gap / limitation: ArcGIS accepts one video source, while MapLibre accepts an
+  ordered fallback list; autoplay/playback controls and raster paint parity are
+  not part of the current neutral layer contract.
+- Workaround: choose the first valid URL deterministically. Removal criteria:
+  introduce a reviewed engine-neutral media fallback/playback contract.
+- Tradeoff accepted: deterministic first-source selection favors store-first
+  reconciliation over browser-format fallback resilience.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 52 passed; `npm run lint -- --quiet` →
+  passed; `git diff --check` → passed.
+- Follow-up: run browser validation with CORS-enabled media before claiming
+  playback parity; Codex, 2026-07-22.

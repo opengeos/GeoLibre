@@ -153,6 +153,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "wmts",
   "vector-tiles",
   "image",
+  "video",
 ]);
 
 function localArcGISAssetsPath(): string {
@@ -247,6 +248,15 @@ function imageCorners(source: Readonly<Record<string, unknown>>): Record<string,
   if (points.some((point) => point === null)) return null;
   const [topLeft, topRight, bottomRight, bottomLeft] = points;
   return { type: "corners", topLeft, topRight, bottomRight, bottomLeft };
+}
+
+function videoUrl(source: Readonly<Record<string, unknown>>): string | null {
+  const urls = source.urls;
+  if (!Array.isArray(urls)) return null;
+  const url = urls.find((candidate): candidate is string =>
+    typeof candidate === "string" && candidate.trim().length > 0,
+  );
+  return url?.trim() ?? null;
 }
 
 function toArcGISLayerId(id: string): string {
@@ -729,6 +739,16 @@ export class ArcGISMapEngine implements MapEngine {
         return new modules.MediaLayer({
           ...properties,
           source: { type: "image", image, georeference },
+        });
+      }
+    }
+    if (layer.type === "video") {
+      const video = videoUrl(layer.source);
+      const georeference = imageCorners(layer.source);
+      if (video && georeference) {
+        return new modules.MediaLayer({
+          ...properties,
+          source: { type: "video", video, georeference },
         });
       }
     }
