@@ -135,6 +135,7 @@ export interface ArcGISMapEngineModules extends ArcGISControlModules {
   readonly WMSLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
   readonly WMTSLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
   readonly VectorTileLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
+  readonly MediaLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
 }
 
 export interface ArcGISMapEngineDependencies {
@@ -151,6 +152,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "wms",
   "wmts",
   "vector-tiles",
+  "image",
 ]);
 
 function localArcGISAssetsPath(): string {
@@ -169,6 +171,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     { default: WMSLayer },
     { default: WMTSLayer },
     { default: VectorTileLayer },
+    { default: MediaLayer },
     { default: Zoom },
     { default: Compass },
     { default: Fullscreen },
@@ -185,6 +188,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     import("@arcgis/core/layers/WMSLayer"),
     import("@arcgis/core/layers/WMTSLayer"),
     import("@arcgis/core/layers/VectorTileLayer"),
+    import("@arcgis/core/layers/MediaLayer"),
     import("@arcgis/core/widgets/Zoom"),
     import("@arcgis/core/widgets/Compass"),
     import("@arcgis/core/widgets/Fullscreen"),
@@ -208,6 +212,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     WMSLayer: WMSLayer as unknown as ArcGISMapEngineModules["WMSLayer"],
     WMTSLayer: WMTSLayer as unknown as ArcGISMapEngineModules["WMTSLayer"],
     VectorTileLayer: VectorTileLayer as unknown as ArcGISMapEngineModules["VectorTileLayer"],
+    MediaLayer: MediaLayer as unknown as ArcGISMapEngineModules["MediaLayer"],
     Zoom: Zoom as unknown as ArcGISMapEngineModules["Zoom"],
     Compass: Compass as unknown as ArcGISMapEngineModules["Compass"],
     Fullscreen: Fullscreen as unknown as ArcGISMapEngineModules["Fullscreen"],
@@ -228,6 +233,20 @@ function tileTemplate(layer: GeoLibreLayer): string | null {
     (tile): tile is string => typeof tile === "string" && tile.trim().length > 0,
   );
   return first?.trim() ?? null;
+}
+
+function imageCorners(source: Readonly<Record<string, unknown>>): Record<string, unknown> | null {
+  const coordinates = source.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length !== 4) return null;
+  const points = coordinates.map((coordinate) =>
+    Array.isArray(coordinate) && coordinate.length >= 2 &&
+    typeof coordinate[0] === "number" && typeof coordinate[1] === "number"
+      ? { longitude: coordinate[0], latitude: coordinate[1], spatialReference: { wkid: 4326 } }
+      : null,
+  );
+  if (points.some((point) => point === null)) return null;
+  const [topLeft, topRight, bottomRight, bottomLeft] = points;
+  return { type: "corners", topLeft, topRight, bottomRight, bottomLeft };
 }
 
 function toArcGISLayerId(id: string): string {
@@ -702,6 +721,16 @@ export class ArcGISMapEngine implements MapEngine {
     if (layer.type === "vector-tiles") {
       const url = stringSourceValue(layer.source, "url");
       if (url) return new modules.VectorTileLayer({ ...properties, url });
+    }
+    if (layer.type === "image") {
+      const image = stringSourceValue(layer.source, "url");
+      const georeference = imageCorners(layer.source);
+      if (image && georeference) {
+        return new modules.MediaLayer({
+          ...properties,
+          source: { type: "image", image, georeference },
+        });
+      }
     }
     if (
       layer.type === "raster" ||

@@ -46,17 +46,35 @@ test("ArcGISMapEngine lazy-loads MapView, uses local assets, and reconciles stor
     layer("geo", "geojson"),
     layer("wms", "wms"),
     { ...layer("vector", "vector-tiles"), source: { url: "https://example.test/VectorTileServer" } },
+    {
+      ...layer("image", "image"),
+      source: {
+        url: "https://example.test/overlay.png",
+        coordinates: [[8, 48], [9, 48], [9, 47], [8, 47]],
+      },
+    },
   ]);
   assert.equal(loads, 0);
   await engine.mount({} as HTMLElement, initialView);
 
   assert.equal(loads, 1);
   assert.equal(runtime.config.assetsPath, "/app/arcgis-assets");
-  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector"]);
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector", "geolibre-image"]);
   assert.equal(runtime.basemapLayers[0]?.properties.title, "OpenStreetMap");
   assert.equal(runtime.basemapLayers[0]?.properties.copyright, "© OpenStreetMap contributors");
   assert.equal(engine.layers.hasRenderTarget("vector"), true);
   assert.equal(runtime.currentLayers[2]?.properties.url, "https://example.test/VectorTileServer");
+  assert.deepEqual(runtime.currentLayers[3]?.properties.source, {
+    type: "image",
+    image: "https://example.test/overlay.png",
+    georeference: {
+      type: "corners",
+      topLeft: { longitude: 8, latitude: 48, spatialReference: { wkid: 4326 } },
+      topRight: { longitude: 9, latitude: 48, spatialReference: { wkid: 4326 } },
+      bottomRight: { longitude: 9, latitude: 47, spatialReference: { wkid: 4326 } },
+      bottomLeft: { longitude: 8, latitude: 47, spatialReference: { wkid: 4326 } },
+    },
+  });
 
   engine.configure({ basemapVisible: false, basemapOpacity: 0.4 });
   assert.equal(runtime.basemapLayers[0]?.visible, false);

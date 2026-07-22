@@ -2050,3 +2050,34 @@
   Vite browser externalization warnings were non-fatal).
 - Follow-up: design the engine-neutral style/source bridge before attempting
   raw-template or MapLibre paint parity; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre image source → ArcGIS `MediaLayer` corners source
+
+- Source: MapLibre — `syncImageLayer` renders a georeferenced image URL at four
+  `[longitude, latitude]` corners from a store-backed `image` record.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS fake/adapter/registry tests
+  under `tests/` before → lazy public ArcGIS MediaLayer source creation.
+- ArcGIS approach: construct documented `MediaLayer` with an autocast public
+  image source and `CornersGeoreference`, retaining every corner as an explicit
+  WGS84 point.
+- What changed: MapView and SceneView now reconcile valid image URL/four-corner
+  records in source order, preserve layer visibility/opacity, and advertise
+  `image` as a supported layer type without changing the upstream georeferencer.
+- Gap / limitation: ArcGIS MediaLayer linearly stretches the image between the
+  corners and SceneView places it on the ground; MapLibre's raster paint model
+  and any future edit-in-place source mutation are not translated.
+- Workaround: recreate the adapter-private MediaLayer from each store snapshot.
+  Removal criteria: add a reviewed neutral raster/media styling and source-edit
+  contract before translating those behaviors.
+- Tradeoff accepted: rebuilding a small MediaLayer favors store authority and
+  deterministic cleanup over preserving a native instance across edits.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 52 passed; `npm run lint -- --quiet` →
+  passed; `npm run build` → passed (normal JupyterLite-unavailable notice and
+  Vite browser externalization warnings were non-fatal).
+- Follow-up: assess video overlays separately because ArcGIS MediaLayer accepts
+  a different single-video source contract; Codex, 2026-07-22.

@@ -131,6 +131,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "wms",
   "wmts",
   "vector-tiles",
+  "image",
 ]);
 const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 
@@ -150,6 +151,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     { default: WMSLayer },
     { default: WMTSLayer },
     { default: VectorTileLayer },
+    { default: MediaLayer },
     { default: SceneLayer },
     { default: IntegratedMeshLayer },
     { default: Zoom },
@@ -168,6 +170,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     import("@arcgis/core/layers/WMSLayer"),
     import("@arcgis/core/layers/WMTSLayer"),
     import("@arcgis/core/layers/VectorTileLayer"),
+    import("@arcgis/core/layers/MediaLayer"),
     import("@arcgis/core/layers/SceneLayer"),
     import("@arcgis/core/layers/IntegratedMeshLayer"),
     import("@arcgis/core/widgets/Zoom"),
@@ -189,6 +192,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     WMSLayer: WMSLayer as unknown as ArcGISSceneEngineModules["WMSLayer"],
     WMTSLayer: WMTSLayer as unknown as ArcGISSceneEngineModules["WMTSLayer"],
     VectorTileLayer: VectorTileLayer as unknown as ArcGISSceneEngineModules["VectorTileLayer"],
+    MediaLayer: MediaLayer as unknown as ArcGISSceneEngineModules["MediaLayer"],
     SceneLayer: SceneLayer as unknown as ArcGISSceneEngineModules["SceneLayer"],
     IntegratedMeshLayer: IntegratedMeshLayer as unknown as ArcGISSceneEngineModules["IntegratedMeshLayer"],
     Zoom: Zoom as unknown as ArcGISSceneEngineModules["Zoom"],
@@ -238,6 +242,20 @@ function tileTemplate(layer: GeoLibreLayer): string | null {
     (tile): tile is string => typeof tile === "string" && tile.trim().length > 0,
   );
   return first?.trim() ?? null;
+}
+
+function imageCorners(source: Readonly<Record<string, unknown>>): Record<string, unknown> | null {
+  const coordinates = source.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length !== 4) return null;
+  const points = coordinates.map((coordinate) =>
+    Array.isArray(coordinate) && coordinate.length >= 2 &&
+    typeof coordinate[0] === "number" && typeof coordinate[1] === "number"
+      ? { longitude: coordinate[0], latitude: coordinate[1], spatialReference: { wkid: 4326 } }
+      : null,
+  );
+  if (points.some((point) => point === null)) return null;
+  const [topLeft, topRight, bottomRight, bottomLeft] = points;
+  return { type: "corners", topLeft, topRight, bottomRight, bottomLeft };
 }
 
 function toArcGISLayerId(id: string): string {
@@ -653,6 +671,16 @@ export class ArcGISSceneEngine implements MapEngine {
     if (layer.type === "vector-tiles") {
       const url = stringSourceValue(layer.source, "url");
       if (url) return new modules.VectorTileLayer({ ...properties, url }) as unknown as ArcGISLayer;
+    }
+    if (layer.type === "image") {
+      const image = stringSourceValue(layer.source, "url");
+      const georeference = imageCorners(layer.source);
+      if (image && georeference) {
+        return new modules.MediaLayer({
+          ...properties,
+          source: { type: "image", image, georeference },
+        }) as unknown as ArcGISLayer;
+      }
     }
     if (layer.type === "raster" || layer.type === "xyz" || layer.type === "wms" || layer.type === "wmts") {
       const urlTemplate = tileTemplate(layer);
