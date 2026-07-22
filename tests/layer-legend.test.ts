@@ -59,8 +59,9 @@ describe("layerSwatchShape", () => {
     assert.equal(layerSwatchShape(layer({ type: "geojson", metadata: {}, geojson })), "line");
   });
 
-  it("defaults to square for raster/unknown", () => {
-    assert.equal(layerSwatchShape(layer({ type: "cog", metadata: {} })), "square");
+  it("classifies raster/imagery layers as raster", () => {
+    assert.equal(layerSwatchShape(layer({ type: "cog", metadata: {} })), "raster");
+    assert.equal(layerSwatchShape(layer({ type: "xyz", metadata: {} })), "raster");
   });
 });
 

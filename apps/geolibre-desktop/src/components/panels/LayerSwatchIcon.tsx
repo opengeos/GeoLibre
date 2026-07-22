@@ -1,4 +1,5 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import { Image as RasterIcon } from "lucide-react";
 import { layerSwatch } from "../../lib/layer-swatch";
 
 /**
@@ -11,6 +12,10 @@ export function LayerSwatchIcon({ layer }: { layer: GeoLibreLayer }): React.Reac
   const { color, shape } = layerSwatch(layer);
   const dim = layer.visible ? "" : "opacity-40";
 
+  if (shape === "raster") {
+    // Raster/imagery layers get an image glyph rather than a solid square.
+    return <RasterIcon aria-hidden className={`h-3 w-3 shrink-0 text-muted-foreground ${dim}`} />;
+  }
   if (shape === "circle") {
     return (
       <span

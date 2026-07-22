@@ -7,7 +7,27 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import { legendSwatchesForLayer } from "./print-legend";
 
-export type LayerSwatchShape = "circle" | "line" | "square";
+export type LayerSwatchShape = "circle" | "line" | "square" | "raster";
+
+/** Layer types styled as vectors (a colored dot/line/fill represents them). */
+const VECTOR_TYPES = new Set<GeoLibreLayer["type"]>([
+  "geojson",
+  "flatgeobuf",
+  "geoparquet",
+  "vector-tiles",
+  "pmtiles",
+  "duckdb-query",
+  "deckgl-viz",
+]);
+
+/** Whether a layer is raster/imagery (COG, XYZ, WMS/WMTS, raster MBTiles, …). */
+function isRasterLike(layer: GeoLibreLayer): boolean {
+  if (VECTOR_TYPES.has(layer.type)) return false;
+  if (layer.type === "mbtiles") {
+    return layer.metadata.tileType === "raster" || layer.source.type === "raster";
+  }
+  return true;
+}
 
 export interface LayerSwatch {
   /** First representative color of the layer's symbology. */
@@ -30,6 +50,9 @@ function stringMetadata(value: unknown): string | null {
  * GeoJSON geometry, then a neutral square for raster/service/unknown layers.
  */
 export function layerSwatchShape(layer: GeoLibreLayer): LayerSwatchShape {
+  // Raster/imagery layers get an image glyph, not a solid square.
+  if (isRasterLike(layer)) return "raster";
+
   const geometryType = stringMetadata(layer.metadata?.geometryType);
   if (geometryType === "point") return "circle";
   if (geometryType === "line") return "line";
@@ -64,11 +87,11 @@ export function layerSwatch(layer: GeoLibreLayer): LayerSwatch {
   };
 }
 
-/** One flattened row in the on-map legend. */
+/** One flattened row in the on-map legend (the legend control has no raster glyph). */
 export interface AutoLegendItem {
   label: string;
   color: string;
-  shape: LayerSwatchShape;
+  shape: "square" | "circle" | "line";
 }
 
 /**
@@ -84,7 +107,9 @@ export function autoLegendItems(layers: GeoLibreLayer[]): AutoLegendItem[] {
     if (!layer.visible) continue;
     const swatches = legendSwatchesForLayer(layer);
     if (swatches.length === 0) continue;
-    const shape = layerSwatchShape(layer);
+    // The legend control has no raster glyph, so it falls back to a square.
+    const resolved = layerSwatchShape(layer);
+    const shape = resolved === "raster" ? "square" : resolved;
     if (swatches.length === 1) {
       items.push({ label: layer.name, color: swatches[0].color || NEUTRAL, shape });
       continue;
