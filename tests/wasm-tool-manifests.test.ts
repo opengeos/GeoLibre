@@ -282,10 +282,10 @@ describe("mergeWasmToolManifests", () => {
       params: [],
     };
     const [tool] = mergeWasmToolManifests([catalogD8Pointer], [wasmD8Pointer]);
-    assert.deepEqual(
-      tool.params?.map((param) => param.name),
-      ["dem", "esri_pntr", "output"],
-    );
+    // Compare the whole params, not just the names: `kind` decides how the
+    // dialog renders each field (a dropped one turns a raster picker into a
+    // text box), and `required`/`default` seed createDefaultValues and gate Run.
+    assert.deepEqual(tool.params, catalogD8Pointer.params);
     // Still a catalog merge, not a passthrough: display metadata is the catalog's.
     assert.equal(tool.category, "Hydrology - Flow Routing");
   });
