@@ -55,64 +55,57 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
   // Render order in the store is bottom-first; legends read top-first.
   for (const layer of [...layers].reverse()) {
     if (!layer.visible) continue;
-    if (NON_LEGEND_TYPES.has(layer.type)) continue;
-
-    // MBTiles can carry vector or raster tiles; the app renders it as vector
-    // unless its metadata or source says raster (mirrors layer-sync), so a
-    // missing or legacy tileType is treated as vector here too.
-    const isVector =
-      VECTOR_TYPES.has(layer.type) ||
-      (layer.type === "mbtiles" &&
-        layer.metadata.tileType !== "raster" &&
-        layer.source.type !== "raster");
-    if (isVector) {
-      const mode = styleValue(layer.style, "vectorStyleMode");
-      const stops = styleValue(layer.style, "vectorStyleStops");
-      // Diagram symbology adds one labeled swatch per charted attribute after
-      // the base symbology's swatches, mirroring the QGIS legend.
-      const diagrams = diagramSwatches(layer);
-      if (
-        (mode === "graduated" || mode === "categorized") &&
-        Array.isArray(stops) &&
-        stops.length > 0
-      ) {
-        entries.push({
-          id: layer.id,
-          name: layer.name,
-          swatches: [...rampSwatches(stops, mode), ...diagrams],
-        });
-        continue;
-      }
-      if (mode === "rule-based") {
-        const swatches = ruleSwatches(layer);
-        if (swatches.length > 0) {
-          entries.push({
-            id: layer.id,
-            name: layer.name,
-            swatches: [...swatches, ...diagrams],
-          });
-          continue;
-        }
-      }
-      const primary = pointMarkerSwatch(layer.style) ?? {
-        color: styleValue(layer.style, "fillColor"),
-      };
-      entries.push({
-        id: layer.id,
-        name: layer.name,
-        swatches: [primary, ...diagrams],
-      });
-      continue;
-    }
-
-    // Raster / service layers: a single neutral marker swatch.
-    entries.push({
-      id: layer.id,
-      name: layer.name,
-      swatches: [{ color: NEUTRAL_SWATCH }],
-    });
+    const swatches = legendSwatchesForLayer(layer);
+    // No swatches means a type with no meaningful legend representation.
+    if (swatches.length === 0) continue;
+    entries.push({ id: layer.id, name: layer.name, swatches });
   }
   return entries;
+}
+
+/**
+ * The legend swatch(es) for a single layer, independent of its visibility.
+ * Shared by {@link buildLegend} (which filters to visible layers) and the
+ * Layers-panel row symbol (which shows a swatch even for hidden layers). Returns
+ * an empty array for types with no meaningful legend representation
+ * ({@link NON_LEGEND_TYPES}); every legend-able layer yields at least one swatch.
+ */
+export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
+  if (NON_LEGEND_TYPES.has(layer.type)) return [];
+
+  // MBTiles can carry vector or raster tiles; the app renders it as vector
+  // unless its metadata or source says raster (mirrors layer-sync), so a
+  // missing or legacy tileType is treated as vector here too.
+  const isVector =
+    VECTOR_TYPES.has(layer.type) ||
+    (layer.type === "mbtiles" &&
+      layer.metadata.tileType !== "raster" &&
+      layer.source.type !== "raster");
+  if (isVector) {
+    const mode = styleValue(layer.style, "vectorStyleMode");
+    const stops = styleValue(layer.style, "vectorStyleStops");
+    // Diagram symbology adds one labeled swatch per charted attribute after the
+    // base symbology's swatches, mirroring the QGIS legend.
+    const diagrams = diagramSwatches(layer);
+    if (
+      (mode === "graduated" || mode === "categorized") &&
+      Array.isArray(stops) &&
+      stops.length > 0
+    ) {
+      return [...rampSwatches(stops, mode), ...diagrams];
+    }
+    if (mode === "rule-based") {
+      const swatches = ruleSwatches(layer);
+      if (swatches.length > 0) return [...swatches, ...diagrams];
+    }
+    const primary = pointMarkerSwatch(layer.style) ?? {
+      color: styleValue(layer.style, "fillColor"),
+    };
+    return [primary, ...diagrams];
+  }
+
+  // Raster / service layers: a single neutral marker swatch.
+  return [{ color: NEUTRAL_SWATCH }];
 }
 
 /**

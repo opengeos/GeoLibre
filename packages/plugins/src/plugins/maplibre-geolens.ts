@@ -28,6 +28,7 @@ import {
   datasetPageUrl,
   defaultGeoLensFetch,
   fetchDatasetFields,
+  geometryKind,
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
@@ -88,7 +89,7 @@ export interface GeoLensLabels {
 
 export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   hint: "Connect to a GeoLens server to browse and add its catalog datasets.",
-  baseUrlPlaceholder: "GeoLens URL, e.g. https://demo.getgeolens.com",
+  baseUrlPlaceholder: "GeoLens URL, e.g. https://datasets.geolibre.app",
   apiKeyPlaceholder: "API key (optional, for private data)",
   connect: "Connect",
   connecting: "Connecting…",
@@ -233,6 +234,65 @@ function clearAllRefreshTimers(): void {
   refreshTimers.clear();
 }
 
+/** True when the layer's signed tile URL carries an expired (or near-expiry) token. */
+function tileTokenExpired(layer: GeoLibreLayer): boolean {
+  const tiles = layer.source.tiles;
+  const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+  const match = url.match(/[?&]exp=(\d+)/);
+  if (!match) return false; // no signed expiry — leave it alone
+  return Number(match[1]) <= Math.floor(Date.now() / 1000) + 5;
+}
+
+/** GeoLens layers currently being re-minted, to avoid overlapping restores. */
+const restoringLayerIds = new Set<string>();
+
+/**
+ * Re-mint tile tokens for GeoLens vector-tile layers restored from a saved
+ * project. Such a layer arrives with a dead token (tokens live seconds to
+ * minutes) and no refresh timer — so its tiles 404 forever. For any GeoLens
+ * layer whose token has expired and that isn't already managed, this mints a
+ * fresh token, patches the layer's `tiles`, and starts the refresh loop.
+ *
+ * Only public datasets restore automatically: the API key is never persisted,
+ * so a private layer stays blank until re-added through the panel.
+ */
+function healRestoredGeoLensLayers(): void {
+  for (const layer of useAppStore.getState().layers) {
+    if (layer.metadata.sourceKind !== "geolens-vector-tiles") continue;
+    if (refreshTimers.has(layer.id) || restoringLayerIds.has(layer.id)) continue;
+    if (!tileTokenExpired(layer)) continue; // a fresh add already has a live token
+    const baseUrl = layer.metadata.geolensBaseUrl;
+    const datasetId = layer.metadata.geolensDatasetId;
+    if (typeof baseUrl !== "string" || typeof datasetId !== "string") continue;
+    const client: GeoLensClientOptions = { baseUrl };
+    restoringLayerIds.add(layer.id);
+    void mintTileToken(client, datasetId, defaultGeoLensFetch)
+      .then((token) => {
+        const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
+        if (!current) return;
+        const { tiles } = vectorTileTemplate(client, token);
+        useAppStore
+          .getState()
+          .updateLayer(layer.id, { source: { ...current.source, tiles: [tiles] } });
+        scheduleTokenRefresh(client, layer.id, datasetId, token.expiresIn, defaultGeoLensFetch);
+      })
+      .catch(() => {}) // a transient failure is retried on the next store change
+      .finally(() => restoringLayerIds.delete(layer.id));
+  }
+}
+
+// Heal when the layer set changes (covers project load and late additions),
+// plus once now for layers already present when this module loads. Guarded on
+// the `layers` reference so unrelated store churn (pointer, selection, map view)
+// doesn't re-run the scan — useAppStore has no selector-subscribe middleware.
+let lastLayersRef: readonly GeoLibreLayer[] | null = null;
+useAppStore.subscribe((state) => {
+  if (state.layers === lastLayersRef) return;
+  lastLayersRef = state.layers;
+  healRestoredGeoLensLayers();
+});
+healRestoredGeoLensLayers();
+
 /**
  * Schedule a re-mint of the signed tile token shortly before it expires and
  * patch the layer's `tiles` in place, so MVT keeps loading past the TTL. Stops
@@ -328,6 +388,11 @@ async function addVectorTilesLayer(
       geolensDatasetId: dataset.id,
       sourceLayers: [sourceLayer],
       fields,
+      // The host's canonical geometry signal — drives the Layers-panel symbol
+      // and default styling when there are no local features to inspect.
+      ...(geometryKind(dataset.geometryType)
+        ? { geometryType: geometryKind(dataset.geometryType) }
+        : {}),
     },
     sourcePath: sourcePathFor(client, dataset),
   };

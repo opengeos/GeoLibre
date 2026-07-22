@@ -174,6 +174,7 @@ import {
 import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
+import { LayerSwatchIcon } from "./LayerSwatchIcon";
 
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -2337,6 +2338,7 @@ export function LayerPanel({
                           <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                         )}
                       </button>
+                      <LayerSwatchIcon layer={layer} />
                       {editingLayerId === layer.id ? (
                         <input
                           autoFocus
