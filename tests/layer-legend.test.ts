@@ -63,6 +63,13 @@ describe("layerSwatchShape", () => {
     assert.equal(layerSwatchShape(layer({ type: "cog", metadata: {} })), "raster");
     assert.equal(layerSwatchShape(layer({ type: "xyz", metadata: {} })), "raster");
   });
+
+  it("does not classify 3D/point-cloud/media layers as raster", () => {
+    // These are neither vector nor imagery — they must not get the raster glyph.
+    assert.notEqual(layerSwatchShape(layer({ type: "3d-tiles", metadata: {} })), "raster");
+    assert.notEqual(layerSwatchShape(layer({ type: "lidar", metadata: {} })), "raster");
+    assert.notEqual(layerSwatchShape(layer({ type: "video", metadata: {} })), "raster");
+  });
 });
 
 describe("autoLegendItems", () => {

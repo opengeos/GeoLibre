@@ -20,9 +20,22 @@ const VECTOR_TYPES = new Set<GeoLibreLayer["type"]>([
   "deckgl-viz",
 ]);
 
+/**
+ * Layer types that are neither vector nor raster imagery (3D tiles, point
+ * clouds, media). They get the neutral geometry fallback, not the raster glyph.
+ * Mirrors NON_LEGEND_TYPES in print-legend.ts.
+ */
+const NON_RASTER_TYPES = new Set<GeoLibreLayer["type"]>([
+  "lidar",
+  "gaussian-splat",
+  "3d-tiles",
+  "video",
+  "image",
+]);
+
 /** Whether a layer is raster/imagery (COG, XYZ, WMS/WMTS, raster MBTiles, …). */
 function isRasterLike(layer: GeoLibreLayer): boolean {
-  if (VECTOR_TYPES.has(layer.type)) return false;
+  if (VECTOR_TYPES.has(layer.type) || NON_RASTER_TYPES.has(layer.type)) return false;
   if (layer.type === "mbtiles") {
     return layer.metadata.tileType === "raster" || layer.source.type === "raster";
   }
