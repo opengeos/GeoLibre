@@ -1921,3 +1921,37 @@
   non-fatal).
 - Follow-up: implement neutral marker lifecycle before advertising interactions
   as fully supported; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre `Marker` → ArcGIS public projection DOM marker
+
+- Source: MapLibre — `Marker` supports custom DOM elements, color fallback,
+  anchors, rotation, draggable lifecycle, and live position updates for search,
+  GPS, remote-cursor, inset, field, and story consumers.
+- Files touched: `packages/map/src/engine/arcgis-markers.ts`, both ArcGIS engine
+  adapters/registry/conformance matrix, and ArcGIS fake/adapter tests under
+  `tests/` before → adapter-owned DOM marker projected by public MapView APIs.
+- ArcGIS approach: append the existing application element to the public view
+  container and position it with documented `toScreen`/`toMap`; pointer events
+  drive the neutral drag callbacks without exposing a native SDK marker.
+- What changed: both ArcGIS adapters now preserve element/color, anchor/offset,
+  rotation, position, draggable event lifecycle, cleanup, and refresh markers on
+  public view movement. They advertise `interactions` and `markers` only after
+  the full current port is present.
+- Gap / limitation: pitch alignment is not visually equivalent to MapLibre's
+  marker transform, and offset/anchor sizing follows DOM pixels rather than
+  MapLibre marker-layout measurements.
+- Workaround: retain the existing element and public projected positioning.
+  Removal criteria: define an engine-neutral 3D marker-orientation/layout
+  contract before using a supported ArcGIS graphics/symbol alternative.
+- Tradeoff accepted: DOM markers favor existing UI fidelity and accessibility
+  over native ArcGIS graphic batching for the relatively small marker counts
+  used by these consumers.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 53
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: test real MapView/SceneView marker drag and viewport refresh in
+  browser automation; Codex, 2026-07-22.

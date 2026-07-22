@@ -202,6 +202,9 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: ArcGIS MapView and SceneView now honor the neutral double-click
   zoom policy and temporary navigation suspension with precise restoration of
   their public navigation action-map, touch, momentum, and gamepad state.
+- Implemented: ArcGIS MapView and SceneView now advertise the completed
+  interactions and markers capabilities. Adapter-owned DOM markers preserve
+  custom elements, anchors, rotation, drag lifecycle, and store isolation.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

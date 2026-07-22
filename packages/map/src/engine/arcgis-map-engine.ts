@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import { captureArcGISViewport, type ArcGISScreenshotView } from "../capture/arcgis-capture";
 import { drawArcGISBounds, pickArcGISPoint } from "./arcgis-interactions";
+import { ArcGISDomMarker } from "./arcgis-markers";
 import { getLayerBounds } from "../geojson-loader";
 import {
   toArcGISHitFeatures,
@@ -232,6 +233,7 @@ export class ArcGISMapEngine implements MapEngine {
   private readonly nativeLayers = new Map<string, ArcGISLayer>();
   private readonly overlays = new Map<string, GeoJsonOverlaySpec>();
   private readonly transientLayers = new Map<string, ArcGISLayer>();
+  private readonly markers = new Set<ArcGISDomMarker>();
   private layersSnapshot: readonly GeoLibreLayer[] = [];
   private cachedView: MapViewState = {
     center: [-100, 40],
@@ -329,7 +331,7 @@ export class ArcGISMapEngine implements MapEngine {
       this.view ? drawArcGISBounds(this.view, options) : null,
     setDoubleClickZoomEnabled: (enabled: boolean): void => this.setDoubleClickZoomEnabled(enabled),
     suspendNavigation: (): Unsubscribe => this.suspendNavigation(),
-    createMarker: (_options: MapMarkerOptions): MapMarkerHandle => this.unsupported("markers"),
+    createMarker: (options: MapMarkerOptions): MapMarkerHandle => this.createMarker(options),
     upsertGeoJsonOverlay: (spec: GeoJsonOverlaySpec): void => this.upsertOverlay(spec),
     setOverlayVisible: (id: string, visible: boolean): void => this.setOverlayVisible(id, visible),
     removeOverlay: (id: string): void => this.removeOverlay(id),
@@ -414,6 +416,8 @@ export class ArcGISMapEngine implements MapEngine {
     this.nativeLayers.clear();
     this.transientLayers.clear();
     this.overlays.clear();
+    for (const marker of this.markers) marker.remove();
+    this.markers.clear();
     this.container = null;
     this.listeners.clear();
   }
@@ -448,6 +452,8 @@ export class ArcGISMapEngine implements MapEngine {
     return (
       capability === "capture" ||
       capability === "feature-query" ||
+      capability === "interactions" ||
+      capability === "markers" ||
       capability === "popups" ||
       capability === "transient-overlays"
     );
@@ -502,8 +508,14 @@ export class ArcGISMapEngine implements MapEngine {
       this.userMoved = true;
     };
     this.handles.push(
-      view.on("drag", markUserMove),
-      view.on("mouse-wheel", markUserMove),
+      view.on("drag", () => {
+        markUserMove();
+        this.refreshMarkers();
+      }),
+      view.on("mouse-wheel", () => {
+        markUserMove();
+        this.refreshMarkers();
+      }),
       view.on("key-down", markUserMove),
       view.on("click", (event) => this.emitPointerEvent("click", event)),
       view.on("double-click", (event) => this.emitPointerEvent("dblclick", event)),
@@ -540,6 +552,7 @@ export class ArcGISMapEngine implements MapEngine {
     this.userMoved = false;
     this.cachedView = view;
     this.lastAppliedView = view;
+    this.refreshMarkers();
     this.emit("moveend", { view, userDriven });
     this.emit("idle", undefined);
   }
@@ -682,6 +695,23 @@ export class ArcGISMapEngine implements MapEngine {
     }
     if (!this.view || this.doubleClickZoomHandle) return;
     this.doubleClickZoomHandle = this.view.on("double-click", (event) => event.stopPropagation?.());
+  }
+
+  private createMarker(options: MapMarkerOptions): MapMarkerHandle {
+    const view = this.view;
+    if (!view) throw new Error("ArcGIS MapView is not mounted.");
+    const marker = new ArcGISDomMarker(view, options);
+    this.markers.add(marker);
+    const remove = marker.remove.bind(marker);
+    marker.remove = () => {
+      remove();
+      this.markers.delete(marker);
+    };
+    return marker;
+  }
+
+  private refreshMarkers(): void {
+    for (const marker of this.markers) marker.refresh();
   }
 
   private suspendNavigation(): Unsubscribe {

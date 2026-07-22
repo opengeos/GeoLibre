@@ -174,6 +174,37 @@ test("ArcGISSceneEngine suspends public navigation actions and restores them exa
   assert.equal(runtime.view?.navigation.gamepad.enabled, true);
 });
 
+test("ArcGISSceneEngine owns DOM marker presentation without changing store layers", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const element = {
+    style: {} as CSSStyleDeclaration,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    remove: () => undefined,
+    setPointerCapture: () => undefined,
+  } as unknown as HTMLElement;
+  const container = {
+    append: () => undefined,
+    getBoundingClientRect: () => ({ left: 0, top: 0 }),
+  } as unknown as HTMLElement;
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount(container, initialView);
+  const marker = engine.interactions.createMarker({
+    lngLat: [8.55, 47.37],
+    element,
+    anchor: "bottom",
+  });
+  marker.setRotation(42);
+  marker.setLngLat([9, 48]);
+
+  assert.deepEqual(marker.getLngLat(), [9, 48]);
+  assert.equal(element.style.left, "9px");
+  assert.equal(element.style.top, "48px");
+  assert.equal(element.style.transform, "translate(-50%, -100%) rotate(42deg)");
+  assert.deepEqual(engine.layers.listRenderTargets().map((target) => target.id), []);
+  marker.remove();
+});
+
 test("ArcGISSceneEngine identifies only store-backed GeoJSON features", async () => {
   const runtime = createArcGISSceneFakeRuntime();
   const geo = {

@@ -332,3 +332,35 @@
   non-fatal).
 - Follow-up: port marker presentation/drag lifecycle before advertising the
   interaction capability; Codex, 2026-07-22.
+
+## 2026-07-22 — Cesium entity/HTML marker presentation → ArcGIS public projection DOM marker
+
+- Source: Cesium — secondary-globe consumers require store-independent cursor,
+  location, and story marker presentation with position, rotation, drag, and
+  cleanup semantics.
+- Files touched: `packages/map/src/engine/arcgis-markers.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`, registry/conformance tests,
+  and ArcGIS fake/adapter tests under `tests/` before → SceneView-projected DOM
+  marker lifecycle.
+- ArcGIS approach: use public `SceneView.toScreen`/`toMap` and the view container
+  for an adapter-owned element; native SceneView and graphic instances remain
+  private and never cross MapEngine.
+- What changed: SceneView now owns custom/default DOM markers with neutral
+  position, rotation, drag events, removal, and map-motion refresh, completing
+  the current interaction/marker capability set.
+- Gap / limitation: DOM markers do not drape, occlude, or pitch-align like a
+  native Cesium entity or ArcGIS 3D graphic.
+- Workaround: preserve the existing UI element semantics for low-count consumer
+  markers. Removal criteria: approve a shared 3D marker elevation/occlusion
+  model before replacing this adapter presentation.
+- Tradeoff accepted: favoring DOM fidelity means markers may not be suitable for
+  high-volume or terrain-aware scene data; those belong in a future layer model.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 53
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: run GPU/browser validation against real SceneView terrain before
+  claiming globe-marker visual parity; Codex, 2026-07-22.

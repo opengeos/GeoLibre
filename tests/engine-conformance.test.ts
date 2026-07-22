@@ -529,6 +529,8 @@ runEngineConformance("ArcGIS", createArcGISHarness, {
       capability,
       capability === "capture" ||
       capability === "feature-query" ||
+      capability === "interactions" ||
+      capability === "markers" ||
       capability === "popups" ||
       capability === "transient-overlays",
     ]),
@@ -544,6 +546,8 @@ runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
       capability,
       capability === "capture" ||
       capability === "feature-query" ||
+      capability === "interactions" ||
+      capability === "markers" ||
       capability === "popups" ||
       capability === "transient-overlays",
     ]),
