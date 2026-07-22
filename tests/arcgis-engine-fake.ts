@@ -30,8 +30,9 @@ class FakeLayerCollection {
 
   constructor(private readonly onAdd: (layers: readonly FakeLayer[]) => void) {}
 
-  addMany(layers: readonly FakeLayer[]): void {
-    this.values.push(...layers);
+  addMany(layers: readonly FakeLayer[], index?: number): void {
+    if (index === undefined) this.values.push(...layers);
+    else this.values.splice(index, 0, ...layers);
     this.onAdd(this.values);
   }
 
@@ -404,6 +405,18 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
     }
   }
 
+  class SceneLayerFake extends FakeLayer {
+    constructor(properties: ArcGISLayerProperties) {
+      super({ ...properties, arcgisLayerKind: "scene" });
+    }
+  }
+
+  class IntegratedMeshLayerFake extends FakeLayer {
+    constructor(properties: ArcGISLayerProperties) {
+      super({ ...properties, arcgisLayerKind: "integrated-mesh" });
+    }
+  }
+
   runtime.modules = {
     config,
     reactiveUtils: {
@@ -417,6 +430,8 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
     GeoJSONLayer: FakeLayer,
     WMSLayer: FakeLayer,
     WMTSLayer: FakeLayer,
+    SceneLayer: SceneLayerFake,
+    IntegratedMeshLayer: IntegratedMeshLayerFake,
   };
   return runtime;
 }

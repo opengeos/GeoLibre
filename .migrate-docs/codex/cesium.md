@@ -230,3 +230,42 @@
   SceneView" --reporter=line` → 2 passed.
 - Follow-up: test real SceneView screenshot output in GPU-enabled browser CI
   before claiming 3D print/export parity; Codex, 2026-07-22.
+
+## 2026-07-22 — Cesium `Cesium3DTileset` I3S path → ArcGIS `SceneLayer` / `IntegratedMeshLayer`
+
+- Source: Cesium — the secondary globe accepts a store `3d-tiles` record and
+  renders its URL as a `Cesium3DTileset`; the ArcGIS I3S add-data path marks
+  its store records with `metadata.sourceKind: "arcgis-i3s"`.
+- Files touched: `packages/map/src/engine/arcgis-scene-engine.ts` and
+  `tests/arcgis-engine-fake.ts` / `tests/arcgis-scene-engine.test.ts` before →
+  lazy I3S metadata classification and native SceneView layer construction.
+- ArcGIS approach: request the public SceneServer JSON metadata (`f=json`) and
+  select documented `SceneLayer` for `3DObject` or `IntegratedMeshLayer` for
+  `IntegratedMesh`; both constructors remain inside the lazy SceneView adapter.
+- What changed: explicitly marked I3S store layers now resolve asynchronously,
+  mount in their store ordering when the current reconciliation is still live,
+  and emit a neutral engine error for bad metadata, unsupported layer types, or
+  failed service requests.
+- Gap / limitation: generic Cesium 3D Tiles, Google Photorealistic Tiles, and
+  unmarked `3d-tiles` records cannot be safely mapped to either I3S layer class
+  and remain unsupported in ArcGIS SceneView.
+- Workaround: scope support to the existing `arcgis-i3s` source-kind marker and
+  require the service's declared `layerType`. Removal criteria: introduce a
+  reviewed neutral 3D-source taxonomy for non-I3S inputs before adding another
+  ArcGIS adapter path.
+- Tradeoff accepted: initial I3S display waits for one metadata request; the
+  revision guard favors current store ordering and avoids stale async layers
+  over optimistically mounting the wrong ArcGIS layer class.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-scene-engine.test.ts
+  tests/engine-conformance.test.ts tests/engine-registry.test.ts` → 37 passed;
+  `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 47
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal); `npx playwright test e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS
+  SceneView" --reporter=line` → 2 passed.
+- Follow-up: verify an actual public `3DObject` and `IntegratedMesh` SceneServer
+  in GPU-enabled browser CI, then assess terrain/altitude parity; Codex,
+  2026-07-22.

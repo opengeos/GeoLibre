@@ -46,7 +46,7 @@ interface ArcGISLayer {
 }
 
 interface ArcGISLayerCollection {
-  addMany(layers: readonly ArcGISLayer[]): void;
+  addMany(layers: readonly ArcGISLayer[], index?: number): void;
   remove(layer: ArcGISLayer): void;
   removeAll(): void;
 }
@@ -95,11 +95,14 @@ export interface ArcGISSceneEngineModules extends Omit<ArcGISMapEngineModules, "
       readonly popupEnabled?: boolean;
     } & ArcGISSceneViewProperties,
   ) => ArcGISSceneView;
+  readonly SceneLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
+  readonly IntegratedMeshLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
 }
 
 export interface ArcGISSceneEngineDependencies {
   readonly loadArcGIS?: () => Promise<ArcGISSceneEngineModules>;
   readonly assetsPath?: () => string;
+  readonly loadI3SMetadata?: (url: string) => Promise<unknown>;
 }
 
 const OPEN_STREET_MAP_TILES = "https://tile.openstreetmap.org/{level}/{col}/{row}.png";
@@ -111,6 +114,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "wms",
   "wmts",
 ]);
+const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 
 function localArcGISAssetsPath(): string {
   const base = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/";
@@ -127,6 +131,8 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     { default: GeoJSONLayer },
     { default: WMSLayer },
     { default: WMTSLayer },
+    { default: SceneLayer },
+    { default: IntegratedMeshLayer },
     reactiveUtils,
   ] = await Promise.all([
     import("@arcgis/core/config"),
@@ -137,6 +143,8 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     import("@arcgis/core/layers/GeoJSONLayer"),
     import("@arcgis/core/layers/WMSLayer"),
     import("@arcgis/core/layers/WMTSLayer"),
+    import("@arcgis/core/layers/SceneLayer"),
+    import("@arcgis/core/layers/IntegratedMeshLayer"),
     import("@arcgis/core/core/reactiveUtils"),
     import("@arcgis/core/assets/esri/themes/light/main.css"),
   ]);
@@ -150,7 +158,36 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     GeoJSONLayer: GeoJSONLayer as unknown as ArcGISSceneEngineModules["GeoJSONLayer"],
     WMSLayer: WMSLayer as unknown as ArcGISSceneEngineModules["WMSLayer"],
     WMTSLayer: WMTSLayer as unknown as ArcGISSceneEngineModules["WMTSLayer"],
+    SceneLayer: SceneLayer as unknown as ArcGISSceneEngineModules["SceneLayer"],
+    IntegratedMeshLayer: IntegratedMeshLayer as unknown as ArcGISSceneEngineModules["IntegratedMeshLayer"],
   };
+}
+
+function i3sMetadataUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set("f", "json");
+    return parsed.toString();
+  } catch {
+    return `${url}${url.includes("?") ? "&" : "?"}f=json`;
+  }
+}
+
+async function loadI3SMetadata(url: string): Promise<unknown> {
+  const response = await fetch(i3sMetadataUrl(url));
+  if (!response.ok) throw new Error(`I3S metadata request failed (${response.status}).`);
+  return response.json();
+}
+
+function i3sLayerType(metadata: unknown): "3DObject" | "IntegratedMesh" {
+  if (!metadata || typeof metadata !== "object") throw new Error("I3S metadata is not an object.");
+  const record = metadata as { readonly layerType?: unknown; readonly layers?: readonly unknown[] };
+  const firstLayer = record.layers?.find(
+    (layer): layer is { readonly layerType?: unknown } => Boolean(layer && typeof layer === "object"),
+  );
+  const layerType = record.layerType ?? firstLayer?.layerType;
+  if (layerType === "3DObject" || layerType === "IntegratedMesh") return layerType;
+  throw new Error(`Unsupported I3S layerType: ${typeof layerType === "string" ? layerType : "unknown"}.`);
 }
 
 function stringSourceValue(source: Readonly<Record<string, unknown>>, key: string): string | null {
@@ -201,6 +238,7 @@ export class ArcGISSceneEngine implements MapEngine {
   private userMoved = false;
   private moving = false;
   private destroyed = false;
+  private layerRevision = 0;
 
   readonly camera = {
     readView: (): MapViewState => this.readView(),
@@ -299,6 +337,7 @@ export class ArcGISSceneEngine implements MapEngine {
     this.options = {
       loadArcGIS: dependencies.loadArcGIS ?? loadArcGISSceneModules,
       assetsPath: dependencies.assetsPath ?? localArcGISAssetsPath,
+      loadI3SMetadata: dependencies.loadI3SMetadata ?? loadI3SMetadata,
     };
   }
 
@@ -393,7 +432,7 @@ export class ArcGISSceneEngine implements MapEngine {
   }
 
   supportsLayer(layer: GeoLibreLayer): boolean {
-    return supportedLayerTypes.has(layer.type);
+    return supportedLayerTypes.has(layer.type) || this.isArcGISI3SLayer(layer);
   }
 
   async hitTest(point: ScreenPoint): Promise<readonly HitFeature[]> {
@@ -482,6 +521,7 @@ export class ArcGISSceneEngine implements MapEngine {
 
   private reconcileLayers(): void {
     if (!this.map || !this.modules) return;
+    const revision = ++this.layerRevision;
     this.revokeObjectUrls();
     this.map.layers.removeAll();
     this.nativeLayers.clear();
@@ -496,6 +536,9 @@ export class ArcGISSceneEngine implements MapEngine {
     }
     this.map.layers.addMany(nativeLayers);
     for (const spec of this.overlays.values()) this.mountOverlay(spec);
+    for (const [index, layer] of this.layersSnapshot.entries()) {
+      if (this.isArcGISI3SLayer(layer)) void this.mountI3SLayer(layer, index, revision);
+    }
   }
 
   private createLayer(layer: GeoLibreLayer): ArcGISLayer | null {
@@ -524,6 +567,49 @@ export class ArcGISSceneEngine implements MapEngine {
       if (urlTemplate) return new modules.WebTileLayer({ ...properties, urlTemplate }) as unknown as ArcGISLayer;
     }
     return null;
+  }
+
+  private isArcGISI3SLayer(layer: GeoLibreLayer): boolean {
+    return (
+      layer.type === "3d-tiles" &&
+      layer.metadata.sourceKind === ARCGIS_I3S_SOURCE_KIND &&
+      typeof layer.source.url === "string" &&
+      layer.source.url.trim().length > 0
+    );
+  }
+
+  private async mountI3SLayer(layer: GeoLibreLayer, sourceIndex: number, revision: number): Promise<void> {
+    const map = this.map;
+    const modules = this.modules;
+    const url = stringSourceValue(layer.source, "url");
+    if (!map || !modules || !url) return;
+    try {
+      const type = i3sLayerType(await this.options.loadI3SMetadata(url));
+      if (this.destroyed || revision !== this.layerRevision || this.map !== map) return;
+      const properties = {
+        id: toArcGISLayerId(layer.id),
+        title: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+        url,
+      };
+      const nativeLayer =
+        type === "IntegratedMesh"
+          ? new modules.IntegratedMeshLayer(properties)
+          : new modules.SceneLayer(properties);
+      this.nativeLayers.set(layer.id, nativeLayer);
+      const insertionIndex = this.layersSnapshot
+        .slice(0, sourceIndex)
+        .filter((candidate) => this.supportsLayer(candidate)).length;
+      map.layers.addMany([nativeLayer], insertionIndex);
+    } catch (error) {
+      if (this.destroyed || revision !== this.layerRevision) return;
+      this.emit("error", {
+        message: error instanceof Error ? error.message : String(error),
+        source: "arcgis-i3s",
+        url,
+      });
+    }
   }
 
   private async queryAtScreenPoint(

@@ -66,6 +66,33 @@ test("ArcGISSceneEngine lazy-loads SceneView, uses local assets, and reconciles 
   assert.equal(runtime.destroyed.value, true);
 });
 
+test("ArcGISSceneEngine classifies explicit ArcGIS I3S layers before mounting", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const metadataUrls: string[] = [];
+  const engine = new ArcGISSceneEngine({
+    loadArcGIS: async () => runtime.modules,
+    loadI3SMetadata: async (url) => {
+      metadataUrls.push(url);
+      return { layers: [{ layerType: "IntegratedMesh" }] };
+    },
+  });
+  const i3s = {
+    ...layer("mesh", "3d-tiles"),
+    source: { url: "https://services.example.test/City/SceneServer/layers/0" },
+    metadata: { sourceKind: "arcgis-i3s" },
+  } as GeoLibreLayer;
+
+  engine.syncLayers([layer("geo", "geojson"), i3s]);
+  await engine.mount({} as HTMLElement, initialView);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(metadataUrls, ["https://services.example.test/City/SceneServer/layers/0"]);
+  assert.equal(engine.supportsLayer(i3s), true);
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-mesh"]);
+  assert.equal(runtime.currentLayers[1]?.properties.arcgisLayerKind, "integrated-mesh");
+});
+
 test("ArcGISSceneEngine preserves 3D camera pitch and emits only user navigation", async () => {
   const runtime = createArcGISSceneFakeRuntime();
   const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });

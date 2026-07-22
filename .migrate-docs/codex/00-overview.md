@@ -193,6 +193,9 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: both ArcGIS view adapters now fulfill the neutral viewport
   capture capability through the documented `takeScreenshot()` API, including
   bounded output and temporary adapter-overlay suppression for print/export.
+- Implemented: the ArcGIS SceneView adapter now detects an explicitly marked
+  ArcGIS I3S service's `layerType` before mounting it as `SceneLayer` or
+  `IntegratedMeshLayer`; arbitrary 3D Tiles remain outside this scoped path.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
