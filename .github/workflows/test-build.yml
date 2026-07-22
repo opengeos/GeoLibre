@@ -30,6 +30,15 @@ on:
   pull_request:
     types: [labeled]
 
+# This job checks out and builds pull-request-controlled code (`npm ci` runs
+# lifecycle scripts, and the Tauri build runs the branch's own build scripts), so
+# it gets the narrowest token that still lets it work. It only ever produces
+# workflow artifacts -- it never creates a release or pushes -- so read is
+# enough, and checkout is told not to leave the token in .git/config for the
+# build steps to find.
+permissions:
+  contents: read
+
 concurrency:
   group: test-build-${{ github.ref }}
   cancel-in-progress: true
@@ -79,6 +88,8 @@ jobs:
       - name: Checkout repository
         if: steps.want.outputs.build == 'true'
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         if: steps.want.outputs.build == 'true'
@@ -90,7 +101,7 @@ jobs:
 
       - name: Install Rust stable
         if: steps.want.outputs.build == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Cache Rust dependencies
         if: steps.want.outputs.build == 'true'
@@ -123,12 +134,13 @@ jobs:
         run: npm ci
 
       # No releaseId/tagName: without them tauri-action builds the bundles and
-      # leaves them on disk instead of uploading them to a release.
+      # leaves them on disk instead of uploading them to a release. That is also
+      # why no GITHUB_TOKEN is passed here -- the action only needs one to create
+      # a release or upload assets to it, neither of which this workflow does.
       - name: Build the desktop bundles
         if: steps.want.outputs.build == 'true'
-        uses: tauri-apps/tauri-action@v1.0
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
         with:
