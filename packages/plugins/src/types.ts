@@ -241,6 +241,14 @@ export interface GeoLibreAppAPI {
   resolvePluginAssetUrl?: (pluginId: string, relativePath: string) => string | null;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
+  /**
+   * Open an http(s) URL in the system browser. Needed because the Tauri
+   * desktop webview ignores `window.open`/`target="_blank"` and would open the
+   * link inside the app instead; the host routes through the opener plugin
+   * there and falls back to `window.open` on the web build. Non-http(s) URLs
+   * are ignored. Plugins should call this rather than `window.open` directly.
+   */
+  openExternalUrl?: (url: string) => void;
   pickLocalDirectoryFiles?: () => Promise<File[] | null>;
   /**
    * Prompt the user (desktop only) to pick one or more vector files via the

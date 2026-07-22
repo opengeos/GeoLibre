@@ -215,14 +215,6 @@ function sourcePathFor(client: GeoLensClientOptions, dataset: GeoLensDataset): s
   return `geolens:${client.baseUrl}/${dataset.id}`;
 }
 
-function findAddedLayerId(
-  client: GeoLensClientOptions,
-  dataset: GeoLensDataset,
-): string | undefined {
-  const path = sourcePathFor(client, dataset);
-  return useAppStore.getState().layers.find((layer) => layer.sourcePath === path)?.id;
-}
-
 /** Pending token-refresh timers, keyed by store layer id, so they can be cleared. */
 const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -497,7 +489,25 @@ function buildPanel(
     }
   };
 
+  // Buttons currently mid-add (skip store-driven resync so it doesn't clobber
+  // the transient "Adding…" state) and the per-button resync callbacks that
+  // re-derive add/added state from the store (rebuilt on each renderList).
+  const addingButtons = new Set<HTMLButtonElement>();
+  const resyncers: Array<() => void> = [];
+
+  // Reconcile one add-style button with the store: if a layer with `sourcePath`
+  // is present it reads "Added" and is disabled; otherwise it offers `addLabel`
+  // and is enabled. Derived from the store (not remembered) so the button stays
+  // correct after the user removes the layer from the Layers panel.
+  const syncButtonState = (btn: HTMLButtonElement, sourcePath: string, addLabel: string): void => {
+    if (addingButtons.has(btn)) return;
+    const present = useAppStore.getState().layers.some((l) => l.sourcePath === sourcePath);
+    btn.disabled = present;
+    btn.textContent = present ? labels.added : addLabel;
+  };
+
   const renderList = (): void => {
+    resyncers.length = 0;
     list.replaceChildren();
     for (const dataset of state.datasets) {
       list.append(renderCard(dataset));
@@ -522,38 +532,48 @@ function buildPanel(
     if (dataset.description) card.append(el("div", CSS.desc, dataset.description));
 
     const actions = el("div", CSS.actions);
-    const addedId = findAddedLayerId(state.client!, dataset);
+    const tilesSourcePath = sourcePathFor(state.client!, dataset);
     // Raster datasets render as server-side Titiler PNG tiles; vector datasets
     // as signed MVT vector tiles. The button says which.
     const addLabel = dataset.isRaster ? labels.addRasterTiles : labels.addVectorTiles;
     const addTitle = dataset.isRaster ? labels.addRasterTilesTitle : labels.addVectorTilesTitle;
-    const addButton = button(addedId ? labels.added : addLabel, CSS.action, addTitle);
-    if (addedId) addButton.disabled = true;
+    const addButton = button(addLabel, CSS.action, addTitle);
+    const syncAdd = () => syncButtonState(addButton, tilesSourcePath, addLabel);
+    resyncers.push(syncAdd);
+    syncAdd();
     const addPrimary = dataset.isRaster
       ? () => addRasterTilesLayer(app!, state.client!, dataset, fetchImpl)
       : () => addVectorTilesLayer(app!, state.client!, dataset, fetchImpl);
     addButton.addEventListener("click", () => {
-      void handleAdd(dataset, addButton, addPrimary);
+      void handleAdd(addButton, syncAdd, addPrimary);
     });
     actions.append(addButton);
 
     // Full-feature GeoJSON is only meaningful for vector datasets.
     if (dataset.isVector) {
+      const geoJsonSourcePath = `${tilesSourcePath}#items`;
       const geoJsonButton = button(labels.addGeoJson, CSS.action, labels.addGeoJsonTitle);
+      const syncGeoJson = () =>
+        syncButtonState(geoJsonButton, geoJsonSourcePath, labels.addGeoJson);
+      resyncers.push(syncGeoJson);
+      syncGeoJson();
       geoJsonButton.addEventListener("click", () => {
-        void handleAdd(dataset, geoJsonButton, () =>
+        void handleAdd(geoJsonButton, syncGeoJson, () =>
           addFeaturesLayer(app!, state.client!, dataset, fetchImpl),
         );
       });
       actions.append(geoJsonButton);
     }
 
-    // Opens the dataset's page on the GeoLens server for the full record.
+    // Opens the dataset's page on the GeoLens server for the full record. Route
+    // through the host's opener (the Tauri webview ignores window.open and would
+    // open the link inside the app); fall back to window.open on older hosts.
     const metadataButton = button(labels.metadata, CSS.action, labels.metadataTitle);
     metadataButton.addEventListener("click", () => {
-      if (state.client) {
-        window.open(datasetPageUrl(state.client, dataset.id), "_blank", "noopener,noreferrer");
-      }
+      if (!state.client) return;
+      const url = datasetPageUrl(state.client, dataset.id);
+      if (app?.openExternalUrl) app.openExternalUrl(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
     });
     actions.append(metadataButton);
 
@@ -562,22 +582,24 @@ function buildPanel(
   };
 
   const handleAdd = async (
-    dataset: GeoLensDataset,
     trigger: HTMLButtonElement,
+    settle: () => void,
     add: () => Promise<void>,
   ): Promise<void> => {
     if (!app || !state.client) return;
-    const original = trigger.textContent;
+    addingButtons.add(trigger);
     trigger.disabled = true;
     trigger.textContent = labels.adding;
     clearError();
     try {
       await add();
-      trigger.textContent = labels.added;
     } catch (error) {
-      trigger.disabled = false;
-      trigger.textContent = original;
       showError(labels.addError(messageOf(error)));
+    } finally {
+      // Settle from store truth: "Added"+disabled on success, back to the add
+      // label+enabled on failure (the layer never entered the store).
+      addingButtons.delete(trigger);
+      settle();
     }
   };
 
@@ -607,7 +629,14 @@ function buildPanel(
     if (event.key === "Enter") void runSearch(searchInput.value);
   });
 
+  // Re-derive every card's add/added button whenever the layer set changes, so
+  // removing a layer from the Layers panel re-enables its "Add" button.
+  const unsubscribe = useAppStore.subscribe(() => {
+    for (const resync of resyncers) resync();
+  });
+
   return () => {
+    unsubscribe();
     state.controller?.abort();
   };
 }
