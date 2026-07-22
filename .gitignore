@@ -45,6 +45,16 @@ coverage.xml
 .playwright-cli/
 .claude/
 uv.lock
+# ...except the sidecar's. That project is BUNDLED into the desktop installers
+# and `uv run` against it at app startup, from a resource directory the user
+# cannot write (C:\Program Files\..., /usr/lib/GeoLibre Desktop/...). Without a
+# committed lock, a CI-built release ships lockless, so uv has to resolve and
+# then WRITE uv.lock there on first launch — which fails with "Permission
+# denied" and exits 2, surfacing as "Jupyter server exited before it was ready
+# (exit code: 2)". Committing it also stops released builds from re-resolving
+# against live PyPI on every user's machine. The launcher passes `--frozen`
+# (src-tauri/src/lib.rs) so it is read, never rewritten.
+!backend/geolibre_server/uv.lock
 
 # Playwright E2E artifacts
 test-results/

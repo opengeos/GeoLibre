@@ -28,15 +28,15 @@ use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::env;
 use std::fs::{self, File};
-use std::io::{Cursor, Read};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::Manager;
@@ -792,7 +792,9 @@ fn client_identity() -> Result<Option<ClientIdentity>, String> {
         Ok(value) => Some(value),
         Err(env::VarError::NotPresent) => None,
         Err(env::VarError::NotUnicode(_)) => {
-            return Err(format!("{HTTP_CLIENT_CERT_PASSWORD_ENV} is not valid UTF-8"));
+            return Err(format!(
+                "{HTTP_CLIENT_CERT_PASSWORD_ENV} is not valid UTF-8"
+            ));
         }
     };
     // A set-but-empty cert path is likewise treated as unset, so it does not
@@ -1208,7 +1210,7 @@ fn load_external_plugin_archive(
 /// full path within the archive, or None when no plugin.json is present.
 fn find_zip_manifest_path<R: Read + std::io::Seek>(archive: &zip::ZipArchive<R>) -> Option<String> {
     let names: Vec<&str> = archive.file_names().collect();
-    if names.iter().any(|name| *name == "plugin.json") {
+    if names.contains(&"plugin.json") {
         return Some("plugin.json".to_string());
     }
     let mut best: Option<&str> = None;
@@ -1634,6 +1636,9 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     let mut command = Command::new(&uv);
     command
         .arg("run")
+        // Read the bundled uv.lock as-is: never re-lock, never write to the
+        // project directory. See the same flag in start_jupyter_server_blocking.
+        .arg("--frozen")
         .arg("--project")
         .arg(&project_dir)
         // The AI segmentation `/ml` endpoints proxy to samgeo-api from inside
@@ -1663,14 +1668,17 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     let mut child = command
         .spawn()
         .map_err(|error| format!("Could not start GeoLibre sidecar: {error}"))?;
+    // Drain both pipes from the moment we spawn. Reading them only after the
+    // child exits (the old shape) deadlocks a cold-cache `uv sync`, whose
+    // per-package output overflows the 64 KB pipe long before uvicorn can bind:
+    // the child blocks on write, never becomes ready, and the failure surfaces
+    // as a bare timeout with no output to explain it.
+    let output = CapturedOutput::attach(&mut child);
 
-    if let Err(error) = wait_for_sidecar_health(&base_url, &mut child) {
+    if let Err(error) = wait_for_sidecar_health(&base_url, &mut child, &output) {
         terminate_sidecar_child(&mut child);
         return Err(error);
     }
-
-    let _ = child.stdout.take();
-    let _ = child.stderr.take();
 
     let mut process = state
         .process
@@ -1819,6 +1827,15 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
     let mut command = Command::new(&uv);
     command
         .arg("run")
+        // Read the bundled uv.lock as-is. Without this uv re-locks whenever it
+        // thinks the lock is stale and WRITES uv.lock back into the project
+        // directory — which in an installed build is the read-only resource dir
+        // (C:\Program Files\..., /usr/lib/GeoLibre Desktop/...). That write fails
+        // with "Permission denied" and uv exits 2, which reached the user as the
+        // opaque "Jupyter server exited before it was ready (exit code: 2)".
+        // `--frozen` also keeps a released build pinned to the versions it was
+        // tested against instead of re-resolving against live PyPI per machine.
+        .arg("--frozen")
         .arg("--project")
         .arg(&project_dir)
         // The `notebook` extra carries JupyterLab. Synced into a dedicated
@@ -1846,21 +1863,27 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         // preserving any inherited PYTHONPATH rather than replacing it.
         .env("PYTHONPATH", prepend_pythonpath(&lib_dir))
         .stdin(Stdio::null())
-        // Inherit (don't capture) stdout/stderr. Unlike the sidecar's quiet
-        // uvicorn, `uv sync` of JupyterLab + JupyterLab's own startup write a lot;
-        // a captured 64 KB pipe we don't drain during the health wait would fill
-        // and block the child, so it would never become ready. Inheriting also
-        // surfaces the logs in the dev terminal for debugging.
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+        // Pipe (don't inherit) stdout/stderr, and drain both on background
+        // threads via CapturedOutput. Inheriting used to be the only way to keep
+        // a chatty child — `uv sync` of JupyterLab plus JupyterLab's own startup
+        // write a lot — from filling an undrained 64 KB pipe and blocking before
+        // it could become ready. But release builds are GUI-subsystem
+        // (`windows_subsystem = "windows"`), and a desktop-launched app on Linux
+        // has no terminal either, so inherited output went nowhere and a startup
+        // failure surfaced as a bare exit status with no way to find the cause.
+        // Draining keeps the child unblocked, tees the log to the parent's stdio
+        // for dev terminals, and keeps the tail so the error can quote it.
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     configure_sidecar_process(&mut command);
 
     let mut child = command
         .spawn()
         .map_err(|error| format!("Could not start Jupyter server: {error}"))?;
+    let output = CapturedOutput::attach(&mut child);
 
     let base_url = jupyter_base_url();
-    if let Err(error) = wait_for_jupyter_health(&base_url, &token, &mut child) {
+    if let Err(error) = wait_for_jupyter_health(&base_url, &token, &mut child, &output) {
         terminate_sidecar_child(&mut child);
         return Err(error);
     }
@@ -1955,7 +1978,12 @@ fn jupyter_health_is_ready(
         .unwrap_or(false)
 }
 
-fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Result<(), String> {
+fn wait_for_jupyter_health(
+    base_url: &str,
+    token: &str,
+    child: &mut Child,
+    output: &CapturedOutput,
+) -> Result<(), String> {
     // Build the HTTP client once and reuse it across all health polls (this loop
     // runs up to JUPYTER_HEALTH_ATTEMPTS = 240 times).
     let client = reqwest::blocking::Client::builder()
@@ -1967,11 +1995,9 @@ fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Re
             .try_wait()
             .map_err(|error| format!("Could not inspect Jupyter process: {error}"))?
         {
-            // Output is inherited (visible in the terminal), not captured, so we
-            // surface only the exit status here.
-            return Err(format!(
-                "Jupyter server exited before it was ready (exit status: {status}). \
-                 Check the terminal for the Jupyter/uv startup output."
+            return Err(jupyter_failure_message(
+                &format!("Jupyter server exited before it was ready (exit status: {status})."),
+                output,
             ));
         }
 
@@ -1982,7 +2008,23 @@ fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Re
         thread::sleep(Duration::from_secs(1));
     }
 
-    Err("Jupyter server did not become ready in time.".to_string())
+    Err(jupyter_failure_message(
+        "Jupyter server did not become ready in time.",
+        output,
+    ))
+}
+
+// Append the tail of the child's uv/Jupyter output to a failure summary. The
+// output is the only thing that identifies *why* startup failed (a uv resolution
+// error, a missing `jupyter` executable, a port conflict...), and in an installed
+// build there is no terminal to read it from, so it has to travel with the error.
+fn jupyter_failure_message(summary: &str, output: &CapturedOutput) -> String {
+    let tail = output.tail();
+    if tail.is_empty() {
+        format!("{summary} It produced no output.")
+    } else {
+        format!("{summary}\n\nLast output from uv/Jupyter:\n{tail}")
+    }
 }
 
 // A loopback-bound, per-launch token for the desktop Jupyter server. It is the
@@ -2082,17 +2124,21 @@ fn wait_for_sidecar_stop(base_url: &str) {
     }
 }
 
-fn wait_for_sidecar_health(base_url: &str, child: &mut Child) -> Result<(), String> {
+fn wait_for_sidecar_health(
+    base_url: &str,
+    child: &mut Child,
+    output: &CapturedOutput,
+) -> Result<(), String> {
     for _ in 0..SIDECAR_HEALTH_ATTEMPTS {
         if let Some(status) = child
             .try_wait()
             .map_err(|error| format!("Could not inspect sidecar process: {error}"))?
         {
-            let output = read_child_output(child);
-            return Err(if output.trim().is_empty() {
+            let tail = output.tail();
+            return Err(if tail.is_empty() {
                 format!("GeoLibre sidecar exited before it was ready: {status}")
             } else {
-                format!("GeoLibre sidecar exited before it was ready: {output}")
+                format!("GeoLibre sidecar exited before it was ready: {status}\n\n{tail}")
             });
         }
 
@@ -2104,6 +2150,96 @@ fn wait_for_sidecar_health(base_url: &str, child: &mut Child) -> Result<(), Stri
     }
 
     Err("GeoLibre sidecar did not become ready in time.".to_string())
+}
+
+// How many trailing output lines a captured child keeps, and how many of them a
+// failure message quotes. The log is a ring buffer so a chatty child (uv sync +
+// JupyterLab startup write hundreds of lines) can never grow without bound, and
+// the tail is what matters: the error that killed the process is at the end.
+const CAPTURED_LOG_MAX_LINES: usize = 200;
+const CAPTURED_LOG_REPORTED_LINES: usize = 20;
+
+/// The trailing output of a spawned child, drained on background threads.
+///
+/// `Stdio::piped()` alone is not enough for a child we only poll for health: an
+/// undrained OS pipe fills at ~64 KB and blocks the writer forever, so a chatty
+/// child would hang instead of becoming ready. These readers consume both
+/// streams continuously, keep the last `CAPTURED_LOG_MAX_LINES` in memory, and
+/// echo each line to the parent's own stdio so a dev terminal still shows the
+/// live log.
+#[derive(Clone)]
+struct CapturedOutput {
+    lines: Arc<Mutex<VecDeque<String>>>,
+}
+
+impl CapturedOutput {
+    fn new() -> Self {
+        Self {
+            lines: Arc::new(Mutex::new(VecDeque::with_capacity(CAPTURED_LOG_MAX_LINES))),
+        }
+    }
+
+    /// Take the child's piped stdout/stderr and start draining them.
+    fn attach(child: &mut Child) -> Self {
+        let captured = Self::new();
+        if let Some(stdout) = child.stdout.take() {
+            captured.drain(stdout, false);
+        }
+        if let Some(stderr) = child.stderr.take() {
+            captured.drain(stderr, true);
+        }
+        captured
+    }
+
+    fn drain<R>(&self, stream: R, is_stderr: bool)
+    where
+        R: Read + Send + 'static,
+    {
+        let captured = self.clone();
+        // Detached: the thread ends on its own when the pipe closes at child
+        // exit, and nothing needs to join it.
+        thread::spawn(move || {
+            for line in BufReader::new(stream).lines() {
+                let Ok(line) = line else { break };
+                // Tee to the parent's stdio. In a dev terminal this preserves
+                // the old inherit-style live log; in a bundled GUI build (no
+                // console on Windows) it is simply discarded.
+                if is_stderr {
+                    let _ = writeln!(std::io::stderr(), "{line}");
+                } else {
+                    let _ = writeln!(std::io::stdout(), "{line}");
+                }
+                captured.push(line);
+            }
+        });
+    }
+
+    /// Record one line, evicting the oldest once the ring buffer is full.
+    fn push(&self, line: String) {
+        let Ok(mut lines) = self.lines.lock() else {
+            return;
+        };
+        while lines.len() >= CAPTURED_LOG_MAX_LINES {
+            lines.pop_front();
+        }
+        lines.push_back(line);
+    }
+
+    /// The last few captured lines, blank-trimmed, for an error message.
+    /// Empty when the child produced no output at all.
+    fn tail(&self) -> String {
+        let Ok(lines) = self.lines.lock() else {
+            return String::new();
+        };
+        let start = lines.len().saturating_sub(CAPTURED_LOG_REPORTED_LINES);
+        lines
+            .iter()
+            .skip(start)
+            .map(|line| line.trim_end())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 }
 
 fn configure_sidecar_process(command: &mut Command) {
@@ -3068,8 +3204,9 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         find_zip_manifest_path, is_allowed_local_vector_path, is_allowed_project_path,
-        is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
-        resolve_sidecar_in_resource_dir,
+        is_disallowed_ip, is_safe_absolute_path, jupyter_failure_message, plugin_archive_file_name,
+        resolve_sidecar_in_resource_dir, CapturedOutput, CAPTURED_LOG_MAX_LINES,
+        CAPTURED_LOG_REPORTED_LINES,
     };
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
@@ -3365,5 +3502,54 @@ mod tests {
         assert!(!is_safe_absolute_path("./data"));
         assert!(!is_safe_absolute_path(""));
         assert!(!is_safe_absolute_path("C:")); // drive letter without a separator
+    }
+
+    #[test]
+    fn captured_output_keeps_only_the_trailing_lines() {
+        let captured = CapturedOutput::new();
+        for index in 0..(CAPTURED_LOG_MAX_LINES * 3) {
+            captured.push(format!("line {index}"));
+        }
+        let tail = captured.tail();
+        let lines: Vec<_> = tail.lines().collect();
+        // The buffer is bounded and the report quotes only its end, so a child
+        // that writes thousands of lines still yields a short, recent tail.
+        assert_eq!(lines.len(), CAPTURED_LOG_REPORTED_LINES);
+        let last = CAPTURED_LOG_MAX_LINES * 3 - 1;
+        assert_eq!(lines[lines.len() - 1], format!("line {last}"));
+        assert_eq!(
+            lines[0],
+            format!("line {}", last + 1 - CAPTURED_LOG_REPORTED_LINES)
+        );
+    }
+
+    #[test]
+    fn captured_output_drops_blank_lines_from_the_tail() {
+        let captured = CapturedOutput::new();
+        captured.push("error: Failed to spawn: `jupyter`".to_string());
+        captured.push("   ".to_string());
+        captured.push(String::new());
+        captured.push("  Caused by: No such file or directory (os error 2)  ".to_string());
+        assert_eq!(
+            captured.tail(),
+            "error: Failed to spawn: `jupyter`\n  Caused by: No such file or directory (os error 2)"
+        );
+    }
+
+    #[test]
+    fn jupyter_failure_message_quotes_the_child_output() {
+        let captured = CapturedOutput::new();
+        captured.push("error: Extra `notebook` is not defined".to_string());
+        let message = jupyter_failure_message("Jupyter server exited.", &captured);
+        assert!(message.starts_with("Jupyter server exited."));
+        // The cause has to travel with the error: an installed build is
+        // GUI-subsystem on Windows and has no terminal to read it from.
+        assert!(message.contains("error: Extra `notebook` is not defined"));
+    }
+
+    #[test]
+    fn jupyter_failure_message_says_so_when_there_was_no_output() {
+        let message = jupyter_failure_message("Jupyter server exited.", &CapturedOutput::new());
+        assert_eq!(message, "Jupyter server exited. It produced no output.");
     }
 }

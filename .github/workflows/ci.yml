@@ -178,6 +178,18 @@ jobs:
         # vector/raster/SQL/ML tests skip themselves and CI is green but hollow.
         run: python -m pip install -e "backend/geolibre_server[test]"
 
+      # backend/geolibre_server/uv.lock is committed because the desktop
+      # installers bundle that project and `uv run --frozen` it from a read-only
+      # resource directory at app startup. A lock that has drifted from
+      # pyproject.toml would make the bundled sidecar and the Notebook panel
+      # fail to start on users' machines, with nothing failing here. Fail the
+      # build instead, so a dependency edit has to land with a refreshed lock
+      # (`uv lock --project backend/geolibre_server`).
+      - name: Check the bundled sidecar lockfile is in sync
+        run: |
+          python -m pip install uv
+          uv lock --check --project backend/geolibre_server
+
       # Audit the resolved backend environment for known advisories. Non-blocking
       # (continue-on-error): the sidecar pulls a heavy geospatial/ML dependency
       # tree whose transitive advisories are often upstream and not immediately
