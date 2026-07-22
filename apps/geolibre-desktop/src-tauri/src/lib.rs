@@ -35,7 +35,7 @@ use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -1995,7 +1995,7 @@ fn wait_for_jupyter_health(
             .try_wait()
             .map_err(|error| format!("Could not inspect Jupyter process: {error}"))?
         {
-            return Err(jupyter_failure_message(
+            return Err(child_failure_message(
                 &format!("Jupyter server exited before it was ready (exit status: {status})."),
                 output,
             ));
@@ -2008,22 +2008,26 @@ fn wait_for_jupyter_health(
         thread::sleep(Duration::from_secs(1));
     }
 
-    Err(jupyter_failure_message(
+    Err(child_failure_message(
         "Jupyter server did not become ready in time.",
         output,
     ))
 }
 
-// Append the tail of the child's uv/Jupyter output to a failure summary. The
-// output is the only thing that identifies *why* startup failed (a uv resolution
-// error, a missing `jupyter` executable, a port conflict...), and in an installed
-// build there is no terminal to read it from, so it has to travel with the error.
-fn jupyter_failure_message(summary: &str, output: &CapturedOutput) -> String {
+// Append the tail of a managed child's output to a failure summary. That output
+// is the only thing that identifies *why* startup failed (a uv resolution error,
+// a missing `jupyter` executable, a port conflict...), and in an installed build
+// there is no terminal to read it from, so it has to travel with the error.
+// Shared by the Jupyter and sidecar waiters, and by both of their failure paths
+// (early exit and timeout), so no path can quietly drop the one useful detail.
+fn child_failure_message(summary: &str, output: &CapturedOutput) -> String {
+    // The child may have only just exited, with its last lines still in flight.
+    output.settle();
     let tail = output.tail();
     if tail.is_empty() {
         format!("{summary} It produced no output.")
     } else {
-        format!("{summary}\n\nLast output from uv/Jupyter:\n{tail}")
+        format!("{summary}\n\nLast output:\n{tail}")
     }
 }
 
@@ -2134,12 +2138,10 @@ fn wait_for_sidecar_health(
             .try_wait()
             .map_err(|error| format!("Could not inspect sidecar process: {error}"))?
         {
-            let tail = output.tail();
-            return Err(if tail.is_empty() {
-                format!("GeoLibre sidecar exited before it was ready: {status}")
-            } else {
-                format!("GeoLibre sidecar exited before it was ready: {status}\n\n{tail}")
-            });
+            return Err(child_failure_message(
+                &format!("GeoLibre sidecar exited before it was ready: {status}"),
+                output,
+            ));
         }
 
         if sidecar_health_is_ready(base_url) {
@@ -2149,7 +2151,10 @@ fn wait_for_sidecar_health(
         thread::sleep(Duration::from_secs(1));
     }
 
-    Err("GeoLibre sidecar did not become ready in time.".to_string())
+    Err(child_failure_message(
+        "GeoLibre sidecar did not become ready in time.",
+        output,
+    ))
 }
 
 // How many trailing output lines a captured child keeps, and how many of them a
@@ -2158,6 +2163,16 @@ fn wait_for_sidecar_health(
 // the tail is what matters: the error that killed the process is at the end.
 const CAPTURED_LOG_MAX_LINES: usize = 200;
 const CAPTURED_LOG_REPORTED_LINES: usize = 20;
+// How long a failure report waits for the reader threads to reach EOF before
+// quoting what they have. `try_wait` reports the exit as soon as the process is
+// reaped, which can be before the readers have consumed the last lines still
+// sitting in the pipe — and those last lines are the error itself. Waiting is
+// necessarily *bounded*: `uv` spawns `jupyter`, which spawns kernels that
+// inherit these same pipe handles, so a grandchild outliving the child keeps the
+// write end open and EOF never arrives. An unbounded join would hang the Tauri
+// command forever, which is worse than a truncated tail.
+const CAPTURED_LOG_SETTLE: Duration = Duration::from_millis(500);
+const CAPTURED_LOG_SETTLE_POLL: Duration = Duration::from_millis(10);
 
 /// The trailing output of a spawned child, drained on background threads.
 ///
@@ -2170,12 +2185,15 @@ const CAPTURED_LOG_REPORTED_LINES: usize = 20;
 #[derive(Clone)]
 struct CapturedOutput {
     lines: Arc<Mutex<VecDeque<String>>>,
+    // Reader threads that have not yet seen EOF. Drives `settle`.
+    draining: Arc<AtomicUsize>,
 }
 
 impl CapturedOutput {
     fn new() -> Self {
         Self {
             lines: Arc::new(Mutex::new(VecDeque::with_capacity(CAPTURED_LOG_MAX_LINES))),
+            draining: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -2196,8 +2214,12 @@ impl CapturedOutput {
         R: Read + Send + 'static,
     {
         let captured = self.clone();
+        // Registered before the thread starts, so a `settle` racing the spawn
+        // still sees this reader as outstanding.
+        self.draining.fetch_add(1, Ordering::SeqCst);
         // Detached: the thread ends on its own when the pipe closes at child
-        // exit, and nothing needs to join it.
+        // exit. `settle` waits on the counter rather than a JoinHandle so the
+        // wait can be bounded (see CAPTURED_LOG_SETTLE).
         thread::spawn(move || {
             for line in BufReader::new(stream).lines() {
                 let Ok(line) = line else { break };
@@ -2211,7 +2233,22 @@ impl CapturedOutput {
                 }
                 captured.push(line);
             }
+            captured.draining.fetch_sub(1, Ordering::SeqCst);
         });
+    }
+
+    /// Give the reader threads a bounded moment to reach EOF, so a report made
+    /// right after `try_wait` sees the child's final lines instead of racing
+    /// them. Returns early once every reader is done; otherwise gives up at
+    /// `CAPTURED_LOG_SETTLE` and lets the caller quote a partial tail.
+    fn settle(&self) {
+        let deadline = CAPTURED_LOG_SETTLE.as_millis() / CAPTURED_LOG_SETTLE_POLL.as_millis();
+        for _ in 0..deadline {
+            if self.draining.load(Ordering::SeqCst) == 0 {
+                return;
+            }
+            thread::sleep(CAPTURED_LOG_SETTLE_POLL);
+        }
     }
 
     /// Record one line, evicting the oldest once the ring buffer is full.
@@ -3202,15 +3239,16 @@ fn configure_linux_webkit() {}
 #[cfg(test)]
 mod tests {
     use super::{
-        client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
-        find_zip_manifest_path, is_allowed_local_vector_path, is_allowed_project_path,
-        is_disallowed_ip, is_safe_absolute_path, jupyter_failure_message, plugin_archive_file_name,
+        child_failure_message, client_cert_is_pkcs12, client_cert_password_without_path,
+        ensure_fetchable_url, find_zip_manifest_path, is_allowed_local_vector_path,
+        is_allowed_project_path, is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
         resolve_sidecar_in_resource_dir, CapturedOutput, CAPTURED_LOG_MAX_LINES,
-        CAPTURED_LOG_REPORTED_LINES,
+        CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
     use std::path::PathBuf;
+    use std::time::Duration;
 
     // A throwaway directory tree under the system temp dir that removes itself
     // on drop, so scratch dirs are cleaned up even when an assertion panics.
@@ -3537,10 +3575,10 @@ mod tests {
     }
 
     #[test]
-    fn jupyter_failure_message_quotes_the_child_output() {
+    fn child_failure_message_quotes_the_child_output() {
         let captured = CapturedOutput::new();
         captured.push("error: Extra `notebook` is not defined".to_string());
-        let message = jupyter_failure_message("Jupyter server exited.", &captured);
+        let message = child_failure_message("Jupyter server exited.", &captured);
         assert!(message.starts_with("Jupyter server exited."));
         // The cause has to travel with the error: an installed build is
         // GUI-subsystem on Windows and has no terminal to read it from.
@@ -3548,8 +3586,95 @@ mod tests {
     }
 
     #[test]
-    fn jupyter_failure_message_says_so_when_there_was_no_output() {
-        let message = jupyter_failure_message("Jupyter server exited.", &CapturedOutput::new());
+    fn child_failure_message_says_so_when_there_was_no_output() {
+        let message = child_failure_message("Jupyter server exited.", &CapturedOutput::new());
         assert_eq!(message, "Jupyter server exited. It produced no output.");
+    }
+
+    // The whole point of the capture is that the child's *last* lines — the
+    // error that killed it — reach the report. `try_wait` can observe the exit
+    // while those lines are still in the pipe, so the report has to wait for the
+    // readers to drain. Uses a real child so the race is real: a spawn that
+    // writes and exits immediately, reported the way the health waiters do.
+    #[cfg(unix)]
+    #[test]
+    fn child_failure_message_waits_for_output_still_in_the_pipe() {
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("echo 'error: the cause'; echo 'to stderr' >&2")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn a child that writes and exits");
+        let output = CapturedOutput::attach(&mut child);
+        // Mirror the waiters: report as soon as the exit is observed.
+        while child.try_wait().expect("inspect child").is_none() {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let message = child_failure_message("Child exited.", &output);
+        assert!(message.contains("error: the cause"), "got: {message}");
+        assert!(message.contains("to stderr"), "got: {message}");
+    }
+
+    // The race the report has to win, made deterministic. A reader that is
+    // provably still behind at report time stands in for bytes sitting in the
+    // OS pipe after `try_wait` has already reported the child gone. Without
+    // `settle` the report races past it and quotes nothing — which is the
+    // failure mode the capture exists to prevent. (The real-child test above
+    // exercises the same path end to end, but its timing is not guaranteed:
+    // on a fast machine the reader usually wins on its own.)
+    #[test]
+    fn child_failure_message_waits_for_output_still_in_flight() {
+        struct SlowThenEof {
+            sent: bool,
+        }
+        impl std::io::Read for SlowThenEof {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.sent {
+                    return Ok(0); // EOF
+                }
+                std::thread::sleep(Duration::from_millis(100));
+                let line = b"error: the cause\n";
+                buf[..line.len()].copy_from_slice(line);
+                self.sent = true;
+                Ok(line.len())
+            }
+        }
+
+        let captured = CapturedOutput::new();
+        captured.drain(SlowThenEof { sent: false }, false);
+        let message = child_failure_message("Child exited.", &captured);
+        assert!(message.contains("error: the cause"), "got: {message}");
+    }
+
+    // A reader that never reaches EOF must not hang the report: `uv` spawns
+    // `jupyter`, which spawns kernels holding these same pipe handles, so a
+    // grandchild outliving the child keeps the write end open forever. `settle`
+    // is bounded for exactly this case.
+    #[test]
+    fn settle_gives_up_on_a_reader_that_never_reaches_eof() {
+        struct NeverEnds;
+        impl std::io::Read for NeverEnds {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(Duration::from_millis(50));
+                buf[0] = b'\n';
+                Ok(1)
+            }
+        }
+
+        let captured = CapturedOutput::new();
+        captured.drain(NeverEnds, false);
+        let started = std::time::Instant::now();
+        captured.settle();
+        // Bounded: returns at the deadline rather than blocking forever. The
+        // generous upper bound keeps this from flaking on a loaded CI runner.
+        assert!(
+            started.elapsed() < CAPTURED_LOG_SETTLE * 10,
+            "settle blocked for {:?}",
+            started.elapsed()
+        );
     }
 }
