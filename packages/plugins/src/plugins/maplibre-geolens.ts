@@ -28,6 +28,7 @@ import {
   datasetPageUrl,
   defaultGeoLensFetch,
   fetchDatasetFields,
+  geometryKind,
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
@@ -328,6 +329,11 @@ async function addVectorTilesLayer(
       geolensDatasetId: dataset.id,
       sourceLayers: [sourceLayer],
       fields,
+      // The host's canonical geometry signal — drives the Layers-panel symbol
+      // and default styling when there are no local features to inspect.
+      ...(geometryKind(dataset.geometryType)
+        ? { geometryType: geometryKind(dataset.geometryType) }
+        : {}),
     },
     sourcePath: sourcePathFor(client, dataset),
   };

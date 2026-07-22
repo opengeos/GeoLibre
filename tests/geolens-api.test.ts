@@ -5,6 +5,7 @@ import {
   bboxFromGeometry,
   datasetPageUrl,
   fetchDatasetFields,
+  geometryKind,
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
@@ -172,6 +173,19 @@ describe("fetchDatasetFields", () => {
       () => fetchDatasetFields({ baseUrl: "http://h" }, "d", fetchImpl),
       /HTTP 404/,
     );
+  });
+});
+
+describe("geometryKind", () => {
+  it("maps GeoLens geometry types to the host's point/line/polygon", () => {
+    assert.equal(geometryKind("MULTIPOINT"), "point");
+    assert.equal(geometryKind("Point"), "point");
+    assert.equal(geometryKind("MULTILINESTRING"), "line");
+    assert.equal(geometryKind("LineString"), "line");
+    assert.equal(geometryKind("MULTIPOLYGON"), "polygon");
+    assert.equal(geometryKind("Polygon"), "polygon");
+    assert.equal(geometryKind(null), null);
+    assert.equal(geometryKind("GeometryCollection"), null);
   });
 });
 

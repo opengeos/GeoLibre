@@ -371,6 +371,20 @@ export function datasetPageUrl(options: GeoLensClientOptions, datasetId: string)
   return `${options.baseUrl}/datasets/${encodeURIComponent(datasetId)}`;
 }
 
+/**
+ * Map a GeoLens `geometry_type` (e.g. `MULTIPOLYGON`, `LINESTRING`) to the
+ * host's canonical `point | line | polygon` geometry kind, or null when it
+ * can't be classified (mixed/unknown). Used to set a vector-tile layer's
+ * `metadata.geometryType` so the host knows the geometry without local features.
+ */
+export function geometryKind(geometryType: string | null): "point" | "line" | "polygon" | null {
+  const g = (geometryType ?? "").toUpperCase();
+  if (g.includes("POINT")) return "point";
+  if (g.includes("LINE")) return "line"; // LINESTRING / MULTILINESTRING
+  if (g.includes("POLYGON")) return "polygon";
+  return null;
+}
+
 /** STAC 1.0 landing page URL. */
 export function stacCatalogUrl(options: GeoLensClientOptions): string {
   return `${options.baseUrl}/api/stac`;
