@@ -41,13 +41,19 @@ test("ArcGISSceneEngine lazy-loads SceneView, uses local assets, and reconciles 
     },
     assetsPath: () => "/app/arcgis-assets",
   });
-  engine.syncLayers([layer("geo", "geojson"), layer("wms", "wms"), layer("tiles", "3d-tiles")]);
+  engine.syncLayers([
+    layer("geo", "geojson"),
+    layer("wms", "wms"),
+    { ...layer("vector", "vector-tiles"), source: { url: "https://example.test/VectorTileServer" } },
+    layer("tiles", "3d-tiles"),
+  ]);
   assert.equal(loads, 0);
   await engine.mount({} as HTMLElement, initialView);
 
   assert.equal(loads, 1);
   assert.equal(runtime.config.assetsPath, "/app/arcgis-assets");
-  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms"]);
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector"]);
+  assert.equal(runtime.currentLayers[2]?.properties.url, "https://example.test/VectorTileServer");
   assert.equal(runtime.basemapLayers[0]?.properties.title, "OpenStreetMap");
   assert.equal(runtime.basemapLayers[0]?.properties.copyright, "© OpenStreetMap contributors");
   assert.equal(engine.supportsLayer(layer("tiles", "3d-tiles")), false);

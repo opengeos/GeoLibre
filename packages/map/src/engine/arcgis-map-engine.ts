@@ -134,6 +134,7 @@ export interface ArcGISMapEngineModules extends ArcGISControlModules {
   readonly GeoJSONLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
   readonly WMSLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
   readonly WMTSLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
+  readonly VectorTileLayer: new (properties: Record<string, unknown>) => ArcGISLayer;
 }
 
 export interface ArcGISMapEngineDependencies {
@@ -149,6 +150,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "xyz",
   "wms",
   "wmts",
+  "vector-tiles",
 ]);
 
 function localArcGISAssetsPath(): string {
@@ -166,6 +168,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     { default: GeoJSONLayer },
     { default: WMSLayer },
     { default: WMTSLayer },
+    { default: VectorTileLayer },
     { default: Zoom },
     { default: Compass },
     { default: Fullscreen },
@@ -181,6 +184,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     import("@arcgis/core/layers/GeoJSONLayer"),
     import("@arcgis/core/layers/WMSLayer"),
     import("@arcgis/core/layers/WMTSLayer"),
+    import("@arcgis/core/layers/VectorTileLayer"),
     import("@arcgis/core/widgets/Zoom"),
     import("@arcgis/core/widgets/Compass"),
     import("@arcgis/core/widgets/Fullscreen"),
@@ -203,6 +207,7 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     GeoJSONLayer: GeoJSONLayer as unknown as ArcGISMapEngineModules["GeoJSONLayer"],
     WMSLayer: WMSLayer as unknown as ArcGISMapEngineModules["WMSLayer"],
     WMTSLayer: WMTSLayer as unknown as ArcGISMapEngineModules["WMTSLayer"],
+    VectorTileLayer: VectorTileLayer as unknown as ArcGISMapEngineModules["VectorTileLayer"],
     Zoom: Zoom as unknown as ArcGISMapEngineModules["Zoom"],
     Compass: Compass as unknown as ArcGISMapEngineModules["Compass"],
     Fullscreen: Fullscreen as unknown as ArcGISMapEngineModules["Fullscreen"],
@@ -693,6 +698,10 @@ export class ArcGISMapEngine implements MapEngine {
     if (layer.type === "wmts") {
       const url = stringSourceValue(layer.source, "url");
       if (url) return new modules.WMTSLayer({ ...properties, url });
+    }
+    if (layer.type === "vector-tiles") {
+      const url = stringSourceValue(layer.source, "url");
+      if (url) return new modules.VectorTileLayer({ ...properties, url });
     }
     if (
       layer.type === "raster" ||

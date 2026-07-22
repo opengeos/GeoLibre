@@ -537,7 +537,7 @@ runEngineConformance("ArcGIS", createArcGISHarness, {
     ]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
-  supportsVectorTiles: false,
+  supportsVectorTiles: true,
   hitCount: 1,
 });
 
@@ -555,6 +555,6 @@ runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
     ]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
-  supportsVectorTiles: false,
+  supportsVectorTiles: true,
   hitCount: 1,
 });

@@ -54,9 +54,10 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   assert.equal(isMapEngineLayerSupported("cesium", layer("geojson")), true);
   assert.equal(isMapEngineLayerSupported("cesium", layer("vector-tiles")), false);
   assert.equal(isMapEngineLayerSupported("arcgis", layer("geojson")), true);
-  assert.equal(isMapEngineLayerSupported("arcgis", layer("vector-tiles")), false);
+  assert.equal(isMapEngineLayerSupported("arcgis", layer("vector-tiles")), true);
   assert.equal(isMapEngineLayerSupported("arcgis-scene", layer("geojson")), true);
   assert.equal(isMapEngineLayerSupported("arcgis-scene", layer("3d-tiles")), false);
+  assert.equal(isMapEngineLayerSupported("arcgis-scene", layer("vector-tiles")), true);
 });
 
 test("primary selection keeps MapLibre default while accepting the ArcGIS opt-in", () => {

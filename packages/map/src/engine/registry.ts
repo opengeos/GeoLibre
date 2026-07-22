@@ -37,13 +37,13 @@ const descriptors: Readonly<Record<MapEngineId, MapEngineDescriptor>> = {
     id: "arcgis",
     available: true,
     capabilities: ["capture", "controls", "feature-query", "interactions", "markers", "popups", "transient-overlays"],
-    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
+    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts", "vector-tiles"],
   },
   "arcgis-scene": {
     id: "arcgis-scene",
     available: true,
     capabilities: ["capture", "controls", "feature-query", "interactions", "markers", "popups", "transient-overlays"],
-    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts"],
+    supportedLayerTypes: ["geojson", "raster", "xyz", "wms", "wmts", "vector-tiles"],
   },
 };
 

@@ -213,6 +213,9 @@ Status values: not started · in progress · partial · blocked · done
   owns a metric ScaleBar. Unsupported globe, terrain, logo, and layer-control
   requests return `false`, while required ArcGIS attribution remains native and
   visible.
+- Implemented: store-backed `vector-tiles` records with an explicit service URL
+  now reconcile to lazy ArcGIS `VectorTileLayer` instances in both MapView and
+  SceneView; raw MapLibre tile-template sources remain an explicit gap.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

@@ -2019,3 +2019,34 @@
   → 2 passed.
 - Follow-up: browser-validate ArcGIS control keyboard behavior and attribution
   visibility at narrow widths; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre vector source → ArcGIS `VectorTileLayer`
+
+- Source: MapLibre — `syncVectorTileLayer` accepts a vector TileJSON/service
+  URL or raw tile templates from store-backed `vector-tiles` records.
+- Files touched: `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS fake/adapter/conformance/
+  registry tests under `tests/` before → public lazy VectorTileLayer support.
+- ArcGIS approach: construct documented `@arcgis/core/layers/VectorTileLayer`
+  with the store record's explicit `source.url`; the adapter owns the native
+  layer and continues to reconcile only from the latest store snapshot.
+- What changed: both ArcGIS adapters and their registry metadata now advertise
+  `vector-tiles`, mount a VectorTileLayer in source order when a service URL is
+  present, and retain neutral render-target discovery.
+- Gap / limitation: ArcGIS VectorTileLayer does not accept the existing raw
+  MapLibre `source.tiles` template shape through this public constructor.
+- Workaround: require an explicit compatible VectorTileLayer service/style URL
+  for the ArcGIS opt-ins and skip template-only records. Removal criteria: add a
+  reviewed neutral vector-tile style/source model that can safely produce a
+  documented ArcGIS `style` object.
+- Tradeoff accepted: service URLs provide portable public SDK behavior but defer
+  existing OGC/raw-template vector sources and their MapLibre paint translation.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 52 passed; `npm run lint -- --quiet` →
+  passed; `npm run build` → passed (normal JupyterLite-unavailable notice and
+  Vite browser externalization warnings were non-fatal).
+- Follow-up: design the engine-neutral style/source bridge before attempting
+  raw-template or MapLibre paint parity; Codex, 2026-07-22.

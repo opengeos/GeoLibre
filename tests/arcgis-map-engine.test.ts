@@ -45,17 +45,18 @@ test("ArcGISMapEngine lazy-loads MapView, uses local assets, and reconciles stor
   engine.syncLayers([
     layer("geo", "geojson"),
     layer("wms", "wms"),
-    layer("vector", "vector-tiles"),
+    { ...layer("vector", "vector-tiles"), source: { url: "https://example.test/VectorTileServer" } },
   ]);
   assert.equal(loads, 0);
   await engine.mount({} as HTMLElement, initialView);
 
   assert.equal(loads, 1);
   assert.equal(runtime.config.assetsPath, "/app/arcgis-assets");
-  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms"]);
+  assert.deepEqual(runtime.layerOrders.at(-1), ["geolibre-geo", "geolibre-wms", "geolibre-vector"]);
   assert.equal(runtime.basemapLayers[0]?.properties.title, "OpenStreetMap");
   assert.equal(runtime.basemapLayers[0]?.properties.copyright, "© OpenStreetMap contributors");
-  assert.equal(engine.layers.hasRenderTarget("vector"), false);
+  assert.equal(engine.layers.hasRenderTarget("vector"), true);
+  assert.equal(runtime.currentLayers[2]?.properties.url, "https://example.test/VectorTileServer");
 
   engine.configure({ basemapVisible: false, basemapOpacity: 0.4 });
   assert.equal(runtime.basemapLayers[0]?.visible, false);

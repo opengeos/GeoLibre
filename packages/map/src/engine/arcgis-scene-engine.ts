@@ -130,6 +130,7 @@ const supportedLayerTypes = new Set<GeoLibreLayer["type"]>([
   "xyz",
   "wms",
   "wmts",
+  "vector-tiles",
 ]);
 const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 
@@ -148,6 +149,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     { default: GeoJSONLayer },
     { default: WMSLayer },
     { default: WMTSLayer },
+    { default: VectorTileLayer },
     { default: SceneLayer },
     { default: IntegratedMeshLayer },
     { default: Zoom },
@@ -165,6 +167,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     import("@arcgis/core/layers/GeoJSONLayer"),
     import("@arcgis/core/layers/WMSLayer"),
     import("@arcgis/core/layers/WMTSLayer"),
+    import("@arcgis/core/layers/VectorTileLayer"),
     import("@arcgis/core/layers/SceneLayer"),
     import("@arcgis/core/layers/IntegratedMeshLayer"),
     import("@arcgis/core/widgets/Zoom"),
@@ -185,6 +188,7 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     GeoJSONLayer: GeoJSONLayer as unknown as ArcGISSceneEngineModules["GeoJSONLayer"],
     WMSLayer: WMSLayer as unknown as ArcGISSceneEngineModules["WMSLayer"],
     WMTSLayer: WMTSLayer as unknown as ArcGISSceneEngineModules["WMTSLayer"],
+    VectorTileLayer: VectorTileLayer as unknown as ArcGISSceneEngineModules["VectorTileLayer"],
     SceneLayer: SceneLayer as unknown as ArcGISSceneEngineModules["SceneLayer"],
     IntegratedMeshLayer: IntegratedMeshLayer as unknown as ArcGISSceneEngineModules["IntegratedMeshLayer"],
     Zoom: Zoom as unknown as ArcGISSceneEngineModules["Zoom"],
@@ -645,6 +649,10 @@ export class ArcGISSceneEngine implements MapEngine {
     if (layer.type === "wmts") {
       const url = stringSourceValue(layer.source, "url");
       if (url) return new modules.WMTSLayer({ ...properties, url }) as unknown as ArcGISLayer;
+    }
+    if (layer.type === "vector-tiles") {
+      const url = stringSourceValue(layer.source, "url");
+      if (url) return new modules.VectorTileLayer({ ...properties, url }) as unknown as ArcGISLayer;
     }
     if (layer.type === "raster" || layer.type === "xyz" || layer.type === "wms" || layer.type === "wmts") {
       const urlTemplate = tileTemplate(layer);
