@@ -108,6 +108,38 @@ test("ArcGISSceneEngine preserves 3D camera pitch and emits only user navigation
   engine.destroy();
 });
 
+test("ArcGISSceneEngine resolves cancelable point and bounds gestures through public view events", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount({} as HTMLElement, initialView);
+  const point = engine.interactions.pickPoint();
+  runtime.view?.emitInput("click", { mapPoint: { longitude: 8.6, latitude: 47.4 } });
+  assert.deepEqual(await point, [8.6, 47.4]);
+
+  const previews: Array<readonly number[] | null> = [];
+  const bounds = engine.interactions.drawBounds({
+    aspectRatio: 2,
+    onPreview: (value) => previews.push(value),
+  });
+  runtime.view?.emitInput("drag", {
+    action: "start",
+    button: 0,
+    mapPoint: { longitude: 8, latitude: 47 },
+  });
+  runtime.view?.emitInput("drag", {
+    action: "end",
+    button: 0,
+    mapPoint: { longitude: 10, latitude: 48 },
+  });
+  assert.deepEqual(await bounds, [8, 47, 10, 48]);
+  assert.deepEqual(previews, [[8, 47, 10, 48], null]);
+
+  const controller = new AbortController();
+  const cancelled = engine.interactions.drawBounds({ signal: controller.signal });
+  controller.abort();
+  assert.equal(await cancelled, null);
+});
+
 test("ArcGISSceneEngine identifies only store-backed GeoJSON features", async () => {
   const runtime = createArcGISSceneFakeRuntime();
   const geo = {

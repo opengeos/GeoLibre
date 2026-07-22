@@ -269,3 +269,34 @@
 - Follow-up: verify an actual public `3DObject` and `IntegratedMesh` SceneServer
   in GPU-enabled browser CI, then assess terrain/altitude parity; Codex,
   2026-07-22.
+
+## 2026-07-22 — Cesium globe picking/extent gestures → ArcGIS `SceneView` click/drag events
+
+- Source: Cesium — globe tools need neutral next-point and bounded-drag gestures
+  without leaking the Cesium viewer or native screen-space handlers.
+- Files touched: `packages/map/src/engine/arcgis-interactions.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`, and ArcGIS fake/adapter
+  tests under `tests/` before → SceneView public event gesture helpers.
+- ArcGIS approach: use documented `SceneView` click/drag events and their public
+  `mapPoint`, action, button, and `stopPropagation()` members to resolve neutral
+  coordinates and a bbox.
+- What changed: SceneView now supports abortable point picking and left-drag
+  bounds preview/completion with cleanup of temporary event listeners.
+- Gap / limitation: SceneView terrain intersection and a visible 3D sketch
+  rectangle are not represented; the bbox uses longitude/latitude values only.
+- Workaround: retain the neutral preview callback and defer terrain-aware sketch
+  visualization until an engine-neutral 3D selection model is approved.
+  Removal criteria: a supported shared selection/terrain contract.
+- Tradeoff accepted: stopping propagation while drawing prevents native globe
+  navigation for that gesture, which is required to make the selected extent
+  deterministic.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 49
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: add only the remaining reviewed interaction commands, then make the
+  capability advertisement and conformance matrix change together; Codex,
+  2026-07-22.

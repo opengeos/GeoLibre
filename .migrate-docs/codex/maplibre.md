@@ -1856,3 +1856,35 @@
   SceneView" --reporter=line` → 2 passed.
 - Follow-up: assess print-layout visual fidelity with real remote layers before
   advertising MapLibre-equivalent export appearance; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre point/bounds gesture helpers → ArcGIS `MapView` click/drag events
+
+- Source: MapLibre — `pickMapLibrePoint` and `drawMapLibreBounds` provide
+  cancelable click and drag gestures to field collection, georeferencing, and
+  raster/print extent tools through `MapEngineClient.interactions`.
+- Files touched: `packages/map/src/engine/arcgis-interactions.ts`,
+  `packages/map/src/engine/arcgis-map-engine.ts`, and ArcGIS fake/adapter tests
+  under `tests/` before → neutral MapView click/drag gesture helpers.
+- ArcGIS approach: subscribe through documented `MapView.on("click")` and
+  `MapView.on("drag")`, convert the public `mapPoint` to neutral coordinates,
+  and call the event's public `stopPropagation()` only while an owned bounds
+  drag is active.
+- What changed: MapView now resolves the next click, previews and resolves a
+  left-button drag bbox, honors abort signals, and removes the exact temporary
+  view handles on resolve or cancellation.
+- Gap / limitation: bounds aspect-ratio enforcement is geographic rather than
+  projection/screen-aware, and no native visible draw rectangle is rendered.
+- Workaround: emit the existing neutral preview bbox for the application to
+  render; removal criteria: add a reviewed engine-neutral sketch presentation
+  contract before mapping to an ArcGIS Sketch widget/Graphic.
+- Tradeoff accepted: suppressing propagation during an active draw prevents map
+  panning for that gesture, favoring deterministic extent selection.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 49
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal).
+- Follow-up: port double-click navigation suspension and marker lifecycle
+  before advertising the whole interactions capability; Codex, 2026-07-22.

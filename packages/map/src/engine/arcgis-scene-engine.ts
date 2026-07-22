@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import { captureArcGISViewport, type ArcGISScreenshotView } from "../capture/arcgis-capture";
+import { drawArcGISBounds, pickArcGISPoint } from "./arcgis-interactions";
 import { getLayerBounds } from "../geojson-loader";
 import {
   toArcGISHitFeatures,
@@ -63,10 +64,12 @@ interface ArcGISPoint {
 }
 
 interface ArcGISViewInputEvent {
+  readonly action?: "start" | "update" | "added" | "removed" | "end";
   readonly x?: number;
   readonly y?: number;
   readonly button?: number;
   readonly mapPoint?: ArcGISPoint | null;
+  stopPropagation?(): void;
 }
 
 interface ArcGISSceneView extends ArcGISSceneViewSnapshot, ArcGISHitTestView, ArcGISScreenshotView {
@@ -313,8 +316,10 @@ export class ArcGISSceneEngine implements MapEngine {
   } satisfies MapEngine["viewport"];
 
   readonly interactions = {
-    pickPoint: async (): Promise<LngLat | null> => this.unsupported("interactions"),
-    drawBounds: async (): Promise<BBox | null> => this.unsupported("interactions"),
+    pickPoint: async (options): Promise<LngLat | null> =>
+      this.view ? pickArcGISPoint(this.view, options) : null,
+    drawBounds: async (options): Promise<BBox | null> =>
+      this.view ? drawArcGISBounds(this.view, options) : null,
     setDoubleClickZoomEnabled: (): void => this.unsupported("interactions"),
     suspendNavigation: (): Unsubscribe => this.unsupported("interactions"),
     createMarker: (_options: MapMarkerOptions): MapMarkerHandle => this.unsupported("markers"),

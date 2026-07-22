@@ -74,7 +74,16 @@ export class FakeMapView {
   private stationaryValue = true;
   private readonly eventHandlers = new Map<
     string,
-    Set<(event: { readonly x?: number; readonly y?: number }) => void>
+    Set<
+      (event: {
+        readonly action?: "start" | "update" | "added" | "removed" | "end";
+        readonly button?: number;
+        readonly x?: number;
+        readonly y?: number;
+        readonly mapPoint?: { readonly longitude: number; readonly latitude: number };
+        stopPropagation?(): void;
+      }) => void
+    >
   >();
   private readonly reactiveWatchers = new Set<{
     readonly getValue: () => boolean;
@@ -128,7 +137,14 @@ export class FakeMapView {
 
   on(
     event: string,
-    handler: (event: { readonly x?: number; readonly y?: number }) => void,
+    handler: (event: {
+      readonly action?: "start" | "update" | "added" | "removed" | "end";
+      readonly button?: number;
+      readonly x?: number;
+      readonly y?: number;
+      readonly mapPoint?: { readonly longitude: number; readonly latitude: number };
+      stopPropagation?(): void;
+    }) => void,
   ): FakeHandle {
     const handlers = this.eventHandlers.get(event) ?? new Set();
     handlers.add(handler);
@@ -196,6 +212,20 @@ export class FakeMapView {
     this.zoom += 1;
     this.setStationary(false);
     this.setStationary(true);
+  }
+
+  emitInput(
+    type: string,
+    event: {
+      readonly action?: "start" | "update" | "added" | "removed" | "end";
+      readonly button?: number;
+      readonly x?: number;
+      readonly y?: number;
+      readonly mapPoint?: { readonly longitude: number; readonly latitude: number };
+      stopPropagation?(): void;
+    },
+  ): void {
+    for (const handler of this.eventHandlers.get(type) ?? []) handler(event);
   }
 
   private setStationary(stationary: boolean): void {
