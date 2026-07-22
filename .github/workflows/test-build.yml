@@ -1,0 +1,150 @@
+name: Test Build Desktop App
+
+# Builds unsigned desktop installers from a branch or PR and uploads them as
+# workflow artifacts, so a change can be installed and exercised the way a user
+# would before it is released. `release.yml` only fires on a published release
+# and uploads to that release, so it cannot be used to test a branch — and some
+# bugs only exist in an installed build (a bundled resource directory is
+# read-only, and a GUI-subsystem binary has no console), which is exactly the
+# class of bug that motivated this workflow.
+#
+# Triggered two ways:
+#   - `workflow_dispatch` from the Actions tab (available once this file is on
+#     the default branch), choosing which platforms to build.
+#   - adding the `test-build` label to a pull request, so it never runs on every
+#     PR by default — four desktop builds are not free.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Which platforms to build
+        required: true
+        default: linux-windows
+        type: choice
+        options:
+          - linux-windows
+          - linux
+          - windows
+          - all
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # On a pull_request the job is gated on the label that triggered it, so
+    # unrelated labels do not start a build.
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-build'
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            id: linux
+            os: ubuntu-22.04
+            args: --bundles deb,rpm,appimage
+          - name: Windows x64
+            id: windows
+            os: windows-2025
+            args: --no-sign
+
+    steps:
+      # Skip a matrix leg the dispatch inputs did not ask for. Expressed as a
+      # step guard rather than a dynamic matrix so the job list stays readable.
+      - name: Decide whether to build this platform
+        id: want
+        shell: bash
+        # Via env, not inline `${{ }}` interpolation, so the values never become
+        # part of the script text. A label-triggered run has no inputs, so
+        # SELECTION falls back to the default pair.
+        env:
+          SELECTION: ${{ inputs.platforms || 'linux-windows' }}
+          PLATFORM: ${{ matrix.id }}
+          PLATFORM_NAME: ${{ matrix.name }}
+        run: |
+          if [ "$SELECTION" = "all" ] || [ "$SELECTION" = "linux-windows" ] \
+            || [ "$SELECTION" = "$PLATFORM" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping $PLATFORM_NAME (not in '$SELECTION')."
+          fi
+
+      - name: Checkout repository
+        if: steps.want.outputs.build == 'true'
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        if: steps.want.outputs.build == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        if: steps.want.outputs.build == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        if: steps.want.outputs.build == 'true'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: apps/geolibre-desktop/src-tauri -> target
+
+      # Mirrors release.yml's Linux dependency list; libfuse2 and librsvg2-dev
+      # are needed for the AppImage bundle, rpm for the .rpm.
+      - name: Install Linux dependencies
+        if: steps.want.outputs.build == 'true' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            rpm \
+            wget
+
+      - name: Install frontend dependencies
+        if: steps.want.outputs.build == 'true'
+        run: npm ci
+
+      # No releaseId/tagName: without them tauri-action builds the bundles and
+      # leaves them on disk instead of uploading them to a release.
+      - name: Build the desktop bundles
+        if: steps.want.outputs.build == 'true'
+        uses: tauri-apps/tauri-action@v1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+        with:
+          projectPath: apps/geolibre-desktop
+          args: ${{ matrix.args }}
+
+      - name: Upload installers
+        if: steps.want.outputs.build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: geolibre-${{ matrix.id }}-x64
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/geolibre-desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/geolibre-desktop/src-tauri/target/release/bundle/**/*.rpm
+            apps/geolibre-desktop/src-tauri/target/release/bundle/**/*.AppImage
+            apps/geolibre-desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/geolibre-desktop/src-tauri/target/release/bundle/**/*-setup.exe
