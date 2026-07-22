@@ -14,6 +14,8 @@
 
 import {
   DEFAULT_ARCGIS_FEATURE_URL,
+  DATAFORDELER_ORTO_WMS_ENDPOINT,
+  DATAFORDELER_ORTO_WMS_LAYERS,
   DEFAULT_WFS_ENDPOINT,
   DEFAULT_WFS_TYPE_NAME,
   DEFAULT_WMS_ENDPOINT,
@@ -308,6 +310,24 @@ export const BUILTIN_SERVICES: readonly ServiceLibraryEntry[] = [
       tileSize: "256",
       // GEBCO serves the latest grid over WMS 1.3.0; pin it so the saved
       // service does not fall back to 1.1.1's flipped-axis GetMap.
+      version: "1.3.0",
+    },
+  },
+  {
+    id: "builtin-wms-datafordeler-ortofoto",
+    name: "Datafordeler Ortofoto (Denmark; API key required)",
+    category: "Denmark",
+    kind: "wms",
+    builtin: true,
+    fields: {
+      endpoint: DATAFORDELER_ORTO_WMS_ENDPOINT,
+      layers: DATAFORDELER_ORTO_WMS_LAYERS,
+      styles: "",
+      format: "image/jpeg",
+      transparent: false,
+      tileSize: "256",
+      // Datafordeler supports Web Mercator and WMS 1.3.0; pin the version so
+      // the built-in MapLibre WMS request uses the service's current contract.
       version: "1.3.0",
     },
   },

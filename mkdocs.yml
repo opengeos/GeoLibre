@@ -65,6 +65,7 @@ nav:
       - Overview: tutorials/index.md
       - Your First Map: tutorials/first-map.md
       - Cloud-Native Data: tutorials/cloud-native-data.md
+      - Danish Site Planning: tutorials/danish-site-planning.md
       - Vector Analysis: tutorials/vector-analysis.md
       - Terrain Analysis: tutorials/terrain-analysis.md
       - Spatial SQL: tutorials/spatial-sql.md

@@ -64,6 +64,13 @@ export const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 // attribution and must not be used for navigation. See gebco.net/data-products.
 export const GEBCO_WMS_ENDPOINT = "https://wms.gebco.net/mapserv";
 export const GEBCO_WMS_LAYERS = "GEBCO_LATEST";
+// Denmark's Datafordeler publishes its current spring orthophoto as a WMS.
+// Access uses an API key supplied as an `apikey` URL parameter. The placeholder
+// deliberately keeps credentials out of the shipped preset; replace it locally
+// before retrieving layers, and do not share a project containing the live URL.
+export const DATAFORDELER_ORTO_WMS_ENDPOINT =
+  "https://wms.datafordeler.dk/GeoDanmarkOrto/orto_foraar/1.0.0/WMS?apikey=<YOUR_API_KEY>";
+export const DATAFORDELER_ORTO_WMS_LAYERS = "orto_foraar";
 // GEBCO's license requires its imagery credit the source. `attributionForTileUrl`
 // (helpers) attaches this to any GEBCO WMS layer, however it was added (the sample
 // below or a hand-pasted wms.gebco.net URL).

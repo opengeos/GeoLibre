@@ -152,6 +152,19 @@ describe("serviceCategories", () => {
   });
 });
 
+describe("Danish Datafordeler starter service", () => {
+  it("ships an imagery preset with a credential placeholder, never a key", () => {
+    const service = BUILTIN_SERVICES.find(
+      (entry) => entry.id === "builtin-wms-datafordeler-ortofoto",
+    );
+    assert.ok(service);
+    assert.equal(service.kind, "wms");
+    assert.equal(service.fields.layers, "orto_foraar");
+    assert.match(String(service.fields.endpoint), /wms\.datafordeler\.dk/);
+    assert.match(String(service.fields.endpoint), /<YOUR_API_KEY>/);
+  });
+});
+
 describe("import / export round-trip", () => {
   it("serializes user entries (without builtin flag) and re-parses them", () => {
     const entry = createServiceEntry({

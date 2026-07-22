@@ -14,6 +14,7 @@ These tutorials walk through common GeoLibre workflows end to end. Each one is s
 | --- | --- |
 | [Your First Map](first-map.md) | Add a layer, style it, inspect attributes, and save. |
 | [Cloud-Native Data](cloud-native-data.md) | Load remote GeoParquet, FlatGeobuf, and COG, and convert local data. |
+| [Danish Site Planning](danish-site-planning.md) | Combine Datafordeler imagery and cadastral reference data with historic plans. |
 | [Vector Analysis](vector-analysis.md) | Buffer and overlay layers, then export the result. |
 | [Terrain Analysis](terrain-analysis.md) | Derive hillshade, slope, and contours from a DEM. |
 | [Spatial SQL](spatial-sql.md) | Query data with DuckDB Spatial and map the results. |
