@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
 use std::env;
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::net::TcpListener;
@@ -1953,11 +1954,13 @@ fn wait_for_port_free(port: u16) {
 }
 
 // Prepend `dir` to any inherited PYTHONPATH (platform separator), so a user's
-// existing value is preserved rather than clobbered.
+// existing value is preserved rather than clobbered. The inherited value is
+// taken *after* AppImage sanitation, so the AppDir entry AppRun injects is not
+// carried into the child (see appdir_free_path_var).
 fn prepend_pythonpath(dir: &Path) -> String {
     let dir = dir.display().to_string();
-    match env::var("PYTHONPATH") {
-        Ok(existing) if !existing.is_empty() => {
+    match appdir_free_path_var("PYTHONPATH") {
+        Some(existing) if !existing.is_empty() => {
             let sep = if cfg!(windows) { ";" } else { ":" };
             format!("{dir}{sep}{existing}")
         }
@@ -2279,7 +2282,77 @@ impl CapturedOutput {
     }
 }
 
+/// The AppImage mount root, when running from an AppImage. `APPDIR` is exported
+/// by AppRun and is the prefix of everything it injects.
+fn appimage_dir() -> Option<String> {
+    env::var("APPDIR").ok().filter(|dir| !dir.is_empty())
+}
+
+/// Read a `PATH`-style variable with any entry that points inside the AppImage
+/// mount removed. Returns `None` when the variable is unset or every entry was
+/// an AppDir entry (so the caller unsets it rather than passing an empty value).
+/// Outside an AppImage the value is returned untouched.
+fn appdir_free_path_var(name: &str) -> Option<String> {
+    let value = env::var(name).ok()?;
+    let Some(appdir) = appimage_dir() else {
+        return Some(value);
+    };
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    let kept: Vec<&str> = value
+        .split(sep)
+        .filter(|entry| !entry.is_empty() && !entry.starts_with(appdir.as_str()))
+        .collect();
+    if kept.is_empty() {
+        None
+    } else {
+        Some(kept.join(&sep.to_string()))
+    }
+}
+
+/// Undo the environment an AppImage forces on every child process.
+///
+/// AppImageKit's AppRun exports a fixed set of variables so the bundled GUI can
+/// find its own libraries, including:
+///
+/// ```text
+/// PYTHONHOME=$APPDIR/usr/
+/// PYTHONPATH=$APPDIR/usr/share/pyshared/:$PYTHONPATH
+/// LD_LIBRARY_PATH=$APPDIR/usr/lib/:…:$LD_LIBRARY_PATH
+/// ```
+///
+/// They leak into everything we spawn. `PYTHONHOME` is the fatal one: a Python
+/// that honours it looks for its standard library under the AppImage mount,
+/// finds no `encodings` module, and aborts with "Failed to import encodings
+/// module" before executing a line of code. That killed `uv`'s build backend —
+/// and so the Notebook panel and the sidecar — in every AppImage build, while
+/// the .deb/.rpm (which have no AppRun) were unaffected.
+///
+/// We never want an inherited `PYTHONHOME`: the interpreter is chosen by uv and
+/// the project environment we point it at, so drop it unconditionally rather
+/// than only under an AppImage. The two search paths keep any entries the user
+/// legitimately set and lose only the AppDir ones.
+fn clear_appimage_python_env(command: &mut Command) {
+    command.env_remove("PYTHONHOME");
+    for name in ["LD_LIBRARY_PATH", "PYTHONPATH"] {
+        // The Jupyter launch sets its own PYTHONPATH (already AppDir-free, via
+        // prepend_pythonpath) before this runs, and overwriting it here would
+        // drop the notebook-lib directory that makes `import geolibre` work.
+        if command
+            .get_envs()
+            .any(|(key, value)| key == OsStr::new(name) && value.is_some())
+        {
+            continue;
+        }
+        match appdir_free_path_var(name) {
+            Some(value) => command.env(name, value),
+            None => command.env_remove(name),
+        };
+    }
+}
+
 fn configure_sidecar_process(command: &mut Command) {
+    // Both callers (the sidecar and Jupyter launches) run Python through uv.
+    clear_appimage_python_env(command);
     configure_sidecar_process_impl(command);
 }
 
@@ -3239,16 +3312,24 @@ fn configure_linux_webkit() {}
 #[cfg(test)]
 mod tests {
     use super::{
-        child_failure_message, client_cert_is_pkcs12, client_cert_password_without_path,
-        ensure_fetchable_url, find_zip_manifest_path, is_allowed_local_vector_path,
-        is_allowed_project_path, is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
-        resolve_sidecar_in_resource_dir, CapturedOutput, CAPTURED_LOG_MAX_LINES,
-        CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        child_failure_message, clear_appimage_python_env, client_cert_is_pkcs12,
+        client_cert_password_without_path, ensure_fetchable_url, find_zip_manifest_path,
+        is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
+        is_safe_absolute_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
+        CapturedOutput, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
+    use std::env;
+    use std::ffi::OsStr;
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
     use std::path::PathBuf;
+    use std::process::Command;
+    use std::sync::Mutex;
     use std::time::Duration;
+
+    // `std::env::set_var` is process-global, so the tests that stage an AppImage
+    // environment must not run concurrently with each other.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     // A throwaway directory tree under the system temp dir that removes itself
     // on drop, so scratch dirs are cleaned up even when an assertion panics.
@@ -3648,6 +3729,91 @@ mod tests {
         captured.drain(SlowThenEof { sent: false }, false);
         let message = child_failure_message("Child exited.", &captured);
         assert!(message.contains("error: the cause"), "got: {message}");
+    }
+
+    // AppImageKit's AppRun exports PYTHONHOME=$APPDIR/usr/ into every child. A
+    // Python that honours it looks for its stdlib inside the AppImage mount and
+    // aborts with "Failed to import encodings module" before running any code,
+    // which is how the Notebook panel and the sidecar died in AppImage builds.
+    // Serialized with the other env-mutating test: these share process env.
+    #[test]
+    fn appimage_python_env_is_stripped_from_children() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let appdir = "/tmp/.mount_GeoLibreXXXX";
+        // Reproduce what AppRun exports.
+        env::set_var("APPDIR", appdir);
+        env::set_var("PYTHONHOME", format!("{appdir}/usr/"));
+        env::set_var(
+            "PYTHONPATH",
+            format!("{appdir}/usr/share/pyshared/:/home/me/lib"),
+        );
+        env::set_var(
+            "LD_LIBRARY_PATH",
+            format!("{appdir}/usr/lib/:{appdir}/lib/"),
+        );
+
+        let mut command = Command::new("true");
+        clear_appimage_python_env(&mut command);
+        let envs: Vec<_> = command.get_envs().collect();
+        let lookup = |name: &str| {
+            envs.iter()
+                .find(|(key, _)| *key == OsStr::new(name))
+                .map(|(_, value)| *value)
+        };
+
+        // PYTHONHOME is dropped outright — it is the fatal one.
+        assert_eq!(lookup("PYTHONHOME"), Some(None));
+        // The user's own PYTHONPATH entry survives; the AppDir one does not.
+        assert_eq!(lookup("PYTHONPATH"), Some(Some(OsStr::new("/home/me/lib"))));
+        // Every LD_LIBRARY_PATH entry was an AppDir entry, so the variable is
+        // unset rather than passed through empty.
+        assert_eq!(lookup("LD_LIBRARY_PATH"), Some(None));
+
+        env::remove_var("APPDIR");
+        env::remove_var("PYTHONHOME");
+        env::remove_var("PYTHONPATH");
+        env::remove_var("LD_LIBRARY_PATH");
+    }
+
+    // Outside an AppImage nothing is filtered: a user who deliberately set these
+    // for their own Python must keep them.
+    #[test]
+    fn python_env_is_untouched_outside_an_appimage() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("APPDIR");
+        env::set_var("PYTHONPATH", "/home/me/lib:/opt/other");
+
+        let mut command = Command::new("true");
+        clear_appimage_python_env(&mut command);
+        let value = command
+            .get_envs()
+            .find(|(key, _)| *key == OsStr::new("PYTHONPATH"))
+            .map(|(_, value)| value);
+        assert_eq!(value, Some(Some(OsStr::new("/home/me/lib:/opt/other"))));
+
+        env::remove_var("PYTHONPATH");
+    }
+
+    // The Jupyter launch sets PYTHONPATH itself (notebook-lib, so `import
+    // geolibre` works) before the sanitizer runs; the sanitizer must not
+    // overwrite it.
+    #[test]
+    fn a_pythonpath_the_caller_already_set_is_preserved() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("APPDIR", "/tmp/.mount_GeoLibreXXXX");
+        env::set_var("PYTHONPATH", "/tmp/.mount_GeoLibreXXXX/usr/share/pyshared/");
+
+        let mut command = Command::new("true");
+        command.env("PYTHONPATH", "/app/runtime/notebook-lib");
+        clear_appimage_python_env(&mut command);
+        let value = command
+            .get_envs()
+            .find(|(key, _)| *key == OsStr::new("PYTHONPATH"))
+            .map(|(_, value)| value);
+        assert_eq!(value, Some(Some(OsStr::new("/app/runtime/notebook-lib"))));
+
+        env::remove_var("APPDIR");
+        env::remove_var("PYTHONPATH");
     }
 
     // A reader that never reaches EOF must not hang the report: `uv` spawns
