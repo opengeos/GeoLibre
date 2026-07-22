@@ -4,6 +4,7 @@ import {
   authHeaders,
   bboxFromGeometry,
   datasetPageUrl,
+  fetchDatasetFields,
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
@@ -145,6 +146,32 @@ describe("itemsUrl / stac URLs", () => {
     );
     assert.equal(stacCatalogUrl(opts), "http://localhost:8080/api/stac");
     assert.equal(stacCollectionsUrl(opts), "http://localhost:8080/api/stac/collections");
+  });
+});
+
+describe("fetchDatasetFields", () => {
+  it("returns the property keys of a sample item (limit=1)", async () => {
+    const { fetchImpl, calls } = stubFetch({
+      type: "FeatureCollection",
+      features: [{ properties: { height_roof: 40, construction_year: 1930, name: "x" } }],
+    });
+    const fields = await fetchDatasetFields({ baseUrl: "http://h", apiKey: "k" }, "d1", fetchImpl);
+    assert.deepEqual(fields, ["height_roof", "construction_year", "name"]);
+    assert.match(calls[0].url, /\/api\/collections\/d1\/items\?limit=1$/);
+    assert.deepEqual(calls[0].headers, { "X-Api-Key": "k" });
+  });
+
+  it("returns [] when there are no features", async () => {
+    const { fetchImpl } = stubFetch({ type: "FeatureCollection", features: [] });
+    assert.deepEqual(await fetchDatasetFields({ baseUrl: "http://h" }, "d", fetchImpl), []);
+  });
+
+  it("throws on a non-ok response", async () => {
+    const { fetchImpl } = stubFetch({}, false, 404);
+    await assert.rejects(
+      () => fetchDatasetFields({ baseUrl: "http://h" }, "d", fetchImpl),
+      /HTTP 404/,
+    );
   });
 });
 

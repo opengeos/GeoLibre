@@ -27,6 +27,7 @@ import {
   authHeaders,
   datasetPageUrl,
   defaultGeoLensFetch,
+  fetchDatasetFields,
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
@@ -295,7 +296,15 @@ async function addVectorTilesLayer(
   dataset: GeoLensDataset,
   fetchImpl: GeoLensFetch,
 ): Promise<void> {
-  const token = await mintTileToken(client, dataset.id, fetchImpl);
+  // Mint the tile token and read the dataset's field names together. A vector-
+  // tile layer carries no `geojson` features, so the field list (from one OGC
+  // items feature) is what lets the Style panel populate its attribute
+  // dropdowns (3D extrusion height, graduated/categorical color). Best-effort:
+  // if the items read fails the layer still renders, just without field hints.
+  const [token, fields] = await Promise.all([
+    mintTileToken(client, dataset.id, fetchImpl),
+    fetchDatasetFields(client, dataset.id, fetchImpl).catch(() => [] as string[]),
+  ]);
   const { tiles, sourceLayer } = vectorTileTemplate(client, token);
   const layer: GeoLibreLayer = {
     id: createLayerId(),
@@ -318,6 +327,7 @@ async function addVectorTilesLayer(
       geolensBaseUrl: client.baseUrl,
       geolensDatasetId: dataset.id,
       sourceLayers: [sourceLayer],
+      fields,
     },
     sourcePath: sourcePathFor(client, dataset),
   };

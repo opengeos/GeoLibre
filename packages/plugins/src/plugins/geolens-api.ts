@@ -340,6 +340,32 @@ export function itemsUrl(options: GeoLensClientOptions, datasetId: string, limit
   return `${options.baseUrl}/api/collections/${encodeURIComponent(datasetId)}/items?limit=${limit}`;
 }
 
+/**
+ * The dataset's attribute (field) names, read from a single OGC API Features
+ * item. GeoLens exposes no queryables endpoint, but a `limit=1` items request
+ * carries a representative feature whose `properties` keys are the fields. Used
+ * to populate a vector-tile layer's `metadata.fields` so the host Style panel's
+ * attribute dropdowns (3D extrusion height, graduated/categorical color) work —
+ * a vector-tile layer has no `geojson` features for the host to read them from.
+ */
+export async function fetchDatasetFields(
+  options: GeoLensClientOptions,
+  datasetId: string,
+  fetchImpl: GeoLensFetch = defaultGeoLensFetch,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const res = await fetchImpl(itemsUrl(options, datasetId, 1), {
+    headers: authHeaders(options),
+    signal,
+  });
+  if (!res.ok) throw new Error(`GeoLens items request failed (HTTP ${res.status})`);
+  const body = (await res.json()) as {
+    features?: Array<{ properties?: Record<string, unknown> | null }>;
+  };
+  const properties = body.features?.[0]?.properties;
+  return properties ? Object.keys(properties) : [];
+}
+
 /** The dataset's human-readable detail page on the GeoLens web UI. */
 export function datasetPageUrl(options: GeoLensClientOptions, datasetId: string): string {
   return `${options.baseUrl}/datasets/${encodeURIComponent(datasetId)}`;
