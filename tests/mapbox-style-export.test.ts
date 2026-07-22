@@ -124,7 +124,7 @@ describe("data-driven renderers", () => {
     assert.equal((color as unknown[])[0], "match");
   });
 
-  it("graduated maps to an interpolate expression", () => {
+  it("graduated maps to a discrete step expression", () => {
     const { style: doc } = buildMapboxStyle(
       layer({
         style: style({
@@ -141,8 +141,7 @@ describe("data-driven renderers", () => {
     const color = (layerById(doc, "my-layer-circle") as { paint: Record<string, unknown> }).paint[
       "circle-color"
     ];
-    assert.ok(Array.isArray(color));
-    assert.equal((color as unknown[])[0], "interpolate");
+    assert.deepEqual(color, ["step", ["to-number", ["get", "value"], 0], "#111111", 50, "#222222"]);
   });
 
   it("rule-based maps to a case expression", () => {

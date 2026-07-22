@@ -1,6 +1,5 @@
 import {
-  createEqualIntervalBreaks,
-  createQuantileBreaks,
+  createGraduatedClassBreaks,
   interpolateRampColors,
   type GeoLibreLayer,
   type LayerStyle,
@@ -41,10 +40,10 @@ function graduatedStops(
   scheme: "equal-interval" | "quantile",
   colorRamp: string,
 ): VectorStyleStop[] {
-  const breaks =
-    scheme === "quantile"
-      ? createQuantileBreaks(values, classCount)
-      : createEqualIntervalBreaks(Math.min(...values), Math.max(...values), classCount);
+  // Class lower bounds, matching the Style panel: the top class is open-ended
+  // above rather than ending at the maximum (see createGraduatedClassBreaks).
+  // Duplicate breaks collapse, so size the ramp off the breaks, not the count.
+  const breaks = createGraduatedClassBreaks(values, classCount, scheme);
   const colors = interpolateRampColors(colorRamp, breaks.length);
   return breaks.map((value, index) => ({
     value,

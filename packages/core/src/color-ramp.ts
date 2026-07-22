@@ -270,6 +270,11 @@ export function createEqualIntervalBreaks(min: number, max: number, count: numbe
 /**
  * Builds `count` quantile break values from a sample of numeric values.
  *
+ * These are ramp *edges* spanning the whole sample (the first break is the
+ * minimum, the last the maximum), matching {@link createEqualIntervalBreaks}.
+ * Graduated vector classes want class *lower bounds* instead; use
+ * {@link createGraduatedClassBreaks}.
+ *
  * @param values - The sample values.
  * @param count - Number of breaks to produce.
  * @returns The quantile break values.
@@ -282,9 +287,152 @@ export function createQuantileBreaks(values: number[], count: number): number[] 
   if (sorted.length === 0) return [];
   return Array.from({ length: count }, (_, index) => {
     const position = count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);
-    const lowerIndex = Math.floor(position);
-    const upperIndex = Math.min(sorted.length - 1, Math.ceil(position));
-    const ratio = position - lowerIndex;
-    return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio;
+    return quantileAtPosition(sorted, position);
   });
+}
+
+/** Linearly interpolated order statistic at a fractional index into `sorted`. */
+function quantileAtPosition(sorted: number[], position: number): number {
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.min(sorted.length - 1, Math.ceil(position));
+  const ratio = position - lowerIndex;
+  return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio;
+}
+
+/** The classification schemes the graduated vector renderer offers. */
+export type GraduatedClassificationScheme = "equal-interval" | "quantile" | "natural-breaks";
+
+/**
+ * Builds the class *lower bounds* for a graduated vector renderer.
+ *
+ * A graduated renderer's stops are lower bounds, not ramp edges: with N stops
+ * sorted ascending, class `i` covers `[stops[i], stops[i + 1])` and the last
+ * class is open-ended above. The legend (`≥ value`) and the QML/SLD exporters
+ * already read them that way, so the breaks must follow the same convention:
+ * `count` classes yield `count` breaks whose first entry is the sample minimum
+ * and whose last entry opens the top class. Producing edges instead (ending at
+ * the maximum) leaves the top class holding only the single largest feature and
+ * puts the interior breaks at the wrong percentiles.
+ *
+ * The result is strictly ascending: duplicate breaks (a skewed sample can push
+ * several quantiles onto the same value) are collapsed, so the caller may get
+ * fewer than `count` breaks and must size its colors off `breaks.length`.
+ * MapLibre rejects a `step` expression whose inputs are not strictly ascending,
+ * so this de-duplication is load-bearing, not cosmetic.
+ *
+ * @param values - The finite numeric values of the classified property.
+ * @param count - Number of classes requested.
+ * @param scheme - The classification scheme.
+ * @returns Up to `count` strictly ascending class lower bounds.
+ */
+export function createGraduatedClassBreaks(
+  values: number[],
+  count: number,
+  scheme: GraduatedClassificationScheme,
+): number[] {
+  if (count <= 0 || values.length === 0) return [];
+  if (scheme === "natural-breaks") return ascendingUnique(naturalClassBreaks(values, count));
+  const sorted = [...values].sort((a, b) => a - b);
+  if (scheme === "quantile") {
+    return ascendingUnique(
+      Array.from({ length: count }, (_, index) =>
+        quantileAtPosition(sorted, (index / count) * (sorted.length - 1)),
+      ),
+    );
+  }
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  return ascendingUnique(
+    Array.from({ length: count }, (_, index) => min + ((max - min) * index) / count),
+  );
+}
+
+/** Drops non-finite breaks and collapses repeats, keeping ascending order. */
+function ascendingUnique(breaks: number[]): number[] {
+  const out: number[] = [];
+  for (const value of breaks) {
+    if (!Number.isFinite(value)) continue;
+    if (out.length > 0 && value <= out[out.length - 1]) continue;
+    out.push(value);
+  }
+  return out;
+}
+
+/** Cap on the Jenks input size; the DP below is roughly O(n^2 * k). */
+const MAX_NATURAL_BREAK_SAMPLES = 1000;
+
+/** Evenly thins a sorted array down to at most `maxSamples` entries. */
+function downsampleSortedValues(values: number[], maxSamples: number): number[] {
+  if (values.length <= maxSamples) return values;
+  const result: number[] = [];
+  const step = (values.length - 1) / (maxSamples - 1);
+  for (let index = 0; index < maxSamples; index += 1) {
+    result.push(values[Math.round(index * step)]);
+  }
+  return result;
+}
+
+/**
+ * Jenks natural breaks: the class lower bounds that minimize the summed
+ * within-class variance. Returns the sample minimum first, then the first value
+ * of each subsequent class.
+ */
+function naturalClassBreaks(values: number[], count: number): number[] {
+  const unique = Array.from(new Set(values)).sort((a, b) => a - b);
+  // Cap the input so a large layer does not freeze the Style panel's UI thread.
+  const sorted = downsampleSortedValues(unique, MAX_NATURAL_BREAK_SAMPLES);
+  if (sorted.length <= count) return sorted;
+
+  const lowerClassLimits = Array.from({ length: sorted.length + 1 }, () =>
+    Array(count + 1).fill(0),
+  );
+  const varianceCombinations = Array.from({ length: sorted.length + 1 }, () =>
+    Array(count + 1).fill(Number.POSITIVE_INFINITY),
+  );
+
+  for (let classIndex = 1; classIndex <= count; classIndex += 1) {
+    lowerClassLimits[1][classIndex] = 1;
+    varianceCombinations[1][classIndex] = 0;
+  }
+
+  for (let valueIndex = 2; valueIndex <= sorted.length; valueIndex += 1) {
+    let sum = 0;
+    let sumSquares = 0;
+    let weight = 0;
+
+    for (let lowerIndex = 1; lowerIndex <= valueIndex; lowerIndex += 1) {
+      const currentIndex = valueIndex - lowerIndex + 1;
+      const value = sorted[currentIndex - 1];
+      weight += 1;
+      sum += value;
+      sumSquares += value * value;
+      const variance = sumSquares - (sum * sum) / weight;
+      const previousIndex = currentIndex - 1;
+      if (previousIndex === 0) continue;
+
+      for (let classIndex = 2; classIndex <= count; classIndex += 1) {
+        const candidate = variance + varianceCombinations[previousIndex][classIndex - 1];
+        if (varianceCombinations[valueIndex][classIndex] >= candidate) {
+          lowerClassLimits[valueIndex][classIndex] = currentIndex;
+          varianceCombinations[valueIndex][classIndex] = candidate;
+        }
+      }
+    }
+
+    lowerClassLimits[valueIndex][1] = 1;
+    varianceCombinations[valueIndex][1] = sumSquares - (sum * sum) / Math.max(1, weight);
+  }
+
+  // Walk the DP table back from the top class: `lowerClassLimits[i][k]` is the
+  // 1-based index in `sorted` where class `k` starts, which is exactly that
+  // class's lower bound. Class 1 always starts at the sample minimum.
+  const breaks = Array(count).fill(sorted[0]) as number[];
+  let valueIndex = sorted.length;
+  for (let classIndex = count; classIndex >= 2; classIndex -= 1) {
+    const lowerClassLimit = Math.max(1, lowerClassLimits[valueIndex][classIndex]);
+    breaks[classIndex - 1] = sorted[lowerClassLimit - 1];
+    valueIndex = lowerClassLimit - 1;
+  }
+  breaks[0] = sorted[0];
+  return breaks;
 }

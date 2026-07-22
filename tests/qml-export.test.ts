@@ -132,7 +132,7 @@ describe("buildQml", () => {
     );
     assert.match(compact(qml), /<renderer-v2 type="graduatedSymbol" attr="pop"/);
     assert.match(compact(qml), /<range lower="0" upper="100" symbol="0"/);
-    assert.ok(warnings.some((w) => /discrete QML class ranges/.test(w)));
+    assert.ok(warnings.some((w) => /QML class ranges/.test(w)));
   });
 
   it("maps a rule-based renderer to QGIS-expression rules and an ELSE", () => {

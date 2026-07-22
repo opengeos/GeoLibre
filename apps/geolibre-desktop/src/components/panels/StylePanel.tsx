@@ -6,6 +6,7 @@ import {
   type ExpressionVariable,
   type FillPattern,
   type GeometryGeneratorType,
+  type GraduatedClassificationScheme,
   type LabelStyle,
   type LayerType,
   type LineDecoration,
@@ -17,8 +18,7 @@ import {
   type VectorStyleMode,
   type VectorStyleStop,
   collectDiagramData,
-  createEqualIntervalBreaks,
-  createQuantileBreaks,
+  createGraduatedClassBreaks,
   geojsonHasZCoordinates,
   interpolateRampColors,
   isStyleLibraryTargetLayer,
@@ -549,15 +549,19 @@ export function createGraduatedStops(
   const max = Math.max(...values);
   if (min === max) return [{ value: min, color: colors.at(-1) ?? "#2563eb" }];
 
-  const breaks =
-    classificationScheme === "quantile"
-      ? createQuantileBreaks(values, count)
-      : classificationScheme === "natural-breaks"
-        ? createNaturalBreaks(values, count)
-        : createEqualIntervalBreaks(min, max, count);
+  // The breaks are class lower bounds, so `count` classes give `count` stops
+  // and the top class is open-ended above (see createGraduatedClassBreaks).
+  // normalizeClassificationScheme keeps the scheme to the three known values;
+  // anything else classifies as equal interval, as it did before.
+  const breaks = createGraduatedClassBreaks(
+    values,
+    count,
+    classificationScheme as GraduatedClassificationScheme,
+  );
 
-  // Natural breaks can yield fewer breaks than the requested count when the
-  // layer has fewer unique values; align the color count so none are dropped.
+  // Any scheme can yield fewer breaks than the requested count when the layer
+  // has few unique values (duplicate breaks collapse); align the color count so
+  // none are dropped.
   const stopColors =
     breaks.length === count ? colors : interpolateRampColors(colorRamp, breaks.length);
 
@@ -640,76 +644,6 @@ function normalizeClassificationScheme(mode: VectorStyleMode, scheme: string): s
   return options.some((option) => option.value === scheme)
     ? scheme
     : defaultClassificationScheme(mode);
-}
-
-const MAX_NATURAL_BREAK_SAMPLES = 1000;
-
-function downsampleSortedValues(values: number[], maxSamples: number): number[] {
-  if (values.length <= maxSamples) return values;
-  const result: number[] = [];
-  const step = (values.length - 1) / (maxSamples - 1);
-  for (let index = 0; index < maxSamples; index += 1) {
-    result.push(values[Math.round(index * step)]);
-  }
-  return result;
-}
-
-function createNaturalBreaks(values: number[], count: number): number[] {
-  const unique = Array.from(new Set(values)).sort((a, b) => a - b);
-  // The Jenks DP below is roughly O(n^2 * k); cap the input so large layers
-  // do not freeze the Style panel on the UI thread.
-  const sorted = downsampleSortedValues(unique, MAX_NATURAL_BREAK_SAMPLES);
-  if (sorted.length <= count) return sorted;
-
-  const lowerClassLimits = Array.from({ length: sorted.length + 1 }, () =>
-    Array(count + 1).fill(0),
-  );
-  const varianceCombinations = Array.from({ length: sorted.length + 1 }, () =>
-    Array(count + 1).fill(Number.POSITIVE_INFINITY),
-  );
-
-  for (let classIndex = 1; classIndex <= count; classIndex += 1) {
-    lowerClassLimits[1][classIndex] = 1;
-    varianceCombinations[1][classIndex] = 0;
-  }
-
-  for (let valueIndex = 2; valueIndex <= sorted.length; valueIndex += 1) {
-    let sum = 0;
-    let sumSquares = 0;
-    let weight = 0;
-
-    for (let lowerIndex = 1; lowerIndex <= valueIndex; lowerIndex += 1) {
-      const currentIndex = valueIndex - lowerIndex + 1;
-      const value = sorted[currentIndex - 1];
-      weight += 1;
-      sum += value;
-      sumSquares += value * value;
-      const variance = sumSquares - (sum * sum) / weight;
-      const previousIndex = currentIndex - 1;
-      if (previousIndex === 0) continue;
-
-      for (let classIndex = 2; classIndex <= count; classIndex += 1) {
-        const candidate = variance + varianceCombinations[previousIndex][classIndex - 1];
-        if (varianceCombinations[valueIndex][classIndex] >= candidate) {
-          lowerClassLimits[valueIndex][classIndex] = currentIndex;
-          varianceCombinations[valueIndex][classIndex] = candidate;
-        }
-      }
-    }
-
-    lowerClassLimits[valueIndex][1] = 1;
-    varianceCombinations[valueIndex][1] = sumSquares - (sum * sum) / Math.max(1, weight);
-  }
-
-  const breaks = Array(count).fill(sorted[0]) as number[];
-  breaks[count - 1] = sorted[sorted.length - 1];
-  let valueIndex = sorted.length;
-  for (let classIndex = count; classIndex >= 2; classIndex -= 1) {
-    const lowerClassLimit = lowerClassLimits[valueIndex][classIndex] - 1;
-    breaks[classIndex - 2] = sorted[Math.max(0, lowerClassLimit)];
-    valueIndex = lowerClassLimit;
-  }
-  return breaks;
 }
 
 function chooseDefaultStyleProperty(

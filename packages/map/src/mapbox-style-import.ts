@@ -136,9 +136,11 @@ function wrappedProperty(node: unknown): string | null {
 /**
  * Reverse a color paint value (string or MapLibre expression) back into a
  * GeoLibre renderer. Recognizes the exact shapes the exporter produces:
- * `match` (categorized), `interpolate`/`linear` over a numeric field
- * (graduated), and `case` (rule-based); any other expression is preserved as an
- * `expression` renderer. A `coalesce` simplestyle wrapper is unwrapped first.
+ * `match` (categorized), `step` over a numeric field (graduated), and `case`
+ * (rule-based); any other expression is preserved as an `expression` renderer.
+ * A `coalesce` simplestyle wrapper is unwrapped first. `interpolate` over a
+ * numeric field is also read as graduated, for styles GeoLibre exported before
+ * the graduated renderer became discrete and for hand-written styles.
  */
 function parseColorValue(value: unknown, warnings: string[]): ParsedColor {
   const flat = asString(value);
@@ -165,6 +167,7 @@ function parseColorValue(value: unknown, warnings: string[]): ParsedColor {
   }
 
   if (array[0] === "match") return parseMatch(array, warnings);
+  if (array[0] === "step") return parseStepColor(array, warnings);
   if (array[0] === "interpolate") return parseInterpolateColor(array, warnings);
   if (array[0] === "case") return parseCase(array);
 
@@ -221,10 +224,50 @@ function parseMatch(array: unknown[], warnings: string[]): ParsedColor {
 }
 
 /**
+ * Parse `["step", ["to-number", ["get", p], v1], c1, v2, c2, ...]` as a
+ * graduated color renderer, the shape the exporter writes. The base output is
+ * the first class's color and the input's `to-number` fallback is that class's
+ * lower bound, so the leading stop is recovered from the input rather than the
+ * pairs. A `step` over a different input (`zoom`) is not graduated color, so it
+ * is preserved as an expression.
+ */
+function parseStepColor(array: unknown[], warnings: string[]): ParsedColor {
+  const property = wrappedProperty(array[1]);
+  const firstValue = asFiniteNumber(asArray(array[1])?.[2]);
+  const firstColor = asString(array[2]);
+  if (!property || firstValue === null || firstColor === null) {
+    return { mode: "expression", expression: JSON.stringify(array) };
+  }
+  const body = array.slice(3);
+  const stops: VectorStyleStop[] = [{ value: firstValue, color: firstColor }];
+  let droppedStop = false;
+  for (let index = 0; index + 1 < body.length; index += 2) {
+    const value = asFiniteNumber(body[index]);
+    const color = asString(body[index + 1]);
+    if (value === null || color === null) {
+      droppedStop = true;
+      continue;
+    }
+    stops.push({ value, color });
+  }
+  if (droppedStop && stops.length >= 2) {
+    warnings.push("Some graduated stops used a non-flat color and were skipped.");
+  }
+  if (stops.length < 2) {
+    warnings.push(
+      "A `step` color expression had too few classes to read as a graduated renderer; kept it as a raw expression.",
+    );
+    return { mode: "expression", expression: JSON.stringify(array) };
+  }
+  return { mode: "graduated", property, stops };
+}
+
+/**
  * Parse `["interpolate", ["linear"], ["to-number", ["get", p], x], v1, c1, ...]`
- * as a graduated color renderer. A different interpolation input (`zoom`,
- * `heatmap-density`) is not graduated color, so it is preserved as an
- * expression.
+ * as a graduated color renderer. Retained for styles GeoLibre exported before
+ * its graduated renderer became discrete, and for hand-written continuous
+ * ramps. A different interpolation input (`zoom`, `heatmap-density`) is not
+ * graduated color, so it is preserved as an expression.
  */
 function parseInterpolateColor(array: unknown[], warnings: string[]): ParsedColor {
   const property = wrappedProperty(array[2]);

@@ -432,7 +432,7 @@ function graduatedRenderer(
   }
 
   warnings.push(
-    "The graduated color ramp was written as discrete QML class ranges (QGIS graduated convention); the continuous interpolation is approximated and features below the lowest class are left unclassified.",
+    "The graduated classes were written as QML class ranges (QGIS graduated convention); features below the lowest class are left unclassified rather than taking the first class's color.",
   );
 
   const ranges: string[] = [];

@@ -375,7 +375,7 @@ describe("buildSld", () => {
       compact(sld),
       /<ogc:PropertyIsLessThan><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>100<\/ogc:Literal>/,
     );
-    assert.ok(warnings.some((w) => /discrete SLD class breaks/.test(w)));
+    assert.ok(warnings.some((w) => /SLD class breaks/.test(w)));
   });
 
   it("translates a rule-based renderer's filters to ogc:Filter", () => {
