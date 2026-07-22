@@ -528,6 +528,7 @@ runEngineConformance("ArcGIS", createArcGISHarness, {
     Object.keys(allCapabilities).map((capability) => [
       capability,
       capability === "capture" ||
+      capability === "controls" ||
       capability === "feature-query" ||
       capability === "interactions" ||
       capability === "markers" ||
@@ -545,6 +546,7 @@ runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
     Object.keys(allCapabilities).map((capability) => [
       capability,
       capability === "capture" ||
+      capability === "controls" ||
       capability === "feature-query" ||
       capability === "interactions" ||
       capability === "markers" ||

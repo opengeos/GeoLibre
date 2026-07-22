@@ -1979,3 +1979,43 @@
   tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 55
   passed; `npm run lint -- --quiet` → passed.
 - Follow-up: none; Codex, 2026-07-22.
+
+## 2026-07-22 — MapLibre built-in controls → ArcGIS `MapView.ui` public widgets
+
+- Source: MapLibre — `NavigationControl`, `FullscreenControl`, compass,
+  `GeolocateControl`, and scale/layer controls are managed through the neutral
+  `MapEngineClient.controls` port.
+- Files touched: `packages/map/src/engine/arcgis-controls.ts`,
+  `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/registry/conformance
+  tests under `tests/` before → adapter-private public ArcGIS widget lifecycle.
+- ArcGIS approach: lazily import documented `@arcgis/core` Zoom, Compass,
+  Fullscreen, Locate, and ScaleBar widgets, then use public `MapView.ui.add`,
+  `move`, and `remove`; use the widgets' public `label` property for compass
+  localization.
+- What changed: MapView owns supported widget visibility, position, lifecycle,
+  and compass label through the existing neutral port. It removes the documented
+  default Zoom/Compass entries before adding its own managed instances, uses a
+  metric ScaleBar, and exposes `controls` in the adapter and registry capability
+  matrices.
+- Gap / limitation: ArcGIS has no reviewed one-to-one public equivalent for the
+  MapLibre globe, terrain exaggeration, logo, or store-authoritative layer
+  control; ArcGIS attribution must remain visible.
+- Workaround: unsupported controls return `false`; terrain exaggeration reports
+  neutral `1` and has no visual effect. Do not mount LayerList because changing
+  native layer visibility would violate store authority. Removal criteria: a
+  reviewed store-dispatching layer-list contract and public ArcGIS equivalents
+  for the remaining controls.
+- Tradeoff accepted: core widget imports add to the lazy ArcGIS chunk, while
+  using SDK-owned accessible controls avoids custom DOM or private Shadow DOM
+  styling.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 52 passed; `npm run lint -- --quiet` →
+  passed; `npm run build` → passed (the normal JupyterLite-unavailable notice
+  and browser externalization warnings were non-fatal); `npx playwright test
+  e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS SceneView" --reporter=line`
+  → 2 passed.
+- Follow-up: browser-validate ArcGIS control keyboard behavior and attribution
+  visibility at narrow widths; Codex, 2026-07-22.

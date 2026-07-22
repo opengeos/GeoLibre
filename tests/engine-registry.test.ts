@@ -33,6 +33,7 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   assert.equal(arcgis.available, true);
   assert.deepEqual(arcgis.capabilities, [
     "capture",
+    "controls",
     "feature-query",
     "interactions",
     "markers",
@@ -42,6 +43,7 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   assert.equal(arcgisScene.available, true);
   assert.deepEqual(arcgisScene.capabilities, [
     "capture",
+    "controls",
     "feature-query",
     "interactions",
     "markers",

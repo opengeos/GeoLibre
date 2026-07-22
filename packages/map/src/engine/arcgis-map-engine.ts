@@ -3,6 +3,11 @@ import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import { captureArcGISViewport, type ArcGISScreenshotView } from "../capture/arcgis-capture";
 import { drawArcGISBounds, pickArcGISPoint } from "./arcgis-interactions";
 import { ArcGISDomMarker } from "./arcgis-markers";
+import {
+  ArcGISControls,
+  type ArcGISControlModules,
+  type ArcGISControlUI,
+} from "./arcgis-controls";
 import { getLayerBounds } from "../geojson-loader";
 import {
   toArcGISHitFeatures,
@@ -101,6 +106,7 @@ interface ArcGISMapView extends ArcGISMapViewSnapshot, ArcGISHitTestView, ArcGIS
     momentumEnabled: boolean;
     readonly gamepad?: { enabled: boolean };
   };
+  readonly ui: ArcGISControlUI;
 }
 
 /**
@@ -110,7 +116,7 @@ interface ArcGISMapView extends ArcGISMapViewSnapshot, ArcGISHitTestView, ArcGIS
  * SDK. It is deliberately not re-exported from the `@geolibre/map` public
  * entry point, so concrete ArcGIS objects never cross the MapEngine seam.
  */
-export interface ArcGISMapEngineModules {
+export interface ArcGISMapEngineModules extends ArcGISControlModules {
   readonly config: { assetsPath: string };
   readonly reactiveUtils: {
     watch(getValue: () => boolean, callback: (stationary: boolean) => void): ArcGISHandle;
@@ -160,6 +166,11 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     { default: GeoJSONLayer },
     { default: WMSLayer },
     { default: WMTSLayer },
+    { default: Zoom },
+    { default: Compass },
+    { default: Fullscreen },
+    { default: Locate },
+    { default: ScaleBar },
     reactiveUtils,
   ] = await Promise.all([
     import("@arcgis/core/config"),
@@ -170,6 +181,11 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     import("@arcgis/core/layers/GeoJSONLayer"),
     import("@arcgis/core/layers/WMSLayer"),
     import("@arcgis/core/layers/WMTSLayer"),
+    import("@arcgis/core/widgets/Zoom"),
+    import("@arcgis/core/widgets/Compass"),
+    import("@arcgis/core/widgets/Fullscreen"),
+    import("@arcgis/core/widgets/Locate"),
+    import("@arcgis/core/widgets/ScaleBar"),
     import("@arcgis/core/core/reactiveUtils"),
     // Load the SDK theme with the lazy adapter, not the default app entry.
     import("@arcgis/core/assets/esri/themes/light/main.css"),
@@ -187,6 +203,11 @@ async function loadArcGISModules(): Promise<ArcGISMapEngineModules> {
     GeoJSONLayer: GeoJSONLayer as unknown as ArcGISMapEngineModules["GeoJSONLayer"],
     WMSLayer: WMSLayer as unknown as ArcGISMapEngineModules["WMSLayer"],
     WMTSLayer: WMTSLayer as unknown as ArcGISMapEngineModules["WMTSLayer"],
+    Zoom: Zoom as unknown as ArcGISMapEngineModules["Zoom"],
+    Compass: Compass as unknown as ArcGISMapEngineModules["Compass"],
+    Fullscreen: Fullscreen as unknown as ArcGISMapEngineModules["Fullscreen"],
+    Locate: Locate as unknown as ArcGISMapEngineModules["Locate"],
+    ScaleBar: ScaleBar as unknown as ArcGISMapEngineModules["ScaleBar"],
   };
 }
 
@@ -234,6 +255,7 @@ export class ArcGISMapEngine implements MapEngine {
   private readonly overlays = new Map<string, GeoJsonOverlaySpec>();
   private readonly transientLayers = new Map<string, ArcGISLayer>();
   private readonly markers = new Set<ArcGISDomMarker>();
+  private readonly arcgisControls = new ArcGISControls({ supportsScale: true });
   private layersSnapshot: readonly GeoLibreLayer[] = [];
   private cachedView: MapViewState = {
     center: [-100, 40],
@@ -340,11 +362,16 @@ export class ArcGISMapEngine implements MapEngine {
   } satisfies MapEngine["interactions"];
 
   readonly controls = {
-    getBuiltInState: (_control: BuiltInMapControl): MapControlState => this.unsupported("controls"),
-    setBuiltInState: (): boolean => this.unsupported("controls"),
-    setLabels: (): void => this.unsupported("controls"),
-    getTerrainExaggeration: (): number => this.unsupported("controls"),
-    setTerrainExaggeration: (): void => this.unsupported("controls"),
+    getBuiltInState: (control: BuiltInMapControl): MapControlState =>
+      this.arcgisControls.getBuiltInState(control),
+    setBuiltInState: (control: BuiltInMapControl, state: Partial<MapControlState>): boolean =>
+      this.arcgisControls.setBuiltInState(control, state),
+    setLabels: (labels: Partial<Record<"compass" | "terrain" | "background", string>>): void =>
+      this.arcgisControls.setLabels(labels),
+    // ArcGIS Maps SDK has no public vertical-exaggeration equivalent for the
+    // 2D MapView. Keep the neutral value rather than claiming a visual effect.
+    getTerrainExaggeration: (): number => 1,
+    setTerrainExaggeration: (_value: number): void => undefined,
   } satisfies MapEngine["controls"];
 
   constructor(dependencies: ArcGISMapEngineDependencies = {}) {
@@ -391,6 +418,7 @@ export class ArcGISMapEngine implements MapEngine {
       this.bindViewEvents(view);
       await view.when();
       if (this.destroyed) return;
+      this.arcgisControls.initialize(view, modules);
       this.reconcileLayers();
       this.emit("load", { reason: "mount" });
     } catch (error) {
@@ -406,6 +434,7 @@ export class ArcGISMapEngine implements MapEngine {
     for (const handle of this.handles.splice(0)) handle.remove();
     this.doubleClickZoomHandle?.remove();
     this.doubleClickZoomHandle = null;
+    this.arcgisControls.destroy();
     this.revokeObjectUrls();
     this.revokeOverlayObjectUrls();
     this.view?.destroy();
@@ -451,6 +480,7 @@ export class ArcGISMapEngine implements MapEngine {
   supports(capability: MapEngineCapability): boolean {
     return (
       capability === "capture" ||
+      capability === "controls" ||
       capability === "feature-query" ||
       capability === "interactions" ||
       capability === "markers" ||

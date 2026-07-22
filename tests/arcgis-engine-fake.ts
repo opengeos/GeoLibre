@@ -75,6 +75,7 @@ export class FakeMapView {
     momentumEnabled: true,
     gamepad: { enabled: true },
   };
+  readonly ui = new FakeUI();
   popupOpenOptions: {
     readonly location: { readonly longitude: number; readonly latitude: number };
     readonly content: HTMLElement;
@@ -273,6 +274,35 @@ export class FakeMapView {
   }
 }
 
+class FakeUI {
+  readonly components = new Map<unknown, string>();
+  readonly removed: unknown[] = [];
+
+  add(component: unknown, position: string): void {
+    this.components.set(component, position);
+  }
+
+  move(component: unknown, position: string): void {
+    this.components.set(component, position);
+  }
+
+  remove(component: unknown): void {
+    this.removed.push(component);
+    this.components.delete(component);
+  }
+}
+
+class FakeWidget {
+  label?: string;
+  destroyed = false;
+
+  constructor(readonly properties: Readonly<Record<string, unknown>>) {}
+
+  destroy(): void {
+    this.destroyed = true;
+  }
+}
+
 export interface ArcGISFakeRuntime {
   readonly modules: ArcGISMapEngineModules;
   readonly config: { assetsPath: string };
@@ -353,6 +383,11 @@ export function createArcGISFakeRuntime(): ArcGISFakeRuntime {
     GeoJSONLayer: FakeLayer,
     WMSLayer: FakeLayer,
     WMTSLayer: FakeLayer,
+    Zoom: FakeWidget,
+    Compass: FakeWidget,
+    Fullscreen: FakeWidget,
+    Locate: FakeWidget,
+    ScaleBar: FakeWidget,
   };
   return runtime;
 }
@@ -471,6 +506,11 @@ export function createArcGISSceneFakeRuntime(): ArcGISSceneFakeRuntime {
     GeoJSONLayer: FakeLayer,
     WMSLayer: FakeLayer,
     WMTSLayer: FakeLayer,
+    Zoom: FakeWidget,
+    Compass: FakeWidget,
+    Fullscreen: FakeWidget,
+    Locate: FakeWidget,
+    ScaleBar: FakeWidget,
     SceneLayer: SceneLayerFake,
     IntegratedMeshLayer: IntegratedMeshLayerFake,
   };

@@ -3,6 +3,7 @@ import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import { captureArcGISViewport, type ArcGISScreenshotView } from "../capture/arcgis-capture";
 import { drawArcGISBounds, pickArcGISPoint } from "./arcgis-interactions";
 import { ArcGISDomMarker } from "./arcgis-markers";
+import { ArcGISControls, type ArcGISControlUI } from "./arcgis-controls";
 import { getLayerBounds } from "../geojson-loader";
 import {
   toArcGISHitFeatures,
@@ -99,6 +100,7 @@ interface ArcGISSceneView extends ArcGISSceneViewSnapshot, ArcGISHitTestView, Ar
     momentumEnabled: boolean;
     readonly gamepad?: { enabled: boolean };
   };
+  readonly ui: ArcGISControlUI;
 }
 
 /** Private runtime seam for deterministic SceneView adapter tests. */
@@ -148,6 +150,11 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     { default: WMTSLayer },
     { default: SceneLayer },
     { default: IntegratedMeshLayer },
+    { default: Zoom },
+    { default: Compass },
+    { default: Fullscreen },
+    { default: Locate },
+    { default: ScaleBar },
     reactiveUtils,
   ] = await Promise.all([
     import("@arcgis/core/config"),
@@ -160,6 +167,11 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     import("@arcgis/core/layers/WMTSLayer"),
     import("@arcgis/core/layers/SceneLayer"),
     import("@arcgis/core/layers/IntegratedMeshLayer"),
+    import("@arcgis/core/widgets/Zoom"),
+    import("@arcgis/core/widgets/Compass"),
+    import("@arcgis/core/widgets/Fullscreen"),
+    import("@arcgis/core/widgets/Locate"),
+    import("@arcgis/core/widgets/ScaleBar"),
     import("@arcgis/core/core/reactiveUtils"),
     import("@arcgis/core/assets/esri/themes/light/main.css"),
   ]);
@@ -175,6 +187,11 @@ async function loadArcGISSceneModules(): Promise<ArcGISSceneEngineModules> {
     WMTSLayer: WMTSLayer as unknown as ArcGISSceneEngineModules["WMTSLayer"],
     SceneLayer: SceneLayer as unknown as ArcGISSceneEngineModules["SceneLayer"],
     IntegratedMeshLayer: IntegratedMeshLayer as unknown as ArcGISSceneEngineModules["IntegratedMeshLayer"],
+    Zoom: Zoom as unknown as ArcGISSceneEngineModules["Zoom"],
+    Compass: Compass as unknown as ArcGISSceneEngineModules["Compass"],
+    Fullscreen: Fullscreen as unknown as ArcGISSceneEngineModules["Fullscreen"],
+    Locate: Locate as unknown as ArcGISSceneEngineModules["Locate"],
+    ScaleBar: ScaleBar as unknown as ArcGISSceneEngineModules["ScaleBar"],
   };
 }
 
@@ -247,6 +264,7 @@ export class ArcGISSceneEngine implements MapEngine {
   private readonly overlays = new Map<string, GeoJsonOverlaySpec>();
   private readonly transientLayers = new Map<string, ArcGISLayer>();
   private readonly markers = new Set<ArcGISDomMarker>();
+  private readonly arcgisControls = new ArcGISControls({ supportsScale: false });
   private layersSnapshot: readonly GeoLibreLayer[] = [];
   private cachedView: MapViewState = { center: [-100, 40], zoom: 2, bearing: 0, pitch: 0 };
   private lastAppliedView: MapViewState | null = null;
@@ -345,11 +363,15 @@ export class ArcGISSceneEngine implements MapEngine {
   } satisfies MapEngine["interactions"];
 
   readonly controls = {
-    getBuiltInState: (_control: BuiltInMapControl): MapControlState => this.unsupported("controls"),
-    setBuiltInState: (): boolean => this.unsupported("controls"),
-    setLabels: (): void => this.unsupported("controls"),
-    getTerrainExaggeration: (): number => this.unsupported("controls"),
-    setTerrainExaggeration: (): void => this.unsupported("controls"),
+    getBuiltInState: (control: BuiltInMapControl): MapControlState =>
+      this.arcgisControls.getBuiltInState(control),
+    setBuiltInState: (control: BuiltInMapControl, state: Partial<MapControlState>): boolean =>
+      this.arcgisControls.setBuiltInState(control, state),
+    setLabels: (labels: Partial<Record<"compass" | "terrain" | "background", string>>): void =>
+      this.arcgisControls.setLabels(labels),
+    // ArcGIS exposes no public SceneView-wide vertical exaggeration control.
+    getTerrainExaggeration: (): number => 1,
+    setTerrainExaggeration: (_value: number): void => undefined,
   } satisfies MapEngine["controls"];
 
   constructor(dependencies: ArcGISSceneEngineDependencies = {}) {
@@ -393,6 +415,7 @@ export class ArcGISSceneEngine implements MapEngine {
       this.bindViewEvents(view);
       await view.when();
       if (this.destroyed) return;
+      this.arcgisControls.initialize(view, modules);
       this.reconcileLayers();
       this.emit("load", { reason: "mount" });
     } catch (error) {
@@ -408,6 +431,7 @@ export class ArcGISSceneEngine implements MapEngine {
     for (const handle of this.handles.splice(0)) handle.remove();
     this.doubleClickZoomHandle?.remove();
     this.doubleClickZoomHandle = null;
+    this.arcgisControls.destroy();
     this.revokeObjectUrls();
     this.revokeOverlayObjectUrls();
     this.view?.destroy();
@@ -448,6 +472,7 @@ export class ArcGISSceneEngine implements MapEngine {
   supports(capability: MapEngineCapability): boolean {
     return (
       capability === "capture" ||
+      capability === "controls" ||
       capability === "feature-query" ||
       capability === "interactions" ||
       capability === "markers" ||

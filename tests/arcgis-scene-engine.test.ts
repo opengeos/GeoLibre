@@ -3,7 +3,6 @@ import test from "node:test";
 import type { GeoLibreLayer, MapViewState } from "../packages/core/src/index";
 import { ArcGISSceneEngine } from "../packages/map/src/engine/arcgis-scene-engine";
 import { ARC_GIS_FEATURE_INDEX } from "../packages/map/src/engine/arcgis-feature-query";
-import { MapEngineCapabilityError } from "../packages/map/src/engine/types";
 import { createArcGISSceneFakeRuntime } from "./arcgis-engine-fake";
 
 const initialView: MapViewState = {
@@ -58,10 +57,11 @@ test("ArcGISSceneEngine lazy-loads SceneView, uses local assets, and reconciles 
   assert.equal(runtime.basemapLayers[0]?.visible, false);
   assert.equal(runtime.basemapLayers[0]?.opacity, 0.4);
   assert.equal(engine.layers.setRasterTiles("wms", ["https://example.test/new/{z}/{x}/{y}.png"]), false);
-  assert.throws(
-    () => engine.controls.getBuiltInState("compass"),
-    (error) => error instanceof MapEngineCapabilityError && error.engineId === "arcgis-scene",
-  );
+  assert.deepEqual(engine.controls.getBuiltInState("compass"), {
+    visible: true,
+    position: "top-right",
+  });
+  assert.equal(engine.controls.setBuiltInState("scale", { visible: false }), false);
   engine.destroy();
   assert.equal(runtime.destroyed.value, true);
 });

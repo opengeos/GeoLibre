@@ -388,3 +388,38 @@
   tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 55
   passed; `npm run lint -- --quiet` → passed.
 - Follow-up: none; Codex, 2026-07-22.
+
+## 2026-07-22 — Cesium viewer controls → ArcGIS `SceneView.ui` public widgets
+
+- Source: Cesium — secondary-globe navigation, compass, fullscreen, and locate
+  controls must remain available through the renderer-neutral controls port.
+- Files touched: `packages/map/src/engine/arcgis-controls.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS scene/conformance tests under
+  `tests/` before → adapter-private SceneView public widget lifecycle.
+- ArcGIS approach: lazily use documented ArcGIS Zoom, Compass, Fullscreen, and
+  Locate widgets with public `SceneView.ui.add`, `move`, and `remove`; no SDK
+  object crosses `MapEngine`.
+- What changed: SceneView now supports neutral visibility/position state and
+  compass labels for the matched controls, destroys widgets with the view, and
+  advertises the controls capability only alongside its tested port behavior.
+- Gap / limitation: ScaleBar is MapView-only; ArcGIS has no public SceneView
+  vertical-exaggeration, globe-toggle, logo, or store-authoritative layer-list
+  equivalent. Native attribution must stay visible.
+- Workaround: unsupported controls return `false`; terrain exaggeration stays at
+  neutral `1`; no LayerList is mounted because native visibility edits would make
+  the SDK state authoritative. Removal criteria: approve a store-dispatching
+  control contract and identify supported SceneView equivalents.
+- Tradeoff accepted: partial control parity preserves source-of-truth and
+  attribution guarantees, at the cost of not exposing every former Cesium UI
+  option in the ArcGIS opt-in.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts` → 52 passed; `npm run lint -- --quiet` →
+  passed; `npm run build` → passed (normal JupyterLite notice and Vite browser
+  externalization warnings were non-fatal); `npx playwright test
+  e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS SceneView" --reporter=line`
+  → 2 passed.
+- Follow-up: browser-validate SceneView controls, keyboard focus, and required
+  attribution before claiming visual parity; Codex, 2026-07-22.

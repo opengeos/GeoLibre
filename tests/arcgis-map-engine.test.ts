@@ -3,7 +3,6 @@ import test from "node:test";
 import type { GeoLibreLayer, MapViewState } from "../packages/core/src/index";
 import { ArcGISMapEngine } from "../packages/map/src/engine/arcgis-map-engine";
 import { ARC_GIS_FEATURE_INDEX } from "../packages/map/src/engine/arcgis-feature-query";
-import { MapEngineCapabilityError } from "../packages/map/src/engine/types";
 import { createArcGISFakeRuntime } from "./arcgis-engine-fake";
 
 const initialView: MapViewState = {
@@ -67,10 +66,14 @@ test("ArcGISMapEngine lazy-loads MapView, uses local assets, and reconciles stor
     engine.layers.setRasterTiles("wms", ["https://example.test/new/{z}/{x}/{y}.png"]),
     false,
   );
-  assert.throws(
-    () => engine.controls.getBuiltInState("compass"),
-    (error) => error instanceof MapEngineCapabilityError && error.engineId === "arcgis",
-  );
+  assert.deepEqual(engine.controls.getBuiltInState("compass"), {
+    visible: true,
+    position: "top-right",
+  });
+  assert.equal(engine.controls.setBuiltInState("compass", { position: "bottom-left" }), true);
+  assert.equal(engine.controls.getBuiltInState("compass").position, "bottom-left");
+  assert.equal(engine.controls.setBuiltInState("attribution", { visible: false }), false);
+  assert.equal(engine.controls.getBuiltInState("attribution").visible, true);
 
   engine.destroy();
   assert.equal(runtime.destroyed.value, true);
@@ -84,6 +87,35 @@ test("ArcGISMapEngine derives bounds from public projected view corners", async 
     initialView,
   );
   assert.deepEqual(engine.camera.readBounds(), [0, 0, 120, 80]);
+});
+
+test("ArcGISMapEngine owns supported public controls while preserving native attribution", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  await engine.mount({} as HTMLElement, initialView);
+
+  // Fullscreen, compass, and the 2D-only scale bar are initially visible.
+  assert.equal(runtime.view?.ui.components.size, 3);
+  assert.equal(engine.controls.setBuiltInState("navigation", { visible: true }), true);
+  assert.equal(runtime.view?.ui.components.size, 4);
+  assert.equal(
+    engine.controls.setBuiltInState("navigation", { position: "bottom-left" }),
+    true,
+  );
+  assert.equal([...runtime.view!.ui.components.values()].includes("bottom-left"), true);
+
+  engine.controls.setLabels({ compass: "Reset north" });
+  assert.equal(
+    [...runtime.view!.ui.components.keys()].some(
+      (widget) => (widget as { readonly label?: string }).label === "Reset north",
+    ),
+    true,
+  );
+  assert.equal(engine.controls.setBuiltInState("layer-control", { visible: true }), false);
+  assert.equal(engine.controls.setBuiltInState("attribution", { visible: false }), false);
+
+  engine.destroy();
+  assert.equal(runtime.view?.ui.components.size, 0);
 });
 
 test("ArcGISMapEngine ignores store camera echoes and emits user navigation", async () => {

@@ -64,3 +64,8 @@
 - 2026-07-22: ArcGIS `takeScreenshot()` exports SDK view pixels, not the former
   MapLibre/Cesium arbitrary DOM/canvas composition; see the MapLibre and Cesium
   capture entries for the adapter-owned-overlay workaround and removal criteria.
+- 2026-07-22: ArcGIS public widgets cover navigation, compass, fullscreen, and
+  locate (plus MapView ScaleBar), but not GeoLibre's globe/terrain/logo or
+  store-authoritative layer-control semantics; native ArcGIS attribution remains
+  visible. See the [MapLibre controls entry](maplibre.md#2026-07-22--maplibre-built-in-controls--arcgis-mapviewui-public-widgets)
+  and [Cesium controls entry](cesium.md#2026-07-22--cesium-viewer-controls--arcgis-sceneviewui-public-widgets).
