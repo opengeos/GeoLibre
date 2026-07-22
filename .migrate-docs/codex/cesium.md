@@ -195,3 +195,38 @@
   SceneView" --reporter=line` → 2 passed.
 - Follow-up: scope 3D-native overlay types only after explicit data-model and
   interaction requirements exist; Codex, 2026-07-21.
+
+## 2026-07-22 — Cesium canvas capture → ArcGIS `SceneView.takeScreenshot`
+
+- Source: Cesium — globe capture needs a renderer-neutral canvas result for
+  print/export without exposing the native viewer or capture surface through the
+  MapEngine boundary.
+- Files touched: `packages/map/src/capture/arcgis-capture.ts`,
+  `packages/map/src/engine/arcgis-scene-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → SceneView capture capability using shared public-SDK
+  screenshot conversion.
+- ArcGIS approach: invoke documented `SceneView.takeScreenshot({ area })`, copy
+  returned `ImageData` to an application canvas, and keep the SceneView heading
+  as the neutral capture bearing.
+- What changed: SceneView supports full/bounded capture, emits neutral metadata,
+  and suppresses only requested transient GeoJSON overlays while capturing,
+  restoring their public layer visibility regardless of completion/failure.
+- Gap / limitation: a SceneView screenshot is a 2D rendered image; it cannot
+  expose a native Cesium canvas or guarantee the former viewer's imagery,
+  terrain, DOM-widget, and GPU-composition behavior.
+- Workaround: use the SDK screenshot as the only SDK-private operation and copy
+  it into the existing neutral canvas result. Removal criteria: none unless a
+  future engine-neutral export format replaces canvas capture.
+- Tradeoff accepted: copying raw pixels adds memory proportional to screenshot
+  area but keeps concrete ArcGIS and Cesium objects out of the public contract.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 46
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal); `npx playwright test e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS
+  SceneView" --reporter=line` → 2 passed.
+- Follow-up: test real SceneView screenshot output in GPU-enabled browser CI
+  before claiming 3D print/export parity; Codex, 2026-07-22.

@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
+import { captureArcGISViewport, type ArcGISScreenshotView } from "../capture/arcgis-capture";
 import { getLayerBounds } from "../geojson-loader";
 import {
   toArcGISHitFeatures,
@@ -67,7 +68,7 @@ interface ArcGISViewInputEvent {
   readonly mapPoint?: ArcGISPoint | null;
 }
 
-interface ArcGISMapView extends ArcGISMapViewSnapshot, ArcGISHitTestView {
+interface ArcGISMapView extends ArcGISMapViewSnapshot, ArcGISHitTestView, ArcGISScreenshotView {
   readonly stationary: boolean;
   readonly container: HTMLElement | null;
   readonly popup?: { readonly visible?: boolean } | null;
@@ -302,7 +303,8 @@ export class ArcGISMapEngine implements MapEngine {
     },
     getElement: (): HTMLElement | null => this.container,
     getRect: (): DOMRectReadOnly | null => this.container?.getBoundingClientRect() ?? null,
-    capture: async (): ReturnType<MapEngine["viewport"]["capture"]> => this.unsupported("capture"),
+    capture: async (options): ReturnType<MapEngine["viewport"]["capture"]> =>
+      this.captureViewport(options),
   } satisfies MapEngine["viewport"];
 
   readonly interactions = {
@@ -425,6 +427,7 @@ export class ArcGISMapEngine implements MapEngine {
 
   supports(capability: MapEngineCapability): boolean {
     return (
+      capability === "capture" ||
       capability === "feature-query" ||
       capability === "popups" ||
       capability === "transient-overlays"
@@ -630,6 +633,26 @@ export class ArcGISMapEngine implements MapEngine {
     if (include.length === 0) return [];
     const result = await this.view.hitTest(point, { include });
     return toArcGISHitFeatures(result, this.layersSnapshot, layerId);
+  }
+
+  private async captureViewport(
+    options?: Parameters<MapEngine["viewport"]["capture"]>[0],
+  ): ReturnType<MapEngine["viewport"]["capture"]> {
+    const view = this.view;
+    if (!view) throw new Error("ArcGIS MapView is not mounted.");
+    const hidden = (options?.hideOverlayIds ?? [])
+      .map((id) => this.transientLayers.get(id))
+      .filter((layer): layer is ArcGISLayer => Boolean(layer))
+      .map((layer) => ({ layer, visible: layer.visible }));
+    for (const { layer } of hidden) layer.visible = false;
+    try {
+      return await captureArcGISViewport(view, {
+        bounds: options?.bounds,
+        bearing: this.readView().bearing,
+      });
+    } finally {
+      for (const { layer, visible } of hidden) layer.visible = visible;
+    }
   }
 
   private setHighlight(

@@ -527,7 +527,10 @@ runEngineConformance("ArcGIS", createArcGISHarness, {
   capabilities: Object.fromEntries(
     Object.keys(allCapabilities).map((capability) => [
       capability,
-      capability === "feature-query" || capability === "popups" || capability === "transient-overlays",
+      capability === "capture" ||
+      capability === "feature-query" ||
+      capability === "popups" ||
+      capability === "transient-overlays",
     ]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,
@@ -539,7 +542,10 @@ runEngineConformance("ArcGIS Scene", createArcGISSceneHarness, {
   capabilities: Object.fromEntries(
     Object.keys(allCapabilities).map((capability) => [
       capability,
-      capability === "feature-query" || capability === "popups" || capability === "transient-overlays",
+      capability === "capture" ||
+      capability === "feature-query" ||
+      capability === "popups" ||
+      capability === "transient-overlays",
     ]),
   ) as unknown as Readonly<Record<MapEngineCapability, boolean>>,
   supportsGeoJson: true,

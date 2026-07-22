@@ -68,6 +68,8 @@ export class FakeMapView {
     readonly content: HTMLElement;
   } | null = null;
   closePopupCount = 0;
+  screenshotOptions: unknown = null;
+  screenshotSize = { width: 200, height: 100 };
   private stationaryValue = true;
   private readonly eventHandlers = new Map<
     string,
@@ -176,6 +178,16 @@ export class FakeMapView {
     this.closePopupCount += 1;
     this.popup.visible = false;
     this.notifyReactiveWatchers();
+  }
+
+  async takeScreenshot(options?: unknown): Promise<{ readonly data: ImageData }> {
+    this.screenshotOptions = options ?? null;
+    return {
+      data: {
+        width: this.screenshotSize.width,
+        height: this.screenshotSize.height,
+      } as ImageData,
+    };
   }
 
   emitUserMove(): void {

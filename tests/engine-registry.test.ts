@@ -31,9 +31,10 @@ test("registry metadata describes lazy current-engine capabilities", () => {
   assert.equal(cesium.available, true);
   assert.deepEqual(cesium.capabilities, []);
   assert.equal(arcgis.available, true);
-  assert.deepEqual(arcgis.capabilities, ["feature-query", "popups", "transient-overlays"]);
+  assert.deepEqual(arcgis.capabilities, ["capture", "feature-query", "popups", "transient-overlays"]);
   assert.equal(arcgisScene.available, true);
   assert.deepEqual(arcgisScene.capabilities, [
+    "capture",
     "feature-query",
     "popups",
     "transient-overlays",

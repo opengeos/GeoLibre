@@ -60,3 +60,7 @@
   checks → passed; `git diff --check` → passed.
 - Follow-up: register `ArcGISMapEngine` and `ArcGISSceneEngine` in later phases
   before either becomes selectable.
+
+- 2026-07-22: ArcGIS `takeScreenshot()` exports SDK view pixels, not the former
+  MapLibre/Cesium arbitrary DOM/canvas composition; see the MapLibre and Cesium
+  capture entries for the adapter-owned-overlay workaround and removal criteria.

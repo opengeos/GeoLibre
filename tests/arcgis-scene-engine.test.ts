@@ -147,6 +147,36 @@ test("ArcGISSceneEngine owns one public View popup and reports closure", async (
   engine.destroy();
 });
 
+test("ArcGISSceneEngine captures documented screenshot data without persisting hidden overlays", async () => {
+  const runtime = createArcGISSceneFakeRuntime();
+  const engine = new ArcGISSceneEngine({ loadArcGIS: async () => runtime.modules });
+  const context = { putImageData: () => undefined };
+  const canvas = { width: 0, height: 0, getContext: () => context } as unknown as HTMLCanvasElement;
+  const container = {
+    getBoundingClientRect: () => ({ width: 100, height: 50 }),
+    ownerDocument: { createElement: () => canvas },
+  } as unknown as HTMLElement;
+  await engine.mount(container, initialView);
+  engine.interactions.upsertGeoJsonOverlay({
+    id: "print-preview",
+    data: { type: "FeatureCollection", features: [] },
+  });
+
+  const capture = await engine.viewport.capture({
+    bounds: [0, 0, 20, 10],
+    hideOverlayIds: ["print-preview"],
+  });
+
+  assert.equal(capture.canvas, canvas);
+  assert.deepEqual([capture.width, capture.height], [200, 100]);
+  assert.equal(capture.bearing, initialView.bearing);
+  assert.ok(capture.metersPerPixel > 0);
+  assert.deepEqual(runtime.view?.screenshotOptions, {
+    area: { x: 0, y: 0, width: 20, height: 10 },
+  });
+  assert.equal(runtime.currentLayers.at(-1)?.visible, true);
+});
+
 test("ArcGISSceneEngine keeps transient overlays out of the store layer snapshot", async () => {
   const runtime = createArcGISSceneFakeRuntime();
   const geo = {

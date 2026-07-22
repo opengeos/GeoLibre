@@ -1819,3 +1819,40 @@
   SceneView" --reporter=line` → 2 passed.
 - Follow-up: translate the existing neutral style tokens to documented ArcGIS
   renderers before declaring visual selection parity; Codex, 2026-07-21.
+
+## 2026-07-22 — MapLibre canvas composition/crop → ArcGIS `MapView.takeScreenshot`
+
+- Source: MapLibre — viewport export composites full-viewport canvases, crops a
+  projected bound, and temporarily hides specified renderer overlays through
+  the neutral `MapEngineClient.viewport.capture` contract.
+- Files touched: `packages/map/src/capture/arcgis-capture.ts`,
+  `packages/map/src/engine/arcgis-map-engine.ts`,
+  `packages/map/src/engine/registry.ts`, and ArcGIS adapter/conformance tests
+  under `tests/` before → MapView capture capability using a shared screenshot
+  conversion helper and deterministic SDK fake.
+- ArcGIS approach: call documented `MapView.takeScreenshot({ area })`, use its
+  returned `ImageData` to create the contract canvas, and calculate capture
+  ground resolution from public `toMap` screen coordinates.
+- What changed: MapView now captures full or projected-bounds output, reports
+  dimensions/bearing/meters-per-pixel through the existing neutral result, and
+  hides only requested adapter-owned transient layers for the capture before
+  restoring their visibility in `finally`.
+- Gap / limitation: ArcGIS screenshots include SDK view rendering but do not
+  reproduce MapLibre's arbitrary DOM/canvas composition; only transient layers
+  owned by this adapter can be hidden by id.
+- Workaround: preserve the neutral hide-id API for ArcGIS-owned overlays and
+  return SDK raw image data via an application canvas. Removal criteria: define
+  a cross-engine capture-compositing contract if application DOM parity is
+  required.
+- Tradeoff accepted: capture performs an image-data copy into a new canvas,
+  favoring a neutral, origin-clean result over leaking an ArcGIS SDK image type.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts tests/engine-conformance.test.ts
+  tests/engine-registry.test.ts tests/map-engine-layer-consumers.test.ts` → 46
+  passed; `npm run lint -- --quiet` → passed; `npm run build` → passed (normal
+  JupyterLite-unavailable notice and browser-externalization warnings were
+  non-fatal); `npx playwright test e2e/engine-param.spec.ts -g "ArcGIS opt-in|ArcGIS
+  SceneView" --reporter=line` → 2 passed.
+- Follow-up: assess print-layout visual fidelity with real remote layers before
+  advertising MapLibre-equivalent export appearance; Codex, 2026-07-22.
