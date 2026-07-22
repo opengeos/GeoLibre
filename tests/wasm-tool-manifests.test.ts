@@ -78,6 +78,30 @@ describe("mergeWasmToolManifests", () => {
     assert.equal(merged.filter((tool) => tool.id === "reproject_vector").length, 1);
   });
 
+  it("appends Whitebox-sourced WASM tools the catalog snapshot omits", () => {
+    // The WASM binary ships Whitebox tools the Whitebox Next Gen snapshot has
+    // never listed (buffer_vector, the variogram/cokriging tools,
+    // greater_than_or_equal_to, less_than_or_equal_to). They run through the
+    // WASM runner like any other, so dropping them left the dialog listing
+    // fewer tools than the binary provides.
+    const wasmOnlyWhitebox: WhiteboxTool = {
+      id: "buffer_vector",
+      display_name: "Buffer Vector",
+      source: "whitebox",
+      params: [{ name: "input", data_kind: "vector", io_role: "input" }],
+    };
+    const merged = mergeWasmToolManifests(
+      [catalogReprojectVector],
+      [wasmReprojectVector, wasmOnlyWhitebox],
+    );
+    assert.ok(
+      merged.some((tool) => tool.id === "buffer_vector"),
+      "WASM-only Whitebox tool should be appended",
+    );
+    // Still no duplicate for the tool that does have a catalog entry.
+    assert.equal(merged.filter((tool) => tool.id === "reproject_vector").length, 1);
+  });
+
   it("consumes a matched GeoLibre tool once and preserves its source", () => {
     // A GeoLibre-authored tool that also has a catalog stub must be merged once
     // (never appended a second time via the GeoLibre-only leftovers), take the
@@ -214,13 +238,22 @@ describe("mergeWasmToolManifests", () => {
     assert.equal(tool.params?.[0]?.kind, undefined);
   });
 
-  it("does not append WASM-only Whitebox tools missing from the catalog", () => {
+  it("appends a WASM-only Whitebox tool even when the catalog is empty", () => {
+    // This used to assert the opposite: only `source: "geolibre"` leftovers were
+    // appended, on the assumption that every Whitebox tool worth listing was in
+    // the catalog snapshot. It is not — the WASM ships buffer_vector, the
+    // variogram/cokriging tools and the >=/<= comparisons, which the snapshot
+    // has never listed. They execute through the WASM runner (buffer_vector
+    // turns 2 points into 2 polygons), so dropping them hid working tools.
     const wasmOnlyWhitebox: WhiteboxTool = {
       id: "some_wasm_only_whitebox_tool",
       params: [{ name: "input", data_kind: "raster", io_role: "input" }],
     };
     const merged = mergeWasmToolManifests([], [wasmOnlyWhitebox]);
-    assert.equal(merged.length, 0);
+    assert.deepEqual(
+      merged.map((tool) => tool.id),
+      ["some_wasm_only_whitebox_tool"],
+    );
   });
 });
 

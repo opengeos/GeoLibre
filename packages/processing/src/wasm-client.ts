@@ -279,8 +279,16 @@ export function mergeWasmToolManifests(
       source: wasm.source ?? tool.source,
     };
   });
-  const geolibreOnly = [...wasmById.values()].filter((tool) => tool.source === "geolibre");
-  return [...merged, ...geolibreOnly];
+  // Everything the WASM binary ships that the catalog snapshot does not list,
+  // whatever its provenance. This used to be filtered to `source === "geolibre"`
+  // on the assumption that only GeoLibre-authored tools were missing from the
+  // catalog, but the WASM also carries Whitebox-sourced tools the Whitebox Next
+  // Gen snapshot has never listed (buffer_vector, the variogram/cokriging tools,
+  // greater_than_or_equal_to, less_than_or_equal_to). Those are runnable — the
+  // WASM runner executes them — yet the filter dropped them, so the dialog
+  // listed fewer tools than the binary actually provides.
+  const wasmOnly = [...wasmById.values()];
+  return [...merged, ...wasmOnly];
 }
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
