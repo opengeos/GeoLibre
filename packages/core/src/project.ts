@@ -262,6 +262,15 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
       ? candidate.panelPosition
       : undefined;
 
+  // Hand-resized panel dimensions: keep only sane finite values so a
+  // hand-edited file can't collapse the panel or blow it past any viewport.
+  const panelSize = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) && value >= 120 && value <= 4000
+      ? Math.round(value)
+      : undefined;
+  const panelWidth = panelSize(candidate.panelWidth);
+  const panelHeight = panelSize(candidate.panelHeight);
+
   return {
     title: typeof candidate.title === "string" ? candidate.title : DEFAULT_LEGEND_CONFIG.title,
     groupByLayer: normalizeBoolean(candidate.groupByLayer, DEFAULT_LEGEND_CONFIG.groupByLayer),
@@ -270,6 +279,8 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
     ...(Object.keys(customEntries).length > 0 ? { customEntries } : {}),
     ...(candidate.panelVisible === true ? { panelVisible: true } : {}),
     ...(panelPosition ? { panelPosition } : {}),
+    ...(panelWidth !== undefined ? { panelWidth } : {}),
+    ...(panelHeight !== undefined ? { panelHeight } : {}),
   };
 }
 

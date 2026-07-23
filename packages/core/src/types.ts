@@ -1273,6 +1273,13 @@ export interface LegendConfig {
   panelVisible?: boolean;
   /** Map corner the on-map Legend panel docks to; defaults to `"top-left"`. */
   panelPosition?: LegendPanelPosition;
+  /**
+   * User-resized panel width in px (via the corner drag handles). Absent means
+   * the default width; height absent means auto-fit to content within the map.
+   */
+  panelWidth?: number;
+  /** User-resized panel height in px. See {@link LegendConfig.panelWidth}. */
+  panelHeight?: number;
 }
 
 // Frozen so the shared singleton can be safely spread (`{ ...DEFAULT_LEGEND_CONFIG }`)

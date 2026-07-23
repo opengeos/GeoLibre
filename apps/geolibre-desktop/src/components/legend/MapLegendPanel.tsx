@@ -33,7 +33,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -57,6 +65,15 @@ import { GeometrySwatch, GradientBar, MarkerSwatch } from "./LegendSwatch";
 export const LEGEND_PANEL_CLASS = "geolibre-legend-panel";
 
 const POSITIONS: LegendPanelPosition[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+/** Manual-resize clamps (px). Height is further capped to the map's height. */
+const MIN_PANEL_WIDTH = 200;
+const MAX_PANEL_WIDTH = 520;
+const MIN_PANEL_HEIGHT = 140;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 /** Uncontrolled inline text editor committing on blur / Enter. */
 function InlineEdit({
@@ -164,6 +181,12 @@ export function MapLegendPanel({
   const [dictionaryText, setDictionaryText] = useState("");
   // Bumped when an async sprite-colormap sample resolves, so gradients rebuild.
   const [colormapGeneration, setColormapGeneration] = useState(0);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Vertical space available inside the map for the auto-fitting panel.
+  const [maxHeight, setMaxHeight] = useState<number | null>(null);
+  const maxHeightRef = useRef<number | null>(null);
+  // Live size while a corner handle is being dragged (committed on release).
+  const [dragSize, setDragSize] = useState<{ width: number; height: number } | null>(null);
 
   const visible = legend.panelVisible === true;
   const position = legend.panelPosition ?? "top-left";
@@ -174,6 +197,23 @@ export function MapLegendPanel({
     `${LEGEND_PANEL_CLASS} maplibregl-ctrl`,
     mapReadyGeneration,
   );
+
+  // Track the map's height so the panel can auto-expand to its content but
+  // never past the map (minus a margin for the corner controls' spacing).
+  useEffect(() => {
+    if (!host) return;
+    const mapElement = host.closest(".maplibregl-map");
+    if (!mapElement) return;
+    const update = () => {
+      const available = Math.max(MIN_PANEL_HEIGHT, mapElement.clientHeight - 24);
+      maxHeightRef.current = available;
+      setMaxHeight(available);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(mapElement);
+    return () => observer.disconnect();
+  }, [host]);
 
   // Warm named raster colormaps (sprite-sampled, async) referenced by layers so
   // colormapColors resolves synchronously inside the derivation.
@@ -277,6 +317,66 @@ export function MapLegendPanel({
     );
   };
 
+  /**
+   * Drag a bottom corner handle to resize. Tracked on window so the pointer
+   * can leave the small handle mid-drag; the final size is committed to the
+   * (project-persisted) LegendConfig on release only.
+   */
+  const beginResize = (event: ReactPointerEvent<HTMLDivElement>, edge: "left" | "right") => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const rect = panel.getBoundingClientRect();
+    let last: { width: number; height: number } | null = null;
+    const onMove = (move: globalThis.PointerEvent) => {
+      const deltaX = move.clientX - startX;
+      const deltaY = move.clientY - startY;
+      last = {
+        // Handles work in physical directions: the right handle widens when
+        // dragged right, the left handle when dragged left.
+        width: clamp(
+          edge === "right" ? rect.width + deltaX : rect.width - deltaX,
+          MIN_PANEL_WIDTH,
+          MAX_PANEL_WIDTH,
+        ),
+        height: clamp(
+          rect.height + deltaY,
+          MIN_PANEL_HEIGHT,
+          maxHeightRef.current ?? MIN_PANEL_HEIGHT,
+        ),
+      };
+      setDragSize(last);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (last) {
+        const { legend: current, setLegend: commitLegend } = useAppStore.getState();
+        commitLegend({
+          ...current,
+          panelWidth: Math.round(last.width),
+          panelHeight: Math.round(last.height),
+        });
+      }
+      setDragSize(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
+  /** Back to the default width and auto-fit height (double-click a grip). */
+  const resetSize = () => {
+    const { legend: current, setLegend: commitLegend } = useAppStore.getState();
+    const next = { ...current };
+    delete next.panelWidth;
+    delete next.panelHeight;
+    commitLegend(next);
+  };
+
   const dictionaryItems = parseLegendDictionary(dictionaryText);
   const addDictionarySection = () => {
     if (!dictionaryItems) return;
@@ -291,11 +391,25 @@ export function MapLegendPanel({
     setDictionaryText("");
   };
 
+  const width = dragSize?.width ?? legend.panelWidth;
+  const height = dragSize?.height ?? legend.panelHeight;
   const panel = (
     // /95 rather than the geolens /90: bright map content bleeding through the
-    // translucent panel washed the item text out in dark theme.
-    <div className="w-64 overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md">
-      <div className="flex items-center gap-1 border-b border-border/50 px-3 py-2">
+    // translucent panel washed the item text out in dark theme. Height is
+    // auto (fit to content) up to the map's height unless the user resized;
+    // a flex column keeps header/footer fixed while the entry list scrolls.
+    <div
+      ref={panelRef}
+      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md"
+      style={{
+        maxHeight: maxHeight ?? undefined,
+        ...(width !== undefined ? { width: clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH) } : {}),
+        ...(height !== undefined
+          ? { height: clamp(height, MIN_PANEL_HEIGHT, maxHeight ?? height) }
+          : {}),
+      }}
+    >
+      <div className="flex shrink-0 items-center gap-1 border-b border-border/50 px-3 py-2">
         {editing ? (
           <InlineEdit
             value={legend.title}
@@ -323,7 +437,7 @@ export function MapLegendPanel({
       {displayed.length === 0 ? (
         <p className="px-3 py-4 text-xs text-muted-foreground">{t("legendPanel.empty")}</p>
       ) : (
-        <ul className="max-h-[min(60vh,420px)] divide-y divide-border/50 overflow-y-auto">
+        <ul className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
           {displayed.map((entry) => (
             <LegendEntryRow
               key={entry.id}
@@ -341,7 +455,7 @@ export function MapLegendPanel({
       )}
 
       {editing && (
-        <div className="space-y-2 border-t border-border/50 px-3 py-2">
+        <div className="shrink-0 space-y-2 overflow-y-auto border-t border-border/50 px-3 py-2">
           <button
             type="button"
             onClick={addSection}
@@ -417,6 +531,26 @@ export function MapLegendPanel({
           </label>
         </div>
       )}
+
+      {/* Bottom-corner resize grips. Physical left/right (not logical): the
+          drag math above works in physical screen directions. Double-click
+          resets to the default width and auto-fit height. */}
+      <div
+        aria-hidden="true"
+        onPointerDown={(event) => beginResize(event, "right")}
+        onDoubleClick={resetSize}
+        className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize"
+      >
+        <span className="absolute bottom-1 right-1 h-2 w-2 border-b-2 border-r-2 border-muted-foreground/60" />
+      </div>
+      <div
+        aria-hidden="true"
+        onPointerDown={(event) => beginResize(event, "left")}
+        onDoubleClick={resetSize}
+        className="absolute bottom-0 left-0 z-10 h-4 w-4 cursor-nesw-resize"
+      >
+        <span className="absolute bottom-1 left-1 h-2 w-2 border-b-2 border-l-2 border-muted-foreground/60" />
+      </div>
     </div>
   );
 
