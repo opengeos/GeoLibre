@@ -117,6 +117,39 @@ describe("normalizeWidgets", () => {
     assert.equal(result?.find((w) => w.id === "b")?.aggregation, "mean");
   });
 
+  it("keeps an indicator widget with aggregation, prefix, and suffix", () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: "ind-1",
+        layerId: "layer-a",
+        type: "indicator",
+        indicatorAggregation: "sum",
+        field: "area_ha",
+        prefix: "€",
+        suffix: " ha",
+      },
+    ];
+    assert.deepEqual(normalizeWidgets(widgets), widgets);
+  });
+
+  it("keeps a count indicator that needs no field", () => {
+    const result = normalizeWidgets([
+      { id: "ind-c", layerId: "l", type: "indicator", indicatorAggregation: "count" },
+    ] as never);
+    assert.equal(result?.[0].type, "indicator");
+    assert.equal(result?.[0].indicatorAggregation, "count");
+  });
+
+  it("drops an invalid indicator aggregation", () => {
+    const result = normalizeWidgets([
+      { id: "ind-x", layerId: "l", type: "indicator", indicatorAggregation: "mode" },
+    ] as never);
+    assert.equal(
+      "indicatorAggregation" in (result?.find((w) => w.id === "ind-x") ?? {}),
+      false,
+    );
+  });
+
   it("returns null for a non-array or an all-invalid list", () => {
     assert.equal(normalizeWidgets(undefined), null);
     assert.equal(normalizeWidgets("nope"), null);
@@ -132,6 +165,36 @@ describe("widgets in the project file", () => {
     ];
     const project = projectFromStore({
       projectName: "Widgets",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      widgets,
+      metadata: {},
+    });
+    assert.deepEqual(project.widgets, widgets);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.widgets, widgets);
+  });
+
+  it("round-trips an indicator widget through serialize/parse", () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: "ind-1",
+        layerId: "layer-a",
+        type: "indicator",
+        indicatorAggregation: "median",
+        field: "area_ha",
+        prefix: "€",
+        suffix: " ha",
+        title: "Mediana",
+        color: "#004D43",
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Indicator",
       mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
       basemapStyleUrl: DEFAULT_BASEMAP,
       basemapVisible: true,

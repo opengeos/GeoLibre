@@ -2669,12 +2669,21 @@
       "bar": "Barras",
       "line": "Líneas",
       "box": "Diagrama de caja",
-      "pie": "Circular"
+      "pie": "Circular",
+      "indicator": "Indicador"
     },
     "aggregate": {
       "count": "Recuento",
       "sum": "Suma",
       "mean": "Promedio"
+    },
+    "indicatorAggregation": {
+      "count": "Recuento",
+      "sum": "Suma",
+      "mean": "Promedio",
+      "min": "Mínimo",
+      "max": "Máximo",
+      "median": "Mediana"
     },
     "chart": {
       "emptyNumeric": "No hay valores numéricos que graficar.",
@@ -2701,6 +2710,8 @@
       "category": "Categoría",
       "aggregate": "Agregado",
       "value": "Valor",
+      "prefix": "Prefijo",
+      "suffix": "Sufijo",
       "titleLabel": "Título",
       "titlePlaceholder": "Título opcional",
       "color": "Color",

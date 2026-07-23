@@ -2675,12 +2675,21 @@
       "bar": "Bar",
       "line": "Line",
       "box": "Box plot",
-      "pie": "Pie"
+      "pie": "Pie",
+      "indicator": "Indicator"
     },
     "aggregate": {
       "count": "Count",
       "sum": "Sum",
       "mean": "Average"
+    },
+    "indicatorAggregation": {
+      "count": "Count",
+      "sum": "Sum",
+      "mean": "Average",
+      "min": "Minimum",
+      "max": "Maximum",
+      "median": "Median"
     },
     "chart": {
       "emptyNumeric": "No numeric values to plot.",
@@ -2707,6 +2716,8 @@
       "category": "Category",
       "aggregate": "Aggregate",
       "value": "Value",
+      "prefix": "Prefix",
+      "suffix": "Suffix",
       "titleLabel": "Title",
       "titlePlaceholder": "Optional title",
       "color": "Color",

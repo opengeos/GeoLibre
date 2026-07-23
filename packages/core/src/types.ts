@@ -1456,8 +1456,16 @@ export const MAX_DASHBOARD_COLUMNS = 6;
 export const DEFAULT_DASHBOARD_COLUMNS = 2;
 
 /** The chart a {@link DashboardWidget} draws. Mirrors the attribute Charts
- * panel's types so a widget reuses the same rendering. */
-export type DashboardWidgetType = "histogram" | "scatter" | "bar" | "line" | "box" | "pie";
+ * panel's types so a widget reuses the same rendering. The `"indicator"` type
+ * is a non-chart KPI tile (issue #1381). */
+export type DashboardWidgetType =
+  | "histogram"
+  | "scatter"
+  | "bar"
+  | "line"
+  | "box"
+  | "pie"
+  | "indicator";
 
 /** How a bar widget reduces its category groups. */
 export type DashboardWidgetAggregation = "count" | "sum" | "mean";
@@ -1497,7 +1505,24 @@ export interface DashboardWidget {
   aggregation?: DashboardWidgetAggregation;
   /** Value field a bar chart's sum/mean reduces (ignored for `count`). */
   valueField?: string;
+  /** Indicator widget: aggregation function for the KPI value (issue #1381).
+   * Extends bar aggregation with min, max, and median. */
+  indicatorAggregation?: IndicatorAggregation;
+  /** Indicator widget: optional prefix (e.g. "€", "$"). */
+  prefix?: string;
+  /** Indicator widget: optional suffix (e.g. " kg", " ha"). */
+  suffix?: string;
 }
+
+/** Aggregation functions for indicator widgets (issue #1381). Extends the bar
+ * widget aggregation with min, max, and median. */
+export type IndicatorAggregation =
+  | "count"
+  | "sum"
+  | "mean"
+  | "min"
+  | "max"
+  | "median";
 
 /**
  * What slice of a layer's styling a Style Manager entry captures (issue #1294).
