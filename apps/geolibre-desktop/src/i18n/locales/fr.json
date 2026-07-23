@@ -3970,6 +3970,10 @@
       "bottom-right": "En bas à droite"
     },
     "low": "Faible",
-    "high": "Élevé"
+    "high": "Élevé",
+    "addFromDictionary": "Ajouter depuis un dictionnaire",
+    "dictionaryHint": "Un objet JSON de paires {\"libellé\": \"couleur\"}, ou une ligne \"libellé : couleur\" par élément.",
+    "dictionaryAdd": "Ajouter la section",
+    "cancel": "Annuler"
   }
 }

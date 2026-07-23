@@ -3970,6 +3970,10 @@
       "bottom-right": "In basso a destra"
     },
     "low": "Basso",
-    "high": "Alto"
+    "high": "Alto",
+    "addFromDictionary": "Aggiungi da dizionario",
+    "dictionaryHint": "Un oggetto JSON di coppie {\"etichetta\": \"colore\"}, o una riga \"etichetta: colore\" per elemento.",
+    "dictionaryAdd": "Aggiungi sezione",
+    "cancel": "Annulla"
   }
 }

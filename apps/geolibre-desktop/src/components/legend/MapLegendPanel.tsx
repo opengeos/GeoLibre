@@ -23,6 +23,7 @@ import { cn } from "@geolibre/ui";
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   Check,
   Eye,
   EyeOff,
@@ -38,6 +39,7 @@ import { useTranslation } from "react-i18next";
 import {
   buildAutoLegend,
   newCustomSectionId,
+  parseLegendDictionary,
   removeLegendCustomEntry,
   setLegendCustomEntry,
   type AutoLegendEntry,
@@ -158,6 +160,8 @@ export function MapLegendPanel({
   const legend = useAppStore((state) => state.legend);
   const setLegend = useAppStore((state) => state.setLegend);
   const [editing, setEditing] = useState(false);
+  const [dictionaryOpen, setDictionaryOpen] = useState(false);
+  const [dictionaryText, setDictionaryText] = useState("");
   // Bumped when an async sprite-colormap sample resolves, so gradients rebuild.
   const [colormapGeneration, setColormapGeneration] = useState(0);
 
@@ -273,8 +277,24 @@ export function MapLegendPanel({
     );
   };
 
+  const dictionaryItems = parseLegendDictionary(dictionaryText);
+  const addDictionarySection = () => {
+    if (!dictionaryItems) return;
+    const id = newCustomSectionId(legend);
+    commit(
+      setLegendCustomEntry(legend, id, {
+        title: t("legendPanel.newSectionTitle"),
+        items: dictionaryItems,
+      }),
+    );
+    setDictionaryOpen(false);
+    setDictionaryText("");
+  };
+
   const panel = (
-    <div className="w-64 overflow-hidden rounded-lg border border-border/50 bg-background/90 text-foreground shadow-lg backdrop-blur-md">
+    // /95 rather than the geolens /90: bright map content bleeding through the
+    // translucent panel washed the item text out in dark theme.
+    <div className="w-64 overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md">
       <div className="flex items-center gap-1 border-b border-border/50 px-3 py-2">
         {editing ? (
           <InlineEdit
@@ -288,7 +308,10 @@ export function MapLegendPanel({
         )}
         <IconButton
           label={editing ? t("legendPanel.done") : t("legendPanel.edit")}
-          onClick={() => setEditing((value) => !value)}
+          onClick={() => {
+            setEditing((value) => !value);
+            setDictionaryOpen(false);
+          }}
         >
           {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3 w-3" />}
         </IconButton>
@@ -327,6 +350,55 @@ export function MapLegendPanel({
             <Plus className="h-3 w-3" />
             {t("legendPanel.addSection")}
           </button>
+          <button
+            type="button"
+            aria-expanded={dictionaryOpen}
+            onClick={() => setDictionaryOpen((value) => !value)}
+            className="flex h-7 w-full items-center justify-center gap-1 rounded-md border border-input text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <BookOpen className="h-3 w-3" />
+            {t("legendPanel.addFromDictionary")}
+          </button>
+          {dictionaryOpen && (
+            <div className="space-y-1">
+              <textarea
+                value={dictionaryText}
+                onChange={(event) => setDictionaryText(event.target.value)}
+                rows={4}
+                aria-label={t("legendPanel.addFromDictionary")}
+                placeholder={'{"Open Water": "#466b9f", "Forest": "#1c6330"}'}
+                className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onKeyDown={(event) => {
+                  // Keep Escape local: close the form, not edit mode / the panel.
+                  if (event.key === "Escape") {
+                    event.stopPropagation();
+                    setDictionaryOpen(false);
+                  }
+                }}
+              />
+              <p className="text-[10px] text-muted-foreground">{t("legendPanel.dictionaryHint")}</p>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={!dictionaryItems}
+                  onClick={addDictionarySection}
+                  className="h-6 flex-1 rounded-md bg-primary text-xs text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {t("legendPanel.dictionaryAdd")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDictionaryOpen(false);
+                    setDictionaryText("");
+                  }}
+                  className="h-6 flex-1 rounded-md border border-input text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t("legendPanel.cancel")}
+                </button>
+              </div>
+            </div>
+          )}
           <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
             {t("legendPanel.position")}
             <select
@@ -471,7 +543,7 @@ function LegendEntryRow({
                 value={item.label}
                 placeholder={t("legendPanel.newItemLabel")}
                 ariaLabel={t("legendPanel.renameItem", { name: item.label })}
-                className="text-xs text-muted-foreground"
+                className="text-xs text-foreground/80"
                 onCommit={(next) =>
                   onUpdateCustom((current) => ({
                     ...current,
@@ -576,7 +648,7 @@ function LegendClassRow({
           <InlineEdit
             value={row.label}
             ariaLabel={t("legendPanel.renameItem", { name: row.label })}
-            className="text-xs text-muted-foreground"
+            className="text-xs text-foreground/80"
             onCommit={(next) =>
               onCommit(setLegendItemLabel(legend, row.key, next, row.defaultLabel))
             }
@@ -589,7 +661,7 @@ function LegendClassRow({
           </IconButton>
         </>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={row.label}>
+        <span className="min-w-0 flex-1 truncate text-xs text-foreground/80" title={row.label}>
           {row.label}
         </span>
       )}

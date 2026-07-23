@@ -3970,6 +3970,10 @@
       "bottom-right": "Inferior direito"
     },
     "low": "Baixo",
-    "high": "Alto"
+    "high": "Alto",
+    "addFromDictionary": "Adicionar de dicionário",
+    "dictionaryHint": "Um objeto JSON com pares {\"rótulo\": \"cor\"}, ou um \"rótulo: cor\" por linha.",
+    "dictionaryAdd": "Adicionar seção",
+    "cancel": "Cancelar"
   }
 }

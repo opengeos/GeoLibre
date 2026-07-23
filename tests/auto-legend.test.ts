@@ -8,9 +8,11 @@ import {
 } from "../packages/core/src/index";
 import {
   buildAutoLegend,
+  expressionLegendParts,
   formatLegendNumber,
   legendRowKey,
   newCustomSectionId,
+  parseLegendDictionary,
   removeLegendCustomEntry,
   setLegendCustomEntry,
 } from "../apps/geolibre-desktop/src/lib/auto-legend";
@@ -196,6 +198,165 @@ describe("buildAutoLegend — vector layers", () => {
       ],
     );
     assert.ok(entry.rows.every((row) => row.shape === "circle"));
+  });
+});
+
+describe("expressionLegendParts — advanced expression styles", () => {
+  it("derives range rows from a step expression (year-built classes)", () => {
+    const expression = JSON.stringify([
+      "step",
+      ["get", "year_built"],
+      "#440154",
+      1900,
+      "#31688e",
+      1930,
+      "#35b779",
+      1960,
+      "#fde725",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.ok(parts);
+    assert.equal(parts?.fieldLabel, "year_built");
+    assert.deepEqual(
+      parts?.rows.map((row) => [row.label, row.color]),
+      [
+        ["< 1,900", "#440154"],
+        ["1,900 – 1,930", "#31688e"],
+        ["1,930 – 1,960", "#35b779"],
+        ["≥ 1,960", "#fde725"],
+      ],
+    );
+  });
+
+  it("derives categorical rows plus Other from a match expression", () => {
+    const expression = JSON.stringify([
+      "match",
+      ["get", "type"],
+      "residential",
+      "#ff0000",
+      ["commercial", "retail"],
+      "#00ff00",
+      "#cccccc",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.deepEqual(
+      parts?.rows.map((row) => [row.label, row.color]),
+      [
+        ["residential", "#ff0000"],
+        ["commercial, retail", "#00ff00"],
+        ["Other", "#cccccc"],
+      ],
+    );
+  });
+
+  it("labels case branches from their conditions, including all-ranges", () => {
+    const expression = JSON.stringify([
+      "case",
+      ["<", ["get", "year"], 1900],
+      "#111111",
+      ["all", [">=", ["get", "year"], 1900], ["<", ["get", "year"], 1930]],
+      "#222222",
+      [">=", ["get", "year"], 1930],
+      "#333333",
+      "#444444",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.equal(parts?.fieldLabel, "year");
+    assert.deepEqual(
+      parts?.rows.map((row) => row.label),
+      ["< 1,900", "1,900 – 1,930", "≥ 1,930", "Other"],
+    );
+  });
+
+  it("derives a labelled gradient from an interpolate expression", () => {
+    const expression = JSON.stringify([
+      "interpolate",
+      ["linear"],
+      ["get", "density"],
+      0,
+      "#ffffff",
+      25000,
+      "#ff0000",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.deepEqual(parts?.gradient, {
+      colors: ["#ffffff", "#ff0000"],
+      minLabel: "0",
+      maxLabel: "25.0K",
+    });
+    assert.equal(parts?.fieldLabel, "density");
+  });
+
+  it("finds a classifier nested inside another expression", () => {
+    const expression = JSON.stringify([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      5,
+      ["match", ["get", "kind"], "a", "#111111", "#222222"],
+      10,
+      ["match", ["get", "kind"], "a", "#111111", "#222222"],
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.equal(parts?.rows[0]?.label, "a");
+  });
+
+  it("returns null for invalid JSON or a plain color", () => {
+    assert.equal(expressionLegendParts("not json", "square", "en"), null);
+    assert.equal(expressionLegendParts('"#ff0000"', "square", "en"), null);
+  });
+
+  it("feeds expression-mode layers in buildAutoLegend", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "expr",
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "expression",
+            vectorStyleExpression: JSON.stringify([
+              "match",
+              ["get", "zone"],
+              "R",
+              "#ff0000",
+              "#0000ff",
+            ]),
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.deepEqual(
+      entries[0].rows.map((row) => row.label),
+      ["R", "Other"],
+    );
+    assert.equal(entries[0].headerSwatch, null);
+  });
+});
+
+describe("parseLegendDictionary", () => {
+  it("parses a JSON object of label to color pairs", () => {
+    assert.deepEqual(parseLegendDictionary('{"Open Water": "#466b9f", "Forest": "#1c6330"}'), [
+      { label: "Open Water", color: "#466b9f" },
+      { label: "Forest", color: "#1c6330" },
+    ]);
+  });
+
+  it("parses label: color lines, splitting on the last separator", () => {
+    assert.deepEqual(parseLegendDictionary("Pre-1900: #440154\n1900 – 1929: #31688e"), [
+      { label: "Pre-1900", color: "#440154" },
+      { label: "1900 – 1929", color: "#31688e" },
+    ]);
+    assert.deepEqual(parseLegendDictionary("Water, blue"), [{ label: "Water", color: "blue" }]);
+  });
+
+  it("rejects empty, malformed, and non-object input", () => {
+    assert.equal(parseLegendDictionary(""), null);
+    assert.equal(parseLegendDictionary("just a label"), null);
+    assert.equal(parseLegendDictionary('{"a": 1}'), null);
+    assert.equal(parseLegendDictionary('["#ff0000"]'), null);
   });
 });
 

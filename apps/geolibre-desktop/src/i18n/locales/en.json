@@ -3986,6 +3986,10 @@
       "bottom-right": "Bottom right"
     },
     "low": "Low",
-    "high": "High"
+    "high": "High",
+    "addFromDictionary": "Add from dictionary",
+    "dictionaryHint": "A JSON object of {\"label\": \"color\"} pairs, or one \"label: color\" per line.",
+    "dictionaryAdd": "Add section",
+    "cancel": "Cancel"
   }
 }

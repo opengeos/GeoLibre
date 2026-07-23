@@ -3913,6 +3913,10 @@
       "bottom-right": "오른쪽 아래"
     },
     "low": "낮음",
-    "high": "높음"
+    "high": "높음",
+    "addFromDictionary": "사전에서 추가",
+    "dictionaryHint": "{\"레이블\": \"색상\"} 쌍의 JSON 객체 또는 줄마다 \"레이블: 색상\" 하나.",
+    "dictionaryAdd": "섹션 추가",
+    "cancel": "취소"
   }
 }

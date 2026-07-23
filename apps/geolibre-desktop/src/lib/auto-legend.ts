@@ -20,6 +20,7 @@ import {
   type GeoLibreLayer,
   type LegendConfig,
   type LegendCustomEntry,
+  type LegendCustomItem,
   type LegendItemOverride,
   type VectorStyleStop,
 } from "@geolibre/core";
@@ -209,6 +210,227 @@ function ruleRows(layer: GeoLibreLayer, shape: LayerSwatchShape): RawRow[] {
     rows.push({ label: elseRule.label || "Other", color: elseRule.color, shape });
   }
   return rows;
+}
+
+/* ── Advanced-expression derivation ──────────────────────────────────────── */
+
+/** A comparison leaf like `["<", ["get", "year"], 1900]`, normalized. */
+function parseComparison(
+  expression: unknown,
+): { op: string; property: string; value: number | string } | null {
+  if (!Array.isArray(expression) || expression.length !== 3) return null;
+  const [op, a, b] = expression;
+  if (typeof op !== "string" || !["<", "<=", ">", ">=", "==", "!="].includes(op)) return null;
+  const getter = (side: unknown): string | null =>
+    Array.isArray(side) && side[0] === "get" && typeof side[1] === "string" ? side[1] : null;
+  const literal = (side: unknown): number | string | null =>
+    typeof side === "number" || typeof side === "string" ? side : null;
+  const property = getter(a) ?? getter(b);
+  const value = literal(b) ?? literal(a);
+  if (property === null || value === null) return null;
+  // Normalize "value op get" to "get op value" so labels read naturally.
+  const flipped = getter(a) === null;
+  const flip: Record<string, string> = { "<": ">", "<=": ">=", ">": "<", ">=": "<=" };
+  return { op: flipped ? (flip[op] ?? op) : op, property, value };
+}
+
+/** Format a comparison literal: numbers abbreviated, strings verbatim. */
+function comparisonValue(value: number | string, locale?: string): string {
+  return typeof value === "number" ? formatLegendNumber(value, locale) : value;
+}
+
+/**
+ * A readable label for a `case` branch condition: `["all", [">=", …, a],
+ * ["<", …, b]]` becomes "a – b", a bare comparison becomes "< 1900" /
+ * "≥ 2010" / the value itself for equality. Returns null when the shape is
+ * not recognized (the caller falls back to the raw filter text).
+ */
+function conditionLabel(condition: unknown, locale?: string): string | null {
+  if (Array.isArray(condition) && condition[0] === "all" && condition.length === 3) {
+    const first = parseComparison(condition[1]);
+    const second = parseComparison(condition[2]);
+    if (first && second && first.property === second.property) {
+      const low = first.op.startsWith(">") ? first : second.op.startsWith(">") ? second : null;
+      const high = first.op.startsWith("<") ? first : second.op.startsWith("<") ? second : null;
+      if (low && high) {
+        return `${comparisonValue(low.value, locale)} – ${comparisonValue(high.value, locale)}`;
+      }
+    }
+  }
+  const comparison = parseComparison(condition);
+  if (!comparison) return null;
+  const value = comparisonValue(comparison.value, locale);
+  if (comparison.op === "==") return value;
+  const symbol = { "<": "<", "<=": "≤", ">": ">", ">=": "≥", "!=": "≠" }[comparison.op];
+  return `${symbol} ${value}`;
+}
+
+/** The `["get", property]` name inside an expression input, if any. */
+function expressionProperty(expression: unknown): string | undefined {
+  if (!Array.isArray(expression)) return undefined;
+  if (expression[0] === "get" && typeof expression[1] === "string") return expression[1];
+  for (const entry of expression) {
+    const property = expressionProperty(entry);
+    if (property) return property;
+  }
+  return undefined;
+}
+
+type ExpressionParts = {
+  rows: RawRow[];
+  gradient: AutoLegendGradient | null;
+  fieldLabel?: string;
+};
+
+/**
+ * Derive legend classes from a data-driven color expression: `step` becomes
+ * range rows, `match` categorical rows (plus "Other" for the fallback),
+ * `case` rows labelled from their conditions, and `interpolate` a gradient.
+ * Walks nested expressions so a classifier wrapped in e.g. a zoom
+ * interpolation is still found. Returns null when no classifier with plain
+ * string color outputs is present.
+ */
+function classifierParts(
+  expression: unknown,
+  shape: LayerSwatchShape,
+  locale?: string,
+): ExpressionParts | null {
+  if (!Array.isArray(expression)) return null;
+  const direct = directClassifierParts(expression, shape, locale);
+  if (direct) return direct;
+  // Not a plain classifier at this level (or its outputs are themselves
+  // expressions): walk children so e.g. a match nested inside a zoom
+  // interpolation is still found.
+  for (const entry of expression) {
+    const parts = classifierParts(entry, shape, locale);
+    if (parts) return parts;
+  }
+  return null;
+}
+
+/** A classifier at exactly this level, or null (no recursion). */
+function directClassifierParts(
+  expression: unknown[],
+  shape: LayerSwatchShape,
+  locale?: string,
+): ExpressionParts | null {
+  const head = expression[0];
+
+  if (head === "step" && expression.length >= 5 && typeof expression[2] === "string") {
+    const base = expression[2];
+    const stops: number[] = [];
+    const outputs: string[] = [];
+    for (let index = 3; index + 1 < expression.length; index += 2) {
+      const stop = expression[index];
+      const output = expression[index + 1];
+      if (typeof stop !== "number" || typeof output !== "string") return null;
+      stops.push(stop);
+      outputs.push(output);
+    }
+    const rows: RawRow[] = [
+      { label: `< ${formatLegendNumber(stops[0], locale)}`, color: base, shape },
+      ...outputs.map((color, index) => ({
+        label:
+          index + 1 < stops.length
+            ? `${formatLegendNumber(stops[index], locale)} – ${formatLegendNumber(stops[index + 1], locale)}`
+            : `≥ ${formatLegendNumber(stops[index], locale)}`,
+        color,
+        shape,
+      })),
+    ];
+    return {
+      rows: rows.slice(0, MAX_LEGEND_ROWS),
+      gradient: null,
+      fieldLabel: expressionProperty(expression[1]),
+    };
+  }
+
+  if (head === "match" && expression.length >= 5) {
+    const rows: RawRow[] = [];
+    for (let index = 2; index + 1 < expression.length - 1; index += 2) {
+      const value = expression[index];
+      const output = expression[index + 1];
+      if (typeof output !== "string") return null;
+      const label = Array.isArray(value)
+        ? value.map((entry) => comparisonValue(entry as number | string, locale)).join(", ")
+        : comparisonValue(value as number | string, locale);
+      rows.push({ label, color: output, shape });
+    }
+    const fallback = expression[expression.length - 1];
+    if (rows.length === 0) return null;
+    if (typeof fallback === "string") rows.push({ label: "Other", color: fallback, shape });
+    return {
+      rows: rows.slice(0, MAX_LEGEND_ROWS),
+      gradient: null,
+      fieldLabel: expressionProperty(expression[1]),
+    };
+  }
+
+  if (head === "case" && expression.length >= 4) {
+    const rows: RawRow[] = [];
+    let property: string | undefined;
+    for (let index = 1; index + 1 < expression.length; index += 2) {
+      const condition = expression[index];
+      const output = expression[index + 1];
+      if (typeof output !== "string") return null;
+      rows.push({
+        label: conditionLabel(condition, locale) ?? JSON.stringify(condition),
+        color: output,
+        shape,
+      });
+      property ??= expressionProperty(condition);
+    }
+    const fallback = expression[expression.length - 1];
+    if (rows.length === 0) return null;
+    if (typeof fallback === "string") rows.push({ label: "Other", color: fallback, shape });
+    return { rows: rows.slice(0, MAX_LEGEND_ROWS), gradient: null, fieldLabel: property };
+  }
+
+  if (head === "interpolate" && expression.length >= 7) {
+    const stops: number[] = [];
+    const colors: string[] = [];
+    for (let index = 3; index + 1 < expression.length; index += 2) {
+      const stop = expression[index];
+      const color = expression[index + 1];
+      if (typeof stop !== "number" || typeof color !== "string") return null;
+      stops.push(stop);
+      colors.push(color);
+    }
+    if (colors.length < 2) return null;
+    return {
+      rows: [],
+      gradient: {
+        colors,
+        minLabel: formatLegendNumber(stops[0], locale),
+        maxLabel: formatLegendNumber(stops[stops.length - 1], locale),
+      },
+      fieldLabel: expressionProperty(expression[2]),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Legend parts for an advanced-expression layer, parsed from its stored
+ * MapLibre color expression. Null when the expression is empty, invalid JSON,
+ * or contains no recognizable classifier — the caller then falls back to the
+ * single-symbol swatch.
+ */
+export function expressionLegendParts(
+  expressionJson: string,
+  shape: LayerSwatchShape,
+  locale?: string,
+): ExpressionParts | null {
+  const raw = expressionJson.trim();
+  if (!raw) return null;
+  let expression: unknown;
+  try {
+    expression = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return classifierParts(expression, shape, locale);
 }
 
 /**
@@ -416,6 +638,17 @@ function vectorParts(
       };
     }
   }
+  if (mode === "expression") {
+    const parts = expressionLegendParts(styleValue(style, "vectorStyleExpression"), shape, locale);
+    if (parts) {
+      return {
+        rows: [...parts.rows, ...sizeRows, ...diagrams],
+        gradient: parts.gradient,
+        headerSwatch: null,
+        fieldLabel: parts.fieldLabel,
+      };
+    }
+  }
 
   const marker = pointMarkerSwatch(style);
   const headerSwatch = marker
@@ -619,6 +852,51 @@ export function removeLegendCustomEntry(config: LegendConfig, id: string): Legen
   };
   if (Object.keys(customEntries).length === 0) delete next.customEntries;
   return next;
+}
+
+/**
+ * Parse hand-entered legend items from a dictionary: either a JSON object of
+ * `{"label": "color"}` pairs (the shape `Map.add_legend(legend_dict=…)` and
+ * the legacy Legend control accept), or one `label: color` line per item.
+ * Returns null when nothing parseable is present, so the editor can keep its
+ * Add button disabled rather than creating an empty section.
+ */
+export function parseLegendDictionary(text: string): LegendCustomItem[] | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const items: LegendCustomItem[] = [];
+      for (const [label, color] of Object.entries(parsed)) {
+        if (typeof color !== "string" || !label.trim() || !color.trim()) return null;
+        items.push({ label, color: color.trim() });
+      }
+      return items.length > 0 ? items : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const items: LegendCustomItem[] = [];
+  for (const line of trimmed.split(/\r?\n/)) {
+    const entry = line.trim();
+    if (!entry) continue;
+    // "label: color", or "label, color" for colors without commas. Split on
+    // the LAST separator so labels like "1900 – 1929: Developed" still work
+    // when the color itself has none.
+    const colon = entry.lastIndexOf(":");
+    const comma = entry.lastIndexOf(",");
+    const split = colon >= 0 ? colon : comma;
+    if (split <= 0 || split === entry.length - 1) return null;
+    const label = entry.slice(0, split).trim();
+    const color = entry.slice(split + 1).trim();
+    if (!label || !color) return null;
+    items.push({ label, color });
+  }
+  return items.length > 0 ? items : null;
 }
 
 /** A unique id for a new standalone custom section. */

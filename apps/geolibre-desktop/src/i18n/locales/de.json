@@ -3970,6 +3970,10 @@
       "bottom-right": "Unten rechts"
     },
     "low": "Niedrig",
-    "high": "Hoch"
+    "high": "Hoch",
+    "addFromDictionary": "Aus Wörterbuch hinzufügen",
+    "dictionaryHint": "Ein JSON-Objekt aus {\"Beschriftung\": \"Farbe\"}-Paaren oder je Zeile \"Beschriftung: Farbe\".",
+    "dictionaryAdd": "Abschnitt hinzufügen",
+    "cancel": "Abbrechen"
   }
 }

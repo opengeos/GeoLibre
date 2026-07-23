@@ -3970,6 +3970,10 @@
       "bottom-right": "Sağ alt"
     },
     "low": "Düşük",
-    "high": "Yüksek"
+    "high": "Yüksek",
+    "addFromDictionary": "Sözlükten ekle",
+    "dictionaryHint": "{\"etiket\": \"renk\"} çiftlerinden oluşan bir JSON nesnesi veya satır başına bir \"etiket: renk\".",
+    "dictionaryAdd": "Bölüm ekle",
+    "cancel": "İptal"
   }
 }

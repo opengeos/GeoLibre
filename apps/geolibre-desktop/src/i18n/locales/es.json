@@ -3970,6 +3970,10 @@
       "bottom-right": "Abajo a la derecha"
     },
     "low": "Bajo",
-    "high": "Alto"
+    "high": "Alto",
+    "addFromDictionary": "Añadir desde diccionario",
+    "dictionaryHint": "Un objeto JSON con pares {\"etiqueta\": \"color\"}, o una línea \"etiqueta: color\" por elemento.",
+    "dictionaryAdd": "Añadir sección",
+    "cancel": "Cancelar"
   }
 }

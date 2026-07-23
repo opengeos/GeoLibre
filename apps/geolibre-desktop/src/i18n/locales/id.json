@@ -3913,6 +3913,10 @@
       "bottom-right": "Kanan bawah"
     },
     "low": "Rendah",
-    "high": "Tinggi"
+    "high": "Tinggi",
+    "addFromDictionary": "Tambah dari kamus",
+    "dictionaryHint": "Objek JSON berisi pasangan {\"label\": \"warna\"}, atau satu \"label: warna\" per baris.",
+    "dictionaryAdd": "Tambah bagian",
+    "cancel": "Batal"
   }
 }

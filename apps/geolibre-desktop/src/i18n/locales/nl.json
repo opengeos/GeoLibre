@@ -3970,6 +3970,10 @@
       "bottom-right": "Rechtsonder"
     },
     "low": "Laag",
-    "high": "Hoog"
+    "high": "Hoog",
+    "addFromDictionary": "Toevoegen uit woordenboek",
+    "dictionaryHint": "Een JSON-object met {\"label\": \"kleur\"}-paren, of één \"label: kleur\" per regel.",
+    "dictionaryAdd": "Sectie toevoegen",
+    "cancel": "Annuleren"
   }
 }
