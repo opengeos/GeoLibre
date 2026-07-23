@@ -44,6 +44,9 @@ on:
 
 permissions:
   contents: read
+  # For the sticky preview comment. The deploy to opengeos/pages-preview does
+  # not use this token -- it uses PREVIEW_DEPLOY_TOKEN, which has no access to
+  # this repository.
   pull-requests: write
 
 concurrency:
@@ -211,7 +214,11 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         id: deploy
-        if: github.event.action != 'closed'
+        # pull_request only, like the Pages deploy above. --branch falls back to
+        # github.ref_name, so a manual run from the production branch would
+        # publish a *production* deployment to the preview project instead of a
+        # preview one.
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
