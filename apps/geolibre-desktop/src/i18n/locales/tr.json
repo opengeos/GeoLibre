@@ -2015,7 +2015,10 @@
       "terrain": "Arazi",
       "scale": "Ölçek",
       "attribution": "Atıf",
-      "logo": "MapLibre logosu"
+      "logos": "Logolar",
+      "logo": "MapLibre logosu",
+      "maptoolkitLogo": "Maptoolkit logosu",
+      "maptoolkitLogoHint": "Logosunu göstermek için bir Maptoolkit taban haritası ekleyin."
     },
     "position": {
       "topLeft": "Sol üst",

@@ -2170,7 +2170,10 @@
       "terrain": "التضاريس",
       "scale": "المقياس",
       "attribution": "الإسناد",
-      "logo": "شعار MapLibre"
+      "logos": "الشعارات",
+      "logo": "شعار MapLibre",
+      "maptoolkitLogo": "شعار Maptoolkit",
+      "maptoolkitLogoHint": "أضِف خريطة أساس من Maptoolkit لعرض شعارها."
     },
     "position": {
       "topLeft": "أعلى اليسار",

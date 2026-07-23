@@ -2015,7 +2015,10 @@
       "terrain": "Gelände",
       "scale": "Maßstab",
       "attribution": "Namensnennung",
-      "logo": "MapLibre-Logo"
+      "logos": "Logos",
+      "logo": "MapLibre-Logo",
+      "maptoolkitLogo": "Maptoolkit-Logo",
+      "maptoolkitLogoHint": "Fügen Sie eine Maptoolkit-Basiskarte hinzu, um deren Logo anzuzeigen."
     },
     "position": {
       "topLeft": "Oben links",

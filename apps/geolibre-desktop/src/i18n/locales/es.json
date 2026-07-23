@@ -2015,7 +2015,10 @@
       "terrain": "Terreno",
       "scale": "Escala",
       "attribution": "Atribución",
-      "logo": "Logotipo de MapLibre"
+      "logos": "Logotipos",
+      "logo": "Logotipo de MapLibre",
+      "maptoolkitLogo": "Logotipo de Maptoolkit",
+      "maptoolkitLogoHint": "Añade un mapa base de Maptoolkit para mostrar su logotipo."
     },
     "position": {
       "topLeft": "Superior izquierda",

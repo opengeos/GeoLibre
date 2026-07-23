@@ -42,7 +42,12 @@ import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
-import { MAP_CONTROL_ITEMS, type ToolbarChrome, type ToolbarMapControl } from "./constants";
+import {
+  LOGO_CONTROL_IDS,
+  MAP_CONTROL_ITEMS,
+  type ToolbarChrome,
+  type ToolbarMapControl,
+} from "./constants";
 
 interface ControlsMenuProps {
   chrome: ToolbarChrome;
@@ -172,13 +177,21 @@ export function ControlsMenu({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {MAP_CONTROL_ITEMS.filter((control) => show(`controls.mapControl.${control.id}`)).map(
-            (control) => (
-              <DropdownMenuItem key={control.id} onClick={() => onToggleMapControl(control.id)}>
-                {t(control.labelKey)}
-                {controlsVisible[control.id] ? " ✓" : ""}
-              </DropdownMenuItem>
-            ),
+          {MAP_CONTROL_ITEMS.filter(
+            (control) =>
+              !LOGO_CONTROL_IDS.has(control.id) && show(`controls.mapControl.${control.id}`),
+          ).map((control) => (
+            <DropdownMenuItem key={control.id} onClick={() => onToggleMapControl(control.id)}>
+              {t(control.labelKey)}
+              {controlsVisible[control.id] ? " ✓" : ""}
+            </DropdownMenuItem>
+          ))}
+          {(show("controls.mapControl.logo") || show("controls.mapControl.maptoolkit-logo")) && (
+            <LogosSubmenu
+              controlsVisible={controlsVisible}
+              onToggleMapControl={onToggleMapControl}
+              show={show}
+            />
           )}
           {show("controls.atmosphereEffects") && (
             <AtmosphereEffectsSubmenu
@@ -348,6 +361,83 @@ export function ControlsMenu({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+interface LogosSubmenuProps {
+  controlsVisible: Record<ToolbarMapControl, boolean>;
+  onToggleMapControl: (control: ToolbarMapControl) => void;
+  show: (id: string) => boolean;
+}
+
+/**
+ * The Logos submenu: groups the on-map logo controls (the MapLibre logo and the
+ * Maptoolkit logo). Each is an independent on/off toggle.
+ *
+ * The Maptoolkit logo is the branding companion to Maptoolkit basemaps added via
+ * the basemap control — Maptoolkit's terms require their mark be shown on maps
+ * that use their tiles/styles. So that toggle is disabled (with an explanatory
+ * hint) until a Maptoolkit basemap is actually in use, unless it is already on,
+ * in which case it stays interactive so the user can always turn it back off.
+ */
+function LogosSubmenu({ controlsVisible, onToggleMapControl, show }: LogosSubmenuProps) {
+  const { t } = useTranslation();
+  // A Maptoolkit basemap is active either as a whole-map style (its URL lives on
+  // styles.maptoolkit.org) or as a stacked raster basemap layer (the basemap
+  // control tags those with `metadata.basemapProvider`). Either makes the logo
+  // relevant. See maplibre-basemap-control.ts (registerRasterBasemap).
+  const maptoolkitBasemapActive = useAppStore(
+    (s) =>
+      s.basemapStyleUrl.includes("maptoolkit.org") ||
+      s.layers.some((layer) => layer.metadata?.basemapProvider === "maptoolkit"),
+  );
+
+  const mapLibreLogoVisible = show("controls.mapControl.logo");
+  const maptoolkitLogoVisible = show("controls.mapControl.maptoolkit-logo");
+  const maptoolkitLogoActive = controlsVisible["maptoolkit-logo"];
+  // Keep the toggle usable when it is already on (so it can be turned off) even
+  // if the Maptoolkit basemap has since been removed.
+  const maptoolkitDisabled = !maptoolkitBasemapActive && !maptoolkitLogoActive;
+  const anyLogoActive = controlsVisible.logo || maptoolkitLogoActive;
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        {t("toolbar.mapControl.logos")}
+        {/* Aggregate indicator so an active logo shows without opening the
+            submenu (parity with the old top-level logo entry). */}
+        {anyLogoActive ? " ✓" : ""}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {mapLibreLogoVisible && (
+          <DropdownMenuItem
+            onSelect={(e: Event) => {
+              // Keep the submenu open after toggling so a second logo can be
+              // flipped without reopening it.
+              e.preventDefault();
+              onToggleMapControl("logo");
+            }}
+          >
+            {t("toolbar.mapControl.logo")}
+            {controlsVisible.logo ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {maptoolkitLogoVisible && (
+          <DropdownMenuItem
+            disabled={maptoolkitDisabled}
+            title={maptoolkitDisabled ? t("toolbar.mapControl.maptoolkitLogoHint") : undefined}
+            onSelect={(e: Event) => {
+              e.preventDefault();
+              if (maptoolkitDisabled) return;
+              onToggleMapControl("maptoolkit-logo");
+            }}
+          >
+            {t("toolbar.mapControl.maptoolkitLogo")}
+            {maptoolkitLogoActive ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 

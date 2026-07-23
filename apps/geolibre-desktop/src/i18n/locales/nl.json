@@ -2015,7 +2015,10 @@
       "terrain": "Terrein",
       "scale": "Schaal",
       "attribution": "Bronvermelding",
-      "logo": "MapLibre-logo"
+      "logos": "Logo's",
+      "logo": "MapLibre-logo",
+      "maptoolkitLogo": "Maptoolkit-logo",
+      "maptoolkitLogoHint": "Voeg een Maptoolkit-basiskaart toe om het logo weer te geven."
     },
     "position": {
       "topLeft": "Linksboven",

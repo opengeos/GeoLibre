@@ -2093,7 +2093,10 @@
       "terrain": "Рельеф",
       "scale": "Масштабная линейка",
       "attribution": "Авторство",
-      "logo": "Логотип MapLibre"
+      "logos": "Логотипы",
+      "logo": "Логотип MapLibre",
+      "maptoolkitLogo": "Логотип Maptoolkit",
+      "maptoolkitLogoHint": "Добавьте базовую карту Maptoolkit, чтобы показать её логотип."
     },
     "position": {
       "topLeft": "Вверху слева",

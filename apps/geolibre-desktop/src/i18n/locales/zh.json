@@ -1976,7 +1976,10 @@
       "terrain": "地形",
       "scale": "比例尺",
       "attribution": "归属信息",
-      "logo": "MapLibre 徽标"
+      "logos": "徽标",
+      "logo": "MapLibre 徽标",
+      "maptoolkitLogo": "Maptoolkit 徽标",
+      "maptoolkitLogoHint": "添加 Maptoolkit 底图以显示其徽标。"
     },
     "position": {
       "topLeft": "左上",

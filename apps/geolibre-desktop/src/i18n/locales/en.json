@@ -2021,7 +2021,10 @@
       "terrain": "Terrain",
       "scale": "Scale",
       "attribution": "Attribution",
-      "logo": "MapLibre logo"
+      "logos": "Logos",
+      "logo": "MapLibre logo",
+      "maptoolkitLogo": "Maptoolkit logo",
+      "maptoolkitLogoHint": "Add a Maptoolkit basemap to display its logo."
     },
     "position": {
       "topLeft": "Top left",

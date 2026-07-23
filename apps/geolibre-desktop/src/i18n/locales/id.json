@@ -1976,7 +1976,10 @@
       "terrain": "Medan",
       "scale": "Skala",
       "attribution": "Atribusi",
-      "logo": "Logo MapLibre"
+      "logos": "Logo",
+      "logo": "Logo MapLibre",
+      "maptoolkitLogo": "Logo Maptoolkit",
+      "maptoolkitLogoHint": "Tambahkan peta dasar Maptoolkit untuk menampilkan logonya."
     },
     "position": {
       "topLeft": "Kiri atas",

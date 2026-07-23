@@ -1976,7 +1976,10 @@
       "terrain": "지형",
       "scale": "축척",
       "attribution": "저작권 표시",
-      "logo": "MapLibre 로고"
+      "logos": "로고",
+      "logo": "MapLibre 로고",
+      "maptoolkitLogo": "Maptoolkit 로고",
+      "maptoolkitLogoHint": "로고를 표시하려면 Maptoolkit 배경 지도를 추가하세요."
     },
     "position": {
       "topLeft": "왼쪽 위",

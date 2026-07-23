@@ -2015,7 +2015,10 @@
       "terrain": "भूभाग",
       "scale": "स्केल",
       "attribution": "एट्रिब्यूशन",
-      "logo": "MapLibre लोगो"
+      "logos": "लोगो",
+      "logo": "MapLibre लोगो",
+      "maptoolkitLogo": "Maptoolkit लोगो",
+      "maptoolkitLogoHint": "इसका लोगो दिखाने के लिए Maptoolkit बेसमैप जोड़ें।"
     },
     "position": {
       "topLeft": "ऊपर बाएँ",

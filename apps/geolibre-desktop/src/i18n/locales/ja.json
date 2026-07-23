@@ -1976,7 +1976,10 @@
       "terrain": "地形",
       "scale": "縮尺",
       "attribution": "属性表示",
-      "logo": "MapLibreロゴ"
+      "logos": "ロゴ",
+      "logo": "MapLibreロゴ",
+      "maptoolkitLogo": "Maptoolkitロゴ",
+      "maptoolkitLogoHint": "ロゴを表示するには Maptoolkit のベースマップを追加してください。"
     },
     "position": {
       "topLeft": "左上",

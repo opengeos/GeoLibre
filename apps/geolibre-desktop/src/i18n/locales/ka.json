@@ -2015,7 +2015,10 @@
       "terrain": "რელიეფი",
       "scale": "მასშტაბი",
       "attribution": "ატრიბუცია",
-      "logo": "MapLibre-ის ლოგო"
+      "logos": "ლოგოები",
+      "logo": "MapLibre-ის ლოგო",
+      "maptoolkitLogo": "Maptoolkit-ის ლოგო",
+      "maptoolkitLogoHint": "დაამატეთ Maptoolkit-ის საბაზისო რუკა მისი ლოგოს საჩვენებლად."
     },
     "position": {
       "topLeft": "ზედა მარცხენა",

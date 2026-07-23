@@ -2015,7 +2015,10 @@
       "terrain": "Relief",
       "scale": "Échelle",
       "attribution": "Attribution",
-      "logo": "Logo MapLibre"
+      "logos": "Logos",
+      "logo": "Logo MapLibre",
+      "maptoolkitLogo": "Logo Maptoolkit",
+      "maptoolkitLogoHint": "Ajoutez un fond de carte Maptoolkit pour afficher son logo."
     },
     "position": {
       "topLeft": "Haut gauche",
