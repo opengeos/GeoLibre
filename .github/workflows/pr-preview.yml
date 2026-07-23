@@ -149,6 +149,11 @@ jobs:
       - name: Deploy preview to GitHub Pages
         id: pages
         if: github.event_name == 'pull_request'
+        # This step has to run before the DuckDB offload below, which means a
+        # Pages problem (bad deploy token, Pages size limit) would otherwise
+        # take the Cloudflare preview and the PR comment down with it. Let the
+        # job carry on instead; the comment says which target failed.
+        continue-on-error: true
         # Pinned rather than tracking the v1 tag: this is a third-party action
         # and it receives PREVIEW_DEPLOY_TOKEN.
         uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
@@ -235,6 +240,8 @@ jobs:
             if (pagesUrl) {
               rows.push(`| GitHub Pages | ${pagesUrl} |`);
               rows.push(`| Demo app | ${pagesUrl}demo/ |`);
+            } else {
+              rows.push(`| GitHub Pages | deploy failed — see the job log |`);
             }
             if (url) {
               rows.push(`| Cloudflare | ${url} |`);
