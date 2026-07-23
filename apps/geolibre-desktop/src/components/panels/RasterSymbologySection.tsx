@@ -11,12 +11,10 @@ import {
   computeRasterBreaks,
   getPaletteLegend,
   getRasterBandStats,
-  openLegendPanelWithItems,
   type PaletteLegendEntry,
   savedRasterSymbology,
   warmColormapColors,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
 import {
   Button,
   type ColorRampOption,
@@ -34,9 +32,10 @@ import {
   indexById,
   NORMALIZED_DIFFERENCE_INDICES,
 } from "maplibre-gl-raster";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createAppAPI } from "../../hooks/usePlugins";
+import { setLegendCustomEntry } from "../../lib/auto-legend";
+import { savedRasterAttributeTable } from "../../lib/raster-attribute-table";
 
 type RasterStateRecord = {
   mode: "single" | "rgb" | "index";
@@ -150,16 +149,8 @@ function rangeFromBreaks(breaks: number[]): [number, number][] {
  * render injection).
  *
  * @param props.layer - The selected raster store layer.
- * @param props.mapControllerRef - Live map controller, used to open and
- *   populate the Legend control from the raster's embedded palette.
  */
-export function RasterSymbologySection({
-  layer,
-  mapControllerRef,
-}: {
-  layer: GeoLibreLayer;
-  mapControllerRef: RefObject<MapController | null>;
-}) {
+export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const { t } = useTranslation();
   const updateLayer = useAppStore((s) => s.updateLayer);
   const state = readRasterState(layer);
@@ -398,10 +389,12 @@ export function RasterSymbologySection({
     });
   }
 
-  // Reads the raster's embedded color table and opens the Legend control with
-  // one item per pixel value present in the data (labelled with the bare value
-  // for the user to rename). Resolves the source the same way stats do: the
-  // control's URL, or the session blob for a file-backed raster.
+  // Reads the raster's embedded color table and fills the layer's Legend-panel
+  // entry with one item per pixel value present in the data — labelled from the
+  // Raster Attribute Table when one is saved (land-cover class names like
+  // NLCD), else with the bare value for the user to rename in the panel.
+  // Resolves the source the same way stats do: the control's URL, or the
+  // session blob for a file-backed raster.
   async function createLegendFromPalette(): Promise<void> {
     if (!rasterUrl) {
       setLegendStatus("error");
@@ -423,21 +416,20 @@ export function RasterSymbologySection({
         setLegendStatus("empty");
         return;
       }
-      const opened = await openLegendPanelWithItems(createAppAPI(mapControllerRef), {
-        title: layer.name,
-        items: entries.map((entry) => ({
-          label: String(entry.value),
-          color: entry.color,
-          shape: "square" as const,
-        })),
-        // Dock the on-map legend opposite the editor panel (top-left) so the
-        // two don't overlap.
-        legendPosition: "bottom-right",
-        // Skip the mutation entirely if this call was superseded mid-flight.
-        signal: controller.signal,
+      const table = savedRasterAttributeTable(layer);
+      const labelByValue = new Map(table?.rows.map((row) => [row.value, row.label]) ?? []);
+      const { legend, setLegend } = useAppStore.getState();
+      setLegend({
+        ...setLegendCustomEntry(legend, layer.id, {
+          title: layer.name,
+          items: entries.map((entry) => ({
+            label: labelByValue.get(entry.value) ?? String(entry.value),
+            color: entry.color,
+          })),
+        }),
+        panelVisible: true,
       });
-      if (stale()) return;
-      setLegendStatus(opened ? "idle" : "error");
+      setLegendStatus("idle");
     } catch {
       if (stale()) return;
       setLegendStatus("error");

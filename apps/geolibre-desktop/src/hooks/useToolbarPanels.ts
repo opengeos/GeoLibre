@@ -1,8 +1,8 @@
+import { useAppStore } from "@geolibre/core";
 import {
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,
-  closeLegendPanel,
   closeMeasurePanel,
   closeMinimapPanel,
   closePrintPanel,
@@ -15,7 +15,6 @@ import {
   isColorbarPanelVisible,
   isEarthEnginePanelVisible,
   isHtmlPanelVisible,
-  isLegendPanelVisible,
   isMeasurePanelVisible,
   isMinimapPanelVisible,
   isPrintPanelVisible,
@@ -27,7 +26,6 @@ import {
   openBookmarkPanel,
   openColorbarPanel,
   openHtmlPanel,
-  openLegendPanel,
   openMeasurePanel,
   openMinimapPanel,
   openPrintPanel,
@@ -40,7 +38,6 @@ import {
   subscribeColorbarPanel,
   subscribeEarthEnginePanel,
   subscribeHtmlPanel,
-  subscribeLegendPanel,
   subscribeMeasurePanel,
   subscribeMinimapPanel,
   subscribePrintPanel,
@@ -112,11 +109,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     isColorbarPanelVisible,
     isColorbarPanelVisible,
   );
-  const legendVisible = useSyncExternalStore(
-    subscribeLegendPanel,
-    isLegendPanelVisible,
-    isLegendPanelVisible,
-  );
+  // The Legend panel is React-rendered from store state (MapLegendPanel), not
+  // a maplibre-gl-components control like the rest.
+  const legendConfig = useAppStore((state) => state.legend);
+  const setLegend = useAppStore((state) => state.setLegend);
+  const legendVisible = legendConfig.panelVisible === true;
   const htmlVisible = useSyncExternalStore(
     subscribeHtmlPanel,
     isHtmlPanelVisible,
@@ -211,13 +208,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     },
     legend: {
       visible: legendVisible,
-      toggle: () => {
-        if (legendVisible) {
-          closeLegendPanel(appApi);
-          return;
-        }
-        openLegendPanel(appApi);
-      },
+      toggle: () => setLegend({ ...legendConfig, panelVisible: !legendVisible }),
     },
     html: {
       visible: htmlVisible,

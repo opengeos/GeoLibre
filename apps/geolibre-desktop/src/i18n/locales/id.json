@@ -3881,5 +3881,38 @@
       "valueMap": "Nilai tidak ada dalam daftar yang diizinkan",
       "constraint": "Batasan tidak terpenuhi"
     }
+  },
+  "legendPanel": {
+    "edit": "Edit legenda",
+    "done": "Selesai mengedit",
+    "close": "Tutup legenda",
+    "empty": "Tidak ada lapisan terlihat untuk ditampilkan.",
+    "renameTitle": "Judul legenda",
+    "renameEntry": "Ganti nama {{name}}",
+    "renameItem": "Ganti nama {{name}}",
+    "moveUp": "Pindah ke atas",
+    "moveDown": "Pindah ke bawah",
+    "hideEntry": "Sembunyikan dari legenda",
+    "showEntry": "Tampilkan di legenda",
+    "hideItem": "Sembunyikan item",
+    "showItem": "Tampilkan item",
+    "customizeEntry": "Sesuaikan item",
+    "resetEntry": "Setel ulang ke otomatis",
+    "removeSection": "Hapus bagian",
+    "addSection": "Tambah bagian kustom",
+    "newSectionTitle": "Bagian baru",
+    "newItemLabel": "Item baru",
+    "addItem": "Tambah item",
+    "removeItem": "Hapus item",
+    "itemColor": "Warna item",
+    "position": "Posisi",
+    "positions": {
+      "top-left": "Kiri atas",
+      "top-right": "Kanan atas",
+      "bottom-left": "Kiri bawah",
+      "bottom-right": "Kanan bawah"
+    },
+    "low": "Rendah",
+    "high": "Tinggi"
   }
 }

@@ -3938,5 +3938,38 @@
       "valueMap": "La valeur ne figure pas dans la liste autorisée",
       "constraint": "Contrainte non satisfaite"
     }
+  },
+  "legendPanel": {
+    "edit": "Modifier la légende",
+    "done": "Terminer la modification",
+    "close": "Fermer la légende",
+    "empty": "Aucune couche visible à afficher.",
+    "renameTitle": "Titre de la légende",
+    "renameEntry": "Renommer {{name}}",
+    "renameItem": "Renommer {{name}}",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "hideEntry": "Masquer de la légende",
+    "showEntry": "Afficher dans la légende",
+    "hideItem": "Masquer l'élément",
+    "showItem": "Afficher l'élément",
+    "customizeEntry": "Personnaliser les éléments",
+    "resetEntry": "Rétablir en automatique",
+    "removeSection": "Supprimer la section",
+    "addSection": "Ajouter une section personnalisée",
+    "newSectionTitle": "Nouvelle section",
+    "newItemLabel": "Nouvel élément",
+    "addItem": "Ajouter un élément",
+    "removeItem": "Supprimer l'élément",
+    "itemColor": "Couleur de l'élément",
+    "position": "Position",
+    "positions": {
+      "top-left": "En haut à gauche",
+      "top-right": "En haut à droite",
+      "bottom-left": "En bas à gauche",
+      "bottom-right": "En bas à droite"
+    },
+    "low": "Faible",
+    "high": "Élevé"
   }
 }

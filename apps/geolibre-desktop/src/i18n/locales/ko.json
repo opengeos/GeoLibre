@@ -3881,5 +3881,38 @@
       "valueMap": "값이 허용 목록에 없습니다",
       "constraint": "제약 조건이 충족되지 않았습니다"
     }
+  },
+  "legendPanel": {
+    "edit": "범례 편집",
+    "done": "편집 완료",
+    "close": "범례 닫기",
+    "empty": "표시할 레이어가 없습니다.",
+    "renameTitle": "범례 제목",
+    "renameEntry": "{{name}} 이름 바꾸기",
+    "renameItem": "{{name}} 이름 바꾸기",
+    "moveUp": "위로 이동",
+    "moveDown": "아래로 이동",
+    "hideEntry": "범례에서 숨기기",
+    "showEntry": "범례에 표시",
+    "hideItem": "항목 숨기기",
+    "showItem": "항목 표시",
+    "customizeEntry": "항목 사용자 지정",
+    "resetEntry": "자동으로 재설정",
+    "removeSection": "섹션 제거",
+    "addSection": "사용자 지정 섹션 추가",
+    "newSectionTitle": "새 섹션",
+    "newItemLabel": "새 항목",
+    "addItem": "항목 추가",
+    "removeItem": "항목 제거",
+    "itemColor": "항목 색상",
+    "position": "위치",
+    "positions": {
+      "top-left": "왼쪽 위",
+      "top-right": "오른쪽 위",
+      "bottom-left": "왼쪽 아래",
+      "bottom-right": "오른쪽 아래"
+    },
+    "low": "낮음",
+    "high": "높음"
   }
 }

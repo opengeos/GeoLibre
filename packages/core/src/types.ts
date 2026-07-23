@@ -1215,11 +1215,41 @@ export interface LegendItemOverride {
   hidden?: boolean;
 }
 
+/** Swatch shape for a hand-authored legend item. */
+export type LegendCustomShape = "square" | "circle" | "line";
+
+/** One hand-authored legend item: a color swatch plus its label. */
+export interface LegendCustomItem {
+  /** Display label (e.g. an NLCD class name). */
+  label: string;
+  /** Swatch color as a CSS color (typically `#rrggbb`). */
+  color: string;
+  /** Swatch shape; defaults to `"square"`. */
+  shape?: LegendCustomShape;
+}
+
 /**
- * User customizations for the Print Layout legend. The legend itself is always
- * derived from the visible layers' symbology; this record only stores the edits
- * layered on top (title, ordering, per-item rename/hide), so it survives layer
- * additions and removals and is persisted in the `.geolibre.json` project.
+ * A hand-authored legend entry. Keyed by layer id it REPLACES that layer's
+ * auto-derived classes (the fallback when automatic derivation is wrong or
+ * impossible, e.g. a paletted land-cover raster like NLCD); keyed by a
+ * `custom:` id it renders as a standalone section not tied to any layer.
+ */
+export interface LegendCustomEntry {
+  /** Optional heading; a layer-keyed entry falls back to the layer name. */
+  title?: string;
+  /** The items to render, top to bottom. */
+  items: LegendCustomItem[];
+}
+
+/** Map corner the on-map legend panel docks to. */
+export type LegendPanelPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+/**
+ * User customizations for the legend (the on-map Legend panel and the Print
+ * Layout legend). The legend itself is always derived from the visible layers'
+ * symbology; this record only stores the edits layered on top (title, ordering,
+ * per-item rename/hide, hand-authored entries), so it survives layer additions
+ * and removals and is persisted in the `.geolibre.json` project.
  */
 export interface LegendConfig {
   /** Heading drawn above the legend entries. */
@@ -1233,6 +1263,16 @@ export interface LegendConfig {
   order: string[];
   /** Per-item overrides keyed by stable item key. */
   overrides: Record<string, LegendItemOverride>;
+  /**
+   * Hand-authored entries keyed by layer id (replacing that layer's
+   * auto-derived classes) or by a standalone `custom:` id. See
+   * {@link LegendCustomEntry}.
+   */
+  customEntries?: Record<string, LegendCustomEntry>;
+  /** Whether the on-map Legend panel is open (persisted with the project). */
+  panelVisible?: boolean;
+  /** Map corner the on-map Legend panel docks to; defaults to `"top-left"`. */
+  panelPosition?: LegendPanelPosition;
 }
 
 // Frozen so the shared singleton can be safely spread (`{ ...DEFAULT_LEGEND_CONFIG }`)

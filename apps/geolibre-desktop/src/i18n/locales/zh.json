@@ -3881,5 +3881,38 @@
       "valueMap": "值不在允许列表中",
       "constraint": "不满足约束条件"
     }
+  },
+  "legendPanel": {
+    "edit": "编辑图例",
+    "done": "完成编辑",
+    "close": "关闭图例",
+    "empty": "没有可显示的图层。",
+    "renameTitle": "图例标题",
+    "renameEntry": "重命名 {{name}}",
+    "renameItem": "重命名 {{name}}",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "hideEntry": "从图例中隐藏",
+    "showEntry": "在图例中显示",
+    "hideItem": "隐藏条目",
+    "showItem": "显示条目",
+    "customizeEntry": "自定义条目",
+    "resetEntry": "重置为自动",
+    "removeSection": "移除分节",
+    "addSection": "添加自定义分节",
+    "newSectionTitle": "新分节",
+    "newItemLabel": "新条目",
+    "addItem": "添加条目",
+    "removeItem": "移除条目",
+    "itemColor": "条目颜色",
+    "position": "位置",
+    "positions": {
+      "top-left": "左上",
+      "top-right": "右上",
+      "bottom-left": "左下",
+      "bottom-right": "右下"
+    },
+    "low": "低",
+    "high": "高"
   }
 }

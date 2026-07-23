@@ -3938,5 +3938,38 @@
       "valueMap": "मान अनुमत सूची में नहीं है",
       "constraint": "बाधा पूरी नहीं हुई"
     }
+  },
+  "legendPanel": {
+    "edit": "लेजेंड संपादित करें",
+    "done": "संपादन पूर्ण",
+    "close": "लेजेंड बंद करें",
+    "empty": "दिखाने के लिए कोई दृश्य परत नहीं है।",
+    "renameTitle": "लेजेंड शीर्षक",
+    "renameEntry": "{{name}} का नाम बदलें",
+    "renameItem": "{{name}} का नाम बदलें",
+    "moveUp": "ऊपर ले जाएँ",
+    "moveDown": "नीचे ले जाएँ",
+    "hideEntry": "लेजेंड से छिपाएँ",
+    "showEntry": "लेजेंड में दिखाएँ",
+    "hideItem": "आइटम छिपाएँ",
+    "showItem": "आइटम दिखाएँ",
+    "customizeEntry": "आइटम अनुकूलित करें",
+    "resetEntry": "स्वचालित पर रीसेट करें",
+    "removeSection": "अनुभाग हटाएँ",
+    "addSection": "कस्टम अनुभाग जोड़ें",
+    "newSectionTitle": "नया अनुभाग",
+    "newItemLabel": "नया आइटम",
+    "addItem": "आइटम जोड़ें",
+    "removeItem": "आइटम हटाएँ",
+    "itemColor": "आइटम का रंग",
+    "position": "स्थिति",
+    "positions": {
+      "top-left": "ऊपर बाएँ",
+      "top-right": "ऊपर दाएँ",
+      "bottom-left": "नीचे बाएँ",
+      "bottom-right": "नीचे दाएँ"
+    },
+    "low": "निम्न",
+    "high": "उच्च"
   }
 }

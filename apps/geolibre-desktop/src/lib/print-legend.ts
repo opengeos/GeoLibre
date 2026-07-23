@@ -30,7 +30,7 @@ const VECTOR_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
 ]);
 
 /** Layer types with no meaningful single-swatch legend representation. */
-const NON_LEGEND_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
+export const NON_LEGEND_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
   "lidar",
   "gaussian-splat",
   "3d-tiles",
@@ -73,15 +73,7 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
 export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
   if (NON_LEGEND_TYPES.has(layer.type)) return [];
 
-  // MBTiles can carry vector or raster tiles; the app renders it as vector
-  // unless its metadata or source says raster (mirrors layer-sync), so a
-  // missing or legacy tileType is treated as vector here too.
-  const isVector =
-    VECTOR_TYPES.has(layer.type) ||
-    (layer.type === "mbtiles" &&
-      layer.metadata.tileType !== "raster" &&
-      layer.source.type !== "raster");
-  if (isVector) {
+  if (isVectorStyledLayer(layer)) {
     const mode = styleValue(layer.style, "vectorStyleMode");
     const stops = styleValue(layer.style, "vectorStyleStops");
     // Diagram symbology adds one labeled swatch per charted attribute after the
@@ -109,6 +101,22 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
 }
 
 /**
+ * Whether a layer is rendered through the vector styling pipeline (a colored
+ * fill/line/circle the legend can represent). MBTiles can carry vector or
+ * raster tiles; the app renders it as vector unless its metadata or source says
+ * raster (mirrors layer-sync), so a missing or legacy tileType is treated as
+ * vector here too. Shared with the on-map auto legend.
+ */
+export function isVectorStyledLayer(layer: GeoLibreLayer): boolean {
+  return (
+    VECTOR_TYPES.has(layer.type) ||
+    (layer.type === "mbtiles" &&
+      layer.metadata.tileType !== "raster" &&
+      layer.source.type !== "raster")
+  );
+}
+
+/**
  * The primary legend swatch for a single-symbol point layer that renders a
  * marker icon, carrying the marker so the legend draws the actual shape / SVG
  * instead of a plain fill square. Mirrors `prepareMarker` (`@geolibre/map`):
@@ -116,7 +124,7 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
  * markup falls through (returns null) to the plain fill swatch. Returns null
  * for layers with no marker, so the caller keeps the existing fill swatch.
  */
-function pointMarkerSwatch(style: LayerStyle): LegendSwatch | null {
+export function pointMarkerSwatch(style: LayerStyle): LegendSwatch | null {
   if (styleValue(style, "markerEnabled") !== true) return null;
   // Mirror the map (layer-sync gates the marker overlay on the "single" point
   // renderer): cluster/heatmap draw clustered circles or a density surface with
@@ -366,9 +374,9 @@ export function legendEditorRows(base: LegendEntry[], config: LegendConfig): Leg
  * draw diagrams for the layer (no in-memory GeoJSON, a deck-viz dataset
  * layer, diagrams off, or a point-only layer whose heatmap/cluster renderer
  * suppresses them), matching isDiagramLayer's gate so the legend never lists
- * charts that are not on the map.
+ * charts that are not on the map. Shared with the on-map auto legend.
  */
-function diagramSwatches(
+export function diagramSwatches(
   layer: Pick<GeoLibreLayer, "type" | "geojson" | "style" | "metadata">,
 ): { color: string; label: string }[] {
   if (

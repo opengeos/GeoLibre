@@ -3938,5 +3938,38 @@
       "valueMap": "O valor não está na lista permitida",
       "constraint": "Restrição não satisfeita"
     }
+  },
+  "legendPanel": {
+    "edit": "Editar legenda",
+    "done": "Concluir edição",
+    "close": "Fechar legenda",
+    "empty": "Nenhuma camada visível para listar.",
+    "renameTitle": "Título da legenda",
+    "renameEntry": "Renomear {{name}}",
+    "renameItem": "Renomear {{name}}",
+    "moveUp": "Mover para cima",
+    "moveDown": "Mover para baixo",
+    "hideEntry": "Ocultar da legenda",
+    "showEntry": "Mostrar na legenda",
+    "hideItem": "Ocultar item",
+    "showItem": "Mostrar item",
+    "customizeEntry": "Personalizar itens",
+    "resetEntry": "Redefinir para automático",
+    "removeSection": "Remover seção",
+    "addSection": "Adicionar seção personalizada",
+    "newSectionTitle": "Nova seção",
+    "newItemLabel": "Novo item",
+    "addItem": "Adicionar item",
+    "removeItem": "Remover item",
+    "itemColor": "Cor do item",
+    "position": "Posição",
+    "positions": {
+      "top-left": "Superior esquerdo",
+      "top-right": "Superior direito",
+      "bottom-left": "Inferior esquerdo",
+      "bottom-right": "Inferior direito"
+    },
+    "low": "Baixo",
+    "high": "Alto"
   }
 }
