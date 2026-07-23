@@ -3917,6 +3917,7 @@
     "addFromDictionary": "辞書から追加",
     "dictionaryHint": "{\"ラベル\": \"色\"} のペアからなる JSON オブジェクト、または 1 行につき「ラベル: 色」。",
     "dictionaryAdd": "セクションを追加",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "resize": "凡例のサイズを変更"
   }
 }

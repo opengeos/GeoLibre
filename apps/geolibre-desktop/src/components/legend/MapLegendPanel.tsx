@@ -377,6 +377,34 @@ export function MapLegendPanel({
     commitLegend(next);
   };
 
+  /**
+   * Keyboard alternative to dragging (WCAG 2.5.7): arrow keys on a focused
+   * grip step the size. Left/right follow the grip's physical direction, like
+   * the drag. Returns whether the key was handled.
+   */
+  const stepResize = (edge: "left" | "right", key: string): boolean => {
+    const panel = panelRef.current;
+    if (!panel) return false;
+    const STEP = 16;
+    const rect = panel.getBoundingClientRect();
+    let width = rect.width;
+    let height = rect.height;
+    if (key === "ArrowUp") height -= STEP;
+    else if (key === "ArrowDown") height += STEP;
+    else if (key === "ArrowLeft") width += edge === "left" ? STEP : -STEP;
+    else if (key === "ArrowRight") width += edge === "left" ? -STEP : STEP;
+    else return false;
+    const { legend: current, setLegend: commitLegend } = useAppStore.getState();
+    commitLegend({
+      ...current,
+      panelWidth: Math.round(clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH)),
+      panelHeight: Math.round(
+        clamp(height, MIN_PANEL_HEIGHT, maxHeightRef.current ?? MIN_PANEL_HEIGHT),
+      ),
+    });
+    return true;
+  };
+
   const dictionaryItems = parseLegendDictionary(dictionaryText);
   const addDictionarySection = () => {
     if (!dictionaryItems) return;
@@ -534,20 +562,33 @@ export function MapLegendPanel({
 
       {/* Bottom-corner resize grips. Physical left/right (not logical): the
           drag math above works in physical screen directions. Double-click
-          resets to the default width and auto-fit height. */}
+          resets to the default width and auto-fit height; arrow keys resize
+          when a grip is focused (keyboard alternative to dragging). */}
       <div
-        aria-hidden="true"
+        role="button"
+        tabIndex={0}
+        aria-label={t("legendPanel.resize")}
+        title={t("legendPanel.resize")}
         onPointerDown={(event) => beginResize(event, "right")}
         onDoubleClick={resetSize}
-        className="absolute bottom-0 right-0 z-10 h-4 w-4 cursor-nwse-resize"
+        onKeyDown={(event) => {
+          if (stepResize("right", event.key)) event.preventDefault();
+        }}
+        className="absolute bottom-0 right-0 z-10 h-6 w-6 cursor-nwse-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="absolute bottom-1 right-1 h-2 w-2 border-b-2 border-r-2 border-muted-foreground/60" />
       </div>
       <div
-        aria-hidden="true"
+        role="button"
+        tabIndex={0}
+        aria-label={t("legendPanel.resize")}
+        title={t("legendPanel.resize")}
         onPointerDown={(event) => beginResize(event, "left")}
         onDoubleClick={resetSize}
-        className="absolute bottom-0 left-0 z-10 h-4 w-4 cursor-nesw-resize"
+        onKeyDown={(event) => {
+          if (stepResize("left", event.key)) event.preventDefault();
+        }}
+        className="absolute bottom-0 left-0 z-10 h-6 w-6 cursor-nesw-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="absolute bottom-1 left-1 h-2 w-2 border-b-2 border-l-2 border-muted-foreground/60" />
       </div>

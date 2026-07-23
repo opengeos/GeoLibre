@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Adicionar de dicionário",
     "dictionaryHint": "Um objeto JSON com pares {\"rótulo\": \"cor\"}, ou um \"rótulo: cor\" por linha.",
     "dictionaryAdd": "Adicionar seção",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "resize": "Redimensionar legenda"
   }
 }

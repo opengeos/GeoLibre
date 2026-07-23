@@ -3917,6 +3917,7 @@
     "addFromDictionary": "Tambah dari kamus",
     "dictionaryHint": "Objek JSON berisi pasangan {\"label\": \"warna\"}, atau satu \"label: warna\" per baris.",
     "dictionaryAdd": "Tambah bagian",
-    "cancel": "Batal"
+    "cancel": "Batal",
+    "resize": "Ubah ukuran legenda"
   }
 }

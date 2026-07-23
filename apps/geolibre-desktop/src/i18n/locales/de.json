@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Aus Wörterbuch hinzufügen",
     "dictionaryHint": "Ein JSON-Objekt aus {\"Beschriftung\": \"Farbe\"}-Paaren oder je Zeile \"Beschriftung: Farbe\".",
     "dictionaryAdd": "Abschnitt hinzufügen",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "resize": "Legendengröße ändern"
   }
 }

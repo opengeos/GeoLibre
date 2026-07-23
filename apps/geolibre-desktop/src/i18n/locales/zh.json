@@ -3917,6 +3917,7 @@
     "addFromDictionary": "从字典添加",
     "dictionaryHint": "包含 {\"标签\": \"颜色\"} 键值对的 JSON 对象，或每行一个“标签: 颜色”。",
     "dictionaryAdd": "添加分节",
-    "cancel": "取消"
+    "cancel": "取消",
+    "resize": "调整图例大小"
   }
 }

@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Añadir desde diccionario",
     "dictionaryHint": "Un objeto JSON con pares {\"etiqueta\": \"color\"}, o una línea \"etiqueta: color\" por elemento.",
     "dictionaryAdd": "Añadir sección",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "resize": "Cambiar el tamaño de la leyenda"
   }
 }

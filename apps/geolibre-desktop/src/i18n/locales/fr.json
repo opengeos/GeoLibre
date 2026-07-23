@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Ajouter depuis un dictionnaire",
     "dictionaryHint": "Un objet JSON de paires {\"libellé\": \"couleur\"}, ou une ligne \"libellé : couleur\" par élément.",
     "dictionaryAdd": "Ajouter la section",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "resize": "Redimensionner la légende"
   }
 }

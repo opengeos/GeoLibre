@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Sözlükten ekle",
     "dictionaryHint": "{\"etiket\": \"renk\"} çiftlerinden oluşan bir JSON nesnesi veya satır başına bir \"etiket: renk\".",
     "dictionaryAdd": "Bölüm ekle",
-    "cancel": "İptal"
+    "cancel": "İptal",
+    "resize": "Lejantı yeniden boyutlandır"
   }
 }

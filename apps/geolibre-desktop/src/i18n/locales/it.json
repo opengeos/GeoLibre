@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Aggiungi da dizionario",
     "dictionaryHint": "Un oggetto JSON di coppie {\"etichetta\": \"colore\"}, o una riga \"etichetta: colore\" per elemento.",
     "dictionaryAdd": "Aggiungi sezione",
-    "cancel": "Annulla"
+    "cancel": "Annulla",
+    "resize": "Ridimensiona la legenda"
   }
 }

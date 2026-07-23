@@ -3990,6 +3990,7 @@
     "addFromDictionary": "Add from dictionary",
     "dictionaryHint": "A JSON object of {\"label\": \"color\"} pairs, or one \"label: color\" per line.",
     "dictionaryAdd": "Add section",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "resize": "Resize legend"
   }
 }

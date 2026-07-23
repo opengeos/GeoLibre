@@ -3974,6 +3974,7 @@
     "addFromDictionary": "Toevoegen uit woordenboek",
     "dictionaryHint": "Een JSON-object met {\"label\": \"kleur\"}-paren, of één \"label: kleur\" per regel.",
     "dictionaryAdd": "Sectie toevoegen",
-    "cancel": "Annuleren"
+    "cancel": "Annuleren",
+    "resize": "Legenda vergroten of verkleinen"
   }
 }
