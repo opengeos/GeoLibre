@@ -152,6 +152,21 @@ test("ArcGISMapEngine maps homogeneous GeoJSON base styles to public simple rend
   });
 });
 
+test("ArcGISMapEngine maps explicit categorized stops to a public unique-value renderer", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([{
+    ...layer("points", "geojson"),
+    geojson: { type: "FeatureCollection", features: [{ type: "Feature", properties: { kind: "park" }, geometry: { type: "Point", coordinates: [8.5, 47.3] } }] },
+    style: { fillColor: "#112233", strokeColor: "#445566", fillOpacity: 1, strokeWidth: 2, circleRadius: 5, vectorStyleMode: "categorized", vectorStyleProperty: "kind", vectorStyleStops: [{ value: "park", color: "#00ff00", label: "Park" }] },
+  }]);
+  await engine.mount({} as HTMLElement, initialView);
+  const renderer = runtime.currentLayers[0]?.properties.renderer as { readonly type?: string; readonly field?: string; readonly uniqueValueInfos?: readonly { readonly value?: string; readonly label?: string }[] };
+  assert.equal(renderer.type, "unique-value");
+  assert.equal(renderer.field, "kind");
+  assert.deepEqual(renderer.uniqueValueInfos?.map(({ value, label }) => ({ value, label })), [{ value: "park", label: "Park" }]);
+});
+
 test("ArcGISMapEngine owns supported public controls while preserving native attribution", async () => {
   const runtime = createArcGISFakeRuntime();
   const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });

@@ -296,7 +296,22 @@ function geoJsonRenderer(layer: GeoLibreLayer): Record<string, unknown> | null {
     : kind === "line"
       ? { type: "simple-line", color: stroke, width: Math.max(0, layer.style.strokeWidth) }
       : { type: "simple-fill", color: fill, outline };
-  return { type: "simple", symbol };
+  if (layer.style.vectorStyleMode !== "categorized" || !layer.style.vectorStyleProperty.trim()) {
+    return { type: "simple", symbol };
+  }
+  const uniqueValueInfos = layer.style.vectorStyleStops.flatMap((stop) => {
+    const color = hexColorWithOpacity(stop.color, layer.style.fillOpacity);
+    if (!color || (typeof stop.value !== "string" && typeof stop.value !== "number")) return [];
+    const categorizedSymbol = kind === "point"
+      ? { ...symbol, color }
+      : kind === "line"
+        ? { ...symbol, color: hexColorWithOpacity(stop.color, 1) }
+        : { ...symbol, color };
+    return [{ value: stop.value, label: stop.label ?? String(stop.value), symbol: categorizedSymbol }];
+  });
+  return uniqueValueInfos.length > 0
+    ? { type: "unique-value", field: layer.style.vectorStyleProperty, defaultSymbol: symbol, uniqueValueInfos }
+    : { type: "simple", symbol };
 }
 
 function toArcGISLayerId(id: string): string {

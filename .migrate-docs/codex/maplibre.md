@@ -2156,3 +2156,26 @@
   passed; `git diff --check` → passed.
 - Follow-up: translate the reviewed categorized/graduated color modes next;
   Codex, 2026-07-23.
+
+## 2026-07-23 — MapLibre categorized paint → ArcGIS unique-value renderer
+
+- Source: MapLibre — categorized `vectorStyleStops` color features by the
+  store-owned `vectorStyleProperty`, with base paint for unmatched values.
+- Files touched: ArcGIS MapView/SceneView adapters and ArcGIS MapView tests
+  before → documented UniqueValueRenderer autocast configuration.
+- ArcGIS approach: map valid explicit category stops to public
+  `uniqueValueInfos`; preserve the existing simple symbol as `defaultSymbol`.
+- What changed: homogeneous GeoJSON layers in `categorized` mode now render
+  each matching stop color and retain the base style for other values.
+- Gap / limitation: graduated/class-breaks, rule filters, MapLibre expressions,
+  and per-category size/stroke overrides remain untranslated.
+- Workaround: accept only valid string/number stops with hex colors; otherwise
+  fall back to the base simple renderer. Removal criteria: a reviewed advanced
+  renderer translation matrix and coverage for every neutral style mode.
+- Tradeoff accepted: explicit stops map predictably without inferring class
+  breaks or evaluating MapLibre expressions inside the adapter.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts` →
+  14 passed; `npm run lint -- --quiet` → passed; `git diff --check` → passed.
+- Follow-up: map graduated stops to ArcGIS class-breaks renderer; Codex,
+  2026-07-23.

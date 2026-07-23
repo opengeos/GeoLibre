@@ -227,6 +227,8 @@ Status values: not started · in progress · partial · blocked · done
 - Implemented: homogeneous store GeoJSON layers now translate base color,
   opacity, stroke, and point-radius presentation into public ArcGIS simple
   renderers; advanced style modes remain an explicit follow-up.
+- Implemented: explicit categorized GeoJSON color stops now map to ArcGIS
+  unique-value renderers while the base symbol remains the unmatched fallback.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,
