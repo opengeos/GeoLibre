@@ -2179,3 +2179,26 @@
   14 passed; `npm run lint -- --quiet` → passed; `git diff --check` → passed.
 - Follow-up: map graduated stops to ArcGIS class-breaks renderer; Codex,
   2026-07-23.
+
+## 2026-07-23 — MapLibre graduated paint → ArcGIS color visual variable
+
+- Source: MapLibre — graduated style interpolates numeric
+  `vectorStyleStops` over `vectorStyleProperty`.
+- Files touched: ArcGIS MapView/SceneView adapters and ArcGIS MapView tests
+  before → documented SimpleRenderer color visual-variable configuration.
+- ArcGIS approach: retain the base public simple symbol and attach a public
+  `color` visual variable with the store's sorted numeric stops.
+- What changed: valid graduated stops now interpolate continuously in ArcGIS,
+  matching the neutral store behavior rather than reducing it to discrete bins.
+- Gap / limitation: class-break labels, classification recomputation,
+  proportional size, rule filters, expressions, and advanced symbols remain
+  outside this slice.
+- Workaround: invalid/missing stops use the base simple renderer; partial legacy
+  style records are explicitly guarded. Removal criteria: renderer support for
+  the remaining neutral style modes with dedicated tests.
+- Tradeoff accepted: public visual variables preserve color interpolation but
+  do not carry MapLibre's broader expression language.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts` →
+  15 passed; `npm run lint -- --quiet` → passed; `git diff --check` → passed.
+- Follow-up: evaluate proportional-size visual variables; Codex, 2026-07-23.

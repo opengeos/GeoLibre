@@ -296,7 +296,16 @@ function geoJsonRenderer(layer: GeoLibreLayer): Record<string, unknown> | null {
     : kind === "line"
       ? { type: "simple-line", color: stroke, width: Math.max(0, layer.style.strokeWidth) }
       : { type: "simple-fill", color: fill, outline };
-  if (layer.style.vectorStyleMode !== "categorized" || !layer.style.vectorStyleProperty.trim()) {
+  const property = typeof layer.style.vectorStyleProperty === "string" ? layer.style.vectorStyleProperty.trim() : "";
+  if (layer.style.vectorStyleMode === "graduated" && property) {
+    const stops = layer.style.vectorStyleStops
+      .map((stop) => ({ value: typeof stop.value === "number" ? stop.value : Number.parseFloat(stop.value), color: stop.color }))
+      .filter((stop) => Number.isFinite(stop.value) && hexColorWithOpacity(stop.color, layer.style.fillOpacity))
+      .sort((left, right) => left.value - right.value)
+      .map((stop) => ({ value: stop.value, color: stop.color }));
+    if (stops.length >= 2) return { type: "simple", symbol, visualVariables: [{ type: "color", field: property, stops }] };
+  }
+  if (layer.style.vectorStyleMode !== "categorized" || !property) {
     return { type: "simple", symbol };
   }
   const uniqueValueInfos = layer.style.vectorStyleStops.flatMap((stop) => {
@@ -310,7 +319,7 @@ function geoJsonRenderer(layer: GeoLibreLayer): Record<string, unknown> | null {
     return [{ value: stop.value, label: stop.label ?? String(stop.value), symbol: categorizedSymbol }];
   });
   return uniqueValueInfos.length > 0
-    ? { type: "unique-value", field: layer.style.vectorStyleProperty, defaultSymbol: symbol, uniqueValueInfos }
+    ? { type: "unique-value", field: property, defaultSymbol: symbol, uniqueValueInfos }
     : { type: "simple", symbol };
 }
 

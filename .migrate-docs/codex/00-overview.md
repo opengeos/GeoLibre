@@ -229,6 +229,8 @@ Status values: not started · in progress · partial · blocked · done
   renderers; advanced style modes remain an explicit follow-up.
 - Implemented: explicit categorized GeoJSON color stops now map to ArcGIS
   unique-value renderers while the base symbol remains the unmatched fallback.
+- Implemented: graduated numeric GeoJSON stops now map to public ArcGIS color
+  visual variables, retaining continuous store-defined interpolation.
 - Implemented: cancelable point/bounds gestures, marker rotation and drag
   lifecycle, double-click drawing policy, and restorable transient GeoJSON
   overlays now live behind `MapEngineClient.interactions`. GPS, collaboration,

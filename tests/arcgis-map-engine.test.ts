@@ -167,6 +167,19 @@ test("ArcGISMapEngine maps explicit categorized stops to a public unique-value r
   assert.deepEqual(renderer.uniqueValueInfos?.map(({ value, label }) => ({ value, label })), [{ value: "park", label: "Park" }]);
 });
 
+test("ArcGISMapEngine maps graduated stops to a public color visual variable", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([{
+    ...layer("points", "geojson"),
+    geojson: { type: "FeatureCollection", features: [{ type: "Feature", properties: { score: 5 }, geometry: { type: "Point", coordinates: [8.5, 47.3] } }] },
+    style: { fillColor: "#112233", strokeColor: "#445566", fillOpacity: 1, strokeWidth: 2, circleRadius: 5, vectorStyleMode: "graduated", vectorStyleProperty: "score", vectorStyleStops: [{ value: 10, color: "#ff0000" }, { value: 0, color: "#0000ff" }] },
+  }]);
+  await engine.mount({} as HTMLElement, initialView);
+  const renderer = runtime.currentLayers[0]?.properties.renderer as { readonly visualVariables?: readonly { readonly type?: string; readonly field?: string; readonly stops?: readonly { readonly value?: number }[] }[] };
+  assert.deepEqual(renderer.visualVariables?.[0], { type: "color", field: "score", stops: [{ value: 0, color: "#0000ff" }, { value: 10, color: "#ff0000" }] });
+});
+
 test("ArcGISMapEngine owns supported public controls while preserving native attribution", async () => {
   const runtime = createArcGISFakeRuntime();
   const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
