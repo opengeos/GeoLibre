@@ -2129,3 +2129,30 @@
 - Verification: focused ArcGIS MapView/SceneView/registry tests → 25 passed;
   `git diff --check` → passed.
 - Follow-up: add browser validation for a public COG; Codex, 2026-07-22.
+
+## 2026-07-23 — MapLibre base GeoJSON paint → ArcGIS simple renderers
+
+- Source: MapLibre — base GeoJSON fill, line, and circle paint reads the
+  store-owned `LayerStyle` color, opacity, stroke width, and circle radius.
+- Files touched: ArcGIS MapView and SceneView adapters plus deterministic
+  adapter tests before → public ArcGIS simple renderer/symbol configuration.
+- ArcGIS approach: supply documented GeoJSONLayer `renderer` objects using
+  SimpleRenderer with simple marker, line, or fill symbols; use RGBA values for
+  the independent fill opacity.
+- What changed: homogeneous point, line, or polygon collections now receive a
+  matching base renderer from their latest store snapshot. Mixed/unknown
+  geometry collections intentionally retain the SDK default renderer.
+- Gap / limitation: rule-based, graduated, categorized, expression, pattern,
+  marker-shape, label, cluster, heatmap, extrusion, and elevation style modes
+  are not translated in this slice.
+- Workaround: limit the mapping to stable base properties and preserve default
+  rendering for mixed geometry. Removal criteria: a reviewed renderer-translation
+  matrix and tests for each advanced neutral style mode.
+- Tradeoff accepted: bounded simple renderer parity improves core appearance
+  without silently inventing semantics for MapLibre expressions or mixed layers.
+- Status: partial.
+- Verification: `node --import tsx --test tests/arcgis-map-engine.test.ts
+  tests/arcgis-scene-engine.test.ts` → 24 passed; `npm run lint -- --quiet` →
+  passed; `git diff --check` → passed.
+- Follow-up: translate the reviewed categorized/graduated color modes next;
+  Codex, 2026-07-23.

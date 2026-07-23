@@ -128,6 +128,30 @@ test("ArcGISMapEngine mounts store COG URLs as public ImageryTileLayers", async 
   assert.equal(engine.supportsLayer(layer("cog", "cog")), true);
 });
 
+test("ArcGISMapEngine maps homogeneous GeoJSON base styles to public simple renderers", async () => {
+  const runtime = createArcGISFakeRuntime();
+  const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });
+  engine.syncLayers([{
+    ...layer("points", "geojson"),
+    geojson: {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.5, 47.3] } }],
+    },
+    style: { fillColor: "#112233", strokeColor: "#445566", fillOpacity: 0.5, strokeWidth: 3, circleRadius: 7 },
+  }]);
+  await engine.mount({} as HTMLElement, initialView);
+  assert.deepEqual(runtime.currentLayers[0]?.properties.renderer, {
+    type: "simple",
+    symbol: {
+      type: "simple-marker",
+      style: "circle",
+      color: [17, 34, 51, 128],
+      size: 14,
+      outline: { color: [68, 85, 102, 255], width: 3 },
+    },
+  });
+});
+
 test("ArcGISMapEngine owns supported public controls while preserving native attribution", async () => {
   const runtime = createArcGISFakeRuntime();
   const engine = new ArcGISMapEngine({ loadArcGIS: async () => runtime.modules });

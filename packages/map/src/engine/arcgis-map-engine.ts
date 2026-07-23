@@ -269,6 +269,36 @@ function cogUrl(source: Readonly<Record<string, unknown>>): string | null {
   return url?.startsWith("cog://") ? url.slice("cog://".length) : url;
 }
 
+function hexColorWithOpacity(color: string, opacity: number): readonly [number, number, number, number] | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255, Math.round(Math.max(0, Math.min(1, opacity)) * 255)];
+}
+
+function geoJsonRenderer(layer: GeoLibreLayer): Record<string, unknown> | null {
+  const features = layer.geojson?.features ?? [];
+  const geometryKinds = new Set(features.flatMap((feature) => {
+    const type = feature.geometry?.type;
+    if (type === "Point" || type === "MultiPoint") return ["point"];
+    if (type === "LineString" || type === "MultiLineString") return ["line"];
+    if (type === "Polygon" || type === "MultiPolygon") return ["polygon"];
+    return [];
+  }));
+  if (geometryKinds.size !== 1) return null;
+  const fill = hexColorWithOpacity(layer.style.fillColor, layer.style.fillOpacity);
+  const stroke = hexColorWithOpacity(layer.style.strokeColor, 1);
+  if (!fill || !stroke) return null;
+  const outline = { color: stroke, width: Math.max(0, layer.style.strokeWidth) };
+  const kind = [...geometryKinds][0];
+  const symbol = kind === "point"
+    ? { type: "simple-marker", style: "circle", color: fill, size: Math.max(1, layer.style.circleRadius * 2), outline }
+    : kind === "line"
+      ? { type: "simple-line", color: stroke, width: Math.max(0, layer.style.strokeWidth) }
+      : { type: "simple-fill", color: fill, outline };
+  return { type: "simple", symbol };
+}
+
 function toArcGISLayerId(id: string): string {
   return `geolibre-${id}`;
 }
@@ -727,7 +757,8 @@ export class ArcGISMapEngine implements MapEngine {
         new Blob([JSON.stringify(withArcGISFeatureIndices(layer.geojson))], { type: "application/geo+json" }),
       );
       this.objectUrls.add(url);
-      return new modules.GeoJSONLayer({ ...properties, url });
+      const renderer = geoJsonRenderer(layer);
+      return new modules.GeoJSONLayer({ ...properties, url, ...(renderer ? { renderer } : {}) });
     }
 
     if (layer.type === "wms") {
