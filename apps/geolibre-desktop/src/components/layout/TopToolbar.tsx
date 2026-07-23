@@ -82,6 +82,7 @@ import { useAutoLegend } from "../../hooks/useAutoLegend";
 import { useVectorTileGeometryBackfill } from "../../hooks/useVectorTileGeometryBackfill";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
+import { isMaptoolkitBasemapActive } from "../../lib/maptoolkit-basemap";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { MENU_MANAGED_PLUGIN_IDS, isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
@@ -551,15 +552,11 @@ export function TopToolbar({
   };
 
   // The Maptoolkit logo is Maptoolkit-basemap attribution, so it must not linger
-  // over a different basemap. A basemap counts as Maptoolkit when the active
-  // style lives on maptoolkit.org, or a stacked raster basemap is tagged with
-  // that provider (the basemap control's metadata). When neither holds, turn the
-  // logo back off through the same path as the menu, so the map controller and
-  // this menu's checkmark stay in sync.
-  const maptoolkitBasemapActive = useAppStore(
-    (s) =>
-      s.basemapStyleUrl.includes("maptoolkit.org") ||
-      s.layers.some((layer) => layer.metadata?.basemapProvider === "maptoolkit"),
+  // over a different basemap. When no Maptoolkit basemap is active (see
+  // isMaptoolkitBasemapActive), turn the logo back off through the same path as
+  // the menu, so the map controller and this menu's checkmark stay in sync.
+  const maptoolkitBasemapActive = useAppStore((s) =>
+    isMaptoolkitBasemapActive(s.basemapStyleUrl, s.layers),
   );
   useEffect(() => {
     if (maptoolkitBasemapActive) return;

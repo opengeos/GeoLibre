@@ -41,6 +41,7 @@ import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { isMaptoolkitBasemapActive } from "../../../lib/maptoolkit-basemap";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import {
   LOGO_CONTROL_IDS,
@@ -386,10 +387,8 @@ function LogosSubmenu({ controlsVisible, onToggleMapControl, show }: LogosSubmen
   // styles.maptoolkit.org) or as a stacked raster basemap layer (the basemap
   // control tags those with `metadata.basemapProvider`). Either makes the logo
   // relevant. See maplibre-basemap-control.ts (registerRasterBasemap).
-  const maptoolkitBasemapActive = useAppStore(
-    (s) =>
-      s.basemapStyleUrl.includes("maptoolkit.org") ||
-      s.layers.some((layer) => layer.metadata?.basemapProvider === "maptoolkit"),
+  const maptoolkitBasemapActive = useAppStore((s) =>
+    isMaptoolkitBasemapActive(s.basemapStyleUrl, s.layers),
   );
 
   const mapLibreLogoVisible = show("controls.mapControl.logo");
