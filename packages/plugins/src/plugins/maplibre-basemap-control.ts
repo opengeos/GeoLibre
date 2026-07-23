@@ -1,4 +1,4 @@
-import { getGoogleMapsApiKey, useAppStore } from "@geolibre/core";
+import { getGoogleMapsApiKey, getProtomapsApiKey, useAppStore } from "@geolibre/core";
 import {
   BasemapControl,
   type BasemapChangeEvent,
@@ -60,6 +60,30 @@ function getAmazonCredentials(): { amazonApiKey: string; awsRegion?: string } | 
   if (!amazonApiKey) return null;
   const awsRegion = env.VITE_AMAZON_LOCATION_AWS_REGION?.trim() || undefined;
   return awsRegion ? { amazonApiKey, awsRegion } : { amazonApiKey };
+}
+
+/**
+ * Protomaps and Stadia Maps keys (both added in maplibre-gl-basemap-control
+ * 0.13.0) from runtime env, keyed by the option name the control expects.
+ * Protomaps reuses the same `VITE_PROTOMAPS_API_KEY` that GeoLibre's own
+ * Protomaps basemaps read, so one key serves both.
+ *
+ * Applied with the same "only when set" rule as {@link getAmazonCredentials}:
+ * both providers are also enterable in the panel's API keys view, and Stadia
+ * additionally allows keyless access from allowlisted domains, so pushing empty
+ * strings would clobber a key typed there for no gain.
+ */
+function getStyleProviderCredentials(): {
+  protomapsApiKey?: string;
+  stadiaApiKey?: string;
+} {
+  const env = getRuntimeEnvironment();
+  const protomapsApiKey = getProtomapsApiKey(env);
+  const stadiaApiKey = env.VITE_STADIA_API_KEY?.trim() || undefined;
+  return {
+    ...(protomapsApiKey ? { protomapsApiKey } : {}),
+    ...(stadiaApiKey ? { stadiaApiKey } : {}),
+  };
 }
 
 let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -210,6 +234,7 @@ function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
     // region default in place.
     ...getTrafficOverlayCredentials(),
     ...(getAmazonCredentials() ?? {}),
+    ...getStyleProviderCredentials(),
     // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
     // discards every stacked raster basemap. In stack mode that silently wiped
     // a carefully assembled stack, so confirm before the rasters are lost. See
@@ -249,6 +274,10 @@ function addRuntimeEnvListener(): void {
     if (amazon) {
       basemapControl.setAmazonCredentials(amazon.amazonApiKey, amazon.awsRegion);
     }
+    // Same rule for the style-provider keys: push only what the user actually set.
+    const { protomapsApiKey, stadiaApiKey } = getStyleProviderCredentials();
+    if (protomapsApiKey) basemapControl.setProtomapsApiKey(protomapsApiKey);
+    if (stadiaApiKey) basemapControl.setStadiaApiKey(stadiaApiKey);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);

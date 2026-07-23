@@ -218,6 +218,17 @@ VITE_AMAZON_LOCATION_API_KEY=your_amazon_location_api_key   # Amazon Location st
 VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional; omit to use the control's built-in default region
 ```
 
+## Optional Protomaps and Stadia Maps basemaps
+
+The Basemaps control also carries **Protomaps** and **Stadia Maps** (including Stadia x Stamen) style basemaps. Both authenticate with your own key:
+
+```env
+VITE_PROTOMAPS_API_KEY=your_protomaps_api_key   # same key as the New map dialog's Protomaps basemaps
+VITE_STADIA_API_KEY=your_stadia_api_key         # https://client.stadiamaps.com
+```
+
+Protomaps reuses the key described in [Optional basemap credentials](#optional-basemap-credentials) above — set it once and both places pick it up. Until each key is set, the panel shows a "Get a … API key" prompt in place of the basemap rather than loading tiles.
+
 Keys set via **Settings → Environment Variables**, or typed directly into the panel's **API keys** view (the key button in the panel header), apply at runtime without reopening the project. A key baked into `apps/geolibre-desktop/.env.local` is read at build time and needs a dev server restart. When `VITE_AMAZON_LOCATION_API_KEY` is set in the environment it takes precedence over a key typed in the panel; removing it from the environment clears it on the next page reload.
 
 ## Optional Python sidecar
