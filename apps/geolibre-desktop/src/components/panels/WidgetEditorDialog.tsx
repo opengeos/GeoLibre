@@ -1,4 +1,4 @@
-import type { DashboardWidget, IndicatorAggregation } from "@geolibre/core";
+import type { DashboardWidget, DashboardWidgetType, IndicatorAggregation } from "@geolibre/core";
 import {
   Button,
   ColorField,
@@ -20,7 +20,6 @@ import {
   MIN_HISTOGRAM_BINS,
   numericColumns,
   type BarAggregation,
-  type ChartType,
 } from "../../lib/attribute-charts";
 import { useLayerChartData } from "../../hooks/useLayerChartData";
 
@@ -56,7 +55,7 @@ export function WidgetEditorDialog({
 }: WidgetEditorDialogProps) {
   const { t } = useTranslation();
   const [layerId, setLayerId] = useState("");
-  const [type, setType] = useState<ChartType>("histogram");
+  const [type, setType] = useState<DashboardWidgetType>("histogram");
   const [field, setField] = useState("");
   const [xField, setXField] = useState("");
   const [yField, setYField] = useState("");
@@ -114,7 +113,6 @@ export function WidgetEditorDialog({
         : type === "scatter"
           ? numericCols.length >= 2
           : hasNumeric);
-
   const save = () => {
     if (!canSave) return;
     const next: DashboardWidget = {
@@ -149,10 +147,9 @@ export function WidgetEditorDialog({
       if (indicatorAggregation !== "count") {
         next.field = pick(field, numericCols);
       }
-      const trimmedPrefix = prefix.trim();
-      if (trimmedPrefix) next.prefix = trimmedPrefix;
-      const trimmedSuffix = suffix.trim();
-      if (trimmedSuffix) next.suffix = trimmedSuffix;
+      // Preserve whitespace: prefix/suffix may have intentional spaces (" ha").
+      if (prefix) next.prefix = prefix;
+      if (suffix) next.suffix = suffix;
     }
     onSave(next);
     onOpenChange(false);
@@ -189,7 +186,7 @@ export function WidgetEditorDialog({
               </Select>
             </div>
 
-            {!hasChartable ? (
+            {!hasChartable && type !== "indicator" ? (
               <p className="text-sm text-muted-foreground">{t("dashboard.editor.noFields")}</p>
             ) : (
               <div className="flex flex-wrap items-end gap-3">
@@ -200,7 +197,7 @@ export function WidgetEditorDialog({
                     className="w-36"
                     value={type}
                     onChange={(event) => {
-                      const nextType = event.target.value as ChartType;
+                      const nextType = event.target.value as DashboardWidgetType;
                       setType(nextType);
                       // Pie has no "average"; drop a carried-over mean so the
                       // select doesn't show a stale value with no matching option.
