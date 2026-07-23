@@ -741,9 +741,11 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
     ) {
       widget.indicatorAggregation = candidate.indicatorAggregation;
     }
-    const prefix = normalizeString(candidate.prefix).trim();
+    // Prefix/suffix are not trimmed: a leading/trailing space is intentional
+    // (e.g. " ha" or "$ ").
+    const prefix = normalizeString(candidate.prefix);
     if (prefix) widget.prefix = prefix;
-    const suffix = normalizeString(candidate.suffix).trim();
+    const suffix = normalizeString(candidate.suffix);
     if (suffix) widget.suffix = suffix;
     widgets.push(widget);
   }
