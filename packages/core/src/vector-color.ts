@@ -276,7 +276,14 @@ export function parseJsonExpression(expression: string): unknown[] | null {
  * Builds the data-driven color value for a vector layer's current style mode.
  * `single` (or any mode that cannot produce a valid expression) returns the
  * flat fallback color; `categorized` returns a `match` expression, `graduated`
- * an `interpolate` expression, and `expression` the parsed user expression.
+ * a `step` expression, and `expression` the parsed user expression.
+ *
+ * Graduated stops are class lower bounds (see
+ * {@link createGraduatedClassBreaks}), so the classes are discrete: the map
+ * paints exactly one color per class, which is what the legend (`≥ value`) and
+ * the QML/SLD exporters already describe. Rendering them as a continuous
+ * `interpolate` instead blends a shade per feature, so a 4-class layer draws in
+ * many more than 4 colors and stops matching its own legend (#1384).
  *
  * @param style - The layer style.
  * @param fallbackColor - The flat color used for `single` mode and as the
@@ -312,21 +319,37 @@ export function vectorColorExpression(style: LayerStyle, fallbackColor: string):
     ];
   }
 
-  const stops = styleValue(style, "vectorStyleStops")
+  const stops = graduatedStops(style);
+  if (stops.length < 2) return fallbackColor;
+
+  // `step` outputs the base color below the first break, then switches at each
+  // subsequent break, so every feature lands in exactly one class and features
+  // under the lowest break keep the first class's color (matching how the SLD
+  // exporter writes its leading `< first` rule).
+  return [
+    "step",
+    ["to-number", ["get", property], stops[0].value],
+    stops[0].color,
+    ...stops.slice(1).flatMap((stop) => [stop.value, stop.color]),
+  ];
+}
+
+/**
+ * The graduated stops of a style, cleaned for rendering: non-numeric values and
+ * invalid colors dropped, sorted ascending, and de-duplicated. MapLibre rejects
+ * a `step` expression whose inputs are not strictly ascending, and stops reach
+ * here from hand-edited projects and style imports as well as the Style panel,
+ * so repeats are dropped rather than trusted away.
+ */
+function graduatedStops(style: LayerStyle): { color: string; value: number }[] {
+  const sorted = styleValue(style, "vectorStyleStops")
     .map((stop) => ({
       color: stop.color,
       value: typeof stop.value === "number" ? stop.value : Number.parseFloat(stop.value),
     }))
     .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
-  if (stops.length < 2) return fallbackColor;
-
-  return [
-    "interpolate",
-    ["linear"],
-    ["to-number", ["get", property], stops[0].value],
-    ...stops.flatMap((stop) => [stop.value, stop.color]),
-  ];
+  return sorted.filter((stop, index) => index === 0 || stop.value > sorted[index - 1].value);
 }
 
 /**

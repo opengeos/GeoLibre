@@ -1,8 +1,13 @@
-name: Cloudflare preview
+name: PR preview
 
-# Builds the docs site + web demo for every pull request and uploads it to a
-# Cloudflare Pages project as a *preview* deployment, then comments the URL on
-# the PR. This replaces the old Netlify Deploy Previews.
+# Builds the docs site + web demo for every pull request and publishes it to
+# two places from a single build:
+#
+#   GitHub Pages  https://opengeos.org/pages-preview/GeoLibre/pr-<N>/
+#   Cloudflare    a per-branch *.pages.dev preview deployment
+#
+# Both URLs land in one sticky comment on the PR. The Pages copy is removed
+# automatically when the PR closes.
 #
 # The build mirrors .github/workflows/pages.yml (the GitHub Pages production
 # deploy) so previews match what ships:
@@ -13,10 +18,20 @@ name: Cloudflare preview
 # to PRs opened from forks, so previews only run for branches pushed to this
 # repo (maintainers and collaborators). External fork PRs are skipped — the job
 # guard below short-circuits them instead of failing with a missing token.
+# Do NOT "fix" this by switching to pull_request_target: this job runs `npm ci`
+# and a full build from the PR's own tree, so it executes contributor code, and
+# under pull_request_target that code would run with this repo's secrets in
+# scope. (opengeos/geolibre-plugins can use pull_request_target for its plugin
+# previews only because it never executes the submitted code.)
 #
 # Required repository secrets (already present for the Workers deploys):
 #   CLOUDFLARE_API_TOKEN   - needs the "Cloudflare Pages: Edit" permission
 #   CLOUDFLARE_ACCOUNT_ID
+#   PREVIEW_DEPLOY_TOKEN   - fine-grained PAT scoped to opengeos/pages-preview
+#                            only, with Contents: Read and write + Pages: Read.
+#                            Pages read is required by wait-for-pages-deployment
+#                            below; without it the poll never sees a build and
+#                            the job times out with a misleading error.
 # Optional (baked into the client bundle, same as pages.yml):
 #   VITE_GEE_OAUTH_CLIENT_ID, VITE_PROTOMAPS_API_KEY,
 #   VITE_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY
@@ -24,14 +39,18 @@ name: Cloudflare preview
 on:
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, closed]
   workflow_dispatch:
 
 permissions:
   contents: read
+  # For the sticky preview comment. The deploy to opengeos/pages-preview does
+  # not use this token -- it uses PREVIEW_DEPLOY_TOKEN, which has no access to
+  # this repository.
   pull-requests: write
 
 concurrency:
-  group: cf-preview-${{ github.event.pull_request.number || github.ref }}
+  group: pr-preview-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,6 +60,8 @@ jobs:
     # Skip fork PRs: secrets are unavailable there, so the deploy would fail.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
+      # Unconditional: on `closed` there is nothing to build, but the preview
+      # removal below still needs a git repository in the workspace.
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -49,6 +70,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
+        if: github.event.action != 'closed'
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -58,12 +80,15 @@ jobs:
             apps/geolibre-desktop/jupyterlite/requirements.txt
 
       - name: Install documentation dependencies
+        if: github.event.action != 'closed'
         run: python -m pip install -r requirements-docs.txt
 
       - name: Install JupyterLite build dependencies
+        if: github.event.action != 'closed'
         run: python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
 
       - name: Set up Node.js
+        if: github.event.action != 'closed'
         uses: actions/setup-node@v7
         with:
           node-version: lts/*
@@ -71,9 +96,11 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install frontend dependencies
+        if: github.event.action != 'closed'
         run: npm ci
 
       - name: Build web demo
+        if: github.event.action != 'closed'
         run: npm run build -w geolibre-desktop
         env:
           GEOLIBRE_APP_BASE: ./
@@ -85,16 +112,76 @@ jobs:
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
 
       - name: Build documentation
+        if: github.event.action != 'closed'
         run: zensical build --strict
 
       - name: Add web demo to site
+        if: github.event.action != 'closed'
         run: |
           mkdir -p site/demo
           cp -R apps/geolibre-desktop/dist/. site/demo/
           test -f site/demo/index.html
           test -f site/demo/jupyterlite/lab/index.html
 
+      # ------------------------------------------------------- GitHub Pages
+      # Deployed BEFORE the DuckDB offload below, which deletes those modules
+      # and replaces them with site/_redirects. `_redirects` is a Cloudflare
+      # Pages feature that GitHub Pages ignores, so a Pages copy taken after
+      # that step would 404 on DuckDB. Pages allows 100 MB per file, so the
+      # ~40 MiB modules are fine to serve directly here.
+      - name: Check the site fits GitHub Pages
+        if: github.event.action != 'closed' && github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          echo "preview size: $(du -sh site | cut -f1)"
+          # 104857600 bytes = 100 MB, the Pages per-file hard limit.
+          oversized=$(find site -type f -size +104857600c -printf '%s\t%p\n' || true)
+          if [ -n "$oversized" ]; then
+            echo "::error::Files exceed the 100 MB GitHub Pages limit:"
+            echo "$oversized"
+            exit 1
+          fi
+
+      # Publishing happens via `git add`, which honors any .gitignore inside the
+      # payload and would silently drop those files from the commit while the
+      # build still reports success.
+      - name: Strip .gitignore files from the site
+        if: github.event.action != 'closed' && github.event_name == 'pull_request'
+        run: find site -name .gitignore -print -delete
+
+      - name: Deploy preview to GitHub Pages
+        id: pages
+        if: github.event_name == 'pull_request'
+        # This step has to run before the DuckDB offload below, which means a
+        # Pages problem (bad deploy token, Pages size limit) would otherwise
+        # take the Cloudflare preview and the PR comment down with it. Let the
+        # job carry on instead; the comment says which target failed.
+        #
+        # Deploy runs only. On `closed` this step IS the job -- everything after
+        # it is skipped -- so swallowing a failed removal would report success
+        # while the preview stayed published.
+        continue-on-error: ${{ github.event.action != 'closed' }}
+        # Pinned rather than tracking the v1 tag: this is a third-party action
+        # and it receives PREVIEW_DEPLOY_TOKEN.
+        uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
+        with:
+          source-dir: site
+          deploy-repository: opengeos/pages-preview
+          token: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
+          pages-base-url: opengeos.org/pages-preview
+          preview-branch: gh-pages
+          # pages-preview is shared across opengeos repositories and the action
+          # composes the path as "<umbrella-dir>/pr-<number>", so this namespaces
+          # our previews against every other repository's.
+          umbrella-dir: GeoLibre
+          action: ${{ github.event.action == 'closed' && 'remove' || 'deploy' }}
+          wait-for-pages-deployment: true
+          # Both URLs go in one comment, posted below.
+          comment: false
+
+      # --------------------------------------------------------- Cloudflare
       - name: Offload oversized DuckDB WASM to CDN
+        if: github.event.action != 'closed'
         # Cloudflare Pages rejects any single file > 25 MiB. The bundled DuckDB
         # WASM modules (duckdb-eh ~35 MiB, duckdb-mvp ~40 MiB) exceed that, so we
         # drop the local copies and redirect their hashed URLs to jsDelivr at the
@@ -131,6 +218,11 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         id: deploy
+        # pull_request only, like the Pages deploy above. --branch falls back to
+        # github.ref_name, so a manual run from the production branch would
+        # publish a *production* deployment to the preview project instead of a
+        # preview one.
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -143,17 +235,31 @@ jobs:
             --branch="${{ github.head_ref || github.ref_name }}"
             --commit-dirty=true
 
-      - name: Comment preview URL on PR
-        if: github.event_name == 'pull_request'
+      - name: Comment preview URLs on PR
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
         uses: actions/github-script@v9
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
+          PAGES_URL: ${{ steps.pages.outputs.preview-url }}
         with:
           script: |
             const url = process.env.DEPLOY_URL;
-            if (!url) return;
+            const pagesUrl = process.env.PAGES_URL;
+            if (!url && !pagesUrl) return;
             const marker = '<!-- cloudflare-preview -->';
-            const body = `${marker}\n### ⚡ Cloudflare Pages preview\n\n| Item | Value |\n| --- | --- |\n| Preview | ${url} |\n| Demo app | ${url}/demo/ |\n| Commit | \`${context.sha.slice(0, 7)}\` |`;
+            const rows = [];
+            if (pagesUrl) {
+              rows.push(`| GitHub Pages | ${pagesUrl} |`);
+              rows.push(`| Demo app | ${pagesUrl}demo/ |`);
+            } else {
+              rows.push(`| GitHub Pages | deploy failed — see the job log |`);
+            }
+            if (url) {
+              rows.push(`| Cloudflare | ${url} |`);
+              rows.push(`| Demo app | ${url}/demo/ |`);
+            }
+            rows.push(`| Commit | \`${context.sha.slice(0, 7)}\` |`);
+            const body = `${marker}\n### 🔍 PR preview\n\n| Item | Value |\n| --- | --- |\n${rows.join('\n')}`;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });

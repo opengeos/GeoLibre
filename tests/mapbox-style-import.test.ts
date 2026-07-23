@@ -178,6 +178,94 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     ]);
   });
 
+  it("reads a property-driven step color as a graduated renderer", () => {
+    // The lowest class is not one of the step's pairs: it is the base output,
+    // and its lower bound rides along as the input's `to-number` fallback.
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          paint: {
+            "fill-color": [
+              "step",
+              ["to-number", ["get", "value"], 10],
+              "#dbeafe",
+              50,
+              "#93c5fd",
+              90,
+              "#2563eb",
+            ],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.vectorStyleMode, "graduated");
+    assert.equal(result.style.vectorStyleProperty, "value");
+    assert.deepEqual(result.style.vectorStyleStops, [
+      { value: 10, color: "#dbeafe" },
+      { value: 50, color: "#93c5fd" },
+      { value: 90, color: "#2563eb" },
+    ]);
+  });
+
+  it("still reads a legacy interpolate color as a graduated renderer", () => {
+    // GeoLibre exported graduated layers as a continuous `interpolate` before
+    // the renderer became discrete; those projects must keep their classes.
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          paint: {
+            "fill-color": [
+              "interpolate",
+              ["linear"],
+              ["to-number", ["get", "value"], 0],
+              0,
+              "#dbeafe",
+              50,
+              "#2563eb",
+            ],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.vectorStyleMode, "graduated");
+    assert.equal(result.style.vectorStyleProperty, "value");
+    assert.deepEqual(result.style.vectorStyleStops, [
+      { value: 0, color: "#dbeafe" },
+      { value: 50, color: "#2563eb" },
+    ]);
+  });
+
+  it("keeps a zoom-driven step color as a raw expression", () => {
+    // `step` only means graduated when it steps over a feature property.
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          paint: { "fill-color": ["step", ["zoom"], "#111111", 8, "#222222"] },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.vectorStyleMode, "expression");
+    assert.equal(result.style.vectorStyleStops, undefined);
+  });
+
   it("recovers a rule-based renderer's filters, colors, and else", () => {
     const original = style({
       vectorStyleMode: "rule-based",

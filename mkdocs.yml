@@ -5,7 +5,7 @@ repo_name: opengeos/GeoLibre
 repo_url: https://github.com/opengeos/GeoLibre
 edit_uri: edit/main/docs/
 # Output directory, set explicitly so the build target stays pinned to `site/`
-# (matching the Pages/Netlify upload paths) rather than relying on the tool's
+# (matching the Pages upload paths) rather than relying on the tool's
 # default, which a Zensical 0.0.x patch could shift.
 site_dir: site
 

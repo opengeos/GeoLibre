@@ -186,7 +186,9 @@ export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
  *
  * Every catalog tool that the WASM binary also implements keeps its catalog
  * metadata but takes the manifest's parameters; the GeoLibre-authored tools that
- * never appear in the catalog are appended.
+ * never appear in the catalog are appended. A manifest that declares *no*
+ * parameters at all is treated as missing metadata rather than as a
+ * parameterless tool — see {@link mergeWasmToolManifests}.
  *
  * @param catalogTools - Tools from the Whitebox catalog snapshot.
  * @param wasmTools - Every WASM tool manifest ({@link listWasmToolManifests}).
@@ -239,13 +241,26 @@ function shouldPreferCatalogKind(
  * Reconcile one tool's WASM manifest params against the catalog's. The WASM
  * params win (names and set), but a same-named catalog param corrects a WASM
  * kind that mislabels a scalar as a dataset/bool (see {@link shouldPreferCatalogKind}).
+ *
+ * A manifest that declares **no** params is a metadata gap, not a parameterless
+ * tool, so the catalog's params are kept instead. geolibre-wasm ships 138 such
+ * manifests (`d8_pointer`, `fill_depressions`, `aspect`, `basins`, every
+ * Hydrology → Flow Routing tool, …) whose `params` array is empty while the
+ * binary still validates and requires them — running one with no arguments
+ * fails with `validation error: missing required parameter '…'` for all 138.
+ * Trusting the empty set rendered "This tool has no parameters." in the
+ * Processing dialog and left the tool impossible to run in local (WASM) mode.
+ * The sidecar path already restores catalog params the same way
+ * (`mergeCatalogParameterFallbacks` in ProcessingDialog), which is why the bug
+ * only ever showed with "Run locally (WASM)" on.
  */
 function reconcileToolParams(
   catalogParams: WhiteboxToolParameter[] | undefined,
   wasmParams: WhiteboxToolParameter[] | undefined,
 ): WhiteboxToolParameter[] {
+  if (!wasmParams?.length) return catalogParams ?? [];
   const catalogByName = new Map((catalogParams ?? []).map((param) => [param.name, param] as const));
-  return (wasmParams ?? []).map((param) => {
+  return wasmParams.map((param) => {
     const catalogParam = catalogByName.get(param.name);
     if (!catalogParam) return param;
     const catalogKind = paramKind(catalogParam);
@@ -267,20 +282,30 @@ export function mergeWasmToolManifests(
     // Consume the match so a WASM-only-appended tool (below) can never duplicate
     // a catalog tool's id.
     wasmById.delete(tool.id);
-    // The WASM binary is authoritative for the parameters (even an empty set)
-    // and for the tool's provenance; keep only the catalog's display metadata
-    // (name, category, …). Preserving `source` matters so a GeoLibre-authored
-    // tool that also has a catalog stub keeps its "geolibre" marker for the
-    // source filter. A same-named catalog param still corrects a WASM kind that
-    // mislabels a scalar expression as a dataset/bool (GeoLibre#1073).
+    // The WASM binary is authoritative for the parameters it declares, and for
+    // the tool's provenance; keep only the catalog's display metadata (name,
+    // category, …). A manifest that declares no params at all keeps the
+    // catalog's instead — see {@link reconcileToolParams}. Preserving `source`
+    // matters so a GeoLibre-authored tool that also has a catalog stub keeps its
+    // "geolibre" marker for the source filter. A same-named catalog param still
+    // corrects a WASM kind that mislabels a scalar expression as a dataset/bool
+    // (GeoLibre#1073).
     return {
       ...tool,
       params: reconcileToolParams(tool.params, wasm.params),
       source: wasm.source ?? tool.source,
     };
   });
-  const geolibreOnly = [...wasmById.values()].filter((tool) => tool.source === "geolibre");
-  return [...merged, ...geolibreOnly];
+  // Everything the WASM binary ships that the catalog snapshot does not list,
+  // whatever its provenance. This used to be filtered to `source === "geolibre"`
+  // on the assumption that only GeoLibre-authored tools were missing from the
+  // catalog, but the WASM also carries Whitebox-sourced tools the Whitebox Next
+  // Gen snapshot has never listed (buffer_vector, the variogram/cokriging tools,
+  // greater_than_or_equal_to, less_than_or_equal_to). Those are runnable — the
+  // WASM runner executes them — yet the filter dropped them, so the dialog
+  // listed fewer tools than the binary actually provides.
+  const wasmOnly = [...wasmById.values()];
+  return [...merged, ...wasmOnly];
 }
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {

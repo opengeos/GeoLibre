@@ -549,15 +549,13 @@ function graduatedRules(
     .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
 
-  warnings.push(
-    "The graduated color ramp was written as discrete SLD class breaks; the continuous interpolation is approximated.",
-  );
+  warnings.push("The graduated classes were written as SLD class breaks, one rule per class.");
 
   const rules: string[] = [];
-  // Values below the first break clamp to the first stop's color on the live
-  // map (the interpolate expression clamps out-of-range inputs), so emit a
-  // leading `< first` rule to reproduce that in SLD consumers. The importer
-  // recognizes and skips this guard so the stop values still round-trip exactly.
+  // Values below the first break take the first stop's color on the live map
+  // (the `step` expression's base output covers everything under the first
+  // break), so emit a leading `< first` rule to reproduce that in SLD consumers.
+  // The importer recognizes and skips this guard so the stops round-trip exactly.
   if (numeric.length > 0) {
     rules.push(
       rule(

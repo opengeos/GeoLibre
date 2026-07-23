@@ -87,6 +87,79 @@ describe("ruleBasedColorExpression", () => {
   });
 });
 
+describe("vectorColorExpression graduated mode", () => {
+  function graduated(patch: Partial<LayerStyle> = {}): LayerStyle {
+    return style({
+      vectorStyleMode: "graduated",
+      vectorStyleProperty: "pop",
+      vectorStyleStops: [
+        { value: 0, color: "#111111" },
+        { value: 10, color: "#222222" },
+        { value: 20, color: "#333333" },
+      ],
+      ...patch,
+    });
+  }
+
+  it("paints one flat color per class with a step expression", () => {
+    // Discrete, not `interpolate`: the stops are class lower bounds, so the map
+    // must draw exactly as many colors as the legend lists (#1384).
+    assert.deepEqual(vectorColorExpression(graduated(), "#000000"), [
+      "step",
+      ["to-number", ["get", "pop"], 0],
+      "#111111",
+      10,
+      "#222222",
+      20,
+      "#333333",
+    ]);
+  });
+
+  it("gives features below the lowest break the first class's color", () => {
+    const expression = vectorColorExpression(graduated(), "#000000") as unknown[];
+    // The step base output (index 2) covers everything under the first break,
+    // matching the SLD exporter's leading `< first` rule.
+    assert.equal(expression[2], "#111111");
+  });
+
+  it("sorts and de-duplicates stops so the step inputs strictly ascend", () => {
+    // MapLibre rejects a step whose inputs repeat; stops reach here from
+    // hand-edited projects and style imports, not only the Style panel.
+    const expression = vectorColorExpression(
+      graduated({
+        vectorStyleStops: [
+          { value: 20, color: "#333333" },
+          { value: 0, color: "#111111" },
+          { value: 20, color: "#444444" },
+        ],
+      }),
+      "#000000",
+    );
+    assert.deepEqual(expression, [
+      "step",
+      ["to-number", ["get", "pop"], 0],
+      "#111111",
+      20,
+      "#333333",
+    ]);
+  });
+
+  it("falls back to the flat color when fewer than two stops survive", () => {
+    assert.equal(
+      vectorColorExpression(
+        graduated({
+          vectorStyleStops: [
+            { value: 0, color: "#111111" },
+            { value: 10, color: "not-a-color" },
+          ],
+        }),
+        "#abcdef",
+      ),
+      "#abcdef",
+    );
+  });
+});
+
 describe("vectorColorExpression rule-based mode", () => {
   it("routes rule-based mode through the case compiler", () => {
     const rules: VectorRule[] = [

@@ -170,8 +170,14 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
           live kernel and notebook state are preserved. */}
       <div className={isCollapsed ? "hidden" : "relative min-h-0 flex-1"}>
         {error ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center px-4 text-center text-xs text-destructive">
-            {error}
+          // Startup failures now carry the tail of the uv/Jupyter output, which
+          // is multi-line and the only thing that explains the failure. Keep its
+          // line breaks, start-align it, let it scroll rather than overflow the
+          // panel, and keep it selectable so it can be pasted into a bug report.
+          <div className="absolute inset-0 z-10 overflow-auto bg-card px-4 py-3">
+            <pre className="whitespace-pre-wrap break-words text-start font-mono text-xs text-destructive select-text">
+              {error}
+            </pre>
           </div>
         ) : !loaded ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-card text-xs text-muted-foreground">

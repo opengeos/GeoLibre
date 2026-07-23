@@ -86,6 +86,7 @@ The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); conf
 ## Conventions
 
 - Never commit directly to `main`; branch and open a PR.
+- **`backend/geolibre_server/uv.lock` is committed** (the root `.gitignore` ignores `uv.lock` everywhere else and negates it for this one path). That project is bundled into the desktop installers and launched with `uv run --frozen --project <resource dir>` from `src-tauri/src/lib.rs` — a directory the user cannot write (`C:\Program Files\…`, `/usr/lib/GeoLibre Desktop/…`). Ship it lockless and uv resolves, then tries to *write* `uv.lock` there, fails with "Permission denied" and exits 2 — which reaches the user as "Jupyter server exited before it was ready (exit code: 2)" with the cause invisible. So: any edit to that `pyproject.toml`'s dependencies must land with a refreshed lock (`uv lock --project backend/geolibre_server`). CI's "Check the bundled sidecar lockfile is in sync" step (`uv lock --check`) fails if they drift.
 - Tauri CSP allowlists tile/style hosts (OpenFreeMap, CARTO) — new external map/tile hosts must be added there.
 - Map/tile-host CORS for selected release assets is handled by a dev-server raster proxy.
 - For MapLibre control styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css`, never edit `node_modules`.

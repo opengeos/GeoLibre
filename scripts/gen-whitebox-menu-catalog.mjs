@@ -59,10 +59,17 @@ const subcatLabel = (cat) =>
 
 const esc = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-// Load the GeoLibre-authored WASM tools from the geolibre-wasm binary's own
-// manifests (they are not in the Whitebox snapshot). Returns [] if the package
-// or wasm is unavailable, so the generator still produces a snapshot-only menu.
-async function loadGeolibreWasmTools() {
+// Load every runnable tool from the geolibre-wasm binary's own manifests.
+// Returns [] if the package or wasm is unavailable, so the generator still
+// produces a snapshot-only menu.
+//
+// Deliberately NOT filtered to `source === "geolibre"`. The WASM also carries
+// Whitebox-sourced tools that the Whitebox Next Gen snapshot does not list
+// (buffer_vector, the variogram/cokriging tools, greater_than_or_equal_to...).
+// Those used to fall through both halves of the merge — absent from the
+// snapshot, and excluded here by the source filter — so they were runnable and
+// listed by the Processing *dialog* while silently missing from the menu.
+async function loadWasmTools() {
   try {
     const { initTools, listManifests } = await import("geolibre-wasm/tools");
     const toolsUrl = import.meta.resolve("geolibre-wasm/tools");
@@ -70,11 +77,12 @@ async function loadGeolibreWasmTools() {
     await initTools(readFileSync(wasmPath));
     const manifests = await listManifests();
     return manifests
-      .filter((m) => (m.source ?? "").toLowerCase() === "geolibre" && !m.locked)
+      .filter((m) => !m.locked)
       .map((m) => ({
         id: m.id,
         name: m.display_name || m.id,
         category: m.category ?? "",
+        source: (m.source ?? "").toLowerCase(),
       }));
   } catch (err) {
     console.warn(
@@ -117,8 +125,15 @@ async function main() {
     )} KB).`,
   );
 
-  const geolibre = await loadGeolibreWasmTools();
+  const wasmTools = await loadWasmTools();
+  const geolibre = wasmTools.filter((t) => t.source === "geolibre");
   const geolibreIds = new Set(geolibre.map((t) => t.id));
+  // Whitebox-sourced WASM tools the snapshot has never heard of. They belong in
+  // the menu under their own category's regular subheading (not the "GeoLibre"
+  // one — they are not GeoLibre-authored), and they are the reason the menu
+  // could list fewer tools than the WASM actually ships.
+  const snapshotIds = new Set(tools.map((t) => t.id));
+  const wasmOnly = wasmTools.filter((t) => t.source !== "geolibre" && !snapshotIds.has(t.id));
 
   // Only free tools: locked/"pro"-tier Whitebox tools cannot run, so omit them
   // from the menu entirely (the dialog hides them too). Also drop any snapshot
@@ -131,11 +146,14 @@ async function main() {
   let total = 0;
   for (const [key, labelKey, pred] of GROUPS) {
     const sel = free.filter((t) => pred(t.category ?? ""));
+    // WASM-only Whitebox tools join the snapshot tools, grouped the same way
+    // (a bare category like "Vector" lands under "General").
+    const wasmHere = wasmOnly.filter((t) => pred(t.category));
     const bySub = new Map();
-    for (const t of sel) {
+    for (const t of [...sel, ...wasmHere]) {
       const label = subcatLabel(t.category ?? "");
       if (!bySub.has(label)) bySub.set(label, []);
-      bySub.get(label).push({ id: t.id, name: t.display_name || t.id });
+      bySub.get(label).push({ id: t.id, name: t.display_name || t.name || t.id });
     }
     // GeoLibre-authored tools whose bare category falls in this group go under
     // the dedicated GeoLibre heading.
@@ -163,7 +181,7 @@ async function main() {
       .filter((s) => s.tools.length > 0);
     if (subcategories.length === 0) continue;
     cats.push({ key, labelKey, subcategories });
-    total += sel.length + glHere.length;
+    total += sel.length + wasmHere.length + glHere.length;
   }
 
   const L = [];
