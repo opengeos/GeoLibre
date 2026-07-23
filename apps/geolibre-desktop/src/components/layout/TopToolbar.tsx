@@ -550,6 +550,26 @@ export function TopToolbar({
     });
   };
 
+  // The Maptoolkit logo is Maptoolkit-basemap attribution, so it must not linger
+  // over a different basemap. A basemap counts as Maptoolkit when the active
+  // style lives on maptoolkit.org, or a stacked raster basemap is tagged with
+  // that provider (the basemap control's metadata). When neither holds, turn the
+  // logo back off through the same path as the menu, so the map controller and
+  // this menu's checkmark stay in sync.
+  const maptoolkitBasemapActive = useAppStore(
+    (s) =>
+      s.basemapStyleUrl.includes("maptoolkit.org") ||
+      s.layers.some((layer) => layer.metadata?.basemapProvider === "maptoolkit"),
+  );
+  useEffect(() => {
+    if (maptoolkitBasemapActive) return;
+    setControlsVisible((current) => {
+      if (!current["maptoolkit-logo"]) return current;
+      mapControllerRef.current?.setBuiltInControlVisible("maptoolkit-logo", false);
+      return { ...current, "maptoolkit-logo": false };
+    });
+  }, [maptoolkitBasemapActive, mapControllerRef]);
+
   // The command registry: the single source of truth shared by the command
   // palette, the global shortcut layer, and the keyboard cheat sheet. Each
   // entry reuses the same handler the matching menu item calls, so behaviour is
