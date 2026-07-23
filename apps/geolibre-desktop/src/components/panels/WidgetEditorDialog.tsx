@@ -1,4 +1,4 @@
-import type { DashboardWidget } from "@geolibre/core";
+import type { DashboardWidget, DashboardWidgetType, IndicatorAggregation } from "@geolibre/core";
 import {
   Button,
   ColorField,
@@ -20,7 +20,6 @@ import {
   MIN_HISTOGRAM_BINS,
   numericColumns,
   type BarAggregation,
-  type ChartType,
 } from "../../lib/attribute-charts";
 import { useLayerChartData } from "../../hooks/useLayerChartData";
 
@@ -56,7 +55,7 @@ export function WidgetEditorDialog({
 }: WidgetEditorDialogProps) {
   const { t } = useTranslation();
   const [layerId, setLayerId] = useState("");
-  const [type, setType] = useState<ChartType>("histogram");
+  const [type, setType] = useState<DashboardWidgetType>("histogram");
   const [field, setField] = useState("");
   const [xField, setXField] = useState("");
   const [yField, setYField] = useState("");
@@ -65,6 +64,10 @@ export function WidgetEditorDialog({
   const [aggregation, setAggregation] = useState<BarAggregation>("count");
   const [valueField, setValueField] = useState("");
   const [title, setTitle] = useState("");
+  // "indicator" widget fields (issue #1381).
+  const [indicatorAggregation, setIndicatorAggregation] = useState<IndicatorAggregation>("count");
+  const [prefix, setPrefix] = useState("");
+  const [suffix, setSuffix] = useState("");
   // "" means no custom color: fall back to the theme primary / palette.
   const [color, setColor] = useState("");
 
@@ -82,6 +85,9 @@ export function WidgetEditorDialog({
     setValueField(widget?.valueField ?? "");
     setTitle(widget?.title ?? "");
     setColor(widget?.color ?? "");
+    setIndicatorAggregation(widget?.indicatorAggregation ?? "count");
+    setPrefix(widget?.prefix ?? "");
+    setSuffix(widget?.suffix ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, widget]);
 
@@ -97,14 +103,16 @@ export function WidgetEditorDialog({
   // sum/average rather than count); scatter needs two numeric fields so x and y
   // aren't forced to the same column; the rest need one numeric field.
   const isCategorical = type === "bar" || type === "pie";
+  const isIndicator = type === "indicator";
   const canSave =
     layerId !== "" &&
-    (isCategorical
-      ? hasCategory && (aggregation === "count" || hasNumeric)
-      : type === "scatter"
-        ? numericCols.length >= 2
-        : hasNumeric);
-
+    (isIndicator
+      ? indicatorAggregation === "count" || hasNumeric
+      : isCategorical
+        ? hasCategory && (aggregation === "count" || hasNumeric)
+        : type === "scatter"
+          ? numericCols.length >= 2
+          : hasNumeric);
   const save = () => {
     if (!canSave) return;
     const next: DashboardWidget = {
@@ -133,6 +141,15 @@ export function WidgetEditorDialog({
       const agg = type === "pie" && aggregation === "mean" ? "sum" : aggregation;
       next.aggregation = agg;
       if (agg !== "count") next.valueField = pick(valueField, numericCols);
+    }
+    if (type === "indicator") {
+      next.indicatorAggregation = indicatorAggregation;
+      if (indicatorAggregation !== "count") {
+        next.field = pick(field, numericCols);
+      }
+      // Preserve whitespace: prefix/suffix may have intentional spaces (" ha").
+      if (prefix) next.prefix = prefix;
+      if (suffix) next.suffix = suffix;
     }
     onSave(next);
     onOpenChange(false);
@@ -169,7 +186,7 @@ export function WidgetEditorDialog({
               </Select>
             </div>
 
-            {!hasChartable ? (
+            {!hasChartable && type !== "indicator" ? (
               <p className="text-sm text-muted-foreground">{t("dashboard.editor.noFields")}</p>
             ) : (
               <div className="flex flex-wrap items-end gap-3">
@@ -180,7 +197,7 @@ export function WidgetEditorDialog({
                     className="w-36"
                     value={type}
                     onChange={(event) => {
-                      const nextType = event.target.value as ChartType;
+                      const nextType = event.target.value as DashboardWidgetType;
                       setType(nextType);
                       // Pie has no "average"; drop a carried-over mean so the
                       // select doesn't show a stale value with no matching option.
@@ -207,6 +224,7 @@ export function WidgetEditorDialog({
                     <option value="pie" disabled={!hasCategory}>
                       {t("dashboard.chartType.pie")}
                     </option>
+                    <option value="indicator">{t("dashboard.chartType.indicator")}</option>
                   </Select>
                 </div>
 
@@ -310,6 +328,72 @@ export function WidgetEditorDialog({
                         onChange={setValueField}
                       />
                     )}
+                  </>
+                )}
+
+                {type === "indicator" && (
+                  <>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="widget-indicator-agg">
+                        {t("dashboard.editor.aggregate")}
+                      </Label>
+                      <Select
+                        id="widget-indicator-agg"
+                        className="w-32"
+                        value={indicatorAggregation}
+                        onChange={(event) =>
+                          setIndicatorAggregation(event.target.value as IndicatorAggregation)
+                        }
+                      >
+                        <option value="count">{t("dashboard.indicatorAggregation.count")}</option>
+                        <option value="sum" disabled={!hasNumeric}>
+                          {t("dashboard.indicatorAggregation.sum")}
+                        </option>
+                        <option value="mean" disabled={!hasNumeric}>
+                          {t("dashboard.indicatorAggregation.mean")}
+                        </option>
+                        <option value="min" disabled={!hasNumeric}>
+                          {t("dashboard.indicatorAggregation.min")}
+                        </option>
+                        <option value="max" disabled={!hasNumeric}>
+                          {t("dashboard.indicatorAggregation.max")}
+                        </option>
+                        <option value="median" disabled={!hasNumeric}>
+                          {t("dashboard.indicatorAggregation.median")}
+                        </option>
+                      </Select>
+                    </div>
+                    {indicatorAggregation !== "count" && (
+                      <FieldSelect
+                        id="widget-indicator-field"
+                        label={t("dashboard.editor.field")}
+                        value={pick(field, numericCols)}
+                        options={numericCols}
+                        onChange={setField}
+                      />
+                    )}
+                    <div className="flex gap-2">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="widget-prefix">{t("dashboard.editor.prefix")}</Label>
+                        <Input
+                          id="widget-prefix"
+                          className="w-20"
+                          value={prefix}
+                          placeholder="€"
+                          onChange={(event) => setPrefix(event.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="widget-suffix">{t("dashboard.editor.suffix")}</Label>
+                        <Input
+                          id="widget-suffix"
+                          className="w-20"
+                          value={suffix}
+                          placeholder=" ha"
+                          onChange={(event) => setSuffix(event.target.value)}
+                        />
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
