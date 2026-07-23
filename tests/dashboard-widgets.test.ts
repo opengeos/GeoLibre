@@ -144,10 +144,7 @@ describe("normalizeWidgets", () => {
     const result = normalizeWidgets([
       { id: "ind-x", layerId: "l", type: "indicator", indicatorAggregation: "mode" },
     ] as never);
-    assert.equal(
-      "indicatorAggregation" in (result?.find((w) => w.id === "ind-x") ?? {}),
-      false,
-    );
+    assert.equal("indicatorAggregation" in (result?.find((w) => w.id === "ind-x") ?? {}), false);
   });
 
   it("returns null for a non-array or an all-invalid list", () => {

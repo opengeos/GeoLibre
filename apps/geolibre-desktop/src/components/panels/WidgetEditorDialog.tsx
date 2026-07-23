@@ -66,8 +66,7 @@ export function WidgetEditorDialog({
   const [valueField, setValueField] = useState("");
   const [title, setTitle] = useState("");
   // "indicator" widget fields (issue #1381).
-  const [indicatorAggregation, setIndicatorAggregation] =
-    useState<IndicatorAggregation>("count");
+  const [indicatorAggregation, setIndicatorAggregation] = useState<IndicatorAggregation>("count");
   const [prefix, setPrefix] = useState("");
   const [suffix, setSuffix] = useState("");
   // "" means no custom color: fall back to the theme primary / palette.
@@ -228,9 +227,7 @@ export function WidgetEditorDialog({
                     <option value="pie" disabled={!hasCategory}>
                       {t("dashboard.chartType.pie")}
                     </option>
-                    <option value="indicator">
-                      {t("dashboard.chartType.indicator")}
-                    </option>
+                    <option value="indicator">{t("dashboard.chartType.indicator")}</option>
                   </Select>
                 </div>
 
@@ -348,14 +345,10 @@ export function WidgetEditorDialog({
                         className="w-32"
                         value={indicatorAggregation}
                         onChange={(event) =>
-                          setIndicatorAggregation(
-                            event.target.value as IndicatorAggregation,
-                          )
+                          setIndicatorAggregation(event.target.value as IndicatorAggregation)
                         }
                       >
-                        <option value="count">
-                          {t("dashboard.indicatorAggregation.count")}
-                        </option>
+                        <option value="count">{t("dashboard.indicatorAggregation.count")}</option>
                         <option value="sum" disabled={!hasNumeric}>
                           {t("dashboard.indicatorAggregation.sum")}
                         </option>
@@ -384,9 +377,7 @@ export function WidgetEditorDialog({
                     )}
                     <div className="flex gap-2">
                       <div className="grid gap-1.5">
-                        <Label htmlFor="widget-prefix">
-                          {t("dashboard.editor.prefix")}
-                        </Label>
+                        <Label htmlFor="widget-prefix">{t("dashboard.editor.prefix")}</Label>
                         <Input
                           id="widget-prefix"
                           className="w-20"
@@ -396,9 +387,7 @@ export function WidgetEditorDialog({
                         />
                       </div>
                       <div className="grid gap-1.5">
-                        <Label htmlFor="widget-suffix">
-                          {t("dashboard.editor.suffix")}
-                        </Label>
+                        <Label htmlFor="widget-suffix">{t("dashboard.editor.suffix")}</Label>
                         <Input
                           id="widget-suffix"
                           className="w-20"

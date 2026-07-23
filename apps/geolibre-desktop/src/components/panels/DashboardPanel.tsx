@@ -54,9 +54,7 @@ function computeIndicator(
     case "median": {
       const sorted = [...values].sort((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
-      return sorted.length % 2 !== 0
-        ? sorted[mid]
-        : (sorted[mid - 1] + sorted[mid]) / 2;
+      return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
     }
     default:
       return null;
@@ -399,9 +397,7 @@ function WidgetCard({
       case "indicator": {
         const agg = widget.indicatorAggregation ?? "count";
         const aggLabel = t(`dashboard.indicatorAggregation.${agg}`);
-        return widget.field
-          ? `${aggLabel} · ${widget.field}`
-          : aggLabel;
+        return widget.field ? `${aggLabel} · ${widget.field}` : aggLabel;
       }
     }
   };
@@ -472,21 +468,14 @@ function WidgetCard({
             const value = computeIndicator(data.rows, widget.field, agg);
             if (value === null) {
               return (
-                <p className="text-center text-xs text-muted-foreground">
-                  {t("dashboard.noData")}
-                </p>
+                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
               );
             }
             const formatted = formatIndicatorValue(value);
-            const colorStyle = widget.color
-              ? { color: widget.color }
-              : undefined;
+            const colorStyle = widget.color ? { color: widget.color } : undefined;
             return (
               <>
-                <span
-                  className="text-3xl font-bold leading-none tracking-tight"
-                  style={colorStyle}
-                >
+                <span className="text-3xl font-bold leading-none tracking-tight" style={colorStyle}>
                   {widget.prefix ?? ""}
                   {formatted}
                   {widget.suffix ?? ""}

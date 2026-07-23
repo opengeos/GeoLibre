@@ -1516,13 +1516,7 @@ export interface DashboardWidget {
 
 /** Aggregation functions for indicator widgets (issue #1381). Extends the bar
  * widget aggregation with min, max, and median. */
-export type IndicatorAggregation =
-  | "count"
-  | "sum"
-  | "mean"
-  | "min"
-  | "max"
-  | "median";
+export type IndicatorAggregation = "count" | "sum" | "mean" | "min" | "max" | "median";
 
 /**
  * What slice of a layer's styling a Style Manager entry captures (issue #1294).
