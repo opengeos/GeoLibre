@@ -31,7 +31,7 @@ before you invest time in a pull request.
   commit hooks below) and, if you work on the backend, the conversion sidecar
   and its tests
 
-## Set up
+## Setup
 
 ```bash
 git clone https://github.com/opengeos/GeoLibre.git
