@@ -156,7 +156,11 @@ jobs:
         # Pages problem (bad deploy token, Pages size limit) would otherwise
         # take the Cloudflare preview and the PR comment down with it. Let the
         # job carry on instead; the comment says which target failed.
-        continue-on-error: true
+        #
+        # Deploy runs only. On `closed` this step IS the job -- everything after
+        # it is skipped -- so swallowing a failed removal would report success
+        # while the preview stayed published.
+        continue-on-error: ${{ github.event.action != 'closed' }}
         # Pinned rather than tracking the v1 tag: this is a third-party action
         # and it receives PREVIEW_DEPLOY_TOKEN.
         uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
