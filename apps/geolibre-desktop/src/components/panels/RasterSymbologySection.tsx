@@ -416,12 +416,22 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         setLegendStatus("empty");
         return;
       }
-      const table = savedRasterAttributeTable(layer);
-      const labelByValue = new Map(table?.rows.map((row) => [row.value, row.label]) ?? []);
+      // The awaited palette read races user edits: re-read the live layer so a
+      // rename or RAT label edit made meanwhile isn't lost, and only apply RAT
+      // labels when the table describes the band currently rendered.
+      const currentLayer =
+        useAppStore.getState().layers.find((candidate) => candidate.id === layer.id) ?? layer;
+      const table = savedRasterAttributeTable(currentLayer);
+      const currentBand = readRasterState(currentLayer).bands[0] ?? 1;
+      const labelByValue = new Map(
+        table && table.band === currentBand
+          ? table.rows.map((row) => [row.value, row.label] as [number, string])
+          : [],
+      );
       const { legend, setLegend } = useAppStore.getState();
       setLegend({
         ...setLegendCustomEntry(legend, layer.id, {
-          title: layer.name,
+          title: currentLayer.name,
           items: entries.map((entry) => ({
             label: labelByValue.get(entry.value) ?? String(entry.value),
             color: entry.color,

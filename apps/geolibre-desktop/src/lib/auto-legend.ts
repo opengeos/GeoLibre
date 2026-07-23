@@ -260,6 +260,8 @@ function rasterRampColors(
 /** Evenly sample `count` colors along a list of gradient anchors. */
 function sampleColors(anchors: readonly string[], count: number): string[] {
   if (anchors.length === 0) return [];
+  // count === 1 would divide by zero below (NaN index → undefined color).
+  if (count <= 1) return count === 1 ? [anchors[0]] : [];
   if (anchors.length === 1) return Array(count).fill(anchors[0]);
   const out: string[] = [];
   for (let i = 0; i < count; i++) {
