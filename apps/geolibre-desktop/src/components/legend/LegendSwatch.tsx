@@ -15,20 +15,39 @@ import type { LegendMarker } from "../../lib/print-layout";
 /** Neutral outline that reads on both light and dark themes. */
 const OUTLINE = "rgba(107,114,128,0.6)";
 
+/** Largest radius / stroke width a proportional legend symbol is drawn at (px). */
+const MAX_SWATCH_RADIUS = 12;
+const MAX_SWATCH_STROKE = 8;
+
+/**
+ * The scale that fits an entry's largest proportional symbol into the legend.
+ * Applied to EVERY row of that entry so the drawn symbols keep the map's true
+ * size ratios; clamping each radius on its own instead would flatten a 4 → 24px
+ * ramp into 4 → 12 and make the classes look far closer in size than they are.
+ */
+function swatchScale(largest: number | undefined, size: number, cap: number): number {
+  const reference = Math.max(largest ?? size, size);
+  return reference > cap ? cap / reference : 1;
+}
+
 /**
  * A small geometry-aware swatch: point → filled circle, line → rounded stroke,
  * polygon → filled square, raster → image glyph. `size` overrides the symbol
- * size for proportional-symbol rows (circle radius / line width in px).
+ * size for proportional-symbol rows (circle radius / line width in px), and
+ * `maxSize` is the largest `size` in the same entry so the whole set scales by
+ * one factor and shares one box width (keeping the labels aligned).
  */
 export function GeometrySwatch({
   shape,
   color,
   size,
+  maxSize,
   opacity = 1,
 }: {
   shape: LayerSwatchShape;
   color: string;
   size?: number;
+  maxSize?: number;
   opacity?: number;
 }) {
   const style = opacity < 1 ? { opacity } : undefined;
@@ -43,9 +62,15 @@ export function GeometrySwatch({
     );
   }
   if (shape === "circle") {
-    // Proportional rows pass a radius; cap it so the largest class still fits.
-    const r = Math.max(2, Math.min(size ?? 5, 11));
-    const box = size !== undefined ? 24 : 14;
+    const scale = size !== undefined ? swatchScale(maxSize, size, MAX_SWATCH_RADIUS) : 1;
+    // Proportional rows pass a radius; keep the smallest visible without
+    // disturbing the shared scale of the rest.
+    const r = size !== undefined ? Math.max(1.5, size * scale) : 5;
+    // One box per entry: derived from the entry's largest symbol, not this row's.
+    const box =
+      size !== undefined
+        ? Math.ceil(Math.max(r, Math.max(maxSize ?? size, size) * scale) * 2) + 2
+        : 14;
     return (
       <svg
         width={box}
@@ -60,7 +85,8 @@ export function GeometrySwatch({
     );
   }
   if (shape === "line") {
-    const width = Math.max(1.5, Math.min(size ?? 2.5, 8));
+    const scale = size !== undefined ? swatchScale(maxSize, size, MAX_SWATCH_STROKE) : 1;
+    const width = size !== undefined ? Math.max(1, size * scale) : 2.5;
     const box = size !== undefined ? 24 : 14;
     return (
       <svg width={box} height={14} className="shrink-0" style={style} aria-hidden="true">

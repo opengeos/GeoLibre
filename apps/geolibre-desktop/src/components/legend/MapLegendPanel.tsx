@@ -297,6 +297,9 @@ export function MapLegendPanel({
             label: row.label,
             color: normalizeHexColor(row.color) ?? row.color,
             ...(row.shape === "circle" || row.shape === "line" ? { shape: row.shape } : {}),
+            // Carry proportional sizes so customizing a graduated-size entry
+            // renames/reorders its rows without flattening every symbol.
+            ...(row.size !== undefined ? { size: row.size } : {}),
           }))
         : [
             {
@@ -704,6 +707,13 @@ function LegendEntryRow({
   const { t } = useTranslation();
   const index = entryIds.indexOf(entry.id);
   const visibleRows = editing ? entry.rows : entry.rows.filter((row) => !row.hidden);
+  // The entry's largest proportional symbol, so every row scales by one factor
+  // (see GeometrySwatch). Taken over all rows, not just the visible ones, so
+  // hiding a class does not resize the ones left behind.
+  const maxRowSize = entry.rows.reduce(
+    (largest, row) => (row.size !== undefined && row.size > largest ? row.size : largest),
+    0,
+  );
   const editingCustom = editing && entry.custom && customEntry;
   const hasBody = Boolean(
     entry.fieldLabel || entry.gradient || editingCustom || visibleRows.length > 0,
@@ -870,6 +880,7 @@ function LegendEntryRow({
                 key={row.key}
                 row={row}
                 entry={entry}
+                maxRowSize={maxRowSize}
                 editing={editing && !entry.custom}
                 legend={legend}
                 onCommit={onCommit}
@@ -896,51 +907,63 @@ function LegendEntryRow({
 function LegendClassRow({
   row,
   entry,
+  maxRowSize,
   editing,
   legend,
   onCommit,
 }: {
   row: AutoLegendRow;
   entry: AutoLegendEntry;
+  maxRowSize: number;
   editing: boolean;
   legend: LegendConfig;
   onCommit: (next: LegendConfig) => void;
 }) {
   const { t } = useTranslation();
   return (
-    <li className={cn("flex items-center gap-1.5", row.hidden && "opacity-40")}>
-      {row.marker ? (
-        <MarkerSwatch marker={row.marker} opacity={entry.opacity} />
-      ) : (
-        <GeometrySwatch
-          shape={row.shape}
-          color={row.color}
-          size={row.size}
-          opacity={entry.opacity}
-        />
+    <li className={cn(row.hidden && "opacity-40")}>
+      {/* Names the field this and the following rows describe, when it is not
+          the entry's classified field (a size ramp on a second attribute). */}
+      {row.caption && (
+        <div className="mb-0.5 mt-1 truncate text-[10px] font-medium text-muted-foreground">
+          {row.caption}
+        </div>
       )}
-      {editing ? (
-        <>
-          <InlineEdit
-            value={row.label}
-            ariaLabel={t("legendPanel.renameItem", { name: row.label })}
-            className="text-xs text-foreground/80"
-            onCommit={(next) =>
-              onCommit(setLegendItemLabel(legend, row.key, next, row.defaultLabel))
-            }
+      <div className="flex items-center gap-1.5">
+        {row.marker ? (
+          <MarkerSwatch marker={row.marker} opacity={entry.opacity} />
+        ) : (
+          <GeometrySwatch
+            shape={row.shape}
+            color={row.color}
+            size={row.size}
+            maxSize={maxRowSize > 0 ? maxRowSize : undefined}
+            opacity={entry.opacity}
           />
-          <IconButton
-            label={row.hidden ? t("legendPanel.showItem") : t("legendPanel.hideItem")}
-            onClick={() => onCommit(toggleLegendItemHidden(legend, row.key))}
-          >
-            {row.hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-          </IconButton>
-        </>
-      ) : (
-        <span className="min-w-0 flex-1 truncate text-xs text-foreground/80" title={row.label}>
-          {row.label}
-        </span>
-      )}
+        )}
+        {editing ? (
+          <>
+            <InlineEdit
+              value={row.label}
+              ariaLabel={t("legendPanel.renameItem", { name: row.label })}
+              className="text-xs text-foreground/80"
+              onCommit={(next) =>
+                onCommit(setLegendItemLabel(legend, row.key, next, row.defaultLabel))
+              }
+            />
+            <IconButton
+              label={row.hidden ? t("legendPanel.showItem") : t("legendPanel.hideItem")}
+              onClick={() => onCommit(toggleLegendItemHidden(legend, row.key))}
+            >
+              {row.hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            </IconButton>
+          </>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-xs text-foreground/80" title={row.label}>
+            {row.label}
+          </span>
+        )}
+      </div>
     </li>
   );
 }

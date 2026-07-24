@@ -211,6 +211,38 @@ describe("project parsing", () => {
     assert.deepEqual(project.legend?.overrides, { a: { label: "Renamed", hidden: true } });
   });
 
+  it("keeps hand-authored legend item sizes and drops nonsensical ones", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Legend",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        legend: {
+          title: "Legend",
+          groupByLayer: true,
+          order: [],
+          overrides: {},
+          customEntries: {
+            a: {
+              items: [
+                { label: "Small", color: "#440154", shape: "circle", size: 4 },
+                { label: "Huge", color: "#fde725", shape: "circle", size: 9e9 },
+                { label: "Bad", color: "#000000", size: "big" },
+                { label: "None", color: "#111111", size: 0 },
+              ],
+            },
+          },
+        },
+      }),
+    );
+    assert.deepEqual(project.legend?.customEntries?.a.items, [
+      { label: "Small", color: "#440154", shape: "circle", size: 4 },
+      { label: "Huge", color: "#fde725", shape: "circle", size: 1000 },
+      { label: "Bad", color: "#000000" },
+      { label: "None", color: "#111111" },
+    ]);
+  });
+
   it("round-trips a legend config through projectFromStore", () => {
     const legend = {
       title: "Custom",
