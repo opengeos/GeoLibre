@@ -18,7 +18,7 @@ export function useRuntimeEnvironmentVariables() {
   // updates (e.g. dragging the accent-color picker), which normalizeDesktopSettings
   // would otherwise churn into a fresh object every time — needlessly re-running
   // this effect and re-rendering the host.
-  const aiProviderEnv = useDesktopSettingsStore(useShallow((s) => s.desktopSettings.aiProviderEnv));
+  const aiProfiles = useDesktopSettingsStore(useShallow((s) => s.desktopSettings.aiProfiles));
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
 
@@ -63,10 +63,14 @@ export function useRuntimeEnvironmentVariables() {
 
     // Device-local AI provider credentials, keyed by env var name. Empty values
     // are dropped so a blank entry never blanks out a build-time or OS value.
+    // Credentials from all profiles are projected so any profile can be selected
+    // at runtime without re-projecting.
     const aiEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries(aiProviderEnv)) {
-      const name = key.trim();
-      if (name && value) aiEnv[name] = value;
+    for (const profile of aiProfiles) {
+      for (const [key, value] of Object.entries(profile.fieldValues)) {
+        const name = key.trim();
+        if (name && value) aiEnv[name] = value;
+      }
     }
 
     // Only inject the Cesium token when set: an empty value would override (and
@@ -108,5 +112,5 @@ export function useRuntimeEnvironmentVariables() {
     lastSerializedEnv.current = serializedEnv;
 
     window.dispatchEvent(new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }));
-  }, [environmentVariables, geocoding, cesiumIonToken, aiProviderEnv, osEnv]);
+  }, [environmentVariables, geocoding, cesiumIonToken, aiProfiles, osEnv]);
 }

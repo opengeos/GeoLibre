@@ -11,18 +11,17 @@ const NO_SOURCES = {
   projectEnv: {},
 };
 
-// AI provider credentials entered in Settings → AI Providers are stored in the
-// device-local `DesktopSettings.aiProviderEnv` (localStorage) so they survive
-// app restarts (issue #1249). normalizeDesktopSettings is the load-path guard
-// that restores those keys from persisted storage, so these tests pin the
-// round-trip and the defensiveness against malformed/legacy data.
-describe("DesktopSettings.aiProviderEnv persistence", () => {
-  it("defaults to an empty record", () => {
-    assert.deepEqual(normalizeDesktopSettings(undefined).aiProviderEnv, {});
-    assert.deepEqual(normalizeDesktopSettings({}).aiProviderEnv, {});
+// AI provider credentials are now stored as named profiles in
+// `DesktopSettings.aiProfiles` (localStorage). The legacy flat `aiProviderEnv`
+// map is automatically migrated to profiles on load. These tests pin the
+// round-trip, the migration, and the defensiveness against malformed data.
+describe("DesktopSettings.aiProfiles persistence and migration", () => {
+  it("defaults to an empty array", () => {
+    assert.deepEqual(normalizeDesktopSettings(undefined).aiProfiles, []);
+    assert.deepEqual(normalizeDesktopSettings({}).aiProfiles, []);
   });
 
-  it("restores stored provider credentials verbatim", () => {
+  it("migrates legacy aiProviderEnv into profiles", () => {
     const stored = {
       aiProviderEnv: {
         ANTHROPIC_API_KEY: "sk-ant-123",
@@ -30,14 +29,22 @@ describe("DesktopSettings.aiProviderEnv persistence", () => {
         OLLAMA_BASE_URL: "http://localhost:11434",
       },
     };
-    assert.deepEqual(normalizeDesktopSettings(stored).aiProviderEnv, {
-      ANTHROPIC_API_KEY: "sk-ant-123",
-      OPENAI_API_KEY: "sk-openai-456",
-      OLLAMA_BASE_URL: "http://localhost:11434",
-    });
+    const result = normalizeDesktopSettings(stored);
+    // Should have created three profiles (one per detected provider).
+    const anthropic = result.aiProfiles.find((p) => p.provider === "anthropic");
+    const openai = result.aiProfiles.find((p) => p.provider === "openai");
+    const ollama = result.aiProfiles.find((p) => p.provider === "ollama");
+    assert.ok(anthropic);
+    assert.equal(anthropic.fieldValues.ANTHROPIC_API_KEY, "sk-ant-123");
+    assert.ok(openai);
+    assert.equal(openai.fieldValues.OPENAI_API_KEY, "sk-openai-456");
+    assert.ok(ollama);
+    assert.equal(ollama.fieldValues.OLLAMA_BASE_URL, "http://localhost:11434");
+    // defaultAiProfileId should be null on initial migration.
+    assert.equal(result.defaultAiProfileId, null);
   });
 
-  it("drops non-string values, blank values, and blank keys from tampered storage", () => {
+  it("drops non-string values, blank values, and blank keys from legacy env during migration", () => {
     const stored = {
       aiProviderEnv: {
         ANTHROPIC_API_KEY: "sk-ant-123",
@@ -48,15 +55,22 @@ describe("DesktopSettings.aiProviderEnv persistence", () => {
         "  AWS_REGION  ": "us-east-1",
       },
     };
-    assert.deepEqual(normalizeDesktopSettings(stored).aiProviderEnv, {
-      ANTHROPIC_API_KEY: "sk-ant-123",
-      AWS_REGION: "us-east-1",
-    });
+    const result = normalizeDesktopSettings(stored);
+    const anthropic = result.aiProfiles.find((p) => p.provider === "anthropic");
+    assert.ok(anthropic);
+    assert.equal(anthropic.fieldValues.ANTHROPIC_API_KEY, "sk-ant-123");
+    // OPENAI_API_KEY was a number — dropped during migration (entry filtered).
+    const openai = result.aiProfiles.find((p) => p.provider === "openai");
+    assert.equal(openai, undefined);
+    // AWS_REGION without AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY does not
+    // create a bedrock profile (not enough required fields).
+    const bedrock = result.aiProfiles.find((p) => p.provider === "bedrock");
+    assert.equal(bedrock, undefined);
   });
 
-  it("tolerates a non-record aiProviderEnv", () => {
+  it("tolerates a non-record legacy aiProviderEnv", () => {
     for (const bad of [null, "nope", 7, ["ANTHROPIC_API_KEY"]]) {
-      assert.deepEqual(normalizeDesktopSettings({ aiProviderEnv: bad }).aiProviderEnv, {});
+      assert.deepEqual(normalizeDesktopSettings({ aiProviderEnv: bad }).aiProfiles, []);
     }
   });
 
@@ -66,7 +80,53 @@ describe("DesktopSettings.aiProviderEnv persistence", () => {
       cesiumIonToken: "cesium",
       layout: { toolbarLabels: false },
     };
-    assert.deepEqual(normalizeDesktopSettings(legacy).aiProviderEnv, {});
+    assert.deepEqual(normalizeDesktopSettings(legacy).aiProfiles, []);
+  });
+
+  it("keeps existing profiles when legacy env is also present (dedup)", () => {
+    const stored = {
+      aiProfiles: [
+        {
+          id: "prof_existing",
+          name: "My Anthropic",
+          provider: "anthropic",
+          modelId: "claude-opus-4-8",
+          fieldValues: { ANTHROPIC_API_KEY: "sk-ant-existing" },
+        },
+      ],
+      aiProviderEnv: {
+        ANTHROPIC_API_KEY: "sk-ant-existing",
+        OPENAI_API_KEY: "sk-openai-new",
+      },
+    };
+    const result = normalizeDesktopSettings(stored);
+    // The existing anthropic profile should be preserved (dedup by matching
+    // field values prevents a duplicate).
+    assert.equal(result.aiProfiles.length, 2);
+    const anthropic = result.aiProfiles.find((p) => p.provider === "anthropic");
+    assert.ok(anthropic);
+    assert.equal(anthropic.fieldValues.ANTHROPIC_API_KEY, "sk-ant-existing");
+    // The openai key from legacy env should create a new profile.
+    const openai = result.aiProfiles.find((p) => p.provider === "openai");
+    assert.ok(openai);
+    assert.equal(openai.fieldValues.OPENAI_API_KEY, "sk-openai-new");
+  });
+
+  it("preserves an empty fieldValues map", () => {
+    const stored = {
+      aiProfiles: [
+        {
+          id: "prof_empty",
+          name: "Empty Profile",
+          provider: "google",
+          modelId: "gemini-3.5-flash",
+          fieldValues: {},
+        },
+      ],
+    };
+    const result = normalizeDesktopSettings(stored);
+    assert.equal(result.aiProfiles.length, 1);
+    assert.deepEqual(result.aiProfiles[0].fieldValues, {});
   });
 });
 

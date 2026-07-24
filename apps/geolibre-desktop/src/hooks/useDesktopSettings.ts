@@ -11,6 +11,8 @@ import {
   type ThemeScheme,
 } from "../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../lib/updates";
+import { migrateLegacyAiEnv } from "../lib/assistant/profiles";
+import type { AssistantProfile } from "../lib/assistant/provider";
 
 /** Notification-granularity options, in order. Single source of truth. */
 export const UPDATE_NOTIFICATION_LEVELS: readonly UpdateNotificationLevel[] = [
@@ -51,18 +53,19 @@ export interface DesktopSettings {
    */
   cesiumIonToken: string;
   /**
-   * AI Assistant provider credentials (Settings → AI Providers), keyed by the
-   * runtime environment variable each field maps to (e.g. `ANTHROPIC_API_KEY`,
-   * `OPENAI_API_KEY`, `OLLAMA_BASE_URL`). Stored here — device-local
-   * localStorage, not the shared project file — so a personal API key survives
-   * app restarts (the desktop webview persists localStorage across launches)
-   * yet is never serialized into a `.geolibre.json` a user shares. Projected
-   * into `window.__GEOLIBRE_RUNTIME_ENV__` at runtime by
-   * `useRuntimeEnvironmentVariables`, below any explicit project Environment
-   * variable of the same name. Same "secret in localStorage" trade-off as
-   * {@link cesiumIonToken}.
+   * AI Assistant provider profiles. Each profile bundles a provider, model, and
+   * credential values. Stored here — device-local localStorage, not the shared
+   * project file — so personal API keys survive app restarts yet are never
+   * serialized into a `.geolibre.json` a user shares.
    */
-  aiProviderEnv: Record<string, string>;
+  aiProfiles: AssistantProfile[];
+  /**
+   * The id of the default / active profile, or null. When set, this profile's
+   * credentials are projected into the runtime env and the assistant panel
+   * preselects it. Persisted separately to localStorage so the active choice
+   * survives settings dialog Cancel without extra plumbing.
+   */
+  defaultAiProfileId: string | null;
   /**
    * Appearance preferences (the accent color scheme). The light/dark mode is
    * handled separately by `useThemeMode` (it tracks the OS / embed preference).
@@ -181,7 +184,8 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   pluginManifestUrls: [],
   shareToken: "",
   cesiumIonToken: "",
-  aiProviderEnv: {},
+  aiProfiles: [],
+  defaultAiProfileId: null,
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
@@ -212,7 +216,14 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     shareToken: typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
     cesiumIonToken:
       typeof candidate.cesiumIonToken === "string" ? candidate.cesiumIonToken.trim() : "",
-    aiProviderEnv: normalizeEnvRecord(candidate.aiProviderEnv),
+    aiProfiles: normalizeAssistantProfiles(
+      candidate.aiProfiles,
+      (candidate as Record<string, unknown>).aiProviderEnv,
+    ),
+    defaultAiProfileId:
+      typeof candidate.defaultAiProfileId === "string" && candidate.defaultAiProfileId.trim()
+        ? candidate.defaultAiProfileId.trim()
+        : null,
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),
@@ -220,20 +231,66 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
 }
 
 /**
- * Coerce a persisted (or tampered) value into a clean env-var record: entries
- * with a non-empty trimmed name mapped to a non-empty string value. Blank keys,
- * blank values, and non-string values are dropped so a malformed localStorage
- * entry cannot inject bad values into the runtime environment and the persisted
- * blob never accrues empty leftovers (every consumer treats a blank as unset).
+ * Coerce a persisted (or tampered) profiles array into a clean form. Each
+ * profile must have valid fields matching its provider's schema. The legacy
+ * `aiProviderEnv` flat map is migrated into profiles on first load.
  */
-function normalizeEnvRecord(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const result: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const name = key.trim();
-    if (name && typeof entry === "string" && entry) result[name] = entry;
+function normalizeAssistantProfiles(value: unknown, legacyEnv: unknown): AssistantProfile[] {
+  const profiles: AssistantProfile[] = [];
+
+  if (Array.isArray(value)) {
+    const seenIds = new Set<string>();
+    for (const item of value) {
+      if (!item || typeof item !== "object") continue;
+      const candidate = item as Record<string, unknown>;
+      const id =
+        typeof candidate.id === "string" && candidate.id.trim()
+          ? candidate.id.trim()
+          : `prof_auto_${profiles.length}_${Date.now()}`;
+      // Deduplicate by id.
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+
+      const name =
+        typeof candidate.name === "string" && candidate.name.trim()
+          ? candidate.name.trim()
+          : `Profile ${profiles.length + 1}`;
+      const provider =
+        typeof candidate.provider === "string" &&
+        ["google", "anthropic", "openai", "ollama", "bedrock", "custom"].includes(
+          candidate.provider,
+        )
+          ? (candidate.provider as AssistantProfile["provider"])
+          : "google";
+      const modelId =
+        typeof candidate.modelId === "string" && candidate.modelId.trim()
+          ? candidate.modelId.trim()
+          : "";
+      const fieldValues: Record<string, string> = {};
+      if (
+        candidate.fieldValues &&
+        typeof candidate.fieldValues === "object" &&
+        !Array.isArray(candidate.fieldValues)
+      ) {
+        for (const [k, v] of Object.entries(candidate.fieldValues)) {
+          const key = k.trim();
+          if (key && typeof v === "string" && v.trim()) {
+            fieldValues[key] = v.trim();
+          }
+        }
+      }
+
+      profiles.push({ id, name, provider, modelId, fieldValues });
+    }
   }
-  return result;
+
+  // Migrate legacy flat env map into profiles (dedup against existing).
+  if (legacyEnv && typeof legacyEnv === "object" && !Array.isArray(legacyEnv)) {
+    const migrated = migrateLegacyAiEnv(legacyEnv as Record<string, string>, profiles);
+    profiles.push(...migrated);
+  }
+
+  return profiles;
 }
 
 function normalizeThemeSettings(theme: unknown): ThemeSettings {

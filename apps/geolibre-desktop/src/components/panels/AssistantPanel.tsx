@@ -30,12 +30,12 @@ import { openSettingsSection } from "../layout/SettingsDialog";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
-  defaultModelFor,
   hasProviderKey,
   PROVIDER_LABELS,
-  PROVIDER_MODELS,
+  type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 // Paired with MapCanvas so it suspends pointer interaction while dragging.
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 
@@ -43,8 +43,7 @@ const DEFAULT_PANEL_HEIGHT = 360;
 const MIN_PANEL_HEIGHT = 160;
 const MAX_PANEL_HEIGHT = 640;
 const RUNTIME_ENV_EVENT = "geolibre:runtime-env-change";
-const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
-const MODEL_STORAGE_KEY = "geolibre.assistant.model";
+const PROFILE_STORAGE_KEY = "geolibre.assistant.profileId";
 
 /**
  * Providers shown in the no-key setup card, each with the env var(s) that
@@ -156,13 +155,46 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const [running, setRunning] = useState(false);
   const [hasKey, setHasKey] = useState(() => hasProviderKey());
   const [providers, setProviders] = useState<AssistantProviderId[]>(() => availableProviders());
-  const [provider, setProvider] = useState<AssistantProviderId | null>(() => {
-    const stored = loadStored(PROVIDER_STORAGE_KEY);
-    return stored && ASSISTANT_PROVIDER_IDS.includes(stored as AssistantProviderId)
-      ? (stored as AssistantProviderId)
-      : null;
+
+  // Read profiles + default from DesktopSettings (localStorage).
+  const { aiProfiles, defaultAiProfileId } = useDesktopSettingsStore((s) => s.desktopSettings);
+
+  // Whether the user has explicitly changed the profile via the dropdown in
+  // this session. When false, we always follow the default profile so that
+  // changing the default in Settings takes effect immediately. Once the user
+  // picks a profile from the dropdown, that choice is respected.
+  const userExplicitlyChoseProfile = useRef(false);
+
+  // The selected profile id, persisted to localStorage.
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => {
+    const storeSettings = useDesktopSettingsStore.getState().desktopSettings;
+    // If a default profile is set, pre-select it so the panel always starts on
+    // the default. An explicit past selection only overrides when the user
+    // opens the dropdown (tracked by userExplicitlyChoseProfile).
+    if (storeSettings.defaultAiProfileId) {
+      return storeSettings.defaultAiProfileId;
+    }
+    const stored = loadStored(PROFILE_STORAGE_KEY);
+    if (!stored) return null;
+    return storeSettings.aiProfiles.some((p) => p.id === stored) ? stored : null;
   });
-  const [model, setModel] = useState<string>(() => loadStored(MODEL_STORAGE_KEY) ?? "");
+
+  // The currently active profile: if the user hasn't explicitly chosen one,
+  // follow the default. Otherwise respect their explicit selection.
+  const activeProfile: AssistantProfile | null = useMemo(() => {
+    // If the user explicitly chose a profile via the dropdown, use that.
+    if (userExplicitlyChoseProfile.current && selectedProfileId) {
+      const found = aiProfiles.find((p) => p.id === selectedProfileId);
+      if (found) return found;
+    }
+    // Fall back to the default profile.
+    if (defaultAiProfileId) {
+      const found = aiProfiles.find((p) => p.id === defaultAiProfileId);
+      if (found) return found;
+    }
+    // Fall back to the first profile.
+    return aiProfiles[0] ?? null;
+  }, [selectedProfileId, aiProfiles, defaultAiProfileId]);
 
   // Queue of model-generated code snippets (run_python / run_maplibre_js)
   // awaiting the user's approval, each with the promise resolver its tool
@@ -258,25 +290,29 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
   }, []);
 
-  // Keep the selected provider valid: fall back to the first available one when
-  // the stored choice has no key (e.g. its key was removed).
-  useEffect(() => {
-    if (providers.length === 0) return;
-    setProvider((current) => (current && providers.includes(current) ? current : providers[0]));
-  }, [providers]);
-
-  // Push the resolved provider/model into the session. Selecting null lets the
-  // session auto-resolve from the configured keys.
-  useEffect(() => {
-    if (!provider) {
-      session.setSelection(null);
-      return;
+  // When the default profile changes (user set a new default in Settings),
+  // reset the "user explicitly chose" flag so the new default takes effect.
+  // This ensures that changing the default in Settings always overrides a
+  // previous dropdown selection — matching the user's mental model.
+  const prevDefaultRef = useRef(defaultAiProfileId);
+  if (prevDefaultRef.current !== defaultAiProfileId) {
+    prevDefaultRef.current = defaultAiProfileId;
+    if (userExplicitlyChoseProfile.current) {
+      userExplicitlyChoseProfile.current = false;
+      setSelectedProfileId(defaultAiProfileId);
+      saveStored(PROFILE_STORAGE_KEY, defaultAiProfileId ?? "");
     }
-    const models = PROVIDER_MODELS[provider];
-    const effectiveModel = model && models.includes(model) ? model : defaultModelFor(provider);
-    if (effectiveModel !== model) setModel(effectiveModel);
-    session.setSelection({ provider, model: effectiveModel });
-  }, [provider, model, session]);
+  }
+
+  // Push the active profile into the session. When no profile is available,
+  // fall back to auto-resolution (which reads from the runtime env directly).
+  useEffect(() => {
+    if (activeProfile) {
+      session.setSelection(activeProfile);
+    } else {
+      session.setSelection(null);
+    }
+  }, [activeProfile, session]);
 
   // Keep the latest turn in view. Skip when there is no conversation (e.g. the
   // no-key setup card) so its heading stays pinned to the top instead of being
@@ -384,16 +420,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     }
   };
 
-  const onProviderChange = (value: AssistantProviderId) => {
-    setProvider(value);
-    setModel("");
-    saveStored(PROVIDER_STORAGE_KEY, value);
-    saveStored(MODEL_STORAGE_KEY, "");
-  };
-
-  const onModelChange = (value: string) => {
-    setModel(value);
-    saveStored(MODEL_STORAGE_KEY, value);
+  const onProfileChange = (profileId: string) => {
+    userExplicitlyChoseProfile.current = true;
+    setSelectedProfileId(profileId);
+    saveStored(PROFILE_STORAGE_KEY, profileId);
   };
 
   // Drag the top edge to resize the panel height. Mirrors the Python Console:
@@ -483,39 +513,20 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           </span>
         ) : null}
         <div className="ms-auto flex items-center gap-1">
-          {hasKey && provider && providers.length > 0 ? (
-            <>
-              {providers.length > 1 ? (
-                <Select
-                  aria-label={t("assistant.provider")}
-                  className="h-8 w-auto text-xs"
-                  value={provider}
-                  disabled={running}
-                  onChange={(event) => onProviderChange(event.target.value as AssistantProviderId)}
-                >
-                  {providers.map((id) => (
-                    <option key={id} value={id}>
-                      {PROVIDER_LABELS[id]}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
-              {PROVIDER_MODELS[provider].length > 0 ? (
-                <Select
-                  aria-label={t("assistant.model")}
-                  className="h-8 w-auto text-xs"
-                  value={model || defaultModelFor(provider)}
-                  disabled={running}
-                  onChange={(event) => onModelChange(event.target.value)}
-                >
-                  {PROVIDER_MODELS[provider].map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
-            </>
+          {hasKey && aiProfiles.length > 0 ? (
+            <Select
+              aria-label={t("assistant.provider")}
+              className="h-8 w-auto max-w-[160px] text-xs"
+              value={activeProfile?.id ?? ""}
+              disabled={running}
+              onChange={(event) => onProfileChange(event.target.value)}
+            >
+              {aiProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </Select>
           ) : null}
           <Button
             variant="ghost"
