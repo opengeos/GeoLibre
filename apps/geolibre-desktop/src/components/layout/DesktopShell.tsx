@@ -2233,14 +2233,12 @@ export function DesktopShell({
           </div>
         </div>
       ) : null}
-      {projectUrlLoadState?.message || projectUrlLoadState?.error ? (
+      {projectUrlLoadState?.error ? (
         <div
-          aria-live="polite"
-          className={`pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm shadow-lg ${
-            projectUrlLoadState.error ? "text-destructive" : "text-foreground"
-          }`}
+          aria-live="assertive"
+          className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
         >
-          {projectUrlLoadState.error ?? projectUrlLoadState.message}
+          {projectUrlLoadState.error}
         </div>
       ) : null}
       {dropMessage || dropError ? (
