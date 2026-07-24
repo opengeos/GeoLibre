@@ -343,7 +343,9 @@ export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
     // firstYearAtOrAfter(upperMs)). Comparing the year numbers directly keeps
     // the filter a plain numeric comparison on the raw property value.
     // `to-number` coerces a missing property to 0, below YEAR_MIN, so undated
-    // features fall outside every window.
+    // features fall outside every window. The floor check mirrors
+    // parseTimeValue's integer requirement, so a fractional value (1958.5)
+    // that never parsed as a year cannot slip through the window bounds.
     const firstYearAtOrAfter = (ms: number): number => {
       const y = new Date(ms).getUTCFullYear();
       return Date.UTC(y, 0, 1) >= ms ? y : y + 1;
@@ -351,6 +353,7 @@ export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
     const value = ["to-number", ["get", property]];
     return [
       "all",
+      ["==", value, ["floor", value]],
       [">=", value, firstYearAtOrAfter(lowerMs)],
       ["<", value, firstYearAtOrAfter(upperMs)],
     ];

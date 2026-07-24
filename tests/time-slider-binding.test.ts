@@ -127,6 +127,14 @@ describe("buildTimeFilter (year)", () => {
     const filter = buildTimeFilter(binding, new Date(Date.UTC(1958, 0, 1)));
     assert.deepEqual(filter, [
       "all",
+      // Integer guard: a fractional value like 1958.5 never parses as a year
+      // (parseTimeValue rejects it), so the filter must reject it too rather
+      // than let it slip inside the [1958, 1959) window.
+      [
+        "==",
+        ["to-number", ["get", "construction_year"]],
+        ["floor", ["to-number", ["get", "construction_year"]]],
+      ],
       [">=", ["to-number", ["get", "construction_year"]], 1958],
       ["<", ["to-number", ["get", "construction_year"]], 1959],
     ]);
@@ -145,6 +153,11 @@ describe("buildTimeFilter (year)", () => {
     const filter = buildTimeFilter(binding, new Date(Date.UTC(1958, 6, 1)));
     assert.deepEqual(filter, [
       "all",
+      [
+        "==",
+        ["to-number", ["get", "construction_year"]],
+        ["floor", ["to-number", ["get", "construction_year"]]],
+      ],
       [">=", ["to-number", ["get", "construction_year"]], 1959],
       ["<", ["to-number", ["get", "construction_year"]], 1960],
     ]);
