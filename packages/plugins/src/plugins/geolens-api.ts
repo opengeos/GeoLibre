@@ -341,19 +341,30 @@ export function itemsUrl(options: GeoLensClientOptions, datasetId: string, limit
 }
 
 /**
- * Features requested per items page. GeoLens caps the `limit` query param and
- * **rejects** anything above the cap with HTTP 400 rather than clamping (the
- * reference deployment caps it at 200), so the total feature limit must never
- * be passed through as the page size — pagination accumulates the rest.
+ * The known-safe items page size, used as the last rung of
+ * {@link GEOLENS_PAGE_SIZE_LADDER}. GeoLens caps the `limit` query param and
+ * **rejects** anything above the cap with HTTP 400 rather than clamping, and
+ * the cap is not advertised anywhere a client can read, so the loader probes
+ * downward instead of assuming.
  */
 export const GEOLENS_PAGE_LIMIT = 100;
 
 /**
+ * Page sizes retried, in order, after a server rejects the full requested
+ * limit with HTTP 400: GeoLens's OGC items cap (10,000), then the
+ * conservative floor every deployment accepts.
+ */
+const GEOLENS_PAGE_SIZE_LADDER = [10_000, GEOLENS_PAGE_LIMIT];
+
+/**
  * Load up to `limit` features, following OGC API Features `rel=next` links.
- * Each page requests at most {@link GEOLENS_PAGE_LIMIT} features, because
- * GeoLens rejects (HTTP 400) a `limit` above its per-page cap instead of
- * clamping it, and deployments may cap each response below the requested page
- * size anyway.
+ *
+ * The first request asks for all `limit` features at once, so a server whose
+ * page cap allows it answers in a single round trip. A server that caps the
+ * page size responds one of two ways: clamping servers return a shorter first
+ * page plus a `next` link, which the pagination loop follows as usual; GeoLens
+ * instead rejects the request with HTTP 400, in which case the loader retries
+ * down {@link GEOLENS_PAGE_SIZE_LADDER} until a page size is accepted.
  */
 export async function fetchDatasetFeatures(
   options: GeoLensClientOptions,
@@ -364,55 +375,73 @@ export async function fetchDatasetFeatures(
 ): Promise<import("geojson").FeatureCollection> {
   if (!HTTP_URL_RE.test(options.baseUrl)) throw new Error("GeoLens URL must be http(s)");
   const base = new URL(options.baseUrl);
-  const pageLimit = Math.min(Math.max(1, Math.floor(limit)), GEOLENS_PAGE_LIMIT);
-  const features: import("geojson").Feature[] = [];
-  const visited = new Set<string>();
-  let nextUrl: string | null = itemsUrl(options, datasetId, pageLimit);
-  let firstPage: Record<string, unknown> | null = null;
+  const requested = Math.max(1, Math.floor(limit));
+  const pageSizes = [requested, ...GEOLENS_PAGE_SIZE_LADDER.filter((n) => n < requested)];
 
-  while (nextUrl && features.length < limit && !visited.has(nextUrl)) {
-    visited.add(nextUrl);
-    const res = await fetchImpl(nextUrl, { headers: authHeaders(options), signal });
-    if (!res.ok) throw new Error(`GeoLens items request failed (HTTP ${res.status})`);
-    const body = (await res.json()) as Record<string, unknown>;
-    if (!firstPage) firstPage = body;
-    if (!Array.isArray(body.features)) {
-      throw new Error("GeoLens items response contained no features");
-    }
-    // Appended one at a time, not spread: a page can hold more features than
-    // the engine accepts as call arguments, and `push(...page)` would throw.
-    for (const feature of body.features as import("geojson").Feature[]) {
-      if (features.length >= limit) break;
-      features.push(feature);
+  for (let attempt = 0; attempt < pageSizes.length; attempt++) {
+    const features: import("geojson").Feature[] = [];
+    const visited = new Set<string>();
+    let nextUrl: string | null = itemsUrl(options, datasetId, pageSizes[attempt]);
+    let firstPage: Record<string, unknown> | null = null;
+    let pageSizeRejected = false;
+
+    while (nextUrl && features.length < requested && !visited.has(nextUrl)) {
+      visited.add(nextUrl);
+      const res = await fetchImpl(nextUrl, { headers: authHeaders(options), signal });
+      if (!res.ok) {
+        // Only a 400 on the *first* request means the page size was refused;
+        // one mid-pagination is a real error and must surface, not silently
+        // restart the whole download.
+        if (res.status === 400 && firstPage === null && attempt < pageSizes.length - 1) {
+          pageSizeRejected = true;
+          break;
+        }
+        throw new Error(`GeoLens items request failed (HTTP ${res.status})`);
+      }
+      const body = (await res.json()) as Record<string, unknown>;
+      if (!firstPage) firstPage = body;
+      if (!Array.isArray(body.features)) {
+        throw new Error("GeoLens items response contained no features");
+      }
+      // Appended one at a time, not spread: a page can hold more features than
+      // the engine accepts as call arguments, and `push(...page)` would throw.
+      for (const feature of body.features as import("geojson").Feature[]) {
+        if (features.length >= requested) break;
+        features.push(feature);
+      }
+
+      const links = Array.isArray(body.links) ? body.links : [];
+      const next = links.find(
+        (link): link is { rel: string; href: string } =>
+          !!link &&
+          typeof link === "object" &&
+          (link as { rel?: unknown }).rel === "next" &&
+          typeof (link as { href?: unknown }).href === "string",
+      );
+      if (next) {
+        // A deployment behind a reverse proxy may advertise its *internal*
+        // origin in link hrefs (datasets.geolibre.app returns
+        // `http://localhost:8080/...` next links), so the href's path + query
+        // are rebased onto the configured base URL rather than trusted
+        // verbatim. This also keeps every paginated request (and its auth
+        // header) on the origin the user connected to.
+        const resolvedUrl: URL = new URL(next.href, nextUrl);
+        nextUrl = `${base.origin}${resolvedUrl.pathname}${resolvedUrl.search}`;
+      } else {
+        nextUrl = null;
+      }
     }
 
-    const links = Array.isArray(body.links) ? body.links : [];
-    const next = links.find(
-      (link): link is { rel: string; href: string } =>
-        !!link &&
-        typeof link === "object" &&
-        (link as { rel?: unknown }).rel === "next" &&
-        typeof (link as { href?: unknown }).href === "string",
-    );
-    if (next) {
-      // A deployment behind a reverse proxy may advertise its *internal*
-      // origin in link hrefs (datasets.geolibre.app returns
-      // `http://localhost:8080/...` next links), so the href's path + query
-      // are rebased onto the configured base URL rather than trusted verbatim.
-      // This also keeps every paginated request (and its auth header) on the
-      // origin the user connected to.
-      const resolvedUrl: URL = new URL(next.href, nextUrl);
-      nextUrl = `${base.origin}${resolvedUrl.pathname}${resolvedUrl.search}`;
-    } else {
-      nextUrl = null;
-    }
+    if (pageSizeRejected) continue;
+    return {
+      ...(firstPage ?? {}),
+      type: "FeatureCollection",
+      features,
+    } as import("geojson").FeatureCollection;
   }
 
-  return {
-    ...(firstPage ?? {}),
-    type: "FeatureCollection",
-    features,
-  } as import("geojson").FeatureCollection;
+  // Unreachable: the final ladder rung either returns or throws above.
+  throw new Error("GeoLens items request failed");
 }
 
 /**
