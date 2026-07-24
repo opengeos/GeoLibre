@@ -366,7 +366,12 @@ export async function fetchDatasetFeatures(
     if (!Array.isArray(body.features)) {
       throw new Error("GeoLens items response contained no features");
     }
-    features.push(...(body.features as import("geojson").Feature[]));
+    // Appended one at a time, not spread: a page can hold more features than
+    // the engine accepts as call arguments, and `push(...page)` would throw.
+    for (const feature of body.features as import("geojson").Feature[]) {
+      if (features.length >= limit) break;
+      features.push(feature);
+    }
 
     const links = Array.isArray(body.links) ? body.links : [];
     const next = links.find(
@@ -393,7 +398,7 @@ export async function fetchDatasetFeatures(
   return {
     ...(firstPage ?? {}),
     type: "FeatureCollection",
-    features: features.slice(0, limit),
+    features,
   } as import("geojson").FeatureCollection;
 }
 

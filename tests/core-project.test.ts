@@ -47,6 +47,32 @@ describe("project parsing", () => {
     assert.equal(dangling.selectedLayerId, undefined);
   });
 
+  it("normalizes the selected layer on save as well as on load", () => {
+    const layer = geojsonLayer({ id: "chosen" });
+    const save = (selectedLayerId: string | null | undefined) =>
+      parseProject(
+        serializeProject(
+          projectFromStore({
+            projectName: "Selection",
+            mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+            basemapStyleUrl: DEFAULT_BASEMAP,
+            basemapVisible: true,
+            basemapOpacity: 1,
+            layers: [layer],
+            selectedLayerId,
+            preferences: createEmptyProject().preferences,
+            metadata: {},
+          }),
+        ),
+      );
+
+    assert.equal(save("chosen").selectedLayerId, "chosen");
+    assert.equal(save("missing").selectedLayerId, undefined);
+    assert.equal(save(undefined).selectedLayerId, undefined);
+    // An explicit null is a saved "nothing active", so it must survive the trip.
+    assert.equal(save(null).selectedLayerId, null);
+  });
+
   it("fills defaults while preserving valid project fields", () => {
     const project = parseProject(
       JSON.stringify({
