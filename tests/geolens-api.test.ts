@@ -4,6 +4,7 @@ import {
   authHeaders,
   bboxFromGeometry,
   datasetPageUrl,
+  fetchDatasetFeatures,
   fetchDatasetFields,
   geometryKind,
   itemsUrl,
@@ -147,6 +148,46 @@ describe("itemsUrl / stac URLs", () => {
     );
     assert.equal(stacCatalogUrl(opts), "http://localhost:8080/api/stac");
     assert.equal(stacCollectionsUrl(opts), "http://localhost:8080/api/stac/collections");
+  });
+});
+
+describe("fetchDatasetFeatures", () => {
+  it("follows pagination and stops at the requested feature limit", async () => {
+    const calls: string[] = [];
+    const fetchImpl: GeoLensFetch = async (url) => {
+      calls.push(url);
+      const second = url.includes("offset=2");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: "FeatureCollection",
+          features: second
+            ? [{ type: "Feature", geometry: null, properties: { id: 3 } }]
+            : [
+                { type: "Feature", geometry: null, properties: { id: 1 } },
+                { type: "Feature", geometry: null, properties: { id: 2 } },
+              ],
+          links: second ? [] : [{ rel: "next", href: "?limit=3&offset=2" }],
+        }),
+      };
+    };
+    const result = await fetchDatasetFeatures({ baseUrl: "http://h" }, "d", 3, fetchImpl);
+    assert.equal(result.features.length, 3);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1], "http://h/api/collections/d/items?limit=3&offset=2");
+  });
+
+  it("truncates an oversized response to the requested limit", async () => {
+    const { fetchImpl } = stubFetch({
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: null, properties: { id: 1 } },
+        { type: "Feature", geometry: null, properties: { id: 2 } },
+      ],
+    });
+    const result = await fetchDatasetFeatures({ baseUrl: "http://h" }, "d", 1, fetchImpl);
+    assert.equal(result.features.length, 1);
   });
 });
 

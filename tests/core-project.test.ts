@@ -33,6 +33,20 @@ function geojsonLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
 }
 
 describe("project parsing", () => {
+  it("preserves a valid selected layer and drops a dangling selection", () => {
+    const base = createEmptyProject("Selection");
+    const layer = geojsonLayer({ id: "chosen" });
+    const selected = parseProject(
+      serializeProject({ ...base, layers: [layer], selectedLayerId: "chosen" }),
+    );
+    assert.equal(selected.selectedLayerId, "chosen");
+
+    const dangling = parseProject(
+      serializeProject({ ...base, layers: [layer], selectedLayerId: "missing" }),
+    );
+    assert.equal(dangling.selectedLayerId, undefined);
+  });
+
   it("fills defaults while preserving valid project fields", () => {
     const project = parseProject(
       JSON.stringify({
@@ -663,6 +677,29 @@ describe("app store", () => {
     useAppStore.getState().selectLayer(first);
     useAppStore.getState().removeLayer(first);
     assert.equal(useAppStore.getState().selectedLayerId, second);
+  });
+
+  it("restores the saved active layer and keeps the legacy first-layer fallback", () => {
+    const first = geojsonLayer({ id: "first", name: "First" });
+    const second = geojsonLayer({ id: "second", name: "Second" });
+    const base = createEmptyProject("Selection");
+
+    useAppStore.getState().loadProject({
+      ...base,
+      layers: [first, second],
+      selectedLayerId: "second",
+    });
+    assert.equal(useAppStore.getState().selectedLayerId, "second");
+
+    useAppStore.getState().loadProject({ ...base, layers: [first, second] });
+    assert.equal(useAppStore.getState().selectedLayerId, "first");
+
+    useAppStore.getState().loadProject({
+      ...base,
+      layers: [first, second],
+      selectedLayerId: null,
+    });
+    assert.equal(useAppStore.getState().selectedLayerId, null);
   });
 
   it("renames a layer without changing its id (keeps MapLibre sync stable)", () => {

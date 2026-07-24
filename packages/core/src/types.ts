@@ -1591,6 +1591,11 @@ export interface GeoLibreProject {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  /**
+   * Layer selected in the Layers panel when the project was saved. Omitted by
+   * legacy projects; `null` deliberately restores no active layer.
+   */
+  selectedLayerId?: string | null;
   /** Named folders that organize the flat `layers` list in the layer panel. */
   layerGroups?: LayerGroup[];
   styles: Record<string, LayerStyle>;

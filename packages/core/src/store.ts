@@ -1731,12 +1731,19 @@ export const useAppStore = create<AppState>()(
         // (or with an empty one) open normally. Callers that open a project for
         // authoring rather than viewing can pass `presenting: false` to override.
         const presentStory = options.presenting ?? (applied.storymap?.chapters.length ?? 0) > 0;
+        const selectedLayerId =
+          project.selectedLayerId === null
+            ? null
+            : typeof project.selectedLayerId === "string" &&
+                applied.layers.some((layer) => layer.id === project.selectedLayerId)
+              ? project.selectedLayerId
+              : (applied.layers[0]?.id ?? null);
         set((s) => ({
           ...applied,
           projectPath: path,
           projectGeneration: s.projectGeneration + 1,
           isDirty: false,
-          selectedLayerId: applied.layers[0]?.id ?? null,
+          selectedLayerId,
           selectedFeatureId: null,
           selectedFeatureIds: [],
           identifyLayerId: null,

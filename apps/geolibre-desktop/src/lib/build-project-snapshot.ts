@@ -27,6 +27,7 @@ export function buildProjectSnapshot(
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     layers: state.layers,
+    selectedLayerId: state.selectedLayerId,
     layerGroups: state.layerGroups,
     preferences: state.preferences,
     plugins: {

@@ -110,6 +110,13 @@ export function parseProject(json: string): GeoLibreProject {
     .map((layer) =>
       layer.groupId && !validGroupIds.has(layer.groupId) ? { ...layer, groupId: undefined } : layer,
     );
+  const selectedLayerId =
+    data.selectedLayerId === null
+      ? null
+      : typeof data.selectedLayerId === "string" &&
+          layers.some((layer) => layer.id === data.selectedLayerId)
+        ? data.selectedLayerId
+        : undefined;
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
@@ -127,6 +134,7 @@ export function parseProject(json: string): GeoLibreProject {
     basemapVisible,
     basemapOpacity,
     layers,
+    ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles: data.styles ?? {},
     preferences: normalizeProjectPreferences(data.preferences),
@@ -1061,6 +1069,7 @@ export function projectFromStore(state: {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  selectedLayerId?: string | null;
   layerGroups?: LayerGroup[];
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
@@ -1107,6 +1116,13 @@ export function projectFromStore(state: {
   );
   const persistGrid = mapLayout.rows * mapLayout.cols > 1;
   const styleLibrary = normalizeStyleLibraryEntries(state.styleLibrary);
+  const selectedLayerId =
+    state.selectedLayerId === null
+      ? null
+      : typeof state.selectedLayerId === "string" &&
+          state.layers.some((layer) => layer.id === state.selectedLayerId)
+        ? state.selectedLayerId
+        : undefined;
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -1115,6 +1131,7 @@ export function projectFromStore(state: {
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     layers: state.layers.map(prepareLayerForSave),
+    ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles,
     preferences: state.preferences,

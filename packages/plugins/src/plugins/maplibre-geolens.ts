@@ -21,15 +21,13 @@
  */
 
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { FeatureCollection } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
-  authHeaders,
   datasetPageUrl,
   defaultGeoLensFetch,
+  fetchDatasetFeatures,
   fetchDatasetFields,
   geometryKind,
-  itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
   resolveRasterTiles,
@@ -44,8 +42,10 @@ export const GEOLENS_PLUGIN_ID = "maplibre-gl-geolens";
 
 /** Number of datasets requested per catalog search. */
 const SEARCH_LIMIT = 50;
-/** OGC Features page size (GeoLens caps `limit`, so this reads one page). */
-const FEATURES_LIMIT = 100;
+/** Default maximum number of editable GeoJSON features loaded per dataset. */
+export const DEFAULT_GEOLENS_FEATURE_LIMIT = 10_000;
+const MAX_GEOLENS_FEATURE_LIMIT = 1_000_000;
+const FEATURE_LIMIT_STORAGE_KEY = "geolibre.geolens.featureLimit";
 /** Re-mint the tile token this many seconds before it expires. */
 const TOKEN_REFRESH_LEAD_SECONDS = 30;
 /** Floor on the refresh delay, so a tiny/expired TTL cannot busy-loop. */
@@ -83,6 +83,9 @@ export interface GeoLensLabels {
   addGeoJsonTitle: string;
   metadata: string;
   metadataTitle: string;
+  settings: string;
+  featureLimit: string;
+  featureLimitHelp: string;
   addError: (message: string) => string;
   features: (count: number) => string;
 }
@@ -108,15 +111,44 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   adding: "Adding…",
   added: "Added",
   addGeoJson: "Add GeoJSON",
-  addGeoJsonTitle:
-    "Load features as editable GeoJSON (first 100) for the attribute table and export",
+  addGeoJsonTitle: "Load features as editable GeoJSON for the attribute table and export",
   metadata: "Metadata",
   metadataTitle: "Open this dataset's page on the GeoLens server in a new tab",
+  settings: "Settings",
+  featureLimit: "Default GeoJSON feature limit",
+  featureLimitHelp: "The loader follows paginated responses until this many features are loaded.",
   addError: (message) => `Could not add layer: ${message}`,
   features: (count) => `${count.toLocaleString()} features`,
 };
 
 let labels: GeoLensLabels = { ...DEFAULT_GEOLENS_LABELS };
+
+export function normalizeGeoLensFeatureLimit(value: unknown): number {
+  if (value === null || value === undefined || value === "") {
+    return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  }
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  return Math.min(MAX_GEOLENS_FEATURE_LIMIT, Math.max(1, Math.floor(parsed)));
+}
+
+function readFeatureLimit(): number {
+  if (typeof localStorage === "undefined") return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  try {
+    return normalizeGeoLensFeatureLimit(localStorage.getItem(FEATURE_LIMIT_STORAGE_KEY));
+  } catch {
+    return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  }
+}
+
+function writeFeatureLimit(value: number): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(FEATURE_LIMIT_STORAGE_KEY, String(value));
+  } catch {
+    // Storage can be unavailable in privacy-restricted webviews.
+  }
+}
 
 /** Panels currently mounted, so a language change can repaint them in place. */
 const mountedPanels = new Set<() => void>();
@@ -174,6 +206,9 @@ const CSS = {
     "padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
     "color:hsl(var(--foreground));",
+  settings:
+    "display:none;flex-direction:column;gap:5px;padding:7px;border-radius:6px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
 } as const;
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -451,12 +486,10 @@ async function addFeaturesLayer(
   app: GeoLibreAppAPI,
   client: GeoLensClientOptions,
   dataset: GeoLensDataset,
+  featureLimit: number,
   fetchImpl: GeoLensFetch,
 ): Promise<void> {
-  const url = itemsUrl(client, dataset.id, FEATURES_LIMIT);
-  const res = await fetchImpl(url, { headers: authHeaders(client) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as FeatureCollection;
+  const data = await fetchDatasetFeatures(client, dataset.id, featureLimit, fetchImpl);
   app.addGeoJsonLayer(dataset.title, data, `${sourcePathFor(client, dataset)}#items`);
   if (dataset.bbox) app.fitBounds?.(dataset.bbox);
 }
@@ -471,6 +504,7 @@ interface PanelState {
   /** Monotonic token to ignore superseded in-flight requests. */
   generation: number;
   controller: AbortController | null;
+  featureLimit: number;
 }
 
 /**
@@ -488,10 +522,28 @@ function buildPanel(
     datasets: [],
     generation: 0,
     controller: null,
+    featureLimit: readFeatureLimit(),
   };
 
   const panel = el("div", CSS.panel);
-  const hint = el("div", CSS.hint, labels.hint);
+  const hintRow = el("div", "display:flex;align-items:flex-start;gap:8px;");
+  const hint = el("div", `${CSS.hint}flex:1 1 auto;`, labels.hint);
+  const settingsButton = button("⚙", CSS.action, labels.settings);
+  settingsButton.setAttribute("aria-label", labels.settings);
+  hintRow.append(hint, settingsButton);
+
+  const settingsPanel = el("div", CSS.settings);
+  const featureLimitLabel = el("label", "font-size:11px;font-weight:600;", labels.featureLimit);
+  const featureLimitInput = el("input", CSS.input) as HTMLInputElement;
+  featureLimitInput.type = "number";
+  featureLimitInput.min = "1";
+  featureLimitInput.max = String(MAX_GEOLENS_FEATURE_LIMIT);
+  featureLimitInput.step = "1";
+  featureLimitInput.value = String(state.featureLimit);
+  featureLimitInput.style.display = "block";
+  featureLimitInput.style.marginTop = "4px";
+  featureLimitLabel.append(featureLimitInput);
+  settingsPanel.append(featureLimitLabel, el("div", CSS.hint, labels.featureLimitHelp));
 
   const baseUrlInput = el("input", CSS.input) as HTMLInputElement;
   baseUrlInput.placeholder = labels.baseUrlPlaceholder;
@@ -521,7 +573,17 @@ function buildPanel(
   errorLine.style.display = "none";
   const list = el("div", CSS.list);
 
-  panel.append(hint, baseUrlInput, apiKeyInput, connectRow, searchRow, status, errorLine, list);
+  panel.append(
+    hintRow,
+    settingsPanel,
+    baseUrlInput,
+    apiKeyInput,
+    connectRow,
+    searchRow,
+    status,
+    errorLine,
+    list,
+  );
   container.replaceChildren(panel);
 
   const showError = (message: string): void => {
@@ -634,7 +696,7 @@ function buildPanel(
       syncGeoJson();
       geoJsonButton.addEventListener("click", () => {
         void handleAdd(geoJsonButton, syncGeoJson, () =>
-          addFeaturesLayer(app!, state.client!, dataset, fetchImpl),
+          addFeaturesLayer(app!, state.client!, dataset, state.featureLimit, fetchImpl),
         );
       });
       actions.append(geoJsonButton);
@@ -696,6 +758,17 @@ function buildPanel(
   };
 
   connectButton.addEventListener("click", () => void connect());
+  settingsButton.addEventListener("click", () => {
+    const open = settingsPanel.style.display !== "flex";
+    settingsPanel.style.display = open ? "flex" : "none";
+    settingsButton.setAttribute("aria-expanded", String(open));
+  });
+  settingsButton.setAttribute("aria-expanded", "false");
+  featureLimitInput.addEventListener("change", () => {
+    state.featureLimit = normalizeGeoLensFeatureLimit(featureLimitInput.value);
+    featureLimitInput.value = String(state.featureLimit);
+    writeFeatureLimit(state.featureLimit);
+  });
   baseUrlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") void connect();
   });

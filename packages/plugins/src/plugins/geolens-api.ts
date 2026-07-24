@@ -15,7 +15,7 @@
  *    URL is not enough; the caller must re-mint before `expires_in` elapses.
  *  - **OGC API Features** — `GET /api/collections/{id}/items` is a plain
  *    (paginated) GeoJSON `FeatureCollection`, the fallback for a full-feature
- *    load. GeoLens caps `limit` (300 → 400), so this reads one page.
+ *    load.
  *  - **STAC 1.0** — `/api/stac` catalog + `/api/stac/collections`, the natural
  *    path for raster/COG datasets.
  *
@@ -338,6 +338,63 @@ export async function resolveRasterTiles(
 /** OGC API Features items URL (one GeoJSON page) for a dataset. */
 export function itemsUrl(options: GeoLensClientOptions, datasetId: string, limit: number): string {
   return `${options.baseUrl}/api/collections/${encodeURIComponent(datasetId)}/items?limit=${limit}`;
+}
+
+/**
+ * Load up to `limit` features, following OGC API Features `rel=next` links.
+ * GeoLens deployments may cap each response below the requested page size, so
+ * requesting a large limit alone is not sufficient to avoid silent truncation.
+ */
+export async function fetchDatasetFeatures(
+  options: GeoLensClientOptions,
+  datasetId: string,
+  limit: number,
+  fetchImpl: GeoLensFetch = defaultGeoLensFetch,
+  signal?: AbortSignal,
+): Promise<import("geojson").FeatureCollection> {
+  const features: import("geojson").Feature[] = [];
+  const visited = new Set<string>();
+  let nextUrl: string | null = itemsUrl(options, datasetId, limit);
+  let firstPage: Record<string, unknown> | null = null;
+
+  while (nextUrl && features.length < limit && !visited.has(nextUrl)) {
+    visited.add(nextUrl);
+    const res = await fetchImpl(nextUrl, { headers: authHeaders(options), signal });
+    if (!res.ok) throw new Error(`GeoLens items request failed (HTTP ${res.status})`);
+    const body = (await res.json()) as Record<string, unknown>;
+    if (!firstPage) firstPage = body;
+    if (!Array.isArray(body.features)) {
+      throw new Error("GeoLens items response contained no features");
+    }
+    features.push(...(body.features as import("geojson").Feature[]));
+
+    const links = Array.isArray(body.links) ? body.links : [];
+    const next = links.find(
+      (link): link is { rel: string; href: string } =>
+        !!link &&
+        typeof link === "object" &&
+        (link as { rel?: unknown }).rel === "next" &&
+        typeof (link as { href?: unknown }).href === "string",
+    );
+    if (next) {
+      const resolvedUrl: URL = new URL(next.href, nextUrl);
+      if (
+        !HTTP_URL_RE.test(resolvedUrl.href) ||
+        resolvedUrl.origin !== new URL(options.baseUrl).origin
+      ) {
+        throw new Error("GeoLens pagination returned an unsafe next-page URL");
+      }
+      nextUrl = resolvedUrl.href;
+    } else {
+      nextUrl = null;
+    }
+  }
+
+  return {
+    ...(firstPage ?? {}),
+    type: "FeatureCollection",
+    features: features.slice(0, limit),
+  } as import("geojson").FeatureCollection;
 }
 
 /**
