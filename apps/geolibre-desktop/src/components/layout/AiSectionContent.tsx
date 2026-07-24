@@ -142,8 +142,7 @@ export function AiSectionContent({
       ...current,
       aiProfiles: current.aiProfiles.filter((p: any) => p.id !== id),
       // Clear default if the deleted profile was the default.
-      defaultAiProfileId:
-        current.defaultAiProfileId === id ? null : current.defaultAiProfileId,
+      defaultAiProfileId: current.defaultAiProfileId === id ? null : current.defaultAiProfileId,
     }));
     if (editingProfileId === id) {
       setEditingProfileId(null);
@@ -244,10 +243,7 @@ export function AiSectionContent({
           {PROVIDER_MODELS[newProfileProvider].length > 0 ? (
             <div className="space-y-1.5">
               <Label className="text-xs">{t("assistant.model")}</Label>
-              <Select
-                value={newProfileModel}
-                onChange={(e) => setNewProfileModel(e.target.value)}
-              >
+              <Select value={newProfileModel} onChange={(e) => setNewProfileModel(e.target.value)}>
                 {PROVIDER_MODELS[newProfileProvider].map((id) => (
                   <option key={id} value={id}>
                     {id}
@@ -429,9 +425,7 @@ function ProfileEditor({
   const updateName = (name: string) => {
     setDraftDesktopSettings((current: any) => ({
       ...current,
-      aiProfiles: current.aiProfiles.map((p: any) =>
-        p.id === profile.id ? { ...p, name } : p,
-      ),
+      aiProfiles: current.aiProfiles.map((p: any) => (p.id === profile.id ? { ...p, name } : p)),
     }));
   };
 
@@ -449,9 +443,7 @@ function ProfileEditor({
   const updateModel = (modelId: string) => {
     setDraftDesktopSettings((current: any) => ({
       ...current,
-      aiProfiles: current.aiProfiles.map((p: any) =>
-        p.id === profile.id ? { ...p, modelId } : p,
-      ),
+      aiProfiles: current.aiProfiles.map((p: any) => (p.id === profile.id ? { ...p, modelId } : p)),
     }));
   };
 
@@ -545,9 +537,7 @@ function ProfileEditor({
                     </span>
                   )}
                 </Label>
-                <code className="font-mono text-[11px] text-muted-foreground">
-                  {field.envKey}
-                </code>
+                <code className="font-mono text-[11px] text-muted-foreground">{field.envKey}</code>
               </div>
               <div className="flex items-center gap-2">
                 <Input
@@ -558,9 +548,7 @@ function ProfileEditor({
                   value={getProviderField(field)}
                   onChange={(event) => setProviderField(field, event.target.value)}
                   placeholder={
-                    fromOsEnv
-                      ? t("settings.ai.osEnvPlaceholder")
-                      : t(field.placeholderKey)
+                    fromOsEnv ? t("settings.ai.osEnvPlaceholder") : t(field.placeholderKey)
                   }
                 />
                 {field.secret ? (
@@ -586,9 +574,7 @@ function ProfileEditor({
               {fromOsEnv ? (
                 <p className="flex items-center gap-1.5 text-[11px] text-sky-700 dark:text-sky-300">
                   <Terminal className="h-3 w-3 shrink-0" />
-                  <span>
-                    {t("settings.ai.osEnvField", { name: osEnvName })}
-                  </span>
+                  <span>{t("settings.ai.osEnvField", { name: osEnvName })}</span>
                 </p>
               ) : null}
             </div>
@@ -611,12 +597,7 @@ function ProfileEditor({
 
       {/* Footer — save and delete */}
       <div className="flex items-center justify-between gap-2 border-t pt-4">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-xs text-destructive"
-          onClick={onDelete}
-        >
+        <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={onDelete}>
           <Trash2 className="me-1 h-3.5 w-3.5" />
           {t("settings.ai.deleteProfile")}
         </Button>
@@ -651,9 +632,7 @@ function providerConfigFromEnv(
       return names.some((n) => env[n]?.trim()) ? { provider } : null;
     }
     case "ollama":
-      return env.OLLAMA_BASE_URL?.trim() || env.OLLAMA_HOST?.trim()
-        ? { provider }
-        : null;
+      return env.OLLAMA_BASE_URL?.trim() || env.OLLAMA_HOST?.trim() ? { provider } : null;
     case "custom":
       return env.OPENAI_COMPATIBLE_BASE_URL?.trim() && env.OPENAI_COMPATIBLE_MODEL?.trim()
         ? { provider }

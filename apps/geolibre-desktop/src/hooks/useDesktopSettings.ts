@@ -216,7 +216,10 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     shareToken: typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
     cesiumIonToken:
       typeof candidate.cesiumIonToken === "string" ? candidate.cesiumIonToken.trim() : "",
-    aiProfiles: normalizeAssistantProfiles(candidate.aiProfiles, (candidate as Record<string, unknown>).aiProviderEnv),
+    aiProfiles: normalizeAssistantProfiles(
+      candidate.aiProfiles,
+      (candidate as Record<string, unknown>).aiProviderEnv,
+    ),
     defaultAiProfileId:
       typeof candidate.defaultAiProfileId === "string" && candidate.defaultAiProfileId.trim()
         ? candidate.defaultAiProfileId.trim()
@@ -232,10 +235,7 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
  * profile must have valid fields matching its provider's schema. The legacy
  * `aiProviderEnv` flat map is migrated into profiles on first load.
  */
-function normalizeAssistantProfiles(
-  value: unknown,
-  legacyEnv: unknown,
-): AssistantProfile[] {
+function normalizeAssistantProfiles(value: unknown, legacyEnv: unknown): AssistantProfile[] {
   const profiles: AssistantProfile[] = [];
 
   if (Array.isArray(value)) {
@@ -257,7 +257,9 @@ function normalizeAssistantProfiles(
           : `Profile ${profiles.length + 1}`;
       const provider =
         typeof candidate.provider === "string" &&
-        ["google", "anthropic", "openai", "ollama", "bedrock", "custom"].includes(candidate.provider)
+        ["google", "anthropic", "openai", "ollama", "bedrock", "custom"].includes(
+          candidate.provider,
+        )
           ? (candidate.provider as AssistantProfile["provider"])
           : "google";
       const modelId =
@@ -284,10 +286,7 @@ function normalizeAssistantProfiles(
 
   // Migrate legacy flat env map into profiles (dedup against existing).
   if (legacyEnv && typeof legacyEnv === "object" && !Array.isArray(legacyEnv)) {
-    const migrated = migrateLegacyAiEnv(
-      legacyEnv as Record<string, string>,
-      profiles,
-    );
+    const migrated = migrateLegacyAiEnv(legacyEnv as Record<string, string>, profiles);
     profiles.push(...migrated);
   }
 

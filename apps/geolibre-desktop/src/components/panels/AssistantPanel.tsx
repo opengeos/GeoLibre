@@ -157,9 +157,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const [providers, setProviders] = useState<AssistantProviderId[]>(() => availableProviders());
 
   // Read profiles + default from DesktopSettings (localStorage).
-  const { aiProfiles, defaultAiProfileId } = useDesktopSettingsStore(
-    (s) => s.desktopSettings,
-  );
+  const { aiProfiles, defaultAiProfileId } = useDesktopSettingsStore((s) => s.desktopSettings);
 
   // The selected profile id, persisted to localStorage.
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => {

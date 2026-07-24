@@ -522,7 +522,10 @@ export function SettingsDialog({
   // project GOOGLE_API_KEY row shadows the whole Google OS alias group).
   const scopedOsEnv = useMemo(
     () =>
-      scopeOsEnvToProject(osEnv, new Set([...Object.keys(draftEnv), ...Object.keys(draftProfilesEnv)])),
+      scopeOsEnvToProject(
+        osEnv,
+        new Set([...Object.keys(draftEnv), ...Object.keys(draftProfilesEnv)]),
+      ),
     [osEnv, draftEnv, draftProfilesEnv],
   );
   // Merge OS env under the drafts so a provider configured purely via a system
