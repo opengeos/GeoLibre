@@ -18,8 +18,11 @@ export type TimeGranularity = "hour" | "day" | "month" | "year";
  *   compared lexicographically, which equals chronological order for ISO-8601.
  * - `isoDate`: date-only ISO strings (`YYYY-MM-DD`), compared against date-only
  *   bounds so a feature on the boundary day is not dropped.
+ * - `year`: bare calendar years (`1958`, `"2015"`), the common vintage column in
+ *   GIS data (construction year, survey year). Compared numerically against
+ *   year bounds; each year is anchored at Jan 1 UTC on the timeline.
  */
-export type TimeValueKind = "epochMs" | "epochS" | "isoDateTime" | "isoDate";
+export type TimeValueKind = "epochMs" | "epochS" | "isoDateTime" | "isoDate" | "year";
 
 /**
  * A sliding window of time placed around the timeline's current date. Features
@@ -64,10 +67,19 @@ export interface TimePropertyCandidate {
 const EPOCH_MS_THRESHOLD = 1e11;
 /**
  * Smallest magnitude accepted as an epoch-second timestamp (~1973-03). Numbers
- * below this are not treated as timestamps, so bare-year columns (2015, 2016,
- * ...) and small counts are not misclassified as epoch seconds near 1970.
+ * between the year range and this are not treated as timestamps, so counts and
+ * ids are not misclassified as epoch seconds near 1970.
  */
 const EPOCH_SECONDS_MIN = 1e8;
+/**
+ * Integers in `[YEAR_MIN, YEAR_MAX]` are read as bare calendar years — the
+ * common vintage column in GIS data (construction year, survey year). Kept to
+ * four digits so counts and codes outside the range stay rejected; a four-digit
+ * count column can still slip in as a low-ranked candidate, which is why
+ * {@link detectTimeProperties} breaks coverage ties by distinct-value count.
+ */
+const YEAR_MIN = 1000;
+const YEAR_MAX = 9999;
 /** How many features to inspect when detecting candidate columns / value kind. */
 const SAMPLE_LIMIT = 500;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,9 +89,10 @@ const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
  * Parse a raw property value into an epoch-millisecond timestamp.
  *
  * Numbers (and all-numeric strings) are treated as epoch seconds or
- * milliseconds by magnitude; other strings are parsed as dates (ISO and any
- * format `Date.parse` accepts). Numbers too small to be a plausible epoch (a
- * bare year or a count) are rejected rather than read as seconds near 1970.
+ * milliseconds by magnitude; four-digit integers are read as bare calendar
+ * years anchored at Jan 1 UTC; other strings are parsed as dates (ISO and any
+ * format `Date.parse` accepts). Remaining numbers (counts, ids) are rejected
+ * rather than read as seconds near 1970.
  *
  * @param value - A raw feature-property value.
  * @returns Epoch milliseconds, or `null` when the value is not a timestamp.
@@ -90,6 +103,9 @@ export function parseTimeValue(value: unknown): number | null {
     const magnitude = Math.abs(value);
     if (magnitude >= EPOCH_MS_THRESHOLD) return value;
     if (magnitude >= EPOCH_SECONDS_MIN) return value * 1000;
+    if (Number.isInteger(value) && value >= YEAR_MIN && value <= YEAR_MAX) {
+      return Date.UTC(value, 0, 1);
+    }
     return null;
   }
   if (typeof value === "string") {
@@ -106,8 +122,12 @@ export function parseTimeValue(value: unknown): number | null {
 
 /**
  * Inspect a feature collection and return the properties that look like
- * timestamps, most-covered first. A property qualifies when at least 60% of the
- * inspected features carry a parseable value.
+ * timestamps, best first. A property qualifies when at least 60% of the
+ * inspected features carry a parseable value. Candidates are ordered by
+ * coverage, and ties by how many distinct timestamps they hold: a real time
+ * column varies across features, while a constant code that happens to parse
+ * (e.g. a `feature_code` of `2100` on every row) collapses to one value and
+ * sinks below it.
  *
  * @param geojson - The layer's feature collection.
  * @returns Candidate timestamp properties for the bind dialog.
@@ -121,6 +141,7 @@ export function detectTimeProperties(
   const total = new Map<string, number>();
   const parsed = new Map<string, number>();
   const sample = new Map<string, unknown>();
+  const distinct = new Map<string, Set<number>>();
   const inspected = Math.min(features.length, SAMPLE_LIMIT);
 
   for (let i = 0; i < inspected; i += 1) {
@@ -129,9 +150,13 @@ export function detectTimeProperties(
     for (const [key, value] of Object.entries(props)) {
       if (value === null || value === undefined || value === "") continue;
       total.set(key, (total.get(key) ?? 0) + 1);
-      if (parseTimeValue(value) !== null) {
+      const ms = parseTimeValue(value);
+      if (ms !== null) {
         parsed.set(key, (parsed.get(key) ?? 0) + 1);
         if (!sample.has(key)) sample.set(key, value);
+        let seen = distinct.get(key);
+        if (!seen) distinct.set(key, (seen = new Set()));
+        seen.add(ms);
       }
     }
   }
@@ -144,7 +169,11 @@ export function detectTimeProperties(
       candidates.push({ property: key, coverage, sample: sample.get(key) });
     }
   }
-  candidates.sort((a, b) => b.coverage - a.coverage);
+  candidates.sort(
+    (a, b) =>
+      b.coverage - a.coverage ||
+      (distinct.get(b.property)?.size ?? 0) - (distinct.get(a.property)?.size ?? 0),
+  );
   return candidates;
 }
 
@@ -156,19 +185,24 @@ export function detectTimeProperties(
  */
 export function detectValueKind(values: unknown[]): TimeValueKind {
   let numeric = 0;
+  let years = 0;
   let isoDateOnly = 0;
   let strings = 0;
   let maxMagnitude = 0;
 
+  const countNumber = (n: number): void => {
+    numeric += 1;
+    maxMagnitude = Math.max(maxMagnitude, Math.abs(n));
+    if (Number.isInteger(n) && n >= YEAR_MIN && n <= YEAR_MAX) years += 1;
+  };
+
   for (const value of values) {
     if (typeof value === "number") {
-      numeric += 1;
-      maxMagnitude = Math.max(maxMagnitude, Math.abs(value));
+      countNumber(value);
     } else if (typeof value === "string") {
       const trimmed = value.trim();
       if (NUMERIC_STRING.test(trimmed)) {
-        numeric += 1;
-        maxMagnitude = Math.max(maxMagnitude, Math.abs(Number(trimmed)));
+        countNumber(Number(trimmed));
       } else {
         strings += 1;
         if (ISO_DATE_ONLY.test(trimmed)) isoDateOnly += 1;
@@ -176,11 +210,13 @@ export function detectValueKind(values: unknown[]): TimeValueKind {
     }
   }
 
-  // Only a purely numeric column is treated as epoch. If any date strings are
-  // present the column is compared as ISO text, so a mixed (or exactly 50/50)
-  // sample is never misclassified as epoch — which would coerce the ISO strings
-  // to NaN and silently drop them. Magnitude tells milliseconds from seconds.
+  // Only a purely numeric column is treated as epoch or year. If any date
+  // strings are present the column is compared as ISO text, so a mixed (or
+  // exactly 50/50) sample is never misclassified as epoch — which would coerce
+  // the ISO strings to NaN and silently drop them. An all-years sample is a
+  // vintage column; otherwise magnitude tells milliseconds from seconds.
   if (numeric > 0 && strings === 0) {
+    if (years === numeric) return "year";
     return maxMagnitude >= EPOCH_MS_THRESHOLD ? "epochMs" : "epochS";
   }
   // Bare calendar dates compare date-only; otherwise (datetimes, or an empty /
@@ -299,6 +335,25 @@ export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
     const scale = valueKind === "epochS" ? 0.001 : 1;
     const value = ["to-number", ["get", property]];
     return ["all", [">=", value, lowerMs * scale], ["<", value, upperMs * scale]];
+  }
+
+  if (valueKind === "year") {
+    // A year Y is in the window iff its Jan 1 UTC anchor falls in
+    // [lowerMs, upperMs), i.e. Y lies in [firstYearAtOrAfter(lowerMs),
+    // firstYearAtOrAfter(upperMs)). Comparing the year numbers directly keeps
+    // the filter a plain numeric comparison on the raw property value.
+    // `to-number` coerces a missing property to 0, below YEAR_MIN, so undated
+    // features fall outside every window.
+    const firstYearAtOrAfter = (ms: number): number => {
+      const y = new Date(ms).getUTCFullYear();
+      return Date.UTC(y, 0, 1) >= ms ? y : y + 1;
+    };
+    const value = ["to-number", ["get", property]];
+    return [
+      "all",
+      [">=", value, firstYearAtOrAfter(lowerMs)],
+      ["<", value, firstYearAtOrAfter(upperMs)],
+    ];
   }
 
   // Compare a fixed-length leading slice of the ISO text on both sides so a
