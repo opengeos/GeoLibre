@@ -159,18 +159,31 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Read profiles + default from DesktopSettings (localStorage).
   const { aiProfiles, defaultAiProfileId } = useDesktopSettingsStore((s) => s.desktopSettings);
 
+  // Whether the user has explicitly changed the profile via the dropdown in
+  // this session. When false, we always follow the default profile so that
+  // changing the default in Settings takes effect immediately. Once the user
+  // picks a profile from the dropdown, that choice is respected.
+  const userExplicitlyChoseProfile = useRef(false);
+
   // The selected profile id, persisted to localStorage.
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => {
+    const storeSettings = useDesktopSettingsStore.getState().desktopSettings;
+    // If a default profile is set, pre-select it so the panel always starts on
+    // the default. An explicit past selection only overrides when the user
+    // opens the dropdown (tracked by userExplicitlyChoseProfile).
+    if (storeSettings.defaultAiProfileId) {
+      return storeSettings.defaultAiProfileId;
+    }
     const stored = loadStored(PROFILE_STORAGE_KEY);
     if (!stored) return null;
-    // Validate that the stored profile still exists.
-    const profiles = useDesktopSettingsStore.getState().desktopSettings.aiProfiles;
-    return profiles.some((p) => p.id === stored) ? stored : null;
+    return storeSettings.aiProfiles.some((p) => p.id === stored) ? stored : null;
   });
 
-  // The currently active profile: explicit selection → default → first → none.
+  // The currently active profile: if the user hasn't explicitly chosen one,
+  // follow the default. Otherwise respect their explicit selection.
   const activeProfile: AssistantProfile | null = useMemo(() => {
-    if (selectedProfileId) {
+    // If the user explicitly chose a profile via the dropdown, use that.
+    if (userExplicitlyChoseProfile.current && selectedProfileId) {
       const found = aiProfiles.find((p) => p.id === selectedProfileId);
       if (found) return found;
     }
@@ -397,6 +410,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   };
 
   const onProfileChange = (profileId: string) => {
+    userExplicitlyChoseProfile.current = true;
     setSelectedProfileId(profileId);
     saveStored(PROFILE_STORAGE_KEY, profileId);
   };
