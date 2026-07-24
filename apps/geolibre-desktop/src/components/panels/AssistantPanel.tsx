@@ -290,6 +290,20 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
   }, []);
 
+  // When the default profile changes (user set a new default in Settings),
+  // reset the "user explicitly chose" flag so the new default takes effect.
+  // This ensures that changing the default in Settings always overrides a
+  // previous dropdown selection — matching the user's mental model.
+  const prevDefaultRef = useRef(defaultAiProfileId);
+  if (prevDefaultRef.current !== defaultAiProfileId) {
+    prevDefaultRef.current = defaultAiProfileId;
+    if (userExplicitlyChoseProfile.current) {
+      userExplicitlyChoseProfile.current = false;
+      setSelectedProfileId(defaultAiProfileId);
+      saveStored(PROFILE_STORAGE_KEY, defaultAiProfileId ?? "");
+    }
+  }
+
   // Push the active profile into the session. When no profile is available,
   // fall back to auto-resolution (which reads from the runtime env directly).
   useEffect(() => {
