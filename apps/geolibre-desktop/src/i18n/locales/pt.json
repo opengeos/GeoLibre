@@ -3975,6 +3975,11 @@
     "dictionaryHint": "Um objeto JSON com pares {\"rótulo\": \"cor\"}, ou um \"rótulo: cor\" por linha.",
     "dictionaryAdd": "Adicionar seção",
     "cancel": "Cancelar",
-    "resize": "Redimensionar legenda"
+    "resize": "Redimensionar legenda",
+    "collapseEntry": "Recolher seção",
+    "expandEntry": "Expandir seção",
+    "collapsePanel": "Recolher legenda",
+    "expandPanel": "Expandir legenda",
+    "exportJson": "Exportar como JSON"
   }
 }

@@ -3991,6 +3991,11 @@
     "dictionaryHint": "A JSON object of {\"label\": \"color\"} pairs, or one \"label: color\" per line.",
     "dictionaryAdd": "Add section",
     "cancel": "Cancel",
-    "resize": "Resize legend"
+    "resize": "Resize legend",
+    "collapseEntry": "Collapse section",
+    "expandEntry": "Expand section",
+    "collapsePanel": "Collapse legend",
+    "expandPanel": "Expand legend",
+    "exportJson": "Export as JSON"
   }
 }

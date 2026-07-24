@@ -14,6 +14,7 @@ import {
   newCustomSectionId,
   parseLegendDictionary,
   removeLegendCustomEntry,
+  serializeLegend,
   setLegendCustomEntry,
 } from "../apps/geolibre-desktop/src/lib/auto-legend";
 
@@ -333,6 +334,65 @@ describe("expressionLegendParts — advanced expression styles", () => {
       ["R", "Other"],
     );
     assert.equal(entries[0].headerSwatch, null);
+  });
+});
+
+describe("serializeLegend", () => {
+  it("exports visible entries with effective labels and omits hidden ones", () => {
+    const styled = layer({
+      id: "cat",
+      name: "Era",
+      metadata: { geometryType: "polygon" },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "categorized",
+        vectorStyleStops: [
+          { value: "old", color: "#8c2d04" },
+          { value: "new", color: "#08306b" },
+        ],
+      },
+    });
+    const hiddenLayer = layer({ id: "hidden", name: "Hidden" });
+    const cfg = config({
+      overrides: {
+        hidden: { hidden: true },
+        [legendRowKey("cat", 0)]: { label: "Ancient" },
+        [legendRowKey("cat", 1)]: { hidden: true },
+      },
+    });
+    const parsed = JSON.parse(
+      serializeLegend(buildAutoLegend([hiddenLayer, styled], cfg, EN), "My Legend"),
+    );
+    assert.equal(parsed.title, "My Legend");
+    assert.equal(parsed.entries.length, 1);
+    assert.equal(parsed.entries[0].title, "Era");
+    assert.equal(parsed.entries[0].field, undefined);
+    assert.deepEqual(parsed.entries[0].items, [
+      { label: "Ancient", color: "#8c2d04", shape: "square" },
+    ]);
+  });
+
+  it("includes gradients with their end labels", () => {
+    const dem = layer({
+      id: "dem",
+      type: "cog",
+      source: { type: "raster" },
+      metadata: { rasterState: { mode: "single", colormap: "viridis", rescale: [[0, 3000]] } },
+    });
+    const parsed = JSON.parse(
+      serializeLegend(
+        buildAutoLegend([dem], config(), {
+          ...EN,
+          resolveColormapColors: () => ["#000000", "#ffffff"],
+        }),
+        "Legend",
+      ),
+    );
+    // Gradients are sampled to a fixed number of stops for the bar.
+    assert.equal(parsed.entries[0].gradient.colors.length, 6);
+    assert.equal(parsed.entries[0].gradient.colors[0], "#000000");
+    assert.equal(parsed.entries[0].gradient.min, "0");
+    assert.equal(parsed.entries[0].gradient.max, "3,000");
   });
 });
 

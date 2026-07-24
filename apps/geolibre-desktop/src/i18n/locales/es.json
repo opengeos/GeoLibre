@@ -3975,6 +3975,11 @@
     "dictionaryHint": "Un objeto JSON con pares {\"etiqueta\": \"color\"}, o una línea \"etiqueta: color\" por elemento.",
     "dictionaryAdd": "Añadir sección",
     "cancel": "Cancelar",
-    "resize": "Cambiar el tamaño de la leyenda"
+    "resize": "Cambiar el tamaño de la leyenda",
+    "collapseEntry": "Contraer sección",
+    "expandEntry": "Expandir sección",
+    "collapsePanel": "Contraer leyenda",
+    "expandPanel": "Expandir leyenda",
+    "exportJson": "Exportar como JSON"
   }
 }

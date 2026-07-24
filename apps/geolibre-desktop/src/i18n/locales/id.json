@@ -3918,6 +3918,11 @@
     "dictionaryHint": "Objek JSON berisi pasangan {\"label\": \"warna\"}, atau satu \"label: warna\" per baris.",
     "dictionaryAdd": "Tambah bagian",
     "cancel": "Batal",
-    "resize": "Ubah ukuran legenda"
+    "resize": "Ubah ukuran legenda",
+    "collapseEntry": "Ciutkan bagian",
+    "expandEntry": "Bentangkan bagian",
+    "collapsePanel": "Ciutkan legenda",
+    "expandPanel": "Bentangkan legenda",
+    "exportJson": "Ekspor sebagai JSON"
   }
 }

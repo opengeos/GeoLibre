@@ -3918,6 +3918,11 @@
     "dictionaryHint": "{\"ラベル\": \"色\"} のペアからなる JSON オブジェクト、または 1 行につき「ラベル: 色」。",
     "dictionaryAdd": "セクションを追加",
     "cancel": "キャンセル",
-    "resize": "凡例のサイズを変更"
+    "resize": "凡例のサイズを変更",
+    "collapseEntry": "セクションを折りたたむ",
+    "expandEntry": "セクションを展開",
+    "collapsePanel": "凡例を折りたたむ",
+    "expandPanel": "凡例を展開",
+    "exportJson": "JSON としてエクスポート"
   }
 }

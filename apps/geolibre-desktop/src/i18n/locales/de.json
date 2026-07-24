@@ -3975,6 +3975,11 @@
     "dictionaryHint": "Ein JSON-Objekt aus {\"Beschriftung\": \"Farbe\"}-Paaren oder je Zeile \"Beschriftung: Farbe\".",
     "dictionaryAdd": "Abschnitt hinzufügen",
     "cancel": "Abbrechen",
-    "resize": "Legendengröße ändern"
+    "resize": "Legendengröße ändern",
+    "collapseEntry": "Abschnitt einklappen",
+    "expandEntry": "Abschnitt ausklappen",
+    "collapsePanel": "Legende einklappen",
+    "expandPanel": "Legende ausklappen",
+    "exportJson": "Als JSON exportieren"
   }
 }

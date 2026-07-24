@@ -3975,6 +3975,11 @@
     "dictionaryHint": "Een JSON-object met {\"label\": \"kleur\"}-paren, of één \"label: kleur\" per regel.",
     "dictionaryAdd": "Sectie toevoegen",
     "cancel": "Annuleren",
-    "resize": "Legenda vergroten of verkleinen"
+    "resize": "Legenda vergroten of verkleinen",
+    "collapseEntry": "Sectie samenvouwen",
+    "expandEntry": "Sectie uitvouwen",
+    "collapsePanel": "Legenda samenvouwen",
+    "expandPanel": "Legenda uitvouwen",
+    "exportJson": "Exporteren als JSON"
   }
 }

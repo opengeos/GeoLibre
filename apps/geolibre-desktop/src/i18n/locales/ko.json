@@ -3918,6 +3918,11 @@
     "dictionaryHint": "{\"레이블\": \"색상\"} 쌍의 JSON 객체 또는 줄마다 \"레이블: 색상\" 하나.",
     "dictionaryAdd": "섹션 추가",
     "cancel": "취소",
-    "resize": "범례 크기 조절"
+    "resize": "범례 크기 조절",
+    "collapseEntry": "섹션 접기",
+    "expandEntry": "섹션 펼치기",
+    "collapsePanel": "범례 접기",
+    "expandPanel": "범례 펼치기",
+    "exportJson": "JSON으로 내보내기"
   }
 }

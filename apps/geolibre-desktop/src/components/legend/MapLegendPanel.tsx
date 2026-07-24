@@ -25,6 +25,8 @@ import {
   ArrowUp,
   BookOpen,
   Check,
+  ChevronRight,
+  Download,
   Eye,
   EyeOff,
   Pencil,
@@ -49,10 +51,13 @@ import {
   newCustomSectionId,
   parseLegendDictionary,
   removeLegendCustomEntry,
+  serializeLegend,
   setLegendCustomEntry,
   type AutoLegendEntry,
   type AutoLegendRow,
 } from "../../lib/auto-legend";
+import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
+import { sanitizeExportFileName } from "../../lib/vector-export";
 import {
   reorderLegendEntry,
   setLegendItemLabel,
@@ -179,6 +184,8 @@ export function MapLegendPanel({
   const [editing, setEditing] = useState(false);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
   const [dictionaryText, setDictionaryText] = useState("");
+  // Sections the user folded while editing (session-local, not persisted).
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   // Bumped when an async sprite-colormap sample resolves, so gradients rebuild.
   const [colormapGeneration, setColormapGeneration] = useState(0);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -419,6 +426,38 @@ export function MapLegendPanel({
     setDictionaryText("");
   };
 
+  /** Save the rendered legend (override-applied, visible items) as JSON. */
+  const exportLegendJson = async () => {
+    const json = serializeLegend(entries, legend.title);
+    try {
+      await saveBinaryFileWithFallback(new TextEncoder().encode(json), {
+        defaultName: `${sanitizeExportFileName(legend.title || "legend")}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        browserTypes: [{ description: "JSON", accept: { "application/json": [".json"] } }],
+        mimeType: "application/json",
+      });
+    } catch {
+      // Cancelled or unwritable target; nothing to roll back.
+    }
+  };
+
+  const toggleSectionCollapsed = (id: string) =>
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const panelCollapsed = legend.panelCollapsed === true;
+  const togglePanelCollapsed = () => {
+    commit({ ...legend, panelCollapsed: !panelCollapsed });
+    // A collapsed panel shows only its header; leave edit mode so reopening
+    // doesn't land in a hidden editing session.
+    setEditing(false);
+    setDictionaryOpen(false);
+  };
+
   const width = dragSize?.width ?? legend.panelWidth;
   const height = dragSize?.height ?? legend.panelHeight;
   const panel = (
@@ -432,12 +471,29 @@ export function MapLegendPanel({
       style={{
         maxHeight: maxHeight ?? undefined,
         ...(width !== undefined ? { width: clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH) } : {}),
-        ...(height !== undefined
+        // A collapsed panel hugs its header; the resized height only applies
+        // when expanded.
+        ...(height !== undefined && !panelCollapsed
           ? { height: clamp(height, MIN_PANEL_HEIGHT, maxHeight ?? height) }
           : {}),
       }}
     >
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/50 px-3 py-2">
+      {/* `group` reveals the edit/close buttons on hover or keyboard focus,
+          keeping the header quiet while reading the legend. */}
+      <div
+        className={cn(
+          "group flex shrink-0 items-center gap-1 px-3 py-2",
+          !panelCollapsed && "border-b border-border/50",
+        )}
+      >
+        <IconButton
+          label={panelCollapsed ? t("legendPanel.expandPanel") : t("legendPanel.collapsePanel")}
+          onClick={togglePanelCollapsed}
+        >
+          <ChevronRight
+            className={cn("h-3 w-3 transition-transform", !panelCollapsed && "rotate-90")}
+          />
+        </IconButton>
         {editing ? (
           <InlineEdit
             value={legend.title}
@@ -448,21 +504,30 @@ export function MapLegendPanel({
         ) : (
           <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{legend.title}</h2>
         )}
-        <IconButton
-          label={editing ? t("legendPanel.done") : t("legendPanel.edit")}
-          onClick={() => {
-            setEditing((value) => !value);
-            setDictionaryOpen(false);
-          }}
+        <span
+          className={cn(
+            "flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100",
+            editing && "opacity-100",
+          )}
         >
-          {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3 w-3" />}
-        </IconButton>
-        <IconButton label={t("legendPanel.close")} onClick={close}>
-          <X className="h-3.5 w-3.5" />
-        </IconButton>
+          {!panelCollapsed && (
+            <IconButton
+              label={editing ? t("legendPanel.done") : t("legendPanel.edit")}
+              onClick={() => {
+                setEditing((value) => !value);
+                setDictionaryOpen(false);
+              }}
+            >
+              {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3 w-3" />}
+            </IconButton>
+          )}
+          <IconButton label={t("legendPanel.close")} onClick={close}>
+            <X className="h-3.5 w-3.5" />
+          </IconButton>
+        </span>
       </div>
 
-      {displayed.length === 0 ? (
+      {panelCollapsed ? null : displayed.length === 0 ? (
         <p className="px-3 py-4 text-xs text-muted-foreground">{t("legendPanel.empty")}</p>
       ) : (
         <ul className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
@@ -471,6 +536,8 @@ export function MapLegendPanel({
               key={entry.id}
               entry={entry}
               editing={editing}
+              collapsed={collapsedIds.has(entry.id)}
+              onToggleCollapsed={() => toggleSectionCollapsed(entry.id)}
               legend={legend}
               entryIds={entryIds}
               customEntry={legend.customEntries?.[entry.id]}
@@ -541,6 +608,14 @@ export function MapLegendPanel({
               </div>
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => void exportLegendJson()}
+            className="flex h-7 w-full items-center justify-center gap-1 rounded-md border border-input text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Download className="h-3 w-3" />
+            {t("legendPanel.exportJson")}
+          </button>
           <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
             {t("legendPanel.position")}
             <select
@@ -563,35 +638,40 @@ export function MapLegendPanel({
       {/* Bottom-corner resize grips. Physical left/right (not logical): the
           drag math above works in physical screen directions. Double-click
           resets to the default width and auto-fit height; arrow keys resize
-          when a grip is focused (keyboard alternative to dragging). */}
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={t("legendPanel.resize")}
-        title={t("legendPanel.resize")}
-        onPointerDown={(event) => beginResize(event, "right")}
-        onDoubleClick={resetSize}
-        onKeyDown={(event) => {
-          if (stepResize("right", event.key)) event.preventDefault();
-        }}
-        className="absolute bottom-0 right-0 z-10 h-6 w-6 cursor-nwse-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span className="absolute bottom-1 right-1 h-2 w-2 border-b-2 border-r-2 border-muted-foreground/60" />
-      </div>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={t("legendPanel.resize")}
-        title={t("legendPanel.resize")}
-        onPointerDown={(event) => beginResize(event, "left")}
-        onDoubleClick={resetSize}
-        onKeyDown={(event) => {
-          if (stepResize("left", event.key)) event.preventDefault();
-        }}
-        className="absolute bottom-0 left-0 z-10 h-6 w-6 cursor-nesw-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span className="absolute bottom-1 left-1 h-2 w-2 border-b-2 border-l-2 border-muted-foreground/60" />
-      </div>
+          when a grip is focused (keyboard alternative to dragging). Hidden
+          while collapsed — a header-only bar has nothing to resize. */}
+      {panelCollapsed ? null : (
+        <>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={t("legendPanel.resize")}
+            title={t("legendPanel.resize")}
+            onPointerDown={(event) => beginResize(event, "right")}
+            onDoubleClick={resetSize}
+            onKeyDown={(event) => {
+              if (stepResize("right", event.key)) event.preventDefault();
+            }}
+            className="absolute bottom-0 right-0 z-10 h-6 w-6 cursor-nwse-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="absolute bottom-1 right-1 h-2 w-2 border-b-2 border-r-2 border-muted-foreground/60" />
+          </div>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={t("legendPanel.resize")}
+            title={t("legendPanel.resize")}
+            onPointerDown={(event) => beginResize(event, "left")}
+            onDoubleClick={resetSize}
+            onKeyDown={(event) => {
+              if (stepResize("left", event.key)) event.preventDefault();
+            }}
+            className="absolute bottom-0 left-0 z-10 h-6 w-6 cursor-nesw-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="absolute bottom-1 left-1 h-2 w-2 border-b-2 border-l-2 border-muted-foreground/60" />
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -601,6 +681,8 @@ export function MapLegendPanel({
 function LegendEntryRow({
   entry,
   editing,
+  collapsed,
+  onToggleCollapsed,
   legend,
   entryIds,
   customEntry,
@@ -610,6 +692,8 @@ function LegendEntryRow({
 }: {
   entry: AutoLegendEntry;
   editing: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   legend: LegendConfig;
   entryIds: string[];
   customEntry: LegendCustomEntry | undefined;
@@ -621,10 +705,27 @@ function LegendEntryRow({
   const index = entryIds.indexOf(entry.id);
   const visibleRows = editing ? entry.rows : entry.rows.filter((row) => !row.hidden);
   const editingCustom = editing && entry.custom && customEntry;
+  const hasBody = Boolean(
+    entry.fieldLabel || entry.gradient || editingCustom || visibleRows.length > 0,
+  );
+  // Sections collapse in edit mode only, to keep long legends manageable
+  // while rearranging; display mode always shows everything.
+  const bodyCollapsed = editing && collapsed;
 
   return (
     <li className={cn("px-3 py-2", entry.hidden && "opacity-40")}>
       <div className="flex items-center gap-2">
+        {editing && (
+          <IconButton
+            label={collapsed ? t("legendPanel.expandEntry") : t("legendPanel.collapseEntry")}
+            disabled={!hasBody}
+            onClick={onToggleCollapsed}
+          >
+            <ChevronRight
+              className={cn("h-3 w-3 transition-transform", !bodyCollapsed && "rotate-90")}
+            />
+          </IconButton>
+        )}
         <EntryChip entry={entry} />
         {editing ? (
           <InlineEdit
@@ -690,13 +791,13 @@ function LegendEntryRow({
         )}
       </div>
 
-      {entry.fieldLabel && (
+      {!bodyCollapsed && entry.fieldLabel && (
         <div className="ms-6 mt-1 truncate text-[10px] font-medium text-muted-foreground">
           {entry.fieldLabel}
         </div>
       )}
 
-      {editingCustom ? (
+      {bodyCollapsed ? null : editingCustom ? (
         <ul className="ms-6 mt-1.5 space-y-1">
           {customEntry.items.map((item, itemIndex) => (
             <li key={itemIndex} className="flex items-center gap-1.5">
@@ -778,7 +879,7 @@ function LegendEntryRow({
         )
       )}
 
-      {entry.gradient && !editingCustom && (
+      {!bodyCollapsed && entry.gradient && !editingCustom && (
         <div className="ms-6 mt-1.5">
           <GradientBar
             colors={entry.gradient.colors}

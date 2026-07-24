@@ -278,6 +278,7 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
     overrides,
     ...(Object.keys(customEntries).length > 0 ? { customEntries } : {}),
     ...(candidate.panelVisible === true ? { panelVisible: true } : {}),
+    ...(candidate.panelCollapsed === true ? { panelCollapsed: true } : {}),
     ...(panelPosition ? { panelPosition } : {}),
     ...(panelWidth !== undefined ? { panelWidth } : {}),
     ...(panelHeight !== undefined ? { panelHeight } : {}),

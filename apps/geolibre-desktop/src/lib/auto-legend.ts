@@ -855,6 +855,45 @@ export function removeLegendCustomEntry(config: LegendConfig, id: string): Legen
 }
 
 /**
+ * Serialize the rendered legend to pretty-printed JSON for export: the title
+ * plus one entry per visible section with its effective (override-applied)
+ * labels, colors, shapes, and gradient. Hidden entries and rows are omitted —
+ * the export mirrors what the panel shows. Each section's items are the same
+ * `{label, color}` shape "Add from dictionary" accepts, so an exported legend
+ * can be rebuilt by hand elsewhere.
+ */
+export function serializeLegend(entries: AutoLegendEntry[], title: string): string {
+  const payload = {
+    title,
+    entries: entries
+      .filter((entry) => !entry.hidden)
+      .map((entry) => ({
+        title: entry.name,
+        ...(entry.fieldLabel ? { field: entry.fieldLabel } : {}),
+        ...(entry.headerSwatch ? { color: entry.headerSwatch.color, shape: entry.shape } : {}),
+        items: entry.rows
+          .filter((row) => !row.hidden)
+          .map((row) => ({
+            label: row.label,
+            color: row.color,
+            shape: row.shape,
+            ...(row.size !== undefined ? { size: row.size } : {}),
+          })),
+        ...(entry.gradient
+          ? {
+              gradient: {
+                colors: entry.gradient.colors,
+                ...(entry.gradient.minLabel !== null ? { min: entry.gradient.minLabel } : {}),
+                ...(entry.gradient.maxLabel !== null ? { max: entry.gradient.maxLabel } : {}),
+              },
+            }
+          : {}),
+      })),
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
  * Parse hand-entered legend items from a dictionary: either a JSON object of
  * `{"label": "color"}` pairs (the shape `Map.add_legend(legend_dict=…)` and
  * the legacy Legend control accept), or one `label: color` line per item.

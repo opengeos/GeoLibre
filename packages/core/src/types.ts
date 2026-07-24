@@ -1271,6 +1271,8 @@ export interface LegendConfig {
   customEntries?: Record<string, LegendCustomEntry>;
   /** Whether the on-map Legend panel is open (persisted with the project). */
   panelVisible?: boolean;
+  /** Whether the open panel is collapsed to just its header bar. */
+  panelCollapsed?: boolean;
   /** Map corner the on-map Legend panel docks to; defaults to `"top-left"`. */
   panelPosition?: LegendPanelPosition;
   /**

@@ -3918,6 +3918,11 @@
     "dictionaryHint": "包含 {\"标签\": \"颜色\"} 键值对的 JSON 对象，或每行一个“标签: 颜色”。",
     "dictionaryAdd": "添加分节",
     "cancel": "取消",
-    "resize": "调整图例大小"
+    "resize": "调整图例大小",
+    "collapseEntry": "折叠分节",
+    "expandEntry": "展开分节",
+    "collapsePanel": "折叠图例",
+    "expandPanel": "展开图例",
+    "exportJson": "导出为 JSON"
   }
 }

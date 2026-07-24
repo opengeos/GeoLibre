@@ -3975,6 +3975,11 @@
     "dictionaryHint": "Un objet JSON de paires {\"libellé\": \"couleur\"}, ou une ligne \"libellé : couleur\" par élément.",
     "dictionaryAdd": "Ajouter la section",
     "cancel": "Annuler",
-    "resize": "Redimensionner la légende"
+    "resize": "Redimensionner la légende",
+    "collapseEntry": "Réduire la section",
+    "expandEntry": "Développer la section",
+    "collapsePanel": "Réduire la légende",
+    "expandPanel": "Développer la légende",
+    "exportJson": "Exporter en JSON"
   }
 }

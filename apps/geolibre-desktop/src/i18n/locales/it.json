@@ -3975,6 +3975,11 @@
     "dictionaryHint": "Un oggetto JSON di coppie {\"etichetta\": \"colore\"}, o una riga \"etichetta: colore\" per elemento.",
     "dictionaryAdd": "Aggiungi sezione",
     "cancel": "Annulla",
-    "resize": "Ridimensiona la legenda"
+    "resize": "Ridimensiona la legenda",
+    "collapseEntry": "Comprimi sezione",
+    "expandEntry": "Espandi sezione",
+    "collapsePanel": "Comprimi legenda",
+    "expandPanel": "Espandi legenda",
+    "exportJson": "Esporta come JSON"
   }
 }
