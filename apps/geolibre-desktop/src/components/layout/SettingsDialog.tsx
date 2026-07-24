@@ -105,8 +105,8 @@ import {
 import {
   ASSISTANT_PROVIDER_IDS,
   PROVIDER_LABELS,
-  availableProviders,
   scopeOsEnvToProject,
+  type AssistantProfile,
   type AssistantProviderId,
   type RuntimeEnv,
 } from "../../lib/assistant/provider";
@@ -116,6 +116,7 @@ import {
   PROVIDER_FIELDS,
   type ProviderField,
 } from "../../lib/assistant/provider-fields";
+import { AiSectionContent } from "./AiSectionContent";
 
 export type SettingsSection =
   | "map"
@@ -230,7 +231,8 @@ interface DraftDesktopSettings {
   layout: DesktopLayoutSettings;
   shareToken: string;
   cesiumIonToken: string;
-  aiProviderEnv: Record<string, string>;
+  aiProfiles: AssistantProfile[];
+  defaultAiProfileId: string | null;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
 }
@@ -260,7 +262,11 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
     layout: { ...settings.layout },
     shareToken: settings.shareToken,
     cesiumIonToken: settings.cesiumIonToken,
-    aiProviderEnv: { ...settings.aiProviderEnv },
+    aiProfiles: settings.aiProfiles.map((p) => ({
+      ...p,
+      fieldValues: { ...p.fieldValues },
+    })),
+    defaultAiProfileId: settings.defaultAiProfileId,
     uiProfile: {
       ...settings.uiProfile,
       hiddenDataSources: [...settings.uiProfile.hiddenDataSources],
@@ -451,10 +457,12 @@ export function SettingsDialog({
       ).length,
     [draftPreferences.environmentVariables],
   );
-  // The AI provider whose credential template is shown in the AI section. Seeded
-  // to the first already-configured provider when the dialog opens (below), so a
-  // returning user lands on the provider they set up.
-  const [aiProvider, setAiProvider] = useState<AssistantProviderId>("google");
+  // The AI profile being edited in the AI section. Null when no profile is
+  // selected (the user sees the profile list). Seeded to the first existing
+  // profile when the dialog opens.
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  // Whether the user is creating a new profile (transient — no id yet).
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   // The draft env vars as a plain name→value map (enabled, named only), matching
   // what the live runtime env will hold after Save. Drives the per-provider
   // "configured" status without re-implementing provider.ts resolution.
@@ -466,18 +474,32 @@ export function SettingsDialog({
     }
     return env;
   }, [draftPreferences.environmentVariables]);
-  // Device-local AI provider credentials (Settings → AI Providers). The AI
-  // section reads and writes these instead of the project's Environment
-  // variables so a key persists across restarts without entering the shared
-  // project file. Non-empty entries only, matching the live runtime projection.
-  const draftAiEnv = useMemo(() => {
+
+  /** The editing profile (the one whose fields are shown), or null. */
+  const editingProfile: AssistantProfile | null = useMemo(() => {
+    if (isCreatingProfile) return null;
+    if (!editingProfileId) return null;
+    return draftDesktopSettings.aiProfiles.find((p) => p.id === editingProfileId) ?? null;
+  }, [editingProfileId, isCreatingProfile, draftDesktopSettings.aiProfiles]);
+
+  /** The provider shown in the editing fields. Derived from the editing profile. */
+  const editingProvider: AssistantProviderId = editingProfile?.provider ?? "google";
+
+  /**
+   * Flat env map from all profiles' fieldValues. Projected into the runtime env
+   * alongside OS and project values so provider "configured" status reflects
+   * what the assistant will actually resolve.
+   */
+  const draftProfilesEnv = useMemo(() => {
     const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(draftDesktopSettings.aiProviderEnv)) {
-      const name = key.trim();
-      if (name && value) env[name] = value;
+    for (const profile of draftDesktopSettings.aiProfiles) {
+      for (const [key, value] of Object.entries(profile.fieldValues)) {
+        const name = key.trim();
+        if (name && value) env[name] = value;
+      }
     }
     return env;
-  }, [draftDesktopSettings.aiProviderEnv]);
+  }, [draftDesktopSettings.aiProfiles]);
   // AI keys read from the user's OS environment (desktop only). This dialog is
   // mounted eagerly at startup — before the App-root loader populates the cache
   // and before the async Tauri read resolves — so a mount-only read would freeze
@@ -500,19 +522,15 @@ export function SettingsDialog({
   // project GOOGLE_API_KEY row shadows the whole Google OS alias group).
   const scopedOsEnv = useMemo(
     () =>
-      scopeOsEnvToProject(osEnv, new Set([...Object.keys(draftEnv), ...Object.keys(draftAiEnv)])),
-    [osEnv, draftEnv, draftAiEnv],
+      scopeOsEnvToProject(osEnv, new Set([...Object.keys(draftEnv), ...Object.keys(draftProfilesEnv)])),
+    [osEnv, draftEnv, draftProfilesEnv],
   );
   // Merge OS env under the drafts so a provider configured purely via a system
   // environment variable still reports "ready". Precedence mirrors the live
   // runtime merge: OS < device AI keys < project Environment variables.
   const effectiveEnv = useMemo(
-    () => ({ ...scopedOsEnv, ...draftAiEnv, ...draftEnv }),
-    [scopedOsEnv, draftAiEnv, draftEnv],
-  );
-  const configuredProviders = useMemo(
-    () => new Set(availableProviders(effectiveEnv)),
-    [effectiveEnv],
+    () => ({ ...scopedOsEnv, ...draftProfilesEnv, ...draftEnv }),
+    [scopedOsEnv, draftProfilesEnv, draftEnv],
   );
 
   // Seed the draft from the store only when the dialog opens. Depending on
@@ -540,19 +558,27 @@ export function SettingsDialog({
     setDraftDesktopSettings(
       cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
     );
-    // Land the AI section on a provider the user already configured, so editing
-    // existing credentials needs no extra click.
+    // Land the AI section on the first profile's provider, or the first
+    // available provider if no profiles exist, so the user sees something
+    // relevant without extra clicks.
+    const storeSettings = useDesktopSettingsStore.getState().desktopSettings;
+    const seededProfiles = storeSettings.aiProfiles.map((p) => ({
+      ...p,
+      fieldValues: { ...p.fieldValues },
+    }));
     const seededProjectEnv: Record<string, string> = {};
     for (const variable of seededPreferences.environmentVariables) {
       const key = variable.key.trim();
       if (variable.enabled && key) seededProjectEnv[key] = variable.value;
     }
+    // Build a flat env from all profile field values for determining
+    // available providers during seeding.
     const seededAiEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries(
-      useDesktopSettingsStore.getState().desktopSettings.aiProviderEnv,
-    )) {
-      const name = key.trim();
-      if (name && value) seededAiEnv[name] = value;
+    for (const profile of seededProfiles) {
+      for (const [key, value] of Object.entries(profile.fieldValues)) {
+        const name = key.trim();
+        if (name && value) seededAiEnv[name] = value;
+      }
     }
     const seededEnv = {
       ...scopeOsEnvToProject(
@@ -562,7 +588,9 @@ export function SettingsDialog({
       ...seededAiEnv,
       ...seededProjectEnv,
     };
-    setAiProvider(availableProviders(seededEnv)[0] ?? "google");
+    // Show the profile list by default (do not auto-select a profile for editing).
+    setEditingProfileId(null);
+    setIsCreatingProfile(false);
     setRevealedValueIds(new Set());
     setError(null);
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
@@ -683,16 +711,15 @@ export function SettingsDialog({
   ];
 
   // The value of an env-var-backed AI provider field, or "" when unset. Reads
-  // the device-local AI credential store first (where the AI section now saves
-  // keys so they persist across restarts), then falls back to a matching value
-  // still held in the project's Environment variables — e.g. one loaded from a
-  // `.geolibre.json` or set by hand under the Environment section — so an
-  // existing credential stays visible and editable here. An aliased value (e.g.
-  // an existing GOOGLE_API_KEY) is surfaced rather than hidden.
+  // the editing profile's field values first (where the AI section saves keys),
+  // then falls back to a matching value still held in the project's Environment
+  // variables so an existing credential stays visible and editable here.
   const getProviderField = (field: ProviderField): string => {
-    for (const key of fieldEnvKeys(field)) {
-      const value = draftDesktopSettings.aiProviderEnv[key];
-      if (value) return value;
+    if (editingProfile) {
+      for (const key of fieldEnvKeys(field)) {
+        const value = editingProfile.fieldValues[key];
+        if (value) return value;
+      }
     }
     for (const key of fieldEnvKeys(field)) {
       const row = draftPreferences.environmentVariables.find(
@@ -713,21 +740,25 @@ export function SettingsDialog({
     return null;
   };
 
-  // Write an AI provider field through to the device-local credential store,
-  // keyed by the field's canonical env var name. Any alias entry is dropped so
-  // re-entering a credential never leaves a stale duplicate under an alias, and
-  // clearing removes the entry so the store never accrues empty values. The
-  // matching rows are also removed from the project's Environment variables:
-  // these keys now live device-local, so a leftover project row must not shadow
-  // the device value at runtime (project env has higher precedence) nor get
-  // serialized into a shared project file.
+  // Write an AI provider field to the editing profile's field values. Any alias
+  // entry is dropped so re-entering a credential never leaves a stale duplicate
+  // under an alias, and clearing removes the entry so the store never accrues
+  // empty values. The matching rows are also removed from the project's
+  // Environment variables: these keys now live in the profile, so a leftover
+  // project row must not shadow the profile value at runtime (project env has
+  // higher precedence) nor get serialized into a shared project file.
   const setProviderField = (field: ProviderField, value: string) => {
+    if (!editingProfile) return;
     const keys = fieldEnvKeys(field);
     setDraftDesktopSettings((current) => {
-      const next = { ...current.aiProviderEnv };
-      for (const key of keys) delete next[key];
-      if (value !== "") next[field.envKey] = value;
-      return { ...current, aiProviderEnv: next };
+      const next = current.aiProfiles.map((p) => {
+        if (p.id !== editingProfile.id) return p;
+        const nextFieldValues = { ...p.fieldValues };
+        for (const key of keys) delete nextFieldValues[key];
+        if (value !== "") nextFieldValues[field.envKey] = value;
+        return { ...p, fieldValues: nextFieldValues };
+      });
+      return { ...current, aiProfiles: next };
     });
     setDraftPreferences((current) => {
       if (!current.environmentVariables.some((v) => keys.includes(v.key))) {
@@ -1098,7 +1129,8 @@ export function SettingsDialog({
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
       cesiumIonToken: draftDesktopSettings.cesiumIonToken,
-      aiProviderEnv: draftDesktopSettings.aiProviderEnv,
+      aiProfiles: draftDesktopSettings.aiProfiles,
+      defaultAiProfileId: draftDesktopSettings.defaultAiProfileId,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
     });
@@ -2181,142 +2213,24 @@ export function SettingsDialog({
                 </div>
               ) : null}
               {effectiveSection === "ai" ? (
-                <div className="space-y-5">
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-semibold">{t("settings.ai.title")}</h3>
-                    <p className="text-xs text-muted-foreground">{t("settings.ai.description")}</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs" htmlFor="settings-ai-provider">
-                      {t("settings.ai.providerLabel")}
-                    </Label>
-                    <Select
-                      id="settings-ai-provider"
-                      value={aiProvider}
-                      onChange={(event) => setAiProvider(event.target.value as AssistantProviderId)}
-                    >
-                      {ASSISTANT_PROVIDER_IDS.map((id) => (
-                        <option key={id} value={id}>
-                          {configuredProviders.has(id)
-                            ? `${PROVIDER_LABELS[id]} ${t("settings.ai.configuredMark")}`
-                            : PROVIDER_LABELS[id]}
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-muted-foreground">{t("settings.ai.providerHint")}</p>
-                  </div>
-                  {configuredProviders.has(aiProvider) ? (
-                    <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-                      <Check className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        {t("settings.ai.statusReady", {
-                          provider: PROVIDER_LABELS[aiProvider],
-                        })}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                      {t("settings.ai.statusIncomplete", {
-                        provider: PROVIDER_LABELS[aiProvider],
-                      })}
-                    </div>
-                  )}
-                  <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{t("settings.ai.secretsNote")}</span>
-                  </div>
-                  {PROVIDER_FIELDS[aiProvider].some((field) => osFieldEnvName(field) !== null) ? (
-                    <div className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
-                      <Terminal className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{t("settings.ai.osEnvNote")}</span>
-                    </div>
-                  ) : null}
-                  <div className="space-y-4">
-                    {PROVIDER_FIELDS[aiProvider].map((field) => {
-                      const revealed = revealedValueIds.has(field.envKey);
-                      const osEnvName = osFieldEnvName(field);
-                      const fromOsEnv = getProviderField(field) === "" && osEnvName !== null;
-                      return (
-                        <div key={field.envKey} className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <Label className="text-xs" htmlFor={`settings-ai-${field.envKey}`}>
-                              {t(field.labelKey)}
-                              {field.required ? null : (
-                                <span className="ms-1 font-normal text-muted-foreground">
-                                  {t("settings.ai.optionalMark")}
-                                </span>
-                              )}
-                            </Label>
-                            <code className="font-mono text-[11px] text-muted-foreground">
-                              {field.envKey}
-                            </code>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Input
-                              id={`settings-ai-${field.envKey}`}
-                              type={field.secret && !revealed ? "password" : "text"}
-                              autoComplete="off"
-                              spellCheck={false}
-                              value={getProviderField(field)}
-                              onChange={(event) => setProviderField(field, event.target.value)}
-                              placeholder={
-                                fromOsEnv
-                                  ? t("settings.ai.osEnvPlaceholder")
-                                  : t(field.placeholderKey)
-                              }
-                            />
-                            {field.secret ? (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => toggleValueVisibility(field.envKey)}
-                                aria-label={
-                                  revealed
-                                    ? t("settings.ai.hideValue", {
-                                        name: t(field.labelKey),
-                                      })
-                                    : t("settings.ai.showValue", {
-                                        name: t(field.labelKey),
-                                      })
-                                }
-                              >
-                                {revealed ? (
-                                  <EyeOff className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Eye className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                            ) : null}
-                          </div>
-                          {fromOsEnv ? (
-                            <p className="flex items-center gap-1.5 text-[11px] text-sky-700 dark:text-sky-300">
-                              <Terminal className="h-3 w-3 shrink-0" />
-                              <span>
-                                {t("settings.ai.osEnvField", {
-                                  name: osEnvName,
-                                })}
-                              </span>
-                            </p>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {PROVIDER_DOCS_URL[aiProvider] ? (
-                    <a
-                      className="inline-flex items-center gap-1 text-xs text-primary underline"
-                      href={PROVIDER_DOCS_URL[aiProvider]}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      {t("settings.ai.getCredentials", {
-                        provider: PROVIDER_LABELS[aiProvider],
-                      })}
-                    </a>
-                  ) : null}
-                </div>
+                <AiSectionContent
+                  draftDesktopSettings={draftDesktopSettings}
+                  setDraftDesktopSettings={setDraftDesktopSettings}
+                  editingProfileId={editingProfileId}
+                  setEditingProfileId={setEditingProfileId}
+                  isCreatingProfile={isCreatingProfile}
+                  setIsCreatingProfile={setIsCreatingProfile}
+                  editingProfile={editingProfile}
+                  editingProvider={editingProvider}
+                  defaultAiProfileId={draftDesktopSettings.defaultAiProfileId}
+                  scopedOsEnv={scopedOsEnv}
+                  effectiveEnv={effectiveEnv}
+                  revealedValueIds={revealedValueIds}
+                  toggleValueVisibility={toggleValueVisibility}
+                  getProviderField={getProviderField}
+                  setProviderField={setProviderField}
+                  osFieldEnvName={osFieldEnvName}
+                />
               ) : null}
               {effectiveSection === "environment" ? (
                 <div className="space-y-5">
@@ -2561,14 +2475,20 @@ export function SettingsDialog({
           {error ? (
             <div className="border-t px-6 py-2 text-sm text-destructive">{error}</div>
           ) : null}
-          <div className="flex justify-end gap-2 border-t px-6 py-4">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button type="button" onClick={saveSettings}>
-              {t("settings.saveButton")}
-            </Button>
-          </div>
+          {effectiveSection === "ai" && (editingProfileId || isCreatingProfile) ? (
+            <div className="border-t px-6 py-4 text-center text-xs text-muted-foreground">
+              {t("settings.ai.profileEditSaveHint")}
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2 border-t px-6 py-4">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="button" onClick={saveSettings}>
+                {t("settings.saveButton")}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

@@ -32,6 +32,29 @@ export interface BedrockCredentials {
   sessionToken?: string;
 }
 
+/**
+ * A named, saved profile that bundles a provider, model, and credential values
+ * together so users can define multiple LLM configurations and switch between
+ * them. Profiles are stored in DesktopSettings (localStorage), never in the
+ * shared project file.
+ */
+export interface AssistantProfile {
+  /** Stable unique identifier (UUID v4). */
+  id: string;
+  /** User-given label, e.g. "Work Gemini" or "Local Ollama". */
+  name: string;
+  /** The LLM provider for this profile. */
+  provider: AssistantProviderId;
+  /** The model id to use (e.g. "gemini-3.5-flash"). */
+  modelId: string;
+  /**
+   * Credential values keyed by env-var name, matching {@link PROVIDER_FIELDS}.
+   * E.g. for google: `{ GEMINI_API_KEY: "AIza..." }`
+   *      for ollama: `{ OLLAMA_BASE_URL: "http://localhost:11434", OLLAMA_MODEL: "llama3.2" }`
+   */
+  fieldValues: Record<string, string>;
+}
+
 /** A fully resolved provider selection ready to build a model from. */
 export interface AssistantProviderConfig {
   provider: AssistantProviderId;
