@@ -341,9 +341,19 @@ export function itemsUrl(options: GeoLensClientOptions, datasetId: string, limit
 }
 
 /**
+ * Features requested per items page. GeoLens caps the `limit` query param and
+ * **rejects** anything above the cap with HTTP 400 rather than clamping (the
+ * reference deployment caps it at 200), so the total feature limit must never
+ * be passed through as the page size — pagination accumulates the rest.
+ */
+export const GEOLENS_PAGE_LIMIT = 100;
+
+/**
  * Load up to `limit` features, following OGC API Features `rel=next` links.
- * GeoLens deployments may cap each response below the requested page size, so
- * requesting a large limit alone is not sufficient to avoid silent truncation.
+ * Each page requests at most {@link GEOLENS_PAGE_LIMIT} features, because
+ * GeoLens rejects (HTTP 400) a `limit` above its per-page cap instead of
+ * clamping it, and deployments may cap each response below the requested page
+ * size anyway.
  */
 export async function fetchDatasetFeatures(
   options: GeoLensClientOptions,
@@ -352,9 +362,12 @@ export async function fetchDatasetFeatures(
   fetchImpl: GeoLensFetch = defaultGeoLensFetch,
   signal?: AbortSignal,
 ): Promise<import("geojson").FeatureCollection> {
+  if (!HTTP_URL_RE.test(options.baseUrl)) throw new Error("GeoLens URL must be http(s)");
+  const base = new URL(options.baseUrl);
+  const pageLimit = Math.min(Math.max(1, Math.floor(limit)), GEOLENS_PAGE_LIMIT);
   const features: import("geojson").Feature[] = [];
   const visited = new Set<string>();
-  let nextUrl: string | null = itemsUrl(options, datasetId, limit);
+  let nextUrl: string | null = itemsUrl(options, datasetId, pageLimit);
   let firstPage: Record<string, unknown> | null = null;
 
   while (nextUrl && features.length < limit && !visited.has(nextUrl)) {
@@ -382,14 +395,14 @@ export async function fetchDatasetFeatures(
         typeof (link as { href?: unknown }).href === "string",
     );
     if (next) {
+      // A deployment behind a reverse proxy may advertise its *internal*
+      // origin in link hrefs (datasets.geolibre.app returns
+      // `http://localhost:8080/...` next links), so the href's path + query
+      // are rebased onto the configured base URL rather than trusted verbatim.
+      // This also keeps every paginated request (and its auth header) on the
+      // origin the user connected to.
       const resolvedUrl: URL = new URL(next.href, nextUrl);
-      if (
-        !HTTP_URL_RE.test(resolvedUrl.href) ||
-        resolvedUrl.origin !== new URL(options.baseUrl).origin
-      ) {
-        throw new Error("GeoLens pagination returned an unsafe next-page URL");
-      }
-      nextUrl = resolvedUrl.href;
+      nextUrl = `${base.origin}${resolvedUrl.pathname}${resolvedUrl.search}`;
     } else {
       nextUrl = null;
     }

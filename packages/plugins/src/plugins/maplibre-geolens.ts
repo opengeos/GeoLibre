@@ -478,9 +478,10 @@ async function addRasterTilesLayer(
 }
 
 /**
- * Add a vector dataset as GeoJSON via OGC API Features. Reads one page (GeoLens
- * caps `limit`); the vector-tile path is preferred for large datasets. Uses the
- * host GeoJSON layer so styling/attribute-table/export all apply.
+ * Add a vector dataset as GeoJSON via OGC API Features. Follows `rel=next`
+ * pages until `featureLimit` features are loaded; the vector-tile path is
+ * preferred for large datasets. Uses the host GeoJSON layer so
+ * styling/attribute-table/export all apply.
  */
 async function addFeaturesLayer(
   app: GeoLibreAppAPI,

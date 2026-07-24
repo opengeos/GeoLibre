@@ -6,6 +6,7 @@ import {
   datasetPageUrl,
   fetchDatasetFeatures,
   fetchDatasetFields,
+  GEOLENS_PAGE_LIMIT,
   geometryKind,
   itemsUrl,
   mintTileToken,
@@ -176,6 +177,57 @@ describe("fetchDatasetFeatures", () => {
     assert.equal(result.features.length, 3);
     assert.equal(calls.length, 2);
     assert.equal(calls[1], "http://h/api/collections/d/items?limit=3&offset=2");
+  });
+
+  it("caps the per-page limit even when the total limit is larger", async () => {
+    // GeoLens rejects (HTTP 400) a `limit` query param above its per-page cap
+    // instead of clamping, so a 10,000-feature request must page, not pass
+    // 10000 through.
+    const calls: string[] = [];
+    const fetchImpl: GeoLensFetch = async (url) => {
+      calls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: null, properties: { id: 1 } }],
+          links: [],
+        }),
+      };
+    };
+    await fetchDatasetFeatures({ baseUrl: "http://h" }, "d", 10_000, fetchImpl);
+    assert.equal(calls[0], `http://h/api/collections/d/items?limit=${GEOLENS_PAGE_LIMIT}`);
+  });
+
+  it("rebases a next link advertising an internal origin onto the base URL", async () => {
+    // datasets.geolibre.app sits behind a reverse proxy and returns
+    // `http://localhost:8080/...` next hrefs; the path + query must be
+    // followed on the public origin the user connected to.
+    const calls: string[] = [];
+    const fetchImpl: GeoLensFetch = async (url) => {
+      calls.push(url);
+      const second = url.includes("after_gid=1");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: null, properties: { id: second ? 2 : 1 } }],
+          links: second
+            ? []
+            : [{ rel: "next", href: "http://localhost:8080/api/collections/d/items?after_gid=1" }],
+        }),
+      };
+    };
+    const result = await fetchDatasetFeatures(
+      { baseUrl: "https://public.example" },
+      "d",
+      2,
+      fetchImpl,
+    );
+    assert.equal(result.features.length, 2);
+    assert.equal(calls[1], "https://public.example/api/collections/d/items?after_gid=1");
   });
 
   it("truncates an oversized response to the requested limit", async () => {
