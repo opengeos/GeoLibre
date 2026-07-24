@@ -308,10 +308,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // fall back to auto-resolution (which reads from the runtime env directly).
   useEffect(() => {
     if (activeProfile) {
-      session.setSelection({
-        provider: activeProfile.provider,
-        model: activeProfile.modelId || undefined,
-      });
+      session.setSelection(activeProfile);
     } else {
       session.setSelection(null);
     }
