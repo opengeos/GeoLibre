@@ -42,12 +42,15 @@ export const RASTER_APPEARANCE_STATE_KEYS = [
   "gamma",
 ] as const;
 
-/** Fields every clipboard entry carries, regardless of style family. */
+/**
+ * Fields every clipboard entry carries, regardless of style family. Layer
+ * `opacity` is deliberately excluded: like QGIS "Paste Style" and GeoLibre's
+ * own Style Manager, copy/paste transfers symbology only and leaves the
+ * target's opacity alone (opacity is a per-layer render setting, not style).
+ */
 interface CopiedLayerStyleBase {
   /** Source layer name, surfaced in the paste tooltip and status message. */
   sourceName: string;
-  /** Source layer opacity in [0, 1]. */
-  opacity: number;
 }
 
 /** A copied vector layer style: the whole {@link LayerStyle} bag. */
@@ -113,7 +116,6 @@ export function extractCopiedLayerStyle(layer: GeoLibreLayer): CopiedLayerStyle 
     return {
       kind,
       sourceName: layer.name,
-      opacity: layer.opacity,
       style: structuredClone({ ...DEFAULT_LAYER_STYLE, ...layer.style }),
     };
   }
@@ -121,13 +123,17 @@ export function extractCopiedLayerStyle(layer: GeoLibreLayer): CopiedLayerStyle 
   // clone is skipped here.
   const rasterState = layer.metadata.rasterState;
   const rasterSymbology = layer.metadata.rasterSymbology;
+  // Only a real symbology object counts as "has symbology". A missing or null
+  // value (the latter only reachable via a hand-edited project file) both mean
+  // "none", so the paste clears the target's symbology rather than writing a
+  // literal null onto it — symmetric with the delete path in applyCopiedLayerStyle.
+  const hasRasterSymbology = isPlainObject(rasterSymbology);
   return {
     kind,
     sourceName: layer.name,
-    opacity: layer.opacity,
     rasterState: isPlainObject(rasterState) ? structuredClone(rasterState) : undefined,
-    hasRasterSymbology: rasterSymbology !== undefined,
-    ...(rasterSymbology !== undefined ? { rasterSymbology: structuredClone(rasterSymbology) } : {}),
+    hasRasterSymbology,
+    ...(hasRasterSymbology ? { rasterSymbology: structuredClone(rasterSymbology) } : {}),
   };
 }
 
@@ -153,28 +159,29 @@ export function applyCopiedLayerStyle(
     // Manager's full-"style" preset: a target lacking those attributes just
     // renders that facet inert (no classification / labels), which the user
     // re-points, rather than the paste silently dropping parts of the style.
-    return { style: structuredClone(copied.style), opacity: copied.opacity };
+    return { style: structuredClone(copied.style) };
   }
   // Merge the appearance keys onto the target's existing rasterState, keeping
   // its own `mode`/`bands`/`index` so the paste restyles the layer without
   // repointing it at the source's band selection.
   const targetState = isPlainObject(target.metadata.rasterState) ? target.metadata.rasterState : {};
   const source = copied.rasterState ?? {};
-  const targetBandCount = Array.isArray(targetState.bands) ? targetState.bands.length : 1;
+  const expectedRescaleLength = rescaleEntryCount(targetState);
   const mergedState: Record<string, unknown> = { ...targetState };
   for (const key of RASTER_APPEARANCE_STATE_KEYS) {
     if (!(key in source)) continue;
-    // `rescale` is a per-band min/max array sized to the source's band count.
-    // Copying it onto a target with a different band count (e.g. an RGB source
-    // onto a single-band target) would leave a rescale whose length disagrees
-    // with the preserved `bands` — the same "band it does not have" hazard the
-    // mode/bands preservation above avoids, one level down. Skip it then and
-    // let the target keep its own stretch. A null source rescale (auto) is safe
-    // to carry over regardless.
+    // `rescale` is a per-channel min/max array whose length is set by the
+    // render mode (one entry for single/index, one per band for rgb), not by
+    // `bands.length` (index mode holds two operand bands but a single-entry
+    // rescale). Copying a rescale whose length disagrees with the target's mode
+    // — e.g. an RGB source's 3 entries onto a single-band target — would leave a
+    // rescale that no longer matches the preserved render mode, the same "band
+    // it does not have" hazard one level down. Skip it then and let the target
+    // keep its own stretch. A null source rescale (auto) is safe to carry over.
     if (
       key === "rescale" &&
       Array.isArray(source.rescale) &&
-      source.rescale.length !== targetBandCount
+      source.rescale.length !== expectedRescaleLength
     ) {
       continue;
     }
@@ -186,5 +193,15 @@ export function applyCopiedLayerStyle(
   } else {
     delete metadata.rasterSymbology;
   }
-  return { metadata, opacity: copied.opacity };
+  return { metadata };
+}
+
+/**
+ * Number of `rescale` entries a rasterState of this render mode expects: one
+ * per band for `"rgb"`, a single entry for `"single"` and `"index"` (the
+ * latter stretches one derived index even though it reads two operand bands).
+ */
+function rescaleEntryCount(state: Record<string, unknown>): number {
+  if (state.mode === "rgb") return Array.isArray(state.bands) ? state.bands.length : 3;
+  return 1;
 }

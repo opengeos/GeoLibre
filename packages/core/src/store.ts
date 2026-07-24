@@ -1423,10 +1423,10 @@ export const useAppStore = create<AppState>()(
         if (!layer) return false;
         const patch = applyCopiedLayerStyle(layer, copied);
         if (!patch) return false;
-        set({
-          layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-          isDirty: true,
-        });
+        // Go through updateLayer so the paste picks up any cross-cutting layer
+        // update logic (it also sets isDirty); the patch never carries geojson,
+        // so the join-cascade branch is a no-op.
+        get().updateLayer(id, patch);
         return true;
       },
 

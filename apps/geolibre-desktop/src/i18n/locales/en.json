@@ -3752,6 +3752,8 @@
     "copyStyle": "Copy style",
     "pasteStyle": "Paste style",
     "pasteStyleFrom": "Paste style from \"{{name}}\"",
+    "pasteStyleEmpty": "Copy a layer's style first",
+    "pasteStyleMismatch": "The copied style is for a different layer type",
     "styleCopied": "Copied style from \"{{name}}\".",
     "stylePasted": "Pasted style from \"{{name}}\".",
     "bindToTimeSlider": "Bind to Time Slider…",
