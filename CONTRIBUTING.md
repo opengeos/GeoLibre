@@ -6,10 +6,10 @@ pull request workflow, lives in the documentation:
 
 **<https://geolibre.app/contributing/>** (source: [`docs/contributing.md`](docs/contributing.md))
 
-## Quick start
+## Quick Start
 
 ```bash
-git clone https://github.com/opengeos/GeoLibre.git
+git clone https://github.com/<your-username>/GeoLibre.git
 cd GeoLibre
 npm install
 npm run dev          # web build at http://localhost:5173
