@@ -1,0 +1,243 @@
+name: PR preview deploy
+
+# Stage 2 of 2: PUBLISH ONLY. Holds the deploy secrets; runs no contributor code.
+#
+# Triggered by `workflow_run` on .github/workflows/pr-preview.yml, which builds
+# the site from the PR's tree with no secrets in scope. Because `workflow_run`
+# always executes the workflow definition from the DEFAULT BRANCH, a pull
+# request cannot alter what this file does, and repository secrets are
+# available even when the PR came from a fork -- which is the entire reason the
+# preview is split in two.
+#
+# The invariant that makes that safe: this job must never execute anything from
+# the pull request. It downloads an artifact and copies files. Specifically:
+#
+#   * The checkout below takes the default branch. It must never be given
+#     `ref: ...head.sha` or anything else derived from the PR.
+#   * No `npm ci`, no build, no `npm run`, no running a script out of `site/`.
+#     The artifact is inert data here -- static files pushed to a host.
+#   * Nothing from the artifact may be interpolated into a `run:` block.
+#
+# The PR number is NOT taken from the artifact, which a fork controls and could
+# use to overwrite an unrelated PR's preview and comment on it. It is looked up
+# from the API using the head repo and branch recorded in the trusted
+# `workflow_run` payload, so a run can only ever address its own PR.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN   - needs the "Cloudflare Pages: Edit" permission
+#   CLOUDFLARE_ACCOUNT_ID
+#   PREVIEW_DEPLOY_TOKEN   - fine-grained PAT scoped to opengeos/pages-preview
+#                            only, with Contents: Read and write + Pages: Read.
+#                            Pages read is required by wait-for-pages-deployment
+#                            below; without it the poll never sees a build and
+#                            the job times out with a misleading error.
+
+on:
+  workflow_run:
+    workflows: ["PR preview"]
+    types: [completed]
+
+permissions:
+  contents: read
+  # Download the build artifact from the triggering run.
+  actions: read
+  # The sticky preview comment. The deploy to opengeos/pages-preview does not
+  # use this token -- it uses PREVIEW_DEPLOY_TOKEN, which has no access to this
+  # repository.
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-deploy-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  # NOT cancel-in-progress: unlike the build, this job pushes commits to
+  # opengeos/pages-preview. Queue overlapping runs instead of killing one
+  # mid-push.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy preview
+    runs-on: ubuntu-latest
+    # Only for builds that came from a pull request and actually succeeded. A
+    # `workflow_dispatch` build of pr-preview.yml is a build smoke test and
+    # publishes nothing, matching the behaviour before the split.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      # Resolve the PR from trusted event data only. `workflow_run.pull_requests`
+      # is empty for fork PRs, so query by head instead: the (fork, branch) pair
+      # is recorded by GitHub, not by the build, and an attacker cannot push to
+      # someone else's fork -- so this can only resolve to the PR that triggered
+      # the run.
+      - name: Resolve the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          # Highest number wins if a branch has been reused across PRs; that is
+          # the current one.
+          # No --paginate: the head filter cannot return anywhere near 100 PRs,
+          # and per-page --jq would mangle the max_by below.
+          #
+          # `// empty` matters: max_by on an empty array yields null, and piping
+          # null into the object constructor would produce {"number":null} --
+          # a truthy string that sails past the emptiness check below.
+          pr=$(gh api \
+            "repos/${REPO}/pulls?state=all&per_page=100&head=${HEAD_OWNER}:${HEAD_BRANCH}" \
+            --jq 'max_by(.number) // empty | {number, state}' || true)
+          if [ -z "$pr" ]; then
+            echo "::notice::No pull request found for ${HEAD_OWNER}:${HEAD_BRANCH} -- nothing to publish."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          number=$(echo "$pr" | jq -r .number)
+          state=$(echo "$pr" | jq -r .state)
+          case "$number" in
+            ''|*[!0-9]*) echo "::error::Unexpected PR number: $number"; exit 1 ;;
+          esac
+          echo "PR #${number} is ${state}"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "number=${number}" >> "$GITHUB_OUTPUT"
+          # Drive deploy-vs-remove off the PR's live state rather than off the
+          # build job, so a preview is never published for a closed PR.
+          if [ "$state" = "closed" ]; then
+            echo "action=remove" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=deploy" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The Pages deploy action needs a git repository in the workspace. This
+      # is the DEFAULT BRANCH -- never the PR head. Do not add a `ref:` here.
+      - name: Checkout repository
+        if: steps.pr.outputs.found == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download the built site
+        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
+        uses: actions/download-artifact@v7
+        with:
+          name: pr-preview-site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # ------------------------------------------------------- GitHub Pages
+      # Runs BEFORE the DuckDB deletion below: Pages allows 100 MB per file and
+      # ignores the `_redirects` file stage 1 wrote, so it serves those modules
+      # locally and needs them present.
+      - name: Deploy preview to GitHub Pages
+        id: pages
+        if: steps.pr.outputs.found == 'true'
+        # A Pages problem (bad deploy token, Pages size limit) would otherwise
+        # take the Cloudflare preview and the PR comment down with it. Let the
+        # job carry on; the comment says which target failed.
+        #
+        # Deploy runs only. On a removal this step IS the job -- everything
+        # after it is skipped -- so swallowing a failed removal would report
+        # success while the preview stayed published.
+        continue-on-error: ${{ steps.pr.outputs.action == 'deploy' }}
+        # Pinned rather than tracking the v1 tag: this is a third-party action
+        # and it receives PREVIEW_DEPLOY_TOKEN.
+        uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
+        with:
+          source-dir: site
+          deploy-repository: opengeos/pages-preview
+          token: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
+          pages-base-url: opengeos.org/pages-preview
+          preview-branch: gh-pages
+          # pages-preview is shared across opengeos repositories and the action
+          # composes the path as "<umbrella-dir>/pr-<number>", so this namespaces
+          # our previews against every other repository's.
+          umbrella-dir: GeoLibre
+          # There is no pull_request payload under `workflow_run`, so the PR
+          # number and the deploy/remove decision have to be passed explicitly;
+          # the action would otherwise read them off the event and do nothing.
+          pr-number: ${{ steps.pr.outputs.number }}
+          action: ${{ steps.pr.outputs.action }}
+          # Same reason: the default messages interpolate `github.event.number`,
+          # which is empty here.
+          deploy-commit-message: Deploy preview for PR ${{ steps.pr.outputs.number }} 🛫
+          remove-commit-message: Remove preview for PR ${{ steps.pr.outputs.number }} 🛬
+          wait-for-pages-deployment: true
+          # Both URLs go in one comment, posted below.
+          comment: false
+
+      # --------------------------------------------------------- Cloudflare
+      - name: Drop the CDN-redirected DuckDB WASM
+        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
+        # Cloudflare Pages rejects any single file > 25 MiB. Stage 1 already
+        # wrote site/_redirects pointing every such file at jsDelivr and failed
+        # the build on any it could not map, so deleting by size alone here is
+        # safe: anything left over 25 MiB is already redirected.
+        run: |
+          set -euo pipefail
+          find site -type f -size +26214400c -printf 'dropping %p (%s bytes)\n' -delete
+          echo "----- site/_redirects -----"
+          cat site/_redirects || echo "(none)"
+
+      - name: Create a scratch directory for wrangler
+        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
+        run: mkdir -p .wrangler-deploy
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # wrangler-action installs wrangler with npm into its working
+          # directory. Point it at an empty scratch dir so it does not resolve
+          # against this monorepo's package.json / workspaces, and give the
+          # payload an absolute path.
+          workingDirectory: .wrangler-deploy
+          # --branch is anything other than the project's production branch, so
+          # every run here is a preview deployment with its own URL.
+          command: >-
+            pages deploy ${{ github.workspace }}/site
+            --project-name=geolibre-preview
+            --branch="${{ github.event.workflow_run.head_branch }}"
+            --commit-dirty=true
+
+      - name: Comment preview URLs on PR
+        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
+        uses: actions/github-script@v9
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
+          PAGES_URL: ${{ steps.pages.outputs.preview-url }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const url = process.env.DEPLOY_URL;
+            const pagesUrl = process.env.PAGES_URL;
+            if (!url && !pagesUrl) return;
+            const marker = '<!-- cloudflare-preview -->';
+            const rows = [];
+            if (pagesUrl) {
+              rows.push(`| GitHub Pages | ${pagesUrl} |`);
+              rows.push(`| Demo app | ${pagesUrl}demo/ |`);
+            } else {
+              rows.push(`| GitHub Pages | deploy failed — see the job log |`);
+            }
+            if (url) {
+              rows.push(`| Cloudflare | ${url} |`);
+              rows.push(`| Demo app | ${url}/demo/ |`);
+            }
+            rows.push(`| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |`);
+            const body = `${marker}\n### 🔍 PR preview\n\n| Item | Value |\n| --- | --- |\n${rows.join('\n')}`;
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
