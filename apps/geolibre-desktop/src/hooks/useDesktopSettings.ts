@@ -12,6 +12,7 @@ import {
 } from "../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../lib/updates";
 import { migrateLegacyAiEnv } from "../lib/assistant/profiles";
+import { ASSISTANT_PROVIDER_IDS } from "../lib/assistant/provider";
 import type { AssistantProfile } from "../lib/assistant/provider";
 
 /** Notification-granularity options, in order. Single source of truth. */
@@ -257,9 +258,7 @@ function normalizeAssistantProfiles(value: unknown, legacyEnv: unknown): Assista
           : `Profile ${profiles.length + 1}`;
       const provider =
         typeof candidate.provider === "string" &&
-        ["google", "anthropic", "openai", "ollama", "bedrock", "custom"].includes(
-          candidate.provider,
-        )
+        ASSISTANT_PROVIDER_IDS.includes(candidate.provider as AssistantProfile["provider"])
           ? (candidate.provider as AssistantProfile["provider"])
           : "google";
       const modelId =

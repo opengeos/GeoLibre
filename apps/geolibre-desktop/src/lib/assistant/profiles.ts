@@ -2,25 +2,13 @@ import type { AssistantProfile } from "./provider";
 import {
   ASSISTANT_PROVIDER_IDS,
   configForProvider,
+  defaultModelFor,
   PROVIDER_LABELS,
   readRuntimeEnv,
   type AssistantProviderConfig,
   type RuntimeEnv,
 } from "./provider";
 import { PROVIDER_FIELDS } from "./provider-fields";
-
-/**
- * Default model per provider (empty for `custom`, which requires its own).
- * Mirrors the private `DEFAULT_MODEL` in provider.ts so we avoid re-exporting it.
- */
-const DEFAULT_MODEL: Record<string, string> = {
-  google: "gemini-3.5-flash",
-  anthropic: "claude-opus-4-8",
-  openai: "gpt-5.5",
-  ollama: "llama3.2",
-  bedrock: "global.anthropic.claude-sonnet-4-6",
-  custom: "",
-};
 
 /** Generate a unique profile id (no UUID dependency). */
 function generateProfileId(): string {
@@ -74,7 +62,7 @@ export function migrateLegacyAiEnv(
       id: generateProfileId(),
       name: PROVIDER_LABELS[provider],
       provider,
-      modelId: DEFAULT_MODEL[provider] ?? "",
+      modelId: defaultModelFor(provider),
       fieldValues,
     });
   }
@@ -91,28 +79,4 @@ export function configForProfile(
   // can resolve them alongside any broader env vars (fallback keys, OS env).
   const augmented: RuntimeEnv = { ...env, ...profile.fieldValues };
   return configForProvider(profile.provider, profile.modelId, augmented);
-}
-
-/** The default profile id, or null if none is set. Read from localStorage. */
-export function readDefaultProfileId(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem("geolibre.assistant.defaultProfile");
-  } catch {
-    return null;
-  }
-}
-
-/** Persist the default profile id to localStorage. */
-export function saveDefaultProfileId(id: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (id) {
-      window.localStorage.setItem("geolibre.assistant.defaultProfile", id);
-    } else {
-      window.localStorage.removeItem("geolibre.assistant.defaultProfile");
-    }
-  } catch {
-    // Best-effort persistence.
-  }
 }

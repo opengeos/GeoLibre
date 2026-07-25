@@ -306,13 +306,17 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
 
   // Push the active profile into the session. When no profile is available,
   // fall back to auto-resolution (which reads from the runtime env directly).
+  //
+  // Deferred while a response is streaming: setSelection resets the session,
+  // which cancels the in-flight agent. That cancellation is not user-initiated,
+  // so send()'s catch would surface it as an error turn and drop the reply. The
+  // panel dropdown is disabled while running, but Settings can still change the
+  // default profile, so guard here. `running` is a dependency, so the latest
+  // activeProfile is applied as soon as the run finishes.
   useEffect(() => {
-    if (activeProfile) {
-      session.setSelection(activeProfile);
-    } else {
-      session.setSelection(null);
-    }
-  }, [activeProfile, session]);
+    if (running) return;
+    session.setSelection(activeProfile ?? null);
+  }, [activeProfile, session, running]);
 
   // Keep the latest turn in view. Skip when there is no conversation (e.g. the
   // no-key setup card) so its heading stays pinned to the top instead of being
@@ -515,7 +519,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         <div className="ms-auto flex items-center gap-1">
           {hasKey && aiProfiles.length > 0 ? (
             <Select
-              aria-label={t("assistant.provider")}
+              aria-label={t("assistant.profile")}
               className="h-8 w-auto max-w-[160px] text-xs"
               value={activeProfile?.id ?? ""}
               disabled={running}
