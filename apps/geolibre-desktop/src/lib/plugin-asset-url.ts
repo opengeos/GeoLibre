@@ -9,6 +9,31 @@ export function isManagedUrlSource(source: string): boolean {
   return /^(https?|tauri):\/\//.test(source);
 }
 
+/**
+ * The manifest URLs backing `pluginIds`, in the order given and de-duplicated.
+ *
+ * `sourceOf` maps a loaded plugin id to the source it was loaded from; ids it
+ * does not know (built-in plugins) contribute nothing. Only managed URL sources
+ * qualify: a filesystem source is a local path and a web archive source is a
+ * synthetic id, so neither is something a recipient of a shared project could
+ * fetch -- recording one would only produce a trust prompt that can never be
+ * satisfied.
+ */
+export function managedUrlSourcesForIds(
+  pluginIds: Iterable<string>,
+  sourceOf: (pluginId: string) => string | undefined,
+): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const pluginId of pluginIds) {
+    const source = sourceOf(pluginId);
+    if (source === undefined || !isManagedUrlSource(source) || seen.has(source)) continue;
+    seen.add(source);
+    urls.push(source);
+  }
+  return urls;
+}
+
 // Resolve `path` against a plugin manifest URL, rejecting anything absolute,
 // scheme-qualified, or that escapes the manifest's own directory. Mirrors the
 // safety checks GeoLibre applies to a manifest's `entry`/`style` paths so a

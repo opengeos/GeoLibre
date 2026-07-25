@@ -19,6 +19,7 @@ import {
 } from "./plugin-archive-unpack";
 import {
   isManagedUrlSource,
+  managedUrlSourcesForIds,
   pluginAssetUrlFromSource,
   resolvePluginAssetUrl,
 } from "./plugin-asset-url";
@@ -181,6 +182,25 @@ export async function loadExternalPlugins(
  */
 export function isExternalPluginId(pluginId: string): boolean {
   return externallyLoadedPluginSources.has(pluginId);
+}
+
+/**
+ * The manifest URLs backing the given loaded plugin ids, in the order the ids
+ * are supplied and de-duplicated.
+ *
+ * Only managed URL sources qualify. A filesystem source is a path, and a web
+ * archive source is a synthetic id (see `webPluginSource`) - neither is
+ * something a recipient could fetch, so recording either in a project would
+ * only produce a trust prompt that can never be satisfied. Built-in plugins are
+ * not tracked in the source map at all and contribute nothing.
+ *
+ * Used when serializing a project to record just the plugins that project
+ * actually needs, rather than everything the author happens to have installed.
+ */
+export function pluginManifestUrlsForIds(pluginIds: Iterable<string>): string[] {
+  return managedUrlSourcesForIds(pluginIds, (pluginId) =>
+    externallyLoadedPluginSources.get(pluginId),
+  );
 }
 
 async function loadFilesystemPluginBundles(
