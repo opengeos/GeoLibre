@@ -1068,6 +1068,11 @@ function buildPanel(
       return true;
     } catch (error) {
       if (isAbort(error) || generation !== state.generation) return false;
+      // Show no catalog rather than a stale one: after a failed request the
+      // panel does not know what this server holds, and leaving the previous
+      // results up presents them as the answer to a query that never ran.
+      state.datasets = [];
+      renderList();
       status.textContent = "";
       showError(
         isTransportFailure(error)
@@ -1330,6 +1335,12 @@ function buildPanel(
     const baseUrl = normalizeBaseUrl(baseUrlInput.value);
     if (!baseUrl) return;
     state.client = { baseUrl, apiKey: apiKeyInput.value.trim() || undefined };
+    // Drop the outgoing server's catalog before the new one is queried. Those
+    // cards belong to a server this panel is no longer pointed at: their Add
+    // buttons would build source paths for the old base URL, and if the new
+    // connection fails they would sit there looking like its catalog.
+    state.datasets = [];
+    renderList();
     connectButton.disabled = true;
     connectButton.textContent = labels.connecting;
     const connected = await runSearch("");
