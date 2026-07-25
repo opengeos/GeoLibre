@@ -21,6 +21,7 @@
  */
 
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   datasetPageUrl,
@@ -30,8 +31,10 @@ import {
   geometryKind,
   mintTileToken,
   normalizeBaseUrl,
+  rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
+  tileUrlPrefix,
   vectorTileTemplate,
   type GeoLensClientOptions,
   type GeoLensDataset,
@@ -269,6 +272,66 @@ function clearAllRefreshTimers(): void {
   refreshTimers.clear();
 }
 
+/**
+ * Raster tile URL prefixes that need an `X-Api-Key` header, mapped to the key.
+ *
+ * MapLibre issues raster tile requests itself, so an API-key-only private raster
+ * cannot carry the key the way the fetch calls in `./geolens-api` do.
+ * `transformRequest` is the supported hook: `RasterTileSource` routes every tile
+ * URL through it, and supplying any header other than `accept` moves the request
+ * off `HTMLImageElement` onto fetch, which sends headers. (Verified against
+ * maplibre-gl 5.24: `ImageRequest.doImageRequest` only takes the
+ * `HTMLImageElement` path when `requestParameters.headers` is empty or
+ * `accept`-only.)
+ *
+ * Keyed by tile-URL prefix (everything before the `{z}` placeholder) rather than
+ * by origin, so a key is only ever attached to the exact GeoLens raster endpoint
+ * that issued it. A basemap, another plugin's tiles, or a second GeoLens server
+ * reachable on the same origin never sees it.
+ */
+const rasterApiKeys = new Map<string, string>();
+
+let installedOnMap: MapLibreMap | null = null;
+
+function geolensTransformRequest(
+  url: string,
+  resourceType?: ResourceType,
+): RequestParameters | undefined {
+  if (resourceType !== "Tile" || rasterApiKeys.size === 0) return undefined;
+  const headers = rasterTileAuthHeaders(url, rasterApiKeys);
+  return headers ? { url, headers } : undefined;
+}
+
+/**
+ * Register a private raster's tile URL so its requests carry the API key.
+ *
+ * Installs the transform on first use only. GeoLibre sets no `transformRequest`
+ * of its own, and `Map` exposes no getter for an existing one, so this
+ * deliberately does not try to chain: it returns `undefined` for anything it
+ * does not recognize, which is the documented "leave this request alone" answer
+ * and keeps the hook cheap to hand over if the host ever wants to own it.
+ */
+function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string): void {
+  rasterApiKeys.set(tileUrlPrefix(tiles), apiKey);
+  const map = app.getMap?.();
+  if (!map || installedOnMap === map) return;
+  map.setTransformRequest(geolensTransformRequest);
+  installedOnMap = map;
+}
+
+/**
+ * Drop every registered key and uninstall the hook (plugin deactivation).
+ *
+ * Raster layers the user added stay on the map, but a private one stops
+ * rendering once its key is gone. That is deliberate: the credential was
+ * entered into the plugin panel, so it should not outlive the plugin.
+ */
+function clearRasterApiKeys(): void {
+  rasterApiKeys.clear();
+  installedOnMap?.setTransformRequest(null);
+  installedOnMap = null;
+}
+
 /** True when the layer's signed tile URL carries an expired (or near-expiry) token. */
 function tileTokenExpired(layer: GeoLibreLayer): boolean {
   const tiles = layer.source.tiles;
@@ -450,6 +513,8 @@ async function addRasterTilesLayer(
   fetchImpl: GeoLensFetch,
 ): Promise<void> {
   const raster = await resolveRasterTiles(client, dataset.id, fetchImpl);
+  // A public raster renders anonymously; only a keyed client needs the header.
+  if (client.apiKey) registerRasterApiKey(app, raster.tiles, client.apiKey);
   const layer: GeoLibreLayer = {
     id: createLayerId(),
     name: dataset.title,
@@ -849,8 +914,10 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
       unregisterPanel = null;
       mountedPanels.delete(remount);
       // Layers the user added stay on the map (ordinary GeoLibre layers now),
-      // but the token-refresh timers we own must not outlive the plugin.
+      // but the token-refresh timers and the raster API keys we own must not
+      // outlive the plugin.
       clearAllRefreshTimers();
+      clearRasterApiKeys();
       appRef = null;
     },
   };

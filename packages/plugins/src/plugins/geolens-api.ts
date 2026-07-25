@@ -130,9 +130,43 @@ export function normalizeBaseUrl(raw: string): string {
 }
 
 /** Auth headers for a request — an API key becomes `X-Api-Key`. */
+/** GeoLens accepts the API key in this header (it also honors `Authorization`). */
+export const GEOLENS_API_KEY_HEADER = "X-Api-Key";
+
 export function authHeaders(options: GeoLensClientOptions): Record<string, string> {
   const key = options.apiKey?.trim();
-  return key ? { "X-Api-Key": key } : {};
+  return key ? { [GEOLENS_API_KEY_HEADER]: key } : {};
+}
+
+/**
+ * The prefix of a tile URL template: everything before the first `{z}`/`{x}`/`{y}`
+ * placeholder.
+ *
+ * Used as the match key when attaching credentials to MapLibre-issued raster
+ * tile requests, so a key is scoped to the exact endpoint that produced it
+ * rather than to a whole origin.
+ */
+export function tileUrlPrefix(template: string): string {
+  const brace = template.indexOf("{");
+  return brace === -1 ? template : template.slice(0, brace);
+}
+
+/**
+ * Auth headers for a raster tile URL, or `null` to leave the request untouched.
+ *
+ * `keysByPrefix` maps a {@link tileUrlPrefix} to the API key that endpoint needs.
+ * A request only ever gets a key when its URL starts with that exact prefix, so
+ * basemaps, other plugins' tiles, and a second GeoLens server on the same origin
+ * are all unaffected.
+ */
+export function rasterTileAuthHeaders(
+  url: string,
+  keysByPrefix: ReadonlyMap<string, string>,
+): Record<string, string> | null {
+  for (const [prefix, apiKey] of keysByPrefix) {
+    if (url.startsWith(prefix)) return { [GEOLENS_API_KEY_HEADER]: apiKey };
+  }
+  return null;
 }
 
 /**
