@@ -1629,8 +1629,11 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         // identity guard prevents terminating an unrelated service that happens
         // to use the same port.
         terminate_sidecar_listeners_on_port(SIDECAR_PORT)?;
-        wait_for_port_free(SIDECAR_PORT);
-        if sidecar_health_is_ready(&base_url) {
+        // Bind-testing the port is the authoritative check that the reclaim
+        // worked: a listener we could not terminate may also have stopped
+        // answering /health, and falling through to spawn would then surface as
+        // an opaque uvicorn "address already in use" instead of this message.
+        if !wait_for_port_free(SIDECAR_PORT) {
             return Err(
                 "A GeoLibre processing server from a previous session is still \
                  running on port 8765 but does not accept this session's token. \
@@ -1809,7 +1812,9 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
     // and exit 1 ("exited before it was ready") while the orphan lingers. Clear
     // any stale listener and wait for the port to free before spawning.
     let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT);
-    wait_for_port_free(JUPYTER_PORT);
+    // Best-effort here: if the port never frees, the spawn below fails with
+    // Jupyter's own bind error, which is already reported to the user.
+    let _ = wait_for_port_free(JUPYTER_PORT);
 
     let uv = ensure_managed_uv(&app)?;
     let project_dir = sidecar_project_dir(&app)?;
@@ -1962,13 +1967,16 @@ fn jupyter_base_url() -> String {
 // Wait (briefly) until `port` can be bound, i.e. a just-terminated listener has
 // fully released it. Binding then dropping leaves a small race window, but it is
 // enough to avoid a `--port-retries=0` bind failure right after killing an orphan.
-fn wait_for_port_free(port: u16) {
+// Returns whether the port actually came free within the timeout, so a caller
+// that can report a better error than the failed spawn is able to bail out.
+fn wait_for_port_free(port: u16) -> bool {
     for _ in 0..20 {
         if TcpListener::bind(("127.0.0.1", port)).is_ok() {
-            return;
+            return true;
         }
         thread::sleep(Duration::from_millis(100));
     }
+    false
 }
 
 // Prepend `dir` to any inherited PYTHONPATH (platform separator), so a user's
