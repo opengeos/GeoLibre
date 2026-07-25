@@ -52,6 +52,13 @@ export interface TimeBinding {
   granularity: TimeGranularity;
   /** Window of time shown around the current date. */
   window: TimeWindow;
+  /**
+   * Accumulate features over time instead of showing only the window: every
+   * feature from the start of the data up to the window's end stays visible, so
+   * past steps build up rather than clear. Mirrors the `cumulative` option the
+   * Time Slider's own GeoJSON sources take.
+   */
+  cumulative?: boolean;
 }
 
 /** A property offered as a candidate timestamp column in the bind dialog. */
@@ -62,6 +69,14 @@ export interface TimePropertyCandidate {
   /** A representative raw value, shown to help the user pick. */
   sample: unknown;
 }
+
+/**
+ * A bag of feature properties. Detection and extent scanning only ever read
+ * properties, never geometry, so both a GeoJSON feature collection and a sample
+ * of vector-tile features (which carry tile-clipped geometry not worth
+ * materializing) reduce to a list of these.
+ */
+export type TimePropertyRecord = Record<string, unknown> | null | undefined;
 
 /** At/above this magnitude a numeric timestamp is read as milliseconds, else seconds. */
 const EPOCH_MS_THRESHOLD = 1e11;
@@ -135,17 +150,32 @@ export function parseTimeValue(value: unknown): number | null {
 export function detectTimeProperties(
   geojson: FeatureCollection | undefined,
 ): TimePropertyCandidate[] {
-  const features = geojson?.features ?? [];
-  if (features.length === 0) return [];
+  return detectTimePropertiesFromRecords(
+    (geojson?.features ?? []).map((feature) => feature?.properties),
+  );
+}
+
+/**
+ * The property-record form of {@link detectTimeProperties}, used when the
+ * features come from vector tiles rather than a feature collection. Identical
+ * ranking rules; see that function for the qualifying threshold and tie-break.
+ *
+ * @param records - Feature property bags, in sample order.
+ * @returns Candidate timestamp properties for the bind dialog.
+ */
+export function detectTimePropertiesFromRecords(
+  records: readonly TimePropertyRecord[],
+): TimePropertyCandidate[] {
+  if (records.length === 0) return [];
 
   const total = new Map<string, number>();
   const parsed = new Map<string, number>();
   const sample = new Map<string, unknown>();
   const distinct = new Map<string, Set<number>>();
-  const inspected = Math.min(features.length, SAMPLE_LIMIT);
+  const inspected = Math.min(records.length, SAMPLE_LIMIT);
 
   for (let i = 0; i < inspected; i += 1) {
-    const props = features[i]?.properties;
+    const props = records[i];
     if (!props) continue;
     for (const [key, value] of Object.entries(props)) {
       if (value === null || value === undefined || value === "") continue;
@@ -253,13 +283,50 @@ export function buildTimeBinding(
   property: string,
   window?: TimeWindow,
 ): TimeBinding | null {
-  const features = geojson?.features ?? [];
+  return buildTimeBindingFromRecords(
+    (geojson?.features ?? []).map((feature) => feature?.properties),
+    property,
+    { window },
+  );
+}
+
+/** Options for {@link buildTimeBindingFromRecords}. */
+export interface BuildTimeBindingOptions {
+  /** Explicit window; defaults to one granularity step. */
+  window?: TimeWindow;
+  /**
+   * Explicit epoch-millisecond extent, replacing the one scanned from the
+   * records. Vector-tile layers only expose the features of currently loaded
+   * tiles, so their scanned extent is a lower bound on the real one — the bind
+   * dialog scans to prefill, then passes back whatever range the user confirmed
+   * so the timeline covers the whole dataset rather than the current view.
+   * Ignored when it is not a finite, ordered pair.
+   */
+  extent?: { min: number; max: number };
+}
+
+/**
+ * The property-record form of {@link buildTimeBinding}, used when the features
+ * come from vector tiles rather than a feature collection, and the only form
+ * that accepts an explicit extent.
+ *
+ * @param records - Feature property bags.
+ * @param property - The chosen timestamp property.
+ * @param options - Optional window and extent overrides.
+ * @returns The binding, or `null` when the property is not time-like.
+ */
+export function buildTimeBindingFromRecords(
+  records: readonly TimePropertyRecord[],
+  property: string,
+  options: BuildTimeBindingOptions = {},
+): TimeBinding | null {
+  const { window, extent } = options;
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   const rawSamples: unknown[] = [];
 
-  for (let i = 0; i < features.length; i += 1) {
-    const value = features[i]?.properties?.[property];
+  for (let i = 0; i < records.length; i += 1) {
+    const value = records[i]?.[property];
     if (value === null || value === undefined || value === "") continue;
     const ms = parseTimeValue(value);
     if (ms === null) continue;
@@ -270,7 +337,15 @@ export function buildTimeBinding(
     if (rawSamples.length < SAMPLE_LIMIT) rawSamples.push(value);
   }
 
+  // The value kind is always detected from real sampled values; only the extent
+  // can be overridden. A property with no parseable value anywhere in the
+  // sample is not bindable, even with a user-supplied range, because there is
+  // nothing to tell epoch from year from ISO text.
   if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (extent && Number.isFinite(extent.min) && Number.isFinite(extent.max)) {
+    min = Math.min(extent.min, extent.max);
+    max = Math.max(extent.min, extent.max);
+  }
   // A single-instant dataset still needs a non-zero span so the slider can move.
   if (max <= min) max = min + 86_400_000;
 
@@ -283,6 +358,37 @@ export function buildTimeBinding(
     granularity,
     window: window ?? { unit: granularity, before: 0, after: 1 },
   };
+}
+
+/**
+ * Render an epoch-millisecond bound as the text the bind dialog's extent inputs
+ * show, and which {@link parseTimeValue} reads back: a bare year for a vintage
+ * column, otherwise a `YYYY-MM-DD` date. Both forms are parsed as UTC, so a
+ * bound the user leaves alone round-trips to the same instant.
+ *
+ * `roundUp` is meant for the upper bound. Truncating it to the day would place
+ * the end of the timeline *earlier* than the data and hide the final partial
+ * day, so a bound that is not already on a day boundary is carried forward to
+ * the next one.
+ *
+ * @param ms - The bound, in epoch milliseconds.
+ * @param valueKind - How the bound property stores its values.
+ * @param roundUp - Carry a non-aligned bound forward instead of truncating.
+ * @returns The text to show in the extent input.
+ */
+export function formatTimeExtentInput(
+  ms: number,
+  valueKind: TimeValueKind,
+  roundUp = false,
+): string {
+  if (!Number.isFinite(ms)) return "";
+  if (valueKind === "year") {
+    const year = new Date(ms).getUTCFullYear();
+    return String(roundUp && Date.UTC(year, 0, 1) < ms ? year + 1 : year);
+  }
+  const DAY = 86_400_000;
+  const aligned = roundUp && ms % DAY !== 0 ? Math.ceil(ms / DAY) * DAY : ms;
+  return new Date(aligned).toISOString().slice(0, 10);
 }
 
 /**
@@ -328,7 +434,14 @@ export function addGranularityUnits(date: Date, unit: TimeGranularity, amount: n
  */
 export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
   const { window, property, valueKind } = binding;
-  const lowerMs = addGranularityUnits(date, window.unit, -window.before).getTime();
+  // A cumulative binding anchors the lower bound at the start of the data
+  // rather than dropping it: every feature up to the window's end stays
+  // visible, and the guards that keep undated features out of every window
+  // (a missing property coerces to 0 / "", both below any real bound) keep
+  // working unchanged.
+  const lowerMs = binding.cumulative
+    ? binding.min
+    : addGranularityUnits(date, window.unit, -window.before).getTime();
   const upperMs = addGranularityUnits(date, window.unit, window.after).getTime();
 
   if (valueKind === "epochMs" || valueKind === "epochS") {

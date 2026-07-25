@@ -493,14 +493,28 @@ export {
 } from "./plugins/time-slider-pixel-series";
 export {
   buildTimeBinding,
+  buildTimeBindingFromRecords,
   buildTimeFilter,
   detectTimeProperties,
+  detectTimePropertiesFromRecords,
+  formatTimeExtentInput,
+  parseTimeValue,
+  type BuildTimeBindingOptions,
   type TimeBinding,
   type TimeGranularity,
   type TimePropertyCandidate,
+  type TimePropertyRecord,
   type TimeValueKind,
   type TimeWindow,
 } from "./plugins/time-slider-binding";
+export {
+  isTileVectorLayer,
+  resolveTileQueryTargets,
+  sampleTileFeatureRecords,
+  type TileQueryTarget,
+  type TileSampleMap,
+  type TileSampleStyle,
+} from "./plugins/time-slider-tile-sample";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";
 export {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,

@@ -25,10 +25,14 @@ import {
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
-  buildTimeBinding,
+  buildTimeBindingFromRecords,
   canEditLayerGeometry,
-  detectTimeProperties,
+  detectTimePropertiesFromRecords,
+  formatTimeExtentInput,
   getLayerTimeBinding,
+  isTileVectorLayer,
+  parseTimeValue,
+  sampleTileFeatureRecords,
   BASEMAP_CONTROL_PLUGIN_ID,
   GEO_EDITOR_PLUGIN_ID,
   RASTER_SOURCE_KIND,
@@ -36,6 +40,7 @@ import {
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
+  type TimePropertyRecord,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import {
@@ -613,10 +618,20 @@ export function LayerPanel({
   const [bindTimeSliderLayerId, setBindTimeSliderLayerId] = useState<string | null>(null);
   const [bindCandidates, setBindCandidates] = useState<TimePropertyCandidate[] | null>(null);
   const [bindProperty, setBindProperty] = useState("");
-  const [bindWindowMode, setBindWindowMode] = useState<"step" | "wide" | "wider">("step");
-  // Feature collection resolved when the bind dialog opens, reused on confirm so
-  // a large layer is scanned only once.
-  const [bindLayerGeojson, setBindLayerGeojson] = useState<FeatureCollection | null>(null);
+  const [bindWindowMode, setBindWindowMode] = useState<"step" | "wide" | "wider" | "cumulative">(
+    "step",
+  );
+  // Feature properties resolved when the bind dialog opens, reused on confirm so
+  // a large layer is scanned only once. A GeoJSON layer contributes every
+  // feature; a tile layer contributes the features of its loaded tiles.
+  const [bindRecords, setBindRecords] = useState<TimePropertyRecord[] | null>(null);
+  // True when the target layer draws from vector tiles, so the scanned extent
+  // covers only the loaded tiles and the dialog offers it for editing.
+  const [bindIsTileLayer, setBindIsTileLayer] = useState(false);
+  // The editable extent, as the text shown in the inputs (a year, or an ISO
+  // date). Empty until a property is chosen and its extent is prefilled.
+  const [bindRangeStart, setBindRangeStart] = useState("");
+  const [bindRangeEnd, setBindRangeEnd] = useState("");
   // Shown in the dialog when binding fails (e.g. the chosen property has no
   // parseable timestamps) instead of closing the dialog with no feedback.
   const [bindError, setBindError] = useState<string | null>(null);
@@ -1559,6 +1574,18 @@ export function LayerPanel({
     setBindTimeSliderLayerId(null);
   }, []);
 
+  // Fill the extent inputs from a property's scanned range. The upper bound is
+  // rounded up so a partial trailing day/year is not cut off the timeline.
+  const prefillBindRange = useCallback((records: TimePropertyRecord[], property: string) => {
+    const provisional = buildTimeBindingFromRecords(records, property);
+    setBindRangeStart(
+      provisional ? formatTimeExtentInput(provisional.min, provisional.valueKind) : "",
+    );
+    setBindRangeEnd(
+      provisional ? formatTimeExtentInput(provisional.max, provisional.valueKind, true) : "",
+    );
+  }, []);
+
   // Open the bind dialog: inspect the layer's features for timestamp columns and
   // preselect the best-covered one. `candidates` stays null until detection
   // finishes so the dialog can show a "scanning" state for large layers.
@@ -1571,47 +1598,69 @@ export function LayerPanel({
       setBindCandidates(null);
       setBindProperty("");
       setBindWindowMode("step");
-      setBindLayerGeojson(null);
+      setBindRecords(null);
+      setBindRangeStart("");
+      setBindRangeEnd("");
       setBindError(null);
+      const isTileLayer = isTileVectorLayer(layer);
+      setBindIsTileLayer(isTileLayer);
       try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
+        const map = mapControllerRef.current?.getMap() ?? undefined;
+        // A tile layer has no feature collection to scan — read the features of
+        // its currently loaded tiles instead. That sample is enough to find the
+        // timestamp column and how it stores its values; the extent it yields
+        // covers only those tiles, so the dialog prefills it as an editable
+        // range rather than treating it as the data's true span.
+        const records: TimePropertyRecord[] = isTileLayer
+          ? sampleTileFeatureRecords(map, layer)
+          : ((await resolveLayerGeojson(layer, map))?.features ?? []).map(
+              (feature) => feature?.properties,
+            );
         if (bindRequestRef.current !== token) return;
-        const candidates = detectTimeProperties(geojson ?? undefined);
-        setBindLayerGeojson(geojson ?? null);
+        const candidates = detectTimePropertiesFromRecords(records);
+        setBindRecords(records);
         setBindCandidates(candidates);
-        if (candidates.length > 0) setBindProperty(candidates[0].property);
+        if (candidates.length > 0) {
+          setBindProperty(candidates[0].property);
+          if (isTileLayer) prefillBindRange(records, candidates[0].property);
+        }
       } catch {
         if (bindRequestRef.current !== token) return;
+        setBindRecords([]);
         setBindCandidates([]);
       }
     },
-    [mapControllerRef],
+    [mapControllerRef, prefillBindRange],
   );
 
   // Commit a binding: persist it on the layer metadata and activate the Time
   // Slider so it adopts the binding and drives the filter. Styling/opacity are
   // untouched; only the visible feature set narrows as the timeline moves.
-  const confirmBindTimeSlider = useCallback(async () => {
+  const confirmBindTimeSlider = useCallback(() => {
     const layer = bindTimeSliderLayer;
-    if (!layer || !bindProperty) return;
-    const token = bindRequestRef.current;
-    // Reuse the feature collection resolved when the dialog opened so large
-    // layers are not scanned twice.
-    const geojson =
-      bindLayerGeojson ??
-      (await resolveLayerGeojson(layer, mapControllerRef.current?.getMap() ?? undefined));
-    // If the dialog was cancelled (or reopened for another layer) while the
-    // fallback scan was in flight, abandon this commit.
-    if (bindRequestRef.current !== token) return;
-    const binding = buildTimeBinding(geojson ?? undefined, bindProperty);
+    // The records resolved when the dialog opened are reused here, so a large
+    // layer is scanned only once.
+    if (!layer || !bindProperty || !bindRecords) return;
+    // Only a tile layer offers an editable extent: its scan saw just the loaded
+    // tiles. A GeoJSON layer's scanned extent is exact and is used as-is.
+    let extent: { min: number; max: number } | undefined;
+    if (bindIsTileLayer) {
+      const min = parseTimeValue(bindRangeStart);
+      const max = parseTimeValue(bindRangeEnd);
+      if (min === null || max === null) {
+        setBindError(t("layers.bindRangeInvalid"));
+        return;
+      }
+      extent = { min, max };
+    }
+    const binding = buildTimeBindingFromRecords(bindRecords, bindProperty, { extent });
     if (!binding) {
       // Keep the dialog open and explain why, rather than closing silently.
       setBindError(t("layers.bindNoTimestamps"));
       return;
     }
+    // A cumulative binding still steps one granularity unit at a time; what
+    // changes is that the lower bound stays anchored at the start of the data.
     const timeWindow =
       bindWindowMode === "wider"
         ? { unit: binding.granularity, before: 3, after: 3 }
@@ -1619,7 +1668,14 @@ export function LayerPanel({
           ? { unit: binding.granularity, before: 1, after: 1 }
           : { unit: binding.granularity, before: 0, after: 1 };
     updateLayer(layer.id, {
-      metadata: { ...layer.metadata, timeBinding: { ...binding, window: timeWindow } },
+      metadata: {
+        ...layer.metadata,
+        timeBinding: {
+          ...binding,
+          window: timeWindow,
+          cumulative: bindWindowMode === "cumulative",
+        },
+      },
       timeFilter: undefined,
     });
     if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
@@ -1628,8 +1684,11 @@ export function LayerPanel({
     closeBindTimeSliderDialog();
   }, [
     bindTimeSliderLayer,
-    bindLayerGeojson,
+    bindIsTileLayer,
     bindProperty,
+    bindRangeEnd,
+    bindRangeStart,
+    bindRecords,
     bindWindowMode,
     mapControllerRef,
     updateLayer,
@@ -2399,7 +2458,11 @@ export function LayerPanel({
             const canWriteBack = canWriteEditsToSource(layer);
             // Vector layers with a date/timestamp property can be driven by the
             // Time Slider; the binding (if any) lives on the layer metadata.
-            const canBindTimeSlider = layer.type === "geojson";
+            // Tile-backed vector layers qualify too: the window is a MapLibre
+            // filter evaluated per feature as each tile decodes, so it needs no
+            // local copy of the data (see the bind dialog for how the timeline's
+            // extent is established without one).
+            const canBindTimeSlider = layer.type === "geojson" || isTileVectorLayer(layer);
             const timeBinding = getLayerTimeBinding(layer);
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
@@ -3243,7 +3306,14 @@ export function LayerPanel({
           {bindCandidates === null ? (
             <p className="text-sm text-muted-foreground">{t("layers.bindScanning")}</p>
           ) : bindCandidates.length === 0 ? (
-            <p className="text-sm text-destructive">{t("layers.bindNoProperty")}</p>
+            // A tile layer with nothing loaded has no sample to detect from,
+            // which is a different problem from a layer whose columns are not
+            // time-like — and one the user can fix by zooming to the layer.
+            <p className="text-sm text-destructive">
+              {bindIsTileLayer && (bindRecords?.length ?? 0) === 0
+                ? t("layers.bindTileNoFeatures")
+                : t("layers.bindNoProperty")}
+            </p>
           ) : (
             <div className="space-y-3">
               <div className="space-y-2">
@@ -3254,6 +3324,9 @@ export function LayerPanel({
                   onChange={(event) => {
                     setBindProperty(event.target.value);
                     setBindError(null);
+                    if (bindIsTileLayer && bindRecords) {
+                      prefillBindRange(bindRecords, event.target.value);
+                    }
                   }}
                 >
                   {bindCandidates.map((candidate) => (
@@ -3264,18 +3337,46 @@ export function LayerPanel({
                   ))}
                 </Select>
               </div>
+              {bindIsTileLayer && (
+                <div className="space-y-2">
+                  <Label htmlFor="time-slider-range-start">{t("layers.bindRange")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="time-slider-range-start"
+                      value={bindRangeStart}
+                      onChange={(event) => {
+                        setBindRangeStart(event.target.value);
+                        setBindError(null);
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">–</span>
+                    <Input
+                      id="time-slider-range-end"
+                      value={bindRangeEnd}
+                      onChange={(event) => {
+                        setBindRangeEnd(event.target.value);
+                        setBindError(null);
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("layers.bindRangeHint")}</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="time-slider-window">{t("layers.bindWindow")}</Label>
                 <Select
                   id="time-slider-window"
                   value={bindWindowMode}
                   onChange={(event) =>
-                    setBindWindowMode(event.target.value as "step" | "wide" | "wider")
+                    setBindWindowMode(
+                      event.target.value as "step" | "wide" | "wider" | "cumulative",
+                    )
                   }
                 >
                   <option value="step">{t("layers.bindWindowStep")}</option>
                   <option value="wide">{t("layers.bindWindowWide")}</option>
                   <option value="wider">{t("layers.bindWindowWider")}</option>
+                  <option value="cumulative">{t("layers.bindWindowCumulative")}</option>
                 </Select>
               </div>
               {bindError && <p className="text-sm text-destructive">{bindError}</p>}
@@ -3285,11 +3386,7 @@ export function LayerPanel({
             <Button type="button" variant="ghost" onClick={closeBindTimeSliderDialog}>
               {t("layers.bindCancel")}
             </Button>
-            <Button
-              type="button"
-              disabled={!bindProperty}
-              onClick={() => void confirmBindTimeSlider()}
-            >
+            <Button type="button" disabled={!bindProperty} onClick={confirmBindTimeSlider}>
               {t("layers.bindConfirm")}
             </Button>
           </div>
