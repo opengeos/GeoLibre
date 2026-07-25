@@ -31,6 +31,7 @@ import {
   formatTimeExtentInput,
   getLayerTimeBinding,
   isTileVectorLayer,
+  isTimeSliderIdle,
   parseTimeValue,
   sampleTileFeatureRecords,
   BASEMAP_CONTROL_PLUGIN_ID,
@@ -1710,8 +1711,16 @@ export function LayerPanel({
     (layer: GeoLibreLayer) => {
       const { timeBinding: _removed, ...metadata } = layer.metadata as Record<string, unknown>;
       updateLayer(layer.id, { metadata, timeFilter: undefined });
+      // Switch the plugin off once it has nothing left to drive, so the dock
+      // does not linger over a map it no longer affects and the Plugins menu
+      // stops showing it as active. The store write above is synchronous, so
+      // the layer just unbound is already excluded. Any remaining binding, dock
+      // source, or timespan overlay keeps it on.
+      if (isPluginActive(TIME_SLIDER_PLUGIN_ID) && isTimeSliderIdle()) {
+        togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+      }
     },
-    [updateLayer],
+    [updateLayer, isPluginActive, togglePlugin, mapControllerRef],
   );
 
   const handleExportRasterLayer = useCallback(

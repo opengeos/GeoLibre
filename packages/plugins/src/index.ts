@@ -441,6 +441,7 @@ export {
   TIME_SLIDER_PLUGIN_ID,
   getActiveTimeSliderControl,
   getLayerTimeBinding,
+  isTimeSliderIdle,
 } from "./plugins/maplibre-time-slider";
 export {
   DEFAULT_TIMELAPSE_LABELS,
