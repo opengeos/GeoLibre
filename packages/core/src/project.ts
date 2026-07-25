@@ -250,7 +250,18 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
           row.shape === "circle" || row.shape === "line" || row.shape === "square"
             ? row.shape
             : undefined;
-        items.push({ label: row.label, color: row.color, ...(shape ? { shape } : {}) });
+        // Proportional symbol size in map pixels; bounded so a hand-edited file
+        // cannot ask the panel for an absurd swatch.
+        const size =
+          typeof row.size === "number" && Number.isFinite(row.size) && row.size > 0
+            ? Math.min(row.size, 1000)
+            : undefined;
+        items.push({
+          label: row.label,
+          color: row.color,
+          ...(shape ? { shape } : {}),
+          ...(size !== undefined ? { size } : {}),
+        });
       }
       if (items.length === 0) continue;
       customEntries[key.trim()] = {

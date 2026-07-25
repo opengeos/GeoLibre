@@ -8,8 +8,11 @@ pull request workflow, lives in the documentation:
 
 ## Quick Start
 
+Fork the repository, then clone your fork. Replace `YOUR_GITHUB_USERNAME` with
+your GitHub username:
+
 ```bash
-git clone https://github.com/<your-username>/GeoLibre.git
+git clone https://github.com/YOUR_GITHUB_USERNAME/GeoLibre.git
 cd GeoLibre
 npm install
 npm run dev          # web build at http://localhost:5173
