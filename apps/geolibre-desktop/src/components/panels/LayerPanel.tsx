@@ -707,10 +707,11 @@ export function LayerPanel({
     () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
     [layerGroups, firstMemberIdByGroup],
   );
-  // Resize the metadata dialog from its bottom-right grip. The dialog is
-  // centred via a -50% transform, so each edge moves by half the size change;
-  // growing by 2x the pointer delta keeps the grip under the cursor (mirrors
-  // the Project Gallery dialog's resize idiom).
+  // Resize the metadata dialog from its bottom-end grip. The dialog is centred
+  // via a -50% transform, so each edge moves by half the size change; growing
+  // by 2x the pointer delta keeps the grip under the cursor. In an RTL layout
+  // the grip renders on the physical left, so the horizontal delta is inverted
+  // (the same idiom as the Basemap Extract panel's grip).
   const startMetadataResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -718,6 +719,7 @@ export function LayerPanel({
     const el = metadataDialogRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    const isRtl = document.documentElement.dir === "rtl";
     const startX = event.clientX;
     const startY = event.clientY;
     const startW = rect.width;
@@ -726,12 +728,13 @@ export function LayerPanel({
     let frame: number | null = null;
     const prevCursor = document.body.style.cursor;
     const prevSelect = document.body.style.userSelect;
-    document.body.style.cursor = "nwse-resize";
+    document.body.style.cursor = isRtl ? "nesw-resize" : "nwse-resize";
     document.body.style.userSelect = "none";
 
     const onMove = (e: PointerEvent) => {
+      const deltaX = (e.clientX - startX) * (isRtl ? -1 : 1);
       next = {
-        width: Math.max(320, Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2)),
+        width: Math.max(320, Math.min(window.innerWidth - 16, startW + deltaX * 2)),
         height: Math.max(240, Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2)),
       };
       if (frame !== null) return;
@@ -3394,24 +3397,28 @@ export function LayerPanel({
               ? {
                   width: metadataDialogSize.width,
                   height: metadataDialogSize.height,
-                  maxWidth: "none",
-                  maxHeight: "none",
+                  // Only the width cap is lifted (to the viewport, not to
+                  // `none`): a size chosen on a wide window must not leave the
+                  // dialog clipped once the window narrows. The height keeps
+                  // DialogContent's own viewport cap.
+                  maxWidth: "calc(100vw - 1rem)",
                 }
               : undefined
           }
           bodyClassName="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6"
           resizeHandle={
-            // Physical bottom-right (not logical `end-0`): the drag math grows
-            // the dialog with a positive x delta, so the grip stays on the
-            // right edge in right-to-left locales too.
             <div
               role="separator"
               aria-label={t("layers.resizeMetadataDialog")}
               title={t("layers.resizeMetadataDialog")}
               onPointerDown={startMetadataResize}
-              className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+              className="absolute bottom-0 end-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block rtl:cursor-nesw-resize"
             >
-              <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
+              <svg
+                viewBox="0 0 16 16"
+                className="h-full w-full rtl:scale-x-[-1]"
+                aria-hidden="true"
+              >
                 <path
                   d="M11 15L15 11M6 15L15 6"
                   stroke="currentColor"
