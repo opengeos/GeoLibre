@@ -59,6 +59,25 @@ export const GEOLENS_PLUGIN_ID = "maplibre-gl-geolens";
  */
 export const GEOLENS_FEATURES_SOURCE_KIND = "geolens-features";
 
+/** One entry in the sample-server dropdown. */
+export interface GeoLensSampleServer {
+  /** Shown in the dropdown; the URL is the title text. */
+  label: string;
+  baseUrl: string;
+}
+
+/**
+ * Public GeoLens deployments offered in the panel, so the plugin can be tried
+ * without hunting for a server URL. Both are open catalogs that need no key.
+ *
+ * The labels are the deployments' own names rather than translatable strings:
+ * they identify a specific server, the way a bookmark does.
+ */
+export const GEOLENS_SAMPLE_SERVERS: readonly GeoLensSampleServer[] = [
+  { label: "GeoLibre datasets", baseUrl: "https://datasets.geolibre.app" },
+  { label: "GeoLens demo", baseUrl: "https://demo.getgeolens.com" },
+];
+
 /** Number of datasets requested per catalog search. */
 const SEARCH_LIMIT = 50;
 /** Default maximum number of editable GeoJSON features loaded per dataset. */
@@ -80,6 +99,8 @@ const TOKEN_REFRESH_MAX_RETRY_SECONDS = 300;
 
 export interface GeoLensLabels {
   hint: string;
+  sampleServer: string;
+  sampleServerTitle: string;
   baseUrlPlaceholder: string;
   apiKeyPlaceholder: string;
   connect: string;
@@ -89,6 +110,7 @@ export interface GeoLensLabels {
   searching: string;
   noResults: string;
   loadError: (message: string) => string;
+  blockedError: (host: string) => string;
   showing: (count: number) => string;
   vectorBadge: string;
   rasterBadge: string;
@@ -125,6 +147,8 @@ export interface GeoLensLabels {
 
 export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   hint: "Connect to a GeoLens server to browse and add its catalog datasets.",
+  sampleServer: "Sample server…",
+  sampleServerTitle: "Connect to a public GeoLens deployment",
   baseUrlPlaceholder: "GeoLens URL, e.g. https://datasets.geolibre.app",
   apiKeyPlaceholder: "API key (optional, for private data)",
   connect: "Connect",
@@ -134,6 +158,9 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   searching: "Searching…",
   noResults: "No matching datasets.",
   loadError: (message) => `Could not reach GeoLens: ${message}`,
+  blockedError: (host) =>
+    `Could not reach ${host}. The server refused a cross-origin request from ` +
+    `GeoLibre — its administrator has to allow this origin (CORS).`,
   showing: (count) => `${count} dataset${count === 1 ? "" : "s"}.`,
   vectorBadge: "vector",
   rasterBadge: "raster",
@@ -297,6 +324,32 @@ function isAbort(error: unknown): boolean {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Whether a failure was the request never reaching the server at all.
+ *
+ * `fetch` rejects with a bare `TypeError` ("Failed to fetch") when the browser
+ * blocks the request — a CORS policy, a DNS failure, being offline — and gives
+ * the page no detail beyond that, by design. Every failure this module raises
+ * itself is a plain `Error`, so the constructor is a reliable discriminator.
+ *
+ * It matters because CORS is the likeliest cause and the least guessable: a
+ * GeoLens deployment that serves its catalog happily to `curl` is unreachable
+ * from a browser unless it sends `Access-Control-Allow-Origin` for the app's
+ * origin, and `demo.getgeolens.com` currently sends none at all.
+ */
+function isTransportFailure(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
+/** The host of a base URL, for an error message; falls back to the whole URL. */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -920,6 +973,22 @@ function buildPanel(
   featureLimitLabel.append(featureLimitInput);
   settingsPanel.append(featureLimitLabel, el("div", CSS.hint, labels.featureLimitHelp));
 
+  // A shortcut to the public deployments. It fills the URL field and connects,
+  // rather than only filling it: picking a sample server is the whole intent, so
+  // leaving the user to press Connect afterwards would just be a second click.
+  const sampleSelect = el("select", CSS.input) as HTMLSelectElement;
+  sampleSelect.title = labels.sampleServerTitle;
+  sampleSelect.setAttribute("aria-label", labels.sampleServerTitle);
+  const samplePlaceholder = el("option", "", labels.sampleServer);
+  samplePlaceholder.value = "";
+  sampleSelect.append(samplePlaceholder);
+  for (const server of GEOLENS_SAMPLE_SERVERS) {
+    const option = el("option", "", server.label);
+    option.value = server.baseUrl;
+    option.title = server.baseUrl;
+    sampleSelect.append(option);
+  }
+
   const baseUrlInput = el("input", CSS.input) as HTMLInputElement;
   baseUrlInput.placeholder = labels.baseUrlPlaceholder;
   baseUrlInput.autocomplete = "off";
@@ -953,6 +1022,7 @@ function buildPanel(
   panel.append(
     hintRow,
     settingsPanel,
+    sampleSelect,
     baseUrlInput,
     apiKeyInput,
     connectRow,
@@ -999,7 +1069,11 @@ function buildPanel(
     } catch (error) {
       if (isAbort(error) || generation !== state.generation) return false;
       status.textContent = "";
-      showError(labels.loadError(messageOf(error)));
+      showError(
+        isTransportFailure(error)
+          ? labels.blockedError(hostOf(state.client?.baseUrl ?? ""))
+          : labels.loadError(messageOf(error)),
+      );
       return false;
     }
   };
@@ -1284,6 +1358,15 @@ function buildPanel(
   };
 
   connectButton.addEventListener("click", () => void connect());
+  sampleSelect.addEventListener("change", () => {
+    const baseUrl = sampleSelect.value;
+    // Reset to the placeholder: the URL field is the source of truth (the user
+    // can edit it afterwards), so a stuck selection would soon be a lie.
+    sampleSelect.value = "";
+    if (!baseUrl) return;
+    baseUrlInput.value = baseUrl;
+    void connect();
+  });
   settingsButton.addEventListener("click", () => {
     const open = settingsPanel.style.display !== "flex";
     settingsPanel.style.display = open ? "flex" : "none";

@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
-import type {
-  GeoLensFetch,
-  GeoLensHttpResponse,
+import {
+  normalizeBaseUrl,
+  type GeoLensFetch,
+  type GeoLensHttpResponse,
 } from "../packages/plugins/src/plugins/geolens-api";
 import {
   clearEditSessions,
   GEOLENS_FEATURES_SOURCE_KIND,
+  GEOLENS_SAMPLE_SERVERS,
   pendingCountsFor,
   saveLayerEdits,
   type GeoLensEditableLayer,
@@ -226,5 +228,27 @@ describe("saveLayerEdits", () => {
       calls.map((c) => c.method),
       ["GET", "PATCH"],
     );
+  });
+});
+
+describe("GEOLENS_SAMPLE_SERVERS", () => {
+  it("offers both public deployments as ready-to-use https URLs", () => {
+    assert.deepEqual(
+      GEOLENS_SAMPLE_SERVERS.map((s) => s.baseUrl),
+      ["https://datasets.geolibre.app", "https://demo.getgeolens.com"],
+    );
+  });
+
+  it("lists each server once, labelled, and already normalized", () => {
+    // normalizeBaseUrl runs on whatever reaches the URL field, so a sample that
+    // is not already in canonical form would connect to a different string than
+    // the one shown — and a trailing slash would double up in every path join.
+    const seen = new Set<string>();
+    for (const server of GEOLENS_SAMPLE_SERVERS) {
+      assert.ok(server.label.trim().length > 0, "sample server needs a label");
+      assert.equal(server.baseUrl, normalizeBaseUrl(server.baseUrl));
+      assert.equal(seen.has(server.baseUrl), false, `duplicate ${server.baseUrl}`);
+      seen.add(server.baseUrl);
+    }
   });
 });

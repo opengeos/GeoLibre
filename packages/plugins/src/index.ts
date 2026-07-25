@@ -363,10 +363,12 @@ export {
   DEFAULT_GEOLENS_FEATURE_LIMIT,
   GEOLENS_FEATURES_SOURCE_KIND,
   GEOLENS_PLUGIN_ID,
+  GEOLENS_SAMPLE_SERVERS,
   maplibreGeoLensPlugin,
   normalizeGeoLensFeatureLimit,
   setGeoLensLabels,
   type GeoLensLabels,
+  type GeoLensSampleServer,
 } from "./plugins/maplibre-geolens";
 export {
   buildListObjectsUrl,
