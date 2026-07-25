@@ -186,218 +186,219 @@ export function WidgetEditorDialog({
               </Select>
             </div>
 
-            {!hasChartable && type !== "indicator" ? (
+            {/* A layer with no numeric or categorical columns still supports a
+                count indicator, so keep the type selector visible and let the
+                per-option `disabled` flags gate the field-dependent types. */}
+            {!hasChartable && (
               <p className="text-sm text-muted-foreground">{t("dashboard.editor.noFields")}</p>
-            ) : (
-              <div className="flex flex-wrap items-end gap-3">
+            )}
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="widget-type">{t("dashboard.editor.chartType")}</Label>
+                <Select
+                  id="widget-type"
+                  className="w-36"
+                  value={type}
+                  onChange={(event) => {
+                    const nextType = event.target.value as DashboardWidgetType;
+                    setType(nextType);
+                    // Pie has no "average"; drop a carried-over mean so the
+                    // select doesn't show a stale value with no matching option.
+                    if (nextType === "pie" && aggregation === "mean") {
+                      setAggregation("count");
+                    }
+                  }}
+                >
+                  <option value="histogram" disabled={!hasNumeric}>
+                    {t("dashboard.chartType.histogram")}
+                  </option>
+                  <option value="scatter" disabled={!hasNumeric}>
+                    {t("dashboard.chartType.scatter")}
+                  </option>
+                  <option value="bar" disabled={!hasCategory}>
+                    {t("dashboard.chartType.bar")}
+                  </option>
+                  <option value="line" disabled={!hasNumeric}>
+                    {t("dashboard.chartType.line")}
+                  </option>
+                  <option value="box" disabled={!hasNumeric}>
+                    {t("dashboard.chartType.box")}
+                  </option>
+                  <option value="pie" disabled={!hasCategory}>
+                    {t("dashboard.chartType.pie")}
+                  </option>
+                  <option value="indicator">{t("dashboard.chartType.indicator")}</option>
+                </Select>
+              </div>
+
+              {(type === "histogram" || type === "line" || type === "box") && (
+                <FieldSelect
+                  id="widget-field"
+                  label={t("dashboard.editor.field")}
+                  value={pick(field, numericCols)}
+                  options={numericCols}
+                  onChange={setField}
+                />
+              )}
+
+              {type === "histogram" && (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="widget-type">{t("dashboard.editor.chartType")}</Label>
-                  <Select
-                    id="widget-type"
-                    className="w-36"
-                    value={type}
+                  <Label htmlFor="widget-bins">{t("dashboard.editor.bins")}</Label>
+                  <Input
+                    id="widget-bins"
+                    type="number"
+                    className="w-24"
+                    min={MIN_HISTOGRAM_BINS}
+                    max={MAX_HISTOGRAM_BINS}
+                    value={bins === 0 ? "" : bins}
                     onChange={(event) => {
-                      const nextType = event.target.value as DashboardWidgetType;
-                      setType(nextType);
-                      // Pie has no "average"; drop a carried-over mean so the
-                      // select doesn't show a stale value with no matching option.
-                      if (nextType === "pie" && aggregation === "mean") {
-                        setAggregation("count");
+                      const raw = event.target.value;
+                      if (raw === "") {
+                        setBins(0);
+                        return;
+                      }
+                      const value = Number(raw);
+                      if (Number.isFinite(value)) {
+                        setBins(
+                          Math.max(
+                            MIN_HISTOGRAM_BINS,
+                            Math.min(MAX_HISTOGRAM_BINS, Math.trunc(value)),
+                          ),
+                        );
                       }
                     }}
-                  >
-                    <option value="histogram" disabled={!hasNumeric}>
-                      {t("dashboard.chartType.histogram")}
-                    </option>
-                    <option value="scatter" disabled={!hasNumeric}>
-                      {t("dashboard.chartType.scatter")}
-                    </option>
-                    <option value="bar" disabled={!hasCategory}>
-                      {t("dashboard.chartType.bar")}
-                    </option>
-                    <option value="line" disabled={!hasNumeric}>
-                      {t("dashboard.chartType.line")}
-                    </option>
-                    <option value="box" disabled={!hasNumeric}>
-                      {t("dashboard.chartType.box")}
-                    </option>
-                    <option value="pie" disabled={!hasCategory}>
-                      {t("dashboard.chartType.pie")}
-                    </option>
-                    <option value="indicator">{t("dashboard.chartType.indicator")}</option>
-                  </Select>
-                </div>
-
-                {(type === "histogram" || type === "line" || type === "box") && (
-                  <FieldSelect
-                    id="widget-field"
-                    label={t("dashboard.editor.field")}
-                    value={pick(field, numericCols)}
-                    options={numericCols}
-                    onChange={setField}
+                    onBlur={() => {
+                      if (bins < MIN_HISTOGRAM_BINS) setBins(MIN_HISTOGRAM_BINS);
+                    }}
                   />
-                )}
+                </div>
+              )}
 
-                {type === "histogram" && (
+              {type === "scatter" && (
+                <>
+                  <FieldSelect
+                    id="widget-x"
+                    label={t("dashboard.editor.xAxis")}
+                    value={pick(xField, numericCols)}
+                    options={numericCols}
+                    onChange={setXField}
+                  />
+                  <FieldSelect
+                    id="widget-y"
+                    label={t("dashboard.editor.yAxis")}
+                    value={pick(yField, numericCols)}
+                    options={numericCols}
+                    onChange={setYField}
+                  />
+                </>
+              )}
+
+              {(type === "bar" || type === "pie") && (
+                <>
+                  <FieldSelect
+                    id="widget-category"
+                    label={t("dashboard.editor.category")}
+                    value={pick(category, categoryCols)}
+                    options={categoryCols}
+                    onChange={setCategory}
+                  />
                   <div className="grid gap-1.5">
-                    <Label htmlFor="widget-bins">{t("dashboard.editor.bins")}</Label>
-                    <Input
-                      id="widget-bins"
-                      type="number"
-                      className="w-24"
-                      min={MIN_HISTOGRAM_BINS}
-                      max={MAX_HISTOGRAM_BINS}
-                      value={bins === 0 ? "" : bins}
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        if (raw === "") {
-                          setBins(0);
-                          return;
-                        }
-                        const value = Number(raw);
-                        if (Number.isFinite(value)) {
-                          setBins(
-                            Math.max(
-                              MIN_HISTOGRAM_BINS,
-                              Math.min(MAX_HISTOGRAM_BINS, Math.trunc(value)),
-                            ),
-                          );
-                        }
-                      }}
-                      onBlur={() => {
-                        if (bins < MIN_HISTOGRAM_BINS) setBins(MIN_HISTOGRAM_BINS);
-                      }}
-                    />
-                  </div>
-                )}
-
-                {type === "scatter" && (
-                  <>
-                    <FieldSelect
-                      id="widget-x"
-                      label={t("dashboard.editor.xAxis")}
-                      value={pick(xField, numericCols)}
-                      options={numericCols}
-                      onChange={setXField}
-                    />
-                    <FieldSelect
-                      id="widget-y"
-                      label={t("dashboard.editor.yAxis")}
-                      value={pick(yField, numericCols)}
-                      options={numericCols}
-                      onChange={setYField}
-                    />
-                  </>
-                )}
-
-                {(type === "bar" || type === "pie") && (
-                  <>
-                    <FieldSelect
-                      id="widget-category"
-                      label={t("dashboard.editor.category")}
-                      value={pick(category, categoryCols)}
-                      options={categoryCols}
-                      onChange={setCategory}
-                    />
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="widget-agg">{t("dashboard.editor.aggregate")}</Label>
-                      <Select
-                        id="widget-agg"
-                        className="w-32"
-                        value={aggregation}
-                        onChange={(event) => setAggregation(event.target.value as BarAggregation)}
-                      >
-                        <option value="count">{t("dashboard.aggregate.count")}</option>
-                        <option value="sum" disabled={!hasNumeric}>
-                          {t("dashboard.aggregate.sum")}
-                        </option>
-                        {/* Averaging parts of a whole is meaningless for a pie. */}
-                        {type !== "pie" && (
-                          <option value="mean" disabled={!hasNumeric}>
-                            {t("dashboard.aggregate.mean")}
-                          </option>
-                        )}
-                      </Select>
-                    </div>
-                    {aggregation !== "count" && (
-                      <FieldSelect
-                        id="widget-value"
-                        label={t("dashboard.editor.value")}
-                        value={pick(valueField, numericCols)}
-                        options={numericCols}
-                        onChange={setValueField}
-                      />
-                    )}
-                  </>
-                )}
-
-                {type === "indicator" && (
-                  <>
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="widget-indicator-agg">
-                        {t("dashboard.editor.aggregate")}
-                      </Label>
-                      <Select
-                        id="widget-indicator-agg"
-                        className="w-32"
-                        value={indicatorAggregation}
-                        onChange={(event) =>
-                          setIndicatorAggregation(event.target.value as IndicatorAggregation)
-                        }
-                      >
-                        <option value="count">{t("dashboard.indicatorAggregation.count")}</option>
-                        <option value="sum" disabled={!hasNumeric}>
-                          {t("dashboard.indicatorAggregation.sum")}
-                        </option>
+                    <Label htmlFor="widget-agg">{t("dashboard.editor.aggregate")}</Label>
+                    <Select
+                      id="widget-agg"
+                      className="w-32"
+                      value={aggregation}
+                      onChange={(event) => setAggregation(event.target.value as BarAggregation)}
+                    >
+                      <option value="count">{t("dashboard.aggregate.count")}</option>
+                      <option value="sum" disabled={!hasNumeric}>
+                        {t("dashboard.aggregate.sum")}
+                      </option>
+                      {/* Averaging parts of a whole is meaningless for a pie. */}
+                      {type !== "pie" && (
                         <option value="mean" disabled={!hasNumeric}>
-                          {t("dashboard.indicatorAggregation.mean")}
+                          {t("dashboard.aggregate.mean")}
                         </option>
-                        <option value="min" disabled={!hasNumeric}>
-                          {t("dashboard.indicatorAggregation.min")}
-                        </option>
-                        <option value="max" disabled={!hasNumeric}>
-                          {t("dashboard.indicatorAggregation.max")}
-                        </option>
-                        <option value="median" disabled={!hasNumeric}>
-                          {t("dashboard.indicatorAggregation.median")}
-                        </option>
-                      </Select>
-                    </div>
-                    {indicatorAggregation !== "count" && (
-                      <FieldSelect
-                        id="widget-indicator-field"
-                        label={t("dashboard.editor.field")}
-                        value={pick(field, numericCols)}
-                        options={numericCols}
-                        onChange={setField}
+                      )}
+                    </Select>
+                  </div>
+                  {aggregation !== "count" && (
+                    <FieldSelect
+                      id="widget-value"
+                      label={t("dashboard.editor.value")}
+                      value={pick(valueField, numericCols)}
+                      options={numericCols}
+                      onChange={setValueField}
+                    />
+                  )}
+                </>
+              )}
+
+              {type === "indicator" && (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="widget-indicator-agg">{t("dashboard.editor.aggregate")}</Label>
+                    <Select
+                      id="widget-indicator-agg"
+                      className="w-32"
+                      value={indicatorAggregation}
+                      onChange={(event) =>
+                        setIndicatorAggregation(event.target.value as IndicatorAggregation)
+                      }
+                    >
+                      <option value="count">{t("dashboard.indicatorAggregation.count")}</option>
+                      <option value="sum" disabled={!hasNumeric}>
+                        {t("dashboard.indicatorAggregation.sum")}
+                      </option>
+                      <option value="mean" disabled={!hasNumeric}>
+                        {t("dashboard.indicatorAggregation.mean")}
+                      </option>
+                      <option value="min" disabled={!hasNumeric}>
+                        {t("dashboard.indicatorAggregation.min")}
+                      </option>
+                      <option value="max" disabled={!hasNumeric}>
+                        {t("dashboard.indicatorAggregation.max")}
+                      </option>
+                      <option value="median" disabled={!hasNumeric}>
+                        {t("dashboard.indicatorAggregation.median")}
+                      </option>
+                    </Select>
+                  </div>
+                  {indicatorAggregation !== "count" && (
+                    <FieldSelect
+                      id="widget-indicator-field"
+                      label={t("dashboard.editor.field")}
+                      value={pick(field, numericCols)}
+                      options={numericCols}
+                      onChange={setField}
+                    />
+                  )}
+                  <div className="flex gap-2">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="widget-prefix">{t("dashboard.editor.prefix")}</Label>
+                      <Input
+                        id="widget-prefix"
+                        className="w-20"
+                        value={prefix}
+                        placeholder="€"
+                        onChange={(event) => setPrefix(event.target.value)}
                       />
-                    )}
-                    <div className="flex gap-2">
-                      <div className="grid gap-1.5">
-                        <Label htmlFor="widget-prefix">{t("dashboard.editor.prefix")}</Label>
-                        <Input
-                          id="widget-prefix"
-                          className="w-20"
-                          value={prefix}
-                          placeholder="€"
-                          onChange={(event) => setPrefix(event.target.value)}
-                        />
-                      </div>
-                      <div className="grid gap-1.5">
-                        <Label htmlFor="widget-suffix">{t("dashboard.editor.suffix")}</Label>
-                        <Input
-                          id="widget-suffix"
-                          className="w-20"
-                          value={suffix}
-                          placeholder=" ha"
-                          onChange={(event) => setSuffix(event.target.value)}
-                        />
-                      </div>
                     </div>
-                  </>
-                )}
-              </div>
-            )}
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="widget-suffix">{t("dashboard.editor.suffix")}</Label>
+                      <Input
+                        id="widget-suffix"
+                        className="w-20"
+                        value={suffix}
+                        placeholder=" ha"
+                        onChange={(event) => setSuffix(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             <div className="grid gap-1.5">
               <Label htmlFor="widget-title">{t("dashboard.editor.titleLabel")}</Label>

@@ -812,19 +812,22 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
     }
     const valueField = normalizeString(candidate.valueField).trim();
     if (valueField) widget.valueField = valueField;
-    // Indicator widget fields (issue #1381).
-    if (
-      candidate.indicatorAggregation &&
-      INDICATOR_AGGREGATIONS.includes(candidate.indicatorAggregation)
-    ) {
-      widget.indicatorAggregation = candidate.indicatorAggregation;
+    // Indicator widget fields (issue #1381). Only an indicator reads them, so
+    // drop them elsewhere rather than round-tripping dead configuration.
+    if (type === "indicator") {
+      if (
+        candidate.indicatorAggregation &&
+        INDICATOR_AGGREGATIONS.includes(candidate.indicatorAggregation)
+      ) {
+        widget.indicatorAggregation = candidate.indicatorAggregation;
+      }
+      // Prefix/suffix are not trimmed: a leading/trailing space is intentional
+      // (e.g. " ha" or "$ ").
+      const prefix = normalizeString(candidate.prefix);
+      if (prefix) widget.prefix = prefix;
+      const suffix = normalizeString(candidate.suffix);
+      if (suffix) widget.suffix = suffix;
     }
-    // Prefix/suffix are not trimmed: a leading/trailing space is intentional
-    // (e.g. " ha" or "$ ").
-    const prefix = normalizeString(candidate.prefix);
-    if (prefix) widget.prefix = prefix;
-    const suffix = normalizeString(candidate.suffix);
-    if (suffix) widget.suffix = suffix;
     widgets.push(widget);
   }
   return widgets.length > 0 ? widgets : null;

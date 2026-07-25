@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { numericValues, type ChartRow, type ChartType } from "../../lib/attribute-charts";
 import { isChartableLayer, useLayerChartData } from "../../hooks/useLayerChartData";
 import { ChartView, computeChart, type ChartSpec } from "./charts/chart-view";
 import { WidgetEditorDialog } from "./WidgetEditorDialog";
@@ -30,7 +31,7 @@ const MIN_DASHBOARD_ROW_HEIGHT = 200;
 /** Compute the indicator value from layer data and an aggregation. Returns
  * null when there is no numeric data to aggregate. Count works on any layer. */
 function computeIndicator(
-  rows: Record<string, unknown>[],
+  rows: ChartRow[],
   field: string | undefined,
   aggregation: IndicatorAggregation,
 ): number | null {
@@ -38,9 +39,8 @@ function computeIndicator(
     return rows.length;
   }
   if (!field) return null;
-  const values = rows
-    .map((r) => r[field])
-    .filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
+  // Reuse the shared coercion so numeric strings count, as they do in the charts.
+  const values = numericValues(rows, field);
   if (values.length === 0) return null;
   switch (aggregation) {
     case "sum":
@@ -70,10 +70,12 @@ function formatIndicatorValue(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-/** Turn a stored widget into the render-side {@link ChartSpec}. */
-function widgetToSpec(widget: DashboardWidget): ChartSpec {
+/** Turn a stored widget into the render-side {@link ChartSpec}. An indicator is
+ * a KPI tile rather than a chart, so the caller passes the narrowed chart type
+ * and skips this for `"indicator"` widgets. */
+function widgetToSpec(widget: DashboardWidget, type: ChartType): ChartSpec {
   return {
-    type: widget.type,
+    type,
     field: widget.field,
     xField: widget.xField,
     yField: widget.yField,
@@ -371,7 +373,13 @@ function WidgetCard({
 }) {
   const { t } = useTranslation();
   const data = useLayerChartData(widget.layerId);
-  const result = useMemo(() => computeChart(data.rows, widgetToSpec(widget)), [data.rows, widget]);
+  const result = useMemo(
+    () =>
+      widget.type === "indicator"
+        ? null
+        : computeChart(data.rows, widgetToSpec(widget, widget.type)),
+    [data.rows, widget],
+  );
   // A readable title from the widget's chart type and fields when untitled.
   const defaultWidgetTitle = (): string => {
     switch (widget.type) {
@@ -490,7 +498,7 @@ function WidgetCard({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
-          {data.hasData ? (
+          {data.hasData && result ? (
             <ChartView result={result} color={widget.color} />
           ) : (
             <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">

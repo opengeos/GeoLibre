@@ -147,6 +147,24 @@ describe("normalizeWidgets", () => {
     assert.equal("indicatorAggregation" in (result?.find((w) => w.id === "ind-x") ?? {}), false);
   });
 
+  it("drops indicator-only fields from a non-indicator widget", () => {
+    const result = normalizeWidgets([
+      {
+        id: "h",
+        layerId: "l",
+        type: "histogram",
+        field: "pop",
+        indicatorAggregation: "median",
+        prefix: "€",
+        suffix: " ha",
+      },
+    ] as never);
+    const widget = result?.[0] ?? {};
+    assert.equal("indicatorAggregation" in widget, false);
+    assert.equal("prefix" in widget, false);
+    assert.equal("suffix" in widget, false);
+  });
+
   it("returns null for a non-array or an all-invalid list", () => {
     assert.equal(normalizeWidgets(undefined), null);
     assert.equal(normalizeWidgets("nope"), null);
