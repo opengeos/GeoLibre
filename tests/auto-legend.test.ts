@@ -200,6 +200,136 @@ describe("buildAutoLegend — vector layers", () => {
     );
     assert.ok(entry.rows.every((row) => row.shape === "circle"));
   });
+
+  it("sizes graduated class rows instead of repeating the field as a size ramp", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "sized",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "graduated",
+            vectorStyleProperty: "pop_max",
+            vectorStyleStops: [
+              { value: 0, color: "#440154" },
+              { value: 100, color: "#31688e" },
+              { value: 200, color: "#fde725" },
+            ],
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "pop_max",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 200,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    // One row per class, each keeping its class color and carrying the size the
+    // map draws at the class midpoint (the open-ended top class at its bound).
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.color, row.size]),
+      [
+        ["0 – 100", "#440154", 9],
+        ["100 – 200", "#31688e", 19],
+        ["≥ 200", "#fde725", 24],
+      ],
+    );
+  });
+
+  it("keeps a separate size ramp for a different field, colored from the classes", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "two-fields",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            fillColor: "#3388ff",
+            vectorStyleMode: "categorized",
+            vectorStyleProperty: "region",
+            vectorStyleStops: [
+              { value: "north", color: "#440154" },
+              { value: "south", color: "#31688e" },
+              { value: "east", color: "#fde725" },
+            ],
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "pop_max",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 12,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.rows.length, 6);
+    assert.equal(entry.fieldLabel, "region");
+    // The size swatches sample the middle class, never the unused layer fill,
+    // and the block is captioned with the field it actually sizes by.
+    assert.deepEqual(
+      entry.rows.slice(3).map((row) => [row.label, row.color, row.size, row.caption]),
+      [
+        ["0", "#31688e", 4, "pop_max"],
+        ["50", "#31688e", 8, undefined],
+        ["100", "#31688e", 12, undefined],
+      ],
+    );
+  });
+
+  it("omits size rows when the proportional range is degenerate", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "degenerate",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "magnitude",
+            proportionalSizeMinValue: 100,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 12,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.rows.length, 0);
+    assert.equal(entry.fieldLabel, undefined);
+    assert.ok(entry.headerSwatch);
+  });
+
+  it("carries item sizes through a hand-authored custom entry", () => {
+    const entries = buildAutoLegend(
+      [layer({ id: "c", metadata: { geometryType: "point" } })],
+      config({
+        customEntries: {
+          c: {
+            items: [
+              { label: "Small", color: "#440154", shape: "circle", size: 4 },
+              { label: "Large", color: "#fde725", shape: "circle", size: 24 },
+            ],
+          },
+        },
+      }),
+      EN,
+    );
+    assert.deepEqual(
+      entries[0].rows.map((row) => row.size),
+      [4, 24],
+    );
+  });
 });
 
 describe("expressionLegendParts — advanced expression styles", () => {
