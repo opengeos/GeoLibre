@@ -33,8 +33,11 @@ before you invest time in a pull request.
 
 ## Setup
 
+Fork the repository, then clone your fork — replace `YOUR_GITHUB_USERNAME` with
+your GitHub username:
+
 ```bash
-git clone https://github.com/opengeos/GeoLibre.git
+git clone https://github.com/YOUR_GITHUB_USERNAME/GeoLibre.git
 cd GeoLibre
 npm install
 ```
