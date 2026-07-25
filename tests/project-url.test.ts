@@ -26,6 +26,26 @@ describe("fetchProjectFromUrl", () => {
     assert.equal(project.name, "Test");
   });
 
+  it("revalidates instead of trusting the browser cache", async () => {
+    // A shared project URL is mutable: re-sharing overwrites it in place. Share
+    // hosts serve it with a long freshness lifetime (share.geolibre.app sends
+    // `max-age=3600`), so under the default cache mode the browser would keep
+    // answering from its own copy and recipients would silently load a
+    // superseded project -- including a stale `plugins.manifestUrls`, which
+    // drives the trust prompt.
+    let init: RequestInit | undefined;
+    const fetchImpl = (async (_url: string, requestInit?: RequestInit) => {
+      init = requestInit;
+      return new Response(VALID_PROJECT_JSON, { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await fetchProjectFromUrl(PROJECT_URL, { fetchImpl });
+
+    // `no-cache`, not `no-store`: the cache is still used, it just has to
+    // revalidate, so an unchanged project comes back as a 304.
+    assert.equal(init?.cache, "no-cache");
+  });
+
   it("turns a rejected fetch (network/CORS) into a message naming the URL and CORS", async () => {
     // Mimic the bare TypeError a browser throws on a network or CORS failure
     // ("Failed to fetch" / "Load failed") rather than leaking it verbatim.
