@@ -6,6 +6,8 @@ import {
   resolveProviderConfig,
   type AssistantProviderId,
 } from "./provider";
+import { configForProfile } from "./profiles";
+import type { AssistantProfile } from "./provider";
 import { createAssistantTools, describeLayers, type AssistantToolDeps } from "./tools";
 
 /** System prompt establishing the assistant's role, tools, and guardrails. */
@@ -40,6 +42,13 @@ export class AssistantSession {
   private agent: Agent | null = null;
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
   private selection: { provider: AssistantProviderId; model?: string } | null = null;
+  /**
+   * When set, the user chose a named profile from Settings → AI Providers.
+   * The profile's own credential fieldValues are used directly rather than
+   * going through the shared runtime env — this is the source of truth for
+   * profile-based credential resolution and avoids cross-profile collisions.
+   */
+  private profile: AssistantProfile | null = null;
   /** Last layer context sent, so it is only re-sent when it actually changes. */
   private lastContext: string | null = null;
 
@@ -51,11 +60,23 @@ export class AssistantSession {
   }
 
   /**
-   * Pin the provider/model (from the UI picker), or pass null to auto-resolve
-   * from the configured keys. Rebuilds the agent on the next prompt.
+   * Pin the provider/model (from the legacy UI picker) or pass a full
+   * {@link AssistantProfile} for profile-based credential resolution.
+   * Pass null to auto-resolve from the configured keys. Rebuilds the agent
+   * on the next prompt.
    */
-  setSelection(selection: { provider: AssistantProviderId; model?: string } | null): void {
-    this.selection = selection;
+  setSelection(
+    selection: { provider: AssistantProviderId; model?: string } | AssistantProfile | null,
+  ): void {
+    if (selection && "fieldValues" in selection) {
+      // Profile-based: store the full profile, clear the legacy selection.
+      this.profile = selection;
+      this.selection = null;
+    } else {
+      // Legacy provider+model pair, or null for auto-resolve.
+      this.selection = selection as { provider: AssistantProviderId; model?: string } | null;
+      this.profile = null;
+    }
     this.reset();
   }
 
@@ -73,11 +94,18 @@ export class AssistantSession {
 
   private async ensureAgent(): Promise<Agent> {
     if (this.agent) return this.agent;
-    const config = this.selection
-      ? configForProvider(this.selection.provider, this.selection.model)
-      : resolveProviderConfig();
+
+    // Profile-based: resolve credentials directly from the profile's own
+    // fieldValues, bypassing the shared runtime env. This prevents all-
+    // profiles-flattened env collisions.
+    const config = this.profile
+      ? configForProfile(this.profile)
+      : this.selection
+        ? configForProvider(this.selection.provider, this.selection.model)
+        : resolveProviderConfig();
+
     if (!config) {
-      const pinned = this.selection?.provider;
+      const pinned = this.selection?.provider ?? this.profile?.provider;
       throw new Error(
         pinned
           ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment Variables, or pick another provider.`

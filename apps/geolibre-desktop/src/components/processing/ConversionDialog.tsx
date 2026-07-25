@@ -149,8 +149,10 @@ interface ConversionToolConfig {
   titleKey?: ParseKeys;
   descriptionKey?: ParseKeys;
   inputLabel: string;
+  inputLabelKey?: ParseKeys;
   inputFilters: FileDialogFilter[];
   outputLabel: string;
+  outputLabelKey?: ParseKeys;
   outputFilters: FileDialogFilter[];
   defaultOutputName: string;
   compressions?: string[];
@@ -384,21 +386,29 @@ function browserRuntimeMessageKey(kind: ConversionToolKind): ParseKeys {
 const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
   "vector-to-vector": {
     title: "Vector to Vector",
+    titleKey: "toolbar.conversion.vectorToVector",
     description:
       "Convert between any vector formats DuckDB's spatial extension supports. The input and output formats are detected from the file extensions. The desktop app writes any format (FlatGeobuf, GeoPackage, Shapefile, KML, GML, …); the browser writes GeoJSON, CSV, GeoParquet, GeoPackage, FlatGeobuf, and Shapefile.",
+    descriptionKey: "toolbar.conversion.vectorToVectorDesc",
     inputLabel: "Input vector file",
+    inputLabelKey: "toolbar.conversion.vectorToVectorInputLabel",
     inputFilters: [{ name: "Vector", extensions: VECTOR_TO_VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output vector file",
+    outputLabelKey: "toolbar.conversion.vectorToVectorOutputLabel",
     outputFilters: [{ name: "Vector", extensions: VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS }],
     defaultOutputName: "output.gpkg",
   },
   "vector-to-geoparquet": {
     title: "Vector to GeoParquet",
+    titleKey: "toolbar.conversion.vectorToGeoparquet",
     description:
       "Convert a vector dataset to a Hilbert-sorted, compressed GeoParquet file optimized for cloud-native range requests.",
+    descriptionKey: "toolbar.conversion.vectorToGeoparquetDesc",
     inputLabel: "Input vector file",
+    inputLabelKey: "toolbar.conversion.vectorToGeoparquetInputLabel",
     inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output GeoParquet file",
+    outputLabelKey: "toolbar.conversion.vectorToGeoparquetOutputLabel",
     outputFilters: [{ name: "GeoParquet", extensions: ["parquet"] }],
     defaultOutputName: "sorted.parquet",
     compressions: PARQUET_COMPRESSIONS,
@@ -406,41 +416,57 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
   },
   "vector-to-flatgeobuf": {
     title: "Vector to FlatGeobuf",
+    titleKey: "toolbar.conversion.vectorToFlatgeobuf",
     description:
       "Convert a vector dataset to a Hilbert-sorted FlatGeobuf with a packed spatial index for fast cloud-native access.",
+    descriptionKey: "toolbar.conversion.vectorToFlatgeobufDesc",
     inputLabel: "Input vector file",
+    inputLabelKey: "toolbar.conversion.vectorToFlatgeobufInputLabel",
     inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output FlatGeobuf file",
+    outputLabelKey: "toolbar.conversion.vectorToFlatgeobufOutputLabel",
     outputFilters: [{ name: "FlatGeobuf", extensions: ["fgb"] }],
     defaultOutputName: "output.fgb",
   },
   "vector-to-shapefile": {
     title: "Vector to Shapefile",
+    titleKey: "toolbar.conversion.vectorToShapefile",
     description:
       "Convert a vector dataset to a zipped ESRI Shapefile (.shp/.shx/.dbf/.prj). Field names are truncated to 10 characters.",
+    descriptionKey: "toolbar.conversion.vectorToShapefileDesc",
     inputLabel: "Input vector file",
+    inputLabelKey: "toolbar.conversion.vectorToShapefileInputLabel",
     inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output zipped Shapefile",
+    outputLabelKey: "toolbar.conversion.vectorToShapefileOutputLabel",
     outputFilters: [{ name: "Zip", extensions: ["zip"] }],
     defaultOutputName: "output.zip",
   },
   "vector-to-geopackage": {
     title: "Vector to GeoPackage",
+    titleKey: "toolbar.conversion.vectorToGeopackage",
     description:
       "Convert a vector dataset to a GeoPackage (.gpkg) for sharing with QGIS, ArcGIS, and other GIS tools.",
+    descriptionKey: "toolbar.conversion.vectorToGeopackageDesc",
     inputLabel: "Input vector file",
+    inputLabelKey: "toolbar.conversion.vectorToGeopackageInputLabel",
     inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output GeoPackage file",
+    outputLabelKey: "toolbar.conversion.vectorToGeopackageOutputLabel",
     outputFilters: [{ name: "GeoPackage", extensions: ["gpkg"] }],
     defaultOutputName: "output.gpkg",
   },
   "csv-to-geoparquet": {
     title: "CSV to GeoParquet",
+    titleKey: "toolbar.conversion.csvToGeoparquet",
     description:
       "Build point geometries from longitude/latitude columns and write a Hilbert-sorted, compressed GeoParquet.",
+    descriptionKey: "toolbar.conversion.csvToGeoparquetDesc",
     inputLabel: "Input CSV file",
+    inputLabelKey: "toolbar.conversion.csvToGeoparquetInputLabel",
     inputFilters: [{ name: "CSV", extensions: ["csv", "tsv", "txt"] }],
     outputLabel: "Output GeoParquet file",
+    outputLabelKey: "toolbar.conversion.csvToGeoparquetOutputLabel",
     outputFilters: [{ name: "GeoParquet", extensions: ["parquet"] }],
     defaultOutputName: "points.parquet",
     compressions: PARQUET_COMPRESSIONS,
@@ -448,9 +474,12 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
   },
   "vector-to-pmtiles": {
     title: "Vector to PMTiles",
+    titleKey: "toolbar.conversion.vectorToPmtiles",
     description:
       "Tile a vector dataset into a single PMTiles archive of vector tiles, ready for cloud-native serving.",
+    descriptionKey: "toolbar.conversion.vectorToPmtilesDesc",
     inputLabel: "Input vector file",
+    inputLabelKey: "toolbar.conversion.vectorToPmtilesInputLabel",
     inputFilters: [
       {
         name: "Vector",
@@ -467,6 +496,7 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
       },
     ],
     outputLabel: "Output PMTiles file",
+    outputLabelKey: "toolbar.conversion.vectorToPmtilesOutputLabel",
     outputFilters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
     defaultOutputName: "tiles.pmtiles",
   },
@@ -477,16 +507,21 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
       "Render a raster into a single PMTiles archive of Web Mercator PNG tiles, ready for cloud-native serving. Runs entirely in WebAssembly, so it needs no sidecar on either the web or desktop app.",
     descriptionKey: "toolbar.conversion.rasterToPmtilesDesc",
     inputLabel: "Input raster file",
+    inputLabelKey: "toolbar.conversion.rasterToPmtilesInputLabel",
     inputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     outputLabel: "Output PMTiles file",
+    outputLabelKey: "toolbar.conversion.rasterToPmtilesOutputLabel",
     outputFilters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
     defaultOutputName: "raster.pmtiles",
   },
   "raster-to-cog": {
     title: "Raster to COG",
+    titleKey: "toolbar.conversion.rasterToCog",
     description:
       "Convert a raster dataset to a valid, compressed Cloud Optimized GeoTIFF with internal tiling and overviews.",
+    descriptionKey: "toolbar.conversion.rasterToCogDesc",
     inputLabel: "Input raster file",
+    inputLabelKey: "toolbar.conversion.rasterToCogInputLabel",
     inputFilters: [
       {
         name: "Raster",
@@ -497,6 +532,7 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     // GeoTIFF only; the other formats above need the sidecar's GDAL.
     browserInputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     outputLabel: "Output COG file",
+    outputLabelKey: "toolbar.conversion.rasterToCogOutputLabel",
     outputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     defaultOutputName: "output_cog.tif",
     compressions: ["deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"],
@@ -1432,7 +1468,9 @@ export function ConversionDialog() {
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            {config?.titleKey ? t(config.titleKey) : (config?.title ?? "Conversion")}
+            {config?.titleKey
+              ? t(config.titleKey)
+              : (config?.title ?? t("toolbar.conversion.fallbackTitle"))}
           </DialogTitle>
           <DialogDescription>
             {config?.descriptionKey ? t(config.descriptionKey) : (config?.description ?? "")}
@@ -1468,7 +1506,9 @@ export function ConversionDialog() {
           )}
 
           <div className="grid gap-1.5">
-            <Label htmlFor="conversion-input">{config?.inputLabel}</Label>
+            <Label htmlFor="conversion-input">
+              {config?.inputLabelKey ? t(config.inputLabelKey) : config?.inputLabel}
+            </Label>
             <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
               {usesBrowserRuntime ? (
                 <Input
@@ -1497,14 +1537,18 @@ export function ConversionDialog() {
             </div>
             {usesBrowserRuntime && !isCsv && !isRasterInput && (
               <p className="text-xs text-muted-foreground">
-                For Shapefiles, select the .shp together with its .dbf, .shx, and .prj files.
+                {t("toolbar.conversion.shapefileSidecarHint")}
               </p>
             )}
           </div>
 
           <div className="grid gap-1.5">
             <Label htmlFor="conversion-output">
-              {usesBrowserRuntime ? "Output file name" : config?.outputLabel}
+              {usesBrowserRuntime
+                ? t("toolbar.conversion.outputFileName")
+                : config?.outputLabelKey
+                  ? t(config.outputLabelKey)
+                  : config?.outputLabel}
             </Label>
             <div
               className={cn(
@@ -1539,7 +1583,7 @@ export function ConversionDialog() {
           {isCsv && (
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-lon">Longitude column</Label>
+                <Label htmlFor="conversion-lon">{t("toolbar.conversion.longitudeColumn")}</Label>
                 {csvColumns.length > 0 ? (
                   <Select
                     id="conversion-lon"
@@ -1562,7 +1606,7 @@ export function ConversionDialog() {
                 )}
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-lat">Latitude column</Label>
+                <Label htmlFor="conversion-lat">{t("toolbar.conversion.latitudeColumn")}</Label>
                 {csvColumns.length > 0 ? (
                   <Select
                     id="conversion-lat"
@@ -1590,7 +1634,9 @@ export function ConversionDialog() {
           {showCompression && (
             <div className={cn("grid gap-4", showRowGroup && "grid-cols-2")}>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-compression">Compression</Label>
+                <Label htmlFor="conversion-compression">
+                  {t("toolbar.conversion.compression")}
+                </Label>
                 <Select
                   id="conversion-compression"
                   value={compression}
@@ -1605,7 +1651,9 @@ export function ConversionDialog() {
               </div>
               {showRowGroup && (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="conversion-row-group-size">Row group size</Label>
+                  <Label htmlFor="conversion-row-group-size">
+                    {t("toolbar.conversion.rowGroupSize")}
+                  </Label>
                   <Input
                     id="conversion-row-group-size"
                     inputMode="numeric"
@@ -1620,7 +1668,7 @@ export function ConversionDialog() {
           {isPmtiles && (
             <div className="grid grid-cols-[minmax(0,1fr)_5rem_5rem] gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-layer">Layer name</Label>
+                <Label htmlFor="conversion-layer">{t("toolbar.conversion.layerName")}</Label>
                 <Input
                   id="conversion-layer"
                   value={layerName}
@@ -1754,7 +1802,7 @@ export function ConversionDialog() {
               </p>
               <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
                 {job.messages.length === 0 ? (
-                  <span className="text-muted-foreground">No output yet.</span>
+                  <span className="text-muted-foreground">{t("toolbar.conversion.noOutput")}</span>
                 ) : (
                   <>
                     {/* The message list is append-only, so the slot index is a

@@ -116,7 +116,9 @@ export function AttributeChartDialog({
     setExportError(null);
     const base = `${sanitizeExportFileName(layerName || "chart")}-${chartType}`;
     const onError = (error: unknown) =>
-      setExportError(error instanceof Error ? error.message : "Could not export the chart.");
+      setExportError(
+        error instanceof Error ? error.message : t("attributeTable.chart.exportError"),
+      );
     if (format === "svg") {
       try {
         downloadChartSvg(svg, CHART_W, CHART_H, `${base}.svg`);
@@ -134,19 +136,21 @@ export function AttributeChartDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Charts</DialogTitle>
-          <DialogDescription>{`Visualize fields in "${layerName}".`}</DialogDescription>
+          <DialogTitle>{t("attributeTable.chart.title")}</DialogTitle>
+          <DialogDescription>
+            {t("attributeTable.chart.description", { layer: layerName })}
+          </DialogDescription>
         </DialogHeader>
 
         {!hasChartable ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            This layer has no numeric or categorical fields to chart.
+            {t("attributeTable.chart.noChartableFields")}
           </p>
         ) : (
           <div className="grid gap-3 py-1">
             <div className="flex flex-wrap items-end gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="chart-type">Chart type</Label>
+                <Label htmlFor="chart-type">{t("attributeTable.chart.chartType")}</Label>
                 <Select
                   id="chart-type"
                   className="w-36"
@@ -154,22 +158,22 @@ export function AttributeChartDialog({
                   onChange={(event) => setChartType(event.target.value as ChartType)}
                 >
                   <option value="histogram" disabled={!hasNumeric}>
-                    Histogram
+                    {t("attributeTable.chart.typeHistogram")}
                   </option>
                   <option value="scatter" disabled={!hasNumeric}>
-                    Scatter
+                    {t("attributeTable.chart.typeScatter")}
                   </option>
                   <option value="bar" disabled={!hasCategory}>
-                    Bar
+                    {t("attributeTable.chart.typeBar")}
                   </option>
                   <option value="line" disabled={!hasNumeric}>
-                    Line
+                    {t("attributeTable.chart.typeLine")}
                   </option>
                   <option value="box" disabled={!hasNumeric}>
-                    Box plot
+                    {t("attributeTable.chart.typeBox")}
                   </option>
                   <option value="pie" disabled={!hasCategory}>
-                    Pie
+                    {t("attributeTable.chart.typePie")}
                   </option>
                 </Select>
               </div>
@@ -186,7 +190,7 @@ export function AttributeChartDialog({
 
               {chartType === "histogram" && (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="chart-bins">Bins</Label>
+                  <Label htmlFor="chart-bins">{t("attributeTable.chart.bins")}</Label>
                   <Input
                     id="chart-bins"
                     type="number"
@@ -249,21 +253,21 @@ export function AttributeChartDialog({
                     onChange={setCatField}
                   />
                   <div className="grid gap-1.5">
-                    <Label htmlFor="chart-agg">Aggregate</Label>
+                    <Label htmlFor="chart-agg">{t("attributeTable.chart.aggregate")}</Label>
                     <Select
                       id="chart-agg"
                       className="w-32"
                       value={barAgg}
                       onChange={(event) => setBarAgg(event.target.value as BarAggregation)}
                     >
-                      <option value="count">Count</option>
+                      <option value="count">{t("attributeTable.chart.aggCount")}</option>
                       <option value="sum" disabled={!hasNumeric}>
-                        Sum
+                        {t("attributeTable.chart.aggSum")}
                       </option>
                       {/* Averaging parts of a whole is meaningless for a pie. */}
                       {chartType !== "pie" && (
                         <option value="mean" disabled={!hasNumeric}>
-                          Average
+                          {t("attributeTable.chart.aggAverage")}
                         </option>
                       )}
                     </Select>
@@ -296,19 +300,21 @@ export function AttributeChartDialog({
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" disabled={!chartRendered}>
                   <Download className="h-4 w-4" />
-                  Download
+                  {t("attributeTable.chart.download")}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => downloadChart("png")}>PNG image</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => downloadChart("png")}>
+                  {t("attributeTable.chart.downloadPng")}
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => downloadChart("svg")}>
-                  SVG vector
+                  {t("attributeTable.chart.downloadSvg")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {t("common.close")}
           </Button>
         </div>
       </DialogContent>

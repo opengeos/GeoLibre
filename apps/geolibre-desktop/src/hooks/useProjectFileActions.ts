@@ -10,7 +10,7 @@ import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPluginManager } from "./usePlugins";
-import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { pluginManifestUrlsForIds } from "../lib/external-plugins";
 import {
   browserSaveFallsBackToDownload,
   isAbsoluteLocalPath,
@@ -294,9 +294,26 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const state = useAppStore.getState();
     const defaultProjectName =
       nameOverride?.trim() || state.projectName.trim() || DEFAULT_PROJECT_NAME;
+    const pluginProjectState = getPluginManager().getProjectState();
+    // Record only the plugin URLs this project actually needs: the ones it
+    // already declared, plus the manifest URLs behind the plugins it uses. A
+    // plugin counts as used when it is active or has stored project state --
+    // `mapControlPositions` is written for every plugin that reports a position,
+    // so it says nothing about use.
+    //
+    // The author's remaining installed URLs are deliberately NOT merged in.
+    // Doing so stamped every share with the full list, so recipients were
+    // prompted to trust and execute third-party code the project never runs
+    // (the prompt is scary by design, and firing it on irrelevant URLs trains
+    // people to click through it), and the shared file disclosed exactly which
+    // plugins the author had installed.
+    const usedPluginIds = new Set([
+      ...pluginProjectState.activePluginIds,
+      ...Object.keys(pluginProjectState.settings ?? {}),
+    ]);
     const pluginManifestUrls = mergeStringLists(
       state.projectPlugins?.manifestUrls ?? [],
-      useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls,
+      pluginManifestUrlsForIds(usedPluginIds),
     );
     const project = projectFromStore({
       projectName: defaultProjectName,
@@ -309,7 +326,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       layerGroups: state.layerGroups,
       preferences: state.preferences,
       plugins: {
-        ...getPluginManager().getProjectState(),
+        ...pluginProjectState,
         manifestUrls: pluginManifestUrls,
       },
       legend: state.legend,

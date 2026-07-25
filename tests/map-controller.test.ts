@@ -393,6 +393,107 @@ describe("MapController.syncLayers reconciliation", () => {
   });
 });
 
+function vectorTileLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+  return {
+    id,
+    name: id,
+    type: "vector-tiles",
+    source: {
+      type: "vector",
+      tiles: ["https://example.com/{z}/{x}/{y}.pbf"],
+      sourceLayer: "buildings",
+      sourceLayers: ["buildings"],
+    },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+    ...patch,
+  };
+}
+
+const POLYGON_GEOMETRY_FILTER = [
+  "match",
+  ["geometry-type"],
+  ["Polygon", "MultiPolygon"],
+  true,
+  false,
+];
+
+describe("MapController.syncLayers vector-tile time filtering", () => {
+  // A Time Slider window on a tile layer is a filter expression evaluated per
+  // feature as each tile decodes, so binding needs no local copy of the data.
+  const timeFilter = ["all", [">=", ["to-number", ["get", "year"]], 1950]];
+
+  it("leaves the geometry filter alone when no time filter is set", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([vectorTileLayer("vt")]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, POLYGON_GEOMETRY_FILTER);
+  });
+
+  it("combines the time window with each sub-layer's geometry filter", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter })]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, [
+      "all",
+      POLYGON_GEOMETRY_FILTER,
+      timeFilter,
+    ]);
+    assert.deepEqual(fake.layers.get("layer-vt-vector-line")?.filter, [
+      "all",
+      [
+        "match",
+        ["geometry-type"],
+        ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+        true,
+        false,
+      ],
+      timeFilter,
+    ]);
+    assert.deepEqual(fake.layers.get("layer-vt-vector-circle")?.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      timeFilter,
+    ]);
+  });
+
+  it("applies the window to an extruded tile layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([
+      vectorTileLayer("vt", {
+        timeFilter,
+        style: { ...DEFAULT_LAYER_STYLE, extrusionEnabled: true },
+      }),
+    ]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector-extrusion")?.filter, [
+      "all",
+      POLYGON_GEOMETRY_FILTER,
+      timeFilter,
+    ]);
+  });
+
+  it("drops the window again when the layer is unbound", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter })]);
+    // Unbinding clears the transient filter; the next sync must restore the
+    // bare geometry filter rather than leave the last window applied.
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter: undefined })]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, POLYGON_GEOMETRY_FILTER);
+  });
+});
+
 describe("MapController basemap controls", () => {
   it("hides and shows basemap style layers", () => {
     const { map, fake } = makeFakeMap();

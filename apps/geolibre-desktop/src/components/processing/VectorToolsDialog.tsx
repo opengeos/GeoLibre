@@ -433,10 +433,8 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Vector tools</DialogTitle>
-          <DialogDescription>
-            Run common vector geometry operations on your GeoJSON layers.
-          </DialogDescription>
+          <DialogTitle>{t("processing.vectorTools.title")}</DialogTitle>
+          <DialogDescription>{t("processing.vectorTools.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex gap-4">
@@ -486,31 +484,32 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
             {tool.supportsSidecar || tool.requiresSidecar ? (
               <div className="flex flex-col gap-1">
                 <Label className="flex items-center gap-1.5 text-xs">
-                  <Server className="h-3.5 w-3.5" /> Engine
+                  <Server className="h-3.5 w-3.5" /> {t("processing.vectorTools.engine")}
                 </Label>
                 <Select value={engine} onChange={(e) => setEngine(e.target.value as Engine)}>
                   {/* requiresSidecar tools (e.g. Reproject) have no working client
                       path, so don't let the user pick a dead-end engine. */}
                   <option value="client" disabled={tool.requiresSidecar}>
-                    Client (Turf.js)
+                    {t("processing.vectorTools.engineClient")}
                   </option>
-                  <option value="sidecar">Sidecar (GeoPandas)</option>
-                  <option value="pyodide">Python (Pyodide)</option>
+                  <option value="sidecar">{t("processing.vectorTools.engineSidecar")}</option>
+                  <option value="pyodide">{t("processing.vectorTools.enginePyodide")}</option>
                 </Select>
                 {engine === "sidecar" && sidecarAvailable === null ? (
-                  <p className="text-xs text-muted-foreground">Checking sidecar availability...</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("processing.vectorTools.checkingSidecar")}
+                  </p>
                 ) : null}
                 {engine === "sidecar" && sidecarAvailable === false ? (
                   <p className="text-xs text-destructive">
-                    The GeoPandas sidecar is not available. Start the sidecar with the vector extra,
-                    or switch to
-                    {tool.requiresSidecar ? " Python (Pyodide)." : " the client engine."}
+                    {tool.requiresSidecar
+                      ? t("processing.vectorTools.sidecarUnavailablePyodide")
+                      : t("processing.vectorTools.sidecarUnavailableClient")}
                   </p>
                 ) : null}
                 {engine === "pyodide" ? (
                   <p className="text-xs text-muted-foreground">
-                    Runs GeoPandas in your browser. The first run downloads the Python runtime
-                    (one-time, needs an internet connection).
+                    {t("processing.vectorTools.pyodideNote")}
                   </p>
                 ) : null}
               </div>
@@ -527,13 +526,15 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
-                Run
+                {t("processing.vectorTools.run")}
               </Button>
             </div>
 
             <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
               {log.length === 0 ? (
-                <span className="text-muted-foreground">Output will appear here.</span>
+                <span className="text-muted-foreground">
+                  {t("processing.vectorTools.outputPlaceholder")}
+                </span>
               ) : (
                 log.map((line, index) => (
                   <div key={index} className="whitespace-pre-wrap">

@@ -148,6 +148,12 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
  * is active. Per-feature layers (fill, line, point, heatmap, text) filter
  * correctly.
  *
+ * Tile-backed layers (vector tiles, vector MBTiles) use this too. The filter is
+ * an expression evaluated per feature as each tile decodes, so it needs no local
+ * copy of the data and stays correct for tiles loaded later; control-owned
+ * PMTiles layers reach the same behavior through
+ * {@link applyExternalNativeFeatureFilters}.
+ *
  * @param layer - The store layer being synced.
  * @param geometryFilter - The sub-layer's own geometry-type filter.
  * @returns The combined filter, or the original when no extra filter applies.
@@ -2772,7 +2778,13 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+          filter: withFeatureFilters(layer, [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ]),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2789,7 +2801,13 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+          filter: withFeatureFilters(layer, [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ]),
           paint: fillPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2804,13 +2822,13 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
+          filter: withFeatureFilters(layer, [
             "match",
             ["geometry-type"],
             ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
             true,
             false,
-          ],
+          ]),
           paint: linePaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2825,7 +2843,13 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+          filter: withFeatureFilters(layer, [
+            "match",
+            ["geometry-type"],
+            ["Point", "MultiPoint"],
+            true,
+            false,
+          ]),
           paint: circlePaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2884,7 +2908,13 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+          filter: withFeatureFilters(layer, [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ]),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2901,7 +2931,13 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+          filter: withFeatureFilters(layer, [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ]),
           paint: fillPaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2921,13 +2957,13 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: [
+          filter: withFeatureFilters(layer, [
             "match",
             ["geometry-type"],
             ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
             true,
             false,
-          ],
+          ]),
           paint: linePaint(layer.style, layer.opacity),
           layout: { visibility },
         },
@@ -2942,7 +2978,13 @@ function syncMbtilesVectorLayer(
           source: src,
           "source-layer": sourceLayer,
           ...styleLayerZoomRange(layer.style),
-          filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+          filter: withFeatureFilters(layer, [
+            "match",
+            ["geometry-type"],
+            ["Point", "MultiPoint"],
+            true,
+            false,
+          ]),
           paint: circlePaint(layer.style, layer.opacity),
           layout: { visibility },
         },

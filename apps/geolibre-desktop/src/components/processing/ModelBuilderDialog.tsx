@@ -164,6 +164,7 @@ function viewportBoundsReader(
  *   project and re-runnable.
  */
 export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps): ReactElement {
+  const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.modelBuilderOpen);
   const setOpen = useAppStore((s) => s.setModelBuilderOpen);
   const [mode, setMode] = useState<"batch" | "models">("batch");
@@ -177,11 +178,8 @@ export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps
     >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Batch &amp; Models</DialogTitle>
-          <DialogDescription>
-            Run a vector tool across many layers, or chain tools into a reusable model saved with
-            your project.
-          </DialogDescription>
+          <DialogTitle>{t("processing.modelBuilder.title")}</DialogTitle>
+          <DialogDescription>{t("processing.modelBuilder.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="inline-flex w-fit rounded-md border p-0.5 text-sm">
@@ -195,7 +193,7 @@ export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Layers className="h-3.5 w-3.5" /> Batch
+            <Layers className="h-3.5 w-3.5" /> {t("processing.modelBuilder.tabBatch")}
           </button>
           <button
             type="button"
@@ -207,7 +205,7 @@ export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Workflow className="h-3.5 w-3.5" /> Models
+            <Workflow className="h-3.5 w-3.5" /> {t("processing.modelBuilder.tabModels")}
           </button>
         </div>
 
@@ -223,6 +221,7 @@ export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps
 
 /** Output log shared by both panels. */
 function LogView({ log }: { log: string[] }): ReactElement {
+  const { t } = useTranslation();
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -230,7 +229,9 @@ function LogView({ log }: { log: string[] }): ReactElement {
   return (
     <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
       {log.length === 0 ? (
-        <span className="text-muted-foreground">Output will appear here.</span>
+        <span className="text-muted-foreground">
+          {t("processing.modelBuilder.outputPlaceholder")}
+        </span>
       ) : (
         log.map((line, index) => (
           <div key={index} className="whitespace-pre-wrap">
@@ -245,6 +246,7 @@ function LogView({ log }: { log: string[] }): ReactElement {
 
 /** Batch mode: one tool over many input layers with shared parameters. */
 function BatchPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement {
+  const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const duckdb = useMemo(() => createDuckDbCapability(), []);
@@ -391,7 +393,7 @@ function BatchPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Tool</Label>
+        <Label className="text-xs">{t("processing.modelBuilder.tool")}</Label>
         <Select value={toolId} onChange={(e) => setToolId(e.target.value)}>
           <ToolOptions />
         </Select>
@@ -401,9 +403,13 @@ function BatchPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
       <div className="grid grid-cols-2 gap-4">
         {/* Shared parameters */}
         <div className="flex flex-col gap-3">
-          <Label className="text-xs font-medium">Shared parameters</Label>
+          <Label className="text-xs font-medium">
+            {t("processing.modelBuilder.sharedParameters")}
+          </Label>
           {sharedParams.filter((p) => isParamVisible(p, params)).length === 0 ? (
-            <p className="text-xs text-muted-foreground">This tool has no extra parameters.</p>
+            <p className="text-xs text-muted-foreground">
+              {t("processing.modelBuilder.noExtraParameters")}
+            </p>
           ) : (
             sharedParams
               .filter((p) => isParamVisible(p, params))
@@ -423,20 +429,26 @@ function BatchPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
         {/* Input layers to iterate over */}
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
-            <Label className="text-xs font-medium">Input layers</Label>
+            <Label className="text-xs font-medium">
+              {t("processing.modelBuilder.inputLayers")}
+            </Label>
             {inputLayers.length > 0 ? (
               <button
                 type="button"
                 className="text-xs text-muted-foreground hover:text-foreground"
                 onClick={toggleAll}
               >
-                {allSelected ? "Clear" : "Select all"}
+                {allSelected
+                  ? t("processing.modelBuilder.clearSelection")
+                  : t("processing.modelBuilder.selectAll")}
               </button>
             ) : null}
           </div>
           <ScrollArea className="h-44 rounded-md border p-1">
             {inputLayers.length === 0 ? (
-              <p className="p-2 text-xs text-muted-foreground">No compatible GeoJSON layers.</p>
+              <p className="p-2 text-xs text-muted-foreground">
+                {t("processing.modelBuilder.noCompatibleLayers")}
+              </p>
             ) : (
               inputLayers.map((layer) => (
                 <label
@@ -471,6 +483,7 @@ function BatchPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
 
 /** Models mode: chain tools into a saved, re-runnable pipeline. */
 function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement {
+  const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const models = useAppStore((s) => s.models);
@@ -617,11 +630,13 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
       {/* Saved models */}
       <div className="flex w-44 shrink-0 flex-col gap-2">
         <Button variant="outline" size="sm" className="gap-1.5" onClick={newDraft}>
-          <Plus className="h-3.5 w-3.5" /> New model
+          <Plus className="h-3.5 w-3.5" /> {t("processing.modelBuilder.newModel")}
         </Button>
         <ScrollArea className="h-72 rounded-md border p-1">
           {models.length === 0 ? (
-            <p className="p-2 text-xs text-muted-foreground">No saved models yet.</p>
+            <p className="p-2 text-xs text-muted-foreground">
+              {t("processing.modelBuilder.noSavedModels")}
+            </p>
           ) : (
             models.map((model) => (
               <button
@@ -633,7 +648,7 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
                   model.id === draft.id && "bg-accent font-medium text-accent-foreground",
                 )}
               >
-                {model.name || "Untitled model"}
+                {model.name || t("processing.modelBuilder.untitledModel")}
               </button>
             ))
           )}
@@ -644,7 +659,7 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex flex-col gap-1">
           <Label htmlFor="model-name" className="text-xs">
-            Model name
+            {t("processing.modelBuilder.modelName")}
           </Label>
           <Input
             id="model-name"
@@ -656,8 +671,7 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
         <ScrollArea className="h-56 rounded-md border p-2">
           {draft.steps.length === 0 ? (
             <p className="p-2 text-xs text-muted-foreground">
-              Add a step to start building the pipeline. The first step reads an input layer; each
-              later step receives the previous step&apos;s output.
+              {t("processing.modelBuilder.emptyPipelineHint")}
             </p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -680,13 +694,13 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
 
         <div className="flex items-end gap-2">
           <div className="flex flex-1 flex-col gap-1">
-            <Label className="text-xs">Add step</Label>
+            <Label className="text-xs">{t("processing.modelBuilder.addStep")}</Label>
             <Select value={addToolId} onChange={(e) => setAddToolId(e.target.value)}>
               <ToolOptions />
             </Select>
           </div>
           <Button variant="outline" className="gap-1.5" onClick={addStep}>
-            <Plus className="h-4 w-4" /> Add
+            <Plus className="h-4 w-4" /> {t("common.add")}
           </Button>
         </div>
 
@@ -695,13 +709,13 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={handleRun} disabled={running} className="gap-2">
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Run model
+            {t("processing.modelBuilder.runModel")}
           </Button>
           <Button variant="outline" className="gap-2" onClick={handleSave}>
-            <Save className="h-4 w-4" /> Save
+            <Save className="h-4 w-4" /> {t("common.save")}
           </Button>
           <Button variant="outline" className="gap-2" onClick={handleDelete} disabled={!isSaved}>
-            <Trash2 className="h-4 w-4" /> Delete
+            <Trash2 className="h-4 w-4" /> {t("processing.modelBuilder.deleteModel")}
           </Button>
         </div>
 
@@ -797,13 +811,17 @@ function StepCard({
       </div>
 
       {!isFirst ? (
-        <p className="mb-2 text-xs text-muted-foreground">Input: ← previous step output</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t("processing.modelBuilder.inputPreviousStep")}
+        </p>
       ) : null}
 
       {!tool ? (
-        <p className="text-xs text-destructive">Unknown tool &quot;{step.toolId}&quot;</p>
+        <p className="text-xs text-destructive">
+          {t("processing.modelBuilder.unknownTool", { id: step.toolId })}
+        </p>
       ) : visibleParams.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No parameters.</p>
+        <p className="text-xs text-muted-foreground">{t("processing.modelBuilder.noParameters")}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {visibleParams.map((param) => (

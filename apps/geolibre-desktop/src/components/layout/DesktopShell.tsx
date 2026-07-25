@@ -1809,7 +1809,7 @@ export function DesktopShell({
       onDrop={handleDrop}
     >
       {layoutOptions.toolbarVisible ? (
-        <SectionErrorBoundary label="Toolbar">
+        <SectionErrorBoundary label="Toolbar" displayName={t("shell.section.toolbar")}>
           <TopToolbar
             compact={layoutOptions.compact}
             diagnosticsErrorCount={diagnostics.errorCount}
@@ -1847,7 +1847,10 @@ export function DesktopShell({
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
           // the Layers sidebar surface, so a single rail lists both the workbench
           // and Layers instead of the two positional plugin slots flanking it.
-          <SectionErrorBoundary label="Shared left sidebar">
+          <SectionErrorBoundary
+            label="Shared left sidebar"
+            displayName={t("shell.section.sharedLeftSidebar")}
+          >
             <SharedSidebar
               key={replaceLayersPanelId}
               side="layers"
@@ -1889,7 +1892,10 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : (
           <>
-            <SectionErrorBoundary label="Plugin panel (left of Layers)">
+            <SectionErrorBoundary
+              label="Plugin panel (left of Layers)"
+              displayName={t("shell.section.pluginPanelLeftOfLayers")}
+            >
               <PluginRightPanel
                 dock="left-of-layers"
                 contentEl={dockContentEl}
@@ -1898,7 +1904,7 @@ export function DesktopShell({
               />
             </SectionErrorBoundary>
             {layoutOptions.layerPanelVisible ? (
-              <SectionErrorBoundary label="Layer panel">
+              <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
                 <LayerPanel
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startLayerPanelResize}
@@ -1914,7 +1920,10 @@ export function DesktopShell({
                 />
               </SectionErrorBoundary>
             ) : null}
-            <SectionErrorBoundary label="Plugin panel (right of Layers)">
+            <SectionErrorBoundary
+              label="Plugin panel (right of Layers)"
+              displayName={t("shell.section.pluginPanelRightOfLayers")}
+            >
               <PluginRightPanel
                 dock="right-of-layers"
                 contentEl={dockContentEl}
@@ -1935,8 +1944,12 @@ export function DesktopShell({
               `page-has-heading-one` check) expect, without altering the
               chrome-free visual layout. Placed inside the main landmark so it
               is not flagged as content outside a landmark. */}
-          <h1 className="sr-only">GeoLibre map workspace</h1>
-          <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
+          <h1 className="sr-only">{t("shell.workspaceTitle")}</h1>
+          <SectionErrorBoundary
+            label="Map"
+            displayName={t("shell.section.map")}
+            fallbackClassName="h-full w-full"
+          >
             <MapGrid>
               <MapCanvas
                 controllerRef={mapControllerRef}
@@ -1991,13 +2004,19 @@ export function DesktopShell({
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Plugin floating panels">
+          <SectionErrorBoundary
+            label="Plugin floating panels"
+            displayName={t("shell.section.pluginFloatingPanels")}
+          >
             <FloatingPanels />
           </SectionErrorBoundary>
           {/* Mounted here (inside the map area, like FloatingPanels) so the
               selection panels anchor to the map canvas's top-left corner and
               drag-clamp to the map, not the whole window (#1314). */}
-          <SectionErrorBoundary label="Selection panels">
+          <SectionErrorBoundary
+            label="Selection panels"
+            displayName={t("shell.section.selectionPanels")}
+          >
             <Suspense fallback={null}>
               <SelectByExpressionDialog />
             </Suspense>
@@ -2005,10 +2024,16 @@ export function DesktopShell({
               <SelectByLocationDialog />
             </Suspense>
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Sun simulation panel">
+          <SectionErrorBoundary
+            label="Sun simulation panel"
+            displayName={t("shell.section.sunSimulationPanel")}
+          >
             <SunPanel />
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Route animation panel">
+          <SectionErrorBoundary
+            label="Route animation panel"
+            displayName={t("shell.section.routeAnimationPanel")}
+          >
             <RouteAnimationPanel mapControllerRef={mapControllerRef} />
           </SectionErrorBoundary>
           <KnowledgeCardConsentDialog
@@ -2038,7 +2063,10 @@ export function DesktopShell({
           // Shared-rail mode (issue #765): the plugin panel shares the Style
           // sidebar surface, so a single rail lists both the workbench and Style
           // instead of the two positional plugin slots flanking the Style panel.
-          <SectionErrorBoundary label="Shared right sidebar">
+          <SectionErrorBoundary
+            label="Shared right sidebar"
+            displayName={t("shell.section.sharedRightSidebar")}
+          >
             <SharedSidebar
               // Key by the active panel id so switching between two replace-style
               // plugins remounts the sidebar, resetting its per-panel local state
@@ -2070,7 +2098,10 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : (
           <>
-            <SectionErrorBoundary label="Plugin panel (left of Style)">
+            <SectionErrorBoundary
+              label="Plugin panel (left of Style)"
+              displayName={t("shell.section.pluginPanelLeftOfStyle")}
+            >
               <PluginRightPanel
                 dock="left-of-style"
                 contentEl={dockContentEl}
@@ -2083,7 +2114,7 @@ export function DesktopShell({
                 Jupyter Notebook) rather than unmounting; the user can re-expand it.
                 A story map presentation collapses it for the same reason. */}
             {layoutOptions.stylePanelVisible ? (
-              <SectionErrorBoundary label="Style panel">
+              <SectionErrorBoundary label="Style panel" displayName={t("shell.section.stylePanel")}>
                 <StylePanel
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
@@ -2093,7 +2124,10 @@ export function DesktopShell({
                 />
               </SectionErrorBoundary>
             ) : null}
-            <SectionErrorBoundary label="Plugin panel (right of Style)">
+            <SectionErrorBoundary
+              label="Plugin panel (right of Style)"
+              displayName={t("shell.section.pluginPanelRightOfStyle")}
+            >
               <PluginRightPanel
                 dock="right-of-style"
                 contentEl={dockContentEl}
@@ -2104,7 +2138,7 @@ export function DesktopShell({
           </>
         )}
         {notebookOpen ? (
-          <SectionErrorBoundary label="Notebook">
+          <SectionErrorBoundary label="Notebook" displayName={t("shell.section.notebook")}>
             <Suspense fallback={null}>
               <NotebookPanel
                 onResizeStart={startNotebookPanelResize}
@@ -2116,45 +2150,59 @@ export function DesktopShell({
         ) : null}
       </div>
       {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary label="Attribute table">
+        <SectionErrorBoundary
+          label="Attribute table"
+          displayName={t("shell.section.attributeTable")}
+        >
           <AttributeTable mapControllerRef={mapControllerRef} />
         </SectionErrorBoundary>
       ) : null}
       {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary label="Raster attribute table">
+        <SectionErrorBoundary
+          label="Raster attribute table"
+          displayName={t("shell.section.rasterAttributeTable")}
+        >
           <RasterAttributeTable />
         </SectionErrorBoundary>
       ) : null}
       {dashboardOpen ? (
-        <SectionErrorBoundary label="Dashboard">
+        <SectionErrorBoundary label="Dashboard" displayName={t("shell.section.dashboard")}>
           <Suspense fallback={null}>
             <DashboardPanel />
           </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {pythonConsoleOpen ? (
-        <SectionErrorBoundary label="Python console" onClose={() => setPythonConsoleOpen(false)}>
+        <SectionErrorBoundary
+          label="Python console"
+          displayName={t("shell.section.pythonConsole")}
+          onClose={() => setPythonConsoleOpen(false)}
+        >
           <Suspense fallback={null}>
             <PythonConsolePanel mapControllerRef={mapControllerRef} />
           </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {sqlWorkspaceOpen ? (
-        <SectionErrorBoundary label="SQL workspace" onClose={() => setSqlWorkspaceOpen(false)}>
+        <SectionErrorBoundary
+          label="SQL workspace"
+          displayName={t("shell.section.sqlWorkspace")}
+          onClose={() => setSqlWorkspaceOpen(false)}
+        >
           <Suspense fallback={null}>
             <SqlWorkspacePanel />
           </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {assistantOpen ? (
-        <SectionErrorBoundary label="Assistant">
+        <SectionErrorBoundary label="Assistant" displayName={t("shell.section.assistant")}>
           <Suspense fallback={null}>
             <AssistantPanel mapControllerRef={mapControllerRef} />
           </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {layoutOptions.statusBarVisible ? (
-        <SectionErrorBoundary label="Status bar">
+        <SectionErrorBoundary label="Status bar" displayName={t("shell.section.statusBar")}>
           <StatusBar
             compact={layoutOptions.compact}
             diagnosticsErrorCount={diagnostics.errorCount}

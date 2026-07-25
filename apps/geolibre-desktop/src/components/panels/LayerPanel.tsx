@@ -25,10 +25,15 @@ import {
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
-  buildTimeBinding,
+  buildTimeBindingFromRecords,
   canEditLayerGeometry,
-  detectTimeProperties,
+  detectTimePropertiesFromRecords,
+  formatTimeExtentInput,
   getLayerTimeBinding,
+  isTileVectorLayer,
+  isTimeSliderIdle,
+  parseTimeValue,
+  sampleTileFeatureRecords,
   BASEMAP_CONTROL_PLUGIN_ID,
   GEO_EDITOR_PLUGIN_ID,
   RASTER_SOURCE_KIND,
@@ -36,6 +41,7 @@ import {
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
+  type TimePropertyRecord,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import {
@@ -152,7 +158,8 @@ import {
   refreshSqlQueryLayer,
 } from "../../lib/sql-query-layer";
 import { requestSqlWorkspaceQuery } from "../../lib/sql-workspace-prefill";
-import { canExportRasterLayer, exportRasterLayer } from "../../lib/raster-export";
+import { canExportRasterLayer, exportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
+import { readRasterInfo, type RasterInfo } from "../../lib/raster-info";
 import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
@@ -312,9 +319,48 @@ function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   return ext ? WRITEBACK_EXTENSIONS.includes(ext) : false;
 }
 
-function layerMetadataPayload(layer: GeoLibreLayer): Record<string, unknown> {
+/**
+ * Async state of the GeoTIFF header read that backs the raster section of the
+ * metadata dialog. `layerId` scopes the state to the layer it was read for:
+ * the dialog re-renders for a newly opened layer before the effect below can
+ * restart the read, so without it the previous layer's header would show for a
+ * frame under the new layer's name.
+ */
+type RasterInfoState = { layerId: string } & (
+  | { status: "loading" }
+  | { status: "ready"; info: RasterInfo }
+  | { status: "error" }
+);
+
+/**
+ * Whether a layer's metadata can be enriched with GeoTIFF header facts: a
+ * raster layer whose bytes are reachable as a single file (a remote COG or a
+ * retained local-bytes blob). Tile-template rasters have no such file.
+ *
+ * @param layer - The layer whose metadata dialog is open.
+ * @returns A fetchable GeoTIFF URL, or null.
+ */
+function rasterInfoUrl(layer: GeoLibreLayer): string | null {
+  if (layer.type !== "cog" && layer.type !== "raster") return null;
+  return rasterExportUrl(layer);
+}
+
+/**
+ * Builds the JSON payload shown in the layer metadata dialog. Raster header
+ * facts (CRS, pixel size, storage) lead when they have been read, since the
+ * store metadata below them only knows the WGS84 bounds and band count.
+ *
+ * @param layer - The layer whose metadata is shown.
+ * @param rasterInfo - GeoTIFF header facts, when read for this layer.
+ * @returns The payload to serialize into the dialog.
+ */
+function layerMetadataPayload(
+  layer: GeoLibreLayer,
+  rasterInfo?: RasterInfo | null,
+): Record<string, unknown> {
   const videoSourceUrls = sourceUrlsFromLayer(layer);
   return {
+    ...(rasterInfo ? { raster: rasterInfo } : {}),
     ...layer.metadata,
     layerName: layer.name,
     layerType: layer.type,
@@ -545,6 +591,23 @@ export function LayerPanel({
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
+  // metadata dialog is open. The store layer does not carry them, so they are
+  // read from the file on open (#1420): "loading" while the header is being
+  // fetched, "error" when it cannot be read.
+  const [rasterInfoState, setRasterInfoState] = useState<RasterInfoState | null>(null);
+  // Explicit metadata dialog size once the user drags the corner grip (null =
+  // the default responsive size). Kept across open/close so a size chosen for
+  // one layer still applies to the next. `metadataDialogRef` reads the live
+  // element size at the start of a drag; `metadataResizeCleanupRef` tears down
+  // the listeners on unmount.
+  const metadataDialogRef = useRef<HTMLDivElement>(null);
+  const [metadataDialogSize, setMetadataDialogSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const metadataResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => metadataResizeCleanupRef.current?.(), []);
   const [layerPendingRemoval, setLayerPendingRemoval] = useState<GeoLibreLayer | null>(null);
   const [refreshSettingsLayerId, setRefreshSettingsLayerId] = useState<string | null>(null);
   const [refreshStatuses, setRefreshStatuses] = useState<Record<string, LayerRefreshStatus>>({});
@@ -556,10 +619,20 @@ export function LayerPanel({
   const [bindTimeSliderLayerId, setBindTimeSliderLayerId] = useState<string | null>(null);
   const [bindCandidates, setBindCandidates] = useState<TimePropertyCandidate[] | null>(null);
   const [bindProperty, setBindProperty] = useState("");
-  const [bindWindowMode, setBindWindowMode] = useState<"step" | "wide" | "wider">("step");
-  // Feature collection resolved when the bind dialog opens, reused on confirm so
-  // a large layer is scanned only once.
-  const [bindLayerGeojson, setBindLayerGeojson] = useState<FeatureCollection | null>(null);
+  const [bindWindowMode, setBindWindowMode] = useState<"step" | "wide" | "wider" | "cumulative">(
+    "step",
+  );
+  // Feature properties resolved when the bind dialog opens, reused on confirm so
+  // a large layer is scanned only once. A GeoJSON layer contributes every
+  // feature; a tile layer contributes the features of its loaded tiles.
+  const [bindRecords, setBindRecords] = useState<TimePropertyRecord[] | null>(null);
+  // True when the target layer draws from vector tiles, so the scanned extent
+  // covers only the loaded tiles and the dialog offers it for editing.
+  const [bindIsTileLayer, setBindIsTileLayer] = useState(false);
+  // The editable extent, as the text shown in the inputs (a year, or an ISO
+  // date). Empty until a property is chosen and its extent is prefilled.
+  const [bindRangeStart, setBindRangeStart] = useState("");
+  const [bindRangeEnd, setBindRangeEnd] = useState("");
   // Shown in the dialog when binding fails (e.g. the chosen property has no
   // parseable timestamps) instead of closing the dialog with no feedback.
   const [bindError, setBindError] = useState<string | null>(null);
@@ -650,6 +723,66 @@ export function LayerPanel({
     () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
     [layerGroups, firstMemberIdByGroup],
   );
+  // Resize the metadata dialog from its bottom-end grip. The dialog is centred
+  // via a -50% transform, so each edge moves by half the size change; growing
+  // by 2x the pointer delta keeps the grip under the cursor. In an RTL layout
+  // the grip renders on the physical left, so the horizontal delta is inverted
+  // (the same idiom as the Basemap Extract panel's grip).
+  const startMetadataResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const el = metadataDialogRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const isRtl = document.documentElement.dir === "rtl";
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = rect.width;
+    const startH = rect.height;
+    let next = { width: startW, height: startH };
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = isRtl ? "nesw-resize" : "nwse-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (e: PointerEvent) => {
+      const deltaX = (e.clientX - startX) * (isRtl ? -1 : 1);
+      next = {
+        width: Math.max(320, Math.min(window.innerWidth - 16, startW + deltaX * 2)),
+        height: Math.max(240, Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2)),
+      };
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        setMetadataDialogSize(next);
+      });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      metadataResizeCleanupRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setMetadataDialogSize(next);
+    };
+    metadataResizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
+
+  // The header read scoped to the layer whose metadata dialog is open. A state
+  // left over from a previously inspected layer is ignored rather than shown
+  // under the new layer's name.
+  const metadataRasterInfo =
+    rasterInfoState && rasterInfoState.layerId === metadataLayer?.id ? rasterInfoState : null;
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
     : null;
@@ -1442,6 +1575,18 @@ export function LayerPanel({
     setBindTimeSliderLayerId(null);
   }, []);
 
+  // Fill the extent inputs from a property's scanned range. The upper bound is
+  // rounded up so a partial trailing day/year is not cut off the timeline.
+  const prefillBindRange = useCallback((records: TimePropertyRecord[], property: string) => {
+    const provisional = buildTimeBindingFromRecords(records, property);
+    setBindRangeStart(
+      provisional ? formatTimeExtentInput(provisional.min, provisional.valueKind) : "",
+    );
+    setBindRangeEnd(
+      provisional ? formatTimeExtentInput(provisional.max, provisional.valueKind, true) : "",
+    );
+  }, []);
+
   // Open the bind dialog: inspect the layer's features for timestamp columns and
   // preselect the best-covered one. `candidates` stays null until detection
   // finishes so the dialog can show a "scanning" state for large layers.
@@ -1454,55 +1599,90 @@ export function LayerPanel({
       setBindCandidates(null);
       setBindProperty("");
       setBindWindowMode("step");
-      setBindLayerGeojson(null);
+      setBindRecords(null);
+      setBindRangeStart("");
+      setBindRangeEnd("");
       setBindError(null);
+      const isTileLayer = isTileVectorLayer(layer);
+      setBindIsTileLayer(isTileLayer);
       try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
+        const map = mapControllerRef.current?.getMap() ?? undefined;
+        // A tile layer has no feature collection to scan — read the features of
+        // its currently loaded tiles instead. That sample is enough to find the
+        // timestamp column and how it stores its values; the extent it yields
+        // covers only those tiles, so the dialog prefills it as an editable
+        // range rather than treating it as the data's true span.
+        const records: TimePropertyRecord[] = isTileLayer
+          ? sampleTileFeatureRecords(map, layer)
+          : ((await resolveLayerGeojson(layer, map))?.features ?? []).map(
+              (feature) => feature?.properties,
+            );
         if (bindRequestRef.current !== token) return;
-        const candidates = detectTimeProperties(geojson ?? undefined);
-        setBindLayerGeojson(geojson ?? null);
+        const candidates = detectTimePropertiesFromRecords(records);
+        setBindRecords(records);
         setBindCandidates(candidates);
-        if (candidates.length > 0) setBindProperty(candidates[0].property);
+        if (candidates.length > 0) {
+          setBindProperty(candidates[0].property);
+          if (isTileLayer) prefillBindRange(records, candidates[0].property);
+        }
       } catch {
         if (bindRequestRef.current !== token) return;
+        setBindRecords([]);
         setBindCandidates([]);
       }
     },
-    [mapControllerRef],
+    [mapControllerRef, prefillBindRange],
   );
 
   // Commit a binding: persist it on the layer metadata and activate the Time
   // Slider so it adopts the binding and drives the filter. Styling/opacity are
   // untouched; only the visible feature set narrows as the timeline moves.
-  const confirmBindTimeSlider = useCallback(async () => {
+  const confirmBindTimeSlider = useCallback(() => {
     const layer = bindTimeSliderLayer;
-    if (!layer || !bindProperty) return;
-    const token = bindRequestRef.current;
-    // Reuse the feature collection resolved when the dialog opened so large
-    // layers are not scanned twice.
-    const geojson =
-      bindLayerGeojson ??
-      (await resolveLayerGeojson(layer, mapControllerRef.current?.getMap() ?? undefined));
-    // If the dialog was cancelled (or reopened for another layer) while the
-    // fallback scan was in flight, abandon this commit.
-    if (bindRequestRef.current !== token) return;
-    const binding = buildTimeBinding(geojson ?? undefined, bindProperty);
+    // The records resolved when the dialog opened are reused here, so a large
+    // layer is scanned only once.
+    if (!layer || !bindProperty || !bindRecords) return;
+    // Only a tile layer offers an editable extent: its scan saw just the loaded
+    // tiles. A GeoJSON layer's scanned extent is exact and is used as-is.
+    let extent: { min: number; max: number } | undefined;
+    if (bindIsTileLayer) {
+      const min = parseTimeValue(bindRangeStart);
+      const max = parseTimeValue(bindRangeEnd);
+      if (min === null || max === null) {
+        setBindError(t("layers.bindRangeInvalid"));
+        return;
+      }
+      extent = { min, max };
+    }
+    const binding = buildTimeBindingFromRecords(bindRecords, bindProperty, { extent });
     if (!binding) {
       // Keep the dialog open and explain why, rather than closing silently.
       setBindError(t("layers.bindNoTimestamps"));
       return;
     }
+    // A cumulative binding still steps one granularity unit at a time; what
+    // changes is that the lower bound stays anchored at the start of the data.
     const timeWindow =
       bindWindowMode === "wider"
         ? { unit: binding.granularity, before: 3, after: 3 }
         : bindWindowMode === "wide"
           ? { unit: binding.granularity, before: 1, after: 1 }
           : { unit: binding.granularity, before: 0, after: 1 };
+    // Re-read the layer before merging: the dialog stays open across an async
+    // scan, so an auto-refresh or a concurrent edit can have replaced the
+    // metadata since the last render, and spreading the render-time copy would
+    // write those changes back out.
+    const current = useAppStore.getState().layers.find((entry) => entry.id === layer.id);
+    if (!current) return;
     updateLayer(layer.id, {
-      metadata: { ...layer.metadata, timeBinding: { ...binding, window: timeWindow } },
+      metadata: {
+        ...current.metadata,
+        timeBinding: {
+          ...binding,
+          window: timeWindow,
+          cumulative: bindWindowMode === "cumulative",
+        },
+      },
       timeFilter: undefined,
     });
     if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
@@ -1511,8 +1691,11 @@ export function LayerPanel({
     closeBindTimeSliderDialog();
   }, [
     bindTimeSliderLayer,
-    bindLayerGeojson,
+    bindIsTileLayer,
     bindProperty,
+    bindRangeEnd,
+    bindRangeStart,
+    bindRecords,
     bindWindowMode,
     mapControllerRef,
     updateLayer,
@@ -1528,8 +1711,16 @@ export function LayerPanel({
     (layer: GeoLibreLayer) => {
       const { timeBinding: _removed, ...metadata } = layer.metadata as Record<string, unknown>;
       updateLayer(layer.id, { metadata, timeFilter: undefined });
+      // Switch the plugin off once it has nothing left to drive, so the dock
+      // does not linger over a map it no longer affects and the Plugins menu
+      // stops showing it as active. The store write above is synchronous, so
+      // the layer just unbound is already excluded. Any remaining binding, dock
+      // source, or timespan overlay keeps it on.
+      if (isPluginActive(TIME_SLIDER_PLUGIN_ID) && isTimeSliderIdle()) {
+        togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+      }
     },
-    [updateLayer],
+    [updateLayer, isPluginActive, togglePlugin, mapControllerRef],
   );
 
   const handleExportRasterLayer = useCallback(
@@ -1619,6 +1810,35 @@ export function LayerPanel({
         : "",
     );
   }, [refreshSettingsLayerId, refreshSettingsIntervalMs]);
+
+  // Read the GeoTIFF header behind an open raster metadata dialog so it can
+  // report the native CRS and pixel size the store layer never captured
+  // (#1420). Only the header is fetched, and the result is dropped when the
+  // dialog closes or moves to another layer while the read is in flight.
+  useEffect(() => {
+    const url = metadataLayer ? rasterInfoUrl(metadataLayer) : null;
+    if (!metadataLayer || !url) {
+      setRasterInfoState(null);
+      return;
+    }
+
+    const layerId = metadataLayer.id;
+    let cancelled = false;
+    setRasterInfoState({ layerId, status: "loading" });
+    void readRasterInfo(url)
+      .then((info) => {
+        if (!cancelled) setRasterInfoState({ layerId, status: "ready", info });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        console.warn("[GeoLibre] Failed to read raster metadata", error);
+        setRasterInfoState({ layerId, status: "error" });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [metadataLayer]);
 
   useEffect(() => {
     const activeLayerIds = new Set<string>();
@@ -2253,7 +2473,11 @@ export function LayerPanel({
             const canWriteBack = canWriteEditsToSource(layer);
             // Vector layers with a date/timestamp property can be driven by the
             // Time Slider; the binding (if any) lives on the layer metadata.
-            const canBindTimeSlider = layer.type === "geojson";
+            // Tile-backed vector layers qualify too: the window is a MapLibre
+            // filter evaluated per feature as each tile decodes, so it needs no
+            // local copy of the data (see the bind dialog for how the timeline's
+            // extent is established without one).
+            const canBindTimeSlider = layer.type === "geojson" || isTileVectorLayer(layer);
             const timeBinding = getLayerTimeBinding(layer);
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
@@ -3097,7 +3321,14 @@ export function LayerPanel({
           {bindCandidates === null ? (
             <p className="text-sm text-muted-foreground">{t("layers.bindScanning")}</p>
           ) : bindCandidates.length === 0 ? (
-            <p className="text-sm text-destructive">{t("layers.bindNoProperty")}</p>
+            // A tile layer with nothing loaded has no sample to detect from,
+            // which is a different problem from a layer whose columns are not
+            // time-like — and one the user can fix by zooming to the layer.
+            <p className="text-sm text-destructive">
+              {bindIsTileLayer && (bindRecords?.length ?? 0) === 0
+                ? t("layers.bindTileNoFeatures")
+                : t("layers.bindNoProperty")}
+            </p>
           ) : (
             <div className="space-y-3">
               <div className="space-y-2">
@@ -3108,6 +3339,9 @@ export function LayerPanel({
                   onChange={(event) => {
                     setBindProperty(event.target.value);
                     setBindError(null);
+                    if (bindIsTileLayer && bindRecords) {
+                      prefillBindRange(bindRecords, event.target.value);
+                    }
                   }}
                 >
                   {bindCandidates.map((candidate) => (
@@ -3118,18 +3352,49 @@ export function LayerPanel({
                   ))}
                 </Select>
               </div>
+              {bindIsTileLayer && (
+                <div className="space-y-2">
+                  <Label htmlFor="time-slider-range-start">{t("layers.bindRange")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="time-slider-range-start"
+                      value={bindRangeStart}
+                      onChange={(event) => {
+                        setBindRangeStart(event.target.value);
+                        setBindError(null);
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">–</span>
+                    <Input
+                      id="time-slider-range-end"
+                      // The visible label names the start input, so the end
+                      // input would otherwise be announced with no name.
+                      aria-label={t("layers.bindRangeEnd")}
+                      value={bindRangeEnd}
+                      onChange={(event) => {
+                        setBindRangeEnd(event.target.value);
+                        setBindError(null);
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("layers.bindRangeHint")}</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="time-slider-window">{t("layers.bindWindow")}</Label>
                 <Select
                   id="time-slider-window"
                   value={bindWindowMode}
                   onChange={(event) =>
-                    setBindWindowMode(event.target.value as "step" | "wide" | "wider")
+                    setBindWindowMode(
+                      event.target.value as "step" | "wide" | "wider" | "cumulative",
+                    )
                   }
                 >
                   <option value="step">{t("layers.bindWindowStep")}</option>
                   <option value="wide">{t("layers.bindWindowWide")}</option>
                   <option value="wider">{t("layers.bindWindowWider")}</option>
+                  <option value="cumulative">{t("layers.bindWindowCumulative")}</option>
                 </Select>
               </div>
               {bindError && <p className="text-sm text-destructive">{bindError}</p>}
@@ -3139,11 +3404,7 @@ export function LayerPanel({
             <Button type="button" variant="ghost" onClick={closeBindTimeSliderDialog}>
               {t("layers.bindCancel")}
             </Button>
-            <Button
-              type="button"
-              disabled={!bindProperty}
-              onClick={() => void confirmBindTimeSlider()}
-            >
+            <Button type="button" disabled={!bindProperty} onClick={confirmBindTimeSlider}>
               {t("layers.bindConfirm")}
             </Button>
           </div>
@@ -3244,16 +3505,71 @@ export function LayerPanel({
           if (!open) setMetadataLayer(null);
         }}
       >
-        <DialogContent>
+        <DialogContent
+          ref={metadataDialogRef}
+          style={
+            metadataDialogSize
+              ? {
+                  width: metadataDialogSize.width,
+                  height: metadataDialogSize.height,
+                  // Only the width cap is lifted (to the viewport, not to
+                  // `none`): a size chosen on a wide window must not leave the
+                  // dialog clipped once the window narrows. The height keeps
+                  // DialogContent's own viewport cap.
+                  maxWidth: "calc(100vw - 1rem)",
+                }
+              : undefined
+          }
+          bodyClassName="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6"
+          resizeHandle={
+            <div
+              role="separator"
+              aria-label={t("layers.resizeMetadataDialog")}
+              title={t("layers.resizeMetadataDialog")}
+              onPointerDown={startMetadataResize}
+              className="absolute bottom-0 end-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block rtl:cursor-nesw-resize"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                className="h-full w-full rtl:scale-x-[-1]"
+                aria-hidden="true"
+              >
+                <path
+                  d="M11 15L15 11M6 15L15 6"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          }
+        >
           <DialogHeader>
             <DialogTitle>
               {t("layers.metadataDialogTitle", { name: metadataLayer?.name })}
             </DialogTitle>
             <DialogDescription>{t("layers.metadataDialogDescription")}</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-80">
+          {metadataRasterInfo && metadataRasterInfo.status !== "ready" && (
+            <p className="text-xs text-muted-foreground">
+              {metadataRasterInfo.status === "loading"
+                ? t("layers.metadataRasterLoading")
+                : t("layers.metadataRasterError")}
+            </p>
+          )}
+          {/* Capped at a readable height until the user resizes the dialog,
+              after which the payload fills whatever height they chose. */}
+          <ScrollArea className={cn("min-h-0", metadataDialogSize ? "flex-1" : "max-h-80")}>
             <pre className="whitespace-pre-wrap break-all text-xs">
-              {metadataLayer && JSON.stringify(layerMetadataPayload(metadataLayer), null, 2)}
+              {metadataLayer &&
+                JSON.stringify(
+                  layerMetadataPayload(
+                    metadataLayer,
+                    metadataRasterInfo?.status === "ready" ? metadataRasterInfo.info : null,
+                  ),
+                  null,
+                  2,
+                )}
             </pre>
           </ScrollArea>
         </DialogContent>

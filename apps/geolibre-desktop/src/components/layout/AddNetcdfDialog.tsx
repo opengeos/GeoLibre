@@ -325,7 +325,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
                 }}
               />
               <div className="space-y-1.5">
-                <Label htmlFor="netcdf-url">Kerchunk reference URL</Label>
+                <Label htmlFor="netcdf-url">{t("addData.netcdf.kerchunkUrlLabel")}</Label>
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <Input
                     id="netcdf-url"
@@ -342,12 +342,11 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
                     onClick={handleLoadVariables}
                     disabled={!url.trim() || loadingVars}
                   >
-                    {loadingVars ? "Loading..." : "Load variables"}
+                    {loadingVars ? t("addData.netcdf.loading") : t("addData.netcdf.loadVariables")}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Choose a sample dataset above, or paste your own kerchunk reference URL, then
-                  click Load variables.
+                  {t("addData.netcdf.kerchunkUrlHelp")}
                 </p>
               </div>
             </>
@@ -374,7 +373,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
 
           {variables.length > 0 && (
             <div className="space-y-1.5">
-              <Label htmlFor="netcdf-variable">Variable</Label>
+              <Label htmlFor="netcdf-variable">{t("addData.netcdf.variableLabel")}</Label>
               <Select
                 id="netcdf-variable"
                 value={variable}
@@ -393,7 +392,9 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
 
           {leadingDims.map((dim) => (
             <div className="space-y-1.5" key={dim}>
-              <Label htmlFor={`netcdf-dim-${dim}`}>{dim} index</Label>
+              <Label htmlFor={`netcdf-dim-${dim}`}>
+                {t("addData.netcdf.dimIndexLabel", { dim })}
+              </Label>
               <Input
                 id={`netcdf-dim-${dim}`}
                 inputMode="numeric"
@@ -412,7 +413,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
           {variables.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="netcdf-clim-min">Color min (optional)</Label>
+                <Label htmlFor="netcdf-clim-min">{t("addData.netcdf.colorMin")}</Label>
                 <Input
                   id="netcdf-clim-min"
                   inputMode="decimal"
@@ -421,7 +422,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="netcdf-clim-max">Color max (optional)</Label>
+                <Label htmlFor="netcdf-clim-max">{t("addData.netcdf.colorMax")}</Label>
                 <Input
                   id="netcdf-clim-max"
                   inputMode="decimal"
@@ -444,10 +445,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
                 onOpenChange(false);
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!variable || adding}>
-              {adding ? "Adding..." : "Add layer"}
+              {adding ? t("addData.netcdf.adding") : t("addData.netcdf.addLayer")}
             </Button>
           </div>
         </form>

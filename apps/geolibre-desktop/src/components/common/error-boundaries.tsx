@@ -37,6 +37,7 @@ export { reportBoundaryError };
  * recovery without losing unsaved work.
  */
 export function AppErrorBoundary({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <ErrorBoundary
       onError={(error, info) => reportBoundaryError("Application", error, info)}
@@ -47,10 +48,9 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
         >
           <AlertTriangle className="h-10 w-10 text-destructive" />
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold">Something went wrong</h1>
+            <h1 className="text-lg font-semibold">{t("errorBoundary.title")}</h1>
             <p className="max-w-md text-sm text-muted-foreground">
-              GeoLibre hit an unexpected error and could not continue. Your work may be unsaved —
-              try recovering before reloading.
+              {t("errorBoundary.description")}
             </p>
             <p className="max-w-md break-words font-mono text-xs text-muted-foreground/80">
               {/* Non-Error throws (common from plugin code) have no .message. */}
@@ -60,9 +60,9 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
           <div className="flex gap-2">
             <Button variant="outline" onClick={reset}>
               <RefreshCw className="h-4 w-4" />
-              Try again
+              {t("errorBoundary.tryAgain")}
             </Button>
-            <Button onClick={() => window.location.reload()}>Reload app</Button>
+            <Button onClick={() => window.location.reload()}>{t("errorBoundary.reload")}</Button>
           </div>
         </div>
       )}
@@ -80,12 +80,22 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
  */
 export function SectionErrorBoundary({
   label,
+  displayName,
   children,
   fallbackClassName,
   resetKeys,
   onClose,
 }: {
+  /**
+   * Stable English identifier for the section. It lands in diagnostics records
+   * (and therefore in bug reports), so it is deliberately not translated.
+   */
   label: string;
+  /**
+   * Translated section name for the user-facing fallback. Falls back to `label`
+   * when a call site has no translation for it.
+   */
+  displayName?: string;
   children: ReactNode;
   /**
    * Class applied to the error fallback container. It has no effect during
@@ -107,7 +117,7 @@ export function SectionErrorBoundary({
       onError={(error, info) => reportBoundaryError(label, error, info)}
       fallback={({ reset }) => (
         <SectionErrorFallback
-          label={label}
+          label={displayName ?? label}
           reset={reset}
           className={fallbackClassName}
           onClose={onClose}
@@ -155,9 +165,7 @@ function SectionErrorFallback({
       }`}
     >
       <AlertTriangle className="h-6 w-6 text-destructive" />
-      <p className="text-sm text-muted-foreground">
-        {label} failed to render. The rest of GeoLibre is still available.
-      </p>
+      <p className="text-sm text-muted-foreground">{t("errorBoundary.sectionFailed", { label })}</p>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={reset}>
           <RefreshCw className="h-4 w-4" />

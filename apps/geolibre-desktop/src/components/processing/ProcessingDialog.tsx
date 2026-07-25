@@ -744,12 +744,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     for (const tool of tools) {
       if (!matchesSource(tool)) continue;
       total += 1;
-      const name = tool.category || "General";
+      const name = tool.category || t("processing.whitebox.categoryGeneral");
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     return [
-      { value: "All", label: `All (${total})` },
+      { value: "All", label: t("processing.whitebox.categoryAll", { total }) },
       ...sorted.map(([name, count]) => ({
         value: name,
         label: `${name} (${count})`,
@@ -802,7 +802,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         setRuntimeMessage(message);
         setTools([]);
         setSelectedToolId("");
-        setError(err instanceof Error ? err.message : "Could not load Whitebox catalog snapshot.");
+        setError(err instanceof Error ? err.message : t("processing.whitebox.errorLoadSnapshot"));
       }
     };
 
@@ -884,7 +884,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       } catch (err) {
         await applyRemoteCatalogSnapshot(
           `${
-            err instanceof Error ? err.message : "Could not load live catalog."
+            err instanceof Error ? err.message : t("processing.whitebox.errorLoadLive")
           } Showing GitHub catalog only.`,
           true,
         );
@@ -913,7 +913,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       setRuntimeAvailable(false);
       await applyRemoteCatalogSnapshot(
         `${
-          err instanceof Error ? err.message : "Could not connect to sidecar."
+          err instanceof Error ? err.message : t("processing.whitebox.errorConnect")
         } Showing GitHub catalog only.`,
         false,
       );
@@ -1032,7 +1032,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not poll job.");
+          setError(err instanceof Error ? err.message : t("processing.whitebox.errorPoll"));
         }
       }
     };
@@ -1455,7 +1455,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       }
       setJob(nextJob);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not start Whitebox tool.";
+      const message = err instanceof Error ? err.message : t("processing.whitebox.errorStartTool");
       tracker.finish("error", message);
       setError(message);
     } finally {
@@ -1470,7 +1470,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       await startGeoLibreSidecar();
       await loadWhitebox();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start GeoLibre sidecar.");
+      setError(err instanceof Error ? err.message : t("processing.whitebox.errorStartSidecar"));
     } finally {
       setStartingServer(false);
     }
@@ -1485,7 +1485,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       setRuntimeMessage("GeoLibre sidecar is stopped. Showing GitHub catalog only.");
       setJob(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not stop GeoLibre sidecar.");
+      setError(err instanceof Error ? err.message : t("processing.whitebox.errorStopSidecar"));
     } finally {
       setStoppingServer(false);
     }
@@ -1677,7 +1677,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   Loading
                 </div>
               ) : filteredTools.length === 0 ? (
-                <div className="p-3 text-sm text-muted-foreground">No tools found.</div>
+                <div className="p-3 text-sm text-muted-foreground">
+                  {t("processing.whitebox.noToolsFound")}
+                </div>
               ) : (
                 filteredTools.map((tool) => (
                   <button
@@ -1710,7 +1712,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="truncate text-base font-semibold">
-                  {selectedTool ? toolLabel(selectedTool) : "No tool selected"}
+                  {selectedTool ? toolLabel(selectedTool) : t("processing.whitebox.noToolSelected")}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {selectedTool?.id}
@@ -1774,7 +1776,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           <ScrollArea className="min-h-0">
             <div className="grid gap-4 pb-2 pe-5">
               {(selectedTool?.params ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">This tool has no parameters.</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("processing.whitebox.noParameters")}
+                </p>
               ) : (
                 selectedTool?.params?.map((param) => (
                   <ParameterField
@@ -1856,6 +1860,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 }
 
 function JobOutputPanel({ job }: { job: WhiteboxJob }) {
+  const { t } = useTranslation();
   const outputs = outputEntries(job.outputs);
   const hasMessages = job.messages.length > 0;
   const hasOutputs = outputs.length > 0;
@@ -1875,7 +1880,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
       </p>
       <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
         {!hasMessages && !hasOutputs ? (
-          <span className="text-muted-foreground">No output yet.</span>
+          <span className="text-muted-foreground">{t("processing.whitebox.noOutput")}</span>
         ) : null}
         {job.messages.map((line, index) => (
           <div key={`${index}-${line}`}>{line}</div>
@@ -1937,7 +1942,9 @@ function ParameterField({
         <Label htmlFor={`whitebox-${param.name}`}>{label}</Label>
         <span className="shrink-0 text-xs text-muted-foreground">
           {kind}
-          {param.required && !isOutputParameter(param) ? " | required" : ""}
+          {param.required && !isOutputParameter(param)
+            ? t("processing.whitebox.requiredSuffix")
+            : ""}
         </span>
       </div>
 
@@ -1949,7 +1956,7 @@ function ParameterField({
             checked={Boolean(value)}
             onChange={(event) => onChange(event.target.checked)}
           />
-          Enabled
+          {t("processing.whitebox.enabled")}
         </label>
       ) : param.options?.length ? (
         <Select
@@ -1957,7 +1964,7 @@ function ParameterField({
           value={valueText}
           onChange={(event) => onChange(event.target.value)}
         >
-          {!param.required && <option value="">Default</option>}
+          {!param.required && <option value="">{t("processing.whitebox.optionDefault")}</option>}
           {param.options.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -2159,11 +2166,12 @@ function LayerOrPathInput({
   param,
   value,
 }: LayerOrPathInputProps) {
+  const { t } = useTranslation();
   const usingLayer = value.startsWith(LAYER_TOKEN_PREFIX);
   return (
     <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem] gap-2">
       <Select value={usingLayer ? value : ""} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Path</option>
+        <option value="">{t("processing.whitebox.optionPath")}</option>
         {layers.map((layer) => (
           <option key={layer.id} value={`${LAYER_TOKEN_PREFIX}${layer.id}`}>
             {layer.name}
@@ -2173,7 +2181,9 @@ function LayerOrPathInput({
       <Input
         id={id}
         value={usingLayer ? "" : value}
-        placeholder={usingLayer ? "Selected layer" : "File path"}
+        placeholder={
+          usingLayer ? t("processing.whitebox.selectedLayer") : t("processing.whitebox.filePath")
+        }
         disabled={usingLayer}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -2198,12 +2208,17 @@ interface PathPickerInputProps {
 }
 
 function PathPickerInput({ id, onChange, onPickFile, param, toolId, value }: PathPickerInputProps) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
       <Input
         id={id}
         value={value}
-        placeholder={isOutputParameter(param) ? "Auto" : "File path"}
+        placeholder={
+          isOutputParameter(param)
+            ? t("processing.whitebox.auto")
+            : t("processing.whitebox.filePath")
+        }
         onChange={(event) => onChange(event.target.value)}
       />
       <PathBrowseButton
@@ -2234,6 +2249,7 @@ function PathBrowseButton({
   param,
   toolId = "whitebox",
 }: PathBrowseButtonProps) {
+  const { t } = useTranslation();
   const pickPath = async () => {
     const filters = pathFiltersForParameter(param);
     if (mode === "save") {
@@ -2277,7 +2293,11 @@ function PathBrowseButton({
       variant="outline"
       size="icon"
       disabled={disabled}
-      title={mode === "save" ? "Choose output path" : "Choose input path"}
+      title={
+        mode === "save"
+          ? t("processing.whitebox.chooseOutputPath")
+          : t("processing.whitebox.chooseInputPath")
+      }
       onClick={() => void pickPath()}
     >
       {mode === "save" ? <Save className="h-4 w-4" /> : <FolderOpen className="h-4 w-4" />}

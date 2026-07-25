@@ -646,6 +646,37 @@ export function getLayerTimeBinding(layer: {
 }
 
 /**
+ * Whether the Time Slider has nothing left to drive. The Layers panel calls
+ * this after removing a binding so the plugin switches itself off once the last
+ * one is gone, rather than leaving the dock over a map it no longer affects.
+ *
+ * The slider drives three unrelated things, and all three have to be clear
+ * before it is safe to switch off:
+ *
+ * - store layers carrying a {@link TimeBinding};
+ * - the dock's own sources (COG stacks, mosaics, tile templates added through
+ *   its "Add data" form), which are mirrored into the store under
+ *   {@link STORE_LAYER_SOURCE_KIND};
+ * - KML `<TimeSpan>` / `<TimeStamp>` image overlays, which the slider animates
+ *   by visibility rather than by filter.
+ *
+ * The last two matter because the dock is the only way to reach them: turning
+ * the plugin off while either exists would take the user's own timeline data
+ * with it.
+ *
+ * @returns True when no bindings, dock sources, or timespan overlays remain.
+ */
+export function isTimeSliderIdle(): boolean {
+  for (const layer of useAppStore.getState().layers) {
+    if (getLayerTimeBinding(layer)) return false;
+    if (layer.metadata?.sourceKind === STORE_LAYER_SOURCE_KIND) return false;
+    const span = layer.metadata?.timeSpan as { begin?: unknown } | undefined;
+    if (span && typeof span.begin === "number") return false;
+  }
+  return true;
+}
+
+/**
  * Reconciles the GeoLibre layer store with the control's current sources: each
  * source becomes (or updates) an external-native store layer, and store layers
  * whose source no longer exists are pruned. The maplibre layer id equals the
