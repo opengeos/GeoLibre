@@ -315,12 +315,16 @@ function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
 
 /**
  * Async state of the GeoTIFF header read that backs the raster section of the
- * metadata dialog.
+ * metadata dialog. `layerId` scopes the state to the layer it was read for:
+ * the dialog re-renders for a newly opened layer before the effect below can
+ * restart the read, so without it the previous layer's header would show for a
+ * frame under the new layer's name.
  */
-type RasterInfoState =
+type RasterInfoState = { layerId: string } & (
   | { status: "loading" }
   | { status: "ready"; info: RasterInfo }
-  | { status: "error" };
+  | { status: "error" }
+);
 
 /**
  * Whether a layer's metadata can be enriched with GeoTIFF header facts: a
@@ -691,6 +695,11 @@ export function LayerPanel({
     () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
     [layerGroups, firstMemberIdByGroup],
   );
+  // The header read scoped to the layer whose metadata dialog is open. A state
+  // left over from a previously inspected layer is ignored rather than shown
+  // under the new layer's name.
+  const metadataRasterInfo =
+    rasterInfoState && rasterInfoState.layerId === metadataLayer?.id ? rasterInfoState : null;
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
     : null;
@@ -1667,21 +1676,22 @@ export function LayerPanel({
   // dialog closes or moves to another layer while the read is in flight.
   useEffect(() => {
     const url = metadataLayer ? rasterInfoUrl(metadataLayer) : null;
-    if (!url) {
+    if (!metadataLayer || !url) {
       setRasterInfoState(null);
       return;
     }
 
+    const layerId = metadataLayer.id;
     let cancelled = false;
-    setRasterInfoState({ status: "loading" });
+    setRasterInfoState({ layerId, status: "loading" });
     void readRasterInfo(url)
       .then((info) => {
-        if (!cancelled) setRasterInfoState({ status: "ready", info });
+        if (!cancelled) setRasterInfoState({ layerId, status: "ready", info });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
         console.warn("[GeoLibre] Failed to read raster metadata", error);
-        setRasterInfoState({ status: "error" });
+        setRasterInfoState({ layerId, status: "error" });
       });
 
     return () => {
@@ -3320,9 +3330,9 @@ export function LayerPanel({
             </DialogTitle>
             <DialogDescription>{t("layers.metadataDialogDescription")}</DialogDescription>
           </DialogHeader>
-          {rasterInfoState && rasterInfoState.status !== "ready" && (
+          {metadataRasterInfo && metadataRasterInfo.status !== "ready" && (
             <p className="text-xs text-muted-foreground">
-              {rasterInfoState.status === "loading"
+              {metadataRasterInfo.status === "loading"
                 ? t("layers.metadataRasterLoading")
                 : t("layers.metadataRasterError")}
             </p>
@@ -3333,7 +3343,7 @@ export function LayerPanel({
                 JSON.stringify(
                   layerMetadataPayload(
                     metadataLayer,
-                    rasterInfoState?.status === "ready" ? rasterInfoState.info : null,
+                    metadataRasterInfo?.status === "ready" ? metadataRasterInfo.info : null,
                   ),
                   null,
                   2,
