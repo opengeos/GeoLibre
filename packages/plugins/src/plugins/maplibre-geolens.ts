@@ -31,6 +31,7 @@ import {
   geometryKind,
   mintTileToken,
   normalizeBaseUrl,
+  rasterTemplatesForServer,
   rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
@@ -324,7 +325,9 @@ function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string
  *
  * Raster layers the user added stay on the map, but a private one stops
  * rendering once its key is gone. That is deliberate: the credential was
- * entered into the plugin panel, so it should not outlive the plugin.
+ * entered into the plugin panel, so it should not outlive the plugin. The way
+ * back is the connect handler, which re-registers templates for restored
+ * layers when the user reconnects with a key.
  */
 function clearRasterApiKeys(): void {
   rasterApiKeys.clear();
@@ -821,6 +824,16 @@ function buildPanel(
     // display to "" would wipe the inline `display:flex` and collapse to block.
     if (!connected) state.client = null;
     searchRow.style.display = connected ? "flex" : "none";
+    // Restored private rasters (project reopen, plugin reactivation) are in the
+    // store but hold no registered key — and their Add button is disabled, so
+    // re-adding is not a path back. The key entered here is the one credential
+    // they can get; register their templates so their tiles authenticate again.
+    if (connected && app && state.client?.apiKey) {
+      const layers = useAppStore.getState().layers;
+      for (const template of rasterTemplatesForServer(layers, state.client.baseUrl)) {
+        registerRasterApiKey(app, template, state.client.apiKey);
+      }
+    }
   };
 
   connectButton.addEventListener("click", () => void connect());

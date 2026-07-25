@@ -151,6 +151,39 @@ export function tileUrlPrefix(template: string): string {
   return brace === -1 ? template : template.slice(0, brace);
 }
 
+/** The store-layer fields needed to re-key restored GeoLens raster layers. */
+export interface GeoLensRasterLayerLike {
+  metadata?: Record<string, unknown> | null;
+  source?: { tiles?: unknown } | null;
+}
+
+/**
+ * Tile templates of GeoLens raster layers already on the map that belong to
+ * `baseUrl`.
+ *
+ * API keys are held in memory only, so a restored project (or a
+ * deactivate/reactivate cycle) leaves private raster layers in the store with
+ * no registered credential, and the Add button is disabled for them because
+ * they are already present. Re-registering these templates at connect time is
+ * what lets the key the user just entered reach those layers' tile requests.
+ */
+export function rasterTemplatesForServer(
+  layers: readonly GeoLensRasterLayerLike[],
+  baseUrl: string,
+): string[] {
+  const out: string[] = [];
+  for (const layer of layers) {
+    const md = layer.metadata;
+    if (!md || md.sourceKind !== "geolens-raster-tiles" || md.geolensBaseUrl !== baseUrl) {
+      continue;
+    }
+    const tiles = layer.source?.tiles;
+    const first = Array.isArray(tiles) ? tiles[0] : undefined;
+    if (typeof first === "string" && first) out.push(first);
+  }
+  return out;
+}
+
 /**
  * Auth headers for a raster tile URL, or `null` to leave the request untouched.
  *

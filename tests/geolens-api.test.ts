@@ -12,6 +12,7 @@ import {
   mintTileToken,
   normalizeBaseUrl,
   parseDataset,
+  rasterTemplatesForServer,
   rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
@@ -466,5 +467,49 @@ describe("rasterTileAuthHeaders", () => {
 
   it("returns null when nothing is registered", () => {
     assert.equal(rasterTileAuthHeaders("https://demo.example.com/x", new Map()), null);
+  });
+});
+
+describe("rasterTemplatesForServer", () => {
+  const base = "https://demo.example.com";
+  const layers = [
+    {
+      metadata: {
+        sourceKind: "geolens-raster-tiles",
+        geolensBaseUrl: base,
+        geolensDatasetId: "abc",
+      },
+      source: { tiles: [`${base}/raster-tiles/abc/tiles/{z}/{x}/{y}.png`] },
+    },
+    {
+      metadata: { sourceKind: "geolens-raster-tiles", geolensBaseUrl: "https://other.example.com" },
+      source: { tiles: ["https://other.example.com/raster-tiles/xyz/tiles/{z}/{x}/{y}.png"] },
+    },
+    {
+      metadata: { sourceKind: "geolens-vector-tiles", geolensBaseUrl: base },
+      source: { tiles: [`${base}/api/tiles/t/{z}/{x}/{y}.pbf?sig=s`] },
+    },
+    { metadata: null, source: { tiles: [`${base}/raster-tiles/zzz/tiles/{z}/{x}/{y}.png`] } },
+    {
+      metadata: { sourceKind: "geolens-raster-tiles", geolensBaseUrl: base },
+      source: { tiles: [] },
+    },
+    { metadata: { sourceKind: "geolens-raster-tiles", geolensBaseUrl: base }, source: null },
+  ];
+
+  it("returns only this server's raster templates", () => {
+    assert.deepEqual(rasterTemplatesForServer(layers, base), [
+      `${base}/raster-tiles/abc/tiles/{z}/{x}/{y}.png`,
+    ]);
+  });
+
+  it("returns the other server's template for its own base URL", () => {
+    assert.deepEqual(rasterTemplatesForServer(layers, "https://other.example.com"), [
+      "https://other.example.com/raster-tiles/xyz/tiles/{z}/{x}/{y}.png",
+    ]);
+  });
+
+  it("returns nothing when no GeoLens raster layers are present", () => {
+    assert.deepEqual(rasterTemplatesForServer([], base), []);
   });
 });
