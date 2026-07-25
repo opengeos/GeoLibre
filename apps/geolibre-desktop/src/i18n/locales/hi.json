@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "सेकंड की एक धनात्मक संख्या दर्ज करें।",
     "metadataDialogTitle": "{{name}} मेटाडेटा",
     "metadataDialogDescription": "लेयर मेटाडेटा और स्रोत जानकारी",
+    "metadataRasterLoading": "रास्टर मेटाडेटा पढ़ा जा रहा है…",
+    "metadataRasterError": "इस रास्टर का मेटाडेटा नहीं पढ़ा जा सका।",
     "removeLayerConfirmTitle": "लेयर हटाएं?",
     "removeLayerConfirmBody": "यह {{name}} को प्रोजेक्ट और मानचित्र से हटा देता है।",
     "thisLayerFallback": "यह लेयर",

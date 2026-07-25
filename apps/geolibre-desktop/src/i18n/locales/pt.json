@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "Digite um número positivo de segundos.",
     "metadataDialogTitle": "Metadados de {{name}}",
     "metadataDialogDescription": "Metadados da camada e informações da fonte",
+    "metadataRasterLoading": "Lendo os metadados do raster…",
+    "metadataRasterError": "Não foi possível ler os metadados deste raster.",
     "removeLayerConfirmTitle": "Remover camada?",
     "removeLayerConfirmBody": "Isso remove {{name}} do projeto e do mapa.",
     "thisLayerFallback": "esta camada",

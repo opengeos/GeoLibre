@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "Geben Sie eine positive Anzahl von Sekunden ein.",
     "metadataDialogTitle": "Metadaten von {{name}}",
     "metadataDialogDescription": "Ebenenmetadaten und Quelleninformationen",
+    "metadataRasterLoading": "Rastermetadaten werden gelesen…",
+    "metadataRasterError": "Die Metadaten dieses Rasters konnten nicht gelesen werden.",
     "removeLayerConfirmTitle": "Ebene entfernen?",
     "removeLayerConfirmBody": "Dadurch wird {{name}} aus dem Projekt und der Karte entfernt.",
     "thisLayerFallback": "diese Ebene",

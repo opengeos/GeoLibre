@@ -3779,6 +3779,8 @@
     "enterPositiveSeconds": "正の秒数を入力してください。",
     "metadataDialogTitle": "{{name}}のメタデータ",
     "metadataDialogDescription": "レイヤーのメタデータとソース情報",
+    "metadataRasterLoading": "ラスターのメタデータを読み込んでいます…",
+    "metadataRasterError": "このラスターのメタデータを読み取れませんでした。",
     "removeLayerConfirmTitle": "レイヤーを削除しますか?",
     "removeLayerConfirmBody": "{{name}}をプロジェクトと地図から削除します。",
     "thisLayerFallback": "このレイヤー",

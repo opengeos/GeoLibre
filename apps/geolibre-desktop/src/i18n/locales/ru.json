@@ -3950,6 +3950,8 @@
     "enterPositiveSeconds": "Введите положительное число секунд.",
     "metadataDialogTitle": "Метаданные {{name}}",
     "metadataDialogDescription": "Метаданные слоя и сведения об источнике",
+    "metadataRasterLoading": "Чтение метаданных растра…",
+    "metadataRasterError": "Не удалось прочитать метаданные этого растра.",
     "removeLayerConfirmTitle": "Удалить слой?",
     "removeLayerConfirmBody": "Это действие удаляет {{name}} из проекта и с карты.",
     "thisLayerFallback": "этот слой",

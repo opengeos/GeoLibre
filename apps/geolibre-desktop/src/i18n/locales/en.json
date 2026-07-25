@@ -3870,6 +3870,8 @@
     "enterPositiveSeconds": "Enter a positive number of seconds.",
     "metadataDialogTitle": "{{name}} Metadata",
     "metadataDialogDescription": "Layer metadata and source information",
+    "metadataRasterLoading": "Reading raster metadata…",
+    "metadataRasterError": "Could not read this raster's metadata.",
     "removeLayerConfirmTitle": "Remove layer?",
     "removeLayerConfirmBody": "This removes {{name}} from the project and map.",
     "thisLayerFallback": "this layer",

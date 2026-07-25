@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "Introduzca un número positivo de segundos.",
     "metadataDialogTitle": "Metadatos de {{name}}",
     "metadataDialogDescription": "Metadatos de la capa e información de origen",
+    "metadataRasterLoading": "Leyendo los metadatos del ráster…",
+    "metadataRasterError": "No se pudieron leer los metadatos de este ráster.",
     "removeLayerConfirmTitle": "¿Quitar capa?",
     "removeLayerConfirmBody": "Esto quita {{name}} del proyecto y del mapa.",
     "thisLayerFallback": "esta capa",

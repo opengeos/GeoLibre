@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "Entrez un nombre de secondes positif.",
     "metadataDialogTitle": "Métadonnées de {{name}}",
     "metadataDialogDescription": "Métadonnées de la couche et informations sur la source",
+    "metadataRasterLoading": "Lecture des métadonnées du raster…",
+    "metadataRasterError": "Impossible de lire les métadonnées de ce raster.",
     "removeLayerConfirmTitle": "Supprimer la couche ?",
     "removeLayerConfirmBody": "Cela supprime {{name}} du projet et de la carte.",
     "thisLayerFallback": "cette couche",

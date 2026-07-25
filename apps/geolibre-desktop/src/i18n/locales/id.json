@@ -3779,6 +3779,8 @@
     "enterPositiveSeconds": "Masukkan jumlah detik yang positif.",
     "metadataDialogTitle": "Metadata {{name}}",
     "metadataDialogDescription": "Metadata layer dan informasi sumber",
+    "metadataRasterLoading": "Membaca metadata raster…",
+    "metadataRasterError": "Tidak dapat membaca metadata raster ini.",
     "removeLayerConfirmTitle": "Hapus layer?",
     "removeLayerConfirmBody": "Ini menghapus {{name}} dari proyek dan peta.",
     "thisLayerFallback": "layer ini",

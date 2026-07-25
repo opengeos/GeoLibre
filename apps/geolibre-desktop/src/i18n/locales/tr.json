@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "Pozitif bir saniye sayısı girin.",
     "metadataDialogTitle": "{{name}} Meta Verileri",
     "metadataDialogDescription": "Katman meta verileri ve kaynak bilgileri",
+    "metadataRasterLoading": "Raster meta verileri okunuyor…",
+    "metadataRasterError": "Bu rasterin meta verileri okunamadı.",
     "removeLayerConfirmTitle": "Katman kaldırılsın mı?",
     "removeLayerConfirmBody": "Bu işlem {{name}} öğesini projeden ve haritadan kaldırır.",
     "thisLayerFallback": "bu katman",

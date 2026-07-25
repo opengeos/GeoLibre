@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "Voer een positief aantal seconden in.",
     "metadataDialogTitle": "Metadata van {{name}}",
     "metadataDialogDescription": "Laagmetadata en broninformatie",
+    "metadataRasterLoading": "Rastermetadata worden gelezen…",
+    "metadataRasterError": "Kan de metadata van deze raster niet lezen.",
     "removeLayerConfirmTitle": "Laag verwijderen?",
     "removeLayerConfirmBody": "Hiermee wordt {{name}} verwijderd uit het project en de kaart.",
     "thisLayerFallback": "deze laag",

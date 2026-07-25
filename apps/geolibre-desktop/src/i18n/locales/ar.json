@@ -4063,6 +4063,8 @@
     "enterPositiveSeconds": "أدخل عددًا موجبًا من الثواني.",
     "metadataDialogTitle": "البيانات الوصفية لـ {{name}}",
     "metadataDialogDescription": "البيانات الوصفية للطبقة ومعلومات المصدر",
+    "metadataRasterLoading": "جارٍ قراءة البيانات الوصفية للراستر…",
+    "metadataRasterError": "تعذّرت قراءة البيانات الوصفية لهذا الراستر.",
     "removeLayerConfirmTitle": "هل تريد إزالة الطبقة؟",
     "removeLayerConfirmBody": "يؤدي هذا إلى إزالة {{name}} من المشروع والخريطة.",
     "thisLayerFallback": "هذه الطبقة",

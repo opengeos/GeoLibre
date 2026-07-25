@@ -3779,6 +3779,8 @@
     "enterPositiveSeconds": "请输入正的秒数。",
     "metadataDialogTitle": "{{name}} 元数据",
     "metadataDialogDescription": "图层元数据和数据源信息",
+    "metadataRasterLoading": "正在读取栅格元数据…",
+    "metadataRasterError": "无法读取该栅格的元数据。",
     "removeLayerConfirmTitle": "是否移除图层？",
     "removeLayerConfirmBody": "此操作会从项目和地图中移除 {{name}}。",
     "thisLayerFallback": "此图层",

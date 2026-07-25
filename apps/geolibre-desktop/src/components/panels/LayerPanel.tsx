@@ -152,7 +152,8 @@ import {
   refreshSqlQueryLayer,
 } from "../../lib/sql-query-layer";
 import { requestSqlWorkspaceQuery } from "../../lib/sql-workspace-prefill";
-import { canExportRasterLayer, exportRasterLayer } from "../../lib/raster-export";
+import { canExportRasterLayer, exportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
+import { readRasterInfo, type RasterInfo } from "../../lib/raster-info";
 import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
@@ -312,9 +313,44 @@ function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   return ext ? WRITEBACK_EXTENSIONS.includes(ext) : false;
 }
 
-function layerMetadataPayload(layer: GeoLibreLayer): Record<string, unknown> {
+/**
+ * Async state of the GeoTIFF header read that backs the raster section of the
+ * metadata dialog.
+ */
+type RasterInfoState =
+  | { status: "loading" }
+  | { status: "ready"; info: RasterInfo }
+  | { status: "error" };
+
+/**
+ * Whether a layer's metadata can be enriched with GeoTIFF header facts: a
+ * raster layer whose bytes are reachable as a single file (a remote COG or a
+ * retained local-bytes blob). Tile-template rasters have no such file.
+ *
+ * @param layer - The layer whose metadata dialog is open.
+ * @returns A fetchable GeoTIFF URL, or null.
+ */
+function rasterInfoUrl(layer: GeoLibreLayer): string | null {
+  if (layer.type !== "cog" && layer.type !== "raster") return null;
+  return rasterExportUrl(layer);
+}
+
+/**
+ * Builds the JSON payload shown in the layer metadata dialog. Raster header
+ * facts (CRS, pixel size, storage) lead when they have been read, since the
+ * store metadata below them only knows the WGS84 bounds and band count.
+ *
+ * @param layer - The layer whose metadata is shown.
+ * @param rasterInfo - GeoTIFF header facts, when read for this layer.
+ * @returns The payload to serialize into the dialog.
+ */
+function layerMetadataPayload(
+  layer: GeoLibreLayer,
+  rasterInfo?: RasterInfo | null,
+): Record<string, unknown> {
   const videoSourceUrls = sourceUrlsFromLayer(layer);
   return {
+    ...(rasterInfo ? { raster: rasterInfo } : {}),
     ...layer.metadata,
     layerName: layer.name,
     layerType: layer.type,
@@ -545,6 +581,11 @@ export function LayerPanel({
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
+  // metadata dialog is open. The store layer does not carry them, so they are
+  // read from the file on open (#1420): "loading" while the header is being
+  // fetched, "error" when it cannot be read.
+  const [rasterInfoState, setRasterInfoState] = useState<RasterInfoState | null>(null);
   const [layerPendingRemoval, setLayerPendingRemoval] = useState<GeoLibreLayer | null>(null);
   const [refreshSettingsLayerId, setRefreshSettingsLayerId] = useState<string | null>(null);
   const [refreshStatuses, setRefreshStatuses] = useState<Record<string, LayerRefreshStatus>>({});
@@ -1619,6 +1660,34 @@ export function LayerPanel({
         : "",
     );
   }, [refreshSettingsLayerId, refreshSettingsIntervalMs]);
+
+  // Read the GeoTIFF header behind an open raster metadata dialog so it can
+  // report the native CRS and pixel size the store layer never captured
+  // (#1420). Only the header is fetched, and the result is dropped when the
+  // dialog closes or moves to another layer while the read is in flight.
+  useEffect(() => {
+    const url = metadataLayer ? rasterInfoUrl(metadataLayer) : null;
+    if (!url) {
+      setRasterInfoState(null);
+      return;
+    }
+
+    let cancelled = false;
+    setRasterInfoState({ status: "loading" });
+    void readRasterInfo(url)
+      .then((info) => {
+        if (!cancelled) setRasterInfoState({ status: "ready", info });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        console.warn("[GeoLibre] Failed to read raster metadata", error);
+        setRasterInfoState({ status: "error" });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [metadataLayer]);
 
   useEffect(() => {
     const activeLayerIds = new Set<string>();
@@ -3251,9 +3320,24 @@ export function LayerPanel({
             </DialogTitle>
             <DialogDescription>{t("layers.metadataDialogDescription")}</DialogDescription>
           </DialogHeader>
+          {rasterInfoState && rasterInfoState.status !== "ready" && (
+            <p className="text-xs text-muted-foreground">
+              {rasterInfoState.status === "loading"
+                ? t("layers.metadataRasterLoading")
+                : t("layers.metadataRasterError")}
+            </p>
+          )}
           <ScrollArea className="max-h-80">
             <pre className="whitespace-pre-wrap break-all text-xs">
-              {metadataLayer && JSON.stringify(layerMetadataPayload(metadataLayer), null, 2)}
+              {metadataLayer &&
+                JSON.stringify(
+                  layerMetadataPayload(
+                    metadataLayer,
+                    rasterInfoState?.status === "ready" ? rasterInfoState.info : null,
+                  ),
+                  null,
+                  2,
+                )}
             </pre>
           </ScrollArea>
         </DialogContent>

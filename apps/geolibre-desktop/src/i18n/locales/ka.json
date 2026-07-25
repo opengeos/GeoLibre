@@ -3836,6 +3836,8 @@
     "enterPositiveSeconds": "შეიყვანეთ დადებითი წამების რაოდენობა.",
     "metadataDialogTitle": "{{name}} — მეტამონაცემები",
     "metadataDialogDescription": "შრის მეტამონაცემები და წყაროს ინფორმაცია",
+    "metadataRasterLoading": "რასტრის მეტამონაცემები იკითხება…",
+    "metadataRasterError": "ამ რასტრის მეტამონაცემების წაკითხვა ვერ მოხერხდა.",
     "removeLayerConfirmTitle": "მოვაშოროთ შრე?",
     "removeLayerConfirmBody": "ეს მოაშორებს {{name}}-ს პროექტიდან და რუკიდან.",
     "thisLayerFallback": "ეს შრე",
