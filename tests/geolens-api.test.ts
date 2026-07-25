@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyFeatureEdits,
   authHeaders,
   bboxFromGeometry,
+  captureFeatureBaseline,
+  createFeature,
   datasetPageUrl,
+  deleteFeature,
+  diffFeatures,
+  editPlanSize,
+  featureGid,
+  fetchCapabilities,
   fetchDatasetFeatures,
+  isEditPlanEmpty,
+  updateFeature,
   fetchDatasetFields,
   GEOLENS_PAGE_LIMIT,
   geometryKind,
@@ -511,5 +521,317 @@ describe("rasterTemplatesForServer", () => {
 
   it("returns nothing when no GeoLens raster layers are present", () => {
     assert.deepEqual(rasterTemplatesForServer([], base), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature editing (write-back).
+// ---------------------------------------------------------------------------
+
+const CLIENT = { baseUrl: "https://demo.example.com", apiKey: "k" };
+
+/** A fetch stub that records every write and answers from a per-URL script. */
+function stubWrites(responses: Array<{ ok?: boolean; status?: number; body?: unknown }> = []): {
+  fetchImpl: GeoLensFetch;
+  calls: Array<{ url: string; method?: string; body?: unknown; headers?: Record<string, string> }>;
+} {
+  const calls: Array<{
+    url: string;
+    method?: string;
+    body?: unknown;
+    headers?: Record<string, string>;
+  }> = [];
+  let index = 0;
+  const fetchImpl: GeoLensFetch = (url, init) => {
+    calls.push({
+      url,
+      method: init?.method,
+      body: init?.body === undefined ? undefined : JSON.parse(init.body),
+      headers: init?.headers,
+    });
+    const scripted = responses[index++] ?? {};
+    return Promise.resolve({
+      ok: scripted.ok ?? true,
+      status: scripted.status ?? 200,
+      json: async () => scripted.body ?? {},
+    });
+  };
+  return { fetchImpl, calls };
+}
+
+function point(x: number, y: number) {
+  return { type: "Point" as const, coordinates: [x, y] };
+}
+
+function collection(features: unknown[]) {
+  return { type: "FeatureCollection", features } as import("geojson").FeatureCollection;
+}
+
+describe("fetchCapabilities", () => {
+  it("reads the server's dataset-editing flag", async () => {
+    const { fetchImpl, calls } = stubFetch({
+      enable_dataset_editing: true,
+      require_metadata_for_publish: false,
+    });
+    assert.deepEqual(await fetchCapabilities(CLIENT, fetchImpl), { datasetEditing: true });
+    assert.equal(calls[0].url, "https://demo.example.com/api/settings/feature-flags/");
+  });
+
+  it("reports no editing when the flag is off", async () => {
+    const { fetchImpl } = stubFetch({ enable_dataset_editing: false });
+    assert.deepEqual(await fetchCapabilities(CLIENT, fetchImpl), { datasetEditing: false });
+  });
+
+  it("reports no editing when the endpoint is missing, rather than throwing", async () => {
+    const { fetchImpl } = stubFetch({ detail: "Not Found" }, false, 404);
+    assert.deepEqual(await fetchCapabilities(CLIENT, fetchImpl), { datasetEditing: false });
+  });
+});
+
+describe("featureGid", () => {
+  it("accepts the integer row id GeoLens returns, in either JSON form", () => {
+    assert.equal(featureGid({ id: 7 }), 7);
+    assert.equal(featureGid({ id: "7" }), 7);
+  });
+
+  it("rejects ids that are not a row id", () => {
+    assert.equal(featureGid({}), null);
+    assert.equal(featureGid({ id: "" }), null);
+    assert.equal(featureGid({ id: "abc" }), null);
+    assert.equal(featureGid({ id: 1.5 }), null);
+  });
+});
+
+describe("diffFeatures", () => {
+  const loaded = collection([
+    { type: "Feature", id: 1, geometry: point(0, 0), properties: { name: "a" } },
+    { type: "Feature", id: 2, geometry: point(1, 1), properties: { name: "b" } },
+  ]);
+
+  it("reports nothing for an untouched collection", () => {
+    const plan = diffFeatures(loaded, captureFeatureBaseline(loaded));
+    assert.equal(isEditPlanEmpty(plan), true);
+    assert.equal(editPlanSize(plan), 0);
+  });
+
+  it("patches a moved feature and replaces one whose attributes changed", () => {
+    const baseline = captureFeatureBaseline(loaded);
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(5, 5), properties: { name: "a" } },
+        { type: "Feature", id: 2, geometry: point(1, 1), properties: { name: "B" } },
+      ]),
+      baseline,
+    );
+    assert.deepEqual(
+      plan.updates.map((u) => [u.gid, u.mode]),
+      [
+        [1, "patch"],
+        [2, "replace"],
+      ],
+    );
+    assert.deepEqual(plan.creates, []);
+    assert.deepEqual(plan.deletes, []);
+  });
+
+  it("treats a feature with no gid as a create and a missing gid as a delete", () => {
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(0, 0), properties: { name: "a" } },
+        { type: "Feature", geometry: point(9, 9), properties: { name: "new" } },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    assert.deepEqual(plan.deletes, [2]);
+    assert.equal(plan.creates.length, 1);
+    assert.deepEqual(plan.creates[0], {
+      index: 1,
+      geometry: point(9, 9),
+      properties: { name: "new" },
+    });
+    assert.deepEqual(plan.updates, []);
+  });
+
+  it("never sends editor-internal properties to the server", () => {
+    const plan = diffFeatures(
+      collection([
+        {
+          type: "Feature",
+          id: 1,
+          geometry: point(0, 0),
+          properties: { name: "a", __geolibre_fid: "1", __gm_shape: "circle_marker" },
+        },
+        {
+          type: "Feature",
+          geometry: point(3, 3),
+          properties: { __gm_shape: "circle_marker", note: "drawn" },
+        },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    // Feature 1 only gained editor tags, so it is not a change at all.
+    assert.deepEqual(plan.updates, []);
+    assert.deepEqual(plan.creates[0].properties, { note: "drawn" });
+  });
+
+  it("updates a duplicated gid once and inserts the copy", () => {
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(4, 4), properties: { name: "a" } },
+        { type: "Feature", id: 1, geometry: point(6, 6), properties: { name: "a" } },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    assert.deepEqual(
+      plan.updates.map((u) => u.gid),
+      [1],
+    );
+    assert.equal(plan.creates.length, 1);
+    assert.equal(plan.creates[0].index, 1);
+  });
+
+  it("ignores a feature that has no geometry to insert", () => {
+    const plan = diffFeatures(
+      collection([{ type: "Feature", geometry: null, properties: { name: "empty" } }]),
+      new Map(),
+    );
+    assert.equal(isEditPlanEmpty(plan), true);
+  });
+});
+
+describe("createFeature / updateFeature / deleteFeature", () => {
+  it("posts a new feature and returns the gid GeoLens assigned", async () => {
+    const { fetchImpl, calls } = stubWrites([{ status: 201, body: { id: 42 } }]);
+    const gid = await createFeature(
+      CLIENT,
+      "ds-1",
+      { geometry: point(1, 2), properties: { name: "x" } },
+      fetchImpl,
+    );
+    assert.equal(gid, 42);
+    assert.equal(calls[0].url, "https://demo.example.com/api/datasets/ds-1/features/");
+    assert.equal(calls[0].method, "POST");
+    assert.deepEqual(calls[0].body, { geometry: point(1, 2), properties: { name: "x" } });
+    assert.equal(calls[0].headers?.["X-Api-Key"], "k");
+    assert.equal(calls[0].headers?.["Content-Type"], "application/json");
+  });
+
+  it("PATCHes a geometry-only change and PUTs a full replacement", async () => {
+    const { fetchImpl, calls } = stubWrites();
+    await updateFeature(
+      CLIENT,
+      "ds-1",
+      { gid: 3, mode: "patch", geometry: point(0, 1), properties: {} },
+      fetchImpl,
+    );
+    await updateFeature(
+      CLIENT,
+      "ds-1",
+      { gid: 4, mode: "replace", geometry: point(2, 3), properties: { a: 1 } },
+      fetchImpl,
+    );
+    assert.equal(calls[0].method, "PATCH");
+    assert.equal(calls[0].url, "https://demo.example.com/api/datasets/ds-1/features/3");
+    assert.deepEqual(calls[0].body, { geometry: point(0, 1) });
+    assert.equal(calls[1].method, "PUT");
+    assert.deepEqual(calls[1].body, { geometry: point(2, 3), properties: { a: 1 } });
+  });
+
+  it("deletes by gid without a body", async () => {
+    const { fetchImpl, calls } = stubWrites([{ status: 204 }]);
+    await deleteFeature(CLIENT, "ds-1", 9, fetchImpl);
+    assert.equal(calls[0].method, "DELETE");
+    assert.equal(calls[0].url, "https://demo.example.com/api/datasets/ds-1/features/9");
+    assert.equal(calls[0].body, undefined);
+    assert.equal(calls[0].headers?.["Content-Type"], undefined);
+  });
+
+  it("surfaces the server's problem detail, not just the status", async () => {
+    const { fetchImpl } = stubWrites([
+      { ok: false, status: 403, body: { detail: "Dataset editing is disabled" } },
+    ]);
+    await assert.rejects(
+      () => createFeature(CLIENT, "ds-1", { geometry: point(0, 0), properties: {} }, fetchImpl),
+      /Could not create feature: Dataset editing is disabled/,
+    );
+  });
+
+  it("falls back to the status when the error body is not JSON", async () => {
+    const fetchImpl: GeoLensFetch = () =>
+      Promise.resolve({
+        ok: false,
+        status: 502,
+        json: async () => {
+          throw new Error("not json");
+        },
+      });
+    await assert.rejects(
+      () => deleteFeature(CLIENT, "ds-1", 5, fetchImpl),
+      /Could not delete feature 5 \(HTTP 502\)/,
+    );
+  });
+});
+
+describe("applyFeatureEdits", () => {
+  const plan = {
+    creates: [{ index: 2, geometry: point(9, 9), properties: { name: "new" } }],
+    updates: [{ gid: 1, mode: "patch" as const, geometry: point(5, 5), properties: {} }],
+    deletes: [2],
+  };
+
+  it("writes every change and reports what landed", async () => {
+    const { fetchImpl, calls } = stubWrites([
+      {},
+      { status: 201, body: { id: 77 } },
+      { status: 204 },
+    ]);
+    const progress: Array<[number, number]> = [];
+    const result = await applyFeatureEdits(CLIENT, "ds-1", plan, fetchImpl, (done, total) =>
+      progress.push([done, total]),
+    );
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["PATCH", "POST", "DELETE"],
+    );
+    assert.deepEqual(result.updated, [1]);
+    assert.deepEqual(result.created, [{ index: 2, gid: 77 }]);
+    assert.deepEqual(result.deleted, [2]);
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(progress, [
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ]);
+  });
+
+  it("keeps going after a rejected write and reports it", async () => {
+    const { fetchImpl } = stubWrites([
+      { ok: false, status: 422, body: { detail: "bad geometry" } },
+      { status: 201, body: { id: 78 } },
+      { status: 204 },
+    ]);
+    const result = await applyFeatureEdits(CLIENT, "ds-1", plan, fetchImpl);
+    assert.deepEqual(result.updated, []);
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0], /bad geometry/);
+    // The create and the delete still ran.
+    assert.deepEqual(result.created, [{ index: 2, gid: 78 }]);
+    assert.deepEqual(result.deleted, [2]);
+  });
+
+  it("stops issuing writes once aborted", async () => {
+    const controller = new AbortController();
+    const { fetchImpl, calls } = stubWrites();
+    controller.abort();
+    const result = await applyFeatureEdits(
+      CLIENT,
+      "ds-1",
+      plan,
+      fetchImpl,
+      undefined,
+      controller.signal,
+    );
+    assert.deepEqual(calls, []);
+    assert.equal(result.errors.length, 0);
   });
 });

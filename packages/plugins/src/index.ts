@@ -361,6 +361,7 @@ export {
 export {
   DEFAULT_GEOLENS_LABELS,
   DEFAULT_GEOLENS_FEATURE_LIMIT,
+  GEOLENS_FEATURES_SOURCE_KIND,
   GEOLENS_PLUGIN_ID,
   maplibreGeoLensPlugin,
   normalizeGeoLensFeatureLimit,

@@ -24,11 +24,16 @@ import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/
 import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
+  applyFeatureEdits,
+  captureFeatureBaseline,
   datasetPageUrl,
   defaultGeoLensFetch,
+  diffFeatures,
+  fetchCapabilities,
   fetchDatasetFeatures,
   fetchDatasetFields,
   geometryKind,
+  isEditPlanEmpty,
   mintTileToken,
   normalizeBaseUrl,
   rasterTemplatesForServer,
@@ -39,10 +44,20 @@ import {
   vectorTileTemplate,
   type GeoLensClientOptions,
   type GeoLensDataset,
+  type GeoLensEditPlan,
+  type GeoLensFeatureBaseline,
   type GeoLensFetch,
 } from "./geolens-api";
 
 export const GEOLENS_PLUGIN_ID = "maplibre-gl-geolens";
+
+/**
+ * Metadata `sourceKind` of a layer loaded from GeoLens as editable GeoJSON —
+ * distinct from `geolens-vector-tiles`, which cannot be edited in place. It,
+ * together with `geolensBaseUrl`/`geolensDatasetId`, is what lets the panel
+ * find a layer's origin again after a project reload.
+ */
+export const GEOLENS_FEATURES_SOURCE_KIND = "geolens-features";
 
 /** Number of datasets requested per catalog search. */
 const SEARCH_LIMIT = 50;
@@ -92,6 +107,20 @@ export interface GeoLensLabels {
   featureLimitHelp: string;
   addError: (message: string) => string;
   features: (count: number) => string;
+  editsHeading: string;
+  editsPending: (added: number, changed: number, deleted: number) => string;
+  editsNone: string;
+  saveEdits: string;
+  saveEditsTitle: string;
+  savingEdits: (done: number, total: number) => string;
+  savedEdits: (written: number) => string;
+  saveDisabledByServer: string;
+  saveNeedsKey: string;
+  saveError: (message: string) => string;
+  savePartial: (failed: number, message: string) => string;
+  revertEdits: string;
+  revertEditsTitle: string;
+  revertingEdits: string;
 }
 
 export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
@@ -123,6 +152,28 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   featureLimitHelp: "The loader follows paginated responses until this many features are loaded.",
   addError: (message) => `Could not add layer: ${message}`,
   features: (count) => `${count.toLocaleString()} features`,
+  editsHeading: "Edits",
+  editsPending: (added, changed, deleted) =>
+    [
+      added ? `${added} added` : "",
+      changed ? `${changed} changed` : "",
+      deleted ? `${deleted} deleted` : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  editsNone: "No local changes.",
+  saveEdits: "Save to GeoLens",
+  saveEditsTitle: "Write the added, changed, and deleted features back to the GeoLens dataset",
+  savingEdits: (done, total) => `Saving ${done}/${total}…`,
+  savedEdits: (written) => `Saved ${written} change${written === 1 ? "" : "s"} to GeoLens.`,
+  saveDisabledByServer: "This GeoLens server has dataset editing turned off.",
+  saveNeedsKey: "Connect with an API key that can write to this dataset.",
+  saveError: (message) => `Could not save: ${message}`,
+  savePartial: (failed, message) =>
+    `${failed} change${failed === 1 ? "" : "s"} failed — ${message}`,
+  revertEdits: "Reload",
+  revertEditsTitle: "Discard local changes and reload this dataset's features from GeoLens",
+  revertingEdits: "Reloading…",
 };
 
 let labels: GeoLensLabels = { ...DEFAULT_GEOLENS_LABELS };
@@ -213,6 +264,13 @@ const CSS = {
   settings:
     "display:none;flex-direction:column;gap:5px;padding:7px;border-radius:6px;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
+  edits:
+    "display:none;flex-direction:column;gap:6px;padding:7px;border-radius:6px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
+  editsHeading: "font-size:11px;font-weight:600;",
+  editRow: "display:flex;flex-direction:column;gap:3px;",
+  editName:
+    "font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
 } as const;
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -559,8 +617,250 @@ async function addFeaturesLayer(
   fetchImpl: GeoLensFetch,
 ): Promise<void> {
   const data = await fetchDatasetFeatures(client, dataset.id, featureLimit, fetchImpl);
-  app.addGeoJsonLayer(dataset.title, data, `${sourcePathFor(client, dataset)}#items`);
+  const layerId = app.addGeoJsonLayer(
+    dataset.title,
+    data,
+    `${sourcePathFor(client, dataset)}#items`,
+  );
+  // Register the baseline before the metadata write below: that write is the
+  // store change that makes the panel notice the layer, and it must already be
+  // able to report "no local changes" rather than an unknown state.
+  editSessions.set(layerId, { baseline: captureFeatureBaseline(data) });
+  // Tag the layer with where it came from, so the panel can offer to write
+  // edits back — including after a project reload, when the in-memory baseline
+  // is gone but the metadata was persisted with the project.
+  const store = useAppStore.getState();
+  const layer = store.layers.find((l) => l.id === layerId);
+  if (layer) {
+    store.updateLayer(layerId, {
+      metadata: {
+        ...layer.metadata,
+        sourceKind: GEOLENS_FEATURES_SOURCE_KIND,
+        geolensBaseUrl: client.baseUrl,
+        geolensDatasetId: dataset.id,
+      },
+    });
+  }
   if (dataset.bbox) app.fitBounds?.(dataset.bbox);
+}
+
+// ---------------------------------------------------------------------------
+// Feature editing: change tracking and write-back.
+// ---------------------------------------------------------------------------
+
+/** What a layer's features looked like on the server, per store layer id. */
+interface GeoLensEditSession {
+  baseline: GeoLensFeatureBaseline;
+}
+
+/**
+ * Per-layer baselines for the GeoLens datasets loaded this session.
+ *
+ * Deliberately in memory only — a baseline is a copy of the whole dataset, and
+ * persisting it would bloat every saved project. A restored project therefore
+ * has none, and {@link ensureBaseline} rebuilds it from the server, which also
+ * means the diff is against what the dataset holds *now* rather than what it
+ * held whenever the project was last saved.
+ */
+const editSessions = new Map<string, GeoLensEditSession>();
+
+/** A GeoLens GeoJSON layer in the store that can be written back. */
+interface GeoLensEditableLayer {
+  id: string;
+  name: string;
+  datasetId: string;
+  baseUrl: string;
+  geojson: import("geojson").FeatureCollection;
+}
+
+/** The editable GeoLens feature layers currently in the store for one server. */
+export function editableLayersForServer(baseUrl: string): GeoLensEditableLayer[] {
+  const out: GeoLensEditableLayer[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    if (layer.metadata.sourceKind !== GEOLENS_FEATURES_SOURCE_KIND) continue;
+    if (layer.metadata.geolensBaseUrl !== baseUrl) continue;
+    const datasetId = layer.metadata.geolensDatasetId;
+    if (typeof datasetId !== "string" || !layer.geojson) continue;
+    out.push({ id: layer.id, name: layer.name, datasetId, baseUrl, geojson: layer.geojson });
+  }
+  return out;
+}
+
+/**
+ * The baseline for a layer: the one captured when it was loaded, or — after a
+ * project reload or a plugin reactivation — a fresh read of the dataset from
+ * the server. Reading it back is what makes "Save" work at all on a restored
+ * project, and it is why a save then only writes what genuinely differs from
+ * the server rather than re-writing every feature.
+ */
+async function ensureBaseline(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  signal?: AbortSignal,
+): Promise<GeoLensFeatureBaseline> {
+  const existing = editSessions.get(layer.id);
+  if (existing) return existing.baseline;
+  const data = await fetchDatasetFeatures(client, layer.datasetId, featureLimit, fetchImpl, signal);
+  const baseline = captureFeatureBaseline(data);
+  editSessions.set(layer.id, { baseline });
+  return baseline;
+}
+
+/** Counts shown next to a layer in the Edits section. */
+interface GeoLensPendingCounts {
+  added: number;
+  changed: number;
+  deleted: number;
+}
+
+function planCounts(plan: GeoLensEditPlan): GeoLensPendingCounts {
+  return {
+    added: plan.creates.length,
+    changed: plan.updates.length,
+    deleted: plan.deletes.length,
+  };
+}
+
+/**
+ * Last computed counts per layer, keyed on the exact collection and baseline
+ * they were derived from. Diffing walks every feature, and the panel repaints
+ * whenever *any* layer changes, so without this an edit to one layer would
+ * re-diff every other tracked dataset as well.
+ */
+const pendingCountsCache = new Map<
+  string,
+  {
+    collection: import("geojson").FeatureCollection;
+    baseline: GeoLensFeatureBaseline;
+    counts: GeoLensPendingCounts;
+  }
+>();
+
+/**
+ * The pending changes for a layer whose baseline is already known, or null when
+ * it is not (a restored project, before a save reads the dataset back). The
+ * panel uses this for its at-a-glance counts, which is why it never triggers a
+ * network read of its own.
+ */
+function pendingCountsFor(layer: GeoLensEditableLayer): GeoLensPendingCounts | null {
+  const session = editSessions.get(layer.id);
+  if (!session) return null;
+  const cached = pendingCountsCache.get(layer.id);
+  if (cached && cached.collection === layer.geojson && cached.baseline === session.baseline) {
+    return cached.counts;
+  }
+  const counts = planCounts(diffFeatures(layer.geojson, session.baseline));
+  pendingCountsCache.set(layer.id, {
+    collection: layer.geojson,
+    baseline: session.baseline,
+    counts,
+  });
+  return counts;
+}
+
+/** The outcome of one layer's save, as the panel reports it. */
+interface GeoLensSaveOutcome {
+  written: number;
+  errors: string[];
+}
+
+/**
+ * Diff a layer against its baseline and write the differences to GeoLens.
+ *
+ * After the writes, the ids GeoLens assigned to newly inserted features are
+ * stamped back onto the store layer, and the baseline is advanced to match —
+ * but only for the writes that actually succeeded, so a partially applied save
+ * leaves exactly the failed changes still pending instead of silently dropping
+ * them.
+ */
+async function saveLayerEdits(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  onProgress: (done: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<GeoLensSaveOutcome> {
+  const baseline = await ensureBaseline(client, layer, featureLimit, fetchImpl, signal);
+  const plan = diffFeatures(layer.geojson, baseline);
+  if (isEditPlanEmpty(plan)) return { written: 0, errors: [] };
+
+  const result = await applyFeatureEdits(
+    client,
+    layer.datasetId,
+    plan,
+    fetchImpl,
+    onProgress,
+    signal,
+  );
+
+  // Stamp the new gids onto the features that were just inserted, so a second
+  // save updates those rows instead of inserting duplicates.
+  const newGidByIndex = new Map<number, number>();
+  for (const created of result.created) {
+    if (created.gid !== null) newGidByIndex.set(created.index, created.gid);
+  }
+  const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
+  const collection = current?.geojson ?? layer.geojson;
+  let patched = collection;
+  if (newGidByIndex.size > 0 && collection === layer.geojson) {
+    // Only re-index when the layer has not been edited again while the save was
+    // in flight; otherwise the indices no longer refer to the same features and
+    // stamping them would attach a row id to the wrong feature.
+    patched = {
+      ...collection,
+      features: collection.features.map((feature, index) => {
+        const gid = newGidByIndex.get(index);
+        return gid === undefined ? feature : { ...feature, id: gid };
+      }),
+    };
+    useAppStore.getState().updateLayer(layer.id, { geojson: patched });
+  }
+
+  // Advance the baseline to the saved state, then put back the entries whose
+  // write failed so they stay pending.
+  const next = captureFeatureBaseline(patched);
+  const updatedOk = new Set(result.updated.map(String));
+  for (const update of plan.updates) {
+    if (updatedOk.has(String(update.gid))) continue;
+    const original = baseline.get(String(update.gid));
+    if (original) next.set(String(update.gid), original);
+  }
+  const deletedOk = new Set(result.deleted.map(String));
+  for (const gid of plan.deletes) {
+    if (deletedOk.has(String(gid))) continue;
+    const original = baseline.get(String(gid));
+    if (original) next.set(String(gid), original);
+  }
+  editSessions.set(layer.id, { baseline: next });
+
+  const written = result.updated.length + result.created.length + result.deleted.length;
+  return { written, errors: result.errors };
+}
+
+/**
+ * Discard a layer's local changes by reloading the dataset from GeoLens. Also
+ * re-captures the baseline, so the layer starts clean rather than immediately
+ * looking edited again.
+ */
+async function reloadLayerFeatures(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  signal?: AbortSignal,
+): Promise<void> {
+  const data = await fetchDatasetFeatures(client, layer.datasetId, featureLimit, fetchImpl, signal);
+  useAppStore.getState().updateLayer(layer.id, { geojson: data });
+  editSessions.set(layer.id, { baseline: captureFeatureBaseline(data) });
+}
+
+/** Forget every tracked baseline (plugin deactivation). */
+function clearEditSessions(): void {
+  editSessions.clear();
+  pendingCountsCache.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -574,6 +874,10 @@ interface PanelState {
   generation: number;
   controller: AbortController | null;
   featureLimit: number;
+  /** Whether the connected server has dataset editing enabled. */
+  editingEnabled: boolean;
+  /** Layer ids with a save/reload in flight, so the row can't be re-triggered. */
+  busyLayerIds: Set<string>;
 }
 
 /**
@@ -592,6 +896,8 @@ function buildPanel(
     generation: 0,
     controller: null,
     featureLimit: readFeatureLimit(),
+    editingEnabled: false,
+    busyLayerIds: new Set(),
   };
 
   const panel = el("div", CSS.panel);
@@ -640,6 +946,8 @@ function buildPanel(
   const status = el("div", CSS.status, "");
   const errorLine = el("div", CSS.error, "");
   errorLine.style.display = "none";
+  const edits = el("div", CSS.edits);
+  edits.style.display = "none";
   const list = el("div", CSS.list);
 
   panel.append(
@@ -651,6 +959,7 @@ function buildPanel(
     searchRow,
     status,
     errorLine,
+    edits,
     list,
   );
   container.replaceChildren(panel);
@@ -717,6 +1026,132 @@ function buildPanel(
     list.replaceChildren();
     for (const dataset of state.datasets) {
       list.append(renderCard(dataset));
+    }
+  };
+
+  // Per-layer status lines in the Edits section, so a save in progress can
+  // report "Saving 12/48…" into its own row without repainting the section.
+  const rowStatusNodes = new Map<string, HTMLElement>();
+
+  /**
+   * Repaint the Edits section: one row per GeoLens GeoJSON layer on the map that
+   * came from the connected server. Hidden entirely when there are none, so the
+   * panel looks exactly as it did before for read-only use.
+   */
+  const renderEdits = (): void => {
+    rowStatusNodes.clear();
+    const client = state.client;
+    const layers = client ? editableLayersForServer(client.baseUrl) : [];
+    if (!client || layers.length === 0) {
+      edits.replaceChildren();
+      edits.style.display = "none";
+      return;
+    }
+    const children: HTMLElement[] = [el("div", CSS.editsHeading, labels.editsHeading)];
+    // Say *why* saving is unavailable rather than showing a dead button: the
+    // server's editing flag is off, or the connection carries no API key (the
+    // write endpoints reject anonymous requests).
+    if (!state.editingEnabled) {
+      children.push(el("div", CSS.hint, labels.saveDisabledByServer));
+    } else if (!client.apiKey) {
+      children.push(el("div", CSS.hint, labels.saveNeedsKey));
+    }
+    for (const layer of layers) children.push(renderEditRow(layer));
+    edits.replaceChildren(...children);
+    edits.style.display = "flex";
+  };
+
+  const renderEditRow = (layer: GeoLensEditableLayer): HTMLElement => {
+    const row = el("div", CSS.editRow);
+    row.append(el("div", CSS.editName, layer.name));
+
+    const counts = pendingCountsFor(layer);
+    const pending = counts ? counts.added + counts.changed + counts.deleted : null;
+    const rowStatus = el(
+      "div",
+      CSS.hint,
+      // A restored project has no baseline yet, so the counts are unknown until
+      // a save reads the dataset back — leave the line blank rather than claim
+      // there is nothing to save.
+      counts === null
+        ? ""
+        : pending === 0
+          ? labels.editsNone
+          : labels.editsPending(counts.added, counts.changed, counts.deleted),
+    );
+    rowStatusNodes.set(layer.id, rowStatus);
+    row.append(rowStatus);
+
+    const busy = state.busyLayerIds.has(layer.id);
+    const canWrite = state.editingEnabled && !!state.client?.apiKey;
+    const actions = el("div", CSS.actions);
+
+    const saveButton = button(labels.saveEdits, CSS.action, labels.saveEditsTitle);
+    saveButton.disabled = busy || !canWrite || pending === 0;
+    saveButton.addEventListener("click", () => void handleSave(layer));
+
+    const reloadButton = button(labels.revertEdits, CSS.action, labels.revertEditsTitle);
+    reloadButton.disabled = busy;
+    reloadButton.addEventListener("click", () => void handleReload(layer));
+
+    actions.append(saveButton, reloadButton);
+    row.append(actions);
+    return row;
+  };
+
+  /** The layer's current store state, or null when it has since been removed. */
+  const currentEditableLayer = (layerId: string): GeoLensEditableLayer | null => {
+    if (!state.client) return null;
+    return editableLayersForServer(state.client.baseUrl).find((l) => l.id === layerId) ?? null;
+  };
+
+  const handleSave = async (layer: GeoLensEditableLayer): Promise<void> => {
+    const client = state.client;
+    if (!client || state.busyLayerIds.has(layer.id)) return;
+    state.busyLayerIds.add(layer.id);
+    clearError();
+    renderEdits();
+    try {
+      // Re-read from the store: the row was built from a snapshot that may be a
+      // few edits old by the time the button is pressed.
+      const fresh = currentEditableLayer(layer.id) ?? layer;
+      const outcome = await saveLayerEdits(
+        client,
+        fresh,
+        state.featureLimit,
+        fetchImpl,
+        (done, total) => {
+          const node = rowStatusNodes.get(layer.id);
+          if (node) node.textContent = labels.savingEdits(done, total);
+        },
+      );
+      if (outcome.errors.length > 0) {
+        showError(labels.savePartial(outcome.errors.length, outcome.errors[0]));
+      }
+      status.textContent = labels.savedEdits(outcome.written);
+    } catch (error) {
+      showError(labels.saveError(messageOf(error)));
+    } finally {
+      state.busyLayerIds.delete(layer.id);
+      renderEdits();
+    }
+  };
+
+  const handleReload = async (layer: GeoLensEditableLayer): Promise<void> => {
+    const client = state.client;
+    if (!client || state.busyLayerIds.has(layer.id)) return;
+    state.busyLayerIds.add(layer.id);
+    clearError();
+    renderEdits();
+    const rowStatus = rowStatusNodes.get(layer.id);
+    if (rowStatus) rowStatus.textContent = labels.revertingEdits;
+    try {
+      await reloadLayerFeatures(client, layer, state.featureLimit, fetchImpl);
+    } catch (error) {
+      showError(labels.loadError(messageOf(error)));
+    } finally {
+      state.busyLayerIds.delete(layer.id);
+      renderEdits();
     }
   };
 
@@ -806,7 +1241,15 @@ function buildPanel(
       // label+enabled on failure (the layer never entered the store).
       addingButtons.delete(trigger);
       settle();
+      // A GeoJSON add introduces a layer the Edits section tracks, and it
+      // finishes after the store change that would otherwise have repainted it.
+      renderEdits();
     }
+  };
+
+  const capabilitiesFor = async (client: GeoLensClientOptions): Promise<boolean> => {
+    const { datasetEditing } = await fetchCapabilities(client, fetchImpl);
+    return datasetEditing;
   };
 
   const connect = async (): Promise<void> => {
@@ -824,6 +1267,10 @@ function buildPanel(
     // display to "" would wipe the inline `display:flex` and collapse to block.
     if (!connected) state.client = null;
     searchRow.style.display = connected ? "flex" : "none";
+    // Ask the server whether it allows dataset editing at all. Public endpoint,
+    // and a failure resolves to "no editing", so this never blocks connecting.
+    state.editingEnabled = connected && state.client ? await capabilitiesFor(state.client) : false;
+    renderEdits();
     // Restored private rasters (project reopen, plugin reactivation) are in the
     // store but hold no registered key — and their Add button is disabled, so
     // re-adding is not a path back. The key entered here is the one credential
@@ -858,8 +1305,18 @@ function buildPanel(
 
   // Re-derive every card's add/added button whenever the layer set changes, so
   // removing a layer from the Layers panel re-enables its "Add" button.
-  const unsubscribe = useAppStore.subscribe(() => {
+  //
+  // The Edits section repaints with it — that is what makes the pending counts
+  // follow along as the user edits geometry or attributes elsewhere in the app —
+  // but only when the `layers` array itself changed. Repainting diffs every
+  // tracked collection against its baseline, and this subscription fires on all
+  // store churn (pointer moves, map view), which would run that diff continuously.
+  let lastLayersRef: readonly GeoLibreLayer[] | null = null;
+  const unsubscribe = useAppStore.subscribe((store) => {
     for (const resync of resyncers) resync();
+    if (store.layers === lastLayersRef) return;
+    lastLayersRef = store.layers;
+    if (state.busyLayerIds.size === 0) renderEdits();
   });
 
   return () => {
@@ -931,6 +1388,9 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
       // outlive the plugin.
       clearAllRefreshTimers();
       clearRasterApiKeys();
+      // Baselines are the plugin's own bookkeeping and hold a full copy of each
+      // loaded dataset; on reactivation they are read back from the server.
+      clearEditSessions();
       appRef = null;
     },
   };
@@ -943,3 +1403,6 @@ export const maplibreGeoLensPlugin: GeoLibrePlugin = createGeoLensPlugin({
 
 /** Exposed for unit tests: build a plugin over an injected transport. */
 export { createGeoLensPlugin };
+
+/** Exposed for unit tests: the save path and the pending-change readout. */
+export { clearEditSessions, pendingCountsFor, saveLayerEdits, type GeoLensEditableLayer };
