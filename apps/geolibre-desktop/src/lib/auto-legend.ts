@@ -16,12 +16,15 @@
 import {
   effectiveVectorRules,
   isHexColor,
+  proportionalSizeRange,
   styleValue,
   type GeoLibreLayer,
+  type LayerStyle,
   type LegendConfig,
   type LegendCustomEntry,
   type LegendCustomItem,
   type LegendItemOverride,
+  type ProportionalSizeRange,
   type VectorStyleStop,
 } from "@geolibre/core";
 import { isRasterLike, layerSwatchShape, type LayerSwatchShape } from "./layer-swatch";
@@ -63,6 +66,12 @@ export const HEATMAP_RAMP_COLORS: readonly string[] = [
 export interface AutoLegendRow {
   /** Stable override key (`<entryId>::p:<index>` in the panel namespace). */
   key: string;
+  /**
+   * Caption naming the field the rows from here down describe. Set on the first
+   * row of a size ramp that reads a different field than the colors classify,
+   * so the two blocks are not both read as the entry's `fieldLabel`.
+   */
+  caption?: string;
   /** Effective label after applying any user override. */
   label: string;
   /** The auto-generated label (for the rename editor's clear-to-default). */
@@ -173,6 +182,7 @@ interface RawRow {
   shape: LayerSwatchShape;
   marker?: LegendMarker;
   size?: number;
+  caption?: string;
 }
 
 /** Vector class rows (graduated ranges / categorized values). */
@@ -436,26 +446,72 @@ export function expressionLegendParts(
 /**
  * Proportional-symbol size rows: min / middle / max symbol sizes with their
  * data values, mirroring the interpolate the map renders. Circles for points,
- * line strokes for lines.
+ * line strokes for lines. Only used when the size field is NOT the field the
+ * colors classify — otherwise the sizes are merged into the class rows by
+ * {@link sizeClassRows} so one field yields one legend block.
  */
 function proportionalSizeRows(
-  layer: GeoLibreLayer,
+  range: ProportionalSizeRange,
+  color: string,
   shape: LayerSwatchShape,
-  locale?: string,
+  locale: string | undefined,
+  /** Field caption for the block, when the entry's own caption names another. */
+  caption?: string,
 ): RawRow[] {
-  const style = layer.style;
-  const color = styleValue(style, "fillColor") || NEUTRAL;
-  const minValue = styleValue(style, "proportionalSizeMinValue");
-  const maxValue = styleValue(style, "proportionalSizeMaxValue");
-  const minRadius = styleValue(style, "proportionalSizeMinRadius");
-  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
   const rowShape: LayerSwatchShape = shape === "line" ? "line" : "circle";
-  return [0, 0.5, 1].map((ratio) => ({
-    label: formatLegendNumber(lerp(minValue, maxValue, ratio), locale),
+  return [0, 0.5, 1].map((ratio, index) => ({
+    label: formatLegendNumber(lerp(range.minValue, range.maxValue, ratio), locale),
     color,
     shape: rowShape,
-    size: lerp(minRadius, maxRadius, ratio),
+    size: lerp(range.minRadius, range.maxRadius, ratio),
+    ...(index === 0 && caption ? { caption } : {}),
   }));
+}
+
+/**
+ * The symbol size the map draws for `value`, clamping outside the configured
+ * value range exactly as the `interpolate` in `proportionalRadiusExpression`
+ * does, so a legend symbol can never claim a size the map does not render.
+ */
+function proportionalSize(range: ProportionalSizeRange, value: number): number {
+  const ratio = (value - range.minValue) / (range.maxValue - range.minValue);
+  return lerp(range.minRadius, range.maxRadius, Math.min(1, Math.max(0, ratio)));
+}
+
+/**
+ * Size each graduated class row at the symbol the map draws for that class —
+ * the midpoint of the class range, or the lower bound for the open-ended top
+ * class. Applied when the color classification and the proportional sizing read
+ * the same field, so the legend shows ONE block of correctly-sized,
+ * correctly-colored symbols instead of the class rows plus a second,
+ * differently-colored size ramp describing the very same field.
+ *
+ * Rows whose stop value is not numeric keep their default size.
+ */
+function sizeClassRows(
+  rows: RawRow[],
+  stops: VectorStyleStop[],
+  range: ProportionalSizeRange,
+): RawRow[] {
+  return rows.map((row, index) => {
+    const from = Number(stops[index]?.value);
+    const to = Number(stops[index + 1]?.value);
+    // The top class has no upper bound ("≥ x"): represent it at its lower bound.
+    const representative = Number.isFinite(to) ? (from + to) / 2 : from;
+    if (!Number.isFinite(representative)) return row;
+    return { ...row, size: proportionalSize(range, representative) };
+  });
+}
+
+/**
+ * Fill color for a standalone size ramp. A class-colored layer paints no single
+ * `fillColor` — using it there is what made the size swatches show an unrelated
+ * default blue next to the layer's actual ramp — so sample the middle class
+ * color instead; single-symbol layers keep their fill.
+ */
+function sizeRampColor(classRows: RawRow[], style: LayerStyle): string {
+  if (classRows.length > 0) return classRows[Math.floor(classRows.length / 2)].color;
+  return styleValue(style, "fillColor") || NEUTRAL;
 }
 
 /** Grayscale fallback when a named colormap has not been sampled yet. */
@@ -613,26 +669,56 @@ function vectorParts(
     };
   }
 
-  const sizeRows =
-    styleValue(style, "proportionalSizeEnabled") &&
-    styleValue(style, "proportionalSizeProperty") !== "" &&
-    (shape === "circle" || shape === "line")
-      ? proportionalSizeRows(layer, shape, locale)
-      : [];
+  // The shared guard from @geolibre/core, so the legend advertises proportional
+  // sizing on exactly the layers the map actually sizes. Only circles and line
+  // strokes carry a size; polygon fills ignore it.
+  const sizeRange = shape === "circle" || shape === "line" ? proportionalSizeRange(style) : null;
 
   if ((mode === "graduated" || mode === "categorized") && stops.length > 0) {
+    const classProperty = styleValue(style, "vectorStyleProperty");
+    const classRows = stopRows(stops, mode, shape, locale);
+    // Same field classified and sized: one merged block. Categorized values are
+    // not numeric ranges, so they can only carry a separate ramp.
+    const merged =
+      sizeRange !== null && mode === "graduated" && sizeRange.property === classProperty;
     return {
-      rows: [...stopRows(stops, mode, shape, locale), ...sizeRows, ...diagrams],
+      rows: [
+        ...(merged && sizeRange ? sizeClassRows(classRows, stops, sizeRange) : classRows),
+        ...(sizeRange && !merged
+          ? proportionalSizeRows(
+              sizeRange,
+              sizeRampColor(classRows, style),
+              shape,
+              locale,
+              // The entry caption already names the classified field; say which
+              // field this second block sizes by so the two are not confused.
+              sizeRange.property === classProperty ? undefined : sizeRange.property,
+            )
+          : []),
+        ...diagrams,
+      ],
       gradient: null,
       headerSwatch: null,
-      fieldLabel: styleValue(style, "vectorStyleProperty") || undefined,
+      fieldLabel: classProperty || undefined,
     };
   }
   if (mode === "rule-based") {
     const rows = ruleRows(layer, shape);
     if (rows.length > 0) {
       return {
-        rows: [...rows, ...sizeRows, ...diagrams],
+        rows: [
+          ...rows,
+          ...(sizeRange
+            ? proportionalSizeRows(
+                sizeRange,
+                sizeRampColor(rows, style),
+                shape,
+                locale,
+                sizeRange.property,
+              )
+            : []),
+          ...diagrams,
+        ],
         gradient: null,
         headerSwatch: null,
       };
@@ -642,7 +728,19 @@ function vectorParts(
     const parts = expressionLegendParts(styleValue(style, "vectorStyleExpression"), shape, locale);
     if (parts) {
       return {
-        rows: [...parts.rows, ...sizeRows, ...diagrams],
+        rows: [
+          ...parts.rows,
+          ...(sizeRange
+            ? proportionalSizeRows(
+                sizeRange,
+                sizeRampColor(parts.rows, style),
+                shape,
+                locale,
+                sizeRange.property === parts.fieldLabel ? undefined : sizeRange.property,
+              )
+            : []),
+          ...diagrams,
+        ],
         gradient: parts.gradient,
         headerSwatch: null,
         fieldLabel: parts.fieldLabel,
@@ -650,21 +748,29 @@ function vectorParts(
     }
   }
 
+  // Single symbology: the size ramp IS the classification, so it carries the
+  // field caption and replaces the single-swatch heading chip.
+  const sizeRows = sizeRange
+    ? proportionalSizeRows(sizeRange, styleValue(style, "fillColor") || NEUTRAL, shape, locale)
+    : [];
   const marker = pointMarkerSwatch(style);
   const headerSwatch = marker
     ? { color: marker.color, marker: marker.marker }
     : { color: styleValue(style, "fillColor") || NEUTRAL };
-  const fieldLabel =
-    sizeRows.length > 0 ? styleValue(style, "proportionalSizeProperty") || undefined : undefined;
+  const fieldLabel = sizeRange ? sizeRange.property : undefined;
   return { rows: [...sizeRows, ...diagrams], gradient: null, headerSwatch, fieldLabel };
 }
 
-/** Rows for a hand-authored entry. */
+/**
+ * Rows for a hand-authored entry. Item sizes carry through so customizing a
+ * proportional-symbol entry keeps the graduated symbol sizes it was seeded from.
+ */
 function customRows(entry: LegendCustomEntry): RawRow[] {
   return entry.items.slice(0, MAX_LEGEND_ROWS).map((item) => ({
     label: item.label,
     color: item.color,
     shape: item.shape ?? ("square" as const),
+    ...(typeof item.size === "number" && Number.isFinite(item.size) ? { size: item.size } : {}),
   }));
 }
 
@@ -802,6 +908,7 @@ function finishEntry(
       const override = config.overrides[key];
       return {
         key,
+        ...(row.caption ? { caption: row.caption } : {}),
         label: effectiveLabel(override, row.label),
         defaultLabel: row.label,
         color: row.color,

@@ -1226,6 +1226,12 @@ export interface LegendCustomItem {
   color: string;
   /** Swatch shape; defaults to `"square"`. */
   shape?: LegendCustomShape;
+  /**
+   * Symbol size in map pixels (circle radius / line width). Carried so that
+   * customizing a proportional-symbol entry keeps the graduated sizes it was
+   * seeded from instead of flattening every symbol to one size.
+   */
+  size?: number;
 }
 
 /**
