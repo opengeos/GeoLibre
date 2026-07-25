@@ -185,7 +185,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setRuntimeMessage(status.message);
     } catch (err) {
       setRuntimeAvailable(false);
-      setRuntimeMessage(err instanceof Error ? err.message : "Could not connect to sidecar.");
+      setRuntimeMessage(err instanceof Error ? err.message : t("toolbar.rasterTool.errorConnect"));
     }
   }, [desktop]);
 
@@ -247,7 +247,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not poll job.");
+          setError(err instanceof Error ? err.message : t("toolbar.rasterTool.errorPoll"));
         }
       }
     };
@@ -328,7 +328,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       await startGeoLibreSidecar();
       await checkRuntime();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start GeoLibre sidecar.");
+      setError(err instanceof Error ? err.message : t("toolbar.rasterTool.errorStartSidecar"));
     } finally {
       setStartingServer(false);
     }
@@ -490,7 +490,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       setJob(nextJob);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not start raster tool.";
+      const message = err instanceof Error ? err.message : t("toolbar.rasterTool.errorStartTool");
       tracker.finish("error", message);
       setError(message);
     }
@@ -624,11 +624,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Raster tools</DialogTitle>
-          <DialogDescription>
-            Run common raster operations on the Python sidecar (rasterio/GDAL), or in your browser
-            when no sidecar is available.
-          </DialogDescription>
+          <DialogTitle>{t("toolbar.rasterTool.dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("toolbar.rasterTool.dialogDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex gap-4">
@@ -790,7 +787,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             {engine === "sidecar" && (
               <div className="grid gap-1.5">
                 <Label htmlFor="raster-output" className="text-xs">
-                  Output file<span className="text-destructive"> *</span>
+                  {t("toolbar.rasterTool.outputFile")}
+                  <span className="text-destructive"> *</span>
                 </Label>
                 <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
                   <Input
@@ -870,7 +868,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 </p>
                 <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
                   {job.messages.length === 0 ? (
-                    <span className="text-muted-foreground">No output yet.</span>
+                    <span className="text-muted-foreground">
+                      {t("toolbar.rasterTool.noOutput")}
+                    </span>
                   ) : (
                     <>
                       {job.messages.map((line, index) => (

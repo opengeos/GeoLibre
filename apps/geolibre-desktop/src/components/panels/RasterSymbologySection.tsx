@@ -52,11 +52,14 @@ type RasterStateRecord = {
 
 const CLASSIFICATION_METHODS: {
   value: RasterClassificationMethod;
-  label: string;
+  labelKey:
+    | "rasterSymbology.methodEqualInterval"
+    | "rasterSymbology.methodQuantile"
+    | "rasterSymbology.methodManual";
 }[] = [
-  { value: "equal-interval", label: "Equal interval" },
-  { value: "quantile", label: "Quantile" },
-  { value: "manual", label: "Manual breaks" },
+  { value: "equal-interval", labelKey: "rasterSymbology.methodEqualInterval" },
+  { value: "quantile", labelKey: "rasterSymbology.methodQuantile" },
+  { value: "manual", labelKey: "rasterSymbology.methodManual" },
 ];
 
 const DEFAULT_RAMP = "viridis";
@@ -504,7 +507,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   // --- Mode ---
   const modeControl = (
     <div className="space-y-2">
-      <Label htmlFor="rasterMode">Render mode</Label>
+      <Label htmlFor="rasterMode">{t("rasterSymbology.renderMode")}</Label>
       <Select
         id="rasterMode"
         value={state.mode}
@@ -524,11 +527,13 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           }
         }}
       >
-        <option value="single">Single band (pseudocolor)</option>
+        <option value="single">{t("rasterSymbology.modeSingle")}</option>
         {(bandCount === null || bandCount >= 2) && (
-          <option value="index">Index (normalized difference)</option>
+          <option value="index">{t("rasterSymbology.modeIndex")}</option>
         )}
-        {(bandCount === null || bandCount >= 3) && <option value="rgb">RGB composite</option>}
+        {(bandCount === null || bandCount >= 3) && (
+          <option value="rgb">{t("rasterSymbology.modeRgb")}</option>
+        )}
       </Select>
       {bandCount === null && <p className="text-[10px] text-muted-foreground">Loading bands…</p>}
     </div>
@@ -538,7 +543,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     return (
       <div className="space-y-3">
         <Separator />
-        <p className="text-xs font-semibold">Raster symbology</p>
+        <p className="text-xs font-semibold">{t("rasterSymbology.heading")}</p>
         {modeControl}
         <RgbControls
           state={state}
@@ -664,7 +669,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   return (
     <div className="space-y-3">
       <Separator />
-      <p className="text-xs font-semibold">Raster symbology</p>
+      <p className="text-xs font-semibold">{t("rasterSymbology.heading")}</p>
       {modeControl}
 
       {state.mode === "index" ? (
@@ -676,7 +681,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         />
       ) : (
         <div className="space-y-2">
-          <Label htmlFor="rasterBand">Band</Label>
+          <Label htmlFor="rasterBand">{t("rasterSymbology.band")}</Label>
           <Select
             id="rasterBand"
             value={String(band)}
@@ -697,7 +702,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="rasterRamp">Color ramp</Label>
+        <Label htmlFor="rasterRamp">{t("rasterSymbology.colorRampLabel")}</Label>
         <ColorRampSelect
           id="rasterRamp"
           aria-label={t("rasterSymbology.colorRampLabel")}
@@ -755,7 +760,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
             }
           }}
         />
-        Classify into discrete classes
+        {t("rasterSymbology.classifyToggle")}
       </label>
 
       {classified && symbology && (
@@ -787,7 +792,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       {!classified && (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="rasterStretch">Stretch</Label>
+            <Label htmlFor="rasterStretch">{t("rasterSymbology.stretch")}</Label>
             <Select
               id="rasterStretch"
               value={state.stretch}
@@ -799,9 +804,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
                 })
               }
             >
-              <option value="linear">Linear</option>
-              <option value="log">Logarithmic</option>
-              <option value="sqrt">Square root</option>
+              <option value="linear">{t("rasterSymbology.stretchLinear")}</option>
+              <option value="log">{t("rasterSymbology.stretchLog")}</option>
+              <option value="sqrt">{t("rasterSymbology.stretchSqrt")}</option>
             </Select>
           </div>
           <NumberField
@@ -882,6 +887,7 @@ function IndexControls({
   onPreset: (presetId: string) => void;
   onBands: (bands: number[]) => void;
 }) {
+  const { t } = useTranslation();
   const preset = indexById(state.index) ?? NORMALIZED_DIFFERENCE_INDICES[0];
   const presets = [...NORMALIZED_DIFFERENCE_INDICES, CUSTOM_NORMALIZED_DIFFERENCE];
   const bandA = state.bands[0] ?? 1;
@@ -898,7 +904,7 @@ function IndexControls({
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="rasterIndexPreset">Index</Label>
+        <Label htmlFor="rasterIndexPreset">{t("rasterSymbology.index")}</Label>
         <Select
           id="rasterIndexPreset"
           value={preset.id}
@@ -966,7 +972,7 @@ function ClassificationControls({
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="rasterMethod">Method</Label>
+          <Label htmlFor="rasterMethod">{t("rasterSymbology.method")}</Label>
           <Select
             id="rasterMethod"
             value={symbology.method}
@@ -974,13 +980,13 @@ function ClassificationControls({
           >
             {CLASSIFICATION_METHODS.map((option) => (
               <option key={option.value} value={option.value}>
-                {option.label}
+                {t(option.labelKey)}
               </option>
             ))}
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="rasterClasses">Classes</Label>
+          <Label htmlFor="rasterClasses">{t("rasterSymbology.classes")}</Label>
           <Select
             id="rasterClasses"
             value={String(symbology.classCount)}
@@ -1026,7 +1032,7 @@ function ClassificationControls({
 
       {symbology.method === "manual" && (
         <div className="space-y-2">
-          <Label className="text-xs">Class edges</Label>
+          <Label className="text-xs">{t("rasterSymbology.classEdges")}</Label>
           {symbology.breaks.map((edge, index) => (
             <NumberField
               key={index}
@@ -1101,7 +1107,7 @@ function NodataControl({
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-2">
-        <Label htmlFor="rasterNodata">No data</Label>
+        <Label htmlFor="rasterNodata">{t("rasterSymbology.noData")}</Label>
         <Select
           id="rasterNodata"
           value={mode}
@@ -1112,9 +1118,9 @@ function NodataControl({
             else onChange("auto");
           }}
         >
-          <option value="auto">Auto (from file)</option>
-          <option value="off">Render all pixels</option>
-          <option value="custom">Custom value</option>
+          <option value="auto">{t("rasterSymbology.nodataAuto")}</option>
+          <option value="off">{t("rasterSymbology.nodataOff")}</option>
+          <option value="custom">{t("rasterSymbology.nodataCustom")}</option>
         </Select>
       </div>
       {mode === "custom" && (

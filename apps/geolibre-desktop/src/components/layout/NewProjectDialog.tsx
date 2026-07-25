@@ -257,7 +257,7 @@ export function NewProjectDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>New project</DialogTitle>
+              <DialogTitle>{t("newProject.title")}</DialogTitle>
               <DialogDescription>
                 {protomapsPresets.length > 0
                   ? t("newProject.basemapDescription")
@@ -266,7 +266,7 @@ export function NewProjectDialog({
             </DialogHeader>
             <form className="space-y-5" onSubmit={handleCreate}>
               <div className="space-y-2">
-                <Label htmlFor="new-project-name">Project name</Label>
+                <Label htmlFor="new-project-name">{t("newProject.projectName")}</Label>
                 <Input
                   id="new-project-name"
                   autoFocus
@@ -276,7 +276,7 @@ export function NewProjectDialog({
               </div>
 
               <div className="space-y-4">
-                <Label>Basemap</Label>
+                <Label>{t("newProject.basemapLabel")}</Label>
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
@@ -373,7 +373,7 @@ export function NewProjectDialog({
                   field unlocks only when "Custom URL" is selected above, so it
                   can never compete with a highlighted preset button. */}
               <div className="space-y-2">
-                <Label htmlFor="custom-basemap-url">Custom URL</Label>
+                <Label htmlFor="custom-basemap-url">{t("newProject.customUrlButton")}</Label>
                 <Input
                   id="custom-basemap-url"
                   ref={customUrlRef}
@@ -409,10 +409,10 @@ export function NewProjectDialog({
 
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={!canCreate}>
-                  Create
+                  {t("newProject.create")}
                 </Button>
               </div>
             </form>
