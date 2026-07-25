@@ -19,6 +19,8 @@ import {
   type LayerGroup,
   type LayerStyle,
   type LegendConfig,
+  type LegendCustomEntry,
+  type LegendCustomItem,
   type LegendItemOverride,
   type MapGridLayout,
   type MapScaleUnit,
@@ -109,6 +111,13 @@ export function parseProject(json: string): GeoLibreProject {
     .map((layer) =>
       layer.groupId && !validGroupIds.has(layer.groupId) ? { ...layer, groupId: undefined } : layer,
     );
+  const selectedLayerId =
+    data.selectedLayerId === null
+      ? null
+      : typeof data.selectedLayerId === "string" &&
+          layers.some((layer) => layer.id === data.selectedLayerId)
+        ? data.selectedLayerId
+        : undefined;
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
@@ -126,6 +135,7 @@ export function parseProject(json: string): GeoLibreProject {
     basemapVisible,
     basemapOpacity,
     layers,
+    ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles: data.styles ?? {},
     preferences: normalizeProjectPreferences(data.preferences),
@@ -219,11 +229,79 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
     }
   }
 
+  // Hand-authored entries: keep only well-formed items (string label + color);
+  // an entry whose items all fail validation is dropped entirely so the panel
+  // never renders an empty custom section from a hand-edited file.
+  const customEntries: Record<string, LegendCustomEntry> = {};
+  if (
+    candidate.customEntries &&
+    typeof candidate.customEntries === "object" &&
+    !Array.isArray(candidate.customEntries)
+  ) {
+    for (const [key, value] of Object.entries(candidate.customEntries)) {
+      if (!key.trim() || !value || typeof value !== "object" || Array.isArray(value)) continue;
+      const entry = value as Partial<LegendCustomEntry>;
+      if (!Array.isArray(entry.items)) continue;
+      const items: LegendCustomItem[] = [];
+      for (const item of entry.items) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const row = item as Partial<LegendCustomItem>;
+        if (typeof row.label !== "string" || typeof row.color !== "string") continue;
+        const shape =
+          row.shape === "circle" || row.shape === "line" || row.shape === "square"
+            ? row.shape
+            : undefined;
+        // Proportional symbol size in map pixels; bounded so a hand-edited file
+        // cannot ask the panel for an absurd swatch.
+        const size =
+          typeof row.size === "number" && Number.isFinite(row.size) && row.size > 0
+            ? Math.min(row.size, 1000)
+            : undefined;
+        items.push({
+          label: row.label,
+          color: row.color,
+          ...(shape ? { shape } : {}),
+          ...(size !== undefined ? { size } : {}),
+        });
+      }
+      if (items.length === 0) continue;
+      customEntries[key.trim()] = {
+        ...(typeof entry.title === "string" && entry.title.trim() !== ""
+          ? { title: entry.title }
+          : {}),
+        items,
+      };
+    }
+  }
+
+  const panelPosition =
+    candidate.panelPosition === "top-left" ||
+    candidate.panelPosition === "top-right" ||
+    candidate.panelPosition === "bottom-left" ||
+    candidate.panelPosition === "bottom-right"
+      ? candidate.panelPosition
+      : undefined;
+
+  // Hand-resized panel dimensions: keep only sane finite values so a
+  // hand-edited file can't collapse the panel or blow it past any viewport.
+  const panelSize = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) && value >= 120 && value <= 4000
+      ? Math.round(value)
+      : undefined;
+  const panelWidth = panelSize(candidate.panelWidth);
+  const panelHeight = panelSize(candidate.panelHeight);
+
   return {
     title: typeof candidate.title === "string" ? candidate.title : DEFAULT_LEGEND_CONFIG.title,
     groupByLayer: normalizeBoolean(candidate.groupByLayer, DEFAULT_LEGEND_CONFIG.groupByLayer),
     order,
     overrides,
+    ...(Object.keys(customEntries).length > 0 ? { customEntries } : {}),
+    ...(candidate.panelVisible === true ? { panelVisible: true } : {}),
+    ...(candidate.panelCollapsed === true ? { panelCollapsed: true } : {}),
+    ...(panelPosition ? { panelPosition } : {}),
+    ...(panelWidth !== undefined ? { panelWidth } : {}),
+    ...(panelHeight !== undefined ? { panelHeight } : {}),
   };
 }
 
@@ -1025,6 +1103,7 @@ export function projectFromStore(state: {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  selectedLayerId?: string | null;
   layerGroups?: LayerGroup[];
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
@@ -1071,6 +1150,13 @@ export function projectFromStore(state: {
   );
   const persistGrid = mapLayout.rows * mapLayout.cols > 1;
   const styleLibrary = normalizeStyleLibraryEntries(state.styleLibrary);
+  const selectedLayerId =
+    state.selectedLayerId === null
+      ? null
+      : typeof state.selectedLayerId === "string" &&
+          state.layers.some((layer) => layer.id === state.selectedLayerId)
+        ? state.selectedLayerId
+        : undefined;
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -1079,6 +1165,7 @@ export function projectFromStore(state: {
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     layers: state.layers.map(prepareLayerForSave),
+    ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles,
     preferences: state.preferences,

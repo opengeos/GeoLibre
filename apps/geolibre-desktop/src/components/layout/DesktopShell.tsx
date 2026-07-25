@@ -104,6 +104,7 @@ import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
+import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
@@ -1963,6 +1964,10 @@ export function DesktopShell({
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <MapLegendPanel
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <RasterSubsetPanel
                 layer={rasterSubsetLayer}
                 onClose={() => setRasterSubsetLayer(null)}
@@ -2117,7 +2122,7 @@ export function DesktopShell({
       ) : null}
       {layoutOptions.attributePanelVisible ? (
         <SectionErrorBoundary label="Raster attribute table">
-          <RasterAttributeTable mapControllerRef={mapControllerRef} />
+          <RasterAttributeTable />
         </SectionErrorBoundary>
       ) : null}
       {dashboardOpen ? (
@@ -2228,14 +2233,12 @@ export function DesktopShell({
           </div>
         </div>
       ) : null}
-      {projectUrlLoadState?.message || projectUrlLoadState?.error ? (
+      {projectUrlLoadState?.error ? (
         <div
-          aria-live="polite"
-          className={`pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm shadow-lg ${
-            projectUrlLoadState.error ? "text-destructive" : "text-foreground"
-          }`}
+          aria-live="assertive"
+          className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
         >
-          {projectUrlLoadState.error ?? projectUrlLoadState.message}
+          {projectUrlLoadState.error}
         </div>
       ) : null}
       {dropMessage || dropError ? (

@@ -1,17 +1,12 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
-import {
-  getPaletteLegend,
-  openLegendPanelWithItems,
-  savedRasterSymbology,
-} from "@geolibre/plugins";
+import { getPaletteLegend, savedRasterSymbology } from "@geolibre/plugins";
 import { type RasterData, readRasterData } from "@geolibre/processing";
 import { Button, Input, Select } from "@geolibre/ui";
 import { FileDown, ListChecks, Paintbrush, RefreshCw, Table2, X } from "lucide-react";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { createAppAPI } from "../../hooks/usePlugins";
+import { setLegendCustomEntry } from "../../lib/auto-legend";
 import {
   type GdalRatEntry,
   type RasterAttributeTableRecord,
@@ -113,11 +108,7 @@ function formatArea(m2: number, unit: "m2" | "ha" | "km2"): string {
  * (`metadata.rasterAttributeTable`), drive the layer's categorical symbology,
  * and fill the on-map legend. Opened from a raster layer's context menu.
  */
-export function RasterAttributeTable({
-  mapControllerRef,
-}: {
-  mapControllerRef: RefObject<MapController | null>;
-}) {
+export function RasterAttributeTable() {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.rasterAttributeTableOpen);
   const setOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
@@ -491,19 +482,19 @@ export function RasterAttributeTable({
     }
   }
 
-  async function sendToLegend() {
+  function sendToLegend() {
     if (!ratLayer || !record) return;
     setError(null);
-    const opened = await openLegendPanelWithItems(createAppAPI(mapControllerRef), {
-      title: ratLayer.name,
-      items: record.rows.map((row) => ({
-        label: row.label,
-        color: row.color,
-        shape: "square" as const,
-      })),
-      legendPosition: "bottom-right",
+    // Fill the layer's Legend-panel entry with the table's classes (a custom
+    // entry overriding auto derivation) and open the panel.
+    const { legend, setLegend } = useAppStore.getState();
+    setLegend({
+      ...setLegendCustomEntry(legend, ratLayer.id, {
+        title: ratLayer.name,
+        items: record.rows.map((row) => ({ label: row.label, color: row.color })),
+      }),
+      panelVisible: true,
     });
-    if (!opened) setError(t("rasterAttributeTable.legendError"));
   }
 
   async function exportCsv() {

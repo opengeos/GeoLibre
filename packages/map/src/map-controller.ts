@@ -43,6 +43,7 @@ import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
 import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-basemap";
 import { ResetBearingControl } from "./reset-bearing-control";
+import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
@@ -311,6 +312,7 @@ export type BuiltInMapControl =
   | "scale"
   | "attribution"
   | "logo"
+  | "maptoolkit-logo"
   | "layer-control";
 
 export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<BuiltInMapControl, boolean> = {
@@ -323,6 +325,7 @@ export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<BuiltInMapControl, bool
   scale: true,
   attribution: true,
   logo: false,
+  "maptoolkit-logo": false,
   "layer-control": true,
 };
 
@@ -339,6 +342,7 @@ export const DEFAULT_BUILT_IN_CONTROL_POSITIONS: Record<
   scale: "bottom-left",
   attribution: "bottom-right",
   logo: "bottom-left",
+  "maptoolkit-logo": "bottom-left",
   "layer-control": "top-right",
 };
 
@@ -364,6 +368,7 @@ export class MapController {
   private scaleControl: PlanetaryScaleControl | null = null;
   private attributionControl: maplibregl.AttributionControl | null = null;
   private logoControl: maplibregl.LogoControl | null = null;
+  private maptoolkitLogoControl: MaptoolkitLogoControl | null = null;
   private layerControl: LayerControl | null = null;
   private layerControlSignature = "";
   // Debounce timer for refreshing the layer control on style changes, so a
@@ -490,6 +495,7 @@ export class MapController {
     this.addScaleControl();
     this.addAttributionControl();
     this.addLogoControl();
+    this.addMaptoolkitLogoControl();
     return this.map;
   }
 
@@ -803,6 +809,7 @@ export class MapController {
       if (control === "scale") return this.addScaleControl();
       if (control === "attribution") return this.addAttributionControl();
       if (control === "logo") return this.addLogoControl();
+      if (control === "maptoolkit-logo") return this.addMaptoolkitLogoControl();
       return this.addLayerControl();
     }
 
@@ -820,6 +827,7 @@ export class MapController {
     } else if (control === "scale") this.removeScaleControl();
     else if (control === "attribution") this.removeAttributionControl();
     else if (control === "logo") this.removeLogoControl();
+    else if (control === "maptoolkit-logo") this.removeMaptoolkitLogoControl();
     else this.removeLayerControl();
     return true;
   }
@@ -849,6 +857,7 @@ export class MapController {
     this.removeScaleControl();
     this.removeAttributionControl();
     this.removeLogoControl();
+    this.removeMaptoolkitLogoControl();
     this.removeLayerControl();
     if (this.layerControlStyleRefreshTimer !== null) {
       clearTimeout(this.layerControlStyleRefreshTimer);
@@ -2383,6 +2392,21 @@ export class MapController {
     this.logoControl = null;
   }
 
+  private addMaptoolkitLogoControl(): boolean {
+    if (!this.map || this.maptoolkitLogoControl || !this.controlVisibility["maptoolkit-logo"]) {
+      return false;
+    }
+    this.maptoolkitLogoControl = new MaptoolkitLogoControl();
+    this.map.addControl(this.maptoolkitLogoControl, this.controlPositions["maptoolkit-logo"]);
+    return true;
+  }
+
+  private removeMaptoolkitLogoControl(): void {
+    if (!this.maptoolkitLogoControl) return;
+    this.removeControl(this.maptoolkitLogoControl);
+    this.maptoolkitLogoControl = null;
+  }
+
   private addBuiltInControl(control: BuiltInMapControl): boolean {
     if (control === "navigation") return this.addNavigationControl();
     if (control === "fullscreen") return this.addFullscreenControl();
@@ -2393,6 +2417,7 @@ export class MapController {
     if (control === "scale") return this.addScaleControl();
     if (control === "attribution") return this.addAttributionControl();
     if (control === "logo") return this.addLogoControl();
+    if (control === "maptoolkit-logo") return this.addMaptoolkitLogoControl();
     return this.addLayerControl();
   }
 
@@ -2406,6 +2431,7 @@ export class MapController {
     else if (control === "scale") this.removeScaleControl();
     else if (control === "attribution") this.removeAttributionControl();
     else if (control === "logo") this.removeLogoControl();
+    else if (control === "maptoolkit-logo") this.removeMaptoolkitLogoControl();
     else this.removeLayerControl();
   }
 }

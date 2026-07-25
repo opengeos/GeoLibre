@@ -73,17 +73,16 @@ describe("copyableLayerStyleKind", () => {
 });
 
 describe("extractCopiedLayerStyle", () => {
-  it("captures the full style and opacity for a vector layer", () => {
+  it("captures the full style for a vector layer", () => {
     const source = vectorLayer({
-      opacity: 0.5,
       style: { ...DEFAULT_LAYER_STYLE, fillColor: "#ff0000", strokeWidth: 5 },
     });
     const copied = extractCopiedLayerStyle(source);
-    assert.ok(copied);
-    assert.equal(copied.kind, "vector");
-    assert.equal(copied.opacity, 0.5);
+    assert.ok(copied && copied.kind === "vector");
     assert.equal(copied.style.fillColor, "#ff0000");
     assert.equal(copied.style.strokeWidth, 5);
+    // Opacity is a per-layer render setting, not symbology, so it is not copied.
+    assert.equal("opacity" in copied, false);
   });
 
   it("deep-clones so later edits to the source do not mutate the clipboard", () => {
@@ -96,7 +95,6 @@ describe("extractCopiedLayerStyle", () => {
 
   it("captures rasterState and symbology for a raster layer", () => {
     const source = rasterLayer({
-      opacity: 0.8,
       metadata: {
         sourceKind: RASTER_SOURCE_KIND,
         rasterState: { mode: "single", bands: [1], colormap: "magma", rescale: [[10, 90]] },
@@ -109,16 +107,29 @@ describe("extractCopiedLayerStyle", () => {
       },
     });
     const copied = extractCopiedLayerStyle(source);
-    assert.ok(copied);
-    assert.equal(copied.kind, "raster");
-    assert.equal(copied.opacity, 0.8);
+    assert.ok(copied && copied.kind === "raster");
     assert.equal((copied.rasterState as Record<string, unknown>).colormap, "magma");
     assert.equal(copied.hasRasterSymbology, true);
+    assert.equal("opacity" in copied, false);
   });
 
   it("records that a raster source had no symbology", () => {
     const copied = extractCopiedLayerStyle(rasterLayer());
-    assert.ok(copied);
+    assert.ok(copied && copied.kind === "raster");
+    assert.equal(copied.hasRasterSymbology, false);
+  });
+
+  it("treats an explicit null rasterSymbology as no symbology", () => {
+    const copied = extractCopiedLayerStyle(
+      rasterLayer({
+        metadata: {
+          sourceKind: RASTER_SOURCE_KIND,
+          rasterState: { mode: "single", bands: [1], colormap: "gray" },
+          rasterSymbology: null,
+        },
+      }),
+    );
+    assert.ok(copied && copied.kind === "raster");
     assert.equal(copied.hasRasterSymbology, false);
   });
 
@@ -128,15 +139,16 @@ describe("extractCopiedLayerStyle", () => {
 });
 
 describe("applyCopiedLayerStyle", () => {
-  it("returns the full style and opacity when pasting vector onto vector", () => {
+  it("returns the full style (but not opacity) when pasting vector onto vector", () => {
     const copied = extractCopiedLayerStyle(
       vectorLayer({ opacity: 0.4, style: { ...DEFAULT_LAYER_STYLE, fillColor: "#123456" } }),
     );
     assert.ok(copied);
     const patch = applyCopiedLayerStyle(vectorLayer({ id: "target" }), copied);
     assert.ok(patch);
-    assert.equal(patch.opacity, 0.4);
     assert.equal(patch.style?.fillColor, "#123456");
+    // Opacity is left to the target.
+    assert.equal("opacity" in patch, false);
   });
 
   it("refuses to paste across style families", () => {
@@ -152,7 +164,6 @@ describe("applyCopiedLayerStyle", () => {
   it("merges raster appearance keys but preserves the target's band selection", () => {
     const copied = extractCopiedLayerStyle(
       rasterLayer({
-        opacity: 0.7,
         metadata: {
           sourceKind: RASTER_SOURCE_KIND,
           rasterState: {
@@ -191,7 +202,8 @@ describe("applyCopiedLayerStyle", () => {
     assert.deepEqual(state.rescale, [[5, 50]]);
     // Data selection stays with the target.
     assert.deepEqual(state.bands, [1]);
-    assert.equal(patch.opacity, 0.7);
+    // Opacity is left to the target.
+    assert.equal("opacity" in patch, false);
   });
 
   it("clears a stale symbology when the copied raster had none", () => {
@@ -248,6 +260,50 @@ describe("applyCopiedLayerStyle", () => {
     assert.equal(state.colormap, "gray");
     assert.deepEqual(state.rescale, [[10, 90]]);
     assert.deepEqual(state.bands, [1]);
+  });
+
+  it("copies rescale for an index-mode paste (two operand bands, single-entry rescale)", () => {
+    // Index mode reads two operand bands but stretches one derived index, so
+    // its rescale is a single entry even though bands.length is 2. The guard
+    // must not mistake that for a shape mismatch.
+    const copied = extractCopiedLayerStyle(
+      rasterLayer({
+        metadata: {
+          sourceKind: RASTER_SOURCE_KIND,
+          rasterState: {
+            mode: "index",
+            bands: [4, 3],
+            index: "ndvi",
+            colormap: "rdylgn",
+            rescale: [[-1, 1]],
+          },
+        },
+      }),
+    );
+    assert.ok(copied);
+    const target = rasterLayer({
+      id: "target",
+      metadata: {
+        sourceKind: RASTER_SOURCE_KIND,
+        rasterState: {
+          mode: "index",
+          bands: [8, 4],
+          index: "ndvi",
+          colormap: "viridis",
+          rescale: [[0, 1]],
+        },
+      },
+    });
+    const patch = applyCopiedLayerStyle(target, copied);
+    assert.ok(patch);
+    const state = (patch.metadata as Record<string, unknown>).rasterState as Record<
+      string,
+      unknown
+    >;
+    assert.equal(state.colormap, "rdylgn");
+    assert.deepEqual(state.rescale, [[-1, 1]]);
+    // The target keeps its own operand bands.
+    assert.deepEqual(state.bands, [8, 4]);
   });
 });
 

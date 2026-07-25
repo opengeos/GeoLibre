@@ -2015,7 +2015,10 @@
       "terrain": "რელიეფი",
       "scale": "მასშტაბი",
       "attribution": "ატრიბუცია",
-      "logo": "MapLibre-ის ლოგო"
+      "logos": "ლოგოები",
+      "logo": "MapLibre-ის ლოგო",
+      "maptoolkitLogo": "Maptoolkit-ის ლოგო",
+      "maptoolkitLogoHint": "დაამატეთ Maptoolkit-ის საბაზისო რუკა მისი ლოგოს საჩვენებლად."
     },
     "position": {
       "topLeft": "ზედა მარცხენა",
@@ -3935,5 +3938,48 @@
       "valueMap": "მნიშვნელობა დაშვებულ სიაში არ არის",
       "constraint": "შეზღუდვა არ არის დაკმაყოფილებული"
     }
+  },
+  "legendPanel": {
+    "edit": "ლეგენდის რედაქტირება",
+    "done": "რედაქტირების დასრულება",
+    "close": "ლეგენდის დახურვა",
+    "empty": "ხილული ფენები არ არის.",
+    "renameTitle": "ლეგენდის სათაური",
+    "renameEntry": "{{name}}-ის გადარქმევა",
+    "renameItem": "{{name}}-ის გადარქმევა",
+    "moveUp": "ზემოთ ატანა",
+    "moveDown": "ქვემოთ ჩატანა",
+    "hideEntry": "ლეგენდიდან დამალვა",
+    "showEntry": "ლეგენდაში ჩვენება",
+    "hideItem": "ელემენტის დამალვა",
+    "showItem": "ელემენტის ჩვენება",
+    "customizeEntry": "ელემენტების მორგება",
+    "resetEntry": "ავტომატურზე დაბრუნება",
+    "removeSection": "სექციის წაშლა",
+    "addSection": "მორგებული სექციის დამატება",
+    "newSectionTitle": "ახალი სექცია",
+    "newItemLabel": "ახალი ელემენტი",
+    "addItem": "ელემენტის დამატება",
+    "removeItem": "ელემენტის წაშლა",
+    "itemColor": "ელემენტის ფერი",
+    "position": "პოზიცია",
+    "positions": {
+      "top-left": "ზემოთ მარცხნივ",
+      "top-right": "ზემოთ მარჯვნივ",
+      "bottom-left": "ქვემოთ მარცხნივ",
+      "bottom-right": "ქვემოთ მარჯვნივ"
+    },
+    "low": "დაბალი",
+    "high": "მაღალი",
+    "addFromDictionary": "ლექსიკონიდან დამატება",
+    "dictionaryHint": "JSON ობიექტი {\"წარწერა\": \"ფერი\"} წყვილებით, ან თითო ხაზზე \"წარწერა: ფერი\".",
+    "dictionaryAdd": "სექციის დამატება",
+    "cancel": "გაუქმება",
+    "resize": "ლეგენდის ზომის შეცვლა",
+    "collapseEntry": "სექციის ჩაკეცვა",
+    "expandEntry": "სექციის გაშლა",
+    "collapsePanel": "ლეგენდის ჩაკეცვა",
+    "expandPanel": "ლეგენდის გაშლა",
+    "exportJson": "JSON-ად ექსპორტი"
   }
 }

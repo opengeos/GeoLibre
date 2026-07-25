@@ -2021,7 +2021,10 @@
       "terrain": "Terrain",
       "scale": "Scale",
       "attribution": "Attribution",
-      "logo": "MapLibre logo"
+      "logos": "Logos",
+      "logo": "MapLibre logo",
+      "maptoolkitLogo": "Maptoolkit logo",
+      "maptoolkitLogoHint": "Add a Maptoolkit basemap to display its logo."
     },
     "position": {
       "topLeft": "Top left",
@@ -3760,6 +3763,8 @@
     "copyStyle": "Copy style",
     "pasteStyle": "Paste style",
     "pasteStyleFrom": "Paste style from \"{{name}}\"",
+    "pasteStyleEmpty": "Copy a layer's style first",
+    "pasteStyleMismatch": "The copied style is for a different layer type",
     "styleCopied": "Copied style from \"{{name}}\".",
     "stylePasted": "Pasted style from \"{{name}}\".",
     "bindToTimeSlider": "Bind to Time Slider…",
@@ -3962,5 +3967,48 @@
       "valueMap": "Value is not in the allowed list",
       "constraint": "Constraint not satisfied"
     }
+  },
+  "legendPanel": {
+    "edit": "Edit legend",
+    "done": "Done editing",
+    "close": "Close legend",
+    "empty": "No visible layers to list.",
+    "renameTitle": "Legend title",
+    "renameEntry": "Rename {{name}}",
+    "renameItem": "Rename {{name}}",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "hideEntry": "Hide from legend",
+    "showEntry": "Show in legend",
+    "hideItem": "Hide item",
+    "showItem": "Show item",
+    "customizeEntry": "Customize items",
+    "resetEntry": "Reset to automatic",
+    "removeSection": "Remove section",
+    "addSection": "Add custom section",
+    "newSectionTitle": "New section",
+    "newItemLabel": "New item",
+    "addItem": "Add item",
+    "removeItem": "Remove item",
+    "itemColor": "Item color",
+    "position": "Position",
+    "positions": {
+      "top-left": "Top left",
+      "top-right": "Top right",
+      "bottom-left": "Bottom left",
+      "bottom-right": "Bottom right"
+    },
+    "low": "Low",
+    "high": "High",
+    "addFromDictionary": "Add from dictionary",
+    "dictionaryHint": "A JSON object of {\"label\": \"color\"} pairs, or one \"label: color\" per line.",
+    "dictionaryAdd": "Add section",
+    "cancel": "Cancel",
+    "resize": "Resize legend",
+    "collapseEntry": "Collapse section",
+    "expandEntry": "Expand section",
+    "collapsePanel": "Collapse legend",
+    "expandPanel": "Expand legend",
+    "exportJson": "Export as JSON"
   }
 }

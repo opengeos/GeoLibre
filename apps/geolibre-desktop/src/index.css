@@ -1863,6 +1863,33 @@ body,
   cursor: default;
 }
 
+/* Maptoolkit logo control (Controls → Logos → Maptoolkit logo). The branding
+   companion to Maptoolkit basemaps; mirrors MapLibre's own logo control. The
+   wordmark is an inline SVG with its own brand colours, so it needs no theming —
+   only sizing/placement. Maptoolkit's attribution terms require a minimum height
+   of 24px, so the mark is pinned there. The container reuses `maplibregl-ctrl`
+   for corner margins, so drop the control-group chrome to leave just the logo. */
+.geolibre-maptoolkit-logo-ctrl {
+  background: none;
+  box-shadow: none;
+}
+
+.geolibre-maptoolkit-logo {
+  display: block;
+  opacity: 0.85;
+  transition: opacity 150ms ease;
+}
+
+.geolibre-maptoolkit-logo:hover {
+  opacity: 1;
+}
+
+.geolibre-maptoolkit-logo svg {
+  display: block;
+  height: 24px;
+  width: auto;
+}
+
 /* maplibre-gl-layer-control toggle button icon color.
    The library (>=0.15.1) sizes the icon itself but leaves its color to the host
    theme (the SVG uses stroke="currentColor"). GeoLibre keeps map controls light
@@ -3587,4 +3614,22 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
     rotate: 0deg;
     letter-spacing: 0.15em;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * On-map Legend panel (MapLegendPanel): maplibre-gl-components.css forces
+ * black text on EVERY form field inside a MapLibre control
+ * (`.maplibregl-ctrl input … { color: #000 !important }`), which makes the
+ * panel's edit-mode inputs unreadable in dark theme. The panel is
+ * theme-aware, so re-assert the theme colors with higher specificity.
+ * ------------------------------------------------------------------------- */
+.geolibre-legend-panel.maplibregl-ctrl input,
+.geolibre-legend-panel.maplibregl-ctrl select,
+.geolibre-legend-panel.maplibregl-ctrl textarea {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-legend-panel.maplibregl-ctrl input::placeholder,
+.geolibre-legend-panel.maplibregl-ctrl textarea::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
 }

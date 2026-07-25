@@ -13,6 +13,7 @@ export type GeoLibreBuiltInMapControl =
   | "scale"
   | "attribution"
   | "logo"
+  | "maptoolkit-logo"
   | "layer-control";
 
 export interface GeoLibreExternalNativeLayerRegistration {

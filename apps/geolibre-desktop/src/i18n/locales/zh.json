@@ -1976,7 +1976,10 @@
       "terrain": "地形",
       "scale": "比例尺",
       "attribution": "归属信息",
-      "logo": "MapLibre 徽标"
+      "logos": "徽标",
+      "logo": "MapLibre 徽标",
+      "maptoolkitLogo": "Maptoolkit 徽标",
+      "maptoolkitLogoHint": "添加 Maptoolkit 底图以显示其徽标。"
     },
     "position": {
       "topLeft": "左上",
@@ -3878,5 +3881,48 @@
       "valueMap": "值不在允许列表中",
       "constraint": "不满足约束条件"
     }
+  },
+  "legendPanel": {
+    "edit": "编辑图例",
+    "done": "完成编辑",
+    "close": "关闭图例",
+    "empty": "没有可显示的图层。",
+    "renameTitle": "图例标题",
+    "renameEntry": "重命名 {{name}}",
+    "renameItem": "重命名 {{name}}",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "hideEntry": "从图例中隐藏",
+    "showEntry": "在图例中显示",
+    "hideItem": "隐藏条目",
+    "showItem": "显示条目",
+    "customizeEntry": "自定义条目",
+    "resetEntry": "重置为自动",
+    "removeSection": "移除分节",
+    "addSection": "添加自定义分节",
+    "newSectionTitle": "新分节",
+    "newItemLabel": "新条目",
+    "addItem": "添加条目",
+    "removeItem": "移除条目",
+    "itemColor": "条目颜色",
+    "position": "位置",
+    "positions": {
+      "top-left": "左上",
+      "top-right": "右上",
+      "bottom-left": "左下",
+      "bottom-right": "右下"
+    },
+    "low": "低",
+    "high": "高",
+    "addFromDictionary": "从字典添加",
+    "dictionaryHint": "包含 {\"标签\": \"颜色\"} 键值对的 JSON 对象，或每行一个“标签: 颜色”。",
+    "dictionaryAdd": "添加分节",
+    "cancel": "取消",
+    "resize": "调整图例大小",
+    "collapseEntry": "折叠分节",
+    "expandEntry": "展开分节",
+    "collapsePanel": "折叠图例",
+    "expandPanel": "展开图例",
+    "exportJson": "导出为 JSON"
   }
 }

@@ -7,7 +7,7 @@ typo to adding a new processing tool or plugin.
 
 By participating, you agree to keep interactions respectful and constructive.
 
-## Ways to contribute
+## Ways to Contribute
 
 - **Report a bug or request a feature** by opening an
   [issue](https://github.com/opengeos/GeoLibre/issues). Include steps to
@@ -31,10 +31,13 @@ before you invest time in a pull request.
   commit hooks below) and, if you work on the backend, the conversion sidecar
   and its tests
 
-## Set up
+## Setup
+
+Fork the repository, then clone your fork. Replace `YOUR_GITHUB_USERNAME` with
+your GitHub username:
 
 ```bash
-git clone https://github.com/opengeos/GeoLibre.git
+git clone https://github.com/YOUR_GITHUB_USERNAME/GeoLibre.git
 cd GeoLibre
 npm install
 ```

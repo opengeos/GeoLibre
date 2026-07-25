@@ -1,0 +1,795 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  DEFAULT_LAYER_STYLE,
+  DEFAULT_LEGEND_CONFIG,
+  type GeoLibreLayer,
+  type LegendConfig,
+} from "../packages/core/src/index";
+import {
+  buildAutoLegend,
+  expressionLegendParts,
+  formatLegendNumber,
+  legendRowKey,
+  newCustomSectionId,
+  parseLegendDictionary,
+  removeLegendCustomEntry,
+  serializeLegend,
+  setLegendCustomEntry,
+} from "../apps/geolibre-desktop/src/lib/auto-legend";
+
+function layer(over: Partial<GeoLibreLayer>): GeoLibreLayer {
+  return {
+    id: "l",
+    name: "Layer",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+    ...over,
+  } as GeoLibreLayer;
+}
+
+function config(over: Partial<LegendConfig> = {}): LegendConfig {
+  return { ...DEFAULT_LEGEND_CONFIG, ...over };
+}
+
+const EN = { locale: "en" };
+
+describe("formatLegendNumber", () => {
+  it("abbreviates large values but keeps 4-digit values (years) exact", () => {
+    assert.equal(formatLegendNumber(8918925.75, "en"), "8.9M");
+    assert.equal(formatLegendNumber(25000, "en"), "25.0K");
+    assert.equal(formatLegendNumber(1995, "en"), "1,995");
+    assert.equal(formatLegendNumber(3.14159, "en"), "3.14");
+  });
+});
+
+describe("buildAutoLegend — vector layers", () => {
+  it("lists visible layers top-first and skips hidden ones", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({ id: "a", name: "A", metadata: { geometryType: "point" } }),
+        layer({ id: "b", name: "B", visible: false }),
+        layer({ id: "c", name: "C", metadata: { geometryType: "line" } }),
+      ],
+      config(),
+      EN,
+    );
+    assert.deepEqual(
+      entries.map((entry) => entry.name),
+      ["C", "A"],
+    );
+    assert.equal(entries[0].shape, "line");
+    assert.equal(entries[1].shape, "circle");
+  });
+
+  it("renders a graduated layer as range-labelled class rows with a field caption", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "g",
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "graduated",
+            vectorStyleProperty: "population",
+            vectorStyleStops: [
+              { value: 0, color: "#111111" },
+              { value: 25000, color: "#222222" },
+              { value: 8918925, color: "#333333" },
+            ],
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.fieldLabel, "population");
+    assert.equal(entry.headerSwatch, null);
+    assert.deepEqual(
+      entry.rows.map((row) => row.label),
+      ["0 – 25.0K", "25.0K – 8.9M", "≥ 8.9M"],
+    );
+    assert.equal(entry.rows[1].color, "#222222");
+    assert.equal(entry.rows[1].shape, "square");
+  });
+
+  it("renders a categorized layer with value (or stop label) rows", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "cat",
+          name: "Era",
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "categorized",
+            vectorStyleStops: [
+              { value: "old", color: "#8c2d04", label: "Historic" },
+              { value: "new", color: "#08306b" },
+            ],
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.deepEqual(
+      entries[0].rows.map((row) => [row.label, row.color]),
+      [
+        ["Historic", "#8c2d04"],
+        ["new", "#08306b"],
+      ],
+    );
+  });
+
+  it("gives a single-symbol point layer a marker-aware header swatch", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "pt",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            markerEnabled: true,
+            markerShape: "star",
+            markerColor: "#ff0000",
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.equal(entries[0].headerSwatch?.marker?.shape, "star");
+    assert.equal(entries[0].headerSwatch?.color, "#ff0000");
+    assert.equal(entries[0].rows.length, 0);
+  });
+
+  it("renders a heatmap point layer as a gradient with generic end labels", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "heat",
+          metadata: { geometryType: "point" },
+          style: { ...DEFAULT_LAYER_STYLE, pointRenderer: "heatmap" },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.ok(entry.gradient);
+    assert.equal(entry.gradient?.minLabel, null);
+    assert.equal(entry.gradient?.maxLabel, null);
+    assert.ok((entry.gradient?.colors.length ?? 0) >= 2);
+  });
+
+  it("adds proportional-symbol size rows for a point layer", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "prop",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "magnitude",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 12,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.fieldLabel, "magnitude");
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.size]),
+      [
+        ["0", 4],
+        ["50", 8],
+        ["100", 12],
+      ],
+    );
+    assert.ok(entry.rows.every((row) => row.shape === "circle"));
+  });
+
+  it("sizes graduated class rows instead of repeating the field as a size ramp", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "sized",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "graduated",
+            vectorStyleProperty: "pop_max",
+            vectorStyleStops: [
+              { value: 0, color: "#440154" },
+              { value: 100, color: "#31688e" },
+              { value: 200, color: "#fde725" },
+            ],
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "pop_max",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 200,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    // One row per class, each keeping its class color and carrying the size the
+    // map draws at the class midpoint (the open-ended top class at its bound).
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.color, row.size]),
+      [
+        ["0 – 100", "#440154", 9],
+        ["100 – 200", "#31688e", 19],
+        ["≥ 200", "#fde725", 24],
+      ],
+    );
+  });
+
+  it("keeps a separate size ramp for a different field, colored from the classes", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "two-fields",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            fillColor: "#3388ff",
+            vectorStyleMode: "categorized",
+            vectorStyleProperty: "region",
+            vectorStyleStops: [
+              { value: "north", color: "#440154" },
+              { value: "south", color: "#31688e" },
+              { value: "east", color: "#fde725" },
+            ],
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "pop_max",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 12,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.rows.length, 6);
+    assert.equal(entry.fieldLabel, "region");
+    // The size swatches sample the middle class, never the unused layer fill,
+    // and the block is captioned with the field it actually sizes by.
+    assert.deepEqual(
+      entry.rows.slice(3).map((row) => [row.label, row.color, row.size, row.caption]),
+      [
+        ["0", "#31688e", 4, "pop_max"],
+        ["50", "#31688e", 8, undefined],
+        ["100", "#31688e", 12, undefined],
+      ],
+    );
+  });
+
+  it("omits size rows when the proportional range is degenerate", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "degenerate",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "magnitude",
+            proportionalSizeMinValue: 100,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 12,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.rows.length, 0);
+    assert.equal(entry.fieldLabel, undefined);
+    assert.ok(entry.headerSwatch);
+  });
+
+  it("carries item sizes through a hand-authored custom entry", () => {
+    const entries = buildAutoLegend(
+      [layer({ id: "c", metadata: { geometryType: "point" } })],
+      config({
+        customEntries: {
+          c: {
+            items: [
+              { label: "Small", color: "#440154", shape: "circle", size: 4 },
+              { label: "Large", color: "#fde725", shape: "circle", size: 24 },
+            ],
+          },
+        },
+      }),
+      EN,
+    );
+    assert.deepEqual(
+      entries[0].rows.map((row) => row.size),
+      [4, 24],
+    );
+  });
+});
+
+describe("expressionLegendParts — advanced expression styles", () => {
+  it("derives range rows from a step expression (year-built classes)", () => {
+    const expression = JSON.stringify([
+      "step",
+      ["get", "year_built"],
+      "#440154",
+      1900,
+      "#31688e",
+      1930,
+      "#35b779",
+      1960,
+      "#fde725",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.ok(parts);
+    assert.equal(parts?.fieldLabel, "year_built");
+    assert.deepEqual(
+      parts?.rows.map((row) => [row.label, row.color]),
+      [
+        ["< 1,900", "#440154"],
+        ["1,900 – 1,930", "#31688e"],
+        ["1,930 – 1,960", "#35b779"],
+        ["≥ 1,960", "#fde725"],
+      ],
+    );
+  });
+
+  it("derives categorical rows plus Other from a match expression", () => {
+    const expression = JSON.stringify([
+      "match",
+      ["get", "type"],
+      "residential",
+      "#ff0000",
+      ["commercial", "retail"],
+      "#00ff00",
+      "#cccccc",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.deepEqual(
+      parts?.rows.map((row) => [row.label, row.color]),
+      [
+        ["residential", "#ff0000"],
+        ["commercial, retail", "#00ff00"],
+        ["Other", "#cccccc"],
+      ],
+    );
+  });
+
+  it("labels case branches from their conditions, including all-ranges", () => {
+    const expression = JSON.stringify([
+      "case",
+      ["<", ["get", "year"], 1900],
+      "#111111",
+      ["all", [">=", ["get", "year"], 1900], ["<", ["get", "year"], 1930]],
+      "#222222",
+      [">=", ["get", "year"], 1930],
+      "#333333",
+      "#444444",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.equal(parts?.fieldLabel, "year");
+    assert.deepEqual(
+      parts?.rows.map((row) => row.label),
+      ["< 1,900", "1,900 – 1,930", "≥ 1,930", "Other"],
+    );
+  });
+
+  it("derives a labelled gradient from an interpolate expression", () => {
+    const expression = JSON.stringify([
+      "interpolate",
+      ["linear"],
+      ["get", "density"],
+      0,
+      "#ffffff",
+      25000,
+      "#ff0000",
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.deepEqual(parts?.gradient, {
+      colors: ["#ffffff", "#ff0000"],
+      minLabel: "0",
+      maxLabel: "25.0K",
+    });
+    assert.equal(parts?.fieldLabel, "density");
+  });
+
+  it("finds a classifier nested inside another expression", () => {
+    const expression = JSON.stringify([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      5,
+      ["match", ["get", "kind"], "a", "#111111", "#222222"],
+      10,
+      ["match", ["get", "kind"], "a", "#111111", "#222222"],
+    ]);
+    const parts = expressionLegendParts(expression, "square", "en");
+    assert.equal(parts?.rows[0]?.label, "a");
+  });
+
+  it("returns null for invalid JSON or a plain color", () => {
+    assert.equal(expressionLegendParts("not json", "square", "en"), null);
+    assert.equal(expressionLegendParts('"#ff0000"', "square", "en"), null);
+  });
+
+  it("feeds expression-mode layers in buildAutoLegend", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "expr",
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "expression",
+            vectorStyleExpression: JSON.stringify([
+              "match",
+              ["get", "zone"],
+              "R",
+              "#ff0000",
+              "#0000ff",
+            ]),
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.deepEqual(
+      entries[0].rows.map((row) => row.label),
+      ["R", "Other"],
+    );
+    assert.equal(entries[0].headerSwatch, null);
+  });
+});
+
+describe("serializeLegend", () => {
+  it("exports visible entries with effective labels and omits hidden ones", () => {
+    const styled = layer({
+      id: "cat",
+      name: "Era",
+      metadata: { geometryType: "polygon" },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "categorized",
+        vectorStyleStops: [
+          { value: "old", color: "#8c2d04" },
+          { value: "new", color: "#08306b" },
+        ],
+      },
+    });
+    const hiddenLayer = layer({ id: "hidden", name: "Hidden" });
+    const cfg = config({
+      overrides: {
+        hidden: { hidden: true },
+        [legendRowKey("cat", 0)]: { label: "Ancient" },
+        [legendRowKey("cat", 1)]: { hidden: true },
+      },
+    });
+    const parsed = JSON.parse(
+      serializeLegend(buildAutoLegend([hiddenLayer, styled], cfg, EN), "My Legend"),
+    );
+    assert.equal(parsed.title, "My Legend");
+    assert.equal(parsed.entries.length, 1);
+    assert.equal(parsed.entries[0].title, "Era");
+    assert.equal(parsed.entries[0].field, undefined);
+    assert.deepEqual(parsed.entries[0].items, [
+      { label: "Ancient", color: "#8c2d04", shape: "square" },
+    ]);
+  });
+
+  it("includes gradients with their end labels", () => {
+    const dem = layer({
+      id: "dem",
+      type: "cog",
+      source: { type: "raster" },
+      metadata: { rasterState: { mode: "single", colormap: "viridis", rescale: [[0, 3000]] } },
+    });
+    const parsed = JSON.parse(
+      serializeLegend(
+        buildAutoLegend([dem], config(), {
+          ...EN,
+          resolveColormapColors: () => ["#000000", "#ffffff"],
+        }),
+        "Legend",
+      ),
+    );
+    // Gradients are sampled to a fixed number of stops for the bar.
+    assert.equal(parsed.entries[0].gradient.colors.length, 6);
+    assert.equal(parsed.entries[0].gradient.colors[0], "#000000");
+    assert.equal(parsed.entries[0].gradient.min, "0");
+    assert.equal(parsed.entries[0].gradient.max, "3,000");
+  });
+});
+
+describe("parseLegendDictionary", () => {
+  it("parses a JSON object of label to color pairs", () => {
+    assert.deepEqual(parseLegendDictionary('{"Open Water": "#466b9f", "Forest": "#1c6330"}'), [
+      { label: "Open Water", color: "#466b9f" },
+      { label: "Forest", color: "#1c6330" },
+    ]);
+  });
+
+  it("parses label: color lines, splitting on the last separator", () => {
+    assert.deepEqual(parseLegendDictionary("Pre-1900: #440154\n1900 – 1929: #31688e"), [
+      { label: "Pre-1900", color: "#440154" },
+      { label: "1900 – 1929", color: "#31688e" },
+    ]);
+    assert.deepEqual(parseLegendDictionary("Water, blue"), [{ label: "Water", color: "blue" }]);
+  });
+
+  it("rejects empty, malformed, and non-object input", () => {
+    assert.equal(parseLegendDictionary(""), null);
+    assert.equal(parseLegendDictionary("just a label"), null);
+    assert.equal(parseLegendDictionary('{"a": 1}'), null);
+    assert.equal(parseLegendDictionary('["#ff0000"]'), null);
+  });
+});
+
+describe("buildAutoLegend — raster layers", () => {
+  const rasterBase = {
+    type: "cog" as const,
+    source: { type: "raster" as const },
+  };
+
+  it("renders a continuous colormap as a gradient labelled with the rescale range", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          ...rasterBase,
+          id: "dem",
+          metadata: {
+            rasterState: { mode: "single", colormap: "viridis", rescale: [[0, 3000]] },
+          },
+        }),
+      ],
+      config(),
+      { ...EN, resolveColormapColors: () => ["#000000", "#ffffff"] },
+    );
+    const [entry] = entries;
+    assert.ok(entry.gradient);
+    assert.equal(entry.gradient?.minLabel, "0");
+    assert.equal(entry.gradient?.maxLabel, "3,000");
+    assert.equal(entry.gradient?.colors[0], "#000000");
+  });
+
+  it("reverses the gradient when rasterState.reversed is set", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          ...rasterBase,
+          id: "dem",
+          metadata: {
+            rasterState: { mode: "single", colormap: "viridis", reversed: true },
+          },
+        }),
+      ],
+      config(),
+      { ...EN, resolveColormapColors: () => ["#000000", "#ffffff"] },
+    );
+    assert.equal(entries[0].gradient?.colors[0], "#ffffff");
+    // No rescale → generic Low/High labels are the panel's job.
+    assert.equal(entries[0].gradient?.minLabel, null);
+  });
+
+  it("renders a classified raster as closed-range class rows", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          ...rasterBase,
+          id: "class",
+          metadata: {
+            rasterState: { mode: "single", colormap: "viridis" },
+            rasterSymbology: {
+              classified: true,
+              ramp: "viridis",
+              method: "equal-interval",
+              classCount: 3,
+              breaks: [0, 10, 20, 30],
+            },
+          },
+        }),
+      ],
+      config(),
+      { ...EN, resolveColormapColors: () => ["#000000", "#888888", "#ffffff"] },
+    );
+    const [entry] = entries;
+    assert.equal(entry.gradient, null);
+    assert.deepEqual(
+      entry.rows.map((row) => row.label),
+      ["0 – 10", "10 – 20", "20 – 30"],
+    );
+  });
+
+  it("labels classified classes from a matching Raster Attribute Table (NLCD names)", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          ...rasterBase,
+          id: "nlcd",
+          metadata: {
+            rasterState: { mode: "single", colormap: "palette" },
+            rasterSymbology: {
+              classified: true,
+              ramp: "viridis",
+              method: "manual",
+              classCount: 2,
+              breaks: [11, 21, 31],
+            },
+            rasterAttributeTable: {
+              band: 1,
+              rows: [
+                { value: 11, count: 10, label: "Open Water", color: "#466b9f" },
+                { value: 21, count: 20, label: "Developed", color: "#dec5c5" },
+              ],
+              pixelAreaM2: null,
+            },
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.deepEqual(
+      entries[0].rows.map((row) => [row.label, row.color]),
+      [
+        ["Open Water", "#466b9f"],
+        ["Developed", "#dec5c5"],
+      ],
+    );
+  });
+
+  it("gives a palette raster (no classification) a heading-only entry", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          ...rasterBase,
+          id: "pal",
+          metadata: { rasterState: { mode: "single", colormap: "palette" } },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].rows.length, 0);
+    assert.equal(entries[0].gradient, null);
+    assert.equal(entries[0].shape, "raster");
+  });
+});
+
+describe("buildAutoLegend — custom entries and overrides", () => {
+  it("replaces a layer's derived rows with its hand-authored custom entry", () => {
+    const base = config();
+    const custom = setLegendCustomEntry(base, "pal", {
+      title: "Land Cover",
+      items: [
+        { label: "Open Water", color: "#466b9f" },
+        { label: "Forest", color: "#1c6330", shape: "circle" },
+      ],
+    });
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "pal",
+          type: "cog",
+          source: { type: "raster" },
+          metadata: { rasterState: { mode: "single", colormap: "palette" } },
+        }),
+      ],
+      custom,
+      EN,
+    );
+    const [entry] = entries;
+    assert.equal(entry.name, "Land Cover");
+    assert.equal(entry.custom, true);
+    assert.equal(entry.standalone, false);
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.shape]),
+      [
+        ["Open Water", "square"],
+        ["Forest", "circle"],
+      ],
+    );
+  });
+
+  it("renders standalone custom sections and honors the order list", () => {
+    let cfg = config();
+    const id = newCustomSectionId(cfg);
+    assert.equal(id, "custom:1");
+    cfg = setLegendCustomEntry(cfg, id, {
+      title: "Notes",
+      items: [{ label: "Study area", color: "#000000" }],
+    });
+    cfg = { ...cfg, order: [id, "a"] };
+    const entries = buildAutoLegend([layer({ id: "a", name: "A" })], cfg, EN);
+    assert.deepEqual(
+      entries.map((entry) => [entry.id, entry.standalone]),
+      [
+        [id, true],
+        ["a", false],
+      ],
+    );
+  });
+
+  it("keeps a custom entry for a layer type with no auto legend (3d-tiles)", () => {
+    const cfg = setLegendCustomEntry(config(), "t", {
+      items: [{ label: "Buildings", color: "#cccccc" }],
+    });
+    const entries = buildAutoLegend(
+      [layer({ id: "t", name: "Tiles", type: "3d-tiles", source: { type: "3d-tiles" } })],
+      cfg,
+      EN,
+    );
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].rows[0].label, "Buildings");
+  });
+
+  it("applies rename and hide overrides to entries and rows", () => {
+    const styled = layer({
+      id: "cat",
+      name: "Era",
+      metadata: { geometryType: "polygon" },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "categorized",
+        vectorStyleStops: [
+          { value: "old", color: "#8c2d04" },
+          { value: "new", color: "#08306b" },
+        ],
+      },
+    });
+    const cfg = config({
+      overrides: {
+        cat: { label: "Periods" },
+        [legendRowKey("cat", 0)]: { label: "Ancient" },
+        [legendRowKey("cat", 1)]: { hidden: true },
+      },
+    });
+    const [entry] = buildAutoLegend([styled], cfg, EN);
+    assert.equal(entry.name, "Periods");
+    assert.equal(entry.defaultName, "Era");
+    assert.equal(entry.rows[0].label, "Ancient");
+    assert.equal(entry.rows[0].defaultLabel, "old");
+    assert.equal(entry.rows[1].hidden, true);
+  });
+
+  it("removeLegendCustomEntry reverts to auto and prunes stale state", () => {
+    let cfg = setLegendCustomEntry(config(), "a", {
+      items: [{ label: "X", color: "#000000" }],
+    });
+    cfg = {
+      ...cfg,
+      order: ["a"],
+      overrides: { a: { label: "Renamed" }, [legendRowKey("a", 0)]: { hidden: true } },
+    };
+    const next = removeLegendCustomEntry(cfg, "a");
+    assert.equal(next.customEntries, undefined);
+    assert.deepEqual(next.order, []);
+    assert.deepEqual(next.overrides, {});
+  });
+});

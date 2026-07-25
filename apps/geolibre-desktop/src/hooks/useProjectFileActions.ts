@@ -305,6 +305,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       basemapVisible: state.basemapVisible,
       basemapOpacity: state.basemapOpacity,
       layers: layersOverride ?? state.layers,
+      selectedLayerId: state.selectedLayerId,
       layerGroups: state.layerGroups,
       preferences: state.preferences,
       plugins: {

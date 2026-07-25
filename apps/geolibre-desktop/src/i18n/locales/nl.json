@@ -2015,7 +2015,10 @@
       "terrain": "Terrein",
       "scale": "Schaal",
       "attribution": "Bronvermelding",
-      "logo": "MapLibre-logo"
+      "logos": "Logo's",
+      "logo": "MapLibre-logo",
+      "maptoolkitLogo": "Maptoolkit-logo",
+      "maptoolkitLogoHint": "Voeg een Maptoolkit-basiskaart toe om het logo weer te geven."
     },
     "position": {
       "topLeft": "Linksboven",
@@ -3935,5 +3938,48 @@
       "valueMap": "Waarde staat niet in de toegestane lijst",
       "constraint": "Beperking niet voldaan"
     }
+  },
+  "legendPanel": {
+    "edit": "Legenda bewerken",
+    "done": "Bewerken voltooien",
+    "close": "Legenda sluiten",
+    "empty": "Geen zichtbare lagen om te tonen.",
+    "renameTitle": "Titel van de legenda",
+    "renameEntry": "{{name}} hernoemen",
+    "renameItem": "{{name}} hernoemen",
+    "moveUp": "Omhoog verplaatsen",
+    "moveDown": "Omlaag verplaatsen",
+    "hideEntry": "Verbergen uit de legenda",
+    "showEntry": "Tonen in de legenda",
+    "hideItem": "Item verbergen",
+    "showItem": "Item tonen",
+    "customizeEntry": "Items aanpassen",
+    "resetEntry": "Terugzetten naar automatisch",
+    "removeSection": "Sectie verwijderen",
+    "addSection": "Aangepaste sectie toevoegen",
+    "newSectionTitle": "Nieuwe sectie",
+    "newItemLabel": "Nieuw item",
+    "addItem": "Item toevoegen",
+    "removeItem": "Item verwijderen",
+    "itemColor": "Kleur van item",
+    "position": "Positie",
+    "positions": {
+      "top-left": "Linksboven",
+      "top-right": "Rechtsboven",
+      "bottom-left": "Linksonder",
+      "bottom-right": "Rechtsonder"
+    },
+    "low": "Laag",
+    "high": "Hoog",
+    "addFromDictionary": "Toevoegen uit woordenboek",
+    "dictionaryHint": "Een JSON-object met {\"label\": \"kleur\"}-paren, of één \"label: kleur\" per regel.",
+    "dictionaryAdd": "Sectie toevoegen",
+    "cancel": "Annuleren",
+    "resize": "Legenda vergroten of verkleinen",
+    "collapseEntry": "Sectie samenvouwen",
+    "expandEntry": "Sectie uitvouwen",
+    "collapsePanel": "Legenda samenvouwen",
+    "expandPanel": "Legenda uitvouwen",
+    "exportJson": "Exporteren als JSON"
   }
 }

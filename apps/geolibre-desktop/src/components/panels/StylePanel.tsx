@@ -3961,7 +3961,7 @@ export function StylePanel({
               </>
             )}
             {layer.metadata.sourceKind === RASTER_SOURCE_KIND && (
-              <RasterSymbologySection layer={layer} mapControllerRef={mapControllerRef} />
+              <RasterSymbologySection layer={layer} />
             )}
             <Separator />
             <Button

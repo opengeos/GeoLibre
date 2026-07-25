@@ -33,6 +33,46 @@ function geojsonLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
 }
 
 describe("project parsing", () => {
+  it("preserves a valid selected layer and drops a dangling selection", () => {
+    const base = createEmptyProject("Selection");
+    const layer = geojsonLayer({ id: "chosen" });
+    const selected = parseProject(
+      serializeProject({ ...base, layers: [layer], selectedLayerId: "chosen" }),
+    );
+    assert.equal(selected.selectedLayerId, "chosen");
+
+    const dangling = parseProject(
+      serializeProject({ ...base, layers: [layer], selectedLayerId: "missing" }),
+    );
+    assert.equal(dangling.selectedLayerId, undefined);
+  });
+
+  it("normalizes the selected layer on save as well as on load", () => {
+    const layer = geojsonLayer({ id: "chosen" });
+    const save = (selectedLayerId: string | null | undefined) =>
+      parseProject(
+        serializeProject(
+          projectFromStore({
+            projectName: "Selection",
+            mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+            basemapStyleUrl: DEFAULT_BASEMAP,
+            basemapVisible: true,
+            basemapOpacity: 1,
+            layers: [layer],
+            selectedLayerId,
+            preferences: createEmptyProject().preferences,
+            metadata: {},
+          }),
+        ),
+      );
+
+    assert.equal(save("chosen").selectedLayerId, "chosen");
+    assert.equal(save("missing").selectedLayerId, undefined);
+    assert.equal(save(undefined).selectedLayerId, undefined);
+    // An explicit null is a saved "nothing active", so it must survive the trip.
+    assert.equal(save(null).selectedLayerId, null);
+  });
+
   it("fills defaults while preserving valid project fields", () => {
     const project = parseProject(
       JSON.stringify({
@@ -169,6 +209,38 @@ describe("project parsing", () => {
     assert.equal(project.legend?.groupByLayer, false);
     assert.deepEqual(project.legend?.order, ["a", "b"]);
     assert.deepEqual(project.legend?.overrides, { a: { label: "Renamed", hidden: true } });
+  });
+
+  it("keeps hand-authored legend item sizes and drops nonsensical ones", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Legend",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        legend: {
+          title: "Legend",
+          groupByLayer: true,
+          order: [],
+          overrides: {},
+          customEntries: {
+            a: {
+              items: [
+                { label: "Small", color: "#440154", shape: "circle", size: 4 },
+                { label: "Huge", color: "#fde725", shape: "circle", size: 9e9 },
+                { label: "Bad", color: "#000000", size: "big" },
+                { label: "None", color: "#111111", size: 0 },
+              ],
+            },
+          },
+        },
+      }),
+    );
+    assert.deepEqual(project.legend?.customEntries?.a.items, [
+      { label: "Small", color: "#440154", shape: "circle", size: 4 },
+      { label: "Huge", color: "#fde725", shape: "circle", size: 1000 },
+      { label: "Bad", color: "#000000" },
+      { label: "None", color: "#111111" },
+    ]);
   });
 
   it("round-trips a legend config through projectFromStore", () => {
@@ -663,6 +735,29 @@ describe("app store", () => {
     useAppStore.getState().selectLayer(first);
     useAppStore.getState().removeLayer(first);
     assert.equal(useAppStore.getState().selectedLayerId, second);
+  });
+
+  it("restores the saved active layer and keeps the legacy first-layer fallback", () => {
+    const first = geojsonLayer({ id: "first", name: "First" });
+    const second = geojsonLayer({ id: "second", name: "Second" });
+    const base = createEmptyProject("Selection");
+
+    useAppStore.getState().loadProject({
+      ...base,
+      layers: [first, second],
+      selectedLayerId: "second",
+    });
+    assert.equal(useAppStore.getState().selectedLayerId, "second");
+
+    useAppStore.getState().loadProject({ ...base, layers: [first, second] });
+    assert.equal(useAppStore.getState().selectedLayerId, "first");
+
+    useAppStore.getState().loadProject({
+      ...base,
+      layers: [first, second],
+      selectedLayerId: null,
+    });
+    assert.equal(useAppStore.getState().selectedLayerId, null);
   });
 
   it("renames a layer without changing its id (keeps MapLibre sync stable)", () => {

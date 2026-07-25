@@ -2170,7 +2170,10 @@
       "terrain": "التضاريس",
       "scale": "المقياس",
       "attribution": "الإسناد",
-      "logo": "شعار MapLibre"
+      "logos": "الشعارات",
+      "logo": "شعار MapLibre",
+      "maptoolkitLogo": "شعار Maptoolkit",
+      "maptoolkitLogoHint": "أضِف خريطة أساس من Maptoolkit لعرض شعارها."
     },
     "position": {
       "topLeft": "أعلى اليسار",
@@ -4162,5 +4165,48 @@
       "valueMap": "القيمة ليست في القائمة المسموح بها",
       "constraint": "القيد غير مستوفى"
     }
+  },
+  "legendPanel": {
+    "edit": "تحرير مفتاح الخريطة",
+    "done": "إنهاء التحرير",
+    "close": "إغلاق مفتاح الخريطة",
+    "empty": "لا توجد طبقات مرئية لعرضها.",
+    "renameTitle": "عنوان مفتاح الخريطة",
+    "renameEntry": "إعادة تسمية {{name}}",
+    "renameItem": "إعادة تسمية {{name}}",
+    "moveUp": "نقل لأعلى",
+    "moveDown": "نقل لأسفل",
+    "hideEntry": "إخفاء من مفتاح الخريطة",
+    "showEntry": "إظهار في مفتاح الخريطة",
+    "hideItem": "إخفاء العنصر",
+    "showItem": "إظهار العنصر",
+    "customizeEntry": "تخصيص العناصر",
+    "resetEntry": "إعادة التعيين إلى تلقائي",
+    "removeSection": "إزالة القسم",
+    "addSection": "إضافة قسم مخصص",
+    "newSectionTitle": "قسم جديد",
+    "newItemLabel": "عنصر جديد",
+    "addItem": "إضافة عنصر",
+    "removeItem": "إزالة العنصر",
+    "itemColor": "لون العنصر",
+    "position": "الموضع",
+    "positions": {
+      "top-left": "أعلى اليسار",
+      "top-right": "أعلى اليمين",
+      "bottom-left": "أسفل اليسار",
+      "bottom-right": "أسفل اليمين"
+    },
+    "low": "منخفض",
+    "high": "مرتفع",
+    "addFromDictionary": "إضافة من قاموس",
+    "dictionaryHint": "كائن JSON من أزواج {\"التسمية\": \"اللون\"}، أو سطر واحد \"التسمية: اللون\" لكل عنصر.",
+    "dictionaryAdd": "إضافة قسم",
+    "cancel": "إلغاء",
+    "resize": "تغيير حجم مفتاح الخريطة",
+    "collapseEntry": "طي القسم",
+    "expandEntry": "توسيع القسم",
+    "collapsePanel": "طي مفتاح الخريطة",
+    "expandPanel": "توسيع مفتاح الخريطة",
+    "exportJson": "تصدير كملف JSON"
   }
 }

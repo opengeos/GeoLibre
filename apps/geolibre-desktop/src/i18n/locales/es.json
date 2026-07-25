@@ -2015,7 +2015,10 @@
       "terrain": "Terreno",
       "scale": "Escala",
       "attribution": "Atribución",
-      "logo": "Logotipo de MapLibre"
+      "logos": "Logotipos",
+      "logo": "Logotipo de MapLibre",
+      "maptoolkitLogo": "Logotipo de Maptoolkit",
+      "maptoolkitLogoHint": "Añade un mapa base de Maptoolkit para mostrar su logotipo."
     },
     "position": {
       "topLeft": "Superior izquierda",
@@ -3946,5 +3949,48 @@
       "valueMap": "El valor no está en la lista permitida",
       "constraint": "Restricción no satisfecha"
     }
+  },
+  "legendPanel": {
+    "edit": "Editar leyenda",
+    "done": "Terminar edición",
+    "close": "Cerrar leyenda",
+    "empty": "No hay capas visibles que mostrar.",
+    "renameTitle": "Título de la leyenda",
+    "renameEntry": "Renombrar {{name}}",
+    "renameItem": "Renombrar {{name}}",
+    "moveUp": "Subir",
+    "moveDown": "Bajar",
+    "hideEntry": "Ocultar de la leyenda",
+    "showEntry": "Mostrar en la leyenda",
+    "hideItem": "Ocultar elemento",
+    "showItem": "Mostrar elemento",
+    "customizeEntry": "Personalizar elementos",
+    "resetEntry": "Restablecer a automático",
+    "removeSection": "Eliminar sección",
+    "addSection": "Añadir sección personalizada",
+    "newSectionTitle": "Nueva sección",
+    "newItemLabel": "Nuevo elemento",
+    "addItem": "Añadir elemento",
+    "removeItem": "Eliminar elemento",
+    "itemColor": "Color del elemento",
+    "position": "Posición",
+    "positions": {
+      "top-left": "Arriba a la izquierda",
+      "top-right": "Arriba a la derecha",
+      "bottom-left": "Abajo a la izquierda",
+      "bottom-right": "Abajo a la derecha"
+    },
+    "low": "Bajo",
+    "high": "Alto",
+    "addFromDictionary": "Añadir desde diccionario",
+    "dictionaryHint": "Un objeto JSON con pares {\"etiqueta\": \"color\"}, o una línea \"etiqueta: color\" por elemento.",
+    "dictionaryAdd": "Añadir sección",
+    "cancel": "Cancelar",
+    "resize": "Cambiar el tamaño de la leyenda",
+    "collapseEntry": "Contraer sección",
+    "expandEntry": "Expandir sección",
+    "collapsePanel": "Contraer leyenda",
+    "expandPanel": "Expandir leyenda",
+    "exportJson": "Exportar como JSON"
   }
 }

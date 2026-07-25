@@ -2808,9 +2808,13 @@ export function LayerPanel({
                           )}
                           {/* Copy/paste symbology between layers (issue #1339),
                           for vector-styled layers and deck.gl rasters. Paste is
-                          disabled until a same-family style is on the clipboard. */}
+                          disabled until a same-family style is on the clipboard;
+                          its tooltip explains the enabled and both disabled
+                          cases. Separated from the neighbouring action groups to
+                          match the rest of the menu. */}
                           {copyStyleKind && (
                             <>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onSelect={() => {
                                   handleCopyStyle(layer);
@@ -2826,7 +2830,9 @@ export function LayerPanel({
                                     ? t("layers.pasteStyleFrom", {
                                         name: copiedLayerStyle.sourceName,
                                       })
-                                    : undefined
+                                    : copiedLayerStyle
+                                      ? t("layers.pasteStyleMismatch")
+                                      : t("layers.pasteStyleEmpty")
                                 }
                                 onSelect={() => {
                                   handlePasteStyle(layer);

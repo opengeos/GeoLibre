@@ -78,10 +78,10 @@ import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
 import { useOsmPbfLoader } from "../../hooks/useOsmPbfLoader";
 import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
-import { useAutoLegend } from "../../hooks/useAutoLegend";
 import { useVectorTileGeometryBackfill } from "../../hooks/useVectorTileGeometryBackfill";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
+import { isMaptoolkitBasemapActive } from "../../lib/maptoolkit-basemap";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { MENU_MANAGED_PLUGIN_IDS, isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
@@ -430,9 +430,6 @@ export function TopToolbar({
   // mapReadyGeneration so it re-runs once the map exists (an early mount before
   // map init would otherwise miss its only chance to attach the idle listener).
   useVectorTileGeometryBackfill(appApi, mapReadyGeneration);
-  // Feed the visible layers' symbology into the Legend panel while it is open,
-  // so it auto-updates as layers are shown/hidden.
-  useAutoLegend(appApi, panels.legend.visible, t("toolbar.item.legend"));
   const osmPbf = useOsmPbfLoader(appApi, projectFiles.setActionError);
   const consent = useConsentGatedActions({ appApi, isActive, toggle });
   const viewportHistory = useViewportHistory(
@@ -549,6 +546,22 @@ export function TopToolbar({
       return updated ? { ...current, [control]: visible } : current;
     });
   };
+
+  // The Maptoolkit logo is Maptoolkit-basemap attribution, so it must not linger
+  // over a different basemap. When no Maptoolkit basemap is active (see
+  // isMaptoolkitBasemapActive), turn the logo back off through the same path as
+  // the menu, so the map controller and this menu's checkmark stay in sync.
+  const maptoolkitBasemapActive = useAppStore((s) =>
+    isMaptoolkitBasemapActive(s.basemapStyleUrl, s.layers),
+  );
+  useEffect(() => {
+    if (maptoolkitBasemapActive) return;
+    setControlsVisible((current) => {
+      if (!current["maptoolkit-logo"]) return current;
+      mapControllerRef.current?.setBuiltInControlVisible("maptoolkit-logo", false);
+      return { ...current, "maptoolkit-logo": false };
+    });
+  }, [maptoolkitBasemapActive, mapControllerRef]);
 
   // The command registry: the single source of truth shared by the command
   // palette, the global shortcut layer, and the keyboard cheat sheet. Each

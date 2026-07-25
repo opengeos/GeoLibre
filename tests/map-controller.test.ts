@@ -617,6 +617,28 @@ describe("MapController built-in control positions", () => {
     const controller = createMapController();
     assert.equal(controller.getBuiltInControlPosition("navigation"), "top-right");
     assert.equal(controller.getBuiltInControlPosition("scale"), "bottom-left");
+    // The Maptoolkit logo shares the bottom-left corner with the MapLibre logo.
+    assert.equal(controller.getBuiltInControlPosition("maptoolkit-logo"), "bottom-left");
+  });
+
+  it("adds and removes the Maptoolkit logo control on toggle", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    const shown = controller.setBuiltInControlVisible("maptoolkit-logo", true);
+    assert.equal(shown, true);
+    const addCall = fake.calls.find((c) => c.method === "addControl");
+    assert.ok(addCall, "the logo control is added to the map");
+    assert.equal(addCall.args[1], "bottom-left");
+    assert.equal(
+      (addCall.args[0] as { constructor: { name: string } }).constructor.name,
+      "MaptoolkitLogoControl",
+    );
+
+    controller.setBuiltInControlVisible("maptoolkit-logo", false);
+    const removeCall = fake.calls.find((c) => c.method === "removeControl");
+    assert.ok(removeCall, "the same logo control is removed from the map");
+    assert.equal(removeCall.args[0], addCall.args[0]);
   });
 
   it("records a new position even when the control is hidden", () => {

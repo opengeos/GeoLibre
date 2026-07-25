@@ -550,6 +550,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     labelKey: "toolbar.mapControl.logo",
     tier: "advanced",
   },
+  {
+    id: "controls.mapControl.maptoolkit-logo",
+    menuId: "controls",
+    labelKey: "toolbar.mapControl.maptoolkitLogo",
+    tier: "advanced",
+  },
   // Controls — overlays and panels
   // Basic so Beginners keep the toggle: Atmospheric Effects is activeByDefault,
   // so hiding it would leave the effect on with no way to turn it off.

@@ -2015,7 +2015,10 @@
       "terrain": "Arazi",
       "scale": "Ölçek",
       "attribution": "Atıf",
-      "logo": "MapLibre logosu"
+      "logos": "Logolar",
+      "logo": "MapLibre logosu",
+      "maptoolkitLogo": "Maptoolkit logosu",
+      "maptoolkitLogoHint": "Logosunu göstermek için bir Maptoolkit taban haritası ekleyin."
     },
     "position": {
       "topLeft": "Sol üst",
@@ -3935,5 +3938,48 @@
       "valueMap": "Değer izin verilen listede değil",
       "constraint": "Kısıtlama sağlanmadı"
     }
+  },
+  "legendPanel": {
+    "edit": "Lejantı düzenle",
+    "done": "Düzenlemeyi bitir",
+    "close": "Lejantı kapat",
+    "empty": "Listelenecek görünür katman yok.",
+    "renameTitle": "Lejant başlığı",
+    "renameEntry": "{{name}} adını değiştir",
+    "renameItem": "{{name}} adını değiştir",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "hideEntry": "Lejanttan gizle",
+    "showEntry": "Lejantta göster",
+    "hideItem": "Öğeyi gizle",
+    "showItem": "Öğeyi göster",
+    "customizeEntry": "Öğeleri özelleştir",
+    "resetEntry": "Otomatiğe sıfırla",
+    "removeSection": "Bölümü kaldır",
+    "addSection": "Özel bölüm ekle",
+    "newSectionTitle": "Yeni bölüm",
+    "newItemLabel": "Yeni öğe",
+    "addItem": "Öğe ekle",
+    "removeItem": "Öğeyi kaldır",
+    "itemColor": "Öğe rengi",
+    "position": "Konum",
+    "positions": {
+      "top-left": "Sol üst",
+      "top-right": "Sağ üst",
+      "bottom-left": "Sol alt",
+      "bottom-right": "Sağ alt"
+    },
+    "low": "Düşük",
+    "high": "Yüksek",
+    "addFromDictionary": "Sözlükten ekle",
+    "dictionaryHint": "{\"etiket\": \"renk\"} çiftlerinden oluşan bir JSON nesnesi veya satır başına bir \"etiket: renk\".",
+    "dictionaryAdd": "Bölüm ekle",
+    "cancel": "İptal",
+    "resize": "Lejantı yeniden boyutlandır",
+    "collapseEntry": "Bölümü daralt",
+    "expandEntry": "Bölümü genişlet",
+    "collapsePanel": "Lejantı daralt",
+    "expandPanel": "Lejantı genişlet",
+    "exportJson": "JSON olarak dışa aktar"
   }
 }

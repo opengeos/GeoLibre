@@ -360,8 +360,10 @@ export {
 } from "./plugins/maplibre-source-coop";
 export {
   DEFAULT_GEOLENS_LABELS,
+  DEFAULT_GEOLENS_FEATURE_LIMIT,
   GEOLENS_PLUGIN_ID,
   maplibreGeoLensPlugin,
+  normalizeGeoLensFeatureLimit,
   setGeoLensLabels,
   type GeoLensLabels,
 } from "./plugins/maplibre-geolens";

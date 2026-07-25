@@ -54,7 +54,15 @@ export const MAP_CONTROL_ITEMS: Array<{
   { id: "scale", labelKey: "toolbar.mapControl.scale" },
   { id: "attribution", labelKey: "toolbar.mapControl.attribution" },
   { id: "logo", labelKey: "toolbar.mapControl.logo" },
+  { id: "maptoolkit-logo", labelKey: "toolbar.mapControl.maptoolkitLogo" },
 ];
+
+/**
+ * The logo controls, grouped under the Controls → Logos submenu (rather than
+ * rendered as flat toggles like the other map controls). Kept as a Set so
+ * ControlsMenu can filter them out of the flat list and render them together.
+ */
+export const LOGO_CONTROL_IDS = new Set<ToolbarMapControl>(["logo", "maptoolkit-logo"]);
 
 export const NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS = new Set<BuiltInMapControl>([
   "fullscreen",
