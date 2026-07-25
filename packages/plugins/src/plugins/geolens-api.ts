@@ -130,9 +130,76 @@ export function normalizeBaseUrl(raw: string): string {
 }
 
 /** Auth headers for a request — an API key becomes `X-Api-Key`. */
+/** GeoLens accepts the API key in this header (it also honors `Authorization`). */
+export const GEOLENS_API_KEY_HEADER = "X-Api-Key";
+
 export function authHeaders(options: GeoLensClientOptions): Record<string, string> {
   const key = options.apiKey?.trim();
-  return key ? { "X-Api-Key": key } : {};
+  return key ? { [GEOLENS_API_KEY_HEADER]: key } : {};
+}
+
+/**
+ * The prefix of a tile URL template: everything before the first `{z}`/`{x}`/`{y}`
+ * placeholder.
+ *
+ * Used as the match key when attaching credentials to MapLibre-issued raster
+ * tile requests, so a key is scoped to the exact endpoint that produced it
+ * rather than to a whole origin.
+ */
+export function tileUrlPrefix(template: string): string {
+  const brace = template.indexOf("{");
+  return brace === -1 ? template : template.slice(0, brace);
+}
+
+/** The store-layer fields needed to re-key restored GeoLens raster layers. */
+export interface GeoLensRasterLayerLike {
+  metadata?: Record<string, unknown> | null;
+  source?: { tiles?: unknown } | null;
+}
+
+/**
+ * Tile templates of GeoLens raster layers already on the map that belong to
+ * `baseUrl`.
+ *
+ * API keys are held in memory only, so a restored project (or a
+ * deactivate/reactivate cycle) leaves private raster layers in the store with
+ * no registered credential, and the Add button is disabled for them because
+ * they are already present. Re-registering these templates at connect time is
+ * what lets the key the user just entered reach those layers' tile requests.
+ */
+export function rasterTemplatesForServer(
+  layers: readonly GeoLensRasterLayerLike[],
+  baseUrl: string,
+): string[] {
+  const out: string[] = [];
+  for (const layer of layers) {
+    const md = layer.metadata;
+    if (!md || md.sourceKind !== "geolens-raster-tiles" || md.geolensBaseUrl !== baseUrl) {
+      continue;
+    }
+    const tiles = layer.source?.tiles;
+    const first = Array.isArray(tiles) ? tiles[0] : undefined;
+    if (typeof first === "string" && first) out.push(first);
+  }
+  return out;
+}
+
+/**
+ * Auth headers for a raster tile URL, or `null` to leave the request untouched.
+ *
+ * `keysByPrefix` maps a {@link tileUrlPrefix} to the API key that endpoint needs.
+ * A request only ever gets a key when its URL starts with that exact prefix, so
+ * basemaps, other plugins' tiles, and a second GeoLens server on the same origin
+ * are all unaffected.
+ */
+export function rasterTileAuthHeaders(
+  url: string,
+  keysByPrefix: ReadonlyMap<string, string>,
+): Record<string, string> | null {
+  for (const [prefix, apiKey] of keysByPrefix) {
+    if (url.startsWith(prefix)) return { [GEOLENS_API_KEY_HEADER]: apiKey };
+  }
+  return null;
 }
 
 /**

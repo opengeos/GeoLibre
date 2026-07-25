@@ -12,10 +12,13 @@ import {
   mintTileToken,
   normalizeBaseUrl,
   parseDataset,
+  rasterTemplatesForServer,
+  rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
   stacCatalogUrl,
   stacCollectionsUrl,
+  tileUrlPrefix,
   vectorTileTemplate,
   type GeoLensFetch,
   type GeoLensHttpResponse,
@@ -414,5 +417,99 @@ describe("resolveRasterTiles", () => {
       () => resolveRasterTiles({ baseUrl: "http://h" }, "id", fetchImpl),
       /not a raster/,
     );
+  });
+});
+
+describe("tileUrlPrefix", () => {
+  it("keeps everything before the first placeholder", () => {
+    assert.equal(
+      tileUrlPrefix("https://demo.example.com/raster-tiles/abc/tiles/{z}/{x}/{y}.png"),
+      "https://demo.example.com/raster-tiles/abc/tiles/",
+    );
+  });
+
+  it("returns a template without placeholders unchanged", () => {
+    assert.equal(tileUrlPrefix("https://h/tiles.png"), "https://h/tiles.png");
+  });
+});
+
+describe("rasterTileAuthHeaders", () => {
+  const keys = new Map([
+    ["https://demo.example.com/raster-tiles/abc/tiles/", "key-abc"],
+    ["https://other.example.com/raster-tiles/xyz/tiles/", "key-xyz"],
+  ]);
+
+  it("attaches the key registered for that tile endpoint", () => {
+    assert.deepEqual(
+      rasterTileAuthHeaders("https://demo.example.com/raster-tiles/abc/tiles/3/2/1.png", keys),
+      { "X-Api-Key": "key-abc" },
+    );
+  });
+
+  it("picks the matching server when several are registered", () => {
+    assert.deepEqual(
+      rasterTileAuthHeaders("https://other.example.com/raster-tiles/xyz/tiles/0/0/0.png", keys),
+      { "X-Api-Key": "key-xyz" },
+    );
+  });
+
+  it("does not leak the key to a basemap or another host", () => {
+    assert.equal(rasterTileAuthHeaders("https://tiles.openfreemap.org/1/2/3.pbf", keys), null);
+    assert.equal(rasterTileAuthHeaders("https://demo.example.com.evil.test/x", keys), null);
+  });
+
+  it("does not attach a key to a different dataset on the same server", () => {
+    assert.equal(
+      rasterTileAuthHeaders("https://demo.example.com/raster-tiles/zzz/tiles/1/1/1.png", keys),
+      null,
+    );
+  });
+
+  it("returns null when nothing is registered", () => {
+    assert.equal(rasterTileAuthHeaders("https://demo.example.com/x", new Map()), null);
+  });
+});
+
+describe("rasterTemplatesForServer", () => {
+  const base = "https://demo.example.com";
+  const layers = [
+    {
+      metadata: {
+        sourceKind: "geolens-raster-tiles",
+        geolensBaseUrl: base,
+        geolensDatasetId: "abc",
+      },
+      source: { tiles: [`${base}/raster-tiles/abc/tiles/{z}/{x}/{y}.png`] },
+    },
+    {
+      metadata: { sourceKind: "geolens-raster-tiles", geolensBaseUrl: "https://other.example.com" },
+      source: { tiles: ["https://other.example.com/raster-tiles/xyz/tiles/{z}/{x}/{y}.png"] },
+    },
+    {
+      metadata: { sourceKind: "geolens-vector-tiles", geolensBaseUrl: base },
+      source: { tiles: [`${base}/api/tiles/t/{z}/{x}/{y}.pbf?sig=s`] },
+    },
+    { metadata: null, source: { tiles: [`${base}/raster-tiles/zzz/tiles/{z}/{x}/{y}.png`] } },
+    {
+      metadata: { sourceKind: "geolens-raster-tiles", geolensBaseUrl: base },
+      source: { tiles: [] },
+    },
+    { metadata: { sourceKind: "geolens-raster-tiles", geolensBaseUrl: base }, source: null },
+  ];
+
+  it("returns only this server's raster templates", () => {
+    assert.deepEqual(rasterTemplatesForServer(layers, base), [
+      `${base}/raster-tiles/abc/tiles/{z}/{x}/{y}.png`,
+    ]);
+  });
+
+  it("returns the other server's template for its own base URL", () => {
+    assert.deepEqual(rasterTemplatesForServer(layers, "https://other.example.com"), [
+      "https://other.example.com/raster-tiles/xyz/tiles/{z}/{x}/{y}.png",
+    ]);
+  });
+
+  it("returns nothing when no GeoLens raster layers are present", () => {
+    assert.deepEqual(rasterTemplatesForServer([], base), []);
   });
 });
