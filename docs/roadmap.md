@@ -332,7 +332,7 @@
 - [x] Bundled plugin drop-ins can set `activeByDefault` in their manifest, deployments can opt out of the welcome dialog, and the app now defaults to the Advanced interface and skips the welcome dialog on first run
 - [x] Optional HTTP Basic Auth for the web (Docker) container
 
-## v2.2: A styling overhaul, expression-driven fields and labels, print atlas, and browser-native conversions (current)
+## v2.2: A styling overhaul, expression-driven fields and labels, print atlas, and browser-native conversions
 
 - [x] A **rule-based renderer** with per-rule symbol properties, scale-dependent visibility, nested rules, and per-rule toggles, so a single layer can carry a full hierarchy of styling rules and hide anything that matches no rule when the else rule is off
 - [x] A **Style Manager** that saves reusable symbol, color-ramp, and label presets to a personal library and applies them across projects
@@ -353,6 +353,23 @@
 - [x] Desktop gains OS trust store and mTLS client-certificate support for native HTTP, automatic reload when local files change on disk, and Esri File Geodatabase (`.gdb`) layer support
 - [x] New Natural Earth and Source Cooperative data browsers under Plugins > Web Services, including opening or streaming large GeoParquet from Source Cooperative
 - [x] Terrain-aware 3D measurements in the Measure tool, optional title/source captions and on-map panel capture (HTML, legend, colorbar) in video recordings, and a new Georgian locale alongside full Arabic right-to-left support
+
+## v2.3: An on-map Legend panel, iOS and Google Play, the GeoLens catalog, and space-time hot spots (current)
+
+- [x] An auto-generated **Legend panel** on the map that derives itself from the visible layers' symbology — per-class rows for graduated, categorized, rule-based, and expression styling, gradient bars for heatmaps and continuous raster colormaps, proportional-symbol size ramps, diagram fields, and land-cover labels read from a Raster Attribute Table — with an edit mode for renaming, hiding, and reordering entries, adding a section from a color dictionary, choosing a corner, collapsing sections, resizing the panel, and exporting the rendered legend as JSON, all saved with the project and shared with the Print Layout legend
+- [x] **Symbology swatches in the Layers panel**: every row carries a dot, line, square, or image glyph colored from the layer's own styling, dimmed when the layer is hidden, so a tall layer stack reads at a glance
+- [x] A new **GeoLens catalog browser** plugin for connecting to a self-hosted GeoLens server, searching its catalog, and adding datasets as signed vector tiles, OGC API Features GeoJSON, or server-rendered raster tiles, with automatic tile-token refresh and a Metadata link back to each dataset's page
+- [x] **iOS support**, scaffolded end to end — Tauri iOS configuration, location permissions, a signing and TestFlight CI workflow, and a publishing guide. See [iOS](ios.md)
+- [x] The **Android build is Google Play-ready**: a permanent `org.geolibre.app` package id, API level 36, 16 KB page-size alignment verified in CI, and a signed universal App Bundle published alongside the per-architecture sideload APKs. See [Android](android.md)
+- [x] **Emerging Hot Spot Analysis**: aggregate timestamped points into a space-time cube, run Getis-Ord Gi\* per time slice, and classify every cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot or cold spot, entirely in the browser
+- [x] The Time Slider animates **mosaic sources** — a MosaicJSON or STAC collection of many COGs per date — rendered as a full spatial mosaic through either the GPU or the WASM engine, with the WASM engine working in globe as well as mercator projection
+- [x] **Copy and paste layer styles** between layers from the layer menu, so a set of vectors or rasters can be given one consistent look without restyling each in turn
+- [x] **Multiple named AI profiles**: define several provider, model, and credential combinations, mark one as the default, and switch between them from the assistant panel
+- [x] **Deep-link any Whitebox tool** with a `?tool=` URL parameter that opens the Processing dialog preselected and pre-fills the tool's form from the remaining query parameters, plus a Copy link button that builds a shareable link from the settings you changed
+- [x] Add Data gains a source **CRS field for delimited text**, so CSVs with projected easting and northing columns land in the right place, and a **layer picker for multi-layer GeoPackages**, so a container full of feature tables adds only what you asked for
+- [x] The layer metadata dialog reports a raster's real georeferencing read from the GeoTIFF header — CRS and EPSG code, pixel size and extent in CRS units, data type, nodata, compression, tiling, and overviews — in a resizable dialog
+- [x] Type a coordinate into the place-search box to fly straight to it, in decimal degrees, DMS, or DDM, with no geocoder round-trip
+- [x] A new Random extract vector tool, the active layer now persists with the project, turning on the Terrain control enables 3D relief immediately, and a Logos submenu adds Maptoolkit branding alongside the MapLibre logo
 
 ## Plugin marketplace and registry (design)
 
