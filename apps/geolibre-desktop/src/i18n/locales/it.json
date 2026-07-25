@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "La proprietà selezionata non contiene timestamp leggibili. Scegli una proprietà diversa.",
     "bindTileNoFeatures": "Per questo livello non è ancora stato caricato alcun tile. Esegui lo zoom sul livello e riprova.",
     "bindRange": "Intervallo temporale",
+    "bindRangeEnd": "Fine dell'intervallo temporale",
     "bindRangeHint": "Ricavato dai tile caricati finora, quindi potrebbe essere più ristretto del dataset completo. Inserisci un anno (1958) o una data (1958-03-01).",
     "bindRangeInvalid": "Inserisci entrambi i limiti come anno (1958) o data (1958-03-01).",
     "bindProperty": "Proprietà temporale",

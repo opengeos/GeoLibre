@@ -3902,6 +3902,7 @@
     "bindNoTimestamps": "Properti yang dipilih tidak memiliki timestamp yang dapat dibaca. Pilih properti lain.",
     "bindTileNoFeatures": "Belum ada ubin yang dimuat untuk layer ini. Zoom ke layer, lalu coba lagi.",
     "bindRange": "Rentang waktu",
+    "bindRangeEnd": "Akhir rentang waktu",
     "bindRangeHint": "Diambil dari ubin yang telah dimuat sejauh ini, sehingga mungkin lebih sempit daripada dataset lengkap. Masukkan tahun (1958) atau tanggal (1958-03-01).",
     "bindRangeInvalid": "Masukkan kedua batas sebagai tahun (1958) atau tanggal (1958-03-01).",
     "bindProperty": "Properti waktu",

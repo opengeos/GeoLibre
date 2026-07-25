@@ -300,7 +300,8 @@ export interface BuildTimeBindingOptions {
    * tiles, so their scanned extent is a lower bound on the real one — the bind
    * dialog scans to prefill, then passes back whatever range the user confirmed
    * so the timeline covers the whole dataset rather than the current view.
-   * Ignored when it is not a finite, ordered pair.
+   * A reversed pair is reordered rather than rejected; the extent is ignored
+   * only when either bound is non-finite.
    */
   extent?: { min: number; max: number };
 }

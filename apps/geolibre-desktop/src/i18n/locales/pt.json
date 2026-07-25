@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "A propriedade selecionada não tem timestamps legíveis. Escolha outra propriedade.",
     "bindTileNoFeatures": "Ainda não há tiles carregados para esta camada. Amplie para a camada e tente novamente.",
     "bindRange": "Intervalo de tempo",
+    "bindRangeEnd": "Fim do intervalo de tempo",
     "bindRangeHint": "Obtido dos tiles carregados até agora, portanto pode ser mais estreito que o conjunto de dados completo. Informe um ano (1958) ou uma data (1958-03-01).",
     "bindRangeInvalid": "Informe ambos os limites como um ano (1958) ou uma data (1958-03-01).",
     "bindProperty": "Propriedade de tempo",

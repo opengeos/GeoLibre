@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "Die ausgewählte Eigenschaft enthält keine lesbaren Zeitstempel. Wählen Sie eine andere Eigenschaft.",
     "bindTileNoFeatures": "Für diese Ebene sind noch keine Kacheln geladen. Zoomen Sie auf die Ebene und versuchen Sie es erneut.",
     "bindRange": "Zeitraum",
+    "bindRangeEnd": "Ende des Zeitraums",
     "bindRangeHint": "Aus den bisher geladenen Kacheln übernommen und daher möglicherweise kleiner als der gesamte Datensatz. Geben Sie ein Jahr (1958) oder ein Datum (1958-03-01) ein.",
     "bindRangeInvalid": "Geben Sie beide Grenzen als Jahr (1958) oder Datum (1958-03-01) ein.",
     "bindProperty": "Zeiteigenschaft",

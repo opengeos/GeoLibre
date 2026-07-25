@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "La propiedad seleccionada no tiene marcas de tiempo legibles. Elija otra propiedad.",
     "bindTileNoFeatures": "Aún no hay teselas cargadas para esta capa. Ajuste el zoom a la capa y vuelva a intentarlo.",
     "bindRange": "Intervalo de tiempo",
+    "bindRangeEnd": "Fin del intervalo de tiempo",
     "bindRangeHint": "Obtenido de las teselas cargadas hasta ahora, por lo que puede ser más estrecho que el conjunto de datos completo. Introduzca un año (1958) o una fecha (1958-03-01).",
     "bindRangeInvalid": "Introduzca ambos límites como un año (1958) o una fecha (1958-03-01).",
     "bindProperty": "Propiedad de tiempo",

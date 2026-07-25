@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "The selected property has no readable timestamps. Pick a different property.",
     "bindTileNoFeatures": "No tiles are loaded for this layer yet. Zoom to the layer, then try again.",
     "bindRange": "Time range",
+    "bindRangeEnd": "Time range end",
     "bindRangeHint": "Taken from the tiles loaded so far, so it may be narrower than the full dataset. Enter a year (1958) or a date (1958-03-01).",
     "bindRangeInvalid": "Enter both bounds as a year (1958) or a date (1958-03-01).",
     "bindProperty": "Time property",

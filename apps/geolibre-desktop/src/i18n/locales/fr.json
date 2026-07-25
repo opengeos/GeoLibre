@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "La propriété sélectionnée n'a pas d'horodatages lisibles. Choisissez une autre propriété.",
     "bindTileNoFeatures": "Aucune tuile n'est encore chargée pour cette couche. Zoomez sur la couche, puis réessayez.",
     "bindRange": "Plage temporelle",
+    "bindRangeEnd": "Fin de la plage temporelle",
     "bindRangeHint": "Établie à partir des tuiles chargées jusqu'ici, elle peut donc être plus étroite que le jeu de données complet. Saisissez une année (1958) ou une date (1958-03-01).",
     "bindRangeInvalid": "Saisissez les deux bornes sous forme d'année (1958) ou de date (1958-03-01).",
     "bindProperty": "Propriété temporelle",

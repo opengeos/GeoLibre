@@ -3960,6 +3960,7 @@
     "bindNoTimestamps": "Seçilen özniteliğin okunabilir zaman damgası yok. Farklı bir özellik seçin.",
     "bindTileNoFeatures": "Bu katman için henüz döşeme yüklenmedi. Katmana yakınlaştırın ve yeniden deneyin.",
     "bindRange": "Zaman aralığı",
+    "bindRangeEnd": "Zaman aralığı sonu",
     "bindRangeHint": "Şu ana kadar yüklenen döşemelerden alındığı için tüm veri kümesinden daha dar olabilir. Bir yıl (1958) veya tarih (1958-03-01) girin.",
     "bindRangeInvalid": "Her iki sınırı da yıl (1958) veya tarih (1958-03-01) olarak girin.",
     "bindProperty": "Zaman özelliği",

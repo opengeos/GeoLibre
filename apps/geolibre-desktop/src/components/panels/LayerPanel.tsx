@@ -1667,9 +1667,15 @@ export function LayerPanel({
         : bindWindowMode === "wide"
           ? { unit: binding.granularity, before: 1, after: 1 }
           : { unit: binding.granularity, before: 0, after: 1 };
+    // Re-read the layer before merging: the dialog stays open across an async
+    // scan, so an auto-refresh or a concurrent edit can have replaced the
+    // metadata since the last render, and spreading the render-time copy would
+    // write those changes back out.
+    const current = useAppStore.getState().layers.find((entry) => entry.id === layer.id);
+    if (!current) return;
     updateLayer(layer.id, {
       metadata: {
-        ...layer.metadata,
+        ...current.metadata,
         timeBinding: {
           ...binding,
           window: timeWindow,
@@ -3352,6 +3358,9 @@ export function LayerPanel({
                     <span className="text-sm text-muted-foreground">–</span>
                     <Input
                       id="time-slider-range-end"
+                      // The visible label names the start input, so the end
+                      // input would otherwise be announced with no name.
+                      aria-label={t("layers.bindRangeEnd")}
                       value={bindRangeEnd}
                       onChange={(event) => {
                         setBindRangeEnd(event.target.value);
