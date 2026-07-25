@@ -3838,6 +3838,7 @@
     "metadataDialogDescription": "Laagmetadata en broninformatie",
     "metadataRasterLoading": "Rastermetadata worden gelezen…",
     "metadataRasterError": "Kan de metadata van dit raster niet lezen.",
+    "resizeMetadataDialog": "Formaat van metadatavenster wijzigen",
     "removeLayerConfirmTitle": "Laag verwijderen?",
     "removeLayerConfirmBody": "Hiermee wordt {{name}} verwijderd uit het project en de kaart.",
     "thisLayerFallback": "deze laag",

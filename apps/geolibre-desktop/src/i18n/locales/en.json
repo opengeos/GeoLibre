@@ -3872,6 +3872,7 @@
     "metadataDialogDescription": "Layer metadata and source information",
     "metadataRasterLoading": "Reading raster metadata…",
     "metadataRasterError": "Could not read this raster's metadata.",
+    "resizeMetadataDialog": "Resize metadata dialog",
     "removeLayerConfirmTitle": "Remove layer?",
     "removeLayerConfirmBody": "This removes {{name}} from the project and map.",
     "thisLayerFallback": "this layer",

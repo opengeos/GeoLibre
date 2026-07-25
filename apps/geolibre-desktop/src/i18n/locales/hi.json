@@ -3838,6 +3838,7 @@
     "metadataDialogDescription": "लेयर मेटाडेटा और स्रोत जानकारी",
     "metadataRasterLoading": "रास्टर मेटाडेटा पढ़ा जा रहा है…",
     "metadataRasterError": "इस रास्टर का मेटाडेटा नहीं पढ़ा जा सका।",
+    "resizeMetadataDialog": "मेटाडेटा संवाद का आकार बदलें",
     "removeLayerConfirmTitle": "लेयर हटाएं?",
     "removeLayerConfirmBody": "यह {{name}} को प्रोजेक्ट और मानचित्र से हटा देता है।",
     "thisLayerFallback": "यह लेयर",

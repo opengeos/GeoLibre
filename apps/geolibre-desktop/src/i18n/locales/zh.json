@@ -3781,6 +3781,7 @@
     "metadataDialogDescription": "图层元数据和数据源信息",
     "metadataRasterLoading": "正在读取栅格元数据…",
     "metadataRasterError": "无法读取该栅格的元数据。",
+    "resizeMetadataDialog": "调整元数据对话框大小",
     "removeLayerConfirmTitle": "是否移除图层？",
     "removeLayerConfirmBody": "此操作会从项目和地图中移除 {{name}}。",
     "thisLayerFallback": "此图层",

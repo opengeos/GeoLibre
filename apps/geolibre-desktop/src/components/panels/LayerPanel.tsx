@@ -590,6 +590,18 @@ export function LayerPanel({
   // read from the file on open (#1420): "loading" while the header is being
   // fetched, "error" when it cannot be read.
   const [rasterInfoState, setRasterInfoState] = useState<RasterInfoState | null>(null);
+  // Explicit metadata dialog size once the user drags the corner grip (null =
+  // the default responsive size). Kept across open/close so a size chosen for
+  // one layer still applies to the next. `metadataDialogRef` reads the live
+  // element size at the start of a drag; `metadataResizeCleanupRef` tears down
+  // the listeners on unmount.
+  const metadataDialogRef = useRef<HTMLDivElement>(null);
+  const [metadataDialogSize, setMetadataDialogSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const metadataResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => metadataResizeCleanupRef.current?.(), []);
   const [layerPendingRemoval, setLayerPendingRemoval] = useState<GeoLibreLayer | null>(null);
   const [refreshSettingsLayerId, setRefreshSettingsLayerId] = useState<string | null>(null);
   const [refreshStatuses, setRefreshStatuses] = useState<Record<string, LayerRefreshStatus>>({});
@@ -695,6 +707,58 @@ export function LayerPanel({
     () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
     [layerGroups, firstMemberIdByGroup],
   );
+  // Resize the metadata dialog from its bottom-right grip. The dialog is
+  // centred via a -50% transform, so each edge moves by half the size change;
+  // growing by 2x the pointer delta keeps the grip under the cursor (mirrors
+  // the Project Gallery dialog's resize idiom).
+  const startMetadataResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const el = metadataDialogRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = rect.width;
+    const startH = rect.height;
+    let next = { width: startW, height: startH };
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "nwse-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (e: PointerEvent) => {
+      next = {
+        width: Math.max(320, Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2)),
+        height: Math.max(240, Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2)),
+      };
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        setMetadataDialogSize(next);
+      });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      metadataResizeCleanupRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setMetadataDialogSize(next);
+    };
+    metadataResizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
+
   // The header read scoped to the layer whose metadata dialog is open. A state
   // left over from a previously inspected layer is ignored rather than shown
   // under the new layer's name.
@@ -3323,7 +3387,41 @@ export function LayerPanel({
           if (!open) setMetadataLayer(null);
         }}
       >
-        <DialogContent>
+        <DialogContent
+          ref={metadataDialogRef}
+          style={
+            metadataDialogSize
+              ? {
+                  width: metadataDialogSize.width,
+                  height: metadataDialogSize.height,
+                  maxWidth: "none",
+                  maxHeight: "none",
+                }
+              : undefined
+          }
+          bodyClassName="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6"
+          resizeHandle={
+            // Physical bottom-right (not logical `end-0`): the drag math grows
+            // the dialog with a positive x delta, so the grip stays on the
+            // right edge in right-to-left locales too.
+            <div
+              role="separator"
+              aria-label={t("layers.resizeMetadataDialog")}
+              title={t("layers.resizeMetadataDialog")}
+              onPointerDown={startMetadataResize}
+              className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+            >
+              <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
+                <path
+                  d="M11 15L15 11M6 15L15 6"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          }
+        >
           <DialogHeader>
             <DialogTitle>
               {t("layers.metadataDialogTitle", { name: metadataLayer?.name })}
@@ -3337,7 +3435,9 @@ export function LayerPanel({
                 : t("layers.metadataRasterError")}
             </p>
           )}
-          <ScrollArea className="max-h-80">
+          {/* Capped at a readable height until the user resizes the dialog,
+              after which the payload fills whatever height they chose. */}
+          <ScrollArea className={cn("min-h-0", metadataDialogSize ? "flex-1" : "max-h-80")}>
             <pre className="whitespace-pre-wrap break-all text-xs">
               {metadataLayer &&
                 JSON.stringify(

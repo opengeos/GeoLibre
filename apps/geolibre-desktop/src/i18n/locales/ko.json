@@ -3781,6 +3781,7 @@
     "metadataDialogDescription": "레이어 메타데이터 및 소스 정보",
     "metadataRasterLoading": "래스터 메타데이터를 읽는 중…",
     "metadataRasterError": "이 래스터의 메타데이터를 읽을 수 없습니다.",
+    "resizeMetadataDialog": "메타데이터 대화 상자 크기 조정",
     "removeLayerConfirmTitle": "레이어를 제거하시겠습니까?",
     "removeLayerConfirmBody": "{{name}}을(를) 프로젝트와 지도에서 제거합니다.",
     "thisLayerFallback": "이 레이어",

@@ -3838,6 +3838,7 @@
     "metadataDialogDescription": "შრის მეტამონაცემები და წყაროს ინფორმაცია",
     "metadataRasterLoading": "რასტრის მეტამონაცემები იკითხება…",
     "metadataRasterError": "ამ რასტრის მეტამონაცემების წაკითხვა ვერ მოხერხდა.",
+    "resizeMetadataDialog": "მეტამონაცემების დიალოგის ზომის შეცვლა",
     "removeLayerConfirmTitle": "მოვაშოროთ შრე?",
     "removeLayerConfirmBody": "ეს მოაშორებს {{name}}-ს პროექტიდან და რუკიდან.",
     "thisLayerFallback": "ეს შრე",

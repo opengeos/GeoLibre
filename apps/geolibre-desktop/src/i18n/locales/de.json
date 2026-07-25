@@ -3838,6 +3838,7 @@
     "metadataDialogDescription": "Ebenenmetadaten und Quelleninformationen",
     "metadataRasterLoading": "Rastermetadaten werden gelesen…",
     "metadataRasterError": "Die Metadaten dieses Rasters konnten nicht gelesen werden.",
+    "resizeMetadataDialog": "Metadaten-Dialog skalieren",
     "removeLayerConfirmTitle": "Ebene entfernen?",
     "removeLayerConfirmBody": "Dadurch wird {{name}} aus dem Projekt und der Karte entfernt.",
     "thisLayerFallback": "diese Ebene",

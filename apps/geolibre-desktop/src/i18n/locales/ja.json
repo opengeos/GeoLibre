@@ -3781,6 +3781,7 @@
     "metadataDialogDescription": "レイヤーのメタデータとソース情報",
     "metadataRasterLoading": "ラスターのメタデータを読み込んでいます…",
     "metadataRasterError": "このラスターのメタデータを読み取れませんでした。",
+    "resizeMetadataDialog": "メタデータダイアログのサイズを変更",
     "removeLayerConfirmTitle": "レイヤーを削除しますか?",
     "removeLayerConfirmBody": "{{name}}をプロジェクトと地図から削除します。",
     "thisLayerFallback": "このレイヤー",

@@ -3838,6 +3838,7 @@
     "metadataDialogDescription": "Metadati del livello e informazioni sulla sorgente",
     "metadataRasterLoading": "Lettura dei metadati del raster…",
     "metadataRasterError": "Impossibile leggere i metadati di questo raster.",
+    "resizeMetadataDialog": "Ridimensiona la finestra dei metadati",
     "removeLayerConfirmTitle": "Rimuovere il livello?",
     "removeLayerConfirmBody": "Questa operazione rimuove {{name}} dal progetto e dalla mappa.",
     "thisLayerFallback": "questo livello",

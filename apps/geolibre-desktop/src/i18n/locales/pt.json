@@ -3838,6 +3838,7 @@
     "metadataDialogDescription": "Metadados da camada e informações da fonte",
     "metadataRasterLoading": "Lendo os metadados do raster…",
     "metadataRasterError": "Não foi possível ler os metadados deste raster.",
+    "resizeMetadataDialog": "Redimensionar a caixa de diálogo de metadados",
     "removeLayerConfirmTitle": "Remover camada?",
     "removeLayerConfirmBody": "Isso remove {{name}} do projeto e do mapa.",
     "thisLayerFallback": "esta camada",

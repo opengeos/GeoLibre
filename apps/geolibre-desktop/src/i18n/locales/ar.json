@@ -4065,6 +4065,7 @@
     "metadataDialogDescription": "البيانات الوصفية للطبقة ومعلومات المصدر",
     "metadataRasterLoading": "جارٍ قراءة البيانات الوصفية للراستر…",
     "metadataRasterError": "تعذّرت قراءة البيانات الوصفية لهذا الراستر.",
+    "resizeMetadataDialog": "تغيير حجم مربع حوار البيانات الوصفية",
     "removeLayerConfirmTitle": "هل تريد إزالة الطبقة؟",
     "removeLayerConfirmBody": "يؤدي هذا إلى إزالة {{name}} من المشروع والخريطة.",
     "thisLayerFallback": "هذه الطبقة",

@@ -3781,6 +3781,7 @@
     "metadataDialogDescription": "Metadata layer dan informasi sumber",
     "metadataRasterLoading": "Membaca metadata raster…",
     "metadataRasterError": "Tidak dapat membaca metadata raster ini.",
+    "resizeMetadataDialog": "Ubah ukuran dialog metadata",
     "removeLayerConfirmTitle": "Hapus layer?",
     "removeLayerConfirmBody": "Ini menghapus {{name}} dari proyek dan peta.",
     "thisLayerFallback": "layer ini",
