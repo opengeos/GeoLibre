@@ -52,6 +52,14 @@ describe("rasterFileName", () => {
     assert.equal(rasterFileName("dem", "Elevation Model"), "Elevation-Model.tif");
   });
 
+  it("does not double the extension when the layer is named after its file", () => {
+    // A raster layer very often carries its own filename as its display name
+    // (a processing-tool output, say), so the fallback has to honour an
+    // extension already present rather than appending one.
+    assert.equal(rasterFileName("", "clip_output.tif"), "clip_output.tif");
+    assert.equal(rasterFileName("", "Knox DEM (2024).tif"), "Knox-DEM-2024.tif");
+  });
+
   it("falls back when there is no original name at all", () => {
     assert.equal(rasterFileName("", "Elevation"), "Elevation.tif");
     assert.equal(rasterFileName("", ""), "raster.tif");

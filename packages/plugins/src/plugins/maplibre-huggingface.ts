@@ -706,11 +706,19 @@ export function layerFileName(name: string): string {
  * @returns A filename with an extension
  */
 export function rasterFileName(sourcePath: string, layerName: string): string {
+  // Keep a name only when it still carries an extension; a slug that lost it
+  // (or never had one) would upload a file the Hub cannot type.
+  const hasExtension = (name: string) => /\.[A-Za-z0-9]+$/.test(name);
+
   const base = slugifyFileName(sourcePath.split(/[/\\]/).pop() ?? "");
-  // Keep the original name only when it still carries an extension; a slug that
-  // lost it (or never had one) would upload a file the Hub cannot type.
-  if (base && /\.[A-Za-z0-9]+$/.test(base)) return base;
-  return `${slugifyFileName(layerName) || "raster"}.tif`;
+  if (base && hasExtension(base)) return base;
+
+  // The same check applies to the fallback: a raster layer is very often named
+  // after its own file ("clip_output.tif"), so appending unconditionally would
+  // produce "clip_output.tif.tif".
+  const fallback = slugifyFileName(layerName);
+  if (fallback && hasExtension(fallback)) return fallback;
+  return `${fallback || "raster"}.tif`;
 }
 
 /**
@@ -1423,6 +1431,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     }
 
     uploadBusy = true;
+    // Closed rather than left open with inert cards: the "Choose layer" toggle
+    // is disabled during an upload, so an open picker could not be dismissed.
+    layerPickerOpen = false;
     tokenError = "";
     uploadedUrl = "";
     uploadStatus = labels.uploadPreparing;
@@ -1696,6 +1707,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
         card.addEventListener("click", () => {
           void (async () => {
             const file = await layerToUploadFile(entry);
+            // An upload may have started while this read was in flight (a
+            // raster's bytes are read asynchronously). Its payload is already
+            // snapshotted, so staging now would be wiped by the reset on
+            // success instead of being uploaded — drop it rather than lose it
+            // silently.
+            if (uploadBusy) return;
             // Null when the layer went away, or a raster's blob URL was revoked,
             // between this list being rendered and the click.
             if (file) stageFiles([file]);
