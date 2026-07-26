@@ -3,6 +3,7 @@ import {
   type BandReading,
   loadGeoTIFF,
   loadMosaic,
+  MosaicUnsupportedError,
   readBandNames,
   readPixelValues,
 } from "maplibre-gl-raster";
@@ -63,6 +64,74 @@ export class PixelOutsideCoverageError extends Error {
  */
 export function isPixelIdentifiableSourceType(type: string | undefined): boolean {
   return type === "cog" || type === "mosaic";
+}
+
+/**
+ * Matches a URL whose path ends in a GeoTIFF extension, ignoring any query
+ * string or fragment.
+ */
+const GEOTIFF_URL = /\.tiff?($|[?#])/i;
+
+/**
+ * Whether a source's resolved URL has to be opened as a mosaic manifest rather
+ * than read directly as a COG.
+ *
+ * `spec.type` alone cannot answer this. `maplibre-gl-time-slider` renders a COG
+ * source through its mosaic adapter whenever the engine is `gpu` or `wasm` (the
+ * dock's COG form defaults to `gpu`), and the adapter rewrites its own spec to
+ * `type: 'mosaic'` — which is what `getSources()` hands back. So a plain
+ * single-COG source routinely reports itself as a mosaic while its URL still
+ * points at one `.tif`. Deciding on the URL instead keeps both readings correct:
+ * a real mosaic resolves to a `.json` manifest, an engine-rewritten COG to a
+ * GeoTIFF.
+ *
+ * @param spec - The source spec, as reported by the control.
+ * @param url - The URL the spec resolved to for the date being read.
+ * @returns True when the URL should be parsed as a mosaic manifest.
+ */
+function needsMosaicLookup(spec: PixelIdentifiableSpec, url: string): boolean {
+  return spec.type === "mosaic" && !GEOTIFF_URL.test(url);
+}
+
+/**
+ * Resolves the concrete COG URL to range-read for one source at one date.
+ *
+ * A COG source resolves straight to the file. A mosaic resolves to a manifest
+ * listing many COGs, so the asset covering the click has to be found first —
+ * except when the "mosaic" is really an engine-rewritten COG (see
+ * {@link needsMosaicLookup}), which is read directly.
+ *
+ * Shared with the pixel time-series module so a value charted over time and a
+ * value identified at the current date are always read from the same file.
+ *
+ * @param spec - The COG or mosaic source spec.
+ * @param resolvedUrl - The URL the spec's template resolved to for this date.
+ * @param lngLat - The clicked location, `[lng, lat]` in WGS84.
+ * @param signal - Aborts the manifest fetch.
+ * @returns The COG URL to read, or null when a mosaic has no asset covering the
+ *   point.
+ * @throws When the manifest cannot be fetched (network, CORS, or no file for
+ *   this date).
+ */
+export async function resolvePixelReadUrl(
+  spec: PixelIdentifiableSpec,
+  resolvedUrl: string,
+  lngLat: [number, number],
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (!needsMosaicLookup(spec, resolvedUrl)) return resolvedUrl;
+  try {
+    const mosaic = await loadMosaic(resolvedUrl, signal);
+    return pickMosaicAsset(mosaic.assets, lngLat);
+  } catch (error) {
+    // The URL fetched but is not a manifest: an engine-rewritten COG whose URL
+    // carries no `.tif` extension (a signed or extensionless link) lands here.
+    // Reading it as a COG is the only remaining interpretation, and it fails
+    // loudly on its own if that is wrong. A fetch failure is *not* caught — a
+    // missing manifest for this date must stay a failed read.
+    if (error instanceof MosaicUnsupportedError) return resolvedUrl;
+    throw error;
+  }
 }
 
 /**
@@ -146,16 +215,9 @@ export async function identifyTimeSliderPixel(
   const resolved = await resolveUrl(spec.url, date);
   if (signal?.aborted) return null;
 
-  // A COG source resolves straight to the file; a mosaic resolves to a manifest
-  // listing many COGs, so the covering asset has to be found first.
-  let url = resolved;
-  if (spec.type === "mosaic") {
-    const mosaic = await loadMosaic(resolved, signal);
-    if (signal?.aborted) return null;
-    const assetUrl = pickMosaicAsset(mosaic.assets, lngLat);
-    if (!assetUrl) throw new PixelOutsideCoverageError();
-    url = assetUrl;
-  }
+  const url = await resolvePixelReadUrl(spec, resolved, lngLat, signal);
+  if (signal?.aborted) return null;
+  if (!url) throw new PixelOutsideCoverageError();
 
   const tiff = await loadGeoTIFF(url);
   // loadGeoTIFF does not accept the abort signal, so once its header fetch

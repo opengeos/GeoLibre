@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { CogSourceSpec, MosaicSourceSpec } from "maplibre-gl-time-slider";
 import {
   isPixelIdentifiableSourceType,
   pickMosaicAsset,
+  resolvePixelReadUrl,
 } from "../packages/plugins/src/plugins/time-slider-pixel-identify";
 
 describe("isPixelIdentifiableSourceType", () => {
@@ -19,6 +21,34 @@ describe("isPixelIdentifiableSourceType", () => {
     assert.equal(isPixelIdentifiableSourceType("geojson"), false);
     assert.equal(isPixelIdentifiableSourceType("custom"), false);
     assert.equal(isPixelIdentifiableSourceType(undefined), false);
+  });
+});
+
+describe("resolvePixelReadUrl", () => {
+  const cog = (url: string): CogSourceSpec => ({ type: "cog", id: "c", url });
+  const mosaic = (url: string): MosaicSourceSpec => ({ type: "mosaic", id: "m", url });
+
+  it("reads a COG source straight from its resolved URL", async () => {
+    assert.equal(
+      await resolvePixelReadUrl(cog("https://x/2000.tif"), "https://x/2000.tif", [0, 0]),
+      "https://x/2000.tif",
+    );
+  });
+
+  it("reads a GeoTIFF URL directly even when the spec claims to be a mosaic", async () => {
+    // The library renders a COG through its mosaic adapter on the gpu/wasm
+    // engines and rewrites the reported spec to `type: 'mosaic'` — the dock's
+    // COG form defaults to gpu, so this is the ordinary case, not an edge one.
+    // Fetching the `.tif` as a manifest would fail every read.
+    assert.equal(
+      await resolvePixelReadUrl(mosaic("https://x/{date:YYYY}.tif"), "https://x/2000.tif", [0, 0]),
+      "https://x/2000.tif",
+    );
+    // Query strings and fragments must not hide the extension.
+    assert.equal(
+      await resolvePixelReadUrl(mosaic("https://x/a.tiff?v=1"), "https://x/a.tiff?v=1", [0, 0]),
+      "https://x/a.tiff?v=1",
+    );
   });
 });
 

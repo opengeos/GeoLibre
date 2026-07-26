@@ -490,8 +490,9 @@ export {
 export {
   bandOptionsFromResults,
   downsampleSteps,
-  getTimeSliderCogSources,
+  getTimeSliderPixelSources,
   hasTimeSliderRasterStack,
+  ordinalSteps,
   queryPixelTimeSeries,
   seriesToFeatureCollection,
   valueAtBand,

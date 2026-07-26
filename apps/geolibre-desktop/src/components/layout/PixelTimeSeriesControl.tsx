@@ -81,8 +81,9 @@ interface ClickedPoint {
 
 /**
  * Lets users click pixels on the Time Slider's raster stack and chart their
- * values over time (e.g. an annual Landsat COG series). Surfaces a trigger
- * button whenever the Time Slider is active with a COG stack, drives a
+ * values over time (e.g. an annual Landsat COG series, or a dated mosaic of
+ * satellite acquisitions). Surfaces a trigger button whenever the Time Slider is
+ * active with a COG or mosaic stack, drives a
  * pick-a-pixel map mode, and opens a *non-blocking* floating panel so the map
  * stays interactive: each click adds another point to the same chart, a band
  * picker switches which band is plotted across every point, and the underlying
@@ -97,9 +98,10 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   const timeSliderActive = isActive(TIME_SLIDER_PLUGIN_ID);
   // The Time Slider mirrors each raster source into a store layer, so this
   // reacts when a source is added or removed without polling the control. The
-  // mirror cannot tell COG from XYZ/WMS, so it only re-renders this component;
-  // hasTimeSliderRasterStack() (read live below) is what gates the trigger on a
-  // pixel-readable COG stack, since the query engine only supports COG sources.
+  // mirror cannot tell COG/mosaic from XYZ/WMS, so it only re-renders this
+  // component; hasTimeSliderRasterStack() (read live below) is what gates the
+  // trigger on a pixel-readable stack, since the query engine only supports the
+  // sources that carry real values (COG and mosaic).
   const hasTimeSliderRasterMirror = useAppStore((s) =>
     s.layers.some(
       (layer) => layer.metadata.sourceKind === "time-slider" && layer.type === "raster",
