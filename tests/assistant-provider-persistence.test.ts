@@ -119,7 +119,7 @@ describe("DesktopSettings.aiProfiles persistence and migration", () => {
           id: "prof_empty",
           name: "Empty Profile",
           provider: "google",
-          modelId: "gemini-3.5-flash",
+          modelId: "gemini-3.6-flash",
           fieldValues: {},
         },
       ],

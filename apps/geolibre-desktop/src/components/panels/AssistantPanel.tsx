@@ -30,7 +30,9 @@ import { openSettingsSection } from "../layout/SettingsDialog";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
+  defaultModelFor,
   hasProviderKey,
+  PROVIDER_MODELS,
   PROVIDER_LABELS,
   type AssistantProfile,
   type AssistantProviderId,
@@ -158,6 +160,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
 
   // Read profiles + default from DesktopSettings (localStorage).
   const { aiProfiles, defaultAiProfileId } = useDesktopSettingsStore((s) => s.desktopSettings);
+  const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
 
   // Whether the user has explicitly changed the profile via the dropdown in
   // this session. When false, we always follow the default profile so that
@@ -430,6 +433,17 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     saveStored(PROFILE_STORAGE_KEY, profileId);
   };
 
+  const onModelChange = (modelId: string) => {
+    if (!activeProfile) return;
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    setDesktopSettings({
+      ...current,
+      aiProfiles: current.aiProfiles.map((profile) =>
+        profile.id === activeProfile.id ? { ...profile, modelId } : profile,
+      ),
+    });
+  };
+
   // Drag the top edge to resize the panel height. Mirrors the Python Console:
   // writes are throttled to one DOM mutation per frame and committed to state on
   // mouseup, and the panel-resize events let MapCanvas pause pointer handling.
@@ -518,19 +532,36 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         ) : null}
         <div className="ms-auto flex items-center gap-1">
           {hasKey && aiProfiles.length > 0 ? (
-            <Select
-              aria-label={t("assistant.profile")}
-              className="h-8 w-auto max-w-[160px] text-xs"
-              value={activeProfile?.id ?? ""}
-              disabled={running}
-              onChange={(event) => onProfileChange(event.target.value)}
-            >
-              {aiProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </Select>
+            <>
+              <Select
+                aria-label={t("assistant.profile")}
+                className="h-8 w-auto max-w-[160px] text-xs"
+                value={activeProfile?.id ?? ""}
+                disabled={running}
+                onChange={(event) => onProfileChange(event.target.value)}
+              >
+                {aiProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </Select>
+              {activeProfile && PROVIDER_MODELS[activeProfile.provider].length > 0 ? (
+                <Select
+                  aria-label={t("assistant.model")}
+                  className="h-8 w-auto max-w-[180px] text-xs"
+                  value={activeProfile.modelId || defaultModelFor(activeProfile.provider)}
+                  disabled={running}
+                  onChange={(event) => onModelChange(event.target.value)}
+                >
+                  {PROVIDER_MODELS[activeProfile.provider].map((modelId) => (
+                    <option key={modelId} value={modelId}>
+                      {modelId}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+            </>
           ) : null}
           <Button
             variant="ghost"

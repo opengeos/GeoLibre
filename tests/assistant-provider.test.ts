@@ -18,7 +18,7 @@ describe("resolveProviderConfig", () => {
     assert.deepEqual(config, {
       provider: "google",
       apiKey: "g-key",
-      modelId: "gemini-3.5-flash",
+      modelId: "gemini-3.6-flash",
     });
   });
 
@@ -31,7 +31,7 @@ describe("resolveProviderConfig", () => {
   it("selects Anthropic when only its key is present", () => {
     const config = resolveProviderConfig({ ANTHROPIC_API_KEY: "a-key" });
     assert.equal(config?.provider, "anthropic");
-    assert.equal(config?.modelId, "claude-opus-4-8");
+    assert.equal(config?.modelId, "claude-opus-5");
   });
 
   it("prefers Google over others when several keys exist", () => {
@@ -78,7 +78,7 @@ describe("resolveProviderConfig", () => {
       provider: "ollama",
       apiKey: "ollama",
       baseURL: "http://localhost:11434/v1",
-      modelId: "llama3.2",
+      modelId: "gemma4",
     });
   });
 
@@ -89,7 +89,7 @@ describe("resolveProviderConfig", () => {
     });
     assert.deepEqual(config, {
       provider: "bedrock",
-      modelId: "global.anthropic.claude-sonnet-4-6",
+      modelId: "global.anthropic.claude-opus-5",
       region: "us-east-1",
       credentials: {
         accessKeyId: "AKIA",
@@ -157,7 +157,7 @@ describe("configForProvider", () => {
     );
     assert.equal(
       configForProvider("anthropic", undefined, { ANTHROPIC_API_KEY: "a" })?.modelId,
-      "claude-opus-4-8",
+      "claude-opus-5",
     );
   });
 });

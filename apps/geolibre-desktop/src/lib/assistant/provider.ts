@@ -206,16 +206,24 @@ export function mergeRuntimeEnv({
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`
  * (or the per-provider env var) or the model picker. The hosted-model ids were
- * verified against the providers' docs as of 2026-06; the `ollama`/`bedrock`
+ * verified against the providers' docs as of 2026-07; the `ollama`/`bedrock`
  * lists are common examples (use your own via the env vars). `custom` has no
  * preset — supply the model with `OPENAI_COMPATIBLE_MODEL`.
  */
 export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
-  google: ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
-  anthropic: ["claude-opus-4-8", "claude-fable-5", "claude-sonnet-4-6", "claude-haiku-4-5"],
-  openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
-  ollama: ["llama3.2", "llama3.1", "qwen2.5", "mistral", "gemma2"],
+  google: [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-pro-preview",
+  ],
+  anthropic: ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  openai: ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+  ollama: ["gemma4", "qwen3.6", "qwen3.5", "llama4", "gpt-oss"],
   bedrock: [
+    "global.anthropic.claude-opus-5",
+    "global.anthropic.claude-fable-5",
+    "global.anthropic.claude-sonnet-5",
     "global.anthropic.claude-sonnet-4-6",
     "global.anthropic.claude-opus-4-8",
     "global.anthropic.claude-haiku-4-5",
@@ -251,12 +259,44 @@ export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
  */
 export type RuntimeEnv = Record<string, string>;
 
-/** Read the live runtime environment map, or `{}` outside the browser. */
-export function readRuntimeEnv(): RuntimeEnv {
-  if (typeof window === "undefined") return {};
-  return (
-    (window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv }).__GEOLIBRE_RUNTIME_ENV__ ?? {}
+/** AI credentials explicitly embedded by Vite for a managed/preconfigured build. */
+export function readBuildTimeAssistantEnv(
+  viteEnv: Record<string, string | undefined> | undefined = (
+    import.meta as ImportMeta & { env?: Record<string, string | undefined> }
+  ).env,
+): RuntimeEnv {
+  if (!viteEnv) return {};
+  const mappings: ReadonlyArray<readonly [string, string]> = [
+    ["VITE_GEMINI_API_KEY", "GEMINI_API_KEY"],
+    ["VITE_GOOGLE_API_KEY", "GOOGLE_API_KEY"],
+    ["VITE_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"],
+    ["VITE_OPENAI_API_KEY", "OPENAI_API_KEY"],
+    ["VITE_OLLAMA_BASE_URL", "OLLAMA_BASE_URL"],
+    ["VITE_AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"],
+    ["VITE_AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"],
+    ["VITE_AWS_REGION", "AWS_REGION"],
+    ["VITE_AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"],
+    ["VITE_OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_BASE_URL"],
+    ["VITE_OPENAI_COMPATIBLE_MODEL", "OPENAI_COMPATIBLE_MODEL"],
+    ["VITE_OPENAI_COMPATIBLE_API_KEY", "OPENAI_COMPATIBLE_API_KEY"],
+  ];
+  return Object.fromEntries(
+    mappings.flatMap(([source, target]) => {
+      const value = viteEnv[source]?.trim();
+      return value ? [[target, value]] : [];
+    }),
   );
+}
+
+/** Read build-time credentials plus the live runtime environment map. */
+export function readRuntimeEnv(): RuntimeEnv {
+  const built = readBuildTimeAssistantEnv();
+  if (typeof window === "undefined") return built;
+  return {
+    ...built,
+    ...((window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv }).__GEOLIBRE_RUNTIME_ENV__ ??
+      {}),
+  };
 }
 
 /** First non-empty value among `names` in `env`, or null. */

@@ -1,7 +1,11 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { mergeRuntimeEnv, type RuntimeEnv } from "../lib/assistant/provider";
+import {
+  mergeRuntimeEnv,
+  readBuildTimeAssistantEnv,
+  type RuntimeEnv,
+} from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
@@ -83,7 +87,9 @@ export function useRuntimeEnvironmentVariables() {
     // Precedence (low -> high): OS env < device AI keys < geocoder < cesium <
     // explicit project Environment variables. See mergeRuntimeEnv for details.
     const runtimeEnv = mergeRuntimeEnv({
-      osEnv,
+      // Build-time keys are the lowest-precedence defaults. OS, saved profile,
+      // and project values can all override them without requiring a rebuild.
+      osEnv: { ...readBuildTimeAssistantEnv(), ...osEnv },
       aiEnv,
       geocoderEnv,
       cesiumEnv,

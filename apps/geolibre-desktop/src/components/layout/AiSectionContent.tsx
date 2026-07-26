@@ -433,9 +433,7 @@ function ProfileEditor({
     setDraftDesktopSettings((current: any) => ({
       ...current,
       aiProfiles: current.aiProfiles.map((p: any) =>
-        p.id === profile.id
-          ? { ...p, provider, modelId: defaultModelFor(provider), fieldValues: {} }
-          : p,
+        p.id === profile.id ? { ...p, provider, modelId: defaultModelFor(provider) } : p,
       ),
     }));
   };
