@@ -693,11 +693,13 @@ export async function startLayerGeometryEdit(
   let loaded = false;
   restoringSketchesToEditor = true;
   try {
-    const tagged = tagFeatureKeys(cloneFeatureCollection(layer.geojson));
+    const source = cloneFeatureCollection(layer.geojson);
+    const tagged = tagFeatureKeys(source);
     // Snapshot the attributes before Geoman sees them: it renames any column
     // whose name it reserves (see GEOMAN_SHAPE_PROPERTIES), and this session only
-    // edits geometry, so these values are what must come back out.
-    editTargetOriginalProperties = captureEditedProperties(tagged);
+    // edits geometry, so these values are what must come back out. Read from the
+    // pre-tag `source` so a feature with null properties stays null.
+    editTargetOriginalProperties = captureEditedProperties(tagged, source);
     await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
     loaded = true;
   } catch (error) {

@@ -143,6 +143,7 @@ export interface GeoLensLabels {
   revertEdits: string;
   revertEditsTitle: string;
   revertingEdits: string;
+  revertConfirm: (added: number, changed: number, deleted: number) => string;
 }
 
 export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
@@ -159,8 +160,9 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   noResults: "No matching datasets.",
   loadError: (message) => `Could not reach GeoLens: ${message}`,
   blockedError: (host) =>
-    `Could not reach ${host}. The server refused a cross-origin request from ` +
-    `GeoLibre — its administrator has to allow this origin (CORS).`,
+    `Could not reach ${host}. The request never completed — the host may be ` +
+    `unreachable or offline, or, if it is reachable, it may not allow ` +
+    `cross-origin requests from GeoLibre (CORS).`,
   showing: (count) => `${count} dataset${count === 1 ? "" : "s"}.`,
   vectorBadge: "vector",
   rasterBadge: "raster",
@@ -201,6 +203,14 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   revertEdits: "Reload",
   revertEditsTitle: "Discard local changes and reload this dataset's features from GeoLens",
   revertingEdits: "Reloading…",
+  revertConfirm: (added, changed, deleted) =>
+    `Discard unsaved changes to this layer (${[
+      added ? `${added} added` : "",
+      changed ? `${changed} changed` : "",
+      deleted ? `${deleted} deleted` : "",
+    ]
+      .filter(Boolean)
+      .join(", ")}) and reload it from GeoLens?`,
 };
 
 let labels: GeoLensLabels = { ...DEFAULT_GEOLENS_LABELS };
@@ -349,6 +359,15 @@ function hostOf(baseUrl: string): string {
     return new URL(baseUrl).host;
   } catch {
     return baseUrl;
+  }
+}
+
+/** Scheme + host + port of a base URL, or null when it is not a usable URL. */
+function originOf(baseUrl: string): string | null {
+  try {
+    return new URL(baseUrl).origin;
+  } catch {
+    return null;
   }
 }
 
@@ -855,26 +874,33 @@ async function saveLayerEdits(
   for (const created of result.created) {
     if (created.gid !== null) newGidByIndex.set(created.index, created.gid);
   }
+  // What the server now holds: the collection that was actually diffed and
+  // written, with the assigned row ids stamped on. Deliberately NOT re-read
+  // from the store — an edit made while the save was in flight is not on the
+  // server, and baselining it would mark it as already saved, so it could never
+  // be written and would be lost.
+  const saved: import("geojson").FeatureCollection =
+    newGidByIndex.size === 0
+      ? layer.geojson
+      : {
+          ...layer.geojson,
+          features: layer.geojson.features.map((feature, index) => {
+            const gid = newGidByIndex.get(index);
+            return gid === undefined ? feature : { ...feature, id: gid };
+          }),
+        };
+
   const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
-  const collection = current?.geojson ?? layer.geojson;
-  let patched = collection;
-  if (newGidByIndex.size > 0 && collection === layer.geojson) {
-    // Only re-index when the layer has not been edited again while the save was
-    // in flight; otherwise the indices no longer refer to the same features and
-    // stamping them would attach a row id to the wrong feature.
-    patched = {
-      ...collection,
-      features: collection.features.map((feature, index) => {
-        const gid = newGidByIndex.get(index);
-        return gid === undefined ? feature : { ...feature, id: gid };
-      }),
-    };
-    useAppStore.getState().updateLayer(layer.id, { geojson: patched });
+  if (newGidByIndex.size > 0 && current?.geojson === layer.geojson) {
+    // Only write the stamped ids back when the layer has not been edited again
+    // while the save was in flight; otherwise the indices no longer refer to the
+    // same features and stamping them would attach a row id to the wrong one.
+    useAppStore.getState().updateLayer(layer.id, { geojson: saved });
   }
 
   // Advance the baseline to the saved state, then put back the entries whose
   // write failed so they stay pending.
-  const next = captureFeatureBaseline(patched);
+  const next = captureFeatureBaseline(saved);
   const updatedOk = new Set(result.updated.map(String));
   for (const update of plan.updates) {
     if (updatedOk.has(String(update.gid))) continue;
@@ -908,6 +934,24 @@ async function reloadLayerFeatures(
   const data = await fetchDatasetFeatures(client, layer.datasetId, featureLimit, fetchImpl, signal);
   useAppStore.getState().updateLayer(layer.id, { geojson: data });
   editSessions.set(layer.id, { baseline: captureFeatureBaseline(data) });
+}
+
+/**
+ * Drop bookkeeping for layers that have left the store.
+ *
+ * A baseline is a full copy of its dataset, so without this a session of adding
+ * and removing GeoLens layers retains one dataset per layer the user has since
+ * discarded. Called from the panel's store subscription, which already runs on
+ * every `layers` change.
+ */
+function pruneEditSessions(): void {
+  const live = new Set(useAppStore.getState().layers.map((l) => l.id));
+  for (const id of editSessions.keys()) {
+    if (!live.has(id)) editSessions.delete(id);
+  }
+  for (const id of pendingCountsCache.keys()) {
+    if (!live.has(id)) pendingCountsCache.delete(id);
+  }
 }
 
 /** Forget every tracked baseline (plugin deactivation). */
@@ -1219,6 +1263,15 @@ function buildPanel(
   const handleReload = async (layer: GeoLensEditableLayer): Promise<void> => {
     const client = state.client;
     if (!client || state.busyLayerIds.has(layer.id)) return;
+    // Reloading throws away unsaved work, and there is no undo, so confirm when
+    // there is something to lose. A clean layer still reloads on one click.
+    const pending = pendingCountsFor(layer);
+    if (pending && pending.added + pending.changed + pending.deleted > 0) {
+      const proceed = window.confirm(
+        labels.revertConfirm(pending.added, pending.changed, pending.deleted),
+      );
+      if (!proceed) return;
+    }
     state.busyLayerIds.add(layer.id);
     clearError();
     renderEdits();
@@ -1326,6 +1379,20 @@ function buildPanel(
     }
   };
 
+  /**
+   * Forget the API key when the server being pointed at changes origin.
+   *
+   * A key is issued by one deployment. Carrying it across — which is what
+   * picking a sample server or retyping the host would otherwise do — would send
+   * a private host's credential to a different, possibly public one.
+   */
+  const dropKeyOnOriginChange = (nextBaseUrl: string): void => {
+    const next = originOf(normalizeBaseUrl(nextBaseUrl));
+    const current = originOf(normalizeBaseUrl(baseUrlInput.value));
+    if (!next || !current || next === current) return;
+    apiKeyInput.value = "";
+  };
+
   const capabilitiesFor = async (client: GeoLensClientOptions): Promise<boolean> => {
     const { datasetEditing } = await fetchCapabilities(client, fetchImpl);
     return datasetEditing;
@@ -1375,9 +1442,14 @@ function buildPanel(
     // can edit it afterwards), so a stuck selection would soon be a lie.
     sampleSelect.value = "";
     if (!baseUrl) return;
+    dropKeyOnOriginChange(baseUrl);
     baseUrlInput.value = baseUrl;
     void connect();
   });
+  // Typing a different host clears the key for the same reason as above; the
+  // check runs on `change` (commit), not on every keystroke, so editing a path
+  // or fixing a typo within one host leaves the key alone.
+  baseUrlInput.addEventListener("change", () => dropKeyOnOriginChange(baseUrlInput.value));
   settingsButton.addEventListener("click", () => {
     const open = settingsPanel.style.display !== "flex";
     settingsPanel.style.display = open ? "flex" : "none";
@@ -1410,6 +1482,7 @@ function buildPanel(
     for (const resync of resyncers) resync();
     if (store.layers === lastLayersRef) return;
     lastLayersRef = store.layers;
+    pruneEditSessions();
     if (state.busyLayerIds.size === 0) renderEdits();
   });
 

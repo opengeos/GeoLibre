@@ -252,3 +252,48 @@ describe("GEOLENS_SAMPLE_SERVERS", () => {
     }
   });
 });
+
+describe("saveLayerEdits — edits made while the save is in flight", () => {
+  it("leaves a mid-save edit pending instead of baselining it as saved", async () => {
+    const layer = addEditedLayer([
+      { type: "Feature", id: 1, geometry: point(5, 5), properties: { name: "a" } },
+      { type: "Feature", id: 2, geometry: point(1, 1), properties: { name: "b" } },
+    ]);
+
+    // While the PATCH for feature 1 is in flight, the user moves feature 2. That
+    // edit was never part of the plan, so it must still be pending afterwards.
+    let edited = false;
+    const fetchImpl: GeoLensFetch = (url, init) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET") {
+        return Promise.resolve({ ok: true, status: 200, json: async () => serverItems() });
+      }
+      if (!edited) {
+        edited = true;
+        const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
+        assert.ok(current?.geojson);
+        useAppStore.getState().updateLayer(layer.id, {
+          geojson: {
+            ...current.geojson,
+            features: [
+              current.geojson.features[0],
+              { ...current.geojson.features[1], geometry: point(8, 8) },
+            ],
+          } as FeatureCollection,
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    };
+
+    const outcome = await saveLayerEdits(CLIENT, layer, 10_000, fetchImpl, () => {});
+    assert.equal(outcome.written, 1);
+
+    const after = useAppStore.getState().layers.find((l) => l.id === layer.id);
+    assert.ok(after?.geojson);
+    assert.deepEqual(pendingCountsFor({ ...layer, geojson: after.geojson }), {
+      added: 0,
+      changed: 1,
+      deleted: 0,
+    });
+  });
+});

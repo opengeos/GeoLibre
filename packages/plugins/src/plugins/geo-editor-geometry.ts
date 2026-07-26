@@ -172,25 +172,39 @@ export type EditedFeatureProperties = ReadonlyMap<string, Record<string, unknown
  * attribute table, not here — so the values captured here are what the features
  * must still have on the way out, whatever Geoman did to them in between.
  *
+ * `source` is the collection as it was **before** tagging, read positionally:
+ * {@link tagFeatureKeys} maps one input feature to one output feature in order.
+ * Without it a feature whose `properties` were `null` would be snapshotted as
+ * `{}` (tagging has to put the tag somewhere), and a geometry-only save would
+ * quietly rewrite valid GeoJSON `null` into an empty object.
+ *
  * @param collection The collection from {@link tagFeatureKeys}.
+ * @param source The same collection before tagging, for exact attributes.
  * @returns Attributes (tag removed) keyed by feature tag.
  */
 export function captureEditedProperties(
   collection: FeatureCollection,
+  source?: FeatureCollection,
 ): Map<string, Record<string, unknown> | null> {
   const snapshot = new Map<string, Record<string, unknown> | null>();
-  for (const feature of collection.features) {
+  collection.features.forEach((feature, index) => {
     const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
-    if (tag == null) continue;
+    if (tag == null) return;
+    const original = source?.features[index];
+    if (original) {
+      const props = original.properties;
+      snapshot.set(String(tag), props == null ? null : { ...props });
+      return;
+    }
     const rawProps = feature.properties;
     if (rawProps == null) {
       snapshot.set(String(tag), null);
-      continue;
+      return;
     }
     const properties = { ...rawProps };
     delete properties[GEOMETRY_EDIT_FID_PROPERTY];
     snapshot.set(String(tag), properties);
-  }
+  });
   return snapshot;
 }
 

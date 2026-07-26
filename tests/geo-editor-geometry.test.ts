@@ -406,3 +406,56 @@ describe("reconcileEditedFeatures — attribute preservation", () => {
     assert.equal(reconciled.features[0].properties?.name, "keep me");
   });
 });
+
+describe("captureEditedProperties — null properties", () => {
+  // Tagging has to put the feature key somewhere, so it turns `properties: null`
+  // into an object. Snapshotting the tagged collection would therefore restore
+  // `{}` on save and silently rewrite valid GeoJSON; the pre-tag collection is
+  // the source of truth.
+  const original: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        id: 1,
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: null,
+      },
+      {
+        type: "Feature",
+        id: 2,
+        geometry: { type: "Point", coordinates: [1, 1] },
+        properties: { height: 4 },
+      },
+    ],
+  };
+
+  it("keeps null properties null through tag → edit → reconcile", () => {
+    const tagged = tagFeatureKeys(original);
+    const snapshot = captureEditedProperties(tagged, original);
+    // What Geoman hands back: the reserved `height` renamed, its own key added.
+    const returned: FeatureCollection = {
+      type: "FeatureCollection",
+      features: tagged.features.map((feature) => ({
+        ...feature,
+        properties: {
+          [GEOMETRY_EDIT_FID_PROPERTY]: feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY],
+          __gm_shape: "circle_marker",
+          ...(feature.properties?.height === undefined
+            ? {}
+            : { __gm_height: feature.properties.height }),
+        },
+      })),
+    };
+    const reconciled = reconcileEditedFeatures(returned, snapshot);
+    assert.equal(reconciled.features[0].properties, null);
+    assert.deepEqual(reconciled.features[1].properties, { height: 4 });
+  });
+
+  it("falls back to the tagged collection when no source is given", () => {
+    const tagged = tagFeatureKeys(original);
+    const snapshot = captureEditedProperties(tagged);
+    // Without the pre-tag source the best available answer is the tagged one.
+    assert.deepEqual(snapshot.get(String(tagged.features[0].id)), {});
+  });
+});

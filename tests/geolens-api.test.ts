@@ -737,6 +737,21 @@ describe("createFeature / updateFeature / deleteFeature", () => {
     assert.deepEqual(calls[1].body, { geometry: point(2, 3), properties: { a: 1 } });
   });
 
+  it("PATCHes properties alone when the feature has no geometry", async () => {
+    // diffFeatures falls back to this shape for a geometry-less feature whose
+    // attributes changed — GeoLens rejects a PUT without geometry.
+    const { fetchImpl, calls } = stubWrites();
+    await updateFeature(
+      CLIENT,
+      "ds-1",
+      { gid: 5, mode: "patch", geometry: null, properties: { a: 1 } },
+      fetchImpl,
+    );
+    assert.equal(calls[0].method, "PATCH");
+    assert.equal(calls[0].url, "https://demo.example.com/api/datasets/ds-1/features/5");
+    assert.deepEqual(calls[0].body, { properties: { a: 1 } });
+  });
+
   it("deletes by gid without a body", async () => {
     const { fetchImpl, calls } = stubWrites([{ status: 204 }]);
     await deleteFeature(CLIENT, "ds-1", 9, fetchImpl);
@@ -898,5 +913,22 @@ describe("diffFeatures — null vs absent attributes", () => {
       plan.updates.map((u) => u.gid),
       [2],
     );
+  });
+});
+
+describe("diffFeatures — a feature with no geometry", () => {
+  it("patches attributes only, since GeoLens requires geometry on a PUT", () => {
+    const loaded = collection([
+      { type: "Feature", id: 1, geometry: null, properties: { name: "a" } },
+    ]);
+    const plan = diffFeatures(
+      collection([{ type: "Feature", id: 1, geometry: null, properties: { name: "b" } }]),
+      captureFeatureBaseline(loaded),
+    );
+    assert.deepEqual(
+      plan.updates.map((u) => [u.gid, u.mode]),
+      [[1, "patch"]],
+    );
+    assert.deepEqual(plan.updates[0].properties, { name: "b" });
   });
 });
