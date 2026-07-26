@@ -4,6 +4,7 @@ import type {
   RasterControl,
   RasterControlEventHandler,
   RasterSampleDataset,
+  RenderEngine,
 } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
@@ -254,8 +255,8 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
 export async function addRasterToMap(
   app: GeoLibreAppAPI,
   source: string | File,
-  options: { name?: string } = {},
-): Promise<void> {
+  options: { name?: string; defaults?: RasterVisualizationDefaults } = {},
+): Promise<string> {
   const control = await ensureRasterControl(app);
   if (!control) {
     throw new Error("The raster control could not be initialized.");
@@ -264,10 +265,74 @@ export async function addRasterToMap(
   // blob URL (source.objectUrl), which the store sync surfaces as
   // metadata.localBytesUrl so in-browser tools (the WASM Whitebox runner) can
   // read the data back. No extra bookkeeping is needed here.
-  await control.addRaster(source, {
+  // Before the add, so the layer is decoded by the chosen engine rather than
+  // being rendered once and swapped.
+  if (options.defaults?.engine && control.getEngine() !== options.defaults.engine) {
+    control.setEngine(options.defaults.engine);
+  }
+  const id = await control.addRaster(source, {
     name: options.name,
     zoomTo: true,
+    // Safe to pass before the band count is known: the renderer applies a
+    // colormap only in single-band mode and ignores it otherwise.
+    ...(options.defaults?.colormap ? { state: { colormap: options.defaults.colormap } } : {}),
   });
+  applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
+  return id;
+}
+
+/**
+ * How a raster should look when it is first added, for callers that let the
+ * user set a house style (the Hugging Face browser's Settings tab).
+ *
+ * Split in two because a raster only ever honours one of them: an RGB band
+ * triple applies to multiband imagery, a colormap to single-band.
+ */
+export interface RasterVisualizationDefaults {
+  /** 1-indexed [R, G, B] to select when the image has three or more bands. */
+  rgbBands?: [number, number, number];
+  /** Colormap name for single-band imagery. */
+  colormap?: string;
+  /**
+   * Which renderer decodes the imagery.
+   *
+   * Unlike the two above, this is **not** per layer: the control holds one
+   * engine for every raster it manages, so setting it here re-renders the
+   * rasters already on the map too. Callers that expose it should say so.
+   */
+  engine?: RasterRenderEngine;
+}
+
+/**
+ * The renderers the raster control can decode with:
+ * `maplibre-gl-raster` reads the COG on the GPU via deck.gl,
+ * `cog-tiler-wasm` decodes in a WebAssembly tiler,
+ * `titiler` delegates to a TiTiler server.
+ */
+export type RasterRenderEngine = RenderEngine;
+
+/**
+ * Applies a default RGB band triple once the header has loaded.
+ *
+ * Done after the add rather than through `addRaster`'s `state` because the
+ * choice depends on the band count, which is only known once the GeoTIFF
+ * header is read — and `addRaster` resolves at exactly that point. Forcing
+ * `mode: "rgb"` up front would ask a single-band image for bands it does not
+ * have.
+ */
+function applyRgbBandDefaults(
+  control: RasterControl,
+  id: string,
+  rgbBands: [number, number, number] | undefined,
+): void {
+  if (!rgbBands) return;
+  const bandCount = control.getRasters().find((raster) => raster.id === id)?.bandCount ?? 0;
+  // Single-band and two-band images render through the colormap instead.
+  if (bandCount < 3) return;
+  const bands = rgbBands.map((band) =>
+    Math.min(Math.max(Math.round(band), 1), bandCount),
+  ) as number[];
+  control.setRasterState(id, { mode: "rgb", bands });
 }
 
 /**

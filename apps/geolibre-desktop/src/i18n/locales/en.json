@@ -2714,6 +2714,7 @@
   "huggingFace": {
     "browseTab": "Browse",
     "uploadTab": "Upload",
+    "settingsTab": "Settings",
     "hint": "Search Hugging Face for dataset repos, or enter an account name or owner/dataset id.",
     "searchPlaceholder": "Search datasets, account, or owner/dataset",
     "search": "Search",
@@ -2804,7 +2805,23 @@
     "uploadError": "Upload failed: {{message}}",
     "fileTooLarge": "{{name}} is larger than the {{limit}} upload limit.",
     "selectionTooLarge": "The selected files total {{size}}, over the {{limit}} limit for one upload. Upload them in smaller batches.",
-    "openUploaded": "Open the dataset"
+    "openUploaded": "Open the dataset",
+    "rgbHeading": "Multiband imagery",
+    "rgbHint": "Which bands become red, green and blue when an image has three or more of them. 1-indexed; the Style panel can still change any layer afterwards.",
+    "bandR": "Red",
+    "bandG": "Green",
+    "bandB": "Blue",
+    "colormapHeading": "Single-band imagery",
+    "colormapHint": "The colormap applied when an image has one band.",
+    "colormapLabel": "Colormap",
+    "engineHeading": "Rendering engine",
+    "engineHint": "Which renderer decodes the imagery. Unlike the settings above this is not per layer: it applies to every raster on the map, including ones already added.",
+    "engineLabel": "Engine",
+    "engineAuto": "Leave unchanged",
+    "engineGpu": "GPU (deck.gl)",
+    "engineWasm": "WebAssembly tiler",
+    "engineTitiler": "TiTiler server",
+    "resetDefaults": "Reset to defaults"
   },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",

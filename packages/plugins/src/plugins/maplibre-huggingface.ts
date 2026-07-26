@@ -23,11 +23,15 @@
  * the document.
  */
 
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import { addPMTilesLayerFromUrl } from "./maplibre-components";
-import { addRasterToMap } from "./maplibre-raster";
+import {
+  addRasterToMap,
+  type RasterRenderEngine,
+  type RasterVisualizationDefaults,
+} from "./maplibre-raster";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
 import { RASTER_SOURCE_KIND } from "./raster-symbology-texture";
 import {
@@ -76,6 +80,87 @@ const TOKEN_STORAGE_KEY = "geolibre:huggingface-token";
 /** Where the panel sends a user who has no token yet. */
 const TOKEN_SETTINGS_URL = `${HF_SITE}/settings/tokens`;
 
+/** Where the raster display defaults are kept, alongside the access token. */
+const RASTER_DEFAULTS_STORAGE_KEY = "geolibre:huggingface-raster-defaults";
+
+/**
+ * The renderers offered in Settings.
+ *
+ * The values are the library's own engine ids; the labels are what those
+ * actually mean to a user — the first decodes the COG on the GPU, the second in
+ * a WebAssembly tiler, the third on a TiTiler server.
+ */
+const RENDER_ENGINES: {
+  value: RasterRenderEngine;
+  labelKey: "engineGpu" | "engineWasm" | "engineTitiler";
+}[] = [
+  { value: "maplibre-gl-raster", labelKey: "engineGpu" },
+  { value: "cog-tiler-wasm", labelKey: "engineWasm" },
+  { value: "titiler", labelKey: "engineTitiler" },
+];
+
+/** How a raster added from this panel is displayed before the user restyles it. */
+interface HuggingFaceRasterDefaults {
+  /** 1-indexed [R, G, B] used when the image has three or more bands. */
+  rgbBands: [number, number, number];
+  /** Colormap used when the image has a single band. */
+  colormap: string;
+  /** Which renderer decodes the imagery, or undefined to leave the control's own. */
+  engine?: RasterRenderEngine;
+}
+
+const BUILT_IN_RASTER_DEFAULTS: HuggingFaceRasterDefaults = {
+  // Bands 1/2/3 is what the control itself picks for a plain RGB image, so the
+  // out-of-the-box behaviour is unchanged until the user sets something else.
+  rgbBands: [1, 2, 3],
+  // Jet: the default the user asked for — a familiar full-spectrum ramp for
+  // single-band scientific imagery (chlorophyll, elevation, indices).
+  colormap: "jet",
+};
+
+/**
+ * Reads the saved raster defaults, falling back to the built-ins for anything
+ * missing or malformed. Tolerant by design: these are display preferences, so a
+ * partially corrupt entry should degrade to the default rather than break the
+ * panel.
+ */
+function readRasterDefaults(): HuggingFaceRasterDefaults {
+  if (typeof localStorage === "undefined") return { ...BUILT_IN_RASTER_DEFAULTS };
+  try {
+    const raw = localStorage.getItem(RASTER_DEFAULTS_STORAGE_KEY);
+    if (!raw) return { ...BUILT_IN_RASTER_DEFAULTS };
+    const parsed: unknown = JSON.parse(raw);
+    const record = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    const bands = Array.isArray(record.rgbBands) ? record.rgbBands : [];
+    const rgbBands = BUILT_IN_RASTER_DEFAULTS.rgbBands.map((fallback, index) => {
+      const value = Number(bands[index]);
+      return Number.isFinite(value) && value >= 1 ? Math.round(value) : fallback;
+    }) as [number, number, number];
+    const engine = RENDER_ENGINES.some((option) => option.value === record.engine)
+      ? (record.engine as RasterRenderEngine)
+      : undefined;
+    return {
+      rgbBands,
+      colormap:
+        typeof record.colormap === "string" && record.colormap
+          ? record.colormap
+          : BUILT_IN_RASTER_DEFAULTS.colormap,
+      ...(engine ? { engine } : {}),
+    };
+  } catch {
+    return { ...BUILT_IN_RASTER_DEFAULTS };
+  }
+}
+
+function writeRasterDefaults(defaults: HuggingFaceRasterDefaults): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(RASTER_DEFAULTS_STORAGE_KEY, JSON.stringify(defaults));
+  } catch {
+    // Storage unavailable: the defaults still apply for this session.
+  }
+}
+
 /**
  * The datasets the browse view opens on, so the panel is useful before the user
  * has typed anything.
@@ -101,6 +186,7 @@ const SUGGESTED_DATASET_IDS = [
 export interface HuggingFaceLabels {
   browseTab: string;
   uploadTab: string;
+  settingsTab: string;
   hint: string;
   searchPlaceholder: string;
   search: string;
@@ -189,11 +275,29 @@ export interface HuggingFaceLabels {
   fileTooLarge: (name: string, limit: string) => string;
   selectionTooLarge: (size: string, limit: string) => string;
   openUploaded: string;
+  /** Settings half. */
+  rgbHeading: string;
+  rgbHint: string;
+  bandR: string;
+  bandG: string;
+  bandB: string;
+  colormapHeading: string;
+  colormapHint: string;
+  colormapLabel: string;
+  engineHeading: string;
+  engineHint: string;
+  engineLabel: string;
+  engineAuto: string;
+  engineGpu: string;
+  engineWasm: string;
+  engineTitiler: string;
+  resetDefaults: string;
 }
 
 export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
   browseTab: "Browse",
   uploadTab: "Upload",
+  settingsTab: "Settings",
   hint: "Search Hugging Face for dataset repos, or enter an account name or owner/dataset id.",
   searchPlaceholder: "Search datasets, account, or owner/dataset",
   search: "Search",
@@ -298,6 +402,26 @@ export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
     `The selected files total ${size}, over the ${limit} limit for one upload. ` +
     `Upload them in smaller batches.`,
   openUploaded: "Open the dataset",
+  rgbHeading: "Multiband imagery",
+  rgbHint:
+    "Which bands become red, green and blue when an image has three or more of them. " +
+    "1-indexed; the Style panel can still change any layer afterwards.",
+  bandR: "Red",
+  bandG: "Green",
+  bandB: "Blue",
+  colormapHeading: "Single-band imagery",
+  colormapHint: "The colormap applied when an image has one band.",
+  colormapLabel: "Colormap",
+  engineHeading: "Rendering engine",
+  engineHint:
+    "Which renderer decodes the imagery. Unlike the settings above this is not per layer: " +
+    "it applies to every raster on the map, including ones already added.",
+  engineLabel: "Engine",
+  engineAuto: "Leave unchanged",
+  engineGpu: "GPU (deck.gl)",
+  engineWasm: "WebAssembly tiler",
+  engineTitiler: "TiTiler server",
+  resetDefaults: "Reset to defaults",
 };
 
 let labels: HuggingFaceLabels = { ...DEFAULT_HUGGINGFACE_LABELS };
@@ -529,6 +653,7 @@ async function addFileToMap(
   app: GeoLibreAppAPI | null,
   file: HfFile,
   ingestMode: RemoteIngestMode = "table",
+  rasterDefaults?: RasterVisualizationDefaults,
 ): Promise<boolean> {
   // The URL is built by buildResolveUrl from an https base, but re-check at the
   // point it becomes a map source so this security-sensitive step stands alone.
@@ -544,7 +669,7 @@ async function addFileToMap(
       // RASTER_SOURCE_KIND, so the Style panel shows only opacity. This one
       // syncs through raster-layer-sync and gets the full Raster symbology
       // section (band pickers, colormap, classification).
-      await addRasterToMap(app, file.url, { name: file.name });
+      await addRasterToMap(app, file.url, { name: file.name, defaults: rasterDefaults });
       return true;
     case "mosaic": {
       // The extension made this a candidate; the body decides. Without this a
@@ -556,7 +681,7 @@ async function addFileToMap(
       if (!isRasterIndexJson(body)) throw new Error(labels.notRasterIndex);
       // The same control takes the sidecar's URL directly and stitches the
       // scenes it points at at read time.
-      await addRasterToMap(app, file.url, { name: file.name });
+      await addRasterToMap(app, file.url, { name: file.name, defaults: rasterDefaults });
       return true;
     }
     default:
@@ -797,7 +922,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   type View =
     | { kind: "browse" }
     | { kind: "dataset"; dataset: HfDataset; path: string }
-    | { kind: "upload" };
+    | { kind: "upload" }
+    | { kind: "settings" };
 
   let view: View = { kind: "browse" };
   let query = "";
@@ -830,6 +956,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   let selectedFiles: File[] = [];
   /** Whether the inline layer picker is expanded under "Choose layer". */
   let layerPickerOpen = false;
+  let rasterDefaults = readRasterDefaults();
   let uploadBusy = false;
   let uploadStatus = "";
   let uploadedUrl = "";
@@ -1046,7 +1173,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     error = "";
     render();
     try {
-      const added = await addFileToMap(app, file, mode);
+      const added = await addFileToMap(app, file, mode, rasterDefaults);
       if (!added) error = labels.addError(labels.unsupportedTitle);
     } catch (caught) {
       // Dismissing the vector control's multi-layer picker rejects the add, but
@@ -1784,24 +1911,150 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   }
 
   // -------------------------------------------------------------------------
+  // Settings view
+  // -------------------------------------------------------------------------
+
+  /**
+   * How a raster added from this panel should be displayed.
+   *
+   * These are defaults, not a lock: everything here is the *initial* state of a
+   * layer, and the Style panel's Raster symbology section still governs it
+   * afterwards. Saved to localStorage on every change, so there is no Save
+   * button to forget.
+   */
+  function renderSettings(): void {
+    const form = el("div", CSS.form);
+    root.appendChild(form);
+
+    const persist = () => writeRasterDefaults(rasterDefaults);
+
+    // --- Multiband: which bands become R, G and B ---
+    const rgbSection = el("div", CSS.section);
+    rgbSection.appendChild(el("div", CSS.sectionTitle, labels.rgbHeading));
+    rgbSection.appendChild(el("div", CSS.hint, labels.rgbHint));
+
+    const bandRow = el("div", CSS.searchRow);
+    const channelLabels = [labels.bandR, labels.bandG, labels.bandB];
+    rasterDefaults.rgbBands.forEach((band, index) => {
+      const cell = el("div", CSS.field);
+      cell.style.flex = "1 1 0";
+      const label = el("label", CSS.fieldLabel, channelLabels[index]);
+      cell.appendChild(label);
+      const input = el("input", CSS.fieldInput);
+      input.type = "number";
+      input.min = "1";
+      input.step = "1";
+      input.value = String(band);
+      labelControl(label, input);
+      input.addEventListener("change", () => {
+        const value = Number(input.value);
+        // A band index is 1-based; anything else would ask the renderer for a
+        // band that cannot exist.
+        const next = Number.isFinite(value) && value >= 1 ? Math.round(value) : 1;
+        input.value = String(next);
+        rasterDefaults.rgbBands[index] = next;
+        persist();
+      });
+      cell.appendChild(input);
+      bandRow.appendChild(cell);
+    });
+    rgbSection.appendChild(bandRow);
+    form.appendChild(rgbSection);
+
+    // --- Single band: which colormap ---
+    const colormapSection = el("div", CSS.section);
+    colormapSection.appendChild(el("div", CSS.sectionTitle, labels.colormapHeading));
+    colormapSection.appendChild(el("div", CSS.hint, labels.colormapHint));
+    const colormapRow = el("div", CSS.field);
+    const colormapLabel = el("label", CSS.fieldLabel, labels.colormapLabel);
+    colormapRow.appendChild(colormapLabel);
+    const colormapSelect = el("select", CSS.fieldInput);
+    labelControl(colormapLabel, colormapSelect);
+    // GeoLibre's own curated ramps, which the raster renderer treats as
+    // built-in colormap names. Read from core rather than from the renderer so
+    // opening Settings does not pull in the deck.gl raster bundle.
+    for (const ramp of VECTOR_COLOR_RAMPS) {
+      const option = document.createElement("option");
+      option.value = ramp.value;
+      option.textContent = ramp.label;
+      option.selected = ramp.value === rasterDefaults.colormap;
+      colormapSelect.appendChild(option);
+    }
+    colormapSelect.addEventListener("change", () => {
+      rasterDefaults.colormap = colormapSelect.value;
+      persist();
+    });
+    colormapRow.appendChild(colormapSelect);
+    colormapSection.appendChild(colormapRow);
+    form.appendChild(colormapSection);
+
+    // --- Which renderer decodes the imagery ---
+    const engineSection = el("div", CSS.section);
+    engineSection.appendChild(el("div", CSS.sectionTitle, labels.engineHeading));
+    engineSection.appendChild(el("div", CSS.hint, labels.engineHint));
+    const engineRow = el("div", CSS.field);
+    const engineLabel = el("label", CSS.fieldLabel, labels.engineLabel);
+    engineRow.appendChild(engineLabel);
+    const engineSelect = el("select", CSS.fieldInput);
+    labelControl(engineLabel, engineSelect);
+    // An explicit "leave it alone" entry, so the panel does not silently own a
+    // control-wide setting the user never asked it to change.
+    const autoOption = document.createElement("option");
+    autoOption.value = "";
+    autoOption.textContent = labels.engineAuto;
+    autoOption.selected = !rasterDefaults.engine;
+    engineSelect.appendChild(autoOption);
+    for (const engine of RENDER_ENGINES) {
+      const option = document.createElement("option");
+      option.value = engine.value;
+      option.textContent = labels[engine.labelKey];
+      option.selected = engine.value === rasterDefaults.engine;
+      engineSelect.appendChild(option);
+    }
+    engineSelect.addEventListener("change", () => {
+      const value = engineSelect.value;
+      if (value) rasterDefaults.engine = value as RasterRenderEngine;
+      else delete rasterDefaults.engine;
+      persist();
+    });
+    engineRow.appendChild(engineSelect);
+    engineSection.appendChild(engineRow);
+    form.appendChild(engineSection);
+
+    const reset = button(labels.resetDefaults, CSS.secondaryButton);
+    reset.addEventListener("click", () => {
+      rasterDefaults = {
+        ...BUILT_IN_RASTER_DEFAULTS,
+        rgbBands: [...BUILT_IN_RASTER_DEFAULTS.rgbBands],
+      };
+      persist();
+      render();
+    });
+    form.appendChild(reset);
+
+    // Nothing here updates outside a full repaint, and the fields write back on
+    // change, so the store subscription has no work to do in this view.
+    renderCurrentView = () => {};
+  }
+
+  // -------------------------------------------------------------------------
   // Shell
   // -------------------------------------------------------------------------
 
   function renderTabs(): void {
     const tabs = el("div", CSS.tabs);
     // The dataset view is reached from Browse, so it keeps Browse highlighted.
-    const onUpload = view.kind === "upload";
+    const onBrowse = view.kind === "browse" || view.kind === "dataset";
 
-    const browseTab = button(labels.browseTab, onUpload ? CSS.tab : CSS.tabActive);
+    const browseTab = button(labels.browseTab, onBrowse ? CSS.tabActive : CSS.tab);
     browseTab.addEventListener("click", () => {
-      if (view.kind === "upload") {
-        view = { kind: "browse" };
-        render();
-      }
+      if (onBrowse) return;
+      view = { kind: "browse" };
+      render();
     });
     tabs.appendChild(browseTab);
 
-    const uploadTab = button(labels.uploadTab, onUpload ? CSS.tabActive : CSS.tab);
+    const uploadTab = button(labels.uploadTab, view.kind === "upload" ? CSS.tabActive : CSS.tab);
     uploadTab.addEventListener("click", () => {
       if (view.kind === "upload") return;
       // Carry the dataset being browsed into the upload form: uploading into
@@ -1811,6 +2064,17 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
       render();
     });
     tabs.appendChild(uploadTab);
+
+    const settingsTab = button(
+      labels.settingsTab,
+      view.kind === "settings" ? CSS.tabActive : CSS.tab,
+    );
+    settingsTab.addEventListener("click", () => {
+      if (view.kind === "settings") return;
+      view = { kind: "settings" };
+      render();
+    });
+    tabs.appendChild(settingsTab);
     root.appendChild(tabs);
   }
 
@@ -1823,7 +2087,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     renderTabs();
     if (view.kind === "browse") renderBrowse();
     else if (view.kind === "dataset") renderDataset(view.dataset, view.path);
-    else renderUpload();
+    else if (view.kind === "upload") renderUpload();
+    else renderSettings();
   }
 
   render();
