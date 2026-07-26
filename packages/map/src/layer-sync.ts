@@ -423,6 +423,18 @@ function syncExternalNativeLayer(
   // visibility/paint/zoom-range sync below must be skipped — only ordering is
   // handled here.
   if (isExternalCustomLayer(layer)) {
+    // Controls whose native fills are ordinary vector polygons (e.g. Overture
+    // Maps buildings) opt into GeoLibre-owned 3D extrusion. The Style panel
+    // offers the 3D mode to these layers, so without this the toggle would
+    // silently no-op on the ordering-only path below.
+    if (
+      supportsNativeFillExtrusion(layer) &&
+      syncExternalNativeExtrusion(map, layer, nativeLayerIds, beforeId)
+    ) {
+      return;
+    }
+    clearExternalNativeExtrusion(map, layer, nativeLayerIds);
+
     for (const nativeLayerId of nativeLayerIds) {
       moveLayer(map, nativeLayerId, beforeId);
       // Control-painted vector layers (e.g. Add Vector Layer's circle/fill/line
@@ -475,50 +487,14 @@ function syncExternalNativeLayer(
 
   ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
 
-  const nativeFillLayerSpecs = nativeLayerIds
-    .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
-    .filter(isFillStyleLayerSpec);
-
-  if (layer.style.extrusionEnabled && nativeFillLayerSpecs.length > 0 && !controlOwnsPaint(layer)) {
-    for (const nativeLayerId of nativeLayerIds) {
-      setNativeLayerVisibility(map, nativeLayerId, "none");
-    }
-
-    for (const fillLayerSpec of nativeFillLayerSpecs) {
-      const extrusionLayerId = externalExtrusionLayerId(fillLayerSpec.id);
-      // The synthetic extrusion layer must honor the same per-feature filters
-      // (Time Slider window, rule-based hide-unmatched) as the fill it
-      // replaces. The copied fill filter may still carry a previously pushed
-      // combined filter, so prefer the tracked base — the fill's own filter —
-      // and re-apply the current extras on top so they never compound or go
-      // stale.
-      const tracked = nativeFilterStatesFor(map).get(fillLayerSpec.id);
-      const baseFilter = tracked
-        ? tracked.base
-        : ((fillLayerSpec.filter as maplibregl.FilterSpecification) ?? null);
-      const filter = combineExternalFilters(baseFilter, externalFeatureFilterExtras(layer));
-      ensureLayer(
-        map,
-        extrusionLayerId,
-        {
-          id: extrusionLayerId,
-          type: "fill-extrusion",
-          source: fillLayerSpec.source,
-          "source-layer": fillLayerSpec["source-layer"],
-          filter: filter ?? undefined,
-          ...intersectZoomRange(fillLayerSpec, layer.style),
-          paint: fillExtrusionPaint(layer.style, layer.opacity),
-          layout: { visibility: layer.visible ? "visible" : "none" },
-        },
-        beforeId,
-      );
-    }
+  if (
+    !controlOwnsPaint(layer) &&
+    syncExternalNativeExtrusion(map, layer, nativeLayerIds, beforeId)
+  ) {
     return;
   }
 
-  for (const nativeLayerId of nativeLayerIds) {
-    removeIfExists(map, externalExtrusionLayerId(nativeLayerId));
-  }
+  clearExternalNativeExtrusion(map, layer, nativeLayerIds);
 
   for (const nativeLayerId of nativeLayerIds) {
     const nativeLayer = map.getLayer(nativeLayerId);
@@ -690,6 +666,15 @@ function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {
 
 function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
   return typeof layer.metadata.customLayerType === "string";
+}
+
+// Opt-in for control-managed layers (`customLayerType`, the ordering-only path)
+// whose native fill layers are plain vector polygons GeoLibre can re-render as
+// fill-extrusions. Controls that implement extrusion themselves — Add Vector
+// Layer and DuckDB push `extrusionEnabled` into their own control style — must
+// leave this unset, or both would extrude the same features.
+function supportsNativeFillExtrusion(layer: GeoLibreLayer): boolean {
+  return layer.metadata.nativeFillExtrusion === true;
 }
 
 // External controls that paint their native layers with data-driven MapLibre
@@ -1401,6 +1386,97 @@ function isFillStyleLayerSpec(
 
 export function externalExtrusionLayerId(nativeLayerId: string): string {
   return `${nativeLayerId}-geolibre-extrusion`;
+}
+
+// Native layers hidden to make room for a synthetic fill-extrusion layer.
+// Tracked so switching 3D extrusion back off can restore them on the
+// control-managed path, which otherwise never writes visibility (the control
+// owns it) and would leave the layer invisible.
+const extrusionHiddenNativeLayerIds = new Set<string>();
+
+/**
+ * Render an external control's native `fill` layers as GeoLibre-owned
+ * `fill-extrusion` layers built from the same source and source layer.
+ *
+ * The natives are hidden rather than restyled, so the control keeps owning
+ * them and a later toggle back to 2D restores its rendering untouched.
+ *
+ * @param map: The MapLibre map to reconcile against.
+ * @param layer: The store layer whose style drives the extrusion paint.
+ * @param nativeLayerIds: Native layer ids registered by the control.
+ * @param beforeId: Layer id the extrusion layers are inserted before.
+ * @returns True when extrusion layers were applied, false when the layer is
+ *     not extruded or exposes no native fill layer to extrude.
+ */
+function syncExternalNativeExtrusion(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): boolean {
+  if (!layer.style.extrusionEnabled) return false;
+
+  const nativeFillLayerSpecs = nativeLayerIds
+    .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
+    .filter(isFillStyleLayerSpec);
+  if (nativeFillLayerSpecs.length === 0) return false;
+
+  for (const nativeLayerId of nativeLayerIds) {
+    setNativeLayerVisibility(map, nativeLayerId, "none");
+    extrusionHiddenNativeLayerIds.add(nativeLayerId);
+  }
+
+  for (const fillLayerSpec of nativeFillLayerSpecs) {
+    const extrusionLayerId = externalExtrusionLayerId(fillLayerSpec.id);
+    // The synthetic extrusion layer must honor the same per-feature filters
+    // (Time Slider window, rule-based hide-unmatched) as the fill it
+    // replaces. The copied fill filter may still carry a previously pushed
+    // combined filter, so prefer the tracked base — the fill's own filter —
+    // and re-apply the current extras on top so they never compound or go
+    // stale.
+    const tracked = nativeFilterStatesFor(map).get(fillLayerSpec.id);
+    const baseFilter = tracked
+      ? tracked.base
+      : ((fillLayerSpec.filter as maplibregl.FilterSpecification) ?? null);
+    const filter = combineExternalFilters(baseFilter, externalFeatureFilterExtras(layer));
+    ensureLayer(
+      map,
+      extrusionLayerId,
+      {
+        id: extrusionLayerId,
+        type: "fill-extrusion",
+        source: fillLayerSpec.source,
+        "source-layer": fillLayerSpec["source-layer"],
+        filter: filter ?? undefined,
+        ...intersectZoomRange(fillLayerSpec, layer.style),
+        paint: fillExtrusionPaint(layer.style, layer.opacity),
+        layout: { visibility: layer.visible ? "visible" : "none" },
+      },
+      beforeId,
+    );
+  }
+  return true;
+}
+
+/**
+ * Drop the synthetic extrusion layers for `nativeLayerIds` and un-hide any
+ * native layer {@link syncExternalNativeExtrusion} hid for them.
+ *
+ * @param map: The MapLibre map to reconcile against.
+ * @param layer: The store layer, read for its current visibility.
+ * @param nativeLayerIds: Native layer ids registered by the control.
+ */
+function clearExternalNativeExtrusion(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+): void {
+  for (const nativeLayerId of nativeLayerIds) {
+    removeIfExists(map, externalExtrusionLayerId(nativeLayerId));
+    if (extrusionHiddenNativeLayerIds.delete(nativeLayerId)) {
+      setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
+    }
+  }
 }
 
 /**
@@ -3260,6 +3336,17 @@ function ensureLayer(
           ...(strippedLayout ? { layout: strippedLayout } : {}),
         }
       : spec;
+  // An explicit `filter: undefined` key fails MapLibre's add-time validation
+  // ("array expected, undefined found") and the layer is dropped without
+  // throwing — only an `error` event reports it. Callers that compute an
+  // optional filter still need the key present on the update branch above, so
+  // it is dropped here, on first add, where "no filter" must mean "absent".
+  const hasUndefinedFilter = "filter" in addSpec && addSpec.filter === undefined;
+  if (hasUndefinedFilter) {
+    const { filter: _filter, ...withoutFilter } = addSpec;
+    map.addLayer(withoutFilter as typeof addSpec, validBeforeId);
+    return;
+  }
   map.addLayer(addSpec, validBeforeId);
 }
 

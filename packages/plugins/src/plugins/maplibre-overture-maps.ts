@@ -7,6 +7,7 @@ import {
   THEME_IDS,
   THEMES,
   tileUrlForTheme,
+  type OvertureGeometry,
   type OvertureMapsControlOptions,
   type OvertureMapsEventHandler,
   type OvertureMapsState,
@@ -145,6 +146,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
 interface OvertureUnit {
   theme: OvertureTheme;
   sourceLayer: string;
+  geometry: OvertureGeometry;
 }
 
 let storeUnsubscribe: (() => void) | null = null;
@@ -159,8 +161,17 @@ const OVERTURE_UNITS: OvertureUnit[] = THEME_IDS.flatMap((theme) =>
   THEMES[theme].layers.map((layer) => ({
     theme,
     sourceLayer: layer.sourceLayer,
+    geometry: layer.geometry,
   })),
 );
+
+// Numeric Overture schema fields worth extruding by, offered as the Style
+// panel's height-attribute options. The tiles carry no field listing, so
+// without these the picker has nothing to choose from and the user is stuck on
+// the default. Only the buildings theme defines height in the Overture schema.
+const BUILDING_HEIGHT_FIELDS: Partial<Record<OvertureTheme, string[]>> = {
+  buildings: ["height", "min_height", "num_floors", "min_floor", "roof_height"],
+};
 
 function unitKey(unit: OvertureUnit): string {
   return `${unit.theme}/${unit.sourceLayer}`;
@@ -335,6 +346,12 @@ function createOvertureStoreLayer(
       sourceId,
       sourceIds: [sourceId],
       sourceKind: SOURCE_KIND,
+      // The control has no extrusion concept, so polygon themes hand 3D
+      // extrusion back to GeoLibre's layer sync, which re-renders the control's
+      // native fill as a fill-extrusion. Without this the Style panel's 3D mode
+      // is offered but never takes effect.
+      ...(unit.geometry === "polygon" ? { nativeFillExtrusion: true } : {}),
+      ...(BUILDING_HEIGHT_FIELDS[unit.theme] ? { fields: BUILDING_HEIGHT_FIELDS[unit.theme] } : {}),
     },
     sourcePath: tileUrl,
   };
