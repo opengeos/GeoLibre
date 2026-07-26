@@ -210,6 +210,28 @@ describe("addZarrRasterLayer", () => {
     );
   });
 
+  it("rejects with an actionable message when the URL is missing", async () => {
+    installStubModule();
+    await assert.rejects(addZarrRasterLayer(app, { url: "  ", variable: "climate" }), /URL/i);
+  });
+
+  it("serializes overlapping adds so each caller gets its own layer id", async () => {
+    // The control's url/variable live in one shared state slot and its
+    // "layeradd" event carries no correlation id, so concurrent adds must not
+    // observe each other's events.
+    installStubModule();
+
+    const [first, second] = await Promise.all([
+      addZarrRasterLayer(app, { url: "https://example.org/a.zarr", variable: "a", name: "A" }),
+      addZarrRasterLayer(app, { url: "https://example.org/b.zarr", variable: "b", name: "B" }),
+    ]);
+
+    assert.notEqual(first, second);
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.find((layer) => layer.id === first)?.name, "A");
+    assert.equal(layers.find((layer) => layer.id === second)?.name, "B");
+  });
+
   it("rejects with the renderer's error when the store cannot be read", async () => {
     installStubModule();
     failNextAdd = "Failed to load Zarr: 403";

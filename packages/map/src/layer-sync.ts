@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  type ExternalNativePaintBridge,
   geojsonHasZCoordinates,
   getExternalNativePaintBridge,
   type LayerStyle,
@@ -699,8 +700,14 @@ function controlOwnsPaint(layer: GeoLibreLayer): boolean {
 
 // Last opacity/visibility handed to a layer's paint bridge, so a sync pass that
 // changed nothing (a reorder, a basemap swap) does not call the plugin's setters
-// again — each call typically triggers a WebGL repaint.
-const appliedBridgeState = new Map<string, { opacity: number; visible: boolean }>();
+// again — each call typically triggers a WebGL repaint. Keyed by bridge identity
+// as well as layer id: a re-registration (project reload, unregister →
+// register) installs a new bridge whose renderer has never been told the current
+// values, so it must get a fresh apply even when the store values did not move.
+const appliedBridgeState = new Map<
+  string,
+  { bridge: ExternalNativePaintBridge; opacity: number; visible: boolean }
+>();
 
 // Forward the panel's generic controls to a plugin-painted layer's own API. The
 // setters are optional, so a plugin can bridge opacity only (the common case:
@@ -713,13 +720,14 @@ function applyExternalNativePaintBridge(layer: GeoLibreLayer): void {
   }
 
   const applied = appliedBridgeState.get(layer.id);
-  if (!applied || applied.opacity !== layer.opacity) {
+  const sameBridge = applied?.bridge === bridge;
+  if (!sameBridge || applied.opacity !== layer.opacity) {
     bridge.setOpacity?.(layer.opacity);
   }
-  if (!applied || applied.visible !== layer.visible) {
+  if (!sameBridge || applied.visible !== layer.visible) {
     bridge.setVisibility?.(layer.visible);
   }
-  appliedBridgeState.set(layer.id, { opacity: layer.opacity, visible: layer.visible });
+  appliedBridgeState.set(layer.id, { bridge, opacity: layer.opacity, visible: layer.visible });
 }
 
 function ensurePMTilesExternalLayer(

@@ -418,8 +418,10 @@ const layerId = await app.addZarrLayer?.(
 );
 
 // Drive a time slider without rebuilding the layer: the renderer keeps the
-// chunks it already fetched.
-await app.setZarrLayerSelector?.(layerId, { time: 12 });
+// chunks it already fetched. (`addZarrLayer` is optional, so guard the id.)
+if (layerId) {
+  await app.setZarrLayerSelector?.(layerId, { time: 12 });
+}
 ```
 
 `addZarrLayer` is headless: it does not open the Zarr panel (the user can still open it from **Add Data → Zarr Layer** to tweak colormap and color limits). It resolves with the new layer's id once the layer is registered, and rejects when `variable` is missing or the store cannot be read. The layer supports visibility, opacity, ordering, and removal from the Layers panel like any other layer.

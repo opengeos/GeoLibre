@@ -73,9 +73,10 @@ export function getExternalNativePaintBridge(
 }
 
 /**
- * True when a layer's opacity can actually reach the renderer: either GeoLibre
- * paints the layer itself, or the plugin bridged `setOpacity`. The Style and
- * Layers panels use this to hide an Opacity slider that would be inert.
+ * True when a plugin-painted layer bridged `setOpacity`, so an Opacity slider
+ * would actually reach the renderer. It says nothing about GeoLibre-painted
+ * layers, which have no bridge: the Style and Layers panels combine it with
+ * `!pluginOwnsPaint(layer)` to decide whether to show the slider at all.
  */
 export function supportsBridgedOpacity(layerId: string): boolean {
   return typeof paintBridges.get(layerId)?.setOpacity === "function";

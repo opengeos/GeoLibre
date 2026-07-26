@@ -2165,6 +2165,27 @@ export async function addZarrRasterLayer(
     throw new Error("A Zarr variable is required (pass options.variable).");
   }
 
+  // The Zarr control is a shared singleton whose url/variable live in one state
+  // slot, and its "layeradd" event carries no correlation id, so two overlapping
+  // adds would each see the other's event and could return (and then patch) the
+  // wrong layer. Run them one at a time; a failed add must not break the chain.
+  const run = zarrAddQueue.then(() => addZarrLayerExclusively(app, options, url, variable));
+  zarrAddQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+// One add at a time: see the queue comment in addZarrRasterLayer.
+let zarrAddQueue: Promise<void> = Promise.resolve();
+
+async function addZarrLayerExclusively(
+  app: GeoLibreAppAPI,
+  options: ZarrRasterLayerOptions,
+  url: string,
+  variable: string,
+): Promise<string> {
   const { ZarrLayerControl: ZarrLayerControlClass } = await getComponentsConstructors();
 
   zarrControl ??= createZarrControl(ZarrLayerControlClass);

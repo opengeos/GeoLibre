@@ -93,6 +93,24 @@ describe("plugin-owned paint registration", () => {
     assert.equal(layer.metadata.paintMode, undefined);
     assert.equal(pluginOwnsPaint(layer), false);
   });
+
+  it("clears a stale paintMode when a re-registration drops it", () => {
+    // registerExternalNativeLayer also drops the bridge, so inheriting the flag
+    // would leave the layer plugin-owned with nothing to paint it: every
+    // control would be permanently inert.
+    const existing = createExternalNativeStoreLayer(registration({ paintMode: "plugin" }));
+    const relisted = createExternalNativeStoreLayer(registration(), existing);
+
+    assert.equal(relisted.metadata.paintMode, undefined);
+    assert.equal(pluginOwnsPaint(relisted), false);
+  });
+
+  it("keeps a paintMode the plugin re-declares through metadata", () => {
+    const layer = createExternalNativeStoreLayer(
+      registration({ metadata: { paintMode: "plugin" } }),
+    );
+    assert.equal(pluginOwnsPaint(layer), true);
+  });
 });
 
 describe("external native paint bridge registry", () => {
@@ -140,6 +158,25 @@ describe("layer-sync paint bridge", () => {
     assert.deepEqual(visibilities, [true, false]);
 
     clearExternalNativePaintBridge("sync-bridged");
+  });
+
+  it("re-applies the current values to a freshly registered bridge", () => {
+    // A project reload (or unregister → register) installs a new bridge whose
+    // renderer has never been told the layer's opacity/visibility, so an
+    // unchanged store value must still be pushed once.
+    setExternalNativePaintBridge("sync-rebridged", { setOpacity: () => {} });
+    const { map } = makeMapStub("sync-rebridged", "custom");
+    syncLayer(map as never, customLayer("sync-rebridged", { opacity: 0.5 }));
+
+    const reapplied: number[] = [];
+    setExternalNativePaintBridge("sync-rebridged", {
+      setOpacity: (opacity) => reapplied.push(opacity),
+    });
+    syncLayer(map as never, customLayer("sync-rebridged", { opacity: 0.5 }));
+
+    assert.deepEqual(reapplied, [0.5]);
+
+    clearExternalNativePaintBridge("sync-rebridged");
   });
 
   it("never writes MapLibre paint for a plugin-painted layer", () => {
