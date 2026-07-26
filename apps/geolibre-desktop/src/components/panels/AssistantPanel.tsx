@@ -450,6 +450,14 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const history = promptHistoryRef.current;
     if (history.length === 0) return;
 
+    // The arrows still move the caret inside a multi-line draft: recall only
+    // when the caret is collapsed at the edge it would leave anyway -- on the
+    // first line for Up, the last line for Down -- as shell prompt histories do.
+    const { selectionStart, selectionEnd, value } = event.currentTarget;
+    if (selectionStart !== selectionEnd) return;
+    if (event.key === "ArrowUp" && value.slice(0, selectionStart).includes("\n")) return;
+    if (event.key === "ArrowDown" && value.slice(selectionEnd).includes("\n")) return;
+
     const currentIndex = promptHistoryIndexRef.current;
     if (event.key === "ArrowUp") {
       event.preventDefault();
