@@ -1390,6 +1390,7 @@
     "noValues": "Nessun valore per la banda selezionata in queste posizioni (al di fuori del raster o tutti i passi temporali sono nodata).",
     "truncated": "Vengono mostrati {{kept}} di {{total}} passi della timeline (sottocampionati per limitare le letture).",
     "chartAria": "Grafico a linee del valore del pixel nel tempo",
+    "gapNote": "I segmenti tratteggiati coprono date senza valore (nodata o fuori copertura).",
     "exportCsv": "Esporta CSV",
     "exportGeoParquet": "Esporta GeoParquet"
   },

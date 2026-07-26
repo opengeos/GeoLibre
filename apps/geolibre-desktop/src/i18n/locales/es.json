@@ -1390,6 +1390,7 @@
     "noValues": "No hay valores para la banda seleccionada en estas ubicaciones (fuera del ráster o todos los pasos de tiempo son nodata).",
     "truncated": "Mostrando {{kept}} de {{total}} pasos de la línea de tiempo (submuestreado para limitar las lecturas).",
     "chartAria": "Gráfico de líneas del valor de píxel a lo largo del tiempo",
+    "gapNote": "Los segmentos discontinuos abarcan fechas sin lectura (nodata o fuera de la cobertura).",
     "exportCsv": "Exportar CSV",
     "exportGeoParquet": "Exportar GeoParquet"
   },

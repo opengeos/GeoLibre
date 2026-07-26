@@ -21,13 +21,17 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
 import { clamp } from "../../lib/clamp";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { exportVectorLayer } from "../../lib/vector-export";
 
-/** Default panel geometry (px). The panel opens top-right, clear of the
- * Time Slider timeline at the bottom, then the user can drag/resize it. */
+/** Default panel geometry (px). The panel opens top-left, clear of the
+ * Time Slider timeline at the bottom, then the user can drag/resize it. The
+ * CSS default below and {@link PixelTimeSeriesControl.measureRect}'s fallback
+ * describe the same corner, so a drag that starts from the untouched default
+ * does not jump. */
 const PANEL_DEFAULT_W = 448;
 const PANEL_MIN_W = 320;
 const PANEL_MIN_H = 240;
@@ -59,6 +63,32 @@ const SOURCE_DASHES: (string | undefined)[] = [undefined, "4 3", "2 2", "8 3"];
 
 interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapController | null>;
+}
+
+/**
+ * Builds the DOM element for a point's on-map marker: a numbered dot in the
+ * point's series color, so a line in the chart and the location it was sampled
+ * from are matched by both color and number.
+ *
+ * A custom element rather than MapLibre's default pin because the series colors
+ * include `hsl(var(--primary))`, and a CSS variable does not resolve in the
+ * `fill` *attribute* the built-in pin sets — only in a CSS property, which is
+ * what `style.backgroundColor` writes here.
+ *
+ * @param point - The clicked point the marker represents.
+ * @returns The marker element.
+ */
+function buildMarkerElement(point: ClickedPoint): HTMLElement {
+  const element = document.createElement("div");
+  element.className =
+    "flex h-5 w-5 items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold leading-none text-white shadow-md";
+  element.style.backgroundColor = SERIES_COLORS[point.colorIndex];
+  element.textContent = String(point.id);
+  // The panel already lists every point as text, and a marker that swallowed
+  // clicks would block picking another pixel underneath it.
+  element.style.pointerEvents = "none";
+  element.setAttribute("aria-hidden", "true");
+  return element;
 }
 
 /** A single clicked location and the state of its time-series query. */
@@ -130,7 +160,14 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   const abortControllers = useRef<Map<number, AbortController>>(new Map());
   const idCounter = useRef(0);
 
-  // Panel geometry. Null means "use the default top-right placement (CSS)"; once
+  // One MapLibre marker per clicked point, keyed by point id, so the map shows
+  // where each charted series was sampled. Held in a ref rather than state:
+  // markers are imperative map objects, not rendered output, and the effect
+  // below reconciles them against `points` (which "Clear all", removing a
+  // point, and the Time Slider teardown all empty).
+  const markers = useRef<Map<number, maplibregl.Marker>>(new Map());
+
+  // Panel geometry. Null means "use the default top-left placement (CSS)"; once
   // the user drags or resizes, we switch to absolute px so the panel is fully
   // movable and resizable within the map area.
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -231,6 +268,41 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // Abort every in-flight query when the component unmounts so none can call
   // setState afterwards.
   useEffect(() => () => abortAll(), [abortAll]);
+
+  // Reconcile the on-map markers with the collected points: add one per new
+  // point, drop the ones whose point is gone. Driving it off `points` means
+  // "Clear all", removing a single point, and the teardown that fires when the
+  // Time Slider stack goes away all clear the map without their own bookkeeping.
+  useEffect(() => {
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    const live = markers.current;
+    for (const point of points) {
+      if (live.has(point.id)) continue;
+      live.set(
+        point.id,
+        new maplibregl.Marker({ element: buildMarkerElement(point), anchor: "center" })
+          .setLngLat(point.lngLat)
+          .addTo(map),
+      );
+    }
+    const ids = new Set(points.map((point) => point.id));
+    for (const [id, marker] of live) {
+      if (ids.has(id)) continue;
+      marker.remove();
+      live.delete(id);
+    }
+  }, [points, mapControllerRef]);
+
+  // Unmount (rather than an emptied `points`) leaves the effect above no chance
+  // to run, so drop every marker here or they outlive the panel on the map.
+  useEffect(() => {
+    const live = markers.current;
+    return () => {
+      for (const marker of live.values()) marker.remove();
+      live.clear();
+    };
+  }, []);
 
   const runQueryForPoint = useCallback((id: number, lngLat: [number, number]) => {
     abortControllers.current.get(id)?.abort();
@@ -510,7 +582,7 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
           className={
             rect
               ? "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-              : "pointer-events-auto absolute right-3 top-16 z-20 flex max-h-[calc(100%-8rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+              : "pointer-events-auto absolute start-3 top-16 z-20 flex max-h-[calc(100%-8rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
           }
           style={rect ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h } : undefined}
           role="region"
@@ -788,6 +860,23 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
     };
   });
 
+  // Whether any line has a date with no reading *between* two readings, i.e. a
+  // segment the chart bridges. Drives the caption that explains the dashes;
+  // trailing or leading gaps are not bridged and need no explanation.
+  const hasBridgedGap = alignedSeries.some((line) => {
+    let seenReading = false;
+    let gapped = false;
+    for (const value of line.values) {
+      if (value == null) {
+        if (seenReading) gapped = true;
+        continue;
+      }
+      if (gapped) return true;
+      seenReading = true;
+    }
+    return false;
+  });
+
   const scaleX = (index: number) =>
     MARGIN.left + (length > 1 ? index / (length - 1) : 0.5) * INNER_W;
   const scaleY = (value: number) => MARGIN.top + INNER_H - ((value - min) / (max - min)) * INNER_H;
@@ -854,21 +943,47 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
             {axisDateLabel(allDates[index] ?? "", annual)}
           </text>
         ))}
-        {/* One polyline per point, breaking on missing values. */}
+        {/* One path per point, split into readings that are adjacent on the
+            timeline (solid) and readings separated by dates with no value
+            (dashed). Missing dates are common in a satellite series — a cloudy
+            or uncovered acquisition is nodata — and lifting the pen at every
+            one of them left stranded dots with no readable trend. Bridging them
+            keeps the series legible while the dash still says the segment
+            crosses missing data rather than measured change. */}
         {alignedSeries.map((line) => {
           let path = "";
-          let penDown = false;
+          let bridge = "";
+          let previous: { index: number; value: number } | null = null;
+          let gapped = false;
           line.values.forEach((value, index) => {
             if (value == null) {
-              penDown = false;
+              // Only a gap *between* two readings needs bridging; leading nulls
+              // have nothing to bridge from.
+              if (previous) gapped = true;
               return;
             }
-            const command = penDown ? "L" : "M";
-            path += `${command}${scaleX(index)} ${scaleY(value)} `;
-            penDown = true;
+            if (previous) {
+              const segment = `M${scaleX(previous.index)} ${scaleY(previous.value)} L${scaleX(index)} ${scaleY(value)} `;
+              if (gapped) bridge += segment;
+              else path += segment;
+            }
+            previous = { index, value };
+            gapped = false;
           });
           return (
             <g key={line.key}>
+              {/* Under the solid segments, so a bridge never draws over them. */}
+              <path
+                d={bridge.trim()}
+                fill="none"
+                stroke={line.color}
+                strokeWidth={1.5}
+                // A single-source stack (the common case) has no dash of its
+                // own, so bridges get one; a multi-source stack keeps the dash
+                // that identifies the source and is set apart by opacity alone.
+                strokeDasharray={line.dash ?? "3 3"}
+                strokeOpacity={0.45}
+              />
               <path
                 d={path.trim()}
                 fill="none"
@@ -895,18 +1010,23 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
           );
         })}
       </svg>
-      {series.length > 1 ? (
-        <figcaption className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          {series.map((line) => (
-            <span key={line.key} className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: line.color }}
-                aria-hidden="true"
-              />
-              {line.label}
+      {series.length > 1 || hasBridgedGap ? (
+        <figcaption className="flex flex-col gap-1 text-xs text-muted-foreground">
+          {series.length > 1 ? (
+            <span className="flex flex-wrap gap-3">
+              {series.map((line) => (
+                <span key={line.key} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-sm"
+                    style={{ backgroundColor: line.color }}
+                    aria-hidden="true"
+                  />
+                  {line.label}
+                </span>
+              ))}
             </span>
-          ))}
+          ) : null}
+          {hasBridgedGap ? <span>{t("pixelTimeSeries.gapNote")}</span> : null}
         </figcaption>
       ) : null}
     </figure>

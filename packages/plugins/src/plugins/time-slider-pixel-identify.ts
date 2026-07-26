@@ -8,6 +8,7 @@ import {
   readPixelValues,
 } from "maplibre-gl-raster";
 import { getActiveTimeSliderControl } from "./maplibre-time-slider";
+import { usesMosaicManifest } from "./time-slider-source-url";
 
 /**
  * Single-pixel Identify for the Time Slider's raster sources.
@@ -67,39 +68,12 @@ export function isPixelIdentifiableSourceType(type: string | undefined): boolean
 }
 
 /**
- * Matches a URL whose path ends in a GeoTIFF extension, ignoring any query
- * string or fragment.
- */
-const GEOTIFF_URL = /\.tiff?($|[?#])/i;
-
-/**
- * Whether a source's resolved URL has to be opened as a mosaic manifest rather
- * than read directly as a COG.
- *
- * `spec.type` alone cannot answer this. `maplibre-gl-time-slider` renders a COG
- * source through its mosaic adapter whenever the engine is `gpu` or `wasm` (the
- * dock's COG form defaults to `gpu`), and the adapter rewrites its own spec to
- * `type: 'mosaic'` — which is what `getSources()` hands back. So a plain
- * single-COG source routinely reports itself as a mosaic while its URL still
- * points at one `.tif`. Deciding on the URL instead keeps both readings correct:
- * a real mosaic resolves to a `.json` manifest, an engine-rewritten COG to a
- * GeoTIFF.
- *
- * @param spec - The source spec, as reported by the control.
- * @param url - The URL the spec resolved to for the date being read.
- * @returns True when the URL should be parsed as a mosaic manifest.
- */
-function needsMosaicLookup(spec: PixelIdentifiableSpec, url: string): boolean {
-  return spec.type === "mosaic" && !GEOTIFF_URL.test(url);
-}
-
-/**
  * Resolves the concrete COG URL to range-read for one source at one date.
  *
  * A COG source resolves straight to the file. A mosaic resolves to a manifest
  * listing many COGs, so the asset covering the click has to be found first —
  * except when the "mosaic" is really an engine-rewritten COG (see
- * {@link needsMosaicLookup}), which is read directly.
+ * {@link usesMosaicManifest}), which is read directly.
  *
  * Shared with the pixel time-series module so a value charted over time and a
  * value identified at the current date are always read from the same file.
@@ -119,7 +93,7 @@ export async function resolvePixelReadUrl(
   lngLat: [number, number],
   signal?: AbortSignal,
 ): Promise<string | null> {
-  if (!needsMosaicLookup(spec, resolvedUrl)) return resolvedUrl;
+  if (!usesMosaicManifest(spec, resolvedUrl)) return resolvedUrl;
   try {
     const mosaic = await loadMosaic(resolvedUrl, signal);
     return pickMosaicAsset(mosaic.assets, lngLat);

@@ -197,6 +197,37 @@ describe("Time Slider store layer identify metadata", () => {
     }
   });
 
+  it("carries a declared source extent so Zoom to layer has something to fit", () => {
+    // A mirrored dock layer is external-native: there is no MapLibre source with
+    // `bounds` to fall back on, so without this the button does nothing.
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "landsat",
+      url: "https://example.com/{date:YYYY}.tif",
+      bounds: [-10, -5, 10, 5],
+    } as SourceSpec);
+    assert.deepEqual(layer.metadata.bounds, [-10, -5, 10, 5]);
+  });
+
+  it("omits the extent when the source declares none", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "no-bounds",
+      url: "https://example.com/{date:YYYY}.tif",
+    } as SourceSpec);
+    assert.equal("bounds" in layer.metadata, false);
+  });
+
+  it("ignores a malformed extent rather than passing it to the map", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "bad-bounds",
+      url: "https://example.com/{date:YYYY}.tif",
+      bounds: [-10, -5, Number.NaN, 5],
+    } as unknown as SourceSpec);
+    assert.equal("bounds" in layer.metadata, false);
+  });
+
   it("leaves a GeoJSON source to the normal vector feature query", () => {
     const layer = createStoreLayer({
       type: "geojson",

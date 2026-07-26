@@ -1390,6 +1390,7 @@
     "noValues": "Bu konumlarda seçilen bant için değer yok (raster dışında veya tüm zaman adımları veri dışı).",
     "truncated": "{{total}} zaman çizelgesi adımından {{kept}} tanesi gösteriliyor (okumaları sınırlamak için alt örneklendi).",
     "chartAria": "Zaman içinde piksel değerinin çizgi grafiği",
+    "gapNote": "Kesikli bölümler değeri olmayan tarihleri birleştirir (nodata veya kapsama dışı).",
     "exportCsv": "CSV Dışa Aktar",
     "exportGeoParquet": "GeoParquet Dışa Aktar"
   },

@@ -1390,6 +1390,7 @@
     "noValues": "Aucune valeur pour la bande sélectionnée à ces emplacements (en dehors du raster ou toutes les étapes sont nodata).",
     "truncated": "Affichage de {{kept}} sur {{total}} étapes de la chronologie (sous-échantillonné pour limiter les lectures).",
     "chartAria": "Graphique linéaire de la valeur de pixel dans le temps",
+    "gapNote": "Les segments en pointillés couvrent des dates sans valeur (nodata ou hors de la couverture).",
     "exportCsv": "Exporter en CSV",
     "exportGeoParquet": "Exporter en GeoParquet"
   },

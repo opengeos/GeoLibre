@@ -1390,6 +1390,7 @@
     "noValues": "Geen waarden voor de geselecteerde band op deze locaties (buiten de raster of alle tijdstappen zijn nodata).",
     "truncated": "{{kept}} van {{total}} tijdlijnstappen weergegeven (gedownsampled om het aantal lezingen te beperken).",
     "chartAria": "Lijndiagram van pixelwaarde in de tijd",
+    "gapNote": "Gestippelde segmenten overbruggen datums zonder waarde (nodata of buiten de dekking).",
     "exportCsv": "CSV exporteren",
     "exportGeoParquet": "GeoParquet exporteren"
   },

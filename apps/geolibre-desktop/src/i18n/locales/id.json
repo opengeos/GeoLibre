@@ -1352,6 +1352,7 @@
     "noValues": "Tidak ada nilai untuk kanal yang dipilih di lokasi ini (di luar raster atau semua langkah waktu adalah nodata).",
     "truncated": "Menampilkan {{kept}} dari {{total}} langkah linimasa (di-downsample untuk membatasi pembacaan).",
     "chartAria": "Bagan garis nilai piksel sepanjang waktu",
+    "gapNote": "Segmen putus-putus menjembatani tanggal tanpa nilai (nodata atau di luar cakupan).",
     "exportCsv": "Ekspor CSV",
     "exportGeoParquet": "Ekspor GeoParquet"
   },

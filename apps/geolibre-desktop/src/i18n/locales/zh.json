@@ -1352,6 +1352,7 @@
     "noValues": "所选波段在这些位置没有数值（超出栅格范围或所有时间步均为无数据值）。",
     "truncated": "显示 {{total}} 个时间线步骤中的 {{kept}} 个（已降采样以限制读取次数）。",
     "chartAria": "像素值随时间变化的折线图",
+    "gapNote": "虚线段跨越没有数值的日期（无数据或超出覆盖范围）。",
     "exportCsv": "导出 CSV",
     "exportGeoParquet": "导出 GeoParquet"
   },
