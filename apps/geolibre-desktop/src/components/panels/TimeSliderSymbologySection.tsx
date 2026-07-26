@@ -16,6 +16,7 @@ import {
   Separator,
 } from "@geolibre/ui";
 import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
+import { boundText, nextRescaleWindow } from "../../lib/rescale-window";
 import { useEffect, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -68,6 +69,32 @@ export function TimeSliderSymbologySection({ layer }: { layer: GeoLibreLayer }) 
     setBandsInvalid(false);
   }, [bandsValue]);
 
+  // The rescale window is a *pair*: the renderer takes a full [min, max] or
+  // auto-stretches. Both bounds are therefore drafted here so a half-entered
+  // window can be held without being applied — inferring the missing end from
+  // the typed one meant entering a max of 255 also set the min to 255.
+  const specMin = symbology?.rescale?.[0] ?? null;
+  const specMax = symbology?.rescale?.[1] ?? null;
+  const [minDraft, setMinDraft] = useState(() => boundText(specMin));
+  const [maxDraft, setMaxDraft] = useState(() => boundText(specMax));
+  useEffect(() => {
+    // Follow the spec only while it holds a complete window. Not when it
+    // clears: clearing is what this form does when a bound is emptied, and
+    // re-syncing then would wipe the bound the user still has typed.
+    if (specMin == null || specMax == null) return;
+    setMinDraft(boundText(specMin));
+    setMaxDraft(boundText(specMax));
+  }, [specMin, specMax]);
+  useEffect(() => {
+    // A different layer's window is unrelated to whatever was drafted for the
+    // previous one, so switching layers resets both ends.
+    setMinDraft(boundText(specMin));
+    setMaxDraft(boundText(specMax));
+    // Only the layer identity should reset the drafts; the spec values are
+    // handled by the effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layer.id]);
+
   // Colors for every colormap so each option in the picker shows its own
   // swatch. Built-ins resolve synchronously; the rest are sampled from the
   // renderer's sprite once and fill in as they land.
@@ -116,16 +143,23 @@ export function TimeSliderSymbologySection({ layer }: { layer: GeoLibreLayer }) 
     })),
   ];
 
-  const range = symbology.rescale;
-  // A rescale window is all-or-nothing ([min, max] or null = auto-stretch), so
-  // clearing either bound drops back to auto on both.
-  const commitBound = (index: 0 | 1, raw: string) => {
-    if (raw.trim() === "") return commit({ rescale: null });
-    const value = Number(raw);
-    if (!Number.isFinite(value)) return;
-    const next: [number, number] = [range?.[0] ?? value, range?.[1] ?? value];
-    next[index] = value;
-    commit({ rescale: next });
+  /**
+   * Applies the drafted window, or drops back to auto-stretch while it is
+   * incomplete. Never fills in the end the user has not typed: a one-sided
+   * window is not something the renderer can express, so the layer keeps
+   * auto-stretching until both bounds are present.
+   */
+  const commitRescale = (nextMin: string, nextMax: string) => {
+    setMinDraft(nextMin);
+    setMaxDraft(nextMax);
+    const window = nextRescaleWindow(nextMin, nextMax);
+    if (!window) {
+      // Only write when a window was actually applied, so typing the first of
+      // the two bounds is not a pointless re-render of the raster.
+      if (specMin != null || specMax != null) commit({ rescale: null });
+      return;
+    }
+    commit({ rescale: window });
   };
 
   const nodataMode =
@@ -179,21 +213,21 @@ export function TimeSliderSymbologySection({ layer }: { layer: GeoLibreLayer }) 
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <NumberField
+        <BoundField
           id="tsRescaleMin"
           label={t("rasterSymbology.min")}
-          value={range?.[0] ?? ""}
-          step={0.1}
+          draft={minDraft}
           placeholder={t("rasterSymbology.autoPlaceholder")}
-          onCommit={(value) => commitBound(0, value)}
+          onDraftChange={setMinDraft}
+          onCommit={(value) => commitRescale(value, maxDraft)}
         />
-        <NumberField
+        <BoundField
           id="tsRescaleMax"
           label={t("rasterSymbology.max")}
-          value={range?.[1] ?? ""}
-          step={0.1}
+          draft={maxDraft}
           placeholder={t("rasterSymbology.autoPlaceholder")}
-          onCommit={(value) => commitBound(1, value)}
+          onDraftChange={setMaxDraft}
+          onCommit={(value) => commitRescale(minDraft, value)}
         />
       </div>
 
@@ -279,6 +313,51 @@ function NumberField({
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => onCommit(draft)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * One end of the rescale window. Unlike {@link NumberField} the draft lives in
+ * the parent, because the two bounds are only meaningful as a pair: committing
+ * one has to see what the other currently holds.
+ *
+ * @param props.draft - The current field text, owned by the parent.
+ * @param props.onCommit - Receives the field text on blur or Enter.
+ */
+function BoundField({
+  id,
+  label,
+  draft,
+  placeholder,
+  onDraftChange,
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  draft: string;
+  placeholder?: string;
+  onDraftChange: (value: string) => void;
+  onCommit: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        inputMode="decimal"
+        step={0.1}
+        placeholder={placeholder}
+        value={draft}
+        onChange={(event) => onDraftChange(event.target.value)}
+        onBlur={(event) => onCommit(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
         }}
