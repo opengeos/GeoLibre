@@ -1914,6 +1914,25 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           )}
         </ScrollArea>
       ) : null}
+      {/*
+        Status bar: how many features the layer has, how many the table is
+        currently showing, and how many are selected. The "shown" count only
+        appears when a search or the Selected view is narrowing the table, so
+        the common case reads as one unambiguous total rather than two equal
+        numbers. Sits outside the ScrollArea so it stays put while scrolling.
+      */}
+      {!collapsed && hasAttributeSource ? (
+        <div
+          data-testid="attribute-table-status"
+          className="flex shrink-0 items-center gap-3 border-t bg-card px-3 py-1 text-[11px] text-muted-foreground"
+        >
+          <span>{t("attributeTable.statusFeatures", { count: attributeRows.length })}</span>
+          {filtered.length !== attributeRows.length ? (
+            <span>{t("attributeTable.statusShown", { count: filtered.length })}</span>
+          ) : null}
+          <span>{t("attributeTable.statusSelected", { count: selectedFeatureIds.length })}</span>
+        </div>
+      ) : null}
       <Dialog
         open={columnPendingDelete !== null}
         onOpenChange={(open: boolean) => {
