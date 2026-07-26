@@ -271,9 +271,20 @@ export function readBuildTimeAssistantEnv(
   if (proxyUrl) {
     result.OPENAI_COMPATIBLE_BASE_URL = proxyUrl.endsWith("/v1") ? proxyUrl : `${proxyUrl}/v1`;
     result.OPENAI_COMPATIBLE_MODEL =
-      viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() || result.OPENAI_COMPATIBLE_MODEL || "openai/gpt-5.6";
+      viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() || result.OPENAI_COMPATIBLE_MODEL || "openai/gpt-5.5";
   }
   return result;
+}
+
+/** Public proxy configuration injected by the Docker entrypoint at container startup. */
+export function readDeploymentAssistantEnv(): RuntimeEnv {
+  if (typeof window === "undefined") return {};
+  const deploymentEnv = (
+    window as unknown as {
+      __GEOLIBRE_DEPLOYMENT_ENV__?: Record<string, string | undefined>;
+    }
+  ).__GEOLIBRE_DEPLOYMENT_ENV__;
+  return readBuildTimeAssistantEnv(deploymentEnv);
 }
 
 /** Read build-time credentials plus the live runtime environment map. */
@@ -282,6 +293,7 @@ export function readRuntimeEnv(): RuntimeEnv {
   if (typeof window === "undefined") return built;
   return {
     ...built,
+    ...readDeploymentAssistantEnv(),
     ...((window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv }).__GEOLIBRE_RUNTIME_ENV__ ??
       {}),
   };

@@ -209,6 +209,25 @@ docker run --rm -p 8080:80 \
   geolibre
 ```
 
+To enable the managed AI proxy for that password-protected instance, configure
+the same-origin `/ai` route and a server-only instance token that matches the
+`GEOLIBRE_AI_PROXY_TOKEN` secret on the GeoLibre AI Worker:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  -e GEOLIBRE_AI_URL=/ai \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
+  -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+The token stays in nginx and is never sent to the browser. Use an `--env-file`
+or secrets manager rather than putting production credentials in shell history,
+and terminate TLS in front of the container.
+
 The browser prompts for the credentials on first visit. `/healthz` stays
 unauthenticated so the container health check keeps working. When the
 variables are unset (the default), no authentication is applied.

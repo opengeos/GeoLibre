@@ -4,8 +4,9 @@ Cloudflare Worker that gives GeoLibre an OpenAI-compatible
 `/v1/chat/completions` endpoint without shipping an AI provider key in the
 application. It routes through Cloudflare AI Gateway's unified API, which
 supports OpenAI, Anthropic, Google Gemini, and Workers AI with one request
-format. It streams responses and enforces an origin allowlist, model allowlist,
-request-size cap, output-token cap, and per-client rate limit.
+format. It streams responses and requires a server-side GeoLibre instance
+token in addition to enforcing a model allowlist, request-size cap,
+output-token cap, and per-client rate limit.
 
 ## Configure and deploy
 
@@ -19,6 +20,7 @@ request-size cap, output-token cap, and per-client rate limit.
    cd workers/ai-proxy
    npx wrangler secret put CF_AI_GATEWAY_TOKEN
    npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+   npx wrangler secret put GEOLIBRE_AI_PROXY_TOKEN
    ```
 
 3. Validate and deploy:
@@ -29,21 +31,34 @@ request-size cap, output-token cap, and per-client rate limit.
    npx wrangler deploy
    ```
 
-4. Build GeoLibre with the deployed Worker URL:
+4. For a direct managed build, explicitly build GeoLibre with the deployed
+   Worker URL:
 
    ```sh
    GEOLIBRE_AI_URL=https://ai.geolibre.app \
-   GEOLIBRE_AI_MODEL=openai/gpt-5.6 \
+   GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
    npm run build
    ```
 
-Change `GEOLIBRE_AI_MODEL` to another allowlisted model, such as
+Change `GEOLIBRE_AI_MODEL` to another Chat Completions-compatible allowlisted model, such as
 `anthropic/claude-opus-5` or `google/gemini-3.6-flash`, to change provider
 without changing the client protocol.
 
-The URL is public configuration; only `CF_AI_GATEWAY_TOKEN` is secret. Origin
-checks and edge rate limiting reduce casual abuse but are not user
-authentication. For a public production service with meaningful spend, place
-Cloudflare Access or another identity layer in front and rate-limit by a
-verified user identifier. Configure AI Gateway spend limits as a second,
-account-level cost control.
+For Docker, set the client URL to the same-origin `/ai` path and let nginx
+inject the server-only instance token:
+
+```sh
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  -e GEOLIBRE_AI_URL=/ai \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
+  -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+`GEOLIBRE_AI_PROXY_TOKEN` must match the Worker secret. The browser receives
+only `/ai` and the model ID. Basic Auth protects nginx's `/ai` route, nginx
+removes the user's Basic credentials, and the Worker rejects calls without the
+instance token. Use HTTPS in front of Docker on untrusted networks.

@@ -4,11 +4,22 @@ import {
   availableProviders,
   configForProvider,
   readBuildTimeAssistantEnv,
+  readDeploymentAssistantEnv,
   resolveProviderConfig,
   type RuntimeEnv,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider";
 
 describe("build-time AI proxy", () => {
+  it("does not configure a managed proxy unless its URL is explicitly set", () => {
+    assert.deepEqual(readBuildTimeAssistantEnv({}), {});
+    assert.deepEqual(
+      readBuildTimeAssistantEnv({
+        VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.6-terra",
+      }),
+      {},
+    );
+  });
+
   it("never imports provider API keys from the client build environment", () => {
     assert.deepEqual(
       readBuildTimeAssistantEnv({
@@ -33,12 +44,37 @@ describe("build-time AI proxy", () => {
     );
   });
 
-  it("defaults a managed proxy to GPT-5.6 through Cloudflare AI Gateway", () => {
+  it("defaults a managed Chat Completions proxy to GPT-5.5", () => {
     assert.equal(
       readBuildTimeAssistantEnv({ VITE_GEOLIBRE_AI_URL: "https://ai.example.com/v1" })
         .OPENAI_COMPATIBLE_MODEL,
-      "openai/gpt-5.6",
+      "openai/gpt-5.5",
     );
+  });
+
+  it("reads Docker deployment config only when the entrypoint injects a URL", () => {
+    const originalWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        __GEOLIBRE_DEPLOYMENT_ENV__: {
+          VITE_GEOLIBRE_AI_URL: "/ai",
+          VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
+        },
+      } as unknown as Window & typeof globalThis;
+      assert.deepEqual(readDeploymentAssistantEnv(), {
+        OPENAI_COMPATIBLE_BASE_URL: "/ai/v1",
+        OPENAI_COMPATIBLE_MODEL: "openai/gpt-5.5",
+      });
+
+      globalThis.window = {
+        __GEOLIBRE_DEPLOYMENT_ENV__: {
+          VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
+        },
+      } as unknown as Window & typeof globalThis;
+      assert.deepEqual(readDeploymentAssistantEnv(), {});
+    } finally {
+      globalThis.window = originalWindow;
+    }
   });
 });
 

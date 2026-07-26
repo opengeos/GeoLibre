@@ -32,6 +32,22 @@ function allowedOrigin(request: Request, env: Env): string | null {
   return origin;
 }
 
+function responseHeaders(origin: string | null): Headers {
+  return origin ? corsHeaders(origin) : new Headers();
+}
+
+async function hasValidInstanceToken(request: Request, env: Env): Promise<boolean> {
+  const supplied = request.headers.get("X-GeoLibre-Instance-Token") ?? "";
+  const expected = env.GEOLIBRE_AI_PROXY_TOKEN ?? "";
+  if (!supplied || !expected) return false;
+
+  const encoder = new TextEncoder();
+  const suppliedBytes = encoder.encode(supplied);
+  const expectedBytes = encoder.encode(expected);
+  if (suppliedBytes.byteLength !== expectedBytes.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(suppliedBytes, expectedBytes);
+}
+
 async function readBoundedJson(
   request: Request,
   maximumBytes: number,
@@ -81,7 +97,7 @@ function clampOutputTokens(body: Record<string, unknown>, limit: number): void {
   }
 }
 
-async function proxyChat(request: Request, env: Env, origin: string): Promise<Response> {
+async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
   const maximumBytes = positiveInteger(env.MAX_BODY_BYTES, 1_048_576);
   let body: Record<string, unknown>;
   try {
@@ -91,28 +107,29 @@ async function proxyChat(request: Request, env: Env, origin: string): Promise<Re
     return jsonError(
       error instanceof Error ? error.message : "Invalid request body",
       status,
-      corsHeaders(origin),
+      responseHeaders(origin),
     );
   }
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
-    return jsonError("messages must be a non-empty array", 400, corsHeaders(origin));
+    return jsonError("messages must be a non-empty array", 400, responseHeaders(origin));
   }
 
   const allowedModels = parseList(env.ALLOWED_MODELS);
   const requestedModel = typeof body.model === "string" ? body.model.trim() : "";
   const model = requestedModel || env.DEFAULT_MODEL;
   if (!allowedModels.has(model)) {
-    return jsonError("The requested model is not allowed", 400, corsHeaders(origin));
+    return jsonError("The requested model is not allowed", 400, responseHeaders(origin));
   }
   body.model = model;
   clampOutputTokens(body, positiveInteger(env.MAX_OUTPUT_TOKENS, 16_384));
 
-  const actor = request.headers.get("CF-Connecting-IP") ?? "unidentified";
+  const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
+  const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";
   const { success } = await env.AI_RATE_LIMITER.limit({ key: actor });
   if (!success) {
     return jsonError("Rate limit exceeded", 429, {
-      ...Object.fromEntries(corsHeaders(origin)),
+      ...Object.fromEntries(responseHeaders(origin)),
       "Retry-After": "60",
     });
   }
@@ -131,7 +148,7 @@ async function proxyChat(request: Request, env: Env, origin: string): Promise<Re
   });
 
   const headers = new Headers(upstream.headers);
-  for (const [name, value] of corsHeaders(origin)) headers.set(name, value);
+  for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
   headers.delete("set-cookie");
   headers.set("Cache-Control", "no-store");
 
@@ -155,14 +172,17 @@ export default {
     }
 
     const origin = allowedOrigin(request, env);
-    if (!origin) return jsonError("Origin is not allowed", 403);
-    if (request.method === "OPTIONS")
-      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    if (!(await hasValidInstanceToken(request, env))) {
+      return jsonError("Unauthorized", 401, responseHeaders(origin));
+    }
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: responseHeaders(origin) });
+    }
     if (url.pathname !== "/v1/chat/completions") {
-      return jsonError("Not found", 404, corsHeaders(origin));
+      return jsonError("Not found", 404, responseHeaders(origin));
     }
     if (request.method !== "POST") {
-      return jsonError("Method not allowed", 405, corsHeaders(origin));
+      return jsonError("Method not allowed", 405, responseHeaders(origin));
     }
 
     try {
@@ -175,7 +195,7 @@ export default {
           path: url.pathname,
         }),
       );
-      return jsonError("Upstream request failed", 502, corsHeaders(origin));
+      return jsonError("Upstream request failed", 502, responseHeaders(origin));
     }
   },
 } satisfies ExportedHandler<Env>;

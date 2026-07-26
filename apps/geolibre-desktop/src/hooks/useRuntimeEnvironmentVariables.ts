@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import {
   mergeRuntimeEnv,
   readBuildTimeAssistantEnv,
+  readDeploymentAssistantEnv,
   type RuntimeEnv,
 } from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
@@ -89,7 +90,11 @@ export function useRuntimeEnvironmentVariables() {
     const runtimeEnv = mergeRuntimeEnv({
       // Build-time keys are the lowest-precedence defaults. OS, saved profile,
       // and project values can all override them without requiring a rebuild.
-      osEnv: { ...readBuildTimeAssistantEnv(), ...osEnv },
+      osEnv: {
+        ...readBuildTimeAssistantEnv(),
+        ...readDeploymentAssistantEnv(),
+        ...osEnv,
+      },
       aiEnv,
       geocoderEnv,
       cesiumEnv,

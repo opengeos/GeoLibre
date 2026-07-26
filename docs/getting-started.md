@@ -134,6 +134,24 @@ docker run --rm -p 8080:80 \
   ghcr.io/opengeos/geolibre:latest
 ```
 
+To let authenticated users access the managed AI proxy without exposing its
+server token, route AI requests through the same nginx instance:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  -e GEOLIBRE_AI_URL=/ai \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
+  -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+The proxy token must match the `GEOLIBRE_AI_PROXY_TOKEN` Worker secret. It is
+injected by nginx only after Basic Auth succeeds and never appears in frontend
+configuration. Use HTTPS and prefer an `--env-file` or secrets manager.
+
 For deployments under a URL subpath, pass the app base at build time:
 
 ```bash

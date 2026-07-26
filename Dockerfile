@@ -92,7 +92,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
   # Default auth snippet (disabled). entrypoint.sh rewrites it at start based
   # on GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD; baking a valid default keeps
   # `nginx -t` and non-entrypoint invocations working.
-  && printf '# Basic Auth disabled (GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD not set).\n' > /etc/nginx/geolibre-auth.conf
+  && printf '# Basic Auth disabled (GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD not set).\n' > /etc/nginx/geolibre-auth.conf \
+  && printf '# AI proxy disabled (GEOLIBRE_AI_URL not set).\n' > /etc/nginx/geolibre-ai-proxy.conf
 COPY --from=build /app/apps/geolibre-desktop/dist /usr/share/nginx/html
 
 EXPOSE 80
