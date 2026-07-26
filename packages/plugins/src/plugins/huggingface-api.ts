@@ -244,6 +244,43 @@ export function buildResolveUrl(
 }
 
 /**
+ * The page for one file in a dataset — the human-facing viewer, not the bytes
+ * (that is {@link buildResolveUrl}).
+ *
+ * @param repoId - `owner/name`
+ * @param path - Repo-relative file path
+ * @param revision - Branch, tag, or commit; defaults to `main`
+ * @returns The file's `blob` page on huggingface.co
+ */
+export function buildBlobViewUrl(
+  repoId: string,
+  path: string,
+  revision: string = HF_DEFAULT_REVISION,
+): string {
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  return `${HF_SITE}/datasets/${encodeRepoId(repoId)}/blob/${encodeURIComponent(revision)}/${encodedPath}`;
+}
+
+/**
+ * The file-browser page for a folder in a dataset. An empty `path` is the repo
+ * root, which is a valid `tree` URL in its own right.
+ *
+ * @param repoId - `owner/name`
+ * @param path - Repo-relative folder path; empty for the root
+ * @param revision - Branch, tag, or commit; defaults to `main`
+ * @returns The folder's `tree` page on huggingface.co
+ */
+export function buildTreeViewUrl(
+  repoId: string,
+  path = "",
+  revision: string = HF_DEFAULT_REVISION,
+): string {
+  const trimmed = path.replace(/^\/+|\/+$/g, "");
+  const suffix = trimmed ? `/${trimmed.split("/").map(encodeURIComponent).join("/")}` : "";
+  return `${HF_SITE}/datasets/${encodeRepoId(repoId)}/tree/${encodeURIComponent(revision)}${suffix}`;
+}
+
+/**
  * The download form of a resolve URL. `?download=true` makes the Hub send
  * `Content-Disposition: attachment`, so the browser saves the file instead of
  * navigating to it (a `.csv` or `.geojson` would otherwise render in the tab).
@@ -302,6 +339,35 @@ export function parseDataset(raw: unknown): HfDataset | null {
     downloads: asNumber(record.downloads),
     lastModified: asString(record.lastModified) || null,
     tags,
+    url: datasetUrl(id),
+  };
+}
+
+/**
+ * Builds a dataset record from an id alone, without touching the network.
+ *
+ * A repo's *files* are listed from its id alone (see {@link listDatasetTree}),
+ * so a pinned entry needs no metadata read to be useful — and this keeps a
+ * curated list working when the metadata API is unreachable. The fields the API
+ * would supply are left empty for a later {@link fetchDataset} to fill in.
+ *
+ * @param repoId - `owner/name`
+ * @returns The synthesized record, or null when the id is not `owner/name`
+ */
+export function synthesizeDataset(repoId: string): HfDataset | null {
+  const ref = parseRepoId(repoId);
+  if (!ref) return null;
+  const id = `${ref.owner}/${ref.name}`;
+  return {
+    id,
+    owner: ref.owner,
+    name: ref.name,
+    private: false,
+    gated: false,
+    likes: 0,
+    downloads: 0,
+    lastModified: null,
+    tags: [],
     url: datasetUrl(id),
   };
 }

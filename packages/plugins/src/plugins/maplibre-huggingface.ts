@@ -41,7 +41,9 @@ import {
   type RemoteIngestMode,
 } from "./remote-file-formats";
 import {
+  buildBlobViewUrl,
   buildDownloadUrl,
+  buildTreeViewUrl,
   canRenderFrom,
   createDatasetRepo,
   fetchDataset,
@@ -53,6 +55,7 @@ import {
   listOwnerDatasets,
   parseRepoId,
   searchDatasets,
+  synthesizeDataset,
   uploadDatasetFiles,
   whoAmI,
   type HfClientOptions,
@@ -71,12 +74,23 @@ const TOKEN_STORAGE_KEY = "geolibre:huggingface-token";
 const TOKEN_SETTINGS_URL = `${HF_SITE}/settings/tokens`;
 
 /**
- * The query the browse view opens on, so the panel is useful before the user
- * has typed anything. Deliberately a plain search rather than a curated list:
- * the Hub has a real search endpoint, so there is no second catalog here that
- * could go stale.
+ * The datasets the browse view opens on, so the panel is useful before the user
+ * has typed anything.
+ *
+ * A pinned list rather than a seeded search: searching the Hub for a word like
+ * "geospatial" matches on repo *name and description*, not on what a repo
+ * actually holds, so it surfaced repos with no map-renderable file while
+ * missing ones full of COG or GeoParquet that never use the word.
+ *
+ * Only the ids are hard-coded. Each entry's title, stats, and tags are fetched
+ * live, and its file list is always the real repo listing — so there is no
+ * second catalog here that can go stale against the Hub.
  */
-const DEFAULT_QUERY = "geospatial";
+const SUGGESTED_DATASET_IDS = [
+  "giswqs/geospatial",
+  "giswqs/s2-water-dataset",
+  "giswqs/PACE-Water-Quality",
+] as const;
 
 /** User-facing strings. The host pushes translations in via {@link setHuggingFaceLabels}. */
 export interface HuggingFaceLabels {
@@ -147,6 +161,12 @@ export interface HuggingFaceLabels {
   folderLabel: string;
   folderPlaceholder: string;
   chooseFiles: string;
+  chooseLayer: string;
+  chooseLayerTitle: string;
+  layerPickerHeading: string;
+  layerFeatures: (count: number) => string;
+  noUploadableLayers: string;
+  clearSelection: string;
   selectedFiles: (count: number, size: string) => string;
   commitMessageLabel: string;
   commitMessagePlaceholder: string;
@@ -239,6 +259,13 @@ export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
   folderLabel: "Folder (optional)",
   folderPlaceholder: "data/",
   chooseFiles: "Choose files",
+  chooseLayer: "Choose layer",
+  chooseLayerTitle: "Upload a map layer's features as a GeoJSON file",
+  layerPickerHeading: "Upload a layer as GeoJSON",
+  layerFeatures: (count) => `${count} feature${count === 1 ? "" : "s"}`,
+  noUploadableLayers:
+    "No layer on the map holds features that can be uploaded. Add a vector layer first.",
+  clearSelection: "Clear",
   selectedFiles: (count, size) => `${count} file${count === 1 ? "" : "s"} selected (${size}).`,
   commitMessageLabel: "Commit message (optional)",
   commitMessagePlaceholder: "Upload with GeoLibre",
@@ -554,6 +581,75 @@ function noteText(file: HfFile, state: { added: boolean; pending: boolean }): st
   }
 }
 
+/** A map layer that can be uploaded, paired with the size of its data. */
+interface UploadableLayer {
+  id: string;
+  name: string;
+  featureCount: number;
+}
+
+/**
+ * Lists the layers whose data this panel can upload.
+ *
+ * Deliberately only layers that carry their features in the store's `geojson`
+ * field. The alternative — reading a tile-backed layer out of the MapLibre
+ * source — would return just the features in loaded tiles, so it would upload a
+ * silently truncated dataset that looks complete. A layer whose data already
+ * lives in a remote file does not need this path anyway: it is a URL the user
+ * can point at directly.
+ *
+ * @returns One entry per uploadable layer, in the store's own order
+ */
+function listUploadableLayers(): UploadableLayer[] {
+  return (
+    useAppStore
+      .getState()
+      .layers.filter((layer) => Array.isArray(layer.geojson?.features))
+      .map((layer) => ({
+        id: layer.id,
+        name: layer.name,
+        featureCount: layer.geojson?.features.length ?? 0,
+      }))
+      // An empty layer would commit a FeatureCollection with nothing in it.
+      .filter((entry) => entry.featureCount > 0)
+  );
+}
+
+/**
+ * Turns a layer name into a safe `.geojson` filename.
+ *
+ * The result becomes a path inside a git commit, so anything that could change
+ * the path's meaning — separators, `..`, leading dots — has to go, not merely
+ * be escaped.
+ *
+ * @param name - The layer's display name
+ * @returns A filename ending in `.geojson`
+ */
+export function layerFileName(name: string): string {
+  const slug = name
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 80);
+  return `${slug || "layer"}.geojson`;
+}
+
+/**
+ * Serializes a layer's features into an upload-ready file.
+ *
+ * @param layerId - The store layer's id
+ * @returns The file, or null when the layer has gone away or holds no features
+ */
+function layerToGeoJsonFile(layerId: string): File | null {
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
+  if (!layer?.geojson || !Array.isArray(layer.geojson.features)) return null;
+  if (layer.geojson.features.length === 0) return null;
+  return new File([JSON.stringify(layer.geojson)], layerFileName(layer.name), {
+    type: "application/geo+json",
+  });
+}
+
 /** Merges dataset lists, keeping the first record seen for a duplicate id. */
 function mergeDatasets(...groups: HfDataset[][]): HfDataset[] {
   const byId = new Map<string, HfDataset>();
@@ -606,6 +702,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   let uploadFolder = "";
   let uploadCommitMessage = "";
   let selectedFiles: File[] = [];
+  /** Whether the inline layer picker is expanded under "Choose layer". */
+  let layerPickerOpen = false;
   let uploadBusy = false;
   let uploadStatus = "";
   let uploadedUrl = "";
@@ -641,7 +739,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
    * `giswqs` should show that account's datasets, not just repos with the word
    * in their name.
    */
-  async function runSearch(rawQuery: string, options: { seed?: boolean } = {}): Promise<void> {
+  async function runSearch(rawQuery: string): Promise<void> {
     const trimmed = rawQuery.trim();
     if (!trimmed) return;
     const { signal, token: requestToken } = beginRequest();
@@ -681,7 +779,46 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
         owned.status === "fulfilled" ? owned.value : [],
         matched.status === "fulfilled" ? matched.value : [],
       );
-      showingSuggestions = options.seed === true;
+      showingSuggestions = false;
+      status = "";
+    } catch (caught) {
+      if (isAbort(caught) || requestToken !== generation) return;
+      error = labels.loadError(errorMessage(caught));
+      status = "";
+    } finally {
+      if (requestToken === generation) {
+        busy = false;
+        render();
+      }
+    }
+  }
+
+  /**
+   * Loads the pinned suggestions the panel opens on.
+   *
+   * Each id resolves independently and falls back to a synthesized record, so
+   * one unreachable repo (renamed, made private, or a metadata blip) costs its
+   * own card's title and stats rather than emptying the list — the entry still
+   * opens, because the file listing needs only the id.
+   */
+  async function loadSuggested(): Promise<void> {
+    const { signal, token: requestToken } = beginRequest();
+    busy = true;
+    error = "";
+    status = labels.searching;
+    render();
+    try {
+      const fetched = await Promise.all(
+        SUGGESTED_DATASET_IDS.map((id) =>
+          fetchDataset(id, readOptions(signal)).then(
+            (dataset) => dataset ?? synthesizeDataset(id),
+            () => synthesizeDataset(id),
+          ),
+        ),
+      );
+      if (requestToken !== generation) return;
+      results = fetched.filter((dataset): dataset is HfDataset => dataset !== null);
+      showingSuggestions = true;
       status = "";
     } catch (caught) {
       if (isAbort(caught) || requestToken !== generation) return;
@@ -872,7 +1009,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
 
       if (error && results.length === 0) {
         const retry = button(labels.retry, CSS.secondaryButton);
-        retry.addEventListener("click", () => void runSearch(query || DEFAULT_QUERY));
+        retry.addEventListener("click", () =>
+          query.trim() ? void runSearch(query) : void loadSuggested(),
+        );
         list.appendChild(retry);
         return;
       }
@@ -1149,6 +1288,20 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     }
   }
 
+  /**
+   * Adds files to the pending selection, keyed by name.
+   *
+   * Additive so a local file and a map layer can go up in one commit, and
+   * keyed by name because two entries sharing a name would resolve to one
+   * path in that commit — the later one is what would survive, so it is what
+   * the list shows.
+   */
+  function stageFiles(next: File[]): void {
+    const byName = new Map(selectedFiles.map((file) => [file.name, file]));
+    for (const file of next) byName.set(file.name, file);
+    selectedFiles = [...byName.values()];
+  }
+
   async function handleUpload(): Promise<void> {
     const target = uploadTarget.trim();
     const ref = parseRepoId(target);
@@ -1204,7 +1357,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
         { token },
       );
       uploadStatus = labels.uploadDone(payload.length);
-      uploadedUrl = `${HF_SITE}/datasets/${repoId}`;
+      // Land on what was just uploaded, not the repo's front page: a single
+      // file opens its own page, several open the folder that now holds them
+      // (the root tree when no folder was given).
+      uploadedUrl =
+        payload.length === 1
+          ? buildBlobViewUrl(repoId, payload[0].path)
+          : buildTreeViewUrl(repoId, prefix);
       selectedFiles = [];
     } catch (caught) {
       tokenError = labels.uploadError(errorMessage(caught));
@@ -1386,15 +1545,75 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     filePicker.multiple = true;
     filePicker.style.display = "none";
     filePicker.addEventListener("change", () => {
-      selectedFiles = filePicker.files ? [...filePicker.files] : [];
-      syncUploadEnabled();
+      stageFiles(filePicker.files ? [...filePicker.files] : []);
+      // Cleared so re-picking the same file fires `change` again; without this
+      // the input keeps the value and a removed-then-reselected file is a no-op.
+      filePicker.value = "";
+      render();
     });
     uploadSection.appendChild(filePicker);
 
+    const pickRow = el("div", CSS.actions);
     const chooseButton = button(labels.chooseFiles, CSS.action);
     chooseButton.disabled = uploadBusy;
     chooseButton.addEventListener("click", () => filePicker.click());
-    uploadSection.appendChild(chooseButton);
+    pickRow.appendChild(chooseButton);
+
+    // The map's own layers are the other place upload data comes from, so they
+    // are offered beside the filesystem rather than requiring an export first.
+    const uploadableLayers = listUploadableLayers();
+    const chooseLayerButton = button(
+      labels.chooseLayer,
+      layerPickerOpen ? CSS.actionActive : CSS.action,
+      labels.chooseLayerTitle,
+    );
+    chooseLayerButton.disabled = uploadBusy;
+    chooseLayerButton.addEventListener("click", () => {
+      layerPickerOpen = !layerPickerOpen;
+      render();
+    });
+    pickRow.appendChild(chooseLayerButton);
+
+    if (selectedFiles.length > 0) {
+      const clearButton = button(labels.clearSelection, CSS.action);
+      clearButton.disabled = uploadBusy;
+      clearButton.addEventListener("click", () => {
+        selectedFiles = [];
+        render();
+      });
+      pickRow.appendChild(clearButton);
+    }
+    uploadSection.appendChild(pickRow);
+
+    if (layerPickerOpen) {
+      const picker = el("div", CSS.section);
+      picker.appendChild(el("div", CSS.fieldLabel, labels.layerPickerHeading));
+      if (uploadableLayers.length === 0) {
+        picker.appendChild(el("div", CSS.status, labels.noUploadableLayers));
+      }
+      for (const entry of uploadableLayers) {
+        const card = el("button", CSS.cardButton);
+        card.type = "button";
+        card.appendChild(el("span", CSS.title, entry.name));
+        card.appendChild(
+          el(
+            "span",
+            CSS.sub,
+            `${labels.layerFeatures(entry.featureCount)} · ${layerFileName(entry.name)}`,
+          ),
+        );
+        card.addEventListener("click", () => {
+          const file = layerToGeoJsonFile(entry.id);
+          // Null only if the layer was removed between listing and clicking.
+          if (file) stageFiles([file]);
+          layerPickerOpen = false;
+          render();
+        });
+        picker.appendChild(card);
+      }
+      uploadSection.appendChild(picker);
+    }
+
     uploadSection.appendChild(selectionNode);
 
     syncUploadEnabled();
@@ -1465,8 +1684,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   }
 
   render();
-  // Seed the browse list so the panel is useful before anything is typed.
-  void runSearch(DEFAULT_QUERY, { seed: true });
+  // Open on the pinned suggestions so the panel is useful before anything is typed.
+  void loadSuggested();
   // A saved token is verified on mount so the upload tab is ready when opened,
   // and so a revoked token is reported before the user fills in a form.
   if (token) void verifyToken(token);

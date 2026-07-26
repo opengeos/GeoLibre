@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildBlobViewUrl,
   buildDownloadUrl,
   buildResolveUrl,
+  buildTreeViewUrl,
   bytesToBase64,
   canRenderFrom,
   createDatasetRepo,
@@ -21,6 +23,7 @@ import {
   parseTree,
   searchDatasets,
   sha256Hex,
+  synthesizeDataset,
   uploadDatasetFiles,
   whoAmI,
   type HfDataset,
@@ -578,6 +581,62 @@ describe("upload size limits", () => {
       HF_MAX_UPLOAD_TOTAL_BYTES < HF_MAX_UPLOAD_BYTES,
       `expected the total cap (${HF_MAX_UPLOAD_TOTAL_BYTES}) below the per-file cap (${HF_MAX_UPLOAD_BYTES})`,
     );
+  });
+});
+
+describe("buildBlobViewUrl / buildTreeViewUrl", () => {
+  it("points at a file's own page, not the repo root", () => {
+    // The whole reason these exist: after an upload the panel should land on
+    // what was just pushed, not the repo's front page.
+    assert.equal(
+      buildBlobViewUrl("giswqs/geospatial", "landsat/1984.tif"),
+      `${HF_SITE}/datasets/giswqs/geospatial/blob/main/landsat/1984.tif`,
+    );
+  });
+
+  it("points at a folder's listing", () => {
+    assert.equal(
+      buildTreeViewUrl("giswqs/geospatial", "landsat"),
+      `${HF_SITE}/datasets/giswqs/geospatial/tree/main/landsat`,
+    );
+  });
+
+  it("treats an empty folder as the repo root tree", () => {
+    assert.equal(buildTreeViewUrl("o/r"), `${HF_SITE}/datasets/o/r/tree/main`);
+    assert.equal(buildTreeViewUrl("o/r", "/"), `${HF_SITE}/datasets/o/r/tree/main`);
+  });
+
+  it("keeps the owner/name slash but encodes path segments", () => {
+    assert.equal(
+      buildTreeViewUrl("o/r", "country=AFG"),
+      `${HF_SITE}/datasets/o/r/tree/main/country%3DAFG`,
+    );
+  });
+
+  it("honours a non-default revision", () => {
+    assert.equal(buildBlobViewUrl("o/r", "a.tif", "dev"), `${HF_SITE}/datasets/o/r/blob/dev/a.tif`);
+  });
+});
+
+describe("synthesizeDataset", () => {
+  it("builds a usable record from an id alone, for a pinned suggestion", () => {
+    const dataset = synthesizeDataset("giswqs/s2-water-dataset");
+    assert.equal(dataset?.id, "giswqs/s2-water-dataset");
+    assert.equal(dataset?.owner, "giswqs");
+    assert.equal(dataset?.name, "s2-water-dataset");
+    assert.equal(dataset?.url, `${HF_SITE}/datasets/giswqs/s2-water-dataset`);
+  });
+
+  it("defaults to public and ungated, so a pinned entry stays browsable", () => {
+    const dataset = synthesizeDataset("o/r");
+    assert.equal(dataset?.private, false);
+    assert.equal(dataset?.gated, false);
+    assert.equal(canRenderFrom(dataset!), true);
+  });
+
+  it("rejects anything that is not owner/name", () => {
+    assert.equal(synthesizeDataset("giswqs"), null);
+    assert.equal(synthesizeDataset(""), null);
   });
 });
 
