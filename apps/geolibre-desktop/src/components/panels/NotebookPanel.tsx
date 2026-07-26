@@ -1,6 +1,14 @@
 import { useAppStore } from "@geolibre/core";
 import { Button } from "@geolibre/ui";
-import { Loader2, NotebookPen, PanelRightClose, PanelRightOpen, X } from "lucide-react";
+import {
+  Check,
+  Link2,
+  Loader2,
+  NotebookPen,
+  PanelRightClose,
+  PanelRightOpen,
+  X,
+} from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -15,7 +23,7 @@ import { useNotebookBridge } from "../../hooks/useNotebookBridge";
 import { useNotebookThemeSync } from "../../hooks/useNotebookThemeSync";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
-import { startJupyterServer } from "../../lib/jupyter";
+import { type JupyterServerInfo, startJupyterServer } from "../../lib/jupyter";
 
 /**
  * Resolve the notebook iframe URL for the current environment:
@@ -24,13 +32,24 @@ import { startJupyterServer } from "../../lib/jupyter";
  *   embed its token-authenticated `/lab` URL.
  * - **Web:** load the self-hosted JupyterLite site (in-browser Pyodide kernel)
  *   built by `npm run build:jupyterlite` into `public/jupyterlite/`.
+ *
+ * @returns The iframe `src`, plus the desktop server it belongs to (null on web,
+ *   where there is no server an external client could attach to).
  */
-async function resolveNotebookUrl(): Promise<string> {
+async function resolveNotebook(): Promise<{ src: string; server: JupyterServerInfo | null }> {
   if (isTauri()) {
     const info = await startJupyterServer();
-    return `${info.url}/lab?token=${encodeURIComponent(info.token)}`;
+    return {
+      src: `${info.url}/lab?token=${encodeURIComponent(info.token)}`,
+      server: info,
+    };
   }
-  return `${import.meta.env.BASE_URL}jupyterlite/lab/index.html`;
+  return { src: `${import.meta.env.BASE_URL}jupyterlite/lab/index.html`, server: null };
+}
+
+/** The URL an external Jupyter client (VS Code…) attaches to this server with. */
+function externalClientUrl(server: JupyterServerInfo): string {
+  return `${server.url}/?token=${encodeURIComponent(server.token)}`;
 }
 
 interface NotebookPanelProps {
@@ -62,6 +81,8 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
   const [loaded, setLoaded] = useState(false);
   const [src, setSrc] = useState<string | null>(null);
+  const [server, setServer] = useState<JupyterServerInfo | null>(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -74,9 +95,11 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
   // which can take a moment on first run while uv syncs the environment).
   useEffect(() => {
     let cancelled = false;
-    resolveNotebookUrl()
-      .then((url) => {
-        if (!cancelled) setSrc(url);
+    resolveNotebook()
+      .then(({ src: url, server: info }) => {
+        if (cancelled) return;
+        setSrc(url);
+        setServer(info);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -95,6 +118,13 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
       cancelled = true;
     };
   }, [t]);
+
+  // Revert the copy button's confirmation so it reads as reusable.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   return (
     <aside
@@ -137,6 +167,30 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
             <NotebookPen className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">{t("notebook.title")}</span>
             <div className="ms-auto flex items-center gap-1">
+              {/* Desktop only: the loopback server URL + token an external
+                  Jupyter client (VS Code's Jupyter extension, `jupyter
+                  console`) attaches to. Such a client drives the map through the
+                  relay (useJupyterRelay), not through this iframe. */}
+              {server ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={copied ? t("notebook.serverUrlCopied") : t("notebook.copyServerUrl")}
+                  aria-label={t("notebook.copyServerUrl")}
+                  onClick={() => {
+                    void navigator.clipboard
+                      ?.writeText(externalClientUrl(server))
+                      .then(() => setCopied(true));
+                  }}
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Link2 className="h-4 w-4" />
+                  )}
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="icon"

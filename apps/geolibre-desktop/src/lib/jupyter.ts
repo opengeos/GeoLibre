@@ -14,19 +14,55 @@ export interface JupyterServerInfo {
   token: string;
 }
 
+// The live server, published so app-level consumers (the map-command relay in
+// useJupyterRelay) can reach it without depending on the Notebook panel, which
+// owns the *starting* of the server but may be closed while it keeps running.
+let liveServer: JupyterServerInfo | null = null;
+const serverListeners = new Set<(info: JupyterServerInfo | null) => void>();
+
+/** The running desktop JupyterLab server, or null when none has been started. */
+export function getJupyterServer(): JupyterServerInfo | null {
+  return liveServer;
+}
+
+/**
+ * Observe the desktop JupyterLab server's lifecycle.
+ *
+ * @param listener - Called with the current server (or null) immediately, then
+ *   on every start/stop.
+ * @returns An unsubscribe function.
+ */
+export function subscribeJupyterServer(
+  listener: (info: JupyterServerInfo | null) => void,
+): () => void {
+  serverListeners.add(listener);
+  listener(liveServer);
+  return () => {
+    serverListeners.delete(listener);
+  };
+}
+
+function setJupyterServer(info: JupyterServerInfo | null): void {
+  liveServer = info;
+  for (const listener of serverListeners) listener(info);
+}
+
 /**
  * Start (or reuse) the desktop JupyterLab server. Desktop-only — the web build
  * embeds the self-hosted JupyterLite site instead.
  */
 export async function startJupyterServer(): Promise<JupyterServerInfo> {
   assertTauri();
-  return invoke<JupyterServerInfo>("start_jupyter_server");
+  const info = await invoke<JupyterServerInfo>("start_jupyter_server");
+  setJupyterServer(info);
+  return info;
 }
 
 /** Stop the desktop JupyterLab server if it is running. */
 export async function stopJupyterServer(): Promise<void> {
   assertTauri();
   await invoke("stop_jupyter_server");
+  setJupyterServer(null);
 }
 
 function assertTauri(): void {

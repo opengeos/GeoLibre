@@ -2882,6 +2882,8 @@
     "collapse": "Collapse notebook",
     "expand": "Expand notebook",
     "close": "Close notebook",
+    "copyServerUrl": "Copy the server URL for external clients (VS Code…)",
+    "serverUrlCopied": "Server URL copied",
     "loading": "Loading notebook…",
     "loadFailed": "Failed to load the notebook."
   },

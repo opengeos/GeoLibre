@@ -1,9 +1,10 @@
 """``geolibre`` — drive the host GeoLibre map from a notebook cell.
 
 This module is made importable inside GeoLibre's **Notebook panel** (both the
-in-browser JupyterLite kernel on web and the JupyterLab server on desktop). It
-is the kernel side of the notebook scripting bridge: it forwards commands to the
-GeoLibre app that embeds this notebook (the parent window).
+in-browser JupyterLite kernel on web and the JupyterLab server on desktop), and
+in any kernel of the desktop app's Jupyter server — including one driven from an
+external client such as VS Code's Jupyter extension. It is the kernel side of the
+notebook scripting bridge: it forwards commands to the running GeoLibre app.
 
 Scope: this client speaks GeoLibre's **scripting bridge** (the same
 ``createScriptingHandlers`` surface used by the in-app Python console). That is a
@@ -19,6 +20,23 @@ browser/WebAssembly kernel) and a real JupyterLab server, with no
 ``anywidget``/comm dependency. Consequently *read-back* queries (``get_view``,
 ``identify``, ``list_layers``, …) are not available here — they need the blocking
 request/reply path the ``geolibre`` widget uses.
+
+Two transports carry those commands, picked per call:
+
+1. **The relay** (``geolibre_server/jupyter_relay.py``), when the kernel belongs
+   to a GeoLibre desktop Jupyter server. Commands are POSTed to a loopback
+   endpoint the app subscribes to, so they arrive no matter which *frontend* is
+   driving the kernel — the Notebook panel, or an external client such as VS
+   Code's Jupyter extension (issue #1442).
+2. **``display(Javascript(...))`` → ``window.parent.postMessage``**, the fallback.
+   This only reaches the map when the notebook is rendered inside the app's own
+   iframe, which is exactly the case on web (JupyterLite).
+
+When neither can deliver, the call emits a :class:`GeoLibreNotConnectedWarning`
+rather than doing nothing at all. Turn it into an error with::
+
+    import warnings, geolibre
+    warnings.simplefilter("error", geolibre.GeoLibreNotConnectedWarning)
 
 Usage::
 
@@ -38,26 +56,97 @@ and the desktop launcher copies it onto the kernel's import path
 from __future__ import annotations
 
 import json
+import os
+import sys
+import urllib.error
+import urllib.request
+import warnings
 from typing import Any, Iterable, Sequence
 
 from IPython.display import Javascript, display
 
-__all__ = ["HostMap", "Map", "connect"]
+__all__ = [
+    "GeoLibreNotConnectedWarning",
+    "HostMap",
+    "Map",
+    "connect",
+    "is_connected",
+]
+
+# Published by the relay extension into the Jupyter server's environment, which
+# every kernel it spawns inherits. See geolibre_server/jupyter_relay.py.
+_RELAY_URL_ENV = "GEOLIBRE_RELAY_URL"
+_RELAY_TOKEN_ENV = "GEOLIBRE_RELAY_TOKEN"
+
+# Loopback round-trip to the local app. Short: a hung relay must not stall a
+# notebook, and the caller only loses a fire-and-forget command.
+_RELAY_TIMEOUT_SECONDS = 5.0
+
+_NOT_CONNECTED_HINT = (
+    "The command was not delivered to a GeoLibre map. Open GeoLibre Desktop and "
+    "its Notebook panel (Processing -> Jupyter Notebook) so the app is running "
+    "and connected to this Jupyter server, then run the cell again."
+)
 
 
-def _send(method: str, params: dict[str, Any] | None = None) -> None:
-    """Post one scripting command up to the host GeoLibre app window.
+class GeoLibreNotConnectedWarning(UserWarning):
+    """Warned when a map command could not be delivered to a GeoLibre window."""
 
-    The notebook document is itself an iframe inside the app, so
-    ``window.parent`` is the app. An empty ``requestId`` marks a fire-and-forget
-    call (the host still replies; we just don't await it).
+
+def _relay_url() -> str | None:
+    """Return the relay base URL for this kernel, or None when there is none."""
+    url = os.environ.get(_RELAY_URL_ENV, "").strip()
+    return url.rstrip("/") or None
+
+
+def _is_browser_kernel() -> bool:
+    """Whether this kernel runs in the browser (JupyterLite / Pyodide).
+
+    There the notebook page is itself the app's iframe, so the ``postMessage``
+    transport is the right (and only) one, and a missing relay is expected.
     """
-    message = {
-        "type": "geolibre:command",
-        "requestId": "",
-        "method": method,
-        "params": params or {},
-    }
+    return sys.platform == "emscripten"
+
+
+def _post_to_relay(url: str, message: dict[str, Any]) -> tuple[int, str | None]:
+    """POST one command to the relay.
+
+    Args:
+        url: The relay base URL (no trailing slash).
+        message: The command envelope to deliver.
+
+    Returns:
+        ``(delivered, error)`` — how many app windows received the command, and a
+        human-readable reason when the relay itself could not be reached.
+    """
+    headers = {"Content-Type": "application/json"}
+    token = os.environ.get(_RELAY_TOKEN_ENV, "").strip()
+    if token:
+        headers["Authorization"] = f"token {token}"
+    request = urllib.request.Request(  # noqa: S310 - fixed http:// loopback URL
+        f"{url}/command",
+        data=json.dumps(message).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - see above
+            request, timeout=_RELAY_TIMEOUT_SECONDS
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        return 0, f"the local GeoLibre relay could not be reached ({error})"
+    delivered = payload.get("delivered")
+    return (delivered if isinstance(delivered, int) else 0), None
+
+
+def _post_message_via_display(message: dict[str, Any]) -> None:
+    """Emit the ``window.parent.postMessage`` transport as a display output.
+
+    The notebook document is an iframe inside the app, so ``window.parent`` is
+    the app. Inert in a frontend that does not execute JavaScript output (which
+    is why the relay is tried first).
+    """
     # json.dumps leaves "<" and ">" unescaped; escape them so a value containing
     # "</script>" (e.g. a layer name) can't break out of the <script> block that
     # IPython's Javascript() display wraps this code in. The \uXXXX escapes are
@@ -76,6 +165,82 @@ def _send(method: str, params: dict[str, Any] | None = None) -> None:
             "}"
         )
     )
+
+
+def is_connected() -> bool:
+    """Whether a GeoLibre window is currently listening for map commands.
+
+    Only the relay transport can answer this. On the in-browser kernel
+    (JupyterLite) commands travel through the notebook's own iframe and there is
+    nothing to ask, so this reports True.
+
+    Returns:
+        True when at least one GeoLibre window would receive a command now.
+    """
+    url = _relay_url()
+    if url is None:
+        return _is_browser_kernel()
+    headers = {}
+    token = os.environ.get(_RELAY_TOKEN_ENV, "").strip()
+    if token:
+        headers["Authorization"] = f"token {token}"
+    request = urllib.request.Request(  # noqa: S310 - fixed http:// loopback URL
+        f"{url}/status", headers=headers
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - see above
+            request, timeout=_RELAY_TIMEOUT_SECONDS
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    return bool(payload.get("listeners"))
+
+
+def _send(method: str, params: dict[str, Any] | None = None) -> None:
+    """Post one scripting command to the host GeoLibre app.
+
+    Prefers the relay (works from any Jupyter frontend, and reports delivery);
+    falls back to the ``postMessage`` display transport (the embedded panel and
+    JupyterLite). An empty ``requestId`` marks a fire-and-forget call (the host
+    still replies; we just don't await it).
+
+    Warns with :class:`GeoLibreNotConnectedWarning` when the command provably did
+    not reach a map, so a disconnected setup never looks like a silent success.
+    """
+    message = {
+        "type": "geolibre:command",
+        "requestId": "",
+        "method": method,
+        "params": params or {},
+    }
+    url = _relay_url()
+    if url is not None:
+        delivered, error = _post_to_relay(url, message)
+        if delivered:
+            return
+        # Last-ditch: an app old enough to lack the relay socket still listens on
+        # postMessage, and this notebook may be embedded in its Notebook panel.
+        _post_message_via_display(message)
+        reason = error or "no GeoLibre window is connected to this Jupyter server"
+        # stacklevel=3: HostMap method -> _send -> the user's cell, so the warning
+        # points at their code (and repeats in each new cell rather than once).
+        warnings.warn(
+            f"GeoLibre: {reason}. {_NOT_CONNECTED_HINT}",
+            GeoLibreNotConnectedWarning,
+            stacklevel=3,
+        )
+        return
+
+    _post_message_via_display(message)
+    if not _is_browser_kernel():
+        warnings.warn(
+            "GeoLibre: this kernel is not running on a GeoLibre Jupyter server, "
+            "so map commands can only be delivered when the notebook is rendered "
+            f"inside the app's Notebook panel. {_NOT_CONNECTED_HINT}",
+            GeoLibreNotConnectedWarning,
+            stacklevel=3,
+        )
 
 
 def _to_featurecollection(data: Any) -> dict[str, Any]:
@@ -144,7 +309,7 @@ class HostMap:
     """A handle to the live map in the surrounding GeoLibre app."""
 
     def __repr__(self) -> str:
-        return "<GeoLibre map (live, connected to the app)>"
+        return "<GeoLibre map (commands are sent to the live app)>"
 
     # -- camera ---------------------------------------------------------------
 
@@ -257,7 +422,19 @@ class HostMap:
 
 
 def connect() -> HostMap:
-    """Return a handle to the live map in the surrounding GeoLibre app."""
+    """Return a handle to the live map in the surrounding GeoLibre app.
+
+    Warns with :class:`GeoLibreNotConnectedWarning` when no GeoLibre window is
+    listening, so a misconfigured session says so up front instead of at the
+    first command that quietly goes nowhere.
+    """
+    if _relay_url() is not None and not is_connected():
+        warnings.warn(
+            f"GeoLibre: no GeoLibre window is connected to this Jupyter server. "
+            f"{_NOT_CONNECTED_HINT}",
+            GeoLibreNotConnectedWarning,
+            stacklevel=2,
+        )
     return HostMap()
 
 

@@ -27,6 +27,13 @@ _FRAME_ANCESTORS = (
 
 c = get_config()  # noqa: F821  (provided by the Jupyter config loader)
 
+# The map-command relay (geolibre_server/jupyter_relay.py). It lets ANY client of
+# this server — the embedded Notebook panel, but also an external frontend such
+# as VS Code's Jupyter extension — drive the live map, because commands travel
+# over a loopback endpoint instead of depending on the notebook being rendered
+# inside the app's iframe. See docs/notebook.md.
+c.ServerApp.jpserver_extensions = {"geolibre_server.jupyter_relay": True}
+
 c.ServerApp.tornado_settings = {
     "headers": {
         "Content-Security-Policy": _FRAME_ANCESTORS,

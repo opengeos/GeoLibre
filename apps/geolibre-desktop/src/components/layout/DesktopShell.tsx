@@ -114,6 +114,7 @@ import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
+import { useJupyterRelay } from "../../hooks/useJupyterRelay";
 import { appendDiagnostic, useDiagnosticsSnapshot } from "../../lib/diagnostics";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
@@ -747,6 +748,10 @@ export function DesktopShell({
   // Request/reply + event channel backing the Python scripting API (live
   // queries, processing, map events). Also inert when not embedded.
   useCommandBridge(mapControllerRef);
+  // Same scripting surface, reached over the desktop Jupyter server's relay, so
+  // a kernel driven from an EXTERNAL client (VS Code's Jupyter extension) can
+  // control the map too. Inert until that server is running.
+  useJupyterRelay(mapControllerRef);
   // Routes the Layers-panel Identify action to the raster pixel inspector for
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
