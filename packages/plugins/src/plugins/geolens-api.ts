@@ -419,8 +419,31 @@ export async function resolveRasterTiles(
 }
 
 /** OGC API Features items URL (one GeoJSON page) for a dataset. */
-export function itemsUrl(options: GeoLensClientOptions, datasetId: string, limit: number): string {
-  return `${options.baseUrl}/api/collections/${encodeURIComponent(datasetId)}/items?limit=${limit}`;
+/**
+ * A `[minLon, minLat, maxLon, maxLat]` extent to restrict a feature load to,
+ * e.g. the current map view.
+ */
+export type GeoLensBbox = readonly [number, number, number, number];
+
+/** Serialize a bbox for the OGC `bbox` query parameter, clamped to valid ranges. */
+export function bboxParam(bbox: GeoLensBbox): string {
+  const lon = (v: number): number => Math.min(180, Math.max(-180, v));
+  const lat = (v: number): number => Math.min(90, Math.max(-90, v));
+  return [lon(bbox[0]), lat(bbox[1]), lon(bbox[2]), lat(bbox[3])].join(",");
+}
+
+/**
+ * OGC API Features items URL (one GeoJSON page) for a dataset, optionally
+ * restricted to a bounding box.
+ */
+export function itemsUrl(
+  options: GeoLensClientOptions,
+  datasetId: string,
+  limit: number,
+  bbox?: GeoLensBbox,
+): string {
+  const query = `limit=${limit}${bbox ? `&bbox=${encodeURIComponent(bboxParam(bbox))}` : ""}`;
+  return `${options.baseUrl}/api/collections/${encodeURIComponent(datasetId)}/items?${query}`;
 }
 
 /**
@@ -442,6 +465,10 @@ const GEOLENS_PAGE_SIZE_LADDER = [10_000, GEOLENS_PAGE_LIMIT];
 /**
  * Load up to `limit` features, following OGC API Features `rel=next` links.
  *
+ * With a `bbox` the server filters to that extent, so `limit` then caps how many
+ * features *in view* are loaded rather than which arbitrary slice of the whole
+ * dataset arrives first.
+ *
  * The first request asks for all `limit` features at once, so a server whose
  * page cap allows it answers in a single round trip. A server that caps the
  * page size responds one of two ways: clamping servers return a shorter first
@@ -455,6 +482,7 @@ export async function fetchDatasetFeatures(
   limit: number,
   fetchImpl: GeoLensFetch = defaultGeoLensFetch,
   signal?: AbortSignal,
+  bbox?: GeoLensBbox,
 ): Promise<import("geojson").FeatureCollection> {
   if (!HTTP_URL_RE.test(options.baseUrl)) throw new Error("GeoLens URL must be http(s)");
   const base = new URL(options.baseUrl);
@@ -464,7 +492,7 @@ export async function fetchDatasetFeatures(
   for (let attempt = 0; attempt < pageSizes.length; attempt++) {
     const features: import("geojson").Feature[] = [];
     const visited = new Set<string>();
-    let nextUrl: string | null = itemsUrl(options, datasetId, pageSizes[attempt]);
+    let nextUrl: string | null = itemsUrl(options, datasetId, pageSizes[attempt], bbox);
     let firstPage: Record<string, unknown> | null = null;
     let pageSizeRejected = false;
 

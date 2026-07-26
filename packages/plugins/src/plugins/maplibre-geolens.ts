@@ -42,6 +42,7 @@ import {
   searchDatasets,
   tileUrlPrefix,
   vectorTileTemplate,
+  type GeoLensBbox,
   type GeoLensClientOptions,
   type GeoLensDataset,
   type GeoLensEditPlan,
@@ -84,6 +85,7 @@ const SEARCH_LIMIT = 50;
 export const DEFAULT_GEOLENS_FEATURE_LIMIT = 10_000;
 const MAX_GEOLENS_FEATURE_LIMIT = 1_000_000;
 const FEATURE_LIMIT_STORAGE_KEY = "geolibre.geolens.featureLimit";
+const VIEW_ONLY_STORAGE_KEY = "geolibre.geolens.viewOnly";
 /** Re-mint the tile token this many seconds before it expires. */
 const TOKEN_REFRESH_LEAD_SECONDS = 30;
 /** Floor on the refresh delay, so a tiny/expired TTL cannot busy-loop. */
@@ -122,11 +124,15 @@ export interface GeoLensLabels {
   added: string;
   addGeoJson: string;
   addGeoJsonTitle: string;
+  addGeoJsonViewTitle: string;
   metadata: string;
   metadataTitle: string;
   settings: string;
   featureLimit: string;
   featureLimitHelp: string;
+  viewOnly: string;
+  viewOnlyHelp: string;
+  viewSuffix: string;
   addError: (message: string) => string;
   features: (count: number) => string;
   editsHeading: string;
@@ -138,6 +144,7 @@ export interface GeoLensLabels {
   savedEdits: (written: number) => string;
   saveDisabledByServer: string;
   saveNeedsKey: string;
+  confirmDeletes: (count: number) => string;
   saveError: (message: string) => string;
   savePartial: (failed: number, message: string) => string;
   revertEdits: string;
@@ -174,11 +181,19 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   added: "Added",
   addGeoJson: "Add GeoJSON",
   addGeoJsonTitle: "Load features as editable GeoJSON for the attribute table and export",
+  addGeoJsonViewTitle:
+    "Load the features in the current map view as editable GeoJSON for the attribute table " +
+    "and export",
   metadata: "Metadata",
   metadataTitle: "Open this dataset's page on the GeoLens server in a new tab",
   settings: "Settings",
   featureLimit: "Default GeoJSON feature limit",
   featureLimitHelp: "The loader follows paginated responses until this many features are loaded.",
+  viewOnly: "Only load features in the current map view",
+  viewOnlyHelp:
+    "Add GeoJSON asks the server for the features inside the current view, so the limit above " +
+    "caps what is loaded from that area instead of taking an arbitrary slice of the whole dataset.",
+  viewSuffix: "current view",
   addError: (message) => `Could not add layer: ${message}`,
   features: (count) => `${count.toLocaleString()} features`,
   editsHeading: "Edits",
@@ -197,6 +212,9 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   savedEdits: (written) => `Saved ${written} change${written === 1 ? "" : "s"} to GeoLens.`,
   saveDisabledByServer: "This GeoLens server has dataset editing turned off.",
   saveNeedsKey: "Connect with an API key that can write to this dataset.",
+  confirmDeletes: (count) =>
+    `Saving will DELETE ${count} feature${count === 1 ? "" : "s"} from the GeoLens dataset — ` +
+    `features that are in the dataset but no longer in this layer. Continue?`,
   saveError: (message) => `Could not save: ${message}`,
   savePartial: (failed, message) =>
     `${failed} change${failed === 1 ? "" : "s"} failed — ${message}`,
@@ -237,6 +255,26 @@ function writeFeatureLimit(value: number): void {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(FEATURE_LIMIT_STORAGE_KEY, String(value));
+  } catch {
+    // Storage can be unavailable in privacy-restricted webviews.
+  }
+}
+
+function readViewOnly(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  try {
+    // Default on: a catalog dataset is usually far larger than the area being
+    // looked at, and "the features I can see" beats an arbitrary first-N slice.
+    return localStorage.getItem(VIEW_ONLY_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeViewOnly(value: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(VIEW_ONLY_STORAGE_KEY, String(value));
   } catch {
     // Storage can be unavailable in privacy-restricted webviews.
   }
@@ -379,6 +417,28 @@ function createLayerId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * The current map view as a bbox, or null when there is no usable map.
+ *
+ * A globe view can report longitudes beyond ±180 (and a fully zoomed-out map
+ * covers everything), so a view that spans the world is treated as "no bbox" —
+ * filtering to it would only add a pointless query parameter.
+ */
+function currentViewBbox(app: GeoLibreAppAPI | null): GeoLensBbox | null {
+  const bounds = app?.getMap?.()?.getBounds();
+  if (!bounds) return null;
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  if (![west, east, south, north].every((n) => Number.isFinite(n))) return null;
+  if (east - west >= 360) return null;
+  // A wrapped view (crossing the antimeridian) would need two boxes; ask for the
+  // whole world rather than silently loading the wrong half.
+  if (east < west) return null;
+  return [west, south, east, north];
 }
 
 /** A stable identity for "this dataset from this server", for add/remove state. */
@@ -687,13 +747,20 @@ async function addFeaturesLayer(
   dataset: GeoLensDataset,
   featureLimit: number,
   fetchImpl: GeoLensFetch,
+  bbox?: GeoLensBbox,
 ): Promise<void> {
-  const data = await fetchDatasetFeatures(client, dataset.id, featureLimit, fetchImpl);
-  const layerId = app.addGeoJsonLayer(
-    dataset.title,
-    data,
-    `${sourcePathFor(client, dataset)}#items`,
+  const data = await fetchDatasetFeatures(
+    client,
+    dataset.id,
+    featureLimit,
+    fetchImpl,
+    undefined,
+    bbox,
   );
+  // Name the layer for what it holds: a view-filtered load is a subset, and the
+  // Layers panel is where the user will later wonder why.
+  const name = bbox ? `${dataset.title} (${labels.viewSuffix})` : dataset.title;
+  const layerId = app.addGeoJsonLayer(name, data, `${sourcePathFor(client, dataset)}#items`);
   // Register the baseline before the metadata write below: that write is the
   // store change that makes the panel notice the layer, and it must already be
   // able to report "no local changes" rather than an unknown state.
@@ -710,6 +777,13 @@ async function addFeaturesLayer(
         sourceKind: GEOLENS_FEATURES_SOURCE_KIND,
         geolensBaseUrl: client.baseUrl,
         geolensDatasetId: dataset.id,
+        // What this layer was loaded with. A baseline rebuilt on any other
+        // terms would disagree with the layer about which features exist:
+        // everything outside the recorded extent (or past the recorded limit)
+        // would diff as a deletion, and the next save would delete it from the
+        // dataset.
+        geolensFeatureLimit: featureLimit,
+        ...(bbox ? { geolensBbox: [...bbox] } : {}),
       },
     });
   }
@@ -743,6 +817,19 @@ interface GeoLensEditableLayer {
   datasetId: string;
   baseUrl: string;
   geojson: import("geojson").FeatureCollection;
+  /** The feature limit this layer was loaded with, when it was recorded. */
+  featureLimit?: number;
+  /** The extent this layer was loaded from, when it was view-filtered. */
+  bbox?: GeoLensBbox;
+}
+
+/** Whether a persisted metadata value is a usable `[w, s, e, n]` extent. */
+function isBbox(value: unknown): value is GeoLensBbox {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((n) => typeof n === "number" && Number.isFinite(n))
+  );
 }
 
 /** The editable GeoLens feature layers currently in the store for one server. */
@@ -753,7 +840,17 @@ export function editableLayersForServer(baseUrl: string): GeoLensEditableLayer[]
     if (layer.metadata.geolensBaseUrl !== baseUrl) continue;
     const datasetId = layer.metadata.geolensDatasetId;
     if (typeof datasetId !== "string" || !layer.geojson) continue;
-    out.push({ id: layer.id, name: layer.name, datasetId, baseUrl, geojson: layer.geojson });
+    const limit = layer.metadata.geolensFeatureLimit;
+    const bbox = layer.metadata.geolensBbox;
+    out.push({
+      id: layer.id,
+      name: layer.name,
+      datasetId,
+      baseUrl,
+      geojson: layer.geojson,
+      ...(typeof limit === "number" && Number.isFinite(limit) ? { featureLimit: limit } : {}),
+      ...(isBbox(bbox) ? { bbox } : {}),
+    });
   }
   return out;
 }
@@ -774,7 +871,17 @@ async function ensureBaseline(
 ): Promise<GeoLensFeatureBaseline> {
   const existing = editSessions.get(layer.id);
   if (existing) return existing.baseline;
-  const data = await fetchDatasetFeatures(client, layer.datasetId, featureLimit, fetchImpl, signal);
+  const data = await fetchDatasetFeatures(
+    client,
+    layer.datasetId,
+    // Re-read on the terms the layer was loaded with, not the panel's current
+    // ones: a baseline covering more of the dataset than the layer does would
+    // report every extra feature as deleted, and the save would delete them.
+    layer.featureLimit ?? featureLimit,
+    fetchImpl,
+    signal,
+    layer.bbox,
+  );
   const baseline = captureFeatureBaseline(data);
   editSessions.set(layer.id, { baseline });
   return baseline;
@@ -854,10 +961,19 @@ async function saveLayerEdits(
   fetchImpl: GeoLensFetch,
   onProgress: (done: number, total: number) => void,
   signal?: AbortSignal,
+  // Asked before anything is written, once the plan is known. Returning false
+  // cancels the save.
+  confirmPlan?: (plan: GeoLensEditPlan) => boolean,
 ): Promise<GeoLensSaveOutcome> {
   const baseline = await ensureBaseline(client, layer, featureLimit, fetchImpl, signal);
   const plan = diffFeatures(layer.geojson, baseline);
   if (isEditPlanEmpty(plan)) return { written: 0, errors: [] };
+  // A deletion is the one part of a plan the user cannot undo, and it is not
+  // always deliberate: a feature the editor failed to load is simply absent
+  // from the layer afterwards, which diffs identically to "the user deleted
+  // it". Deletions are also the only change that can be produced without the
+  // user touching the feature at all, so they get an explicit confirmation.
+  if (confirmPlan && !confirmPlan(plan)) return { written: 0, errors: [] };
 
   const result = await applyFeatureEdits(
     client,
@@ -931,7 +1047,16 @@ async function reloadLayerFeatures(
   fetchImpl: GeoLensFetch,
   signal?: AbortSignal,
 ): Promise<void> {
-  const data = await fetchDatasetFeatures(client, layer.datasetId, featureLimit, fetchImpl, signal);
+  // Same terms the layer was loaded with, so a reload restores the same slice
+  // of the dataset rather than silently widening or narrowing it.
+  const data = await fetchDatasetFeatures(
+    client,
+    layer.datasetId,
+    layer.featureLimit ?? featureLimit,
+    fetchImpl,
+    signal,
+    layer.bbox,
+  );
   useAppStore.getState().updateLayer(layer.id, { geojson: data });
   editSessions.set(layer.id, { baseline: captureFeatureBaseline(data) });
 }
@@ -971,6 +1096,8 @@ interface PanelState {
   generation: number;
   controller: AbortController | null;
   featureLimit: number;
+  /** Whether Add GeoJSON restricts the load to the current map view. */
+  viewOnly: boolean;
   /** Whether the connected server has dataset editing enabled. */
   editingEnabled: boolean;
   /** Layer ids with a save/reload in flight, so the row can't be re-triggered. */
@@ -993,6 +1120,7 @@ function buildPanel(
     generation: 0,
     controller: null,
     featureLimit: readFeatureLimit(),
+    viewOnly: readViewOnly(),
     editingEnabled: false,
     busyLayerIds: new Set(),
   };
@@ -1015,7 +1143,20 @@ function buildPanel(
   featureLimitInput.style.display = "block";
   featureLimitInput.style.marginTop = "4px";
   featureLimitLabel.append(featureLimitInput);
-  settingsPanel.append(featureLimitLabel, el("div", CSS.hint, labels.featureLimitHelp));
+  const viewOnlyLabel = el(
+    "label",
+    "display:flex;align-items:flex-start;gap:6px;font-size:11px;font-weight:600;",
+  );
+  const viewOnlyInput = el("input", "margin:2px 0 0 0;") as HTMLInputElement;
+  viewOnlyInput.type = "checkbox";
+  viewOnlyInput.checked = state.viewOnly;
+  viewOnlyLabel.append(viewOnlyInput, el("span", "font-weight:600;", labels.viewOnly));
+  settingsPanel.append(
+    featureLimitLabel,
+    el("div", CSS.hint, labels.featureLimitHelp),
+    viewOnlyLabel,
+    el("div", CSS.hint, labels.viewOnlyHelp),
+  );
 
   // A shortcut to the public deployments. It fills the URL field and connects,
   // rather than only filling it: picking a sample server is the whole intent, so
@@ -1247,6 +1388,9 @@ function buildPanel(
           const node = rowStatusNodes.get(layer.id);
           if (node) node.textContent = labels.savingEdits(done, total);
         },
+        undefined,
+        (plan) =>
+          plan.deletes.length === 0 || window.confirm(labels.confirmDeletes(plan.deletes.length)),
       );
       if (outcome.errors.length > 0) {
         showError(labels.savePartial(outcome.errors.length, outcome.errors[0]));
@@ -1325,14 +1469,27 @@ function buildPanel(
     // Full-feature GeoJSON is only meaningful for vector datasets.
     if (dataset.isVector) {
       const geoJsonSourcePath = `${tilesSourcePath}#items`;
-      const geoJsonButton = button(labels.addGeoJson, CSS.action, labels.addGeoJsonTitle);
+      const geoJsonButton = button(
+        labels.addGeoJson,
+        CSS.action,
+        state.viewOnly ? labels.addGeoJsonViewTitle : labels.addGeoJsonTitle,
+      );
       const syncGeoJson = () =>
         syncButtonState(geoJsonButton, geoJsonSourcePath, labels.addGeoJson);
       resyncers.push(syncGeoJson);
       syncGeoJson();
       geoJsonButton.addEventListener("click", () => {
+        // Resolve the extent at click time, so it is the view the user is
+        // actually looking at rather than whatever it was when the card rendered.
         void handleAdd(geoJsonButton, syncGeoJson, () =>
-          addFeaturesLayer(app!, state.client!, dataset, state.featureLimit, fetchImpl),
+          addFeaturesLayer(
+            app!,
+            state.client!,
+            dataset,
+            state.featureLimit,
+            fetchImpl,
+            (state.viewOnly ? currentViewBbox(app) : null) ?? undefined,
+          ),
         );
       });
       actions.append(geoJsonButton);
@@ -1456,6 +1613,11 @@ function buildPanel(
     settingsButton.setAttribute("aria-expanded", String(open));
   });
   settingsButton.setAttribute("aria-expanded", "false");
+  viewOnlyInput.addEventListener("change", () => {
+    state.viewOnly = viewOnlyInput.checked;
+    writeViewOnly(state.viewOnly);
+    renderList();
+  });
   featureLimitInput.addEventListener("change", () => {
     state.featureLimit = normalizeGeoLensFeatureLimit(featureLimitInput.value);
     featureLimitInput.value = String(state.featureLimit);

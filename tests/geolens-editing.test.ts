@@ -297,3 +297,113 @@ describe("saveLayerEdits — edits made while the save is in flight", () => {
     });
   });
 });
+
+describe("saveLayerEdits — a view-filtered layer", () => {
+  /**
+   * The dangerous case: the layer holds only the features inside the view it was
+   * loaded from. If the baseline were rebuilt over the whole dataset, every
+   * feature outside that view would diff as a deletion and the save would delete
+   * it from the server. The load terms are recorded on the layer for this reason.
+   */
+  it("rebuilds the baseline over the same extent, so out-of-view features are not deleted", async () => {
+    const layer = addEditedLayer([
+      { type: "Feature", id: 2, geometry: point(1, 1), properties: { name: "b" } },
+    ]);
+    // Loaded from a view that only contained feature 2.
+    const viewLayer = { ...layer, featureLimit: 5_000, bbox: [0.5, 0.5, 1.5, 1.5] as const };
+    useAppStore.getState().updateLayer(layer.id, {
+      metadata: {
+        ...(useAppStore.getState().layers.find((l) => l.id === layer.id)?.metadata ?? {}),
+        geolensFeatureLimit: 5_000,
+        geolensBbox: [0.5, 0.5, 1.5, 1.5],
+      },
+    });
+
+    const calls: Array<{ url: string; method: string }> = [];
+    const fetchImpl: GeoLensFetch = (url, init) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url, method });
+      if (method === "GET") {
+        // The server answers the bbox query with only that feature.
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            type: "FeatureCollection",
+            features: [
+              { type: "Feature", id: 2, geometry: point(1, 1), properties: { name: "b" } },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    };
+
+    const outcome = await saveLayerEdits(CLIENT, viewLayer, 10_000, fetchImpl, () => {});
+
+    assert.deepEqual(outcome, { written: 0, errors: [] });
+    // The baseline read carried the recorded extent and limit…
+    assert.match(calls[0].url, /bbox=0\.5%2C0\.5%2C1\.5%2C1\.5/);
+    assert.match(calls[0].url, /limit=5000/);
+    // …and nothing was written: no DELETE for the features outside the view.
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["GET"],
+    );
+  });
+});
+
+describe("saveLayerEdits — deletions are confirmed", () => {
+  it("writes nothing when the plan's deletions are declined", async () => {
+    // The layer is missing feature 2 — which looks the same whether the user
+    // deleted it or the editor failed to load it.
+    const layer = addEditedLayer([
+      { type: "Feature", id: 1, geometry: point(0, 0), properties: { name: "a" } },
+    ]);
+    const { fetchImpl, calls } = stubServer([]);
+
+    const outcome = await saveLayerEdits(
+      CLIENT,
+      layer,
+      10_000,
+      fetchImpl,
+      () => {},
+      undefined,
+      () => false,
+    );
+
+    assert.deepEqual(outcome, { written: 0, errors: [] });
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["GET"],
+    );
+  });
+
+  it("passes the plan to the confirmation and proceeds when accepted", async () => {
+    const layer = addEditedLayer([
+      { type: "Feature", id: 1, geometry: point(0, 0), properties: { name: "a" } },
+    ]);
+    const { fetchImpl, calls } = stubServer([{ status: 204 }]);
+    let seen = 0;
+
+    const outcome = await saveLayerEdits(
+      CLIENT,
+      layer,
+      10_000,
+      fetchImpl,
+      () => {},
+      undefined,
+      (plan) => {
+        seen = plan.deletes.length;
+        return true;
+      },
+    );
+
+    assert.equal(seen, 1);
+    assert.equal(outcome.written, 1);
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["GET", "DELETE"],
+    );
+  });
+});

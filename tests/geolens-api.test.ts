@@ -4,6 +4,7 @@ import {
   applyFeatureEdits,
   authHeaders,
   bboxFromGeometry,
+  bboxParam,
   captureFeatureBaseline,
   createFeature,
   datasetPageUrl,
@@ -153,12 +154,24 @@ describe("vectorTileTemplate", () => {
   });
 });
 
+describe("bboxParam", () => {
+  it("serializes minx,miny,maxx,maxy and clamps to valid ranges", () => {
+    assert.equal(bboxParam([-115.5, 36.1, -115.1, 36.3]), "-115.5,36.1,-115.1,36.3");
+    // A globe view can report coordinates past the valid range.
+    assert.equal(bboxParam([-200, -95, 200, 95]), "-180,-90,180,90");
+  });
+});
+
 describe("itemsUrl / stac URLs", () => {
   it("builds OGC Features and STAC URLs", () => {
     const opts = { baseUrl: "http://localhost:8080" };
     assert.equal(
       itemsUrl(opts, "abc def", 100),
       "http://localhost:8080/api/collections/abc%20def/items?limit=100",
+    );
+    assert.equal(
+      itemsUrl(opts, "abc", 100, [-1, -2, 3, 4]),
+      "http://localhost:8080/api/collections/abc/items?limit=100&bbox=-1%2C-2%2C3%2C4",
     );
     assert.equal(stacCatalogUrl(opts), "http://localhost:8080/api/stac");
     assert.equal(stacCollectionsUrl(opts), "http://localhost:8080/api/stac/collections");
@@ -930,5 +943,49 @@ describe("diffFeatures — a feature with no geometry", () => {
       [[1, "patch"]],
     );
     assert.deepEqual(plan.updates[0].properties, { name: "b" });
+  });
+});
+
+describe("fetchDatasetFeatures — bbox", () => {
+  it("passes the extent to the server and keeps it across pagination", async () => {
+    const calls: string[] = [];
+    const fetchImpl: GeoLensFetch = async (url) => {
+      calls.push(url);
+      const second = url.includes("offset=1");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: null, properties: {} }],
+          links: second ? [] : [{ rel: "next", href: "?limit=2&offset=1&bbox=-1%2C-2%2C3%2C4" }],
+        }),
+      };
+    };
+    await fetchDatasetFeatures(
+      { baseUrl: "http://h" },
+      "d",
+      2,
+      fetchImpl,
+      undefined,
+      [-1, -2, 3, 4],
+    );
+    assert.equal(calls[0], "http://h/api/collections/d/items?limit=2&bbox=-1%2C-2%2C3%2C4");
+    // The server's own `next` link carries the filter forward.
+    assert.ok(calls[1].includes("bbox=-1%2C-2%2C3%2C4"));
+  });
+
+  it("omits the parameter entirely when no extent is given", async () => {
+    const calls: string[] = [];
+    const fetchImpl: GeoLensFetch = async (url) => {
+      calls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ type: "FeatureCollection", features: [], links: [] }),
+      };
+    };
+    await fetchDatasetFeatures({ baseUrl: "http://h" }, "d", 5, fetchImpl);
+    assert.equal(calls[0], "http://h/api/collections/d/items?limit=5");
   });
 });
