@@ -26,6 +26,7 @@ import type { MapController } from "@geolibre/map";
 import type { ArcGISLayerType, ArcGISSourceType } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import type { RefObject } from "react";
+import { OGC_FEATURES_SOURCE_KIND } from "../../../lib/ogc-api-features";
 import type { ResolvedXyzTileUrl } from "../../../lib/xyz-url";
 import {
   attributionForTileUrl,
@@ -292,6 +293,63 @@ export function buildWfsGeoJsonLayer(params: WfsLayerParams): GeoLibreLayer {
     ),
     geojson: params.data,
     sourcePath: params.featureUrl,
+  };
+}
+
+// --- OGC API - Features ----------------------------------------------------
+
+export interface OgcFeaturesLayerParams {
+  name: string;
+  /** The first page's `/items` request URL, replayed on refresh. */
+  itemsUrl: string;
+  data: FeatureCollection;
+  baseUrl: string;
+  collectionId: string;
+  maxFeatures: number;
+  bbox?: string;
+  datetime?: string;
+  extraQuery?: string;
+  /** The server's `numberMatched`, when it advertised one. */
+  numberMatched?: number;
+  /** True when the collection holds more features than were loaded. */
+  truncated: boolean;
+}
+
+/**
+ * Builds a GeoJSON layer from fetched OGC API - Features items. The request
+ * parameters are persisted alongside the data so a refresh can replay the same
+ * paged walk rather than re-reading only the first page.
+ *
+ * @param params - The layer name, items URL, fetched data, and request metadata.
+ * @returns The constructed GeoJSON layer.
+ */
+export function buildOgcFeaturesLayer(params: OgcFeaturesLayerParams): GeoLibreLayer {
+  return {
+    ...createBaseLayer(
+      params.name,
+      "geojson",
+      {
+        type: "geojson",
+        url: params.itemsUrl,
+        service: "ogc-features",
+        baseUrl: params.baseUrl,
+        collectionId: params.collectionId,
+        maxFeatures: params.maxFeatures,
+        bbox: params.bbox || undefined,
+        datetime: params.datetime || undefined,
+        extraQuery: params.extraQuery || undefined,
+      },
+      {
+        featureCount: params.data.features.length,
+        service: "ogc-features",
+        sourceKind: OGC_FEATURES_SOURCE_KIND,
+        collectionId: params.collectionId,
+        ...(params.numberMatched !== undefined ? { numberMatched: params.numberMatched } : {}),
+        truncated: params.truncated,
+      },
+    ),
+    geojson: params.data,
+    sourcePath: params.itemsUrl,
   };
 }
 

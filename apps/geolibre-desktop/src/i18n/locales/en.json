@@ -235,6 +235,10 @@
         "label": "Add WMTS Layer",
         "description": "Add a WMTS tile URL template as a raster layer."
       },
+      "ogcFeatures": {
+        "label": "Add OGC API - Features Layer",
+        "description": "Add features from an OGC API - Features collection as a vector layer, following the service's paging links until the requested feature count is loaded."
+      },
       "ogcVectorTiles": {
         "label": "Add OGC Vector Tiles",
         "description": "Add an OGC API - Tiles (vector) service from a TileJSON or tile template, optionally reading its source layers from a style URL."
@@ -392,6 +396,28 @@
       "sampleLabel": "EOX World Imagery (Sentinel-2)",
       "errorUrl": "Enter a WMTS tile URL template.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
+    },
+    "ogcFeatures": {
+      "defaultName": "OGC API Features Layer",
+      "sampleLabel": "Global lakes (pygeoapi demo)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "The service landing page, or any URL copied from it (a /collections or /collections/{id}/items URL also works).",
+      "retrieveCollections": "Retrieve collections",
+      "retrieving": "Retrieving...",
+      "retrievedCollections": "Retrieved collections",
+      "selectCollection_one": "Select from {{count}} collection",
+      "selectCollection_other": "Select from {{count}} collections",
+      "noCollectionsFound": "No feature collections were found for this service.",
+      "retrieveError": "Could not retrieve collections from this service.",
+      "collection": "Collection",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "Max features",
+      "bbox": "Bounding box",
+      "datetime": "Date and time",
+      "errorCollection": "Enter an OGC API - Features collection id.",
+      "errorMaxFeatures": "Enter a max features value of 1 or more.",
+      "errorBbox": "Enter the bounding box as \"west,south,east,north\".",
+      "errorNoFeatures": "This collection returned no features."
     },
     "ogcVectorTiles": {
       "defaultName": "OGC Vector Tiles Layer",
@@ -1948,6 +1974,7 @@
       "wms": "WMS Layer",
       "wfs": "WFS Layer",
       "wmts": "WMTS Layer",
+      "ogcFeatures": "OGC API - Features",
       "ogcVectorTiles": "OGC Vector Tiles",
       "arcgis": "ArcGIS Layer",
       "georss": "GeoRSS Layer",

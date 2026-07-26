@@ -16,6 +16,7 @@ export type KindI18nKey =
   | "wms"
   | "wfs"
   | "wmts"
+  | "ogcFeatures"
   | "ogcVectorTiles"
   | "gpx"
   | "georss"
@@ -39,6 +40,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   wms: "wms",
   wfs: "wfs",
   wmts: "wmts",
+  "ogc-features": "ogcFeatures",
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
   georss: "georss",
@@ -87,6 +89,11 @@ export const DEFAULT_WMTS_URL =
 // this to any EOX tile layer, however it was added.
 export const EOX_S2CLOUDLESS_ATTRIBUTION =
   'Sentinel-2 cloudless 2025 by <a href="https://s2maps.eu" target="_blank" rel="noreferrer">EOX IT Services GmbH</a> (contains modified Copernicus Sentinel data 2025)';
+// pygeoapi's public demo, the reference OGC API - Features implementation. Its
+// `lakes` collection is a small global polygon set, and the server caps `limit`
+// at 10 per page, so the sample also exercises the `next`-link paging walk.
+export const DEFAULT_OGC_FEATURES_ENDPOINT = "https://demo.pygeoapi.io/master";
+export const DEFAULT_OGC_FEATURES_COLLECTION = "lakes";
 // PDOK BGT (Dutch large-scale base map) served as OGC API - Tiles vector tiles.
 // The style document carries the source-layer names the TileJSON omits; both
 // are prefilled so the sample works out of the box (zoom into the Netherlands).

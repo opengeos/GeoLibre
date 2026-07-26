@@ -11,10 +11,12 @@
  * TileJSON's `vector_layers` ids.
  */
 
-import { isTauri } from "./is-tauri";
+import { fetchOgcJson as fetchOgcJsonDocument } from "./ogc-json";
 
-/** Dev-server CORS proxy path; kept in sync with GPX_PROXY_PATH in vite.config.ts. */
-const OGC_PROXY_PATH = "/__geolibre_gpx_proxy";
+/** Fetches an OGC API JSON document, tagged for the native-HTTP diagnostics log. */
+function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown> {
+  return fetchOgcJsonDocument(url, { signal, context: "OGC vector tiles" });
+}
 
 /** The resolved configuration for an OGC API vector tiles layer. */
 export interface OgcVectorTilesConfig {
@@ -259,73 +261,6 @@ export function tileJsonConfig(
  * verbatim and silently fail to load. */
 function normalizeTilePlaceholders(url: string): string {
   return url.replace(/\{z\}/gi, "{z}").replace(/\{x\}/gi, "{x}").replace(/\{y\}/gi, "{y}");
-}
-
-/** A promise that rejects when the signal aborts, with its abort reason. Used to
- * race an uncancellable Tauri invoke against the caller's abort and a timeout. */
-function rejectOnAbort(signal: AbortSignal): Promise<never> {
-  return new Promise((_, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-  });
-}
-
-/** Converts opaque fetch/abort failures into a clear, user-facing Error so the
- * Add Data dialog surfaces the real cause instead of a generic fallback. */
-function normalizeFetchError(error: unknown): Error {
-  if (error instanceof DOMException && error.name === "TimeoutError") {
-    return new Error("The request timed out.");
-  }
-  // A CORS/network rejection surfaces as a bare TypeError with no status.
-  if (error instanceof TypeError) {
-    return new Error(
-      "Could not reach the service. It may not allow cross-origin requests from the browser; try the desktop app.",
-    );
-  }
-  return error instanceof Error ? error : new Error(String(error));
-}
-
-/**
- * Fetches and parses a remote JSON document, working around cross-origin limits.
- * The Tauri path uses the Rust `fetch_url_bytes` command (not subject to browser
- * CORS); the dev server routes through the same-origin proxy; the hosted web
- * build fetches directly. When the caller passes a `signal` it owns the deadline
- * (see `resolveOgcVectorTiles`, which shares one across its requests); otherwise
- * a 30s timeout is applied so an unresponsive endpoint cannot hang forever.
- */
-async function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown> {
-  const abort = signal ?? AbortSignal.timeout(30_000);
-  if (isTauri()) {
-    // `fetch_url_bytes` cannot be cancelled mid-flight, so race it against the
-    // abort/timeout to still return promptly on a slow or hung host.
-    const { fetchUrlBytes } = await import("./native-http");
-    const bytesPromise = fetchUrlBytes(url, { context: "OGC vector tiles" });
-    // If the abort/timeout wins the race, the invoke promise is left unobserved;
-    // swallow a later rejection so it does not surface as an unhandled rejection.
-    bytesPromise.catch(() => {});
-    try {
-      const bytes = await Promise.race([bytesPromise, rejectOnAbort(abort)]);
-      const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      return JSON.parse(new TextDecoder().decode(array));
-    } catch (error) {
-      throw normalizeFetchError(error);
-    }
-  }
-  const isDev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
-  const fetchUrl = isDev ? `${OGC_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
-  let response: Response;
-  try {
-    response = await fetch(fetchUrl, { signal: abort });
-  } catch (error) {
-    throw normalizeFetchError(error);
-  }
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
-  return response.json();
 }
 
 /**

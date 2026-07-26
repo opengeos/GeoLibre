@@ -12,12 +12,21 @@ import { isSqlQueryLayer } from "./sql-query-layer";
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const FETCH_TIMEOUT_MS = 30_000;
+// Feature cap for refreshing an OGC API - Features layer whose stored request
+// carries no `maxFeatures` (added before it was persisted, or hand-edited).
+// Mirrors DEFAULT_OGC_FEATURES_MAX_FEATURES in lib/ogc-api-features.ts.
+const DEFAULT_OGC_FEATURES_REFRESH_MAX = 1000;
 export const MIN_REFRESH_INTERVAL_MS = 1_000;
 const GEORSS_SOURCE_KIND = "georss";
+// Local copy of OGC_FEATURES_SOURCE_KIND (lib/ogc-api-features.ts), kept here so
+// this module's metadata checks stay free of that module's import graph; the
+// paged fetch itself is imported dynamically in the refresh branch below.
+const OGC_FEATURES_SOURCE_KIND = "ogc-features-items";
 const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   "wfs-getfeature",
   "geojson-url",
   GEORSS_SOURCE_KIND,
+  OGC_FEATURES_SOURCE_KIND,
 ]);
 
 // Add Vector Layer (maplibre-gl-vector) tags its store layers with this
@@ -240,6 +249,13 @@ export async function refreshGeoJsonLayer(
     return refreshGeoRssLayer(sourceUrl);
   }
 
+  // An OGC API - Features layer was loaded by walking the service's `next`
+  // links, so re-fetching the stored URL alone would silently shrink it to the
+  // first page. Replay the same paged request instead.
+  if (isOgcFeaturesLayer(layer)) {
+    return refreshOgcFeaturesLayer(layer);
+  }
+
   const data = await fetchGeoJsonFeatureCollection(sourceUrl, {
     useWfsProxy: isWfsLayer(layer),
   });
@@ -247,6 +263,59 @@ export async function refreshGeoJsonLayer(
   return {
     geojson: data,
     featureCount: data.features.length,
+  };
+}
+
+/**
+ * Re-runs an OGC API - Features layer's paged items request from the parameters
+ * stored on its source, so a refresh reloads the whole slice the layer was
+ * added with.
+ *
+ * A layer saved before these parameters existed (or hand-edited) may carry only
+ * the items URL; that case falls back to a plain single-page fetch of it, which
+ * is still better than failing the refresh outright.
+ *
+ * @param layer - The OGC API - Features layer to reload.
+ * @returns The reloaded features and their count.
+ */
+async function refreshOgcFeaturesLayer(
+  layer: GeoLibreLayer,
+): Promise<{ geojson: FeatureCollection; featureCount: number }> {
+  const source = layer.source as {
+    url?: unknown;
+    baseUrl?: unknown;
+    collectionId?: unknown;
+    maxFeatures?: unknown;
+    bbox?: unknown;
+    datetime?: unknown;
+    extraQuery?: unknown;
+  };
+  const baseUrl = typeof source.baseUrl === "string" ? source.baseUrl : "";
+  const collectionId = typeof source.collectionId === "string" ? source.collectionId : "";
+  if (!baseUrl || !collectionId) {
+    const url = layerHttpUrl(layer);
+    if (!url) throw new Error("This layer does not have a refreshable GeoJSON URL.");
+    const data = await fetchGeoJsonFeatureCollection(url);
+    return { geojson: data, featureCount: data.features.length };
+  }
+  // Imported here rather than at module scope so this module stays light for
+  // the callers that only read refresh metadata.
+  const { fetchOgcFeatureItems } = await import("./ogc-api-features");
+  const maxFeatures =
+    typeof source.maxFeatures === "number" && Number.isFinite(source.maxFeatures)
+      ? source.maxFeatures
+      : DEFAULT_OGC_FEATURES_REFRESH_MAX;
+  const result = await fetchOgcFeatureItems({
+    baseUrl,
+    collectionId,
+    extraQuery: typeof source.extraQuery === "string" ? source.extraQuery : undefined,
+    maxFeatures,
+    bbox: typeof source.bbox === "string" ? source.bbox : undefined,
+    datetime: typeof source.datetime === "string" ? source.datetime : undefined,
+  });
+  return {
+    geojson: result.data,
+    featureCount: result.data.features.length,
   };
 }
 
@@ -405,6 +474,14 @@ function isWfsLayer(layer: GeoLibreLayer): boolean {
 
 function isGeoRssLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.sourceKind === GEORSS_SOURCE_KIND;
+}
+
+function isOgcFeaturesLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata.sourceKind === OGC_FEATURES_SOURCE_KIND ||
+    layer.metadata.service === "ogc-features" ||
+    layer.source.service === "ogc-features"
+  );
 }
 
 function isViteDevServer(): boolean {

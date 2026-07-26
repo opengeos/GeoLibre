@@ -67,6 +67,7 @@ export function AddDataMenu({
     wms: { onSelect: () => onSetAddDataKind("wms") },
     wfs: { onSelect: () => onSetAddDataKind("wfs") },
     wmts: { onSelect: () => onSetAddDataKind("wmts") },
+    "ogc-features": { onSelect: () => onSetAddDataKind("ogc-features") },
     "ogc-vector-tiles": {
       onSelect: () => onSetAddDataKind("ogc-vector-tiles"),
     },
