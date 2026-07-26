@@ -138,9 +138,9 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   restoresPanelCollapseState: true,
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
-    const control = new TimeSliderControl(
-      savedConfig ? configToOptions(savedConfig) : buildDefaultOptions(),
-    );
+    const control = savedConfig
+      ? controlFromConfig(savedConfig)
+      : new TimeSliderControl(buildDefaultOptions());
     timeSliderControl = control;
     attachStoreSync(control);
 
@@ -173,7 +173,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     const config = timeSliderControl.getConfig();
     detachStoreSync?.();
     app.removeMapControl(timeSliderControl);
-    const control = new TimeSliderControl(configToOptions(config));
+    const control = controlFromConfig(config);
     timeSliderControl = control;
     attachStoreSync(control);
     const added = app.addMapControl(control, timeSliderPosition);
@@ -234,13 +234,36 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
  * Builds constructor options from a serialized config so a fresh control
  * restores the full timeline state and all of its sources.
  *
+ * Exported so the restore contract can be asserted directly: every path that
+ * rebuilds the control (activate from a saved project, and moving the dock)
+ * goes through here, and a field missing from it is silently dropped rather
+ * than failing a type check, since `TimeSliderOptions` keys are all optional.
+ *
  * @param config - A config produced by `TimeSliderControl.getConfig()`.
  * @returns Options for a new `TimeSliderControl`.
  */
-function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
+export function controlFromConfig(config: TimeSliderConfig): TimeSliderControl {
+  const control = new TimeSliderControl(configToOptions(config));
+  // `TimeSliderOptions` cannot express every `TimeSliderConfig` field: datesUrl
+  // — the URL an ordinal date list was loaded from, which the dock echoes back
+  // in its Dates box — has no option equivalent. setConfig does carry it and is
+  // safe on a control that has not been added to a map yet: without a map it
+  // creates no adapters and stashes the sources for onAdd instead, and every
+  // view/container touch it makes is null-guarded. Replay it only when there is
+  // something to recover, so the ordinary restore stays a single pass.
+  if (config.datesUrl) control.setConfig(config);
+  return control;
+}
+
+export function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
   return {
     startDate: config.startDate,
     endDate: config.endDate,
+    // An ordinal timeline steps through this explicit list instead of the
+    // start/end/interval range. Dropping it silently turned a restored project's
+    // irregular date list back into a continuous range, so the slider stepped
+    // over dates that have no data.
+    dates: config.dates,
     interval: config.interval,
     granularity: config.granularity,
     granularities: config.granularities,
@@ -290,6 +313,16 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
     (candidate.endDate != null && typeof candidate.endDate !== "string") ||
     typeof candidate.granularity !== "string" ||
     (candidate.currentDate !== undefined && typeof candidate.currentDate !== "string") ||
+    // An ordinal timeline's explicit date list. Optional (a continuous timeline
+    // omits it), but when present it must be a list of date strings — it is fed
+    // straight to the library as the steps the slider walks.
+    (candidate.dates !== undefined &&
+      (!Array.isArray(candidate.dates) ||
+        (candidate.dates as unknown[]).some((date) => typeof date !== "string"))) ||
+    // Display-only, but it is rendered into the dock's Dates box, so hold it to
+    // the same http(s)-only rule as the source URLs.
+    (candidate.datesUrl !== undefined &&
+      (typeof candidate.datesUrl !== "string" || !isSafeSourceUrl(candidate.datesUrl))) ||
     !Array.isArray(candidate.sources) ||
     (candidate.sources as unknown[]).some((source) => {
       if (!source || typeof source !== "object") return true;
@@ -730,9 +763,25 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
   );
 }
 
-function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
+/**
+ * Mirrors one dock source into the store as an external-native layer.
+ *
+ * Exported so the metadata contract with the Layers panel can be asserted: the
+ * `identifiable`/`pixelIdentify` pair is what decides whether the panel's
+ * Identify icon is enabled and whether it reads pixels or queries features.
+ *
+ * @param spec - The dock source to mirror.
+ * @returns The store layer representing it.
+ */
+export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
+  // COG and mosaic sources carry real source values, so Identify reads their
+  // bands at the timeline's current date (see time-slider-pixel-identify) the
+  // same way it reads a COG added through Add Raster Layer. XYZ/WMS sources are
+  // pre-rendered picture tiles with nothing to recover, and a GeoJSON source is
+  // mirrored as a vector layer that identifies through the normal map query.
+  const pixelIdentify = spec.type === "cog" || spec.type === "mosaic";
   return {
     id: sourceId,
     name: spec.name ?? sourceId,
@@ -743,7 +792,8 @@ function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
     style: { ...DEFAULT_LAYER_STYLE },
     metadata: {
       externalNativeLayer: true,
-      identifiable: false,
+      identifiable: pixelIdentify,
+      ...(pixelIdentify ? { pixelIdentify: true } : {}),
       nativeLayerIds: [sourceId],
       sourceId,
       sourceIds: [sourceId],

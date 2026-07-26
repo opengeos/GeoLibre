@@ -68,6 +68,29 @@ interface GeoLibreDuckDBBridge {
   setSelectedFeature?: (layerId: string, featureId: string | null) => void;
 }
 
+/** One band's value at an identified pixel, from the Time Slider bridge. */
+interface TimeSliderBandReading {
+  index: number;
+  name: string | null;
+  value: number;
+  isNodata: boolean;
+}
+
+interface TimeSliderPixelIdentifyBridgeResult {
+  sourceId: string;
+  date: string;
+  url: string;
+  bands: TimeSliderBandReading[];
+}
+
+interface GeoLibreTimeSliderBridge {
+  identifyPixelAt?: (
+    sourceId: string,
+    lngLat: [number, number],
+    options?: { signal?: AbortSignal },
+  ) => Promise<TimeSliderPixelIdentifyBridgeResult | null>;
+}
+
 function stringifyIdentifyValue(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "object") return JSON.stringify(value);
@@ -547,6 +570,50 @@ function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
   return typeof window === "undefined"
     ? undefined
     : (window as Window & { __GEOLIBRE_DUCKDB__?: GeoLibreDuckDBBridge }).__GEOLIBRE_DUCKDB__;
+}
+
+function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
+  return typeof window === "undefined"
+    ? undefined
+    : (window as Window & { __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge })
+        .__GEOLIBRE_TIME_SLIDER__;
+}
+
+/**
+ * Whether Identify should read source pixel values for this layer rather than
+ * query vector features. Set by the Time Slider for its COG/mosaic sources,
+ * which resolve to a different file per timeline date.
+ */
+function isPixelIdentifyLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.pixelIdentify === true;
+}
+
+/**
+ * Trim a float sample to something readable. A 32-bit raster value decoded to a
+ * JS double prints all 17 digits of its binary representation
+ * (`48.11851119995117`), which is noise past the sensor's precision — six
+ * significant digits is more than any COG carries. Integers are left alone so a
+ * classification code is never shown in exponential form.
+ */
+function formatPixelValue(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toPrecision(6)));
+}
+
+/** Turn a pixel reading into the flat key/value rows the identify popup shows. */
+function pixelIdentifyProperties(
+  result: TimeSliderPixelIdentifyBridgeResult,
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = { Date: result.date };
+  for (const band of result.bands) {
+    // Prefer the COG's own band name, falling back to the 1-based index so
+    // unnamed bands still get a stable, distinct row label.
+    const key = band.name ?? `Band ${band.index}`;
+    const formatted = formatPixelValue(band.value);
+    properties[key] = band.isNodata ? `${formatted} (nodata)` : formatted;
+  }
+  return properties;
 }
 
 function stringSource(value: unknown): string | undefined {
@@ -1154,6 +1221,7 @@ export const MapCanvas = memo(function MapCanvas({
     map.getCanvas().style.cursor = "crosshair";
 
     let wmsIdentifyAbortController: AbortController | null = null;
+    let pixelIdentifyAbortController: AbortController | null = null;
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
       const clearIdentifyResult = () => {
@@ -1175,6 +1243,58 @@ export const MapCanvas = memo(function MapCanvas({
           .setDOMContent(content)
           .addTo(map);
       };
+
+      if (isPixelIdentifyLayer(layer)) {
+        const identifyPixelAt = timeSliderBridge()?.identifyPixelAt;
+        if (!identifyPixelAt) {
+          clearIdentifyResult();
+          return;
+        }
+        pixelIdentifyAbortController?.abort();
+        const abortController = new AbortController();
+        pixelIdentifyAbortController = abortController;
+        selectFeature(null);
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
+        // Same dismissal dance as the WMS branch: the × on the loading popup
+        // must cancel the read, but the programmatic swap to the result popup
+        // also fires "close", so track user dismissal with a flag rather than
+        // treating every close as a cancel.
+        let userDismissed = false;
+        const loadingPopup = identifyPopup.current;
+        const onLoadingClose = () => {
+          userDismissed = true;
+          abortController.abort();
+          if (pixelIdentifyAbortController === abortController) {
+            pixelIdentifyAbortController = null;
+          }
+        };
+        loadingPopup!.once("close", onLoadingClose);
+
+        void identifyPixelAt(layer.id, [event.lngLat.lng, event.lngLat.lat], {
+          signal: abortController.signal,
+        })
+          .then((result) => {
+            if (userDismissed || abortController.signal.aborted) return;
+            pixelIdentifyAbortController = null;
+            loadingPopup?.off("close", onLoadingClose);
+            // A null result means the click landed off the image grid, which is
+            // an ordinary miss rather than a failure.
+            showIdentifyPopup(
+              result
+                ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
+                : createIdentifyMessagePopupElement(layer.name, "No data at this location."),
+            );
+          })
+          .catch((error: unknown) => {
+            if (userDismissed || isAbortError(error) || abortController.signal.aborted) return;
+            pixelIdentifyAbortController = null;
+            loadingPopup?.off("close", onLoadingClose);
+            const message =
+              error instanceof Error ? error.message : "The pixel value could not be read.";
+            showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
+          });
+        return;
+      }
 
       if (isWmsLayer(layer)) {
         wmsIdentifyAbortController?.abort();
@@ -1265,6 +1385,7 @@ export const MapCanvas = memo(function MapCanvas({
 
     return () => {
       wmsIdentifyAbortController?.abort();
+      pixelIdentifyAbortController?.abort();
       map.off("click", handleIdentifyClick);
       identifyPopup.current?.remove();
       identifyPopup.current = null;

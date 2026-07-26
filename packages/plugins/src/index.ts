@@ -503,6 +503,14 @@ export {
   type PixelTimeSeriesResult,
 } from "./plugins/time-slider-pixel-series";
 export {
+  getPixelIdentifiableSource,
+  identifyTimeSliderPixel,
+  isPixelIdentifiableSourceType,
+  PixelOutsideCoverageError,
+  type PixelIdentifiableSpec,
+  type TimeSliderPixelIdentifyResult,
+} from "./plugins/time-slider-pixel-identify";
+export {
   buildTimeBinding,
   buildTimeBindingFromRecords,
   buildTimeFilter,

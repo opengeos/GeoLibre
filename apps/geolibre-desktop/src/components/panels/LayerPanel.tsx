@@ -2414,8 +2414,10 @@ export function LayerPanel({
               hasNativeIdentifyLayers(layer);
             const identifyActive = identifyLayerId === layer.id;
             // COGs inspect raw pixel/band values rather than vector features, so
-            // the icon's tooltip reflects that distinct action.
-            const isPixelIdentify = layer.type === "cog";
+            // the icon's tooltip reflects that distinct action. Time Slider COG
+            // and mosaic sources read the same way, at the current timeline
+            // date, and mark themselves with `pixelIdentify`.
+            const isPixelIdentify = layer.type === "cog" || layer.metadata.pixelIdentify === true;
             // Shared by the button's title and aria-label so they can't diverge.
             const identifyLabel = canIdentify
               ? identifyActive
