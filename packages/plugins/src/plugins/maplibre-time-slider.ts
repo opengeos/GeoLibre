@@ -924,6 +924,16 @@ export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   // pre-rendered picture tiles with nothing to recover, and a GeoJSON source is
   // mirrored as a vector layer that identifies through the normal map query.
   const pixelIdentify = spec.type === "cog" || spec.type === "mosaic";
+  // Whether the client-side raster pipeline (deck.gl, or the WASM tiler's own
+  // source) draws this layer rather than MapLibre. `mosaic` is exactly that set:
+  // a real mosaic, plus a COG on the `gpu`/`wasm` engine, which the library
+  // reports as a mosaic because it renders it through the same adapter.
+  //
+  // Carried on the layer rather than read back from the control so the Style
+  // panel can react to it: a saved project restores its mirrored layers before
+  // the plugin creates its control, and asking the control during that window
+  // answers "no" and offers MapLibre paint sliders that cannot work.
+  const clientRenderedRaster = spec.type === "mosaic";
   // The source's own extent, when one has been resolved (see
   // `ensureSourceBounds`). Read from the cache rather than taken as an argument
   // so every sync rebuilds the same layer, keeping `shouldUpdateStoreLayer`
@@ -942,6 +952,7 @@ export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
       externalNativeLayer: true,
       identifiable: pixelIdentify,
       ...(pixelIdentify ? { pixelIdentify: true } : {}),
+      ...(clientRenderedRaster ? { clientRenderedRaster: true } : {}),
       // Feeds the Layers panel's "Zoom to layer", which has nothing else to fit
       // for an external-native layer.
       ...(bounds ? { bounds } : {}),

@@ -71,28 +71,6 @@ export function getTimeSliderSymbology(sourceId: string): TimeSliderSymbology | 
 }
 
 /**
- * Whether a Time Slider source is drawn by the client-side raster pipeline
- * (deck.gl, or the WASM tiler's own MapLibre source) rather than as a native
- * MapLibre raster layer keyed by the source id.
- *
- * The Style panel needs this to know which controls can work: MapLibre's raster
- * paint properties (brightness, contrast, saturation, hue) are written onto the
- * layer's `nativeLayerIds`, which only exist for a source the library renders
- * natively — an XYZ/WMS source, or a COG on the `titiler` engine. Everything
- * else has no such layer, so those sliders would move with no visible effect.
- *
- * `type === 'mosaic'` is exactly that set: a real mosaic, plus a COG on the
- * `gpu`/`wasm` engine, which the library reports as a mosaic because it renders
- * it through the same adapter.
- *
- * @param sourceId - The source id (equals the mirrored store layer id).
- * @returns True when the source is client-rendered.
- */
-export function isTimeSliderDeckRasterSource(sourceId: string): boolean {
-  return getTimeSliderSymbology(sourceId)?.type === "mosaic";
-}
-
-/**
  * Applies a symbology change to a Time Slider raster source.
  *
  * The control merges the patch into the source spec and re-renders, so the

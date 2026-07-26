@@ -47,7 +47,6 @@ import {
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_SOURCE_KIND,
   countAtlasDroppedDiagrams,
-  isTimeSliderDeckRasterSource,
 } from "@geolibre/plugins";
 import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
@@ -1429,9 +1428,11 @@ export function StylePanel({
     layer.metadata.sourceKind === "stac-search-cog" ||
     // A Time Slider mosaic (and a COG on the gpu/wasm engine, which the library
     // renders through the same adapter) draws on the client-side pipeline, so
-    // MapLibre's raster paint properties have no layer to land on.
+    // MapLibre's raster paint properties have no layer to land on. The mirrored
+    // layer carries the flag, so this stays correct during the window where a
+    // restored project has the layer but the plugin has not built its control.
     (layer.metadata.sourceKind === TIME_SLIDER_SOURCE_KIND &&
-      isTimeSliderDeckRasterSource(layer.id));
+      layer.metadata.clientRenderedRaster === true);
   const isDeckVectorLayer = hasExternalDeckLayer(layer);
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const isThreeDTilesLayer = layer.type === "3d-tiles";

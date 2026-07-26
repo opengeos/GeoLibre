@@ -197,6 +197,27 @@ describe("Time Slider store layer identify metadata", () => {
     }
   });
 
+  it("marks a mosaic as client-rendered so the Style panel hides MapLibre-only paint", () => {
+    // The flag rides on the layer rather than being read back from the control:
+    // a restored project mirrors its layers before the plugin builds its
+    // control, and asking the control during that window answers "no".
+    const layer = createStoreLayer({
+      type: "mosaic",
+      id: "s2",
+      url: "https://example.com/{date:YYYY}.json",
+    } as SourceSpec);
+    assert.equal(layer.metadata.clientRenderedRaster, true);
+  });
+
+  it("leaves a TiTiler COG unflagged, since MapLibre renders it natively", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "landsat",
+      url: "https://example.com/{date:YYYY}.tif",
+    } as SourceSpec);
+    assert.equal("clientRenderedRaster" in layer.metadata, false);
+  });
+
   it("carries a declared source extent so Zoom to layer has something to fit", () => {
     // A mirrored dock layer is external-native: there is no MapLibre source with
     // `bounds` to fall back on, so without this the button does nothing.
