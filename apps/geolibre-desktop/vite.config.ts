@@ -44,25 +44,10 @@ function resolveViteMode(): string {
 const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FILE_ENV = loadEnv(resolveViteMode(), CONFIG_DIR, "");
 
-// AI provider credentials may be baked into managed builds. Vite only exposes
-// VITE_-prefixed names, so accept the conventional bare server/CI names and
-// bridge them to explicit client variables. These values are public to anyone
-// who can inspect the built bundle; use this only for intentionally shared keys.
-const AI_BUILD_ENV_NAMES = [
-  "GEMINI_API_KEY",
-  "GOOGLE_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "OPENAI_API_KEY",
-  "OLLAMA_BASE_URL",
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_REGION",
-  "AWS_SESSION_TOKEN",
-  "OPENAI_COMPATIBLE_BASE_URL",
-  "OPENAI_COMPATIBLE_MODEL",
-  "OPENAI_COMPATIBLE_API_KEY",
-] as const;
-for (const name of AI_BUILD_ENV_NAMES) {
+// A managed build can use the server-side AI proxy without embedding any
+// provider credential. Only its public endpoint and selected model enter the
+// client bundle.
+for (const name of ["GEOLIBRE_AI_URL", "GEOLIBRE_AI_MODEL"] as const) {
   const viteName = `VITE_${name}`;
   if (!process.env[viteName]) {
     const value = process.env[name] || FILE_ENV[viteName] || FILE_ENV[name];

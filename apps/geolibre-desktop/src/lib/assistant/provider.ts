@@ -259,33 +259,21 @@ export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
  */
 export type RuntimeEnv = Record<string, string>;
 
-/** AI credentials explicitly embedded by Vite for a managed/preconfigured build. */
+/** Public AI proxy configuration embedded by Vite for a managed build. */
 export function readBuildTimeAssistantEnv(
   viteEnv: Record<string, string | undefined> | undefined = (
     import.meta as ImportMeta & { env?: Record<string, string | undefined> }
   ).env,
 ): RuntimeEnv {
   if (!viteEnv) return {};
-  const mappings: ReadonlyArray<readonly [string, string]> = [
-    ["VITE_GEMINI_API_KEY", "GEMINI_API_KEY"],
-    ["VITE_GOOGLE_API_KEY", "GOOGLE_API_KEY"],
-    ["VITE_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"],
-    ["VITE_OPENAI_API_KEY", "OPENAI_API_KEY"],
-    ["VITE_OLLAMA_BASE_URL", "OLLAMA_BASE_URL"],
-    ["VITE_AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"],
-    ["VITE_AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"],
-    ["VITE_AWS_REGION", "AWS_REGION"],
-    ["VITE_AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN"],
-    ["VITE_OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_BASE_URL"],
-    ["VITE_OPENAI_COMPATIBLE_MODEL", "OPENAI_COMPATIBLE_MODEL"],
-    ["VITE_OPENAI_COMPATIBLE_API_KEY", "OPENAI_COMPATIBLE_API_KEY"],
-  ];
-  return Object.fromEntries(
-    mappings.flatMap(([source, target]) => {
-      const value = viteEnv[source]?.trim();
-      return value ? [[target, value]] : [];
-    }),
-  );
+  const result: RuntimeEnv = {};
+  const proxyUrl = viteEnv.VITE_GEOLIBRE_AI_URL?.trim().replace(/\/+$/, "");
+  if (proxyUrl) {
+    result.OPENAI_COMPATIBLE_BASE_URL = proxyUrl.endsWith("/v1") ? proxyUrl : `${proxyUrl}/v1`;
+    result.OPENAI_COMPATIBLE_MODEL =
+      viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() || result.OPENAI_COMPATIBLE_MODEL || "openai/gpt-5.6";
+  }
+  return result;
 }
 
 /** Read build-time credentials plus the live runtime environment map. */

@@ -1,0 +1,13 @@
+{
+  "name": "geolibre-ai-proxy-worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types",
+    "deploy:dry-run": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4.114.0"
+  }
+}

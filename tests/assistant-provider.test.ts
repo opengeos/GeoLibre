@@ -3,9 +3,44 @@ import { describe, it } from "node:test";
 import {
   availableProviders,
   configForProvider,
+  readBuildTimeAssistantEnv,
   resolveProviderConfig,
   type RuntimeEnv,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider";
+
+describe("build-time AI proxy", () => {
+  it("never imports provider API keys from the client build environment", () => {
+    assert.deepEqual(
+      readBuildTimeAssistantEnv({
+        VITE_OPENAI_API_KEY: "must-not-enter-the-bundle",
+        VITE_ANTHROPIC_API_KEY: "must-not-enter-the-bundle",
+        VITE_GEMINI_API_KEY: "must-not-enter-the-bundle",
+      }),
+      {},
+    );
+  });
+
+  it("maps the public proxy URL to an OpenAI-compatible runtime config", () => {
+    assert.deepEqual(
+      readBuildTimeAssistantEnv({
+        VITE_GEOLIBRE_AI_URL: "https://ai.example.com/",
+        VITE_GEOLIBRE_AI_MODEL: "gpt-5.6-terra",
+      }),
+      {
+        OPENAI_COMPATIBLE_BASE_URL: "https://ai.example.com/v1",
+        OPENAI_COMPATIBLE_MODEL: "gpt-5.6-terra",
+      },
+    );
+  });
+
+  it("defaults a managed proxy to GPT-5.6 through Cloudflare AI Gateway", () => {
+    assert.equal(
+      readBuildTimeAssistantEnv({ VITE_GEOLIBRE_AI_URL: "https://ai.example.com/v1" })
+        .OPENAI_COMPATIBLE_MODEL,
+      "openai/gpt-5.6",
+    );
+  });
+});
 
 describe("resolveProviderConfig", () => {
   it("returns null when no provider key is configured", () => {
