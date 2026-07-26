@@ -136,6 +136,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Session-local prompt history. `null` means the user is editing a fresh
+  // draft; otherwise it is the recalled entry's index.
+  const promptHistoryRef = useRef<string[]>([]);
+  const promptHistoryIndexRef = useRef<number | null>(null);
+  const promptDraftRef = useRef("");
   // Guards a synchronous double-submit before `running` re-renders.
   const runningRef = useRef(false);
   // Generation that was stopped (0 = none), so a stopped run's rejection isn't
@@ -333,6 +338,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const send = async () => {
     const prompt = input.trim();
     if (!prompt || runningRef.current || !hasKey) return;
+    const history = promptHistoryRef.current;
+    if (history.at(-1) !== prompt) history.push(prompt);
+    promptHistoryIndexRef.current = null;
+    promptDraftRef.current = "";
     runningRef.current = true;
     const myGeneration = (sendGenerationRef.current += 1);
     setRunning(true);
@@ -424,6 +433,44 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       void send();
+      return;
+    }
+
+    if (
+      (event.key !== "ArrowUp" && event.key !== "ArrowDown") ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    const history = promptHistoryRef.current;
+    if (history.length === 0) return;
+
+    const currentIndex = promptHistoryIndexRef.current;
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (currentIndex === null) {
+        promptDraftRef.current = input;
+        promptHistoryIndexRef.current = history.length - 1;
+      } else {
+        promptHistoryIndexRef.current = Math.max(0, currentIndex - 1);
+      }
+      setInput(history[promptHistoryIndexRef.current]);
+      return;
+    }
+
+    if (currentIndex === null) return;
+    event.preventDefault();
+    if (currentIndex < history.length - 1) {
+      promptHistoryIndexRef.current = currentIndex + 1;
+      setInput(history[currentIndex + 1]);
+    } else {
+      promptHistoryIndexRef.current = null;
+      setInput(promptDraftRef.current);
     }
   };
 
@@ -698,7 +745,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           <Textarea
             ref={inputRef}
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              setInput(event.target.value);
+              if (promptHistoryIndexRef.current === null) {
+                promptDraftRef.current = event.target.value;
+              }
+            }}
             onKeyDown={onKeyDown}
             placeholder={t("assistant.placeholder")}
             spellCheck
