@@ -1359,10 +1359,7 @@
       "exit": "Afsluiten"
     },
     "pixelTimeSeriesMode": {
-      "start": "Pixel-tijdreeks",
-      "title": "Modus pixel-tijdreeks actief",
-      "hint": "Klik op pixels in de rasterstack om ze aan de grafiek toe te voegen. Esc om te stoppen.",
-      "exit": "Stoppen"
+      "start": "Pixel-tijdreeks"
     }
   },
   "terrainSettings": {

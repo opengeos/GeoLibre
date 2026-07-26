@@ -375,15 +375,65 @@ function attachStoreSync(control: TimeSliderControl): void {
   // this control is attached.
   startThemeSync(control);
   const detachBindingSync = attachBindingSync(control);
+  const detachDisplaySync = attachDisplaySync(control);
   // Bind the detacher to this specific control and its own handler closures so
   // a second attach can never orphan the previous control's listeners.
   detachStoreSync = () => {
     control.off("sourceadd", onSourceAdd);
     control.off("sourceremove", onSourceRemove);
     detachBindingSync();
+    detachDisplaySync();
     stopThemeSync();
     detachStoreSync = null;
   };
+}
+
+// ----- Opacity and visibility ------------------------------------------------
+// The Layers panel and Style panel drive a mirrored layer the way they drive any
+// other: they write `opacity`/`visible` to the store, and MapController pushes
+// those onto the layer's `nativeLayerIds`. That only reaches a source the
+// library renders as a real MapLibre layer — an XYZ/WMS source, or a COG on the
+// `titiler` engine. A mosaic (and therefore a COG on the `gpu`/`wasm` engine,
+// which the library renders through the same adapter) draws on a deck.gl overlay
+// or through the WASM tiler's own source, so those writes land on a layer id
+// that does not exist and the controls appear dead. Forwarding the store's
+// values to the control instead reaches every source type, because each adapter
+// implements `setOpacity`/`setVisible` against whatever it actually rendered.
+
+/** Last opacity/visibility forwarded per source id, so an unrelated store write
+ * (a rename, another layer's edit) does not re-push identical values. */
+const lastDisplay = new Map<string, { opacity: number; visible: boolean }>();
+
+/**
+ * Forwards the store's opacity and visibility for mirrored dock layers to the
+ * control, which routes them to the adapter that owns the rendering.
+ *
+ * @param control - The active control.
+ * @returns A detacher that stops the subscription.
+ */
+function attachDisplaySync(control: TimeSliderControl): () => void {
+  const apply = (): void => {
+    const ids = new Set<string>();
+    for (const layer of useAppStore.getState().layers) {
+      if (layer.metadata.sourceKind !== STORE_LAYER_SOURCE_KIND) continue;
+      ids.add(layer.id);
+      const opacity = typeof layer.opacity === "number" ? layer.opacity : 1;
+      const visible = layer.visible !== false;
+      const previous = lastDisplay.get(layer.id);
+      if (previous && previous.opacity === opacity && previous.visible === visible) continue;
+      lastDisplay.set(layer.id, { opacity, visible });
+      // Skip the first pass for a layer whose values already match the spec it
+      // was mirrored from, so restoring a project does not re-push what the
+      // control just rendered.
+      if (!previous) continue;
+      control.setSourceProperty(layer.id, { opacity, visible } as Partial<SourceSpec>);
+    }
+    for (const id of [...lastDisplay.keys()]) {
+      if (!ids.has(id)) lastDisplay.delete(id);
+    }
+  };
+  apply();
+  return useAppStore.subscribe(apply);
 }
 
 // ----- Bound GeoLibre layers ------------------------------------------------

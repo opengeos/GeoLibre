@@ -29,16 +29,17 @@ import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { exportVectorLayer } from "../../lib/vector-export";
 
-/** Default panel geometry (px). The panel opens top-left, clear of the
- * Time Slider timeline at the bottom, then the user can drag/resize it. The
- * CSS default below and {@link PixelTimeSeriesControl.measureRect}'s fallback
- * describe the same corner, so a drag that starts from the untouched default
- * does not jump. */
+/** Default panel geometry (px). The panel opens flush in the top-left corner,
+ * inset by {@link PANEL_MARGIN} on both sides, and its max height keeps it clear
+ * of the Time Slider timeline at the bottom; the user can then drag/resize it.
+ * The CSS default below and {@link PixelTimeSeriesControl.measureRect}'s
+ * fallback describe the same corner, so a drag that starts from the untouched
+ * default does not jump. */
 const PANEL_DEFAULT_W = 448;
 const PANEL_MIN_W = 320;
 const PANEL_MIN_H = 240;
 const PANEL_MARGIN = 12;
-const PANEL_TOP = 64;
+const PANEL_TOP = PANEL_MARGIN;
 
 /** A movable/resizable panel rect, in px relative to the map area. */
 interface PanelRect {
@@ -568,8 +569,13 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   const erroredCount = points.filter((p) => p.error).length;
   return (
     <>
-      <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
-        {!open ? (
+      {/* The trigger only, and only while the panel is closed. There is no
+          "mode active" banner: it could only ever appear alongside the open
+          panel, which already carries a Stop picking button and an empty state
+          telling the user to click a pixel — and reserving the top-center strip
+          for it is what pushed the panel down away from the corner. */}
+      {!open ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
           <Button
             type="button"
             size="sm"
@@ -581,25 +587,8 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
             <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
             {t("map.pixelTimeSeriesMode.start")}
           </Button>
-        ) : picking ? (
-          <div
-            className="pointer-events-auto flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
-            role="region"
-            aria-label={t("map.pixelTimeSeriesMode.title")}
-            data-testid="pixel-time-series-mode-banner"
-          >
-            <Crosshair className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="font-medium">{t("map.pixelTimeSeriesMode.title")}</p>
-              <p className="text-xs text-muted-foreground">{t("map.pixelTimeSeriesMode.hint")}</p>
-            </div>
-            <Button type="button" size="sm" variant="secondary" onClick={() => setPicking(false)}>
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-              {t("map.pixelTimeSeriesMode.exit")}
-            </Button>
-          </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {open ? (
         <div
@@ -607,7 +596,7 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
           className={
             rect
               ? "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-              : "pointer-events-auto absolute start-3 top-16 z-20 flex max-h-[calc(100%-8rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+              : "pointer-events-auto absolute start-3 top-3 z-20 flex max-h-[calc(100%-7rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
           }
           style={rect ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h } : undefined}
           role="region"

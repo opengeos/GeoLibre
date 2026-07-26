@@ -1359,10 +1359,7 @@
       "exit": "Beenden"
     },
     "pixelTimeSeriesMode": {
-      "start": "Pixel-Zeitreihe",
-      "title": "Pixel-Zeitreihen-Modus aktiv",
-      "hint": "Klicken Sie auf Pixel im Raster-Stack, um sie dem Diagramm hinzuzufügen. Esc zum Beenden.",
-      "exit": "Stopp"
+      "start": "Pixel-Zeitreihe"
     }
   },
   "terrainSettings": {

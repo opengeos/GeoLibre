@@ -1359,10 +1359,7 @@
       "exit": "Esci"
     },
     "pixelTimeSeriesMode": {
-      "start": "Serie temporale dei pixel",
-      "title": "Modalità serie temporale dei pixel attiva",
-      "hint": "Fai clic sui pixel dello stack raster per aggiungerli al grafico. Esc per interrompere.",
-      "exit": "Interrompi"
+      "start": "Serie temporale dei pixel"
     }
   },
   "terrainSettings": {

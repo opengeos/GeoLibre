@@ -1359,10 +1359,7 @@
       "exit": "Çık"
     },
     "pixelTimeSeriesMode": {
-      "start": "Piksel zaman serisi",
-      "title": "Piksel zaman serisi modu etkin",
-      "hint": "Grafiğe eklemek için raster yığınındaki pikselleri tıklayın. Durdurmak için Esc.",
-      "exit": "Durdur"
+      "start": "Piksel zaman serisi"
     }
   },
   "terrainSettings": {

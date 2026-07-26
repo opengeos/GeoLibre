@@ -1321,10 +1321,7 @@
       "exit": "終了"
     },
     "pixelTimeSeriesMode": {
-      "start": "ピクセル時系列",
-      "title": "ピクセル時系列モードが有効です",
-      "hint": "ラスタースタック上のピクセルをクリックしてチャートに追加します。Escで停止します。",
-      "exit": "停止"
+      "start": "ピクセル時系列"
     }
   },
   "terrainSettings": {

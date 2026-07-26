@@ -506,6 +506,7 @@ export {
 } from "./plugins/time-slider-pixel-series";
 export {
   getTimeSliderSymbology,
+  isTimeSliderDeckRasterSource,
   parseBandList,
   setTimeSliderSymbology,
   type TimeSliderSymbology,

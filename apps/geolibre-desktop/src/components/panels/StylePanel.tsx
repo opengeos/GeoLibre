@@ -47,6 +47,7 @@ import {
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_SOURCE_KIND,
   countAtlasDroppedDiagrams,
+  isTimeSliderDeckRasterSource,
 } from "@geolibre/plugins";
 import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
@@ -1425,7 +1426,12 @@ export function StylePanel({
     layer.metadata.sourceKind === "cog-url" ||
     layer.metadata.sourceKind === "geotiff-url" ||
     layer.metadata.sourceKind === "maplibre-gl-raster" ||
-    layer.metadata.sourceKind === "stac-search-cog";
+    layer.metadata.sourceKind === "stac-search-cog" ||
+    // A Time Slider mosaic (and a COG on the gpu/wasm engine, which the library
+    // renders through the same adapter) draws on the client-side pipeline, so
+    // MapLibre's raster paint properties have no layer to land on.
+    (layer.metadata.sourceKind === TIME_SLIDER_SOURCE_KIND &&
+      isTimeSliderDeckRasterSource(layer.id));
   const isDeckVectorLayer = hasExternalDeckLayer(layer);
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const isThreeDTilesLayer = layer.type === "3d-tiles";

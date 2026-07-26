@@ -1321,10 +1321,7 @@
       "exit": "종료"
     },
     "pixelTimeSeriesMode": {
-      "start": "픽셀 시계열",
-      "title": "픽셀 시계열 모드 활성화됨",
-      "hint": "래스터 스택의 픽셀을 클릭하여 차트에 추가하세요. 중지하려면 Esc 키를 누르세요.",
-      "exit": "중지"
+      "start": "픽셀 시계열"
     }
   },
   "terrainSettings": {

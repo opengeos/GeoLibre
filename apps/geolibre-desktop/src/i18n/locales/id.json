@@ -1321,10 +1321,7 @@
       "exit": "Keluar"
     },
     "pixelTimeSeriesMode": {
-      "start": "Deret waktu piksel",
-      "title": "Mode deret waktu piksel aktif",
-      "hint": "Klik piksel pada tumpukan raster untuk menambahkannya ke bagan. Esc untuk berhenti.",
-      "exit": "Berhenti"
+      "start": "Deret waktu piksel"
     }
   },
   "terrainSettings": {

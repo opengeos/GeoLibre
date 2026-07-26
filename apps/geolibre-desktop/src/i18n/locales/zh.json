@@ -1321,10 +1321,7 @@
       "exit": "退出"
     },
     "pixelTimeSeriesMode": {
-      "start": "像素时间序列",
-      "title": "像素时间序列模式已激活",
-      "hint": "点击栅格堆栈上的像素以将其添加到图表中。按 Esc 停止。",
-      "exit": "停止"
+      "start": "像素时间序列"
     }
   },
   "terrainSettings": {

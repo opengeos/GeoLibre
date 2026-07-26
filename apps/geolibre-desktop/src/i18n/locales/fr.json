@@ -1359,10 +1359,7 @@
       "exit": "Quitter"
     },
     "pixelTimeSeriesMode": {
-      "start": "Série temporelle de pixels",
-      "title": "Mode série temporelle de pixels actif",
-      "hint": "Cliquez sur des pixels de la pile raster pour les ajouter au graphique. Échap pour arrêter.",
-      "exit": "Arrêter"
+      "start": "Série temporelle de pixels"
     }
   },
   "terrainSettings": {
