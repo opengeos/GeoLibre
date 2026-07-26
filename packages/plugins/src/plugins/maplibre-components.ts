@@ -1,4 +1,11 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  clearExternalNativePaintBridge,
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  interpolateRampColors,
+  setExternalNativePaintBridge,
+  useAppStore,
+} from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
@@ -2083,6 +2090,215 @@ export async function addCloudNetcdfLayer(
   // colormap/clim.
 }
 
+/** Options for {@link addZarrRasterLayer}. */
+export interface ZarrRasterLayerOptions {
+  /** URL of the Zarr store (Zarr v2/v3, Icechunk over HTTP). */
+  url: string;
+  /** Layer name shown in the Layers panel. Defaults to `<store> - <variable>`. */
+  name?: string;
+  /** Array/variable to render. Required: the renderer cannot guess it. */
+  variable: string;
+  /** Dimension selector for non-spatial dims, e.g. `{ time: 0 }`. */
+  selector?: Record<string, number | string>;
+  /** Color limits `[min, max]`. */
+  clim?: [number, number];
+  /**
+   * A named GeoLibre ramp (e.g. `"viridis"`) or an explicit list of hex colors.
+   * An unrecognized name falls back to the default ramp, as `addCogLayer` does.
+   */
+  colormap?: string | string[];
+  /** Layer opacity (0-1). */
+  opacity?: number;
+  /** Zarr metadata version. Defaults to the renderer's detection. */
+  zarrVersion?: 2 | 3;
+  /** CRS of the store for built-in projections, e.g. `"EPSG:32633"`. */
+  crs?: string;
+  /** proj4 definition for a CRS the renderer does not know built-in. */
+  proj4?: string;
+  /** Explicit spatial bounds `[xMin, yMin, xMax, yMax]` in the store's CRS. */
+  bounds?: [number, number, number, number];
+  /** Override the names of the spatial dimensions when they are not lat/lon. */
+  spatialDimensions?: { lat?: string; lon?: string };
+  /** Request headers for an authenticated store. */
+  headers?: Record<string, string>;
+  /** Insert the new layer directly beneath this layer. */
+  beforeLayerId?: string | null;
+}
+
+/**
+ * Add a Zarr layer through GeoLibre's own `@carbonplan/zarr-layer` instance and
+ * mirror it into the layer store, without opening the Zarr panel.
+ *
+ * This is the Zarr counterpart of {@link addCogRasterLayer}: the host owns the
+ * renderer, so an external plugin does not bundle a second copy of
+ * `@carbonplan/zarr-layer` (plus its numcodecs WASM) and does not have to add a
+ * raw MapLibre custom layer whose paint the Style panel cannot reach
+ * (opengeos/GeoLibre#1445).
+ *
+ * `crs`/`proj4` are forwarded to the renderer, which reprojects on the GPU, so a
+ * store in a projected CRS (a national grid on `EPSG:32633`, say) lands in the
+ * right place instead of being read as WGS84.
+ *
+ * The Zarr control is mounted hidden when this is the first Zarr layer, so the
+ * user does not get a map button they never asked for; a panel they already
+ * opened is left alone.
+ *
+ * @param app The GeoLibre app API.
+ * @param options Store URL, variable, and optional styling/CRS/selector.
+ * @returns The new layer's id (the Layers-panel entry and the native layer id).
+ * @throws If the control cannot be mounted, `variable` is missing, or the store
+ *   fails to load.
+ */
+export async function addZarrRasterLayer(
+  app: GeoLibreAppAPI,
+  options: ZarrRasterLayerOptions,
+): Promise<string> {
+  const url = options.url?.trim();
+  if (!url) {
+    throw new Error("A Zarr store URL is required.");
+  }
+  // The control renders `state.variable` and reports "Please enter a variable
+  // name" on its (hidden) panel when it is empty, so fail here with a message
+  // that names the option instead.
+  const variable = options.variable?.trim();
+  if (!variable) {
+    throw new Error("A Zarr variable is required (pass options.variable).");
+  }
+
+  const { ZarrLayerControl: ZarrLayerControlClass } = await getComponentsConstructors();
+
+  zarrControl ??= createZarrControl(ZarrLayerControlClass);
+  if (!zarrControlMounted) {
+    const added = app.addMapControl(zarrControl, zarrControlPosition);
+    if (!added) {
+      zarrControl = null;
+      throw new Error("Could not add the Zarr control to the map.");
+    }
+    zarrControlMounted = true;
+    // Mounted only to borrow its render path — keep it out of sight.
+    zarrControl.hide();
+  }
+
+  // The untiled Zarr renderer draws in Web Mercator; switch off globe first
+  // (matching the COG raster flow) so the layer paints.
+  ensureMercatorProjection(app.getMap?.());
+
+  const control = zarrControl;
+  const headers = options.headers;
+
+  let addedLayerId: string | null = null;
+  let failure: string | null = null;
+  const handleLayerAdd: ZarrLayerEventHandler = (event) => {
+    if (event.layerId) addedLayerId = event.layerId;
+  };
+  const handleError: ZarrLayerEventHandler = (event) => {
+    failure = event.error ?? null;
+  };
+
+  control.on("layeradd", handleLayerAdd);
+  control.on("error", handleError);
+  try {
+    // The control awaits its own load before resolving and reports failure by
+    // emitting "error" rather than rejecting, so both outcomes are already
+    // recorded above by the time this returns.
+    await control.addLayer(url, variable, {
+      selector: options.selector,
+      clim: options.clim,
+      colormap: resolveZarrColormap(options.colormap),
+      opacity: options.opacity,
+      zarrVersion: options.zarrVersion,
+      crs: options.crs,
+      proj4: options.proj4,
+      bounds: options.bounds,
+      spatialDimensions: options.spatialDimensions,
+      ...(headers && Object.keys(headers).length > 0
+        ? { transformRequest: (requestUrl: string) => ({ url: requestUrl, headers }) }
+        : {}),
+    });
+  } finally {
+    control.off("layeradd", handleLayerAdd);
+    control.off("error", handleError);
+  }
+
+  if (!addedLayerId) {
+    throw new Error(failure ?? "Failed to add the Zarr layer.");
+  }
+
+  // `createZarrLayerAddHandler` has already mirrored the layer into the store
+  // (the control emits "layeradd" synchronously), so refine that record with the
+  // fields only the caller knows: the display name, the requested ordering, and
+  // the CRS the renderer used (surfaced in the Metadata panel).
+  const store = useAppStore.getState();
+  const patch: Partial<GeoLibreLayer> = {};
+  const name = options.name?.trim();
+  if (name) patch.name = name;
+  if (options.beforeLayerId) patch.beforeId = options.beforeLayerId;
+  const existing = store.layers.find((layer) => layer.id === addedLayerId);
+  if (existing && (options.crs || options.proj4)) {
+    patch.metadata = {
+      ...existing.metadata,
+      ...(options.crs ? { crs: options.crs } : {}),
+      ...(options.proj4 ? { proj4: options.proj4 } : {}),
+    };
+  }
+  if (Object.keys(patch).length > 0) {
+    store.updateLayer(addedLayerId, patch);
+  }
+
+  return addedLayerId;
+}
+
+/**
+ * Re-select the non-spatial dimensions of a live Zarr layer, e.g. to step a
+ * plugin's own time slider through `{ time: n }` without rebuilding the layer.
+ *
+ * The renderer keeps the fetched chunks, so this is much cheaper than removing
+ * and re-adding the layer. The new selector is written back to the store layer
+ * so the Metadata panel and the project file show what is on screen.
+ *
+ * @param layerId A layer id returned by {@link addZarrRasterLayer}.
+ * @param selector The dimension selector, e.g. `{ time: 3 }`.
+ * @returns True when the layer accepted the selector, false when there is no
+ *   live Zarr layer with that id.
+ */
+export async function setZarrLayerSelector(
+  layerId: string,
+  selector: Record<string, number | string>,
+): Promise<boolean> {
+  const instance = zarrControl?.getLayersMap().get(layerId) as
+    | { setSelector?: (selector: Record<string, number | string>) => Promise<void> | void }
+    | undefined;
+  if (!instance || typeof instance.setSelector !== "function") return false;
+
+  await instance.setSelector(selector);
+
+  const store = useAppStore.getState();
+  const layer = store.layers.find((item) => item.id === layerId);
+  if (layer) {
+    store.updateLayer(layerId, {
+      source: { ...layer.source, selector },
+      metadata: { ...layer.metadata, selector },
+    });
+  }
+  return true;
+}
+
+// The control takes an explicit list of hex colors; the public option also
+// accepts a named GeoLibre ramp so a JS plugin need not spell out the stops.
+// `interpolateRampColors` falls back to the first built-in ramp for an unknown
+// name, mirroring how addCogLayer treats an unrecognized colormap.
+function resolveZarrColormap(colormap: string | string[] | undefined): string[] | undefined {
+  if (colormap === undefined) return undefined;
+  if (Array.isArray(colormap)) return colormap.length > 0 ? colormap : undefined;
+  const name = colormap.trim();
+  if (!name) return undefined;
+  return interpolateRampColors(name, ZARR_COLORMAP_STOPS);
+}
+
+// Matches the stop count of the control's own default colormap, so a named ramp
+// renders with the same smoothness as the built-in Zarr panel default.
+const ZARR_COLORMAP_STOPS = 9;
+
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLidarControl(app);
 }
@@ -3140,35 +3356,40 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
   zarrStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
+    // Visibility and opacity are applied by the paint bridge (see
+    // registerZarrPaintBridge), which layer-sync drives like every other layer
+    // property. Only removal is handled here, because a layer dropped from the
+    // store no longer reaches sync at all.
     for (const layer of previous.layers) {
       if (!isZarrControlLayer(layer)) continue;
-
-      const currentLayer = currentById.get(layer.id);
-      if (!currentLayer) {
-        zarrControl?.removeLayer(layer.id);
-        continue;
-      }
-
-      if (!isZarrControlLayer(currentLayer)) continue;
-
-      if (currentLayer.visible !== layer.visible) {
-        zarrControl?.setLayerVisibility(
-          currentLayer.id,
-          currentLayer.visible,
-          currentLayer.opacity,
-        );
-      }
-
-      if (currentLayer.opacity !== layer.opacity) {
-        if (currentLayer.visible) {
-          zarrControl?.setLayerOpacity(currentLayer.id, currentLayer.opacity);
-        } else {
-          zarrControl?.setLayerVisibility(currentLayer.id, false, currentLayer.opacity);
-        }
-      }
+      if (currentById.has(layer.id)) continue;
+      clearExternalNativePaintBridge(layer.id);
+      zarrControl?.removeLayer(layer.id);
     }
   });
   return control;
+}
+
+// Route the panels' opacity/visibility to the Zarr control's setters. The
+// control expresses "hidden" as opacity 0 (a custom layer has no paint), so a
+// hidden layer's stored opacity has to travel with the visibility call or
+// re-showing it would restore full opacity instead of the user's value.
+function registerZarrPaintBridge(layerId: string): void {
+  setExternalNativePaintBridge(layerId, {
+    setOpacity: (opacity) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      if (layer && !layer.visible) {
+        zarrControl?.setLayerVisibility(layerId, false, opacity);
+        return;
+      }
+      zarrControl?.setLayerOpacity(layerId, opacity);
+    },
+    setVisibility: (visible) => {
+      const opacity =
+        useAppStore.getState().layers.find((item) => item.id === layerId)?.opacity ?? 1;
+      zarrControl?.setLayerVisibility(layerId, visible, opacity);
+    },
+  });
 }
 
 function createPMTilesControl(
@@ -3938,6 +4159,9 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
 
     const store = useAppStore.getState();
     const layer = createZarrStoreLayer(event.layerId, layerInfo);
+    // The renderer owns the pixels, so the panel's opacity/visibility reach it
+    // through the control's setters rather than MapLibre paint properties.
+    registerZarrPaintBridge(layer.id);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,
@@ -4635,6 +4859,12 @@ function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLay
       externalNativeLayer: true,
       identifiable: false,
       nativeLayerIds: [layerInfo.id],
+      // A Zarr layer is a MapLibre custom (WebGL) layer with no paint
+      // properties: brightness/saturation/contrast/hue would be inert sliders.
+      // The Style panel therefore shows the generic controls only, and opacity
+      // reaches the renderer through the paint bridge registered alongside this
+      // record (opengeos/GeoLibre#1445).
+      paintMode: "plugin",
       selector: layerInfo.selector,
       sourceId: layerInfo.id,
       sourceKind: "zarr-url",

@@ -1,4 +1,9 @@
-import type { GeoLibreLayer, LayerStyle } from "@geolibre/core";
+import type {
+  ExternalNativePaintBridge,
+  ExternalNativePaintMode,
+  GeoLibreLayer,
+  LayerStyle,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 
@@ -30,6 +35,33 @@ export interface GeoLibreExternalNativeLayerRegistration {
   style?: Partial<LayerStyle>;
   metadata?: Record<string, unknown>;
   sourcePath?: string;
+  /**
+   * Who paints the registered native layer(s). Default `"geolibre"`: the layer
+   * is an ordinary MapLibre layer, so the Style panel's paint editors apply to
+   * it through `setPaintProperty`.
+   *
+   * Pass `"plugin"` for a MapLibre `CustomLayerInterface` (WebGL) layer, or any
+   * layer whose pixels the plugin draws itself. Such a layer has no MapLibre
+   * paint properties, so GeoLibre hides the paint editors it cannot apply
+   * (raster brightness/saturation/contrast/hue, the vector paint controls)
+   * instead of offering inert sliders, and keeps only the generic operations:
+   * insert-below, zoom range, visibility, reorder, remove. Supply
+   * {@link paintBridge} to keep opacity live as well.
+   */
+  paintMode?: ExternalNativePaintMode;
+  /**
+   * Setters that forward GeoLibre's generic controls to a `paintMode: "plugin"`
+   * layer's own API (e.g. `zarrLayer.setOpacity`). Supplying `setOpacity` keeps
+   * the Style and Layers panel Opacity sliders live for the layer; without it
+   * they are hidden. Implies `paintMode: "plugin"`.
+   *
+   * The setters are called on change only, not on every layer sync. They are
+   * held outside the layer record (functions cannot be serialized into a
+   * project file), so re-register the layer after a project is reloaded to
+   * restore the bridge, and call `unregisterExternalNativeLayer` on
+   * `deactivate` to drop it.
+   */
+  paintBridge?: ExternalNativePaintBridge;
 }
 
 /**
@@ -110,6 +142,48 @@ export interface GeoLibreCogLayerOptions {
   nodata?: number;
   /** Initial opacity in [0, 1] (default 1). */
   opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+}
+
+/**
+ * Options for {@link GeoLibreAppAPI.addZarrLayer}: a Zarr store rendered by the
+ * host's own `@carbonplan/zarr-layer` instance, mirrored into the Layers panel.
+ *
+ * Symmetric to {@link GeoLibreCogLayerOptions}, with the addition of
+ * `crs`/`proj4`: the renderer reprojects on the GPU, so a store on a projected
+ * national grid lands in the right place instead of being read as WGS84.
+ */
+export interface GeoLibreZarrLayerOptions {
+  /**
+   * Array/variable to render (e.g. `"tmax"`). Required: neither GeoLibre nor
+   * the renderer guesses which array of a store to draw.
+   */
+  variable: string;
+  /** Dimension selector for the non-spatial dims, e.g. `{ time: 0 }`. */
+  selector?: Record<string, number | string>;
+  /** Color limits `[min, max]` mapped to the colormap. */
+  clim?: [number, number];
+  /**
+   * A named GeoLibre ramp (e.g. `"viridis"`) or an explicit list of hex colors.
+   * Typed loosely like {@link GeoLibreCogLayerOptions.colormap}: an
+   * unrecognized name falls back to the default ramp rather than erroring.
+   */
+  colormap?: string | string[];
+  /** Initial opacity in [0, 1] (default: the renderer's default). */
+  opacity?: number;
+  /** Zarr metadata version. Omit to let the renderer detect it. */
+  zarrVersion?: 2 | 3;
+  /** CRS of the store, e.g. `"EPSG:32633"`. */
+  crs?: string;
+  /** proj4 definition string, for a CRS the renderer has no built-in for. */
+  proj4?: string;
+  /** Explicit spatial bounds `[xMin, yMin, xMax, yMax]` in the store's CRS. */
+  bounds?: [number, number, number, number];
+  /** Override the spatial dimension names when they are not lat/lon. */
+  spatialDimensions?: { lat?: string; lon?: string };
+  /** Request headers for an authenticated store. */
+  headers?: Record<string, string>;
   /** Insert the new layer directly beneath the layer with this id. */
   beforeLayerId?: string;
 }
@@ -224,6 +298,35 @@ export interface GeoLibreAppAPI {
    * forward-compatibility, so call it with optional chaining.
    */
   addCogLayer?: (name: string, url: string, options?: GeoLibreCogLayerOptions) => Promise<string>;
+  /**
+   * Add a Zarr layer rendered by the **host's own** `@carbonplan/zarr-layer`
+   * instance, returning a promise for the new layer's id. The Zarr counterpart
+   * of {@link addCogLayer}: it reads the store directly (Zarr v2/v3, Icechunk
+   * over HTTP), reprojects on the GPU when `crs`/`proj4` is given, and mirrors
+   * the layer into the Layers panel with working visibility, opacity, ordering,
+   * and removal.
+   *
+   * Prefer this over bundling `@carbonplan/zarr-layer` in the plugin and adding
+   * a raw MapLibre custom layer: a second copy ships a duplicate numcodecs WASM
+   * payload, and a custom layer added that way has no MapLibre paint properties
+   * for the Style panel to drive.
+   *
+   * Resolves once the layer is registered; rejects if `variable` is missing or
+   * the store cannot be read. Typed optional for forward-compatibility, so call
+   * it with optional chaining.
+   */
+  addZarrLayer?: (name: string, url: string, options: GeoLibreZarrLayerOptions) => Promise<string>;
+  /**
+   * Re-select the non-spatial dimensions of a layer added by
+   * {@link addZarrLayer}, e.g. to drive a plugin's own time slider with
+   * `{ time: n }`. The renderer keeps its fetched chunks, so this is much
+   * cheaper than removing and re-adding the layer. Resolves to false when there
+   * is no live Zarr layer with that id.
+   */
+  setZarrLayerSelector?: (
+    layerId: string,
+    selector: Record<string, number | string>,
+  ) => Promise<boolean>;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;

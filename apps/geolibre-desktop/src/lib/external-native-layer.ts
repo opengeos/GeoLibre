@@ -24,6 +24,12 @@ export function createExternalNativeStoreLayer(
       ? [registration.sourceId]
       : [];
   const sourceId = registration.sourceId ?? sourceIds[0];
+  // Supplying a paint bridge is only meaningful for a layer GeoLibre cannot
+  // paint through MapLibre, so it implies plugin-owned paint. The flag is the
+  // serializable half of the contract (the bridge's functions live in the
+  // registry in @geolibre/core), so it must land in metadata.
+  const paintMode =
+    registration.paintMode ?? (registration.paintBridge ? "plugin" : undefined) ?? undefined;
 
   return {
     id: registration.id,
@@ -48,6 +54,7 @@ export function createExternalNativeStoreLayer(
       nativeLayerIds: registration.nativeLayerIds,
       sourceIds,
       ...(sourceId ? { sourceId } : {}),
+      ...(paintMode ? { paintMode } : {}),
     },
     beforeId: registration.beforeId ?? existing?.beforeId,
     geojson: registration.geojson ?? existing?.geojson,

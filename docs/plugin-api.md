@@ -84,6 +84,23 @@ export interface GeoLibreAppAPI {
     url: string,
     options?: GeoLibreCogLayerOptions,
   ) => Promise<string>;
+  // Zarr through the host's own @carbonplan/zarr-layer instance, with
+  // crs/proj4 reprojection (see "Zarr layers" below).
+  addZarrLayer?: (
+    name: string,
+    url: string,
+    options: GeoLibreZarrLayerOptions,
+  ) => Promise<string>;
+  setZarrLayerSelector?: (
+    layerId: string,
+    selector: Record<string, number | string>,
+  ) => Promise<boolean>;
+  // Register a layer the plugin added to the map itself, so it appears in the
+  // Layers panel (see "Custom (WebGL) layers and paint ownership" below).
+  registerExternalNativeLayer?: (
+    layer: GeoLibreExternalNativeLayerRegistration,
+  ) => void;
+  unregisterExternalNativeLayer?: (id: string) => void;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
@@ -360,6 +377,107 @@ const cogId = await app.addCogLayer?.(
 The helpers are typed optional for forward-compatibility with host variants, so call them with optional chaining (`app.addTileLayer?.(...)`).
 
 > **Desktop (Tauri) note:** The desktop app enforces a Content Security Policy that restricts which tile hosts the WebView can reach. If your plugin registers tiles from a host not already in the GeoLibre CSP allowlist, the layer is created but its tiles silently fail to load. For bundled (first-party) plugins, add the host to `connect-src` / `img-src` in `apps/geolibre-desktop/src-tauri/tauri.conf.json`; external plugins can only reach already-permitted hosts. The web build is unaffected.
+
+## Zarr layers
+
+`addZarrLayer` renders a Zarr store (Zarr v2/v3, Icechunk over HTTP, kerchunk-backed cloud NetCDF) through **GeoLibre's own** `@carbonplan/zarr-layer` instance and mirrors the result into the Layers panel. It is the Zarr counterpart of `addCogLayer`.
+
+Do not bundle `@carbonplan/zarr-layer` in a plugin: a second copy ships a duplicate numcodecs WASM payload, and adding the renderer's layer yourself with `getMap().addLayer()` produces a MapLibre **custom** layer, which has no paint properties for the Style panel to drive.
+
+```typescript
+export interface GeoLibreZarrLayerOptions {
+  variable: string;                            // array to render (required)
+  selector?: Record<string, number | string>;  // non-spatial dims, e.g. { time: 0 }
+  clim?: [number, number];
+  colormap?: string | string[];                // named ramp ("viridis") or hex stops
+  opacity?: number;
+  zarrVersion?: 2 | 3;
+  crs?: string;                                // e.g. "EPSG:32633"
+  proj4?: string;                              // for a CRS with no built-in
+  bounds?: [number, number, number, number];   // [xMin, yMin, xMax, yMax] in the store's CRS
+  spatialDimensions?: { lat?: string; lon?: string };
+  headers?: Record<string, string>;            // authenticated stores
+  beforeLayerId?: string;
+}
+```
+
+```typescript
+// A projected national grid: crs/proj4 are forwarded to the renderer, which
+// reprojects on the GPU. Without them the store is read as WGS84 and lands in
+// the wrong place.
+const layerId = await app.addZarrLayer?.(
+  "seNorge tmax",
+  "https://example.no/senorge.zarr",
+  {
+    variable: "tmax",
+    selector: { time: 0 },
+    clim: [-30, 30],
+    colormap: "viridis",
+    crs: "EPSG:32633",
+  },
+);
+
+// Drive a time slider without rebuilding the layer: the renderer keeps the
+// chunks it already fetched.
+await app.setZarrLayerSelector?.(layerId, { time: 12 });
+```
+
+`addZarrLayer` is headless: it does not open the Zarr panel (the user can still open it from **Add Data → Zarr Layer** to tweak colormap and color limits). It resolves with the new layer's id once the layer is registered, and rejects when `variable` is missing or the store cannot be read. The layer supports visibility, opacity, ordering, and removal from the Layers panel like any other layer.
+
+## Custom (WebGL) layers and paint ownership
+
+`registerExternalNativeLayer` mirrors a layer the plugin added to the map itself into GeoLibre's layer store, so it appears in the Layers panel and persists with the project:
+
+```typescript
+export interface GeoLibreExternalNativeLayerRegistration {
+  id: string;
+  name: string;
+  type?: GeoLibreLayer["type"];        // closest built-in type, e.g. "raster"
+  nativeLayerIds: string[];            // the MapLibre layer id(s) you added
+  source?: Record<string, unknown>;
+  sourceIds?: string[];
+  sourceId?: string;
+  geojson?: FeatureCollection;         // for vector layers
+  beforeId?: string;
+  opacity?: number;
+  style?: Partial<LayerStyle>;
+  metadata?: Record<string, unknown>;
+  sourcePath?: string;
+  paintMode?: "geolibre" | "plugin";   // see below
+  paintBridge?: {                      // see below
+    setOpacity?: (opacity: number) => void;
+    setVisibility?: (visible: boolean) => void;
+  };
+}
+```
+
+A plugin that renders with its own MapLibre `CustomLayerInterface` — a WebGL layer that draws its own pixels — registers it the same way:
+
+```typescript
+const layer = new MyWebGLLayer({ id: "my-layer" });
+app.getMap?.()?.addLayer(layer);
+
+app.registerExternalNativeLayer?.({
+  id: "my-layer",
+  name: "My WebGL layer",
+  type: "raster",
+  nativeLayerIds: ["my-layer"],
+  // The layer has no MapLibre paint properties, so GeoLibre must not offer
+  // paint editors that cannot reach it.
+  paintMode: "plugin",
+  // Optional: keep the Opacity sliders live by forwarding them to the layer.
+  paintBridge: {
+    setOpacity: (opacity) => layer.setOpacity(opacity),
+    setVisibility: (visible) => layer.setActive(visible),
+  },
+});
+```
+
+- `paintMode: "plugin"` tells the Style panel that the plugin paints the layer. It then shows only the controls that actually apply — insert-below, zoom range, and (with a bridge) opacity — instead of raster brightness/saturation/contrast/hue sliders that silently do nothing. Visibility, reordering, and removal keep working from the Layers panel; MapLibre honors `visibility` and the zoom range on a custom layer.
+- `paintBridge` supplies the setters GeoLibre calls when the user changes opacity or visibility. Supplying `setOpacity` keeps the Opacity slider in both the Layers and Style panels; omitting it hides the slider rather than leaving an inert one. Supplying a bridge implies `paintMode: "plugin"`.
+- The setters are called only when the value changes, not on every layer sync, and they are held outside the layer record (functions cannot be serialized into a project file). Re-register the layer after a project reload to restore the bridge, and call `unregisterExternalNativeLayer(id)` from `deactivate`.
+
+For Zarr specifically, prefer `addZarrLayer` above: the host's renderer already integrates with the panels, so no custom layer or bridge is needed.
 
 ## Right sidebar panels
 

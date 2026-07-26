@@ -23,8 +23,10 @@ import {
   interpolateRampColors,
   isStyleLibraryTargetLayer,
   parseJsonExpression,
+  pluginOwnsPaint,
   removeTrailingJsonCommas,
   styleValue,
+  supportsBridgedOpacity,
   useAppStore,
   validateMapExpression,
 } from "@geolibre/core";
@@ -1436,10 +1438,19 @@ export function StylePanel({
   const isDeckVectorLayer = hasExternalDeckLayer(layer);
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const isThreeDTilesLayer = layer.type === "3d-tiles";
+  // An external plugin's MapLibre custom (WebGL) layer draws its own pixels and
+  // has no MapLibre paint properties, so every paint editor below would be inert
+  // for it (#1445). The plugin declares that with `paintMode: "plugin"`; the
+  // panel then offers only what actually reaches the layer.
+  const isPluginPaintedLayer = pluginOwnsPaint(layer);
+  // Opacity survives the suppression when (and only when) the plugin bridged a
+  // setter for it; otherwise the slider would be the same inert control.
+  const hasBridgedOpacity = isPluginPaintedLayer && supportsBridgedOpacity(layer.id);
   const hasVectorPaintControls =
     !isThreeDTilesLayer &&
     !isRasterTileLayer &&
     !isDeckRasterLayer &&
+    !isPluginPaintedLayer &&
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
       layer.type === "mbtiles" ||
@@ -1449,9 +1460,11 @@ export function StylePanel({
     !isThreeDTilesLayer &&
     !isRasterTileLayer &&
     !isDeckRasterLayer &&
+    !isPluginPaintedLayer &&
     supportsExtrusionControls(layer);
   const hasRasterPaintControls =
-    isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer;
+    !isPluginPaintedLayer &&
+    (isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer);
   const hasTextMarkerControls = layer.type === "geojson" && hasTextMarkerFeatures(layer);
   // isPointOnly is memoized above the early returns to keep hook order stable.
   const isCoreGeoJsonPoint =
@@ -3872,6 +3885,51 @@ export function StylePanel({
       />
     </>
   );
+
+  if (isPluginPaintedLayer) {
+    // The plugin paints this layer itself, so the panel keeps only the controls
+    // that still reach it: insert-below and the zoom range (MapLibre honors both
+    // on a custom layer) plus Opacity when the registration bridged setOpacity.
+    // Everything else is styled from the plugin's own panel.
+    return (
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
+        {resizeHandle}
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+          <span className="truncate text-sm font-semibold">
+            {t("style.headingWithLayer", { name: layer.name })}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
+            onClick={() => setIsCollapsed(true)}
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="space-y-4 p-3 pe-5">
+            {beforeIdControl}
+            {zoomRangeControls}
+            {hasBridgedOpacity && (
+              <RasterStyleSlider
+                label={t("style.raster.opacity")}
+                value={layer.opacity}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(value) => setLayerOpacity(layer.id, value)}
+              />
+            )}
+          </div>
+        </ScrollArea>
+        <Separator />
+        <p className="p-2 text-[10px] text-muted-foreground">{t("style.pluginPaintedFooter")}</p>
+      </aside>
+    );
+  }
 
   if (hasRasterPaintControls) {
     return (

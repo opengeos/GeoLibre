@@ -20,6 +20,8 @@ import {
   PLANET_SWITCHER_OPTIONS,
   isStyleLibraryTargetLayer,
   copyableLayerStyleKind,
+  pluginOwnsPaint,
+  supportsBridgedOpacity,
   useAppStore,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
@@ -2659,12 +2661,18 @@ export function LayerPanel({
                         </Button>
                       </div>
                     )}
-                    <LayerOpacitySlider
-                      label={t("layers.opacity")}
-                      ariaLabel={t("layers.opacityFor", { name: layer.name })}
-                      value={layer.opacity}
-                      onChange={(v) => setLayerOpacity(layer.id, v)}
-                    />
+                    {/* A plugin-painted layer (a MapLibre custom WebGL layer)
+                        has no paint property for opacity to land on, so the
+                        slider is only shown when the plugin bridged a setter for
+                        it — otherwise it would move with no effect (#1445). */}
+                    {(!pluginOwnsPaint(layer) || supportsBridgedOpacity(layer.id)) && (
+                      <LayerOpacitySlider
+                        label={t("layers.opacity")}
+                        ariaLabel={t("layers.opacityFor", { name: layer.name })}
+                        value={layer.opacity}
+                        onChange={(v) => setLayerOpacity(layer.id, v)}
+                      />
+                    )}
                     <div className="mt-2 flex gap-1">
                       <Button
                         variant="ghost"

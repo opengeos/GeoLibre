@@ -1,6 +1,12 @@
-import { useAppStore } from "@geolibre/core";
+import {
+  clearExternalNativePaintBridge,
+  setExternalNativePaintBridge,
+  useAppStore,
+} from "@geolibre/core";
 import {
   addCogRasterLayer,
+  addZarrRasterLayer,
+  setZarrLayerSelector,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -65,6 +71,7 @@ import type {
   GeoLibreMapControlPosition,
   GeoLibreTileLayerOptions,
   GeoLibreWmsLayerOptions,
+  GeoLibreZarrLayerOptions,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -729,6 +736,30 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
         beforeLayerId: options?.beforeLayerId ?? null,
       }),
+    // Zarr goes through the components plugin's shared @carbonplan/zarr-layer
+    // control for the same reason as addCogLayer: the host owns the renderer, so
+    // a plugin does not bundle (and fail to activate) a second copy.
+    addZarrLayer: (name: string, url: string, options: GeoLibreZarrLayerOptions) =>
+      addZarrRasterLayer(api, {
+        url,
+        name,
+        variable: options?.variable,
+        ...(options?.selector !== undefined ? { selector: options.selector } : {}),
+        ...(options?.clim !== undefined ? { clim: options.clim } : {}),
+        ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),
+        ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
+        ...(options?.zarrVersion !== undefined ? { zarrVersion: options.zarrVersion } : {}),
+        ...(options?.crs !== undefined ? { crs: options.crs } : {}),
+        ...(options?.proj4 !== undefined ? { proj4: options.proj4 } : {}),
+        ...(options?.bounds !== undefined ? { bounds: options.bounds } : {}),
+        ...(options?.spatialDimensions !== undefined
+          ? { spatialDimensions: options.spatialDimensions }
+          : {}),
+        ...(options?.headers !== undefined ? { headers: options.headers } : {}),
+        beforeLayerId: options?.beforeLayerId ?? null,
+      }),
+    setZarrLayerSelector: (layerId: string, selector: Record<string, number | string>) =>
+      setZarrLayerSelector(layerId, selector),
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
     onBasemapChange: (callback: (styleUrl: string) => void) =>
       useAppStore.subscribe((state, prev) => {
@@ -791,6 +822,10 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       const state = useAppStore.getState();
       const existing = state.layers.find((layer) => layer.id === registration.id);
       const layer = createExternalNativeStoreLayer(registration, existing);
+      // A re-registration that omits paintBridge drops the previous one, so the
+      // plugin owns the bridge the same way it owns `style`/`source`. Set it
+      // before the store write so the first sync already sees it.
+      setExternalNativePaintBridge(registration.id, registration.paintBridge);
       if (existing) {
         state.updateLayer(layer.id, layer);
       } else {
@@ -799,6 +834,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     },
     unregisterExternalNativeLayer: (id: string) => {
       const state = useAppStore.getState();
+      clearExternalNativePaintBridge(id);
       if (state.layers.some((layer) => layer.id === id)) {
         state.removeLayer(id);
       }
