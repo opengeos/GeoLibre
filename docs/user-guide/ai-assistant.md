@@ -12,22 +12,23 @@ directly, almost everything it does is **undoable** with **Ctrl/Cmd + Z**, and
 every tool call (including the SQL it generates) is shown in the transcript so
 you can see exactly what ran.
 
-The assistant is **optional and disabled until you configure an API key**. No
-data leaves your machine until you add a key and send a prompt.
+The assistant is **optional and disabled until you configure a provider or the
+deployment operator enables the managed AI proxy**. No data leaves your machine
+until you send a prompt to the configured provider.
 
-## Setup: add an API key
+## Setup: choose an AI provider
 
 The assistant is **provider-pluggable** — it uses the
-[Strands Agents](https://strandsagents.com) SDK. Configure one (or more)
-providers in **Settings → Environment Variables** as environment variables:
+[Strands Agents](https://strandsagents.com) SDK. Configure one or more
+providers in **Settings → AI Providers**:
 
 | Provider | Environment variable(s) | Default model |
 | --- | --- | --- |
-| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-3.5-flash` |
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-8` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-5.5` |
-| **Ollama** (local) | `OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) | `llama3.2` |
-| **Amazon Bedrock** | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_REGION`, optional `AWS_SESSION_TOKEN`) | `global.anthropic.claude-sonnet-4-6` |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-3.6-flash` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-5` |
+| OpenAI | `OPENAI_API_KEY` | Select from the current GPT models |
+| **Ollama** (local) | `OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) | `gemma4` |
+| **Amazon Bedrock** | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_REGION`, optional `AWS_SESSION_TOKEN`) | `global.anthropic.claude-opus-5` |
 | **Custom** (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL` (+ optional `OPENAI_COMPATIBLE_API_KEY`) and `OPENAI_COMPATIBLE_MODEL` | — |
 
 - **Ollama** runs models on your own machine — no API key and nothing leaves your
@@ -42,6 +43,35 @@ providers in **Settings → Environment Variables** as environment variables:
 Hosted keys (and AWS credentials) are used **directly from your browser** to call
 the provider; they are never sent to GeoLibre's servers. Saving the setting
 enables the panel immediately — no reload needed.
+
+### Managed AI in a password-protected Docker deployment
+
+A deployment operator can provide AI without distributing provider API keys.
+In this configuration, the browser calls the same-origin `/ai` route. Docker's
+nginx first checks the instance's HTTP Basic Auth username and password, then
+adds a server-only instance token and forwards the request to
+`ai.geolibre.app`. The browser receives neither the instance token nor the
+Cloudflare AI Gateway token.
+
+Users only need to sign in to the GeoLibre instance; they do not configure an
+AI provider key. Requests sent directly to `ai.geolibre.app` without the
+server-only token receive `401 Unauthorized`.
+
+The operator must start the container with all managed-AI variables:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  -e GEOLIBRE_AI_URL=/ai \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
+  -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+If `GEOLIBRE_AI_URL` is unset, the Docker entrypoint leaves the managed proxy
+disabled and does not inject any AI proxy URL into the application.
 
 Optional variables:
 

@@ -214,6 +214,12 @@ the same-origin `/ai` route and a server-only instance token that matches the
 `GEOLIBRE_AI_PROXY_TOKEN` secret on the GeoLibre AI Worker:
 
 ```bash
+export GEOLIBRE_AI_PROXY_TOKEN="$(openssl rand -hex 32)"
+cd workers/ai-proxy
+printf '%s' "$GEOLIBRE_AI_PROXY_TOKEN" |
+  npx wrangler secret put GEOLIBRE_AI_PROXY_TOKEN
+cd ../..
+
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
@@ -226,7 +232,10 @@ docker run --rm -p 8080:80 \
 
 The token stays in nginx and is never sent to the browser. Use an `--env-file`
 or secrets manager rather than putting production credentials in shell history,
-and terminate TLS in front of the container.
+and terminate TLS in front of the container. Calling `ai.geolibre.app`
+directly without this token returns `401`; authenticated users access it only
+through the Docker instance's `/ai` route. If `GEOLIBRE_AI_URL` is unset, the
+image does not enable or inject the managed AI proxy.
 
 The browser prompts for the credentials on first visit. `/healthz` stays
 unauthenticated so the container health check keeps working. When the

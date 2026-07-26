@@ -138,6 +138,12 @@ To let authenticated users access the managed AI proxy without exposing its
 server token, route AI requests through the same nginx instance:
 
 ```bash
+export GEOLIBRE_AI_PROXY_TOKEN="$(openssl rand -hex 32)"
+cd workers/ai-proxy
+printf '%s' "$GEOLIBRE_AI_PROXY_TOKEN" |
+  npx wrangler secret put GEOLIBRE_AI_PROXY_TOKEN
+cd ../..
+
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
@@ -150,7 +156,9 @@ docker run --rm -p 8080:80 \
 
 The proxy token must match the `GEOLIBRE_AI_PROXY_TOKEN` Worker secret. It is
 injected by nginx only after Basic Auth succeeds and never appears in frontend
-configuration. Use HTTPS and prefer an `--env-file` or secrets manager.
+configuration. Direct inference calls to `ai.geolibre.app` without the token
+return `401`. If `GEOLIBRE_AI_URL` is unset, the image leaves the managed proxy
+disabled. Use HTTPS and prefer an `--env-file` or secrets manager.
 
 For deployments under a URL subpath, pass the app base at build time:
 

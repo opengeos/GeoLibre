@@ -10,8 +10,8 @@ output-token cap, and per-client rate limit.
 
 ## Configure and deploy
 
-1. Review `AI_GATEWAY_ID`, `ALLOWED_ORIGINS`, `ALLOWED_MODELS`, and the limits
-   in `wrangler.jsonc`.
+1. Review `AI_GATEWAY_ID`, `ALLOWED_MODELS`, and the limits in
+   `wrangler.jsonc`.
 2. In Cloudflare, enable AI Gateway Unified Billing and create a scoped API
    token with AI Gateway permission. Store it interactively (never put it in
    source or Wrangler variables):
@@ -23,6 +23,10 @@ output-token cap, and per-client rate limit.
    npx wrangler secret put GEOLIBRE_AI_PROXY_TOKEN
    ```
 
+   Generate the instance token with `openssl rand -hex 32`. Store the same
+   value in the Docker deployment's secret environment; never add it to source
+   control or a frontend build.
+
 3. Validate and deploy:
 
    ```sh
@@ -31,21 +35,8 @@ output-token cap, and per-client rate limit.
    npx wrangler deploy
    ```
 
-4. For a direct managed build, explicitly build GeoLibre with the deployed
-   Worker URL:
-
-   ```sh
-   GEOLIBRE_AI_URL=https://ai.geolibre.app \
-   GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
-   npm run build
-   ```
-
-Change `GEOLIBRE_AI_MODEL` to another Chat Completions-compatible allowlisted model, such as
-`anthropic/claude-opus-5` or `google/gemini-3.6-flash`, to change provider
-without changing the client protocol.
-
-For Docker, set the client URL to the same-origin `/ai` path and let nginx
-inject the server-only instance token:
+4. Set the Docker client's URL to the same-origin `/ai` path and let nginx
+   inject the server-only instance token:
 
 ```sh
 docker run --rm -p 8080:80 \
@@ -62,3 +53,37 @@ docker run --rm -p 8080:80 \
 only `/ai` and the model ID. Basic Auth protects nginx's `/ai` route, nginx
 removes the user's Basic credentials, and the Worker rejects calls without the
 instance token. Use HTTPS in front of Docker on untrusted networks.
+
+Do not set `GEOLIBRE_AI_URL=https://ai.geolibre.app` in a public browser build:
+the Worker deliberately requires a token that must not be shipped to a browser.
+Change `GEOLIBRE_AI_MODEL` to another Chat Completions-compatible allowlisted
+model, such as `anthropic/claude-opus-5` or `google/gemini-3.6-flash`, to
+change provider without changing the client protocol.
+
+## Verify authentication
+
+The health endpoint remains public:
+
+```sh
+curl https://ai.geolibre.app/health
+```
+
+A direct inference request without the server token must fail:
+
+```sh
+curl -i https://ai.geolibre.app/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  --data '{"model":"openai/gpt-5.5","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+Expected status: `401 Unauthorized`. Test the intended path through the
+password-protected Docker host instead:
+
+```sh
+curl -u 'admin:change-me' http://localhost:8080/ai/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  --data '{"model":"openai/gpt-5.5","messages":[{"role":"user","content":"Reply OK"}],"max_completion_tokens":64}'
+```
+
+The client supplies only the Docker username and password. nginx adds the
+instance token when it forwards the request.
