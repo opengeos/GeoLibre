@@ -44,6 +44,9 @@ class ZarrLayerControlStub {
     clim: [number, number];
     opacity: number;
     selector?: Record<string, number | string>;
+    crs?: string;
+    proj4?: string;
+    bounds?: [number, number, number, number];
   }[] = [];
   private instances = new Map<string, { setSelector: (s: never) => Promise<void> }>();
   private counter = 0;
@@ -76,6 +79,11 @@ class ZarrLayerControlStub {
       clim: options?.clim ?? [0, 1],
       opacity: options?.opacity ?? 1,
       selector: options?.selector,
+      // The real control reports the spatial reference it resolved (from the
+      // options, its panel fields, or the store's own metadata).
+      crs: options?.crs,
+      proj4: options?.proj4,
+      bounds: options?.bounds,
     });
     this.instances.set(id, {
       setSelector: async (selector) => {
@@ -171,7 +179,11 @@ describe("addZarrRasterLayer", () => {
     assert.ok(layer, "expected the Zarr layer to be mirrored into the store");
     assert.equal(layer.name, "seNorge tmax");
     assert.equal(layer.type, "zarr");
+    // Mirrored from what the renderer reported, not from the request, so a CRS
+    // the control detected from the store's own metadata is recorded too.
     assert.equal(layer.metadata.crs, "EPSG:32633");
+    assert.equal(layer.source.crs, "EPSG:32633");
+    assert.match(String(layer.source.proj4), /\+proj=utm \+zone=33/);
     // The renderer owns the pixels: no MapLibre paint editors, opacity bridged.
     assert.equal(pluginOwnsPaint(layer), true);
     assert.ok(getExternalNativePaintBridge(id)?.setOpacity);

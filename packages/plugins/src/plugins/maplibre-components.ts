@@ -2246,22 +2246,14 @@ async function addZarrLayerExclusively(
   }
 
   // `createZarrLayerAddHandler` has already mirrored the layer into the store
-  // (the control emits "layeradd" synchronously), so refine that record with the
-  // fields only the caller knows: the display name, the requested ordering, and
-  // the CRS the renderer used (surfaced in the Metadata panel).
+  // (the control emits "layeradd" synchronously) along with the spatial
+  // reference the renderer resolved, so only the fields the caller alone knows
+  // are left to apply.
   const store = useAppStore.getState();
   const patch: Partial<GeoLibreLayer> = {};
   const name = options.name?.trim();
   if (name) patch.name = name;
   if (options.beforeLayerId) patch.beforeId = options.beforeLayerId;
-  const existing = store.layers.find((layer) => layer.id === addedLayerId);
-  if (existing && (options.crs || options.proj4)) {
-    patch.metadata = {
-      ...existing.metadata,
-      ...(options.crs ? { crs: options.crs } : {}),
-      ...(options.proj4 ? { proj4: options.proj4 } : {}),
-    };
-  }
   if (Object.keys(patch).length > 0) {
     store.updateLayer(addedLayerId, patch);
   }
@@ -4867,6 +4859,13 @@ function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLay
       type: "raster",
       url: layerInfo.url,
       variable: layerInfo.variable,
+      // The spatial reference the renderer actually used, whether it came from
+      // the panel's CRS fields, an addZarrLayer option, or the store's own
+      // metadata. Recorded so the Metadata panel and the project file show how a
+      // projected store was placed.
+      ...(layerInfo.crs ? { crs: layerInfo.crs } : {}),
+      ...(layerInfo.proj4 ? { proj4: layerInfo.proj4 } : {}),
+      ...(layerInfo.bounds ? { bounds: layerInfo.bounds } : {}),
     },
     visible: true,
     opacity: layerInfo.opacity,
@@ -4886,6 +4885,8 @@ function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLay
       // reaches the renderer through the paint bridge registered alongside this
       // record (opengeos/GeoLibre#1445).
       paintMode: "plugin",
+      ...(layerInfo.crs ? { crs: layerInfo.crs } : {}),
+      ...(layerInfo.proj4 ? { proj4: layerInfo.proj4 } : {}),
       selector: layerInfo.selector,
       sourceId: layerInfo.id,
       sourceKind: "zarr-url",
