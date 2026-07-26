@@ -28,6 +28,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import { addPMTilesLayerFromUrl } from "./maplibre-components";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
+import { RASTER_SOURCE_KIND } from "./raster-symbology-texture";
 import {
   canStream,
   fileNote,
@@ -165,6 +166,9 @@ export interface HuggingFaceLabels {
   chooseLayerTitle: string;
   layerPickerHeading: string;
   layerFeatures: (count: number) => string;
+  layerOriginalFile: string;
+  layerUnavailable: (name: string) => string;
+  remoteRasterNote: string;
   noUploadableLayers: string;
   clearSelection: string;
   selectedFiles: (count: number, size: string) => string;
@@ -263,6 +267,11 @@ export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
   chooseLayerTitle: "Upload a map layer's features as a GeoJSON file",
   layerPickerHeading: "Upload a layer as GeoJSON",
   layerFeatures: (count) => `${count} feature${count === 1 ? "" : "s"}`,
+  layerOriginalFile: "Original file",
+  layerUnavailable: (name) => `${name} is no longer available to upload.`,
+  remoteRasterNote:
+    "Rasters loaded from a URL are not listed: their data is not in the browser, " +
+    "and they already have a link you can share. Only files opened locally can be uploaded.",
   noUploadableLayers:
     "No layer on the map holds features that can be uploaded. Add a vector layer first.",
   clearSelection: "Clear",
@@ -581,71 +590,154 @@ function noteText(file: HfFile, state: { added: boolean; pending: boolean }): st
   }
 }
 
-/** A map layer that can be uploaded, paired with the size of its data. */
+/** A map layer whose data this panel can upload, and how to get its bytes. */
 interface UploadableLayer {
   id: string;
   name: string;
+  kind: "geojson" | "raster";
+  /** Features in the layer; 0 for a raster. */
   featureCount: number;
+  /** The path this layer would take inside the commit. */
+  fileName: string;
+  /** Blob URL holding a file-backed raster's original bytes. */
+  bytesUrl?: string;
 }
 
 /**
- * Lists the layers whose data this panel can upload.
+ * Lists the layers whose data this panel can upload, and counts the rasters it
+ * had to leave out.
  *
- * Deliberately only layers that carry their features in the store's `geojson`
- * field. The alternative — reading a tile-backed layer out of the MapLibre
- * source — would return just the features in loaded tiles, so it would upload a
- * silently truncated dataset that looks complete. A layer whose data already
- * lives in a remote file does not need this path anyway: it is a URL the user
- * can point at directly.
+ * Two kinds qualify, for the same underlying reason — the bytes are already in
+ * the browser, complete:
  *
- * @returns One entry per uploadable layer, in the store's own order
+ *  - **vector layers carrying their features in the store's `geojson` field.**
+ *    A tile-backed layer is excluded because reading it from the MapLibre
+ *    source returns only the features in loaded tiles, so it would upload a
+ *    silently truncated dataset that looks complete.
+ *  - **file-backed rasters**, which the raster control keeps behind a blob URL
+ *    (surfaced as `metadata.localBytesUrl`). This is the COG a user opened from
+ *    disk, or one a processing tool just produced — the case where publishing
+ *    it is the natural next step, and where the original file can be sent
+ *    byte-for-byte rather than re-encoded.
+ *
+ * A **URL-backed raster is deliberately not offered.** Its bytes are not here:
+ * uploading would mean pulling the whole remote file through the tab only to
+ * push it back out to another host, which is slow, can be many GB, and is
+ * pointless for the common case of a COG that already lives on the Hub. That
+ * layer already has a URL worth sharing, so the count is returned and the
+ * picker says so instead of silently omitting it.
+ *
+ * @returns The uploadable layers, and how many remote rasters were skipped
  */
-function listUploadableLayers(): UploadableLayer[] {
-  return (
-    useAppStore
-      .getState()
-      .layers.filter((layer) => Array.isArray(layer.geojson?.features))
-      .map((layer) => ({
+function listUploadableLayers(): { layers: UploadableLayer[]; skippedRemote: number } {
+  const layers: UploadableLayer[] = [];
+  let skippedRemote = 0;
+
+  for (const layer of useAppStore.getState().layers) {
+    const bytesUrl = layer.metadata.localBytesUrl;
+    if (typeof bytesUrl === "string" && bytesUrl) {
+      layers.push({
         id: layer.id,
         name: layer.name,
-        featureCount: layer.geojson?.features.length ?? 0,
-      }))
-      // An empty layer would commit a FeatureCollection with nothing in it.
-      .filter((entry) => entry.featureCount > 0)
+        kind: "raster",
+        featureCount: 0,
+        fileName: rasterFileName(layer.sourcePath ?? "", layer.name),
+        bytesUrl,
+      });
+      continue;
+    }
+    // A raster with no local bytes is one backed by a remote URL.
+    if (layer.metadata.sourceKind === RASTER_SOURCE_KIND) {
+      skippedRemote += 1;
+      continue;
+    }
+    const features = layer.geojson?.features;
+    if (Array.isArray(features) && features.length > 0) {
+      layers.push({
+        id: layer.id,
+        name: layer.name,
+        kind: "geojson",
+        featureCount: features.length,
+        fileName: layerFileName(layer.name),
+      });
+    }
+  }
+
+  return { layers, skippedRemote };
+}
+
+/**
+ * Reduces a name to characters that are safe in a commit path.
+ *
+ * The result becomes a path inside a git commit, so anything that could change
+ * the path's meaning — separators, `..`, leading dots — has to go, not merely
+ * be escaped.
+ */
+function slugifyFileName(raw: string): string {
+  return (
+    raw
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .replace(/-{2,}/g, "-")
+      // Drop separators left sitting against a dot, so "dem (2024).tif" reads as
+      // "dem-2024.tif" rather than "dem-2024-.tif".
+      .replace(/-+\./g, ".")
+      .slice(0, 80)
   );
 }
 
 /**
  * Turns a layer name into a safe `.geojson` filename.
  *
- * The result becomes a path inside a git commit, so anything that could change
- * the path's meaning — separators, `..`, leading dots — has to go, not merely
- * be escaped.
- *
  * @param name - The layer's display name
  * @returns A filename ending in `.geojson`
  */
 export function layerFileName(name: string): string {
-  const slug = name
-    .trim()
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^[-.]+|[-.]+$/g, "")
-    .replace(/-{2,}/g, "-")
-    .slice(0, 80);
-  return `${slug || "layer"}.geojson`;
+  return `${slugifyFileName(name) || "layer"}.geojson`;
 }
 
 /**
- * Serializes a layer's features into an upload-ready file.
+ * Picks the filename for a file-backed raster, preferring the name it was
+ * opened under so the uploaded file matches what the user has on disk.
  *
- * @param layerId - The store layer's id
- * @returns The file, or null when the layer has gone away or holds no features
+ * @param sourcePath - The layer's `sourcePath`, which holds the original file name
+ * @param layerName - Fallback when that name is missing or unusable
+ * @returns A filename with an extension
  */
-function layerToGeoJsonFile(layerId: string): File | null {
-  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
-  if (!layer?.geojson || !Array.isArray(layer.geojson.features)) return null;
-  if (layer.geojson.features.length === 0) return null;
-  return new File([JSON.stringify(layer.geojson)], layerFileName(layer.name), {
+export function rasterFileName(sourcePath: string, layerName: string): string {
+  const base = slugifyFileName(sourcePath.split(/[/\\]/).pop() ?? "");
+  // Keep the original name only when it still carries an extension; a slug that
+  // lost it (or never had one) would upload a file the Hub cannot type.
+  if (base && /\.[A-Za-z0-9]+$/.test(base)) return base;
+  return `${slugifyFileName(layerName) || "raster"}.tif`;
+}
+
+/**
+ * Reads one layer's data into an upload-ready file.
+ *
+ * @param entry - The layer to serialize, from {@link listUploadableLayers}
+ * @returns The file, or null when the layer's data is no longer reachable
+ */
+async function layerToUploadFile(entry: UploadableLayer): Promise<File | null> {
+  if (entry.kind === "raster") {
+    if (!entry.bytesUrl) return null;
+    try {
+      // A blob URL, so this is a read from memory rather than a network fetch.
+      // It can still fail: the raster control revokes the URL when its layer
+      // goes away, which can race a click on an already-stale list.
+      const response = await fetch(entry.bytesUrl);
+      if (!response.ok) return null;
+      return new File([await response.blob()], entry.fileName);
+    } catch {
+      return null;
+    }
+  }
+
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === entry.id);
+  const features = layer?.geojson?.features;
+  if (!layer?.geojson || !Array.isArray(features) || features.length === 0) return null;
+  return new File([JSON.stringify(layer.geojson)], entry.fileName, {
     type: "application/geo+json",
   });
 }
@@ -1561,7 +1653,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
 
     // The map's own layers are the other place upload data comes from, so they
     // are offered beside the filesystem rather than requiring an export first.
-    const uploadableLayers = listUploadableLayers();
+    const { layers: uploadableLayers, skippedRemote: skippedRemoteRasters } =
+      listUploadableLayers();
     const chooseLayerButton = button(
       labels.chooseLayer,
       layerPickerOpen ? CSS.actionActive : CSS.action,
@@ -1595,21 +1688,28 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
         const card = el("button", CSS.cardButton);
         card.type = "button";
         card.appendChild(el("span", CSS.title, entry.name));
-        card.appendChild(
-          el(
-            "span",
-            CSS.sub,
-            `${labels.layerFeatures(entry.featureCount)} · ${layerFileName(entry.name)}`,
-          ),
-        );
+        const detail =
+          entry.kind === "raster"
+            ? labels.layerOriginalFile
+            : labels.layerFeatures(entry.featureCount);
+        card.appendChild(el("span", CSS.sub, `${detail} · ${entry.fileName}`));
         card.addEventListener("click", () => {
-          const file = layerToGeoJsonFile(entry.id);
-          // Null only if the layer was removed between listing and clicking.
-          if (file) stageFiles([file]);
-          layerPickerOpen = false;
-          render();
+          void (async () => {
+            const file = await layerToUploadFile(entry);
+            // Null when the layer went away, or a raster's blob URL was revoked,
+            // between this list being rendered and the click.
+            if (file) stageFiles([file]);
+            else tokenError = labels.layerUnavailable(entry.name);
+            layerPickerOpen = false;
+            render();
+          })();
         });
         picker.appendChild(card);
+      }
+      // Said out loud rather than left as a silent omission: a user looking for
+      // their remote COG should learn why it is not here.
+      if (skippedRemoteRasters > 0) {
+        picker.appendChild(el("div", CSS.note, labels.remoteRasterNote));
       }
       uploadSection.appendChild(picker);
     }
