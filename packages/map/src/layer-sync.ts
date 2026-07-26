@@ -1391,8 +1391,20 @@ export function externalExtrusionLayerId(nativeLayerId: string): string {
 // Native layers hidden to make room for a synthetic fill-extrusion layer.
 // Tracked so switching 3D extrusion back off can restore them on the
 // control-managed path, which otherwise never writes visibility (the control
-// owns it) and would leave the layer invisible.
-const extrusionHiddenNativeLayerIds = new Set<string>();
+// owns it) and would leave the layer invisible. Keyed per map (like
+// `nativeFilterStatesFor`) because native layer ids are only unique within one
+// map: two live maps showing the same control would otherwise share entries,
+// and one clearing extrusion would strand the other's fill hidden.
+const extrusionHiddenNativeLayerIdsByMap = new WeakMap<maplibregl.Map, Set<string>>();
+
+function extrusionHiddenNativeLayerIdsFor(map: maplibregl.Map): Set<string> {
+  let ids = extrusionHiddenNativeLayerIdsByMap.get(map);
+  if (!ids) {
+    ids = new Set();
+    extrusionHiddenNativeLayerIdsByMap.set(map, ids);
+  }
+  return ids;
+}
 
 /**
  * Render an external control's native `fill` layers as GeoLibre-owned
@@ -1421,9 +1433,10 @@ function syncExternalNativeExtrusion(
     .filter(isFillStyleLayerSpec);
   if (nativeFillLayerSpecs.length === 0) return false;
 
+  const hiddenNativeLayerIds = extrusionHiddenNativeLayerIdsFor(map);
   for (const nativeLayerId of nativeLayerIds) {
     setNativeLayerVisibility(map, nativeLayerId, "none");
-    extrusionHiddenNativeLayerIds.add(nativeLayerId);
+    hiddenNativeLayerIds.add(nativeLayerId);
   }
 
   for (const fillLayerSpec of nativeFillLayerSpecs) {
@@ -1471,9 +1484,10 @@ function clearExternalNativeExtrusion(
   layer: GeoLibreLayer,
   nativeLayerIds: string[],
 ): void {
+  const hiddenNativeLayerIds = extrusionHiddenNativeLayerIdsFor(map);
   for (const nativeLayerId of nativeLayerIds) {
     removeIfExists(map, externalExtrusionLayerId(nativeLayerId));
-    if (extrusionHiddenNativeLayerIds.delete(nativeLayerId)) {
+    if (hiddenNativeLayerIds.delete(nativeLayerId)) {
       setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
     }
   }

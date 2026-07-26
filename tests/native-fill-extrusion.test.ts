@@ -14,7 +14,7 @@ interface MapCall {
   args: unknown[];
 }
 
-function makeMapStub(fillLayerId: string) {
+function makeMapStub(fillLayerId: string, baseFilter?: unknown) {
   const calls: MapCall[] = [];
   const present = new Set<string>([fillLayerId]);
   const record =
@@ -22,22 +22,32 @@ function makeMapStub(fillLayerId: string) {
     (...args: unknown[]) => {
       calls.push({ method, args });
     };
-  const fillSpec = {
+  const fillSpec: Record<string, unknown> = {
     id: fillLayerId,
     type: "fill",
     source: "overture-buildings",
     "source-layer": "building",
+    ...(baseFilter ? { filter: baseFilter } : {}),
   };
+  // Filters are read back the way MapLibre does, so a sync that pushes a
+  // combined filter onto the native layer is visible to the next sync.
+  const filters = new Map<string, unknown>();
+  if (baseFilter) filters.set(fillLayerId, baseFilter);
   const map = {
     getStyle: () => ({ layers: [fillSpec] }),
     getLayer: (id: string) =>
       present.has(id) ? { id, type: id === fillLayerId ? "fill" : "fill-extrusion" } : undefined,
     getSource: () => ({}),
-    getFilter: () => undefined,
+    getFilter: (id: string) => filters.get(id),
     getPaintProperty: () => undefined,
     setLayoutProperty: record("setLayoutProperty"),
     setPaintProperty: record("setPaintProperty"),
-    setFilter: record("setFilter"),
+    setFilter: (...args: unknown[]) => {
+      const [id, filter] = args as [string, unknown];
+      filters.set(id, filter);
+      if (id === fillLayerId) fillSpec.filter = filter;
+      calls.push({ method: "setFilter", args });
+    },
     setLayerZoomRange: record("setLayerZoomRange"),
     moveLayer: record("moveLayer"),
     addSource: record("addSource"),
@@ -127,11 +137,63 @@ describe("3D extrusion on control-managed native fill layers", () => {
       }),
     );
 
-    const added = calls.find((c) => c.method === "addLayer");
+    const added = calls.find(
+      (c) =>
+        c.method === "addLayer" &&
+        (c.args[0] as { id: string }).id === externalExtrusionLayerId(nativeId),
+    );
     assert.ok(added, "expected the extrusion layer to be added");
     assert.ok(
       !("filter" in (added.args[0] as Record<string, unknown>)),
       "expected no filter key so MapLibre does not reject the layer",
+    );
+  });
+
+  it("combines the native fill's own filter with the Time Slider window without compounding", () => {
+    const nativeId = "filtered-fill";
+    const baseFilter = ["==", ["get", "class"], "building"];
+    const timeFilter = ["<=", ["get", "year"], 2000];
+    const { map, calls } = makeMapStub(nativeId, baseFilter);
+    const metadata = {
+      customLayerType: "overture-maps",
+      externalNativeLayer: true,
+      nativeLayerIds: [nativeId],
+      sourceIds: ["overture-buildings"],
+      nativeFillExtrusion: true,
+    };
+
+    // First sync in 2D with a Time Slider window: the ordering-only path pushes
+    // a combined filter onto the native fill and records its base.
+    syncLayer(map as never, overtureLayer("filtered", { metadata, timeFilter }));
+    assert.deepEqual(
+      calls.find((c) => c.method === "setFilter")?.args[1],
+      ["all", baseFilter, timeFilter],
+      "expected the native fill to be narrowed to the time window",
+    );
+
+    // Switching to 3D must rebuild from the tracked base, not from the combined
+    // filter already sitting on the fill — otherwise the window nests deeper on
+    // every toggle.
+    calls.length = 0;
+    syncLayer(
+      map as never,
+      overtureLayer("filtered", {
+        metadata,
+        timeFilter,
+        style: { ...DEFAULT_LAYER_STYLE, extrusionEnabled: true },
+      }),
+    );
+
+    const added = calls.find(
+      (c) =>
+        c.method === "addLayer" &&
+        (c.args[0] as { id: string }).id === externalExtrusionLayerId(nativeId),
+    );
+    assert.ok(added, "expected the extrusion layer to be added");
+    assert.deepEqual(
+      (added.args[0] as { filter: unknown }).filter,
+      ["all", baseFilter, timeFilter],
+      "expected the extrusion filter to combine the base once, not the combined filter again",
     );
   });
 
