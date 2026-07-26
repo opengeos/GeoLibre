@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import {
   clearExternalNativePaintBridge,
   DEFAULT_LAYER_STYLE,
@@ -72,6 +72,21 @@ const registration = (
   ...overrides,
 });
 
+// Bridges live in a module-level registry, so a failed assertion must not leak
+// one into a later test: clear every id this file registers after each test.
+const REGISTERED_BRIDGE_IDS = [
+  "bridge-a",
+  "bridge-b",
+  "bridge-empty",
+  "relisted-layer",
+  "sync-bridged",
+  "sync-rebridged",
+];
+
+afterEach(() => {
+  for (const id of REGISTERED_BRIDGE_IDS) clearExternalNativePaintBridge(id);
+});
+
 describe("plugin-owned paint registration", () => {
   it("records paintMode in the store layer's metadata", () => {
     const layer = createExternalNativeStoreLayer(registration({ paintMode: "plugin" }));
@@ -121,9 +136,26 @@ describe("external native paint bridge registry", () => {
     assert.equal(supportsBridgedOpacity("bridge-a"), true);
     assert.equal(supportsBridgedOpacity("bridge-b"), false);
     assert.equal(supportsBridgedOpacity("bridge-missing"), false);
+  });
 
-    clearExternalNativePaintBridge("bridge-a");
-    clearExternalNativePaintBridge("bridge-b");
+  it("drops the bridge when a re-registration omits it", () => {
+    // How the host mirrors a registration: `registerExternalNativeLayer` passes
+    // `registration.paintBridge` straight through, so a re-registration without
+    // one must leave nothing behind for the next renderer to inherit.
+    setExternalNativePaintBridge("relisted-layer", { setOpacity: () => {} });
+    assert.ok(getExternalNativePaintBridge("relisted-layer"));
+
+    const existing = createExternalNativeStoreLayer(
+      registration({ id: "relisted-layer", paintMode: "plugin" }),
+    );
+    setExternalNativePaintBridge("relisted-layer", undefined);
+    const relisted = createExternalNativeStoreLayer(
+      registration({ id: "relisted-layer" }),
+      existing,
+    );
+
+    assert.equal(getExternalNativePaintBridge("relisted-layer"), undefined);
+    assert.equal(pluginOwnsPaint(relisted), false);
   });
 
   it("drops a bridge that supplies no setters at all", () => {
@@ -156,8 +188,6 @@ describe("layer-sync paint bridge", () => {
     syncLayer(map as never, customLayer("sync-bridged", { opacity: 0.2, visible: false }));
     assert.deepEqual(opacities, [0.4, 0.2]);
     assert.deepEqual(visibilities, [true, false]);
-
-    clearExternalNativePaintBridge("sync-bridged");
   });
 
   it("re-applies the current values to a freshly registered bridge", () => {
@@ -175,8 +205,6 @@ describe("layer-sync paint bridge", () => {
     syncLayer(map as never, customLayer("sync-rebridged", { opacity: 0.5 }));
 
     assert.deepEqual(reapplied, [0.5]);
-
-    clearExternalNativePaintBridge("sync-rebridged");
   });
 
   it("never writes MapLibre paint for a plugin-painted layer", () => {
