@@ -2731,6 +2731,37 @@ function proxyWmsTileUrl(tileUrl: string): string {
   return `${WMS_PROXY_PATH}?url=${encodedUrl}`;
 }
 
+/** The parts of MapLibre's `VectorTileSource` this module reads and updates. */
+interface VectorSourceLike {
+  url?: string;
+  tiles?: string[];
+  setUrl?: (url: string) => unknown;
+  setTiles?: (tiles: string[]) => unknown;
+}
+
+/**
+ * Point an existing vector source at a new endpoint, if it moved.
+ *
+ * `setUrl`/`setTiles` reload the source, which drops its cached tiles and
+ * re-requests them, so this is deliberately a no-op when nothing changed — a
+ * needless reload would blank the layer for a frame on every sync.
+ */
+function updateVectorSourceEndpoint(
+  source: VectorSourceLike,
+  url: string | undefined,
+  tiles: string[] | undefined,
+): void {
+  if (url) {
+    if (source.url !== url && typeof source.setUrl === "function") source.setUrl(url);
+    return;
+  }
+  if (!tiles || tiles.length === 0 || typeof source.setTiles !== "function") return;
+  const current = Array.isArray(source.tiles) ? source.tiles : [];
+  const unchanged = current.length === tiles.length && current.every((t, i) => t === tiles[i]);
+  if (unchanged) return;
+  source.setTiles(tiles);
+}
+
 function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const url = layer.source.url as string | undefined;
@@ -2743,7 +2774,8 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
       )
     : undefined;
   if (!url && !(tiles && tiles.length > 0)) return;
-  if (!map.getSource(src)) {
+  const existingSource = map.getSource(src) as VectorSourceLike | undefined;
+  if (!existingSource) {
     if (url) {
       map.addSource(src, { type: "vector", url });
     } else {
@@ -2758,6 +2790,14 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
           : {}),
       });
     }
+  } else {
+    // The source already exists, so a changed endpoint has to be pushed into it:
+    // MapLibre keeps serving whatever it has already cached otherwise, and the
+    // store update alone would never reach the map. This is what makes a
+    // re-signed tile URL (GeoLens mints short-lived tokens) take effect, and
+    // what re-renders already-loaded zoom levels after the underlying data
+    // changes — without it only zooms the user had not visited yet look updated.
+    updateVectorSourceEndpoint(existingSource, url, tiles);
   }
   const visibility = layer.visible ? "visible" : "none";
   const sourceLayers = getVectorTileSourceLayers(layer);
