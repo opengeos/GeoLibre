@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   layerFileName,
   rasterFileName,
+  repaintPreservingScroll,
 } from "../packages/plugins/src/plugins/maplibre-huggingface";
 
 describe("layerFileName", () => {
@@ -67,5 +68,51 @@ describe("rasterFileName", () => {
 
   it("preserves a non-tif raster extension", () => {
     assert.equal(rasterFileName("scene.tiff", "S"), "scene.tiff");
+  });
+});
+
+describe("repaintPreservingScroll", () => {
+  /** Stands in for a scroll container; only `scrollTop` is touched. */
+  function fakeList(scrollTop: number) {
+    return { scrollTop } as unknown as HTMLElement;
+  }
+
+  it("keeps the user's place when the repaint resets the offset", () => {
+    // What `replaceChildren` does: the container is momentarily empty, so the
+    // browser clamps scrollTop to 0. Pressing Add in a long file listing used
+    // to jump back to the top for exactly this reason.
+    const list = fakeList(700);
+    repaintPreservingScroll(list, () => {
+      list.scrollTop = 0;
+    });
+    assert.equal(list.scrollTop, 700);
+  });
+
+  it("still runs the repaint", () => {
+    let painted = 0;
+    const list = fakeList(0);
+    repaintPreservingScroll(list, () => {
+      painted += 1;
+    });
+    assert.equal(painted, 1);
+  });
+
+  it("leaves a list that was already at the top alone", () => {
+    const list = fakeList(0);
+    repaintPreservingScroll(list, () => {
+      list.scrollTop = 0;
+    });
+    assert.equal(list.scrollTop, 0);
+  });
+
+  it("restores after the paint, not before, so the paint cannot win", () => {
+    const seen: number[] = [];
+    const list = fakeList(120);
+    repaintPreservingScroll(list, () => {
+      seen.push(list.scrollTop);
+      list.scrollTop = 0;
+    });
+    assert.deepEqual(seen, [120]);
+    assert.equal(list.scrollTop, 120);
   });
 });

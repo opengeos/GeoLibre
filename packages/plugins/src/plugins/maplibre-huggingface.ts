@@ -622,6 +622,25 @@ function field(
 }
 
 /**
+ * Repaints a scrolling list without losing the user's place in it.
+ *
+ * `replaceChildren` empties the container before refilling it, and while it is
+ * empty the browser clamps `scrollTop` to 0 — so any repaint of a long listing
+ * silently scrolls back to the top. Capturing the offset first and restoring it
+ * after the rebuild keeps the row the user was looking at under their cursor.
+ *
+ * @param list - The scrolling container
+ * @param paint - Fills it with the new children
+ */
+export function repaintPreservingScroll(list: HTMLElement, paint: () => void): void {
+  const { scrollTop } = list;
+  paint();
+  // The rebuilt content is the same listing with one card restyled, so the
+  // offset is still meaningful; the browser clamps it if the list did shrink.
+  list.scrollTop = scrollTop;
+}
+
+/**
  * Finds the store layer backing a file, if it is already on the map. Derived
  * from the store rather than remembered in module state so the Add/Remove
  * button stays correct across a project reload, and after the user removes the
@@ -1166,12 +1185,15 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     const existing = findAddedLayer(file);
     if (existing) {
       useAppStore.getState().removeLayer(existing.id);
-      render();
+      renderCurrentView();
       return;
     }
     addInFlight.set(file.path, mode);
     error = "";
-    render();
+    // Deliberately not render(): a full repaint rebuilds the scrolling list
+    // element itself, so the user's place in a long file listing is lost the
+    // moment they press Add. Only the cards need to change here.
+    renderCurrentView();
     try {
       const added = await addFileToMap(app, file, mode, rasterDefaults);
       if (!added) error = labels.addError(labels.unsupportedTitle);
@@ -1183,7 +1205,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
       }
     } finally {
       addInFlight.delete(file.path);
-      render();
+      renderCurrentView();
     }
   }
 
@@ -1249,6 +1271,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     root.appendChild(list);
 
     function renderResults(): void {
+      repaintPreservingScroll(list, () => paintResults());
+    }
+
+    function paintResults(): void {
       list.replaceChildren();
       statusNode.textContent = busy
         ? status || labels.searching
@@ -1427,6 +1453,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     root.appendChild(list);
 
     function renderFiles(): void {
+      repaintPreservingScroll(list, () => paintFiles());
+    }
+
+    function paintFiles(): void {
       list.replaceChildren();
       errorNode.textContent = error;
       errorNode.style.display = error ? "" : "none";
