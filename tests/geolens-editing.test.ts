@@ -12,6 +12,7 @@ import {
   GEOLENS_FEATURES_SOURCE_KIND,
   GEOLENS_SAMPLE_SERVERS,
   pendingCountsFor,
+  refreshLayerToExtent,
   saveLayerEdits,
   type GeoLensEditableLayer,
 } from "../packages/plugins/src/plugins/maplibre-geolens";
@@ -404,6 +405,110 @@ describe("saveLayerEdits — deletions are confirmed", () => {
     assert.deepEqual(
       calls.map((c) => c.method),
       ["GET", "DELETE"],
+    );
+  });
+});
+
+describe("refreshLayerToExtent", () => {
+  const VIEW: readonly [number, number, number, number] = [0.5, 0.5, 1.5, 1.5];
+
+  function stubExtentServer(features: FeatureCollection["features"]) {
+    const calls: string[] = [];
+    const fetchImpl: GeoLensFetch = (url) => {
+      calls.push(url);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ type: "FeatureCollection", features }),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("re-reads for the new extent and records it as the layer's terms", async () => {
+    const layer = addEditedLayer(serverItems().features);
+    const { fetchImpl, calls } = stubExtentServer([
+      { type: "Feature", id: 2, geometry: point(1, 1), properties: { name: "b" } },
+    ]);
+
+    await refreshLayerToExtent(CLIENT, layer, 500, fetchImpl, VIEW, "current view");
+
+    assert.match(calls[0], /bbox=0\.5%2C0\.5%2C1\.5%2C1\.5/);
+    assert.match(calls[0], /limit=500/);
+    const after = useAppStore.getState().layers.find((l) => l.id === layer.id);
+    assert.equal(after?.geojson?.features.length, 1);
+    assert.deepEqual(after?.metadata.geolensBbox, [0.5, 0.5, 1.5, 1.5]);
+    assert.equal(after?.metadata.geolensFeatureLimit, 500);
+  });
+
+  it("re-baselines, so the newly loaded features do not read as edits", async () => {
+    const layer = addEditedLayer(serverItems().features);
+    const features = [
+      { type: "Feature" as const, id: 2, geometry: point(1, 1), properties: { name: "b" } },
+    ];
+    const { fetchImpl } = stubExtentServer(features);
+
+    await refreshLayerToExtent(CLIENT, layer, 500, fetchImpl, VIEW, "current view");
+
+    const after = useAppStore.getState().layers.find((l) => l.id === layer.id);
+    assert.ok(after?.geojson);
+    // Crucially not "1 deleted": the features outside the new view are gone from
+    // the layer, but the baseline was rebuilt over the same extent.
+    assert.deepEqual(pendingCountsFor({ ...layer, geojson: after.geojson }), {
+      added: 0,
+      changed: 0,
+      deleted: 0,
+    });
+  });
+
+  it("drops a previous extent when refreshed without one", async () => {
+    const layer = addEditedLayer(serverItems().features);
+    useAppStore.getState().updateLayer(layer.id, {
+      metadata: {
+        ...(useAppStore.getState().layers.find((l) => l.id === layer.id)?.metadata ?? {}),
+        geolensBbox: [0.5, 0.5, 1.5, 1.5],
+      },
+    });
+    const { fetchImpl, calls } = stubExtentServer(serverItems().features);
+
+    await refreshLayerToExtent(CLIENT, layer, 500, fetchImpl, undefined, "current view");
+
+    assert.equal(calls[0].includes("bbox"), false);
+    const after = useAppStore.getState().layers.find((l) => l.id === layer.id);
+    assert.equal(after?.metadata.geolensBbox, undefined);
+  });
+
+  it("keeps a name the user changed, and updates one this plugin generated", async () => {
+    const generated = addEditedLayer(serverItems().features);
+    useAppStore.getState().updateLayer(generated.id, { name: "Meteorites" });
+    const { fetchImpl } = stubExtentServer(serverItems().features);
+
+    await refreshLayerToExtent(
+      CLIENT,
+      { ...generated, datasetTitle: "Meteorites" },
+      500,
+      fetchImpl,
+      VIEW,
+      "current view",
+    );
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === generated.id)?.name,
+      "Meteorites (current view)",
+    );
+
+    const renamed = addEditedLayer(serverItems().features);
+    useAppStore.getState().updateLayer(renamed.id, { name: "My working copy" });
+    await refreshLayerToExtent(
+      CLIENT,
+      { ...renamed, datasetTitle: "Meteorites" },
+      500,
+      fetchImpl,
+      VIEW,
+      "current view",
+    );
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === renamed.id)?.name,
+      "My working copy",
     );
   });
 });

@@ -151,6 +151,11 @@ export interface GeoLensLabels {
   revertEdits: string;
   revertEditsTitle: string;
   revertingEdits: string;
+  refreshToView: string;
+  refreshToViewTitle: string;
+  refreshingToView: string;
+  refreshSavePrompt: (pending: number) => string;
+  refreshDiscardPrompt: (pending: number) => string;
   revertConfirm: (added: number, changed: number, deleted: number) => string;
 }
 
@@ -222,6 +227,15 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   revertEdits: "Reload",
   revertEditsTitle: "Discard local changes and reload this dataset's features from GeoLens",
   revertingEdits: "Reloading…",
+  refreshToView: "Load this view",
+  refreshToViewTitle: "Replace this layer's features with the ones in the current map view",
+  refreshingToView: "Loading this view…",
+  refreshSavePrompt: (pending) =>
+    `This layer has ${pending} unsaved change${pending === 1 ? "" : "s"}. Save ` +
+    `${pending === 1 ? "it" : "them"} to GeoLens before loading the current view? ` +
+    `Cancel to decide whether to discard instead.`,
+  refreshDiscardPrompt: (pending) =>
+    `Discard ${pending} unsaved change${pending === 1 ? "" : "s"} and load the current view?`,
   revertConfirm: (added, changed, deleted) =>
     `Discard unsaved changes to this layer (${[
       added ? `${added} added` : "",
@@ -784,6 +798,7 @@ async function addFeaturesLayer(
         // would diff as a deletion, and the next save would delete it from the
         // dataset.
         geolensFeatureLimit: featureLimit,
+        geolensDatasetTitle: dataset.title,
         ...(bbox ? { geolensBbox: [...bbox] } : {}),
       },
     });
@@ -822,6 +837,8 @@ interface GeoLensEditableLayer {
   featureLimit?: number;
   /** The extent this layer was loaded from, when it was view-filtered. */
   bbox?: GeoLensBbox;
+  /** The dataset's catalog title, used to keep an auto-generated name accurate. */
+  datasetTitle?: string;
 }
 
 /** Whether a persisted metadata value is a usable `[w, s, e, n]` extent. */
@@ -851,6 +868,9 @@ export function editableLayersForServer(baseUrl: string): GeoLensEditableLayer[]
       geojson: layer.geojson,
       ...(typeof limit === "number" && Number.isFinite(limit) ? { featureLimit: limit } : {}),
       ...(isBbox(bbox) ? { bbox } : {}),
+      ...(typeof layer.metadata.geolensDatasetTitle === "string"
+        ? { datasetTitle: layer.metadata.geolensDatasetTitle }
+        : {}),
     });
   }
   return out;
@@ -1123,6 +1143,59 @@ function pruneEditSessions(): void {
   for (const id of pendingCountsCache.keys()) {
     if (!live.has(id)) pendingCountsCache.delete(id);
   }
+}
+
+/**
+ * Re-scope a layer to a different extent: load the dataset's features for
+ * `bbox` (or the whole dataset when there is none), replace the layer's
+ * features, and record the new terms so the baseline and any later reload agree
+ * with what the layer now holds.
+ *
+ * The layer's name is only rewritten when it is still the one this plugin
+ * generated, so a rename the user made survives while an untouched name stays
+ * truthful about whether the layer is the whole dataset or one view of it.
+ */
+async function refreshLayerToExtent(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  bbox: GeoLensBbox | undefined,
+  viewSuffix: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const data = await fetchDatasetFeatures(
+    client,
+    layer.datasetId,
+    featureLimit,
+    fetchImpl,
+    signal,
+    bbox,
+  );
+  const store = useAppStore.getState();
+  const current = store.layers.find((l) => l.id === layer.id);
+  if (!current) return;
+
+  const title = layer.datasetTitle;
+  const generatedNames = title ? [title, `${title} (${viewSuffix})`] : [];
+  const name = generatedNames.includes(current.name)
+    ? bbox
+      ? `${title} (${viewSuffix})`
+      : (title as string)
+    : current.name;
+
+  const { geolensBbox: _dropped, ...metadata } = current.metadata as Record<string, unknown>;
+  void _dropped;
+  store.updateLayer(layer.id, {
+    name,
+    geojson: data,
+    metadata: {
+      ...metadata,
+      geolensFeatureLimit: featureLimit,
+      ...(bbox ? { geolensBbox: [...bbox] } : {}),
+    },
+  });
+  editSessions.set(layer.id, { baseline: captureFeatureBaseline(data) });
 }
 
 /** Forget every tracked baseline (plugin deactivation). */
@@ -1400,11 +1473,15 @@ function buildPanel(
     saveButton.disabled = busy || !canWrite || pending === 0;
     saveButton.addEventListener("click", () => void handleSave(layer));
 
+    const viewButton = button(labels.refreshToView, CSS.action, labels.refreshToViewTitle);
+    viewButton.disabled = busy;
+    viewButton.addEventListener("click", () => void handleRefreshToView(layer));
+
     const reloadButton = button(labels.revertEdits, CSS.action, labels.revertEditsTitle);
     reloadButton.disabled = busy;
     reloadButton.addEventListener("click", () => void handleReload(layer));
 
-    actions.append(saveButton, reloadButton);
+    actions.append(saveButton, viewButton, reloadButton);
     row.append(actions);
     return row;
   };
@@ -1449,6 +1526,72 @@ function buildPanel(
       }
     } catch (error) {
       showError(labels.saveError(messageOf(error)));
+    } finally {
+      state.busyLayerIds.delete(layer.id);
+      renderEdits();
+    }
+  };
+
+  /**
+   * Re-scope a layer to the current map view without removing and re-adding it.
+   *
+   * Unsaved work is never discarded silently: the user is offered the save
+   * first, and a save that did not fully succeed aborts the reload so nothing
+   * is lost. Declining the save asks separately about discarding, so all three
+   * outcomes (save, discard, cancel) are reachable from the one button.
+   */
+  const handleRefreshToView = async (layer: GeoLensEditableLayer): Promise<void> => {
+    const client = state.client;
+    if (!client || state.busyLayerIds.has(layer.id)) return;
+
+    const pending = pendingCountsFor(layer);
+    const pendingCount = pending ? pending.added + pending.changed + pending.deleted : 0;
+    let saveFirst = false;
+    if (pendingCount > 0) {
+      saveFirst = window.confirm(labels.refreshSavePrompt(pendingCount));
+      if (!saveFirst && !window.confirm(labels.refreshDiscardPrompt(pendingCount))) return;
+    }
+
+    state.busyLayerIds.add(layer.id);
+    clearError();
+    renderEdits();
+    const rowStatus = rowStatusNodes.get(layer.id);
+    if (rowStatus) rowStatus.textContent = labels.refreshingToView;
+    try {
+      if (saveFirst) {
+        const outcome = await saveLayerEdits(
+          client,
+          currentEditableLayer(layer.id) ?? layer,
+          state.featureLimit,
+          fetchImpl,
+          (done, total) => {
+            const node = rowStatusNodes.get(layer.id);
+            if (node) node.textContent = labels.savingEdits(done, total);
+          },
+          undefined,
+          (plan) =>
+            plan.deletes.length === 0 || window.confirm(labels.confirmDeletes(plan.deletes.length)),
+        );
+        if (outcome.errors.length > 0) {
+          // Reloading now would replace the features those writes failed on.
+          showError(labels.savePartial(outcome.errors.length, outcome.errors[0]));
+          return;
+        }
+        status.textContent = labels.savedEdits(outcome.written);
+        if (outcome.written > 0) {
+          await refreshVectorTilesForDataset(client, layer.datasetId, fetchImpl);
+        }
+      }
+      await refreshLayerToExtent(
+        client,
+        currentEditableLayer(layer.id) ?? layer,
+        state.featureLimit,
+        fetchImpl,
+        (state.viewOnly ? currentViewBbox(app) : null) ?? undefined,
+        labels.viewSuffix,
+      );
+    } catch (error) {
+      showError(labels.loadError(messageOf(error)));
     } finally {
       state.busyLayerIds.delete(layer.id);
       renderEdits();
@@ -1785,4 +1928,10 @@ export const maplibreGeoLensPlugin: GeoLibrePlugin = createGeoLensPlugin({
 export { createGeoLensPlugin };
 
 /** Exposed for unit tests: the save path and the pending-change readout. */
-export { clearEditSessions, pendingCountsFor, saveLayerEdits, type GeoLensEditableLayer };
+export {
+  clearEditSessions,
+  pendingCountsFor,
+  refreshLayerToExtent,
+  saveLayerEdits,
+  type GeoLensEditableLayer,
+};
