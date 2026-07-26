@@ -28,6 +28,16 @@ interface StubAddOptions {
   transformRequest?: (url: string) => { url: string; headers?: Record<string, string> };
 }
 
+// What the stub control reports as the spatial reference it *resolved*, standing
+// in for the real control's panel fields / store-metadata detection. Deliberately
+// different from anything a test requests, so an assertion can tell "mirrored
+// from the renderer's reported state" apart from "copied from the request".
+const RESOLVED_SPATIAL_REFERENCE = {
+  crs: "EPSG:3031",
+  proj4: "+proj=stere +lat_0=-90 +lat_ts=-71 +datum=WGS84 +units=m +no_defs",
+  bounds: [-3315363.2, -3316901.5, 3316909.4, 3315371.1] as [number, number, number, number],
+};
+
 const addCalls: { url?: string; variable?: string; options?: StubAddOptions }[] = [];
 const opacityCalls: { layerId: string; opacity: number }[] = [];
 const visibilityCalls: { layerId: string; visible: boolean; opacity?: number }[] = [];
@@ -79,11 +89,11 @@ class ZarrLayerControlStub {
       clim: options?.clim ?? [0, 1],
       opacity: options?.opacity ?? 1,
       selector: options?.selector,
-      // The real control reports the spatial reference it resolved (from the
-      // options, its panel fields, or the store's own metadata).
-      crs: options?.crs,
-      proj4: options?.proj4,
-      bounds: options?.bounds,
+      // The real control reports the spatial reference it resolved, which is not
+      // necessarily what the caller asked for: the panel's CRS fields or the
+      // store's own metadata can supply it. Always report the fixture so the
+      // mirroring is provably read from here.
+      ...RESOLVED_SPATIAL_REFERENCE,
     });
     this.instances.set(id, {
       setSelector: async (selector) => {
@@ -179,14 +189,33 @@ describe("addZarrRasterLayer", () => {
     assert.ok(layer, "expected the Zarr layer to be mirrored into the store");
     assert.equal(layer.name, "seNorge tmax");
     assert.equal(layer.type, "zarr");
-    // Mirrored from what the renderer reported, not from the request, so a CRS
-    // the control detected from the store's own metadata is recorded too.
-    assert.equal(layer.metadata.crs, "EPSG:32633");
-    assert.equal(layer.source.crs, "EPSG:32633");
-    assert.match(String(layer.source.proj4), /\+proj=utm \+zone=33/);
+    // Mirrored from what the renderer reported, not from the request: the
+    // control resolves the reference (panel fields, or the store's own
+    // metadata), so the request's own EPSG:32633 must not be what lands here.
+    assert.equal(layer.metadata.crs, RESOLVED_SPATIAL_REFERENCE.crs);
+    assert.equal(layer.metadata.proj4, RESOLVED_SPATIAL_REFERENCE.proj4);
+    assert.equal(layer.source.crs, RESOLVED_SPATIAL_REFERENCE.crs);
+    assert.equal(layer.source.proj4, RESOLVED_SPATIAL_REFERENCE.proj4);
+    assert.deepEqual(layer.source.bounds, RESOLVED_SPATIAL_REFERENCE.bounds);
     // The renderer owns the pixels: no MapLibre paint editors, opacity bridged.
     assert.equal(pluginOwnsPaint(layer), true);
     assert.ok(getExternalNativePaintBridge(id)?.setOpacity);
+  });
+
+  it("records a spatial reference the control resolved without being asked", async () => {
+    // The panel's CRS fields and the store's own metadata both reach the layer
+    // this way, so a caller that passes no CRS still gets the placement recorded.
+    installStubModule();
+
+    const id = await addZarrRasterLayer(app, {
+      url: "https://example.org/antarctic_era5.zarr",
+      variable: "wind_speed",
+    });
+
+    const layer = useAppStore.getState().layers.find((item) => item.id === id);
+    assert.equal(layer?.source.crs, RESOLVED_SPATIAL_REFERENCE.crs);
+    assert.equal(layer?.metadata.proj4, RESOLVED_SPATIAL_REFERENCE.proj4);
+    assert.deepEqual(layer?.source.bounds, RESOLVED_SPATIAL_REFERENCE.bounds);
   });
 
   it("bridges opacity and visibility to the control's setters", async () => {
