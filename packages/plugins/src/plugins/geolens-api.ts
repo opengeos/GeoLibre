@@ -377,6 +377,32 @@ export function vectorTileTemplate(
   };
 }
 
+/**
+ * Query parameter used to force a re-fetch of already-cached tiles.
+ *
+ * GeoLens issues a **stable** tile token per time bucket: minting again inside
+ * the same window returns an identical `sig` and `exp`, so a re-mint alone
+ * cannot change the URL — and an unchanged URL is exactly what MapLibre and the
+ * browser HTTP cache key on. Signature validation ignores unknown parameters
+ * (verified: the same tile returns byte-identical content with and without
+ * this one), so adding it is the way to say "fetch this again" after the data
+ * behind the tiles has changed.
+ */
+export const GEOLENS_TILE_VERSION_PARAM = "_v";
+
+/**
+ * Stamp a version onto a signed tile template, replacing any previous one, so
+ * the URL differs from whatever is cached. Only the query is touched: the
+ * `{z}/{x}/{y}` placeholders live in the path and must stay literal.
+ */
+export function withTileVersion(template: string, version: number | string): string {
+  const split = template.indexOf("?");
+  if (split === -1) return `${template}?${GEOLENS_TILE_VERSION_PARAM}=${version}`;
+  const params = new URLSearchParams(template.slice(split + 1));
+  params.set(GEOLENS_TILE_VERSION_PARAM, String(version));
+  return `${template.slice(0, split)}?${params.toString()}`;
+}
+
 function asBounds(value: unknown): [number, number, number, number] | null {
   if (
     Array.isArray(value) &&

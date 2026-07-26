@@ -42,6 +42,7 @@ import {
   searchDatasets,
   tileUrlPrefix,
   vectorTileTemplate,
+  withTileVersion,
   type GeoLensBbox,
   type GeoLensClientOptions,
   type GeoLensDataset,
@@ -1036,6 +1037,51 @@ async function saveLayerEdits(
 }
 
 /**
+ * Re-point every GeoLens vector-tile layer showing `datasetId` at a freshly
+ * signed tile URL, so the map drops what it cached and re-renders the dataset.
+ *
+ * Saving edits changes the data behind the tiles, but MapLibre keeps serving
+ * the tiles it already has: only zoom levels the user had not visited yet would
+ * show the edit, which reads as "the map updated when I zoom in but not out".
+ * A new token means a new URL, which busts both MapLibre's tile cache and the
+ * browser's HTTP cache; the layer sync pushes it into the live source.
+ *
+ * Best-effort: a failed mint leaves the layer exactly as it was (still showing
+ * pre-save tiles), which is why this never throws into the save's result.
+ */
+async function refreshVectorTilesForDataset(
+  client: GeoLensClientOptions,
+  datasetId: string,
+  fetchImpl: GeoLensFetch,
+): Promise<void> {
+  const targets = useAppStore
+    .getState()
+    .layers.filter(
+      (l) =>
+        l.metadata.sourceKind === "geolens-vector-tiles" &&
+        l.metadata.geolensBaseUrl === client.baseUrl &&
+        l.metadata.geolensDatasetId === datasetId,
+    );
+  for (const target of targets) {
+    try {
+      const token = await mintTileToken(client, datasetId, fetchImpl);
+      // The token alone is not enough: GeoLens hands back the same signature
+      // for the rest of its time bucket, so the URL would be unchanged and the
+      // caches would answer with the pre-save tiles.
+      const tiles = withTileVersion(vectorTileTemplate(client, token).tiles, Date.now());
+      const current = useAppStore.getState().layers.find((l) => l.id === target.id);
+      if (!current) continue;
+      useAppStore.getState().updateLayer(target.id, {
+        source: { ...current.source, tiles: [tiles] },
+      });
+      scheduleTokenRefresh(client, target.id, datasetId, token.expiresIn, fetchImpl);
+    } catch {
+      // Leave this layer on its existing token; the next scheduled refresh retries.
+    }
+  }
+}
+
+/**
  * Discard a layer's local changes by reloading the dataset from GeoLens. Also
  * re-captures the baseline, so the layer starts clean rather than immediately
  * looking edited again.
@@ -1396,6 +1442,11 @@ function buildPanel(
         showError(labels.savePartial(outcome.errors.length, outcome.errors[0]));
       }
       status.textContent = labels.savedEdits(outcome.written);
+      // The same dataset may also be on the map as vector tiles, which are now
+      // out of date at every zoom the user has already looked at.
+      if (outcome.written > 0) {
+        await refreshVectorTilesForDataset(client, fresh.datasetId, fetchImpl);
+      }
     } catch (error) {
       showError(labels.saveError(messageOf(error)));
     } finally {

@@ -31,6 +31,7 @@ import {
   stacCollectionsUrl,
   tileUrlPrefix,
   vectorTileTemplate,
+  withTileVersion,
   type GeoLensFetch,
   type GeoLensHttpResponse,
 } from "../packages/plugins/src/plugins/geolens-api";
@@ -987,5 +988,35 @@ describe("fetchDatasetFeatures — bbox", () => {
     };
     await fetchDatasetFeatures({ baseUrl: "http://h" }, "d", 5, fetchImpl);
     assert.equal(calls[0], "http://h/api/collections/d/items?limit=5");
+  });
+});
+
+describe("withTileVersion", () => {
+  // GeoLens hands back the same signature for the rest of its time bucket, so a
+  // re-mint cannot change the URL — and the URL is what MapLibre and the browser
+  // cache on. This parameter is what makes a post-save refetch happen.
+  const template =
+    "https://demo.example.com/api/tiles/data.b/{z}/{x}/{y}.pbf?sig=abc&exp=1&scope=b";
+
+  it("adds a version without disturbing the tile placeholders", () => {
+    const out = withTileVersion(template, 1770000000000);
+    assert.ok(out.includes("/{z}/{x}/{y}.pbf?"), "placeholders must stay literal");
+    assert.ok(out.includes("_v=1770000000000"));
+    assert.ok(out.includes("sig=abc"));
+    assert.ok(out.includes("scope=b"));
+  });
+
+  it("replaces a previous version rather than appending a second one", () => {
+    const once = withTileVersion(template, 1);
+    const twice = withTileVersion(once, 2);
+    assert.equal(twice.match(/_v=/g)?.length, 1);
+    assert.ok(twice.includes("_v=2"));
+  });
+
+  it("handles a template that carries no query at all", () => {
+    assert.equal(
+      withTileVersion("https://h/api/tiles/t/{z}/{x}/{y}.pbf", 7),
+      "https://h/api/tiles/t/{z}/{x}/{y}.pbf?_v=7",
+    );
   });
 });

@@ -93,6 +93,7 @@ import {
   visibleColumns,
   type ColumnMoveDirection,
   type NewColumnType,
+  inferColumnTypes,
 } from "../../lib/attribute-columns";
 import {
   coerceComputedValue,
@@ -170,13 +171,24 @@ function compareAttributeValues(a: unknown, b: unknown): number {
   });
 }
 
-function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
+function parseAttributeDraft(draft: string, previousValue: unknown, columnType?: string): unknown {
   if (draft.trim() === "") return null;
 
-  // A null/undefined cell carries no original type to infer from, so the raw
-  // string is kept as-is: editing a previously-empty cell does not coerce to
-  // number/boolean/object.
-  if (previousValue == null) return draft;
+  // An empty cell carries no type of its own, so fall back to what the rest of
+  // the column holds; only a column with no values anywhere keeps the raw string.
+  if (previousValue == null) {
+    if (columnType === "number") {
+      const nextValue = Number(draft);
+      return Number.isFinite(nextValue) ? nextValue : draft;
+    }
+    if (columnType === "boolean") {
+      const normalized = draft.trim().toLowerCase();
+      if (normalized === "true") return true;
+      if (normalized === "false") return false;
+      return draft;
+    }
+    return draft;
+  }
 
   if (typeof previousValue === "number") {
     const nextValue = Number(draft);
@@ -221,6 +233,9 @@ function applyDraftsToFeatures(
   drafts: AttributeDrafts,
   formFields?: Map<string, AttributeFormFieldConfig>,
 ): Feature[] {
+  // Derived from the whole collection, so an edit to an empty cell adopts the
+  // column's type rather than the cell's (absent) one.
+  const columnTypes = inferColumnTypes(features.map((feature) => feature.properties));
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
     const rowDrafts = drafts[featureId];
@@ -238,7 +253,7 @@ function applyDraftsToFeatures(
       const config = formFields?.get(column);
       properties[column] = config
         ? coerceAttributeFormValue(config, draft)
-        : parseAttributeDraft(draft, previousValue);
+        : parseAttributeDraft(draft, previousValue, columnTypes?.get(column));
     }
 
     return { ...feature, properties };
@@ -313,6 +328,8 @@ function applyDraftsToDuckDBRows(
 ): Record<string, Record<string, unknown>> {
   const rowById = new Map(rows.map((row) => [row.featureId, row]));
   const updates: Record<string, Record<string, unknown>> = {};
+  // Same column-level inference as the GeoJSON path, over the query's rows.
+  const columnTypes = inferColumnTypes(rows.map((row) => row.properties));
 
   for (const [featureId, rowDrafts] of Object.entries(drafts)) {
     const row = rowById.get(featureId);
@@ -322,7 +339,7 @@ function applyDraftsToDuckDBRows(
     for (const [column, draft] of Object.entries(rowDrafts)) {
       const previousValue = row.properties[column];
       if (isInvalidObjectDraft(draft, previousValue)) continue;
-      properties[column] = parseAttributeDraft(draft, previousValue);
+      properties[column] = parseAttributeDraft(draft, previousValue, columnTypes.get(column));
     }
 
     if (Object.keys(properties).length > 0) updates[featureId] = properties;
