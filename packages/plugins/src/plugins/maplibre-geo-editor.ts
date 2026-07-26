@@ -4,8 +4,10 @@ import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
+  type EditedFeatureProperties,
   SKETCHES_SOURCE_KIND,
   canEditLayerGeometry,
+  captureEditedProperties,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
@@ -96,6 +98,15 @@ let savedSketchesCollection: FeatureCollection | null = null;
 let geomanInstance: Geoman | null = null;
 /** Target layer's store visibility captured at session start, restored on end. */
 let editTargetOriginalVisible: boolean | null = null;
+/**
+ * The target layer's attributes captured at session start, keyed by feature tag.
+ *
+ * Geoman rewrites any column whose name it reserves — `height`, `id`, `text`,
+ * `width`, `angle`, … — into a `__gm_`-prefixed one, so without this the layer
+ * comes back from a pure geometry edit with renamed columns. See
+ * `GEOMAN_SHAPE_PROPERTIES` in `./geo-editor-geometry`.
+ */
+let editTargetOriginalProperties: EditedFeatureProperties | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 
@@ -569,6 +580,7 @@ function syncEditTargetToStore(): void {
 
   const edited = reconcileEditedFeatures(
     cloneFeatureCollection(geoEditorControl.getAllFeatureCollection()),
+    editTargetOriginalProperties ?? undefined,
   );
 
   pushingSketchesToStore = true;
@@ -682,6 +694,10 @@ export async function startLayerGeometryEdit(
   restoringSketchesToEditor = true;
   try {
     const tagged = tagFeatureKeys(cloneFeatureCollection(layer.geojson));
+    // Snapshot the attributes before Geoman sees them: it renames any column
+    // whose name it reserves (see GEOMAN_SHAPE_PROPERTIES), and this session only
+    // edits geometry, so these values are what must come back out.
+    editTargetOriginalProperties = captureEditedProperties(tagged);
     await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
     loaded = true;
   } catch (error) {
@@ -706,6 +722,7 @@ export async function startLayerGeometryEdit(
   if (!loaded) {
     setEditTargetStoreVisible(layerId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
+    editTargetOriginalProperties = null;
     editTargetLayerId = null;
     await restoreSketchesAfterSession();
     applySketchesMapDisplay();
@@ -750,6 +767,7 @@ export async function endLayerGeometryEdit(
   if (!geoEditorControl) {
     editTargetLayerId = null;
     editTargetOriginalVisible = null;
+    editTargetOriginalProperties = null;
     sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
     notifyGeometryEdit();
@@ -770,6 +788,8 @@ export async function endLayerGeometryEdit(
     // edits, or the untouched original on cancel).
     setEditTargetStoreVisible(targetId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
+    // The snapshot only describes the session that just ended.
+    editTargetOriginalProperties = null;
     // Await the sketches restore so a caller switching sessions does not start a
     // new edit while the previous restore is still clearing/loading the editor.
     await restoreSketchesAfterSession();
@@ -791,6 +811,7 @@ function abortGeometryEditSession(): void {
   // The layer is gone, so there is no visibility to restore; just drop the flag.
   // (restoreSketchesAfterSession exits Geoman edit modes.)
   editTargetOriginalVisible = null;
+  editTargetOriginalProperties = null;
   editTargetLayerId = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;

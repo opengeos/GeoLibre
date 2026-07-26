@@ -731,8 +731,27 @@ function canonicalGeometry(geometry: import("geojson").Geometry | null | undefin
   }
 }
 
+/**
+ * Canonical form of a feature's attributes for change detection, with keys
+ * holding `null` treated as absent.
+ *
+ * A GeoLens row exposes every column, so a feature with nothing filled in comes
+ * back as `{"id": null, "height": null}` — but a GeoEditor session returns it as
+ * `{}`, because the editor drops null-valued keys on the round trip. Comparing
+ * those literally makes **every** feature in such a dataset look edited the
+ * moment the user opens the editor, and a 540-feature layer then issues 540
+ * writes that set null columns to null (verified against the Las Vegas
+ * Buildings demo dataset: geometry byte-identical, `{"id":null,…}` vs `{}`).
+ *
+ * Absent and null mean the same thing to the server here — both leave the
+ * column NULL — so folding them together drops writes that could not change
+ * anything. A key whose real value disappears still registers as a change,
+ * which is the case that must not be masked.
+ */
 function canonicalProperties(properties: Record<string, unknown>): string {
-  const keys = Object.keys(properties).sort();
+  const keys = Object.keys(properties)
+    .filter((key) => properties[key] !== null && properties[key] !== undefined)
+    .sort();
   try {
     return JSON.stringify(keys.map((key) => [key, properties[key]]));
   } catch {

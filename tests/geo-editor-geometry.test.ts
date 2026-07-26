@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 import {
+  GEOMAN_SHAPE_PROPERTIES,
   GEOMETRY_EDIT_FID_PROPERTY,
   type OverlayOrderLayer,
   canEditLayerGeometry,
+  captureEditedProperties,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
@@ -324,5 +326,83 @@ describe("planGeoEditorOverlayOrder", () => {
       row("edited-fill", { isAnchor: true }),
     ]);
     assert.equal(plan, null);
+  });
+});
+
+describe("reconcileEditedFeatures — attribute preservation", () => {
+  // Geoman claims `id`, `height`, `text`, `width`, `angle`, … as its own "shape
+  // properties": it strips the plain key and re-emits the value as `__gm_<name>`.
+  // A buildings layer with a `height` column came back from a pure geometry edit
+  // with its columns renamed to `__gm_height`/`__gm_id` (opengeos/GeoLibre, Las
+  // Vegas Buildings demo dataset), which also made every feature look edited to
+  // any change tracker.
+  const original: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        id: 1,
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: { id: "abc", height: 2.6, name: "keep me" },
+      },
+    ],
+  };
+
+  /** What Geoman hands back: reserved names namespaced, the rest untouched. */
+  function asGeomanReturned(collection: FeatureCollection): FeatureCollection {
+    return {
+      type: "FeatureCollection",
+      features: collection.features.map((feature) => {
+        const props = { ...(feature.properties ?? {}) };
+        const out: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(props)) {
+          if (GEOMAN_SHAPE_PROPERTIES.has(key)) out[`__gm_${key}`] = value;
+          else out[key] = value;
+        }
+        out.__gm_shape = "polygon";
+        return { ...feature, properties: out };
+      }),
+    };
+  }
+
+  it("restores columns Geoman renamed, and drops its internal keys", () => {
+    const tagged = tagFeatureKeys(original);
+    const snapshot = captureEditedProperties(tagged);
+    const reconciled = reconcileEditedFeatures(asGeomanReturned(tagged), snapshot);
+    assert.deepEqual(reconciled.features[0].properties, {
+      id: "abc",
+      height: 2.6,
+      name: "keep me",
+    });
+  });
+
+  it("leaves the layer unchanged when nothing was edited", () => {
+    const tagged = tagFeatureKeys(original);
+    const reconciled = reconcileEditedFeatures(
+      asGeomanReturned(tagged),
+      captureEditedProperties(tagged),
+    );
+    assert.deepEqual(reconciled.features[0].properties, original.features[0].properties);
+    assert.equal(String(reconciled.features[0].id), String(original.features[0].id));
+  });
+
+  it("strips Geoman bookkeeping from a feature drawn during the session", () => {
+    const drawn: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [1, 1] },
+          properties: { __gm_shape: "circle_marker", __gm_id: 7, note: "new" },
+        },
+      ],
+    };
+    const reconciled = reconcileEditedFeatures(drawn, new Map());
+    assert.deepEqual(reconciled.features[0].properties, { note: "new" });
+  });
+
+  it("keeps working without a snapshot (older callers)", () => {
+    const reconciled = reconcileEditedFeatures(tagFeatureKeys(original));
+    assert.equal(reconciled.features[0].properties?.name, "keep me");
   });
 });

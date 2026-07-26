@@ -835,3 +835,68 @@ describe("applyFeatureEdits", () => {
     assert.equal(result.errors.length, 0);
   });
 });
+
+describe("diffFeatures — null vs absent attributes", () => {
+  // A GeoLens row exposes every column, so an empty feature loads as
+  // {"id": null, ...}; a GeoEditor round trip returns it as {}. Treating that
+  // as an edit made every feature in the layer look changed (540 no-op writes
+  // on the Las Vegas Buildings demo dataset).
+  const loaded = collection([
+    { type: "Feature", id: 1, geometry: point(0, 0), properties: { id: null, height: null } },
+    { type: "Feature", id: 2, geometry: point(1, 1), properties: { id: null, height: 12 } },
+  ]);
+
+  it("does not treat a dropped null-valued key as a change", () => {
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(0, 0), properties: {} },
+        { type: "Feature", id: 2, geometry: point(1, 1), properties: { height: 12 } },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    assert.equal(isEditPlanEmpty(plan), true);
+  });
+
+  it("patches geometry only when such a feature is actually moved", () => {
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(9, 9), properties: {} },
+        { type: "Feature", id: 2, geometry: point(1, 1), properties: { height: 12 } },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    // "patch" matters: a "replace" would PUT `{}` over the row's attributes.
+    assert.deepEqual(
+      plan.updates.map((u) => [u.gid, u.mode]),
+      [[1, "patch"]],
+    );
+  });
+
+  it("still reports a real attribute change on such a feature", () => {
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(0, 0), properties: { height: 3 } },
+        { type: "Feature", id: 2, geometry: point(1, 1), properties: { height: 12 } },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    assert.deepEqual(
+      plan.updates.map((u) => [u.gid, u.mode]),
+      [[1, "replace"]],
+    );
+  });
+
+  it("still reports a value that disappeared, which is genuine data loss", () => {
+    const plan = diffFeatures(
+      collection([
+        { type: "Feature", id: 1, geometry: point(0, 0), properties: {} },
+        { type: "Feature", id: 2, geometry: point(1, 1), properties: {} },
+      ]),
+      captureFeatureBaseline(loaded),
+    );
+    assert.deepEqual(
+      plan.updates.map((u) => u.gid),
+      [2],
+    );
+  });
+});
