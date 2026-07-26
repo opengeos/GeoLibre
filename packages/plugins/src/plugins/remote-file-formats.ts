@@ -27,6 +27,18 @@ export type RemoteFileFormat =
   | "flatgeobuf"
   | "gpkg"
   | "csv"
+  /**
+   * A `.json` sidecar that indexes rasters rather than holding data itself —
+   * MosaicJSON, or a STAC FeatureCollection whose features carry asset hrefs.
+   * The raster control reads either straight from the URL and stitches the
+   * scenes at read time.
+   *
+   * Classified by extension like every other member, so it is a *candidate*
+   * only: plenty of `.json` in a repo is a config file. The reader confirms the
+   * shape before adding, which is why this is the one format whose add can
+   * legitimately fail on content.
+   */
+  | "mosaic"
   | "other";
 
 /** How a vector file is read into DuckDB. Mirrors `IngestMode` in maplibre-gl-vector. */
@@ -47,6 +59,9 @@ const FORMAT_BY_EXTENSION: [RegExp, RemoteFileFormat][] = [
   [/\.(tif|tiff)$/i, "cog"],
   [/\.(geojson|geojsonl|ndjson)$/i, "geojson"],
   [/\.geo\.json$/i, "geojson"],
+  // Plain `.json` last among the JSON rules, so `.geojson`/`.geo.json` are
+  // already claimed above and only an unqualified `.json` reaches here.
+  [/\.json$/i, "mosaic"],
   [/\.fgb$/i, "flatgeobuf"],
   [/\.gpkg$/i, "gpkg"],
   [/\.csv$/i, "csv"],
@@ -88,6 +103,9 @@ export function classifyPath(path: string): RemoteFileFormat {
 const FORMAT_READER: Record<RemoteFileFormat, "duckdb" | "range" | "none"> = {
   pmtiles: "range",
   cog: "range",
+  // The sidecar itself is tiny; what it points at is read by range like a COG,
+  // so none of the DuckDB size rules apply to it.
+  mosaic: "range",
   geoparquet: "duckdb",
   geojson: "duckdb",
   flatgeobuf: "duckdb",
@@ -201,6 +219,47 @@ export function fileNote(format: RemoteFileFormat, size: number): RemoteFileNote
     return "streamChoice";
   }
   return "none";
+}
+
+/**
+ * Whether a parsed `.json` body indexes rasters, and so can go to the raster
+ * control rather than being download-only.
+ *
+ * Two shapes qualify, both of which the control reads straight from a URL:
+ *
+ *  - **MosaicJSON** — the canonical `{ mosaicjson, tiles }` tile index.
+ *  - **A STAC-style FeatureCollection** whose features carry `assets` with an
+ *    `href`. This is what a `titiler`/`stackstac` export looks like, and what
+ *    the control's own "STAC mosaic" sample is.
+ *
+ * Checked rather than assumed because {@link classifyPath} can only see the
+ * extension, and a repo is full of `.json` that is configuration. A plain
+ * GeoJSON FeatureCollection of *geometries* deliberately fails this: it has no
+ * assets, so it is vector data and belongs to the vector reader.
+ *
+ * @param value - The parsed JSON body
+ * @returns True when the body indexes rasters
+ */
+export function isRasterIndexJson(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.mosaicjson === "string" && record.tiles && typeof record.tiles === "object") {
+    return true;
+  }
+
+  if (record.type !== "FeatureCollection" || !Array.isArray(record.features)) return false;
+  return record.features.some((feature) => {
+    if (!feature || typeof feature !== "object") return false;
+    const assets = (feature as Record<string, unknown>).assets;
+    if (!assets || typeof assets !== "object") return false;
+    return Object.values(assets as Record<string, unknown>).some(
+      (asset) =>
+        Boolean(asset) &&
+        typeof asset === "object" &&
+        typeof (asset as Record<string, unknown>).href === "string",
+    );
+  });
 }
 
 /**

@@ -38,6 +38,7 @@ import {
   formatBytes,
   HTTP_URL_RE,
   isAddable,
+  isRasterIndexJson,
   isTooLargeToOpen,
   listProductObjects,
   MAX_VECTOR_BYTES,
@@ -380,6 +381,19 @@ async function addObjectToMap(
       if (!app.addCogLayer) return false;
       await app.addCogLayer(object.name, object.url);
       return true;
+    case "mosaic": {
+      // A `.json` is a candidate by extension only, so the body decides
+      // whether it indexes rasters (MosaicJSON, or a STAC collection) or is
+      // just configuration. The raster control takes the sidecar URL directly.
+      if (!app.addCogLayer) return false;
+      const body: unknown = await fetch(object.url).then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      });
+      if (!isRasterIndexJson(body)) return false;
+      await app.addCogLayer(object.name, object.url);
+      return true;
+    }
     default:
       if (!usesDuckDB(object.format)) return false;
       return addVectorLayerFromUrl(app, object.url, {

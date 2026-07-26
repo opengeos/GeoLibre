@@ -27,6 +27,7 @@ import { useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import { addPMTilesLayerFromUrl } from "./maplibre-components";
+import { addRasterToMap } from "./maplibre-raster";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
 import { RASTER_SOURCE_KIND } from "./raster-symbology-texture";
 import {
@@ -35,6 +36,7 @@ import {
   formatBytes,
   HTTP_URL_RE,
   isAddable,
+  isRasterIndexJson,
   isTooLargeToOpen,
   MAX_VECTOR_BYTES,
   usesDuckDB,
@@ -89,8 +91,10 @@ const TOKEN_SETTINGS_URL = `${HF_SITE}/settings/tokens`;
  */
 const SUGGESTED_DATASET_IDS = [
   "giswqs/geospatial",
-  "giswqs/s2-water-dataset",
   "giswqs/PACE-Water-Quality",
+  "HyperCoast/PACE_products",
+  "HyperCoast/EMIT_products",
+  "HyperCoast/MSI_products",
 ] as const;
 
 /** User-facing strings. The host pushes translations in via {@link setHuggingFaceLabels}. */
@@ -133,6 +137,7 @@ export interface HuggingFaceLabels {
   openDatasetTitle: string;
   unsupportedTitle: string;
   addError: (message: string) => string;
+  notRasterIndex: string;
   largeFileWarning: (size: string) => string;
   streamHint: (size: string) => string;
   tooLargeToOpen: (size: string, limit: string) => string;
@@ -229,6 +234,9 @@ export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
   openDatasetTitle: "Open this dataset's page on huggingface.co",
   unsupportedTitle: "GeoLibre cannot render this format — download it instead",
   addError: (message) => `Could not add this file: ${message}`,
+  notRasterIndex:
+    "This JSON file does not index any rasters, so there is nothing to put on the map. " +
+    "MosaicJSON and STAC collections are supported.",
   largeFileWarning: (size) =>
     `This file is ${size}. It streams from the source, so only the parts in view are read.`,
   streamHint: (size) =>
@@ -530,9 +538,27 @@ async function addFileToMap(
     case "pmtiles":
       return addPMTilesLayerFromUrl(app, file.url);
     case "cog":
-      if (!app.addCogLayer) return false;
-      await app.addCogLayer(file.name, file.url);
+      // Deliberately the Add Raster Layer control rather than `app.addCogLayer`.
+      // Both render a COG, but they are different controls: `addCogLayer` goes
+      // to the components CogLayerControl, whose store layer does not carry
+      // RASTER_SOURCE_KIND, so the Style panel shows only opacity. This one
+      // syncs through raster-layer-sync and gets the full Raster symbology
+      // section (band pickers, colormap, classification).
+      await addRasterToMap(app, file.url, { name: file.name });
       return true;
+    case "mosaic": {
+      // The extension made this a candidate; the body decides. Without this a
+      // repo's config.json would offer an Add that fails inside the control.
+      const body: unknown = await fetch(file.url).then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      });
+      if (!isRasterIndexJson(body)) throw new Error(labels.notRasterIndex);
+      // The same control takes the sidecar's URL directly and stitches the
+      // scenes it points at at read time.
+      await addRasterToMap(app, file.url, { name: file.name });
+      return true;
+    }
     default:
       if (!usesDuckDB(file.format)) return false;
       return addVectorLayerFromUrl(app, file.url, { name: file.name, ingestMode });

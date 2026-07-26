@@ -59,6 +59,7 @@ import {
 
 export {
   canStream,
+  isRasterIndexJson,
   classifyPath as classifyKey,
   formatBytes,
   HTTP_URL_RE,

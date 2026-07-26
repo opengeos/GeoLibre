@@ -2751,6 +2751,7 @@
     "openDatasetTitle": "Open this dataset's page on huggingface.co",
     "unsupportedTitle": "GeoLibre cannot render this format — download it instead",
     "addError": "Could not add this file: {{message}}",
+    "notRasterIndex": "This JSON file does not index any rasters, so there is nothing to put on the map. MosaicJSON and STAC collections are supported.",
     "largeFileWarning": "This file is {{size}}. It streams from the source, so only the parts in view are read.",
     "streamHint": "This file is {{size}}. Add copies it into memory; Stream reads only the parts in view.",
     "tooLargeToOpen": "This file is {{size}} — too large for the browser to open ({{limit}} limit). Download it, or use a partitioned version of this dataset.",

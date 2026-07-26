@@ -353,6 +353,7 @@ export function TopToolbar({
       openDatasetTitle: t("huggingFace.openDatasetTitle"),
       unsupportedTitle: t("huggingFace.unsupportedTitle"),
       addError: (message) => t("huggingFace.addError", { message }),
+      notRasterIndex: t("huggingFace.notRasterIndex"),
       largeFileWarning: (size) => t("huggingFace.largeFileWarning", { size }),
       streamHint: (size) => t("huggingFace.streamHint", { size }),
       tooLargeToOpen: (size, limit) => t("huggingFace.tooLargeToOpen", { size, limit }),

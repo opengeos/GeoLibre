@@ -10,6 +10,7 @@ import {
   filterProducts,
   formatBytes,
   isAddable,
+  isRasterIndexJson,
   isTooLargeToOpen,
   LARGE_FILE_BYTES,
   listProductObjects,
@@ -277,7 +278,6 @@ describe("classifyKey", () => {
 
   it("classifies anything else as other", () => {
     assert.equal(classifyKey("ftw/global-data/README.md"), "other");
-    assert.equal(classifyKey("a/catalog.json"), "other");
     assert.equal(classifyKey("a/data.db"), "other");
   });
 
@@ -717,5 +717,64 @@ describe("objectNote", () => {
 
   it("stays quiet for a format that cannot go on the map at all", () => {
     assert.equal(objectNote(object("other", 40 * 1024 ** 3)), "none");
+  });
+});
+
+describe("classifyKey on JSON sidecars", () => {
+  it("treats a plain .json as a raster-index candidate", () => {
+    assert.equal(classifyKey("json/20240305_chla.json"), "mosaic");
+    assert.equal(classifyKey("naip_nd_2023_stac.json"), "mosaic");
+  });
+
+  it("still gives .geojson and .geo.json to the vector reader", () => {
+    // The `.json` rule sits after these, so it must not steal them.
+    assert.equal(classifyKey("a.geojson"), "geojson");
+    assert.equal(classifyKey("a.geo.json"), "geojson");
+    assert.equal(classifyKey("a.ndjson"), "geojson");
+  });
+
+  it("routes a mosaic to a range reader, not DuckDB", () => {
+    assert.equal(isAddable("mosaic"), true);
+    assert.equal(usesDuckDB("mosaic"), false);
+  });
+});
+
+describe("isRasterIndexJson", () => {
+  it("accepts a STAC-style FeatureCollection whose features carry asset hrefs", () => {
+    assert.equal(
+      isRasterIndexJson({
+        type: "FeatureCollection",
+        features: [{ bbox: [0, 0, 1, 1], assets: { image: { href: "https://x/a.tif" } } }],
+      }),
+      true,
+    );
+  });
+
+  it("accepts canonical MosaicJSON", () => {
+    assert.equal(isRasterIndexJson({ mosaicjson: "0.0.3", tiles: { "0000": ["a.tif"] } }), true);
+  });
+
+  it("rejects a plain GeoJSON of geometries, which is vector data", () => {
+    assert.equal(
+      isRasterIndexJson({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [0, 0] } }],
+      }),
+      false,
+    );
+  });
+
+  it("rejects configuration and other non-index JSON", () => {
+    assert.equal(isRasterIndexJson({ name: "x", version: 1 }), false);
+    assert.equal(isRasterIndexJson([1, 2, 3]), false);
+    assert.equal(isRasterIndexJson(null), false);
+    assert.equal(isRasterIndexJson("a string"), false);
+  });
+
+  it("rejects a FeatureCollection whose assets carry no href", () => {
+    assert.equal(
+      isRasterIndexJson({ type: "FeatureCollection", features: [{ assets: { image: {} } }] }),
+      false,
+    );
   });
 });
