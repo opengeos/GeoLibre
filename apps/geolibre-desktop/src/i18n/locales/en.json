@@ -2792,6 +2792,7 @@
     "uploadDone_other": "Uploaded {{count}} files.",
     "uploadError": "Upload failed: {{message}}",
     "fileTooLarge": "{{name}} is larger than the {{limit}} upload limit.",
+    "selectionTooLarge": "The selected files total {{size}}, over the {{limit}} limit for one upload. Upload them in smaller batches.",
     "openUploaded": "Open the dataset"
   },
   "basemaps": {

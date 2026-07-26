@@ -61,6 +61,18 @@ export const HF_TREE_PAGE_SIZE = 500;
  */
 export const HF_MAX_UPLOAD_BYTES = 5 * 1024 ** 3;
 
+/**
+ * Largest total selection this client will upload in one commit.
+ *
+ * A separate limit from {@link HF_MAX_UPLOAD_BYTES} because it bounds something
+ * else: every selected file is read into memory before the single commit that
+ * carries them, and the non-LFS ones are base64-encoded on top of that. So a
+ * selection of individually-legal files can still exhaust the tab. Same value
+ * today, but they are free to diverge — this one tracks browser memory, that
+ * one tracks what the storage endpoint accepts in one PUT.
+ */
+export const HF_MAX_UPLOAD_TOTAL_BYTES = 5 * 1024 ** 3;
+
 /** Bytes of each file sent to `preupload` so the Hub can classify it. */
 const PREUPLOAD_SAMPLE_BYTES = 512;
 
@@ -672,13 +684,16 @@ export function bytesToBase64(bytes: Uint8Array): string {
  * @returns The hex digest
  */
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  // `bytes.buffer` may be a view into a larger ArrayBuffer (a slice of a read
-  // buffer), so hash the exact range this view covers rather than the whole
-  // backing store.
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
-  );
+  // Passed as the view itself, not a slice of its backing store: a Uint8Array
+  // is a BufferSource carrying its own byteOffset/byteLength, so only the range
+  // this view covers is hashed. Slicing first would be a second full copy of
+  // the file, on a path that already holds one.
+  //
+  // The cast is needed because `BufferSource` admits only ArrayBuffer-backed
+  // views, while `Uint8Array` is generic over `ArrayBufferLike` and so might in
+  // principle be backed by a SharedArrayBuffer. Upload payloads here are built
+  // from `file.arrayBuffer()` and `readFile`, neither of which produces one.
+  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

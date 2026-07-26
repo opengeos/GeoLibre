@@ -392,6 +392,7 @@ export function TopToolbar({
       uploadDone: (count) => t("huggingFace.uploadDone", { count }),
       uploadError: (message) => t("huggingFace.uploadError", { message }),
       fileTooLarge: (name, limit) => t("huggingFace.fileTooLarge", { name, limit }),
+      selectionTooLarge: (size, limit) => t("huggingFace.selectionTooLarge", { size, limit }),
       openUploaded: t("huggingFace.openUploaded"),
     });
     setGraticuleLabels({

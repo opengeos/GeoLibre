@@ -46,6 +46,7 @@ import {
   createDatasetRepo,
   fetchDataset,
   HF_MAX_UPLOAD_BYTES,
+  HF_MAX_UPLOAD_TOTAL_BYTES,
   HF_SITE,
   isOwnerName,
   listDatasetTree,
@@ -157,6 +158,7 @@ export interface HuggingFaceLabels {
   uploadDone: (count: number) => string;
   uploadError: (message: string) => string;
   fileTooLarge: (name: string, limit: string) => string;
+  selectionTooLarge: (size: string, limit: string) => string;
   openUploaded: string;
 }
 
@@ -248,6 +250,9 @@ export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
   uploadDone: (count) => `Uploaded ${count} file${count === 1 ? "" : "s"}.`,
   uploadError: (message) => `Upload failed: ${message}`,
   fileTooLarge: (name, limit) => `${name} is larger than the ${limit} upload limit.`,
+  selectionTooLarge: (size, limit) =>
+    `The selected files total ${size}, over the ${limit} limit for one upload. ` +
+    `Upload them in smaller batches.`,
   openUploaded: "Open the dataset",
 };
 
@@ -403,17 +408,47 @@ function button(text: string, style: string, title?: string): HTMLButtonElement 
   return node;
 }
 
+/**
+ * Mints a document-unique id for a form control, so its `<label for>` can point
+ * at it. A counter rather than a content-derived id because a panel is rebuilt
+ * wholesale on every render and the same field would otherwise collide with the
+ * copy still being torn down.
+ */
+let fieldIdCounter = 0;
+function nextFieldId(): string {
+  fieldIdCounter += 1;
+  return `geolibre-hf-field-${fieldIdCounter}`;
+}
+
+/**
+ * Associates a label with the control it names.
+ *
+ * Paired by `for`/`id` rather than by nesting the control inside the label:
+ * the row is a column flexbox with the two as siblings, and nesting would
+ * reflow the input into the label's inline box.
+ *
+ * @param label - The label element
+ * @param control - The control it names
+ */
+function labelControl(label: HTMLLabelElement, control: HTMLElement): void {
+  const id = nextFieldId();
+  control.id = id;
+  label.htmlFor = id;
+}
+
 /** A labelled text input, the shape every field in the upload view takes. */
 function field(
   labelText: string,
   options: { value?: string; placeholder?: string; type?: string } = {},
 ): { row: HTMLDivElement; input: HTMLInputElement } {
   const row = el("div", CSS.field);
-  row.appendChild(el("label", CSS.fieldLabel, labelText));
+  const label = el("label", CSS.fieldLabel, labelText);
+  row.appendChild(label);
   const input = el("input", CSS.fieldInput);
   input.type = options.type ?? "text";
   if (options.placeholder) input.placeholder = options.placeholder;
   input.value = options.value ?? "";
+  labelControl(label, input);
   row.appendChild(input);
   return { row, input };
 }
@@ -939,12 +974,19 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
 
       const copyButton = button(labels.copyUrl, CSS.action, labels.copyUrlTitle);
       copyButton.addEventListener("click", () => {
-        void navigator.clipboard?.writeText(file.url).then(() => {
-          copyButton.textContent = labels.copied;
-          window.setTimeout(() => {
-            copyButton.textContent = labels.copyUrl;
-          }, 1500);
-        });
+        void navigator.clipboard
+          ?.writeText(file.url)
+          .then(() => {
+            copyButton.textContent = labels.copied;
+            window.setTimeout(() => {
+              copyButton.textContent = labels.copyUrl;
+            }, 1500);
+          })
+          // writeText rejects outside a secure context and when the permission
+          // is refused. Left silent — the URL is still on screen to copy by
+          // hand — but caught, so it does not surface as an unhandled rejection
+          // in the diagnostics panel.
+          .catch(() => {});
       });
       actions.appendChild(copyButton);
     }
@@ -1121,6 +1163,19 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
       render();
       return;
     }
+    // Checked as well as the per-file limit above, because the two bound
+    // different things: every file is read into memory before the one commit
+    // that carries them all, so a selection of individually-legal files can
+    // still exhaust the tab.
+    const totalBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    if (totalBytes > HF_MAX_UPLOAD_TOTAL_BYTES) {
+      tokenError = labels.selectionTooLarge(
+        formatBytes(totalBytes),
+        formatBytes(HF_MAX_UPLOAD_TOTAL_BYTES),
+      );
+      render();
+      return;
+    }
 
     uploadBusy = true;
     tokenError = "";
@@ -1217,8 +1272,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     createSection.appendChild(el("div", CSS.sectionTitle, labels.createHeading));
 
     const ownerRow = el("div", CSS.field);
-    ownerRow.appendChild(el("label", CSS.fieldLabel, labels.ownerLabel));
+    const ownerLabel = el("label", CSS.fieldLabel, labels.ownerLabel);
+    ownerRow.appendChild(ownerLabel);
     const ownerSelect = el("select", CSS.fieldInput);
+    labelControl(ownerLabel, ownerSelect);
     // The token's account first, then its organizations: the namespaces this
     // token could actually create a repo under.
     for (const owner of [identity.name, ...identity.orgs]) {
