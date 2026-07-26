@@ -64,14 +64,23 @@ export const HF_MAX_UPLOAD_BYTES = 5 * 1024 ** 3;
 /**
  * Largest total selection this client will upload in one commit.
  *
- * A separate limit from {@link HF_MAX_UPLOAD_BYTES} because it bounds something
- * else: every selected file is read into memory before the single commit that
- * carries them, and the non-LFS ones are base64-encoded on top of that. So a
- * selection of individually-legal files can still exhaust the tab. Same value
- * today, but they are free to diverge — this one tracks browser memory, that
- * one tracks what the storage endpoint accepts in one PUT.
+ * Deliberately well below {@link HF_MAX_UPLOAD_BYTES}, because it bounds
+ * something quite different — the tab's memory rather than what the storage
+ * endpoint accepts in one PUT — and the selection is multiplied several times
+ * over before the request is even sent:
+ *
+ *  - every selected file is held as raw bytes at once, to be hashed and staged;
+ *  - each **regular** (non-LFS) file is then base64-encoded, inflating it by
+ *    4/3, and those encodings are joined into one NDJSON body — a second and
+ *    third copy of that portion.
+ *
+ * The base64 step has a hard ceiling of its own: V8 caps a single string at
+ * roughly 512 MB, so a large enough batch of regular files throws
+ * "Invalid string length" no matter how much memory is free. A cap at the
+ * per-file storage limit would therefore never bite — the tab would be gone
+ * first — which is the whole point of this being a separate number.
  */
-export const HF_MAX_UPLOAD_TOTAL_BYTES = 5 * 1024 ** 3;
+export const HF_MAX_UPLOAD_TOTAL_BYTES = 2 * 1024 ** 3;
 
 /** Bytes of each file sent to `preupload` so the Hub can classify it. */
 const PREUPLOAD_SAMPLE_BYTES = 512;

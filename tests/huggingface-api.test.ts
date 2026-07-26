@@ -8,6 +8,8 @@ import {
   createDatasetRepo,
   datasetUrl,
   fetchDataset,
+  HF_MAX_UPLOAD_BYTES,
+  HF_MAX_UPLOAD_TOTAL_BYTES,
   HF_SITE,
   isOwnerName,
   listDatasetTree,
@@ -561,6 +563,20 @@ describe("createDatasetRepo", () => {
     await assert.rejects(
       createDatasetRepo({ name: "x", owner: "someoneelse" }, { fetchImpl, token: "hf_x" }),
       /don't have the rights/,
+    );
+  });
+});
+
+describe("upload size limits", () => {
+  it("caps a whole selection well below what one file may be", () => {
+    // The two bound different things: the per-file limit is what the storage
+    // endpoint takes in one PUT, the total is what the tab can hold while every
+    // file is materialized and the regular ones are base64-encoded on top. If
+    // they ever converge the aggregate guard stops biting, which is exactly the
+    // regression this locks out.
+    assert.ok(
+      HF_MAX_UPLOAD_TOTAL_BYTES < HF_MAX_UPLOAD_BYTES,
+      `expected the total cap (${HF_MAX_UPLOAD_TOTAL_BYTES}) below the per-file cap (${HF_MAX_UPLOAD_BYTES})`,
     );
   });
 });
