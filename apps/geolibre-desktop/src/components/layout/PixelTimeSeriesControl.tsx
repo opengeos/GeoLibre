@@ -9,13 +9,14 @@ import {
   TIME_SLIDER_PLUGIN_ID,
   valueAtBand,
 } from "@geolibre/plugins";
-import { Button, Select } from "@geolibre/ui";
+import { Button, Input, Select } from "@geolibre/ui";
 import { Crosshair, Download, GripVertical, LineChart, Loader2, Trash2, X } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -91,6 +92,25 @@ function buildMarkerElement(point: ClickedPoint): HTMLElement {
   return element;
 }
 
+/**
+ * Reads a manual axis bound from its field text.
+ *
+ * @param text - The raw field value.
+ * @returns The bound, or null for an empty or unparsable field, meaning that
+ *   end of the axis follows the data.
+ */
+function parseAxisBound(text: string): number | null {
+  if (text.trim() === "") return null;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Manual y-axis bounds; null on either end means "follow the data". */
+interface ChartDomain {
+  min: number | null;
+  max: number | null;
+}
+
 /** A single clicked location and the state of its time-series query. */
 interface ClickedPoint {
   /** Stable id, also used as the "Point N" label number. */
@@ -149,6 +169,16 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
     {},
   );
   const [selectedBand, setSelectedBand] = useState<number | null>(null);
+  // Manual y-axis bounds, held as raw field text so a bound can be cleared and
+  // retyped freely. Each is independent: pinning only the floor leaves the
+  // ceiling following the data, which is what comparing two points at different
+  // magnitudes usually calls for.
+  const [yMinDraft, setYMinDraft] = useState("");
+  const [yMaxDraft, setYMaxDraft] = useState("");
+  const yDomain = useMemo(
+    () => ({ min: parseAxisBound(yMinDraft), max: parseAxisBound(yMaxDraft) }),
+    [yMinDraft, yMaxDraft],
+  );
   const [exporting, setExporting] = useState(false);
   // Export failures are kept separate from query errors so a failed export
   // shows an inline message beside the buttons instead of replacing the chart.
@@ -627,7 +657,37 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
             ) : null}
 
             {hasLoaded ? (
-              <PixelTimeSeriesChart series={chartSeries} />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                <span className="text-muted-foreground">{t("pixelTimeSeries.yAxis")}</span>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">{t("pixelTimeSeries.yMin")}</span>
+                  <Input
+                    className="h-8 w-24"
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    placeholder={t("pixelTimeSeries.axisAuto")}
+                    value={yMinDraft}
+                    onChange={(event) => setYMinDraft(event.target.value)}
+                  />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">{t("pixelTimeSeries.yMax")}</span>
+                  <Input
+                    className="h-8 w-24"
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    placeholder={t("pixelTimeSeries.axisAuto")}
+                    value={yMaxDraft}
+                    onChange={(event) => setYMaxDraft(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+
+            {hasLoaded ? (
+              <PixelTimeSeriesChart series={chartSeries} domain={yDomain} />
             ) : (
               <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-8 text-sm text-muted-foreground">
                 {points.some((p) => p.loading) ? (
@@ -815,8 +875,11 @@ function axisDateLabel(date: string, annual: boolean): string {
  * panel's look (CSS-variable colors, gap-on-missing lines) but labels the
  * x-axis with timeline dates rather than feature order.
  */
-function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
+function PixelTimeSeriesChart({ series, domain }: { series: ChartSeries[]; domain: ChartDomain }) {
   const { t } = useTranslation();
+  // Scopes the plot-area clip to this chart: two panels' charts would otherwise
+  // share one id and the second would clip against the first's rect.
+  const clipId = `${useId()}-plot`;
 
   const values: number[] = [];
   for (const line of series)
@@ -838,8 +901,17 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
     if (v < min) min = v;
     if (v > max) max = v;
   }
+  // A manual bound overrides the data on that end only, so one end can be
+  // pinned while the other keeps following the series.
+  if (domain.min != null) min = domain.min;
+  if (domain.max != null) max = domain.max;
+  // Bounds arrive mid-typing and from the user in either order, so normalize
+  // before they reach scaleY, where an inverted or zero-height range would
+  // flip the chart or divide by zero.
+  if (min > max) [min, max] = [max, min];
   if (min === max) {
-    // Pad a flat series so the single value sits mid-axis with room to read.
+    // Pad a flat series (or a pinned single-value domain) so the value sits
+    // mid-axis with room to read.
     min -= 1;
     max += 1;
   }
@@ -943,72 +1015,82 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
             {axisDateLabel(allDates[index] ?? "", annual)}
           </text>
         ))}
-        {/* One path per point, split into readings that are adjacent on the
+        {/* Clip the series to the plot area so a manual y-axis bound crops the
+            lines instead of letting them draw over the labels and outside the
+            frame. */}
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={MARGIN.left} y={MARGIN.top} width={INNER_W} height={INNER_H} />
+          </clipPath>
+        </defs>
+        <g clipPath={`url(#${clipId})`}>
+          {/* One path per point, split into readings that are adjacent on the
             timeline (solid) and readings separated by dates with no value
             (dashed). Missing dates are common in a satellite series — a cloudy
             or uncovered acquisition is nodata — and lifting the pen at every
             one of them left stranded dots with no readable trend. Bridging them
             keeps the series legible while the dash still says the segment
             crosses missing data rather than measured change. */}
-        {alignedSeries.map((line) => {
-          let path = "";
-          let bridge = "";
-          let previous: { index: number; value: number } | null = null;
-          let gapped = false;
-          line.values.forEach((value, index) => {
-            if (value == null) {
-              // Only a gap *between* two readings needs bridging; leading nulls
-              // have nothing to bridge from.
-              if (previous) gapped = true;
-              return;
-            }
-            if (previous) {
-              const segment = `M${scaleX(previous.index)} ${scaleY(previous.value)} L${scaleX(index)} ${scaleY(value)} `;
-              if (gapped) bridge += segment;
-              else path += segment;
-            }
-            previous = { index, value };
-            gapped = false;
-          });
-          return (
-            <g key={line.key}>
-              {/* Under the solid segments, so a bridge never draws over them. */}
-              <path
-                d={bridge.trim()}
-                fill="none"
-                stroke={line.color}
-                strokeWidth={1.5}
-                // A single-source stack (the common case) has no dash of its
-                // own, so bridges get one; a multi-source stack keeps the dash
-                // that identifies the source and is set apart by opacity alone.
-                strokeDasharray={line.dash ?? "3 3"}
-                strokeOpacity={0.45}
-              />
-              <path
-                d={path.trim()}
-                fill="none"
-                stroke={line.color}
-                strokeWidth={1.5}
-                strokeDasharray={line.dash}
-              />
-              {length <= 60
-                ? line.values.map((value, index) =>
-                    value == null ? null : (
-                      <circle
-                        key={index}
-                        cx={scaleX(index)}
-                        cy={scaleY(value)}
-                        r={2.5}
-                        fill={line.color}
-                      >
-                        <title>{`${allDates[index]}: ${formatValue(value)}`}</title>
-                      </circle>
-                    ),
-                  )
-                : null}
-            </g>
-          );
-        })}
+          {alignedSeries.map((line) => {
+            let path = "";
+            let bridge = "";
+            let previous: { index: number; value: number } | null = null;
+            let gapped = false;
+            line.values.forEach((value, index) => {
+              if (value == null) {
+                // Only a gap *between* two readings needs bridging; leading nulls
+                // have nothing to bridge from.
+                if (previous) gapped = true;
+                return;
+              }
+              if (previous) {
+                const segment = `M${scaleX(previous.index)} ${scaleY(previous.value)} L${scaleX(index)} ${scaleY(value)} `;
+                if (gapped) bridge += segment;
+                else path += segment;
+              }
+              previous = { index, value };
+              gapped = false;
+            });
+            return (
+              <g key={line.key}>
+                {/* Under the solid segments, so a bridge never draws over them. */}
+                <path
+                  d={bridge.trim()}
+                  fill="none"
+                  stroke={line.color}
+                  strokeWidth={1.5}
+                  // A single-source stack (the common case) has no dash of its
+                  // own, so bridges get one; a multi-source stack keeps the dash
+                  // that identifies the source and is set apart by opacity alone.
+                  strokeDasharray={line.dash ?? "3 3"}
+                  strokeOpacity={0.45}
+                />
+                <path
+                  d={path.trim()}
+                  fill="none"
+                  stroke={line.color}
+                  strokeWidth={1.5}
+                  strokeDasharray={line.dash}
+                />
+                {length <= 60
+                  ? line.values.map((value, index) =>
+                      value == null ? null : (
+                        <circle
+                          key={index}
+                          cx={scaleX(index)}
+                          cy={scaleY(value)}
+                          r={2.5}
+                          fill={line.color}
+                        >
+                          <title>{`${allDates[index]}: ${formatValue(value)}`}</title>
+                        </circle>
+                      ),
+                    )
+                  : null}
+              </g>
+            );
+          })}
+        </g>
       </svg>
       {series.length > 1 || hasBridgedGap ? (
         <figcaption className="flex flex-col gap-1 text-xs text-muted-foreground">

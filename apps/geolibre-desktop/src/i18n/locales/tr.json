@@ -1390,6 +1390,10 @@
     "noValues": "Bu konumlarda seçilen bant için değer yok (raster dışında veya tüm zaman adımları veri dışı).",
     "truncated": "{{total}} zaman çizelgesi adımından {{kept}} tanesi gösteriliyor (okumaları sınırlamak için alt örneklendi).",
     "chartAria": "Zaman içinde piksel değerinin çizgi grafiği",
+    "yAxis": "Y ekseni",
+    "yMin": "Min",
+    "yMax": "Maks",
+    "axisAuto": "otomatik",
     "gapNote": "Kesikli bölümler değeri olmayan tarihleri birleştirir (nodata veya kapsama dışı).",
     "exportCsv": "CSV Dışa Aktar",
     "exportGeoParquet": "GeoParquet Dışa Aktar"
@@ -4081,6 +4085,13 @@
       "m5": "5 dakika",
       "m15": "15 dakika"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "Bantlar",
+    "bandsPlaceholder": "otomatik",
+    "bandsHint": "1'den başlayan bant numaraları, virgülle ayrılmış (örn. 4,3,2). Varsayılan için boş bırakın.",
+    "bandsInvalid": "1 veya daha büyük tam bant numaralarını virgülle ayırarak girin.",
+    "colormapNone": "Yok (RGB / çok bantlı)"
   },
   "rasterSymbology": {
     "gamma": "Gama",

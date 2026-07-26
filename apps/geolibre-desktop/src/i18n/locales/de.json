@@ -1390,6 +1390,10 @@
     "noValues": "Keine Werte für das ausgewählte Band an diesen Standorten (außerhalb des Rasters oder alle Zeitschritte sind NoData).",
     "truncated": "Zeigt {{kept}} von {{total}} Zeitschritten (heruntergerechnet, um Lesevorgänge zu begrenzen).",
     "chartAria": "Liniendiagramm des Pixelwerts im Zeitverlauf",
+    "yAxis": "Y-Achse",
+    "yMin": "Min",
+    "yMax": "Max",
+    "axisAuto": "auto",
     "gapNote": "Gestrichelte Abschnitte überbrücken Termine ohne Messwert (NoData oder außerhalb der Abdeckung).",
     "exportCsv": "CSV exportieren",
     "exportGeoParquet": "GeoParquet exportieren"
@@ -4081,6 +4085,13 @@
       "m5": "5 Minuten",
       "m15": "15 Minuten"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "Kanäle",
+    "bandsPlaceholder": "auto",
+    "bandsHint": "Kanalnummern ab 1, durch Kommas getrennt (z. B. 4,3,2). Leer lassen für die Standardauswahl.",
+    "bandsInvalid": "Ganze Kanalnummern ab 1 eingeben, durch Kommas getrennt.",
+    "colormapNone": "Keine (RGB / mehrkanalig)"
   },
   "rasterSymbology": {
     "gamma": "Gamma",

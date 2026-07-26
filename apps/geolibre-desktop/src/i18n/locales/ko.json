@@ -1352,6 +1352,10 @@
     "noValues": "선택한 위치에 대한 이 밴드의 값이 없습니다(래스터 범위를 벗어났거나 모든 시간 단계가 nodata입니다).",
     "truncated": "전체 {{total}}개 타임라인 단계 중 {{kept}}개를 표시합니다(읽기 횟수를 제한하기 위해 다운샘플링됨).",
     "chartAria": "시간에 따른 픽셀 값의 선 차트",
+    "yAxis": "Y축",
+    "yMin": "최소",
+    "yMax": "최대",
+    "axisAuto": "자동",
     "gapNote": "점선 구간은 값이 없는 날짜(nodata 또는 적용 범위 밖)를 연결합니다.",
     "exportCsv": "CSV 내보내기",
     "exportGeoParquet": "GeoParquet 내보내기"
@@ -4023,6 +4027,13 @@
       "m5": "5분",
       "m15": "15분"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "밴드",
+    "bandsPlaceholder": "자동",
+    "bandsHint": "1부터 시작하는 밴드 번호를 쉼표로 구분합니다(예: 4,3,2). 비워 두면 렌더러 기본값을 사용합니다.",
+    "bandsInvalid": "1 이상의 정수 밴드 번호를 쉼표로 구분해 입력하세요.",
+    "colormapNone": "없음(RGB / 다중 밴드)"
   },
   "rasterSymbology": {
     "gamma": "감마",

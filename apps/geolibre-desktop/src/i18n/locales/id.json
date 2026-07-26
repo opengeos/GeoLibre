@@ -1352,6 +1352,10 @@
     "noValues": "Tidak ada nilai untuk kanal yang dipilih di lokasi ini (di luar raster atau semua langkah waktu adalah nodata).",
     "truncated": "Menampilkan {{kept}} dari {{total}} langkah linimasa (di-downsample untuk membatasi pembacaan).",
     "chartAria": "Bagan garis nilai piksel sepanjang waktu",
+    "yAxis": "Sumbu Y",
+    "yMin": "Min",
+    "yMax": "Maks",
+    "axisAuto": "otomatis",
     "gapNote": "Segmen putus-putus menjembatani tanggal tanpa nilai (nodata atau di luar cakupan).",
     "exportCsv": "Ekspor CSV",
     "exportGeoParquet": "Ekspor GeoParquet"
@@ -4023,6 +4027,13 @@
       "m5": "5 menit",
       "m15": "15 menit"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "Band",
+    "bandsPlaceholder": "otomatis",
+    "bandsHint": "Nomor band mulai dari 1, dipisahkan koma (mis. 4,3,2). Kosongkan untuk bawaan perender.",
+    "bandsInvalid": "Masukkan nomor band bulat 1 atau lebih, dipisahkan koma.",
+    "colormapNone": "Tidak ada (RGB / multiband)"
   },
   "rasterSymbology": {
     "gamma": "Gamma",

@@ -45,6 +45,7 @@ import {
 import {
   RASTER_SOURCE_KIND,
   SKETCHES_SOURCE_KIND,
+  TIME_SLIDER_SOURCE_KIND,
   countAtlasDroppedDiagrams,
 } from "@geolibre/plugins";
 import { type MapController } from "@geolibre/map";
@@ -54,6 +55,7 @@ import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
+import { TimeSliderSymbologySection } from "./TimeSliderSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
   ChevronDown,
@@ -3962,6 +3964,12 @@ export function StylePanel({
             )}
             {layer.metadata.sourceKind === RASTER_SOURCE_KIND && (
               <RasterSymbologySection layer={layer} />
+            )}
+            {/* A Time Slider source is not in the raster plugin's registry, so
+                the section above has nothing to attach to; its own spec fields
+                are edited through the dock's control instead. */}
+            {layer.metadata.sourceKind === TIME_SLIDER_SOURCE_KIND && (
+              <TimeSliderSymbologySection layer={layer} />
             )}
             <Separator />
             <Button

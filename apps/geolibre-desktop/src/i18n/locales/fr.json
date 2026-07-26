@@ -1390,6 +1390,10 @@
     "noValues": "Aucune valeur pour la bande sélectionnée à ces emplacements (en dehors du raster ou toutes les étapes sont nodata).",
     "truncated": "Affichage de {{kept}} sur {{total}} étapes de la chronologie (sous-échantillonné pour limiter les lectures).",
     "chartAria": "Graphique linéaire de la valeur de pixel dans le temps",
+    "yAxis": "Axe Y",
+    "yMin": "Min",
+    "yMax": "Max",
+    "axisAuto": "auto",
     "gapNote": "Les segments en pointillés couvrent des dates sans valeur (nodata ou hors de la couverture).",
     "exportCsv": "Exporter en CSV",
     "exportGeoParquet": "Exporter en GeoParquet"
@@ -4081,6 +4085,13 @@
       "m5": "5 minutes",
       "m15": "15 minutes"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "Bandes",
+    "bandsPlaceholder": "auto",
+    "bandsHint": "Numéros de bande à partir de 1, séparés par des virgules (ex. 4,3,2). Laissez vide pour la valeur par défaut.",
+    "bandsInvalid": "Saisissez des numéros de bande entiers à partir de 1, séparés par des virgules.",
+    "colormapNone": "Aucun (RVB / multibande)"
   },
   "rasterSymbology": {
     "gamma": "Gamma",

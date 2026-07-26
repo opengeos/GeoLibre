@@ -20,8 +20,13 @@ import { usesMosaicManifest } from "./time-slider-source-url";
  * Marker placed on every GeoLibre store layer that mirrors a time-slider
  * source, used to reconcile and prune the plugin's layers without touching any
  * others (mirrors the Esri Wayback `sourceKind` convention).
+ *
+ * Exported as {@link TIME_SLIDER_SOURCE_KIND} so the Style panel can recognize
+ * these layers and offer the symbology their dock source supports.
  */
 const STORE_LAYER_SOURCE_KIND = "time-slider";
+
+export { STORE_LAYER_SOURCE_KIND as TIME_SLIDER_SOURCE_KIND };
 
 /**
  * Default configuration applied on first activation. No data sources are seeded:

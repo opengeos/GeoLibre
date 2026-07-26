@@ -80,7 +80,7 @@
     "maplibre-gl-splat": "^0.2.8",
     "maplibre-gl-streetview": "^0.7.0",
     "maplibre-gl-swipe": "^0.11.0",
-    "maplibre-gl-time-slider": "^1.7.1",
+    "maplibre-gl-time-slider": "^1.8.0",
     "maplibre-gl-usgs-lidar": "^0.11.1",
     "maplibre-gl-vector": "^0.10.0",
     "openai": "^6.48.0",

@@ -1352,6 +1352,10 @@
     "noValues": "選択したバンドについて、これらの地点に値がありません(ラスターの範囲外か、すべての時点がnodataです)。",
     "truncated": "タイムラインの {{total}} ステップ中 {{kept}} ステップを表示しています(読み取り数を制限するためダウンサンプリングしています)。",
     "chartAria": "ピクセル値の時系列を示す折れ線グラフ",
+    "yAxis": "Y 軸",
+    "yMin": "最小",
+    "yMax": "最大",
+    "axisAuto": "自動",
     "gapNote": "破線の区間は値がない日付（nodata またはカバー範囲外）をつないでいます。",
     "exportCsv": "CSVをエクスポート",
     "exportGeoParquet": "GeoParquetをエクスポート"
@@ -4023,6 +4027,13 @@
       "m5": "5分",
       "m15": "15分"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "バンド",
+    "bandsPlaceholder": "自動",
+    "bandsHint": "1 から始まるバンド番号をカンマ区切りで指定します（例: 4,3,2）。空欄でレンダラーの既定値になります。",
+    "bandsInvalid": "1 以上の整数のバンド番号をカンマ区切りで入力してください。",
+    "colormapNone": "なし（RGB / マルチバンド）"
   },
   "rasterSymbology": {
     "gamma": "ガンマ",

@@ -1390,6 +1390,10 @@
     "noValues": "Geen waarden voor de geselecteerde band op deze locaties (buiten de raster of alle tijdstappen zijn nodata).",
     "truncated": "{{kept}} van {{total}} tijdlijnstappen weergegeven (gedownsampled om het aantal lezingen te beperken).",
     "chartAria": "Lijndiagram van pixelwaarde in de tijd",
+    "yAxis": "Y-as",
+    "yMin": "Min",
+    "yMax": "Max",
+    "axisAuto": "auto",
     "gapNote": "Gestippelde segmenten overbruggen datums zonder waarde (nodata of buiten de dekking).",
     "exportCsv": "CSV exporteren",
     "exportGeoParquet": "GeoParquet exporteren"
@@ -4081,6 +4085,13 @@
       "m5": "5 minuten",
       "m15": "15 minuten"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "Banden",
+    "bandsPlaceholder": "auto",
+    "bandsHint": "Bandnummers vanaf 1, gescheiden door komma's (bijv. 4,3,2). Laat leeg voor de standaard.",
+    "bandsInvalid": "Voer hele bandnummers van 1 of hoger in, gescheiden door komma's.",
+    "colormapNone": "Geen (RGB / multiband)"
   },
   "rasterSymbology": {
     "gamma": "Gamma",

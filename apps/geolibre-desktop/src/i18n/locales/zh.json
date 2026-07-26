@@ -1352,6 +1352,10 @@
     "noValues": "所选波段在这些位置没有数值（超出栅格范围或所有时间步均为无数据值）。",
     "truncated": "显示 {{total}} 个时间线步骤中的 {{kept}} 个（已降采样以限制读取次数）。",
     "chartAria": "像素值随时间变化的折线图",
+    "yAxis": "Y 轴",
+    "yMin": "最小值",
+    "yMax": "最大值",
+    "axisAuto": "自动",
     "gapNote": "虚线段跨越没有数值的日期（无数据或超出覆盖范围）。",
     "exportCsv": "导出 CSV",
     "exportGeoParquet": "导出 GeoParquet"
@@ -4023,6 +4027,13 @@
       "m5": "5 分钟",
       "m15": "15 分钟"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "波段",
+    "bandsPlaceholder": "自动",
+    "bandsHint": "从 1 开始的波段编号，用逗号分隔（例如 4,3,2）。留空则使用渲染器默认值。",
+    "bandsInvalid": "请输入 1 或更大的整数波段编号，用逗号分隔。",
+    "colormapNone": "无（RGB / 多波段）"
   },
   "rasterSymbology": {
     "gamma": "伽马值",

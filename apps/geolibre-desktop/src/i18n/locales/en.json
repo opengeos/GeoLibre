@@ -1390,6 +1390,10 @@
     "noValues": "No values for the selected band at these locations (outside the raster or all timesteps are nodata).",
     "truncated": "Showing {{kept}} of {{total}} timeline steps (downsampled to limit reads).",
     "chartAria": "Line chart of pixel value over time",
+    "yAxis": "Y axis",
+    "yMin": "Min",
+    "yMax": "Max",
+    "axisAuto": "auto",
     "gapNote": "Dashed segments span dates with no reading (nodata or outside coverage).",
     "exportCsv": "Export CSV",
     "exportGeoParquet": "Export GeoParquet"
@@ -4211,6 +4215,13 @@
       "m5": "5 minutes",
       "m15": "15 minutes"
     }
+  },
+  "timeSliderSymbology": {
+    "bands": "Bands",
+    "bandsPlaceholder": "auto",
+    "bandsHint": "1-based band numbers, comma separated (e.g. 4,3,2). Leave empty for the renderer default.",
+    "bandsInvalid": "Enter whole band numbers of 1 or more, separated by commas.",
+    "colormapNone": "None (RGB / multi-band)"
   },
   "rasterSymbology": {
     "gamma": "Gamma",
