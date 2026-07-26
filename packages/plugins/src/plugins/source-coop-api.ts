@@ -40,7 +40,43 @@
  * This module is deliberately DOM-free and framework-free so it can be unit
  * tested under `node --test`; everything that touches the map or the document
  * lives in `maplibre-source-coop.ts`.
+ *
+ * What GeoLibre can *do* with a listed file — its format, which reader opens
+ * it, and the size limits that reader imposes — is not specific to Source
+ * Cooperative and lives in `remote-file-formats.ts`, shared with the other
+ * remote-browse panels. It is re-exported here under this module's names so
+ * callers keep one import.
  */
+
+import {
+  classifyPath,
+  fileNote,
+  isTooLargeToOpen as isFormatTooLargeToOpen,
+  type RemoteFileFormat,
+  type RemoteFileNote,
+  type RemoteIngestMode,
+} from "./remote-file-formats";
+
+export {
+  canStream,
+  classifyPath as classifyKey,
+  formatBytes,
+  HTTP_URL_RE,
+  isAddable,
+  LARGE_FILE_BYTES,
+  MAX_VECTOR_BYTES,
+  STREAM_HINT_BYTES,
+  usesDuckDB,
+} from "./remote-file-formats";
+
+/** @see RemoteFileFormat */
+export type SourceCoopFormat = RemoteFileFormat;
+
+/** @see RemoteIngestMode */
+export type SourceCoopIngestMode = RemoteIngestMode;
+
+/** @see RemoteFileNote */
+export type SourceCoopNote = RemoteFileNote;
 
 /** The Source Cooperative website (used for human-facing product links). */
 export const SOURCE_COOP_SITE = "https://source.coop";
@@ -66,6 +102,7 @@ export const SOURCE_COOP_PROXY_ENDPOINT = "https://tiles.geolibre.app/source-coo
 export const SOURCE_COOP_LIST_MAX_KEYS = 200;
 
 /** One product (a dataset) on Source Cooperative. */
+
 export interface SourceCoopProduct {
   /** Owning account, e.g. `protomaps`. Doubles as the S3 bucket name. */
   accountId: string;
@@ -82,20 +119,6 @@ export interface SourceCoopProduct {
   /** The product's page on source.coop. */
   url: string;
 }
-
-/**
- * A data format GeoLibre can act on. Everything GeoLibre cannot render is
- * `other` and offers download only.
- */
-export type SourceCoopFormat =
-  | "pmtiles"
-  | "geoparquet"
-  | "cog"
-  | "geojson"
-  | "flatgeobuf"
-  | "gpkg"
-  | "csv"
-  | "other";
 
 /** One file in a product. */
 export interface SourceCoopObject {
@@ -135,9 +158,6 @@ export type SourceCoopFetch = (
 }>;
 
 const defaultFetch: SourceCoopFetch = (url, signal) => fetch(url, signal ? { signal } : undefined);
-
-/** Guards a value before it reaches an `<a href>` or a map source. */
-export const HTTP_URL_RE = /^https?:\/\//i;
 
 /** `account/product`, the id form a user can paste into the search box. */
 const PRODUCT_REF_RE = /^([a-z0-9][a-z0-9-_.]*)\/([a-z0-9][a-z0-9-_.]*)\/?$/i;
@@ -293,147 +313,26 @@ export function parseFeed(xml: string): SourceCoopProduct[] {
 }
 
 /**
- * Extension → format, first match wins. The patterns are mutually exclusive, so
- * the order is presentational rather than load-bearing. Note `.geo.json` needs
- * its own rule: the `geojson` alternative below requires that literal token, so
- * it does not match a `.geo.json` suffix.
- */
-const FORMAT_BY_EXTENSION: [RegExp, SourceCoopFormat][] = [
-  [/\.pmtiles$/i, "pmtiles"],
-  [/\.(geo)?parquet$/i, "geoparquet"],
-  [/\.(tif|tiff)$/i, "cog"],
-  [/\.(geojson|geojsonl|ndjson)$/i, "geojson"],
-  [/\.geo\.json$/i, "geojson"],
-  [/\.fgb$/i, "flatgeobuf"],
-  [/\.gpkg$/i, "gpkg"],
-  [/\.csv$/i, "csv"],
-];
-
-/**
- * Classifies a key by extension. Extension-based because a `HEAD` per file
- * would cost one request per row, and Source Cooperative's content types are
- * mostly `application/octet-stream` anyway.
- */
-export function classifyKey(key: string): SourceCoopFormat {
-  for (const [pattern, format] of FORMAT_BY_EXTENSION) {
-    if (pattern.test(key)) return format;
-  }
-  return "other";
-}
-
-/**
- * Which reader puts a format on the map — the one fact both {@link isAddable}
- * and {@link usesDuckDB} are really asking about:
- *
- * - `duckdb` — read through the vector control, so DuckDB-WASM's limits apply
- *   (see {@link isTooLargeToOpen}).
- * - `range` — has its own range-request reader (MapLibre's PMTiles protocol, a
- *   COG reader). Streams by nature, and none of the DuckDB limits apply.
- * - `none` — GeoLibre cannot render it; download only.
- *
- * One `Record` over the whole union rather than a set per question: adding a
- * member to {@link SourceCoopFormat} then fails to compile until it is
- * classified here, so a new format cannot silently inherit the wrong reader's
- * size rules. Deriving one set from the other would not hold — "addable" and
- * "goes through DuckDB" are independent facts about a format, and treating
- * DuckDB as everything-but-PMTiles/COG would quietly subject the next
- * range-request format to a 2 GiB gate that does not apply to it.
- */
-const FORMAT_READER: Record<SourceCoopFormat, "duckdb" | "range" | "none"> = {
-  pmtiles: "range",
-  cog: "range",
-  geoparquet: "duckdb",
-  geojson: "duckdb",
-  flatgeobuf: "duckdb",
-  gpkg: "duckdb",
-  csv: "duckdb",
-  other: "none",
-};
-
-/** Whether GeoLibre can put a format on the map (the rest are download-only). */
-export function isAddable(format: SourceCoopFormat): boolean {
-  return FORMAT_READER[format] !== "none";
-}
-
-/** How a vector file is read into DuckDB. Mirrors `IngestMode` in maplibre-gl-vector. */
-export type SourceCoopIngestMode = "table" | "stream";
-
-/** Whether a format reaches the map through the vector control, and so DuckDB-WASM. */
-export function usesDuckDB(format: SourceCoopFormat): boolean {
-  return FORMAT_READER[format] === "duckdb";
-}
-
-/**
- * Whether a file can be queried in place rather than copied into DuckDB.
- * GeoParquet only: the vector control ignores `stream` for every other format
- * and quietly falls back to a copy, so offering the choice elsewhere would be a
- * button that does nothing different.
- */
-export function canStream(format: SourceCoopFormat): boolean {
-  return format === "geoparquet";
-}
-
-/**
- * Largest remote file DuckDB-WASM can open, mirroring `MAX_REMOTE_FILE_BYTES`
- * in maplibre-gl-vector. Duplicated rather than imported because the constant
- * is internal to that package; {@link isTooLargeToOpen} explains why this
- * module needs to know it.
- */
-export const MAX_VECTOR_BYTES = 2 ** 31 - 1;
-
-/**
- * PMTiles/COG at or above this size get a note that they stream rather than
- * download. Deliberately not applied to the DuckDB formats: those do not read
- * only the parts in view unless the user picks Stream, and at this size they do
- * not open at all.
- */
-export const LARGE_FILE_BYTES = 2 * 1024 ** 3;
-
-/**
- * GeoParquet at or above this size gets a note nudging toward Stream. A copy
- * materializes into the WASM heap and memory roughly tracks the *decompressed*
- * dataset — several times a Parquet's on-disk size — which is where a large
- * file runs the tab out of memory. Below this a copy is cheap enough that the
- * nudge would be noise; the Stream button is still offered.
- */
-export const STREAM_HINT_BYTES = 100 * 1024 ** 2;
-
-/**
  * Whether the browser cannot open a file at all, at either ingest mode.
+ * The object-shaped form of {@link isFormatTooLargeToOpen}, which explains the
+ * limit.
  *
- * DuckDB-WASM's HTTP filesystem holds remote file sizes in 32 bits, so it
- * rejects anything of 2 GiB or more — and it rejects it *before* the ingest
- * mode is consulted (`_registerSource` runs ahead of the stream branch in
- * maplibre-gl-vector's DuckDBEngine), so streaming does not get past this.
- * Knowing the limit lets the panel say so up front instead of offering an Add
- * that is certain to fail.
+ * @param object - A listed file
+ * @returns True when no ingest mode can open it
  */
 export function isTooLargeToOpen(object: SourceCoopObject): boolean {
-  return usesDuckDB(object.format) && object.size > MAX_VECTOR_BYTES;
+  return isFormatTooLargeToOpen(object.format, object.size);
 }
 
 /**
- * Which advisory line a file's card should carry, if any. The cases are
- * mutually exclusive and turn on format, because "large" means something
- * different per reader: a PMTiles/COG of any size really does read only the
- * parts in view, a DuckDB-format file past the 2 GiB limit cannot be opened at
- * either mode, and a big GeoParquet has a real choice to make.
+ * Which advisory line a file's card should carry, if any. The object-shaped
+ * form of {@link fileNote}, which explains the cases.
  *
- * Returns the decision only — the panel owns the wording (see
- * `SourceCoopLabels`), which keeps this module DOM- and i18n-free.
+ * @param object - A listed file
+ * @returns Which note the card should render, or `none`
  */
-export type SourceCoopNote = "none" | "streams" | "streamChoice" | "tooLarge";
-
 export function objectNote(object: SourceCoopObject): SourceCoopNote {
-  if (!isAddable(object.format)) return "none";
-  if (isTooLargeToOpen(object)) return "tooLarge";
-  if (!usesDuckDB(object.format)) {
-    return object.size >= LARGE_FILE_BYTES ? "streams" : "none";
-  }
-  if (canStream(object.format) && object.size >= STREAM_HINT_BYTES) {
-    return "streamChoice";
-  }
-  return "none";
+  return fileNote(object.format, object.size);
 }
 
 /**
@@ -499,7 +398,7 @@ export function parseListObjects(xml: string, accountId: string): SourceCoopList
       name: key.split("/").pop() ?? key,
       size: Number.isFinite(size) ? size : 0,
       lastModified: lastModified || null,
-      format: classifyKey(key),
+      format: classifyPath(key),
       url: buildObjectUrl(accountId, key),
     });
   }
@@ -583,15 +482,6 @@ export function mergeProducts(...groups: SourceCoopProduct[][]): SourceCoopProdu
     }
   }
   return [...byId.values()];
-}
-
-/** Human-readable byte size, e.g. `1.1 GB`. */
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** exponent;
-  return `${value >= 100 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`;
 }
 
 /**

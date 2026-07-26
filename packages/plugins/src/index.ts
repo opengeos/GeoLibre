@@ -359,6 +359,13 @@ export {
   type SourceCoopPinnedProduct,
 } from "./plugins/maplibre-source-coop";
 export {
+  DEFAULT_HUGGINGFACE_LABELS,
+  HUGGINGFACE_PLUGIN_ID,
+  maplibreHuggingFacePlugin,
+  setHuggingFaceLabels,
+  type HuggingFaceLabels,
+} from "./plugins/maplibre-huggingface";
+export {
   DEFAULT_GEOLENS_LABELS,
   DEFAULT_GEOLENS_FEATURE_LIMIT,
   GEOLENS_PLUGIN_ID,
