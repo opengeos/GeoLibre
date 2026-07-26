@@ -181,7 +181,13 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
                   onClick={() => {
                     void navigator.clipboard
                       ?.writeText(externalClientUrl(server))
-                      .then(() => setCopied(true));
+                      .then(() => setCopied(true))
+                      .catch((error: unknown) => {
+                        // Clipboard access can be denied; never leave the button
+                        // claiming a copy that did not happen.
+                        setCopied(false);
+                        console.error("Could not copy the Jupyter server URL", error);
+                      });
                   }}
                 >
                   {copied ? (

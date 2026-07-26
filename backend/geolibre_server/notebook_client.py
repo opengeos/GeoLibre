@@ -61,7 +61,8 @@ import sys
 import urllib.error
 import urllib.request
 import warnings
-from typing import Any, Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from IPython.display import Javascript, display
 
