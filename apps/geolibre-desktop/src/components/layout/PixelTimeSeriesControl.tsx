@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
 import { clamp } from "../../lib/clamp";
+import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { exportVectorLayer } from "../../lib/vector-export";
 
@@ -103,12 +104,6 @@ function parseAxisBound(text: string): number | null {
   if (text.trim() === "") return null;
   const value = Number(text);
   return Number.isFinite(value) ? value : null;
-}
-
-/** Manual y-axis bounds; null on either end means "follow the data". */
-interface ChartDomain {
-  min: number | null;
-  max: number | null;
 }
 
 /** A single clicked location and the state of its time-series query. */
@@ -893,28 +888,7 @@ function PixelTimeSeriesChart({ series, domain }: { series: ChartSeries[]; domai
     );
   }
 
-  // Reduce instead of Math.min/max(...values) so a large multi-point series
-  // cannot blow the argument-spread stack limit.
-  let min = values[0];
-  let max = values[0];
-  for (const v of values) {
-    if (v < min) min = v;
-    if (v > max) max = v;
-  }
-  // A manual bound overrides the data on that end only, so one end can be
-  // pinned while the other keeps following the series.
-  if (domain.min != null) min = domain.min;
-  if (domain.max != null) max = domain.max;
-  // Bounds arrive mid-typing and from the user in either order, so normalize
-  // before they reach scaleY, where an inverted or zero-height range would
-  // flip the chart or divide by zero.
-  if (min > max) [min, max] = [max, min];
-  if (min === max) {
-    // Pad a flat series (or a pinned single-value domain) so the value sits
-    // mid-axis with room to read.
-    min -= 1;
-    max += 1;
-  }
+  const { min, max } = resolveChartDomain(values, domain);
 
   // Align every line on a shared, sorted union of dates so points queried
   // against different timelines (e.g. the user changed the step range between

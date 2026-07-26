@@ -759,6 +759,11 @@ const sourceBounds = new Map<string, [number, number, number, number]>();
 /** Source ids whose lookup already ran, success or failure, so a source without
  * a recoverable extent is not re-fetched on every sync. */
 const boundsAttempted = new Set<string>();
+/** Bumped per source id whenever its cached extent is dropped. A manifest fetch
+ * captures the generation it started under, so a lookup still in flight when the
+ * source is removed cannot write its extent onto a *different* source that later
+ * reuses the same id. */
+const boundsGeneration = new Map<string, number>();
 
 /** Narrows a value to a finite `[west, south, east, north]` extent. */
 function normalizeBounds(value: unknown): [number, number, number, number] | null {
@@ -790,6 +795,7 @@ function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void 
   }
   if (spec.type !== "mosaic") return;
 
+  const generation = boundsGeneration.get(id) ?? 0;
   void (async () => {
     try {
       const url = await resolveUrl(spec.url, control.getCurrentDate());
@@ -800,7 +806,10 @@ function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void 
       const extent = normalizeBounds([bounds.west, bounds.south, bounds.east, bounds.north]);
       // The control may have been rebuilt or torn down while the manifest was
       // in flight; re-syncing a dead control would resurrect its store layers.
+      // The source may also have been removed and a different one added under
+      // the same id, in which case this extent belongs to neither.
       if (!extent || timeSliderControl !== control) return;
+      if ((boundsGeneration.get(id) ?? 0) !== generation) return;
       sourceBounds.set(id, extent);
       syncStoreLayers(control);
     } catch {
@@ -812,10 +821,11 @@ function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void 
 }
 
 /** Drops a removed source's cached extent so a later source reusing the id
- * resolves its own. */
+ * resolves its own, and invalidates any lookup still in flight for it. */
 function forgetSourceBounds(id: string): void {
   sourceBounds.delete(id);
   boundsAttempted.delete(id);
+  boundsGeneration.set(id, (boundsGeneration.get(id) ?? 0) + 1);
 }
 
 function addOrUpdateStoreLayer(layer: GeoLibreLayer): void {
