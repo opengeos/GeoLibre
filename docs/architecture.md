@@ -97,7 +97,7 @@ The root Dockerfile packages the browser version of the app. It uses a Node buil
 
 The `Publish Container Image` GitHub Actions workflow builds the image for pull requests and publishes it to GitHub Container Registry for pushes to `main`, version tags, and manual runs. The upstream image name is `ghcr.io/opengeos/geolibre`.
 
-The container does not run the Tauri desktop shell or the optional Python sidecar. Workflows that depend on desktop filesystem access still require the installed desktop app.
+The image also bundles the optional Python sidecar (uvicorn) and reverse-proxies it at `/sidecar`, so the browser reaches it same-origin with no CORS; set `GEOLIBRE_DISABLE_SIDECAR=1` to run nginx alone. The container does not run the Tauri desktop shell, so workflows that depend on desktop filesystem access still require the installed desktop app. See [Run with Docker](getting-started.md#run-with-docker) for what the bundled sidecar does and does not back.
 
 ## Security
 

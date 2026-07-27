@@ -241,9 +241,17 @@ GeoLibre. To add one to this repository:
      activate: (app: GeoLibreAppAPI) => {
        app.setBasemap("https://example.com/style.json");
      },
-     deactivate: () => {},
+     deactivate: () => {
+       /* basemap remains until the user changes it */
+     },
    };
    ```
+
+   Basemap plugins deliberately leave the style they applied in place on
+   deactivate — the built-in `osm-basemap` and `carto-light` plugins do the
+   same, since reverting the map under the user would be more surprising than
+   keeping what they last selected. Plugins that add controls, listeners, or
+   layers must undo them in `deactivate()`.
 
 2. Export it from `packages/plugins/src/index.ts`.
 
@@ -264,10 +272,14 @@ GeoLibre. To add one to this repository:
    ]);
    ```
 
-For a MapLibre control plugin, add the package dependency, import its CSS in
-`apps/geolibre-desktop/src/main.tsx`, then call
+For a MapLibre control plugin, add the package dependency, then call
 `app.addMapControl(control, "top-left")` in `activate()` and
-`app.removeMapControl(control)` in `deactivate()`.
+`app.removeMapControl(control)` in `deactivate()`. If the control's npm package
+ships its own stylesheet, import that stylesheet in
+`apps/geolibre-desktop/src/main.tsx`, alongside the existing
+`maplibre-gl-*/style.css` imports. That is only for a dependency's own CSS —
+any app-specific fixes on top of it belong in `index.css`, as described under
+[Styling third-party controls](#styling-third-party-controls) below.
 
 Built-in MapLibre controls such as Navigation, Fullscreen, Geolocate, Globe,
 Terrain, Scale, Attribution, and Logo are toggled from the desktop app's
@@ -306,7 +318,10 @@ default control button CSS can override their flex centering:
 ```
 
 Run `npm run build` and `pre-commit run --all-files` before submitting the
-change. See [Contributing](contributing.md) for the full quality gate.
+change. If you also touched pages under `docs/`, build the site — CI runs
+`zensical build --strict`, so a broken link or a page missing from the
+`mkdocs.yml` `nav` fails the build. See
+[Contributing](contributing.md#documentation) for both gates in full.
 
 ## Built-in plugins
 

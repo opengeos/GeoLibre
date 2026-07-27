@@ -123,30 +123,33 @@ docker run --rm -p 8080:80 ghcr.io/opengeos/geolibre:latest
 
 #### Bundled conversion sidecar
 
-The image also bundles the Python conversion/Whitebox sidecar (uvicorn) and
-reverse-proxies it at `/sidecar`, so the browser reaches it same-origin with no
-CORS or separate process to manage. `/conversion/status` is reachable at
+The image also bundles the Python sidecar (uvicorn) and reverse-proxies it at
+`/sidecar`, so the browser reaches it same-origin with no CORS or separate
+process to manage. `/conversion/status` is reachable at
 `http://localhost:8080/sidecar/conversion/status`.
 
-- **Vector → GeoParquet** and **CSV → GeoParquet** run in the browser with
-  DuckDB-WASM and need no sidecar.
-- **Vector → FlatGeobuf**, **Vector → PMTiles**, and **Raster → COG** use the
-  sidecar. These read a file **path on the sidecar's filesystem**, so from a
-  pure browser they currently work for files mounted into the container (a
-  browser cannot hand the container an absolute path); upload-based input is a
-  planned follow-up. The desktop app passes real local paths, so all
-  conversions work there.
-- **PMTiles** and **Whitebox** are **amd64-only** in the container —
-  `freestiler` and `whitebox-workflows` publish no linux/arm64 wheels. On arm64
-  the other conversions still work; those two report unavailable.
+The browser build does **not** need the sidecar for the **Conversion** tools or
+the **Whitebox** toolbox — both run client-side on DuckDB-WASM and
+`geolibre-wasm`. What the bundled sidecar adds is:
 
-Because the sidecar is reachable same-origin, conversion reads/writes are
-confined to `GEOLIBRE_CONVERSION_ROOTS` (default `/data` in the image). Mount
-your files there:
+- **Raster tools** (rasterio), which have a client-side fallback for the core
+  tools but reach the full set through the sidecar.
+- The optional **GeoPandas engine** for the Vector tools, which otherwise run
+  client-side on Turf.js or Pyodide.
+
+Sidecar jobs read and write **paths on the sidecar's own filesystem** — a
+browser cannot hand the container an absolute host path — and those reads and
+writes are confined to `GEOLIBRE_CONVERSION_ROOTS` (default `/data` in the
+image). Mount your files there:
 
 ```bash
 docker run --rm -p 8080:80 -v "$PWD/data:/data" ghcr.io/opengeos/geolibre:latest
 ```
+
+`freestiler` and `whitebox-workflows` publish no linux/arm64 wheels, so they are
+installed on **amd64 only**; on arm64 the sidecar reports those tools
+unavailable. This does not affect the browser's own PMTiles and Whitebox
+engines, which are WebAssembly and run on any architecture.
 
 Set `GEOLIBRE_DISABLE_SIDECAR=1` to run nginx only (web-only behavior):
 
@@ -376,21 +379,25 @@ for details.
 
 The base install is deliberately small. Each group of tools has its own extra;
 install only the ones you need, then run `geolibre-server` (or the `uvicorn`
-command above):
+command above). These continue from `backend/geolibre_server`, the directory the
+snippet above changes into:
 
 ```bash
 # Conversion tools (DuckDB, rio-cogeo, freestiler)
-pip install -e "backend/geolibre_server[conversion]"
+pip install -e ".[conversion]"
 
 # Vector tools — GeoPandas engine (GeoPandas, Shapely)
-pip install -e "backend/geolibre_server[vector]"
+pip install -e ".[vector]"
 
 # Raster tools (rasterio, numpy, contourpy)
-pip install -e "backend/geolibre_server[raster]"
+pip install -e ".[raster]"
 
 # AI Segmentation proxy (an HTTP client only; models live in samgeo-api)
-pip install -e "backend/geolibre_server[ml]"
+pip install -e ".[ml]"
 ```
+
+From the repository root instead, use the full path — for example
+`pip install -e "backend/geolibre_server[conversion]"`.
 
 To use the sidecar from the **web** build, start it and serve the app from
 `localhost:5173` — CORS is restricted to that origin and the Tauri origins.
