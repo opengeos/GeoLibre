@@ -1078,7 +1078,11 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
           return;
         }
-        const { geojson, featureCount } = await refreshGeoJsonLayer(layer);
+        const {
+          geojson,
+          featureCount,
+          metadata: refreshedMetadata,
+        } = await refreshGeoJsonLayer(layer);
         const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
         if (!latest) return;
 
@@ -1087,6 +1091,9 @@ export function LayerPanel({
           metadata: {
             ...latest.metadata,
             featureCount,
+            // Source kinds whose refresh recomputes more than the count (an OGC
+            // API - Features layer's numberMatched/truncated) patch it here.
+            ...refreshedMetadata,
           },
         });
 

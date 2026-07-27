@@ -235,9 +235,21 @@ export async function fetchWfsGeoJson(
   throw lastError instanceof Error ? lastError : new WfsXmlResponseError(false);
 }
 
-export async function refreshGeoJsonLayer(
-  layer: GeoLibreLayer,
-): Promise<{ geojson: FeatureCollection; featureCount: number }> {
+/** The reloaded features, plus any layer metadata the refresh itself updates. */
+export interface GeoJsonRefreshResult {
+  geojson: FeatureCollection;
+  featureCount: number;
+  /**
+   * Metadata keys the refresh recomputed, merged over the layer's existing
+   * metadata by the caller. Only the source kinds that carry request state
+   * beyond the feature count (currently OGC API - Features, whose
+   * `numberMatched`/`truncated` would otherwise stay at the values from when
+   * the layer was added) return anything here.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+export async function refreshGeoJsonLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshResult> {
   const sourceUrl = refreshSourceUrl(layer);
   if (!sourceUrl) {
     throw new Error("This layer does not have a refreshable GeoJSON URL.");
@@ -276,11 +288,9 @@ export async function refreshGeoJsonLayer(
  * is still better than failing the refresh outright.
  *
  * @param layer - The OGC API - Features layer to reload.
- * @returns The reloaded features and their count.
+ * @returns The reloaded features, their count, and the refreshed paging metadata.
  */
-async function refreshOgcFeaturesLayer(
-  layer: GeoLibreLayer,
-): Promise<{ geojson: FeatureCollection; featureCount: number }> {
+async function refreshOgcFeaturesLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshResult> {
   const source = layer.source as {
     url?: unknown;
     baseUrl?: unknown;
@@ -296,6 +306,9 @@ async function refreshOgcFeaturesLayer(
     const url = layerHttpUrl(layer);
     if (!url) throw new Error("This layer does not have a refreshable GeoJSON URL.");
     const data = await fetchGeoJsonFeatureCollection(url);
+    // No metadata patch: this path reads a single page with no `numberMatched`
+    // to compare against, so it cannot say whether the collection is truncated.
+    // Leaving the stored values alone beats overwriting them with a guess.
     return { geojson: data, featureCount: data.features.length };
   }
   // Imported here rather than at module scope so this module stays light for
@@ -316,6 +329,10 @@ async function refreshOgcFeaturesLayer(
   return {
     geojson: result.data,
     featureCount: result.data.features.length,
+    // Both are always written, `numberMatched` even when the service stopped
+    // advertising one, so the layer reports this fetch rather than the counts
+    // it was originally added with.
+    metadata: { numberMatched: result.numberMatched, truncated: result.truncated },
   };
 }
 

@@ -398,7 +398,7 @@
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
     "ogcFeatures": {
-      "defaultName": "OGC API Features Layer",
+      "defaultName": "OGC API - Features Layer",
       "sampleLabel": "Global lakes (pygeoapi demo)",
       "urlPlaceholder": "https://example.com/ogcapi",
       "urlHint": "The service landing page, or any URL copied from it (a /collections or /collections/{id}/items URL also works).",
