@@ -86,7 +86,10 @@ export class PluginManager {
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
-    this.activationGenerations.delete(id);
+    // Invalidate any watcher retained by an activation Promise from the old
+    // plugin instance. Keep the counter monotonic so a re-registered plugin
+    // cannot reuse the same generation identity.
+    this.nextActivationGeneration(id);
     this.activationResults.delete(id);
     this.activating.delete(id);
     for (const handled of this.handledUrlParametersByContext.values()) {
@@ -421,6 +424,7 @@ export class PluginManager {
       if (!plugin) continue;
       plugin.deactivate(scopeAppToPlugin(app, id));
       this.active.delete(id);
+      this.activationResults.delete(id);
       changed = true;
     }
 

@@ -38,7 +38,7 @@ const SOURCE_KIND = "overture-maps";
 let overtureControl: OvertureMapsControl | null = null;
 // Holds the panel state while the control is detached so re-activating or
 // repositioning it restores the user's release, visibility, and opacity.
-let pendingState: OvertureMapsState | null = null;
+let pendingState: RestorableOvertureState | null = null;
 
 function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
   // Construct with the static defaults, then let setState restore the full
@@ -75,6 +75,12 @@ type OvertureStatePatch = Partial<
       }
     >
   >;
+};
+
+type RestorableOvertureState = Partial<
+  Pick<OvertureMapsState, "collapsed" | "inspect" | "panelWidth" | "release">
+> & {
+  themes: OvertureMapsState["themes"];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,6 +154,16 @@ function defaultOvertureState(): OvertureMapsState {
     themes,
     inspect: OVERTURE_OPTIONS.inspect,
     error: null,
+  };
+}
+
+function restorableOvertureState(state: OvertureMapsState): RestorableOvertureState {
+  return {
+    collapsed: state.collapsed,
+    panelWidth: state.panelWidth,
+    inspect: state.inspect,
+    ...(state.release ? { release: state.release } : {}),
+    themes: state.themes,
   };
 }
 
@@ -305,7 +321,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     if (!overtureControl) return;
     detachStoreSync();
-    pendingState = overtureControl.getState();
+    pendingState = restorableOvertureState(overtureControl.getState());
     app.removeMapControl(overtureControl);
     overtureControl = null;
   },
@@ -315,7 +331,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
     if (!overtureControl) return;
     // Snapshot before detaching from the map so a failed re-add still keeps
     // the latest state, mirroring the ordering used in deactivate.
-    pendingState = overtureControl.getState();
+    pendingState = restorableOvertureState(overtureControl.getState());
     app.removeMapControl(overtureControl);
     const added = app.addMapControl(overtureControl, overturePosition);
     if (!added) {
@@ -330,14 +346,14 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
     if (!isOvertureMapsState(state)) return false;
     if (overtureControl) {
       if (!applyOvertureMapsState(overtureControl, state)) return false;
-      pendingState = overtureControl.getState();
+      pendingState = restorableOvertureState(overtureControl.getState());
     } else {
-      const { state: next, applied } = mergeOvertureMapsStateWithResult(
-        pendingState ?? defaultOvertureState(),
-        state,
-      );
+      const base = pendingState
+        ? mergeOvertureMapsStateWithResult(defaultOvertureState(), pendingState).state
+        : defaultOvertureState();
+      const { state: next, applied } = mergeOvertureMapsStateWithResult(base, state);
       if (!applied) return false;
-      pendingState = next;
+      pendingState = restorableOvertureState(next);
     }
     return true;
   },

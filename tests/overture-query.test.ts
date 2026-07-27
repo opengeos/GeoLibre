@@ -335,4 +335,16 @@ describe("Overture plugin state coordination", () => {
     assert.equal(merged.inspect, false);
     assert.equal("unexpected" in merged, false);
   });
+
+  it("does not persist an empty release or fetched release list while detached", () => {
+    const applied = maplibreOvertureMapsPlugin.applyProjectState?.({} as GeoLibreAppAPI, {
+      collapsed: true,
+    });
+    const pending = maplibreOvertureMapsPlugin.getProjectState?.() as Record<string, unknown>;
+
+    assert.equal(applied, true);
+    assert.equal(pending.collapsed, true);
+    assert.equal("release" in pending, false);
+    assert.equal("releases" in pending, false);
+  });
 });

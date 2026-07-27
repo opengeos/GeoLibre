@@ -537,6 +537,75 @@ describe("PluginManager async activation", () => {
     await Promise.resolve();
     assert.equal(manager.isActive("reactivated-plugin"), true);
   });
+
+  it("does not let an unregistered plugin's activation revert its replacement", async () => {
+    const manager = new PluginManager();
+    let resolveOldMount: (value: boolean) => void = () => {};
+    let replacementDeactivations = 0;
+
+    manager.register(
+      testPlugin({
+        id: "replaceable-plugin",
+        activate: () =>
+          new Promise<boolean>((resolve) => {
+            resolveOldMount = resolve;
+          }),
+      }),
+    );
+    const oldActivation = manager.activate("replaceable-plugin", app);
+    manager.unregister("replaceable-plugin", app);
+    manager.register(
+      testPlugin({
+        id: "replaceable-plugin",
+        deactivate: () => {
+          replacementDeactivations += 1;
+        },
+      }),
+    );
+
+    assert.equal(await manager.activate("replaceable-plugin", app), true);
+    resolveOldMount(false);
+    assert.equal(await oldActivation, false);
+    assert.equal(manager.isActive("replaceable-plugin"), true);
+    assert.equal(replacementDeactivations, 0);
+  });
+
+  it("starts a fresh activation after project restore deactivates a pending mount", async () => {
+    const manager = new PluginManager();
+    const resolvers: Array<(value: boolean) => void> = [];
+    let activationCalls = 0;
+
+    manager.register(
+      testPlugin({
+        id: "restore-race-plugin",
+        activate: () => {
+          activationCalls += 1;
+          return new Promise<boolean>((resolve) => {
+            resolvers.push(resolve);
+          });
+        },
+      }),
+    );
+    const firstActivation = manager.activate("restore-race-plugin", app);
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: {},
+      },
+      app,
+    );
+    const secondActivation = manager.activate("restore-race-plugin", app);
+
+    assert.equal(activationCalls, 2);
+    assert.notEqual(secondActivation, firstActivation);
+    resolvers[0](true);
+    resolvers[1](true);
+    assert.equal(await firstActivation, false);
+    assert.equal(await secondActivation, true);
+    assert.equal(manager.isActive("restore-race-plugin"), true);
+  });
 });
 
 describe("PluginManager toolbar menu scoping", () => {
