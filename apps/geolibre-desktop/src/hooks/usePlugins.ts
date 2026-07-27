@@ -12,6 +12,7 @@ import {
   TIME_SLIDER_PLUGIN_ID,
   type TemporalLayerAdapter,
   setZarrLayerSelector,
+  setZarrLocalStoreProvider,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -97,6 +98,7 @@ import {
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
@@ -201,6 +203,15 @@ setTimelapseVideoSaver((blob, { defaultName, extension, mimeType }) =>
     mimeType,
   }),
 );
+
+// The Zarr panel can open a store from a folder on disk, but reading a folder
+// needs a filesystem API the plugins package does not have, so the picker is
+// injected here the same way. Registered only where a folder dialog exists (the
+// desktop app, or a browser with the File System Access API); elsewhere the
+// panel shows no Browse folder button rather than one that cannot deliver.
+if (zarrDirectoryPickerSupported()) {
+  setZarrLocalStoreProvider(pickZarrDirectory);
+}
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;

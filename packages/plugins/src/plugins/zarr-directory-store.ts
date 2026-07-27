@@ -11,8 +11,6 @@
 // `FileSystemDirectoryHandle`. Both are expressed as a
 // {@link ZarrDirectoryReader}, so everything below is platform-free.
 
-import type { ZarrDirectoryLister, ZarrMetadataReader } from "./zarr-store-metadata";
-
 /** Read access to one local folder holding a Zarr store. */
 export interface ZarrDirectoryReader {
   /** Display name of the folder, used to name the layer. */
@@ -25,14 +23,15 @@ export interface ZarrDirectoryReader {
    * @returns The file's bytes, or undefined when it does not exist.
    */
   readFile(path: string): Promise<Uint8Array | undefined>;
-  /**
-   * List the immediate children of a folder-relative directory.
-   *
-   * @param path - Folder-relative directory path (`""` for the store root).
-   * @returns The entries, or an empty list when the path is not a directory.
-   */
-  listEntries(path: string): Promise<Array<{ name: string; isDirectory: boolean }>>;
 }
+
+/**
+ * Reads one of a store's metadata documents.
+ *
+ * @param key - Store-relative key, e.g. `.zmetadata` or `time/.zattrs`.
+ * @returns The parsed JSON document, or undefined when the key is absent.
+ */
+export type ZarrMetadataReader = (key: string) => Promise<unknown | undefined>;
 
 /**
  * Strip the leading slash zarrita may put on a key and reject anything that
@@ -89,8 +88,11 @@ export class ZarrDirectoryStore {
 }
 
 /**
- * Build a {@link ZarrMetadataReader} over a local folder, for
- * `readZarrStoreMetadata`.
+ * Build a {@link ZarrMetadataReader} over a local folder.
+ *
+ * Used to read a local cube's CF `units`/`calendar` so it can still be bound to
+ * the Time Slider: its URL is only an identifier, so the usual metadata walk
+ * over HTTP has nothing to fetch.
  *
  * @param reader - Read access to the folder.
  * @returns A reader resolving each metadata key to its parsed JSON document.
@@ -115,43 +117,25 @@ export function createDirectoryZarrMetadataReader(reader: ZarrDirectoryReader): 
   };
 }
 
-/**
- * Build a {@link ZarrDirectoryLister} over a local folder, enabling
- * `readZarrStoreMetadata`'s node walk for a store with no consolidated
- * metadata.
- *
- * @param reader - Read access to the folder.
- * @returns A lister over that folder, resolving to `[]` for an unreadable path.
- */
-export function createDirectoryZarrLister(reader: ZarrDirectoryReader): ZarrDirectoryLister {
-  return async (path: string) => {
-    const relative = path ? normalizeZarrKey(path) : "";
-    if (relative === null) return [];
-    try {
-      return await reader.listEntries(relative);
-    } catch {
-      return [];
-    }
-  };
-}
-
 // Distinguishes one picked folder from the next; see localZarrStoreUrl.
 let localZarrStoreSequence = 0;
 
 /**
  * The pseudo-URL a local store is added under.
  *
- * The Zarr control keys its state and its layer names by URL, and the layer
- * name is derived from the last path segment, so a local store needs *some*
- * URL-shaped identifier. `local-zarr:` marks it as one that must not be
- * fetched, and the folder name is encoded so a name with URL-special
- * characters survives the round trip.
+ * The Zarr control keys per-layer state by URL and derives the layer name from
+ * the last path segment, so a local store needs *some* URL-shaped identifier.
+ * `local-zarr:` marks it as one that must not be fetched, and the folder name
+ * is encoded so a name with URL-special characters survives the round trip.
  *
- * The name alone will not do: the control keys per-URL state (and the host
- * refcounts in-flight adds) by this string, so two folders both called
- * `data.zarr` would collide and the second add could patch the first layer. A
- * per-call sequence number in the query string keeps them apart while leaving
- * the path — which is what the layer is *named* from — as the folder name.
+ * The name alone will not do: two folders both called `data.zarr` would collide
+ * and the second add could patch the first layer. A per-call sequence number in
+ * the query string keeps them apart while leaving the path — which is what the
+ * layer is *named* from — as the folder name.
+ *
+ * GeoLibre mints this itself rather than letting the control derive one, so the
+ * app can key its own per-store bookkeeping (the Time Slider's attribute
+ * reader) by the same string.
  *
  * @param name - The chosen folder's display name.
  * @returns A unique identifier to add the layer under.

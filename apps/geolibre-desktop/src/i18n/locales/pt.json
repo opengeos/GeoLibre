@@ -644,36 +644,6 @@
       "adding": "Adicionando...",
       "addLayer": "Adicionar camada"
     },
-    "zarr": {
-      "title": "Adicionar camada Zarr",
-      "description": "Renderizar um cubo de dados Zarr: um armazenamento remoto por HTTP, ou um armazenamento numa pasta deste computador.",
-      "sourceLabel": "Origem",
-      "sourceRemote": "Armazenamento remoto (URL)",
-      "sourceFolder": "Pasta local",
-      "urlLabel": "URL do armazenamento Zarr",
-      "urlHelp": "Escolha um conjunto de dados de exemplo acima, ou cole o URL do seu próprio armazenamento Zarr, e clique em Carregar variáveis.",
-      "loadVariables": "Carregar variáveis",
-      "loading": "A carregar...",
-      "folderLabel": "Pasta local",
-      "chooseFolder": "Escolher pasta",
-      "chooseDifferentFolder": "Escolher outra pasta",
-      "readingFolder": "A ler...",
-      "folderHelp": "Selecione a pasta que contém o armazenamento (a que inclui .zmetadata, .zgroup ou zarr.json). É lida diretamente do disco; nada é enviado.",
-      "folderUnsupported": "Este navegador não consegue abrir uma pasta. Use a aplicação de ambiente de trabalho, ou um navegador baseado em Chromium como o Chrome ou o Edge.",
-      "foundVariables_one": "Encontrada {{count}} variável.",
-      "foundVariables_other": "Encontradas {{count}} variáveis.",
-      "variableLabel": "Variável",
-      "dimLabel": "{{dim}}",
-      "dimValueHelp": "Não foi possível ler os valores de coordenada desta dimensão. Escreva o valor a mostrar, tal como aparece no armazenamento.",
-      "colorMin": "Cor mín (opcional)",
-      "colorMax": "Cor máx (opcional)",
-      "adding": "A adicionar...",
-      "addLayer": "Adicionar camada",
-      "sample": {
-        "climate": "Clima (CarbonPlan)",
-        "sst": "Temperatura da superfície do mar, mensal (NOAA)"
-      }
-    },
     "deckViz": {
       "defaultName": "Camada Deck.gl",
       "errorChooseFile": "Escolha um arquivo CSV, JSON ou GeoJSON.",

@@ -630,35 +630,6 @@
       "adding": "追加中...",
       "addLayer": "レイヤーを追加"
     },
-    "zarr": {
-      "title": "Zarr レイヤーを追加",
-      "description": "Zarr データキューブを描画します。HTTP 経由のリモートストア、またはこのコンピューター上のフォルダーにあるストアを使用できます。",
-      "sourceLabel": "ソース",
-      "sourceRemote": "リモートストア（URL）",
-      "sourceFolder": "ローカルフォルダー",
-      "urlLabel": "Zarr ストアの URL",
-      "urlHelp": "上のサンプルデータセットを選ぶか、独自の Zarr ストアの URL を貼り付けてから「変数を読み込む」をクリックします。",
-      "loadVariables": "変数を読み込む",
-      "loading": "読み込み中...",
-      "folderLabel": "ローカルフォルダー",
-      "chooseFolder": "フォルダーを選択",
-      "chooseDifferentFolder": "別のフォルダーを選択",
-      "readingFolder": "読み取り中...",
-      "folderHelp": "ストアを含むフォルダー（.zmetadata、.zgroup または zarr.json があるフォルダー）を選択してください。ディスクから直接読み取り、何もアップロードしません。",
-      "folderUnsupported": "このブラウザーではフォルダーを開けません。デスクトップアプリか、Chrome や Edge などの Chromium 系ブラウザーをお使いください。",
-      "foundVariables_other": "{{count}} 個の変数が見つかりました。",
-      "variableLabel": "変数",
-      "dimLabel": "{{dim}}",
-      "dimValueHelp": "この次元の座標値を読み取れませんでした。表示したい値を、ストアに記録されているとおりに入力してください。",
-      "colorMin": "カラー最小値（任意）",
-      "colorMax": "カラー最大値（任意）",
-      "adding": "追加中...",
-      "addLayer": "レイヤーを追加",
-      "sample": {
-        "climate": "気候（CarbonPlan）",
-        "sst": "海面水温、月別（NOAA）"
-      }
-    },
     "deckViz": {
       "defaultName": "Deck.glレイヤー",
       "errorChooseFile": "CSV、JSON、またはGeoJSONファイルを選択してください。",

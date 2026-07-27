@@ -630,35 +630,6 @@
       "adding": "正在添加...",
       "addLayer": "添加图层"
     },
-    "zarr": {
-      "title": "添加 Zarr 图层",
-      "description": "渲染 Zarr 数据立方体：通过 HTTP 访问的远程存储，或本机文件夹中的存储。",
-      "sourceLabel": "来源",
-      "sourceRemote": "远程存储（URL）",
-      "sourceFolder": "本地文件夹",
-      "urlLabel": "Zarr 存储 URL",
-      "urlHelp": "在上方选择示例数据集，或粘贴你自己的 Zarr 存储 URL，然后点击“加载变量”。",
-      "loadVariables": "加载变量",
-      "loading": "加载中...",
-      "folderLabel": "本地文件夹",
-      "chooseFolder": "选择文件夹",
-      "chooseDifferentFolder": "选择其他文件夹",
-      "readingFolder": "读取中...",
-      "folderHelp": "选择包含该存储的文件夹（其中含有 .zmetadata、.zgroup 或 zarr.json）。文件直接从磁盘读取，不会上传任何内容。",
-      "folderUnsupported": "此浏览器无法打开文件夹。请使用桌面应用，或 Chrome、Edge 等基于 Chromium 的浏览器。",
-      "foundVariables_other": "找到 {{count}} 个变量。",
-      "variableLabel": "变量",
-      "dimLabel": "{{dim}}",
-      "dimValueHelp": "无法读取该维度的坐标值。请按存储中的写法输入要显示的值。",
-      "colorMin": "颜色最小值（可选）",
-      "colorMax": "颜色最大值（可选）",
-      "adding": "添加中...",
-      "addLayer": "添加图层",
-      "sample": {
-        "climate": "气候（CarbonPlan）",
-        "sst": "海表温度，逐月（NOAA）"
-      }
-    },
     "deckViz": {
       "defaultName": "Deck.gl 图层",
       "errorChooseFile": "请选择一个 CSV、JSON 或 GeoJSON 文件。",

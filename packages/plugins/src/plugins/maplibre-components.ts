@@ -60,6 +60,7 @@ import type {
   ZarrLayerControl,
   ZarrLayerControlOptions,
   ZarrLayerEventHandler,
+  ZarrLocalStoreProvider,
   ZarrLayerInfo,
 } from "maplibre-gl-components";
 import type { GaussianSplatControl, GaussianSplatLayerAdapter } from "maplibre-gl-splat";
@@ -79,6 +80,12 @@ import {
   unregisterTemporalLayer,
 } from "./temporal-layers";
 import { pickTimeDimension, resolveZarrTimeAxis, type ZarrTimeAttributes } from "./zarr-time-axis";
+import {
+  ZarrDirectoryStore,
+  createDirectoryZarrMetadataReader,
+  localZarrStoreUrl,
+  type ZarrDirectoryReader,
+} from "./zarr-directory-store";
 
 type ControlGridConstructor = (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor = (typeof import("maplibre-gl-components"))["AddVectorControl"];
@@ -613,48 +620,6 @@ function getStacColorRampModule(colormap: string): typeof STAC_COLOR_RAMP_MODULE
 // above ZARR_OPTIONS because that initializer resolves a ramp for its samples.
 const ZARR_COLORMAP_STOPS = 9;
 
-/** One of the Zarr sample stores offered in the UI. */
-export interface ZarrSampleDataset {
-  /** Stable key the host looks a translated label up by. */
-  id: string;
-  /** English label, used by the on-map panel's own sample dropdown. */
-  label: string;
-  /** Store URL. */
-  url: string;
-  /** Variable to render, when the store's default is not the one to show. */
-  variable?: string;
-  /** Color limits that suit this store. */
-  clim?: [number, number];
-  /** Colormap that suits this store. */
-  colormap?: string[];
-  /** Selector that suits this store. */
-  selector?: Record<string, number | string>;
-}
-
-/**
- * The Zarr sample stores, shared by the on-map Zarr panel's sample dropdown and
- * the Add Zarr Layer dialog's, so the two cannot drift apart.
- *
- * Each carries its own settings because the control's `default*` options are the
- * CarbonPlan sample's: a -2..35 degree field drawn against a 0-300 ramp is a
- * flat wash, and `{ band, month }` names dimensions the SST store does not have.
- * Applying them on select needs maplibre-gl-components >= 0.28.0.
- */
-export const ZARR_SAMPLE_DATASETS: ZarrSampleDataset[] = [
-  { id: "climate", label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL, variable: "climate" },
-  {
-    id: "sst",
-    label: "Sea surface temperature, monthly (NOAA)",
-    url: ZARR_TIME_SERIES_SAMPLE_URL,
-    variable: "sst",
-    clim: [-2, 32],
-    colormap: interpolateRampColors("turbo", ZARR_COLORMAP_STOPS),
-    // This store's only non-spatial dimension is `time`, which the Time Slider
-    // drives; an empty selector clears the climate sample's.
-    selector: {},
-  },
-];
-
 const ZARR_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-zarr-control",
@@ -674,7 +639,23 @@ const ZARR_OPTIONS = {
   defaultOpacity: 0.85,
   defaultPickable: false,
   defaultSelector: { band: "prec", month: 1 },
-  sampleData: ZARR_SAMPLE_DATASETS,
+  // The SST entry carries its own settings because the `default*` options above
+  // are the CarbonPlan sample's: a -2..35 degree field drawn against a 0-300
+  // ramp is a flat wash, and `{ band, month }` names dimensions it does not
+  // have. Needs maplibre-gl-components >= 0.28.0, which applies these on select.
+  sampleData: [
+    { label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL },
+    {
+      label: "Sea surface temperature, monthly (NOAA)",
+      url: ZARR_TIME_SERIES_SAMPLE_URL,
+      variable: "sst",
+      clim: [-2, 32],
+      colormap: interpolateRampColors("turbo", ZARR_COLORMAP_STOPS),
+      // This store's only non-spatial dimension is `time`, which the Time
+      // Slider drives; an empty selector clears the climate sample's.
+      selector: {},
+    },
+  ],
   defaultVariable: "climate",
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies ZarrLayerControlOptions;
@@ -2073,6 +2054,53 @@ export function openZarrLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneZarrControl(app);
 }
 
+/**
+ * The host's folder picker for the Zarr panel's "Browse folder" button, and the
+ * folders it has opened so far.
+ *
+ * Reading a folder needs a filesystem API the plugins package does not have
+ * (Tauri's `fs`, or the browser's `showDirectoryPicker`), so the app registers
+ * one at startup. It stays null where neither exists, and the panel then shows
+ * no button at all rather than one that cannot deliver.
+ */
+let zarrLocalStoreProvider: ZarrLocalStoreProvider | null = null;
+
+/**
+ * Readers for the local stores opened so far, keyed by the identifier the layer
+ * was added under.
+ *
+ * A local cube's `url` is not an address, so the Time Slider's usual metadata
+ * walk over HTTP has nothing to fetch. Keeping the reader lets
+ * {@link registerZarrTemporalAdapter} read the store's CF `units`/`calendar`
+ * out of the folder instead, for a layer the *panel* added — where, unlike a
+ * programmatic add, the caller has no chance to pass its own context.
+ */
+const zarrLocalStoreReaders = new Map<string, ZarrDirectoryReader>();
+
+/**
+ * Register the host's folder picker for the Zarr panel.
+ *
+ * @param provider - Opens a folder dialog and returns read access to the chosen
+ *   Zarr store, or null when dismissed. Pass null to remove the button.
+ */
+export function setZarrLocalStoreProvider(
+  provider: (() => Promise<ZarrDirectoryReader | null>) | null,
+): void {
+  if (!provider) {
+    zarrLocalStoreProvider = null;
+    return;
+  }
+  zarrLocalStoreProvider = async () => {
+    const reader = await provider();
+    if (!reader) return null;
+    // Mint the identifier here rather than let the control derive one, so the
+    // reader can be filed under the same string the layer will carry.
+    const url = localZarrStoreUrl(reader.name);
+    zarrLocalStoreReaders.set(url, reader);
+    return { name: reader.name, store: new ZarrDirectoryStore(reader), url };
+  };
+}
+
 /** Options for {@link addCloudNetcdfLayer}. */
 export interface CloudNetcdfLayerOptions {
   /** URL of the kerchunk reference manifest (JSON) for the NetCDF/HDF file. */
@@ -2524,6 +2552,38 @@ async function readZarrDimensionValues(
   return null;
 }
 
+/**
+ * A reader for the CF `units`/`calendar` of a local store's coordinate, or null
+ * when this layer is not folder-backed.
+ *
+ * Coordinates sit beside the data variables, which in a multiscale pyramid is
+ * one level down, so both places are tried.
+ *
+ * @param url - The identifier the layer was added under.
+ * @returns A reader over that folder's coordinate attributes, or null.
+ */
+function localZarrTimeAttributesReader(url: string): ZarrTimeAttributesReader | null {
+  const reader = zarrLocalStoreReaders.get(url);
+  if (!reader) return null;
+  const read = createDirectoryZarrMetadataReader(reader);
+  return async (dimension: string) => {
+    for (const prefix of ["", "0/"]) {
+      for (const key of [`${prefix}${dimension}/.zattrs`, `${prefix}${dimension}/zarr.json`]) {
+        const document = await read(key);
+        const attributes = key.endsWith("zarr.json")
+          ? (document as { attributes?: unknown } | undefined)?.attributes
+          : document;
+        if (!attributes || typeof attributes !== "object") continue;
+        const record = attributes as Record<string, unknown>;
+        const units = typeof record.units === "string" ? record.units : undefined;
+        const calendar = typeof record.calendar === "string" ? record.calendar : undefined;
+        if (units !== undefined || calendar !== undefined) return { units, calendar };
+      }
+    }
+    return null;
+  };
+}
+
 /** Read a coordinate's `units`/`calendar` out of an inline kerchunk `.zattrs`. */
 function zarrTimeAttributesFromRefs(
   refs: KerchunkRefs | undefined,
@@ -2560,7 +2620,11 @@ function registerZarrTemporalAdapter(
   url: string | undefined,
   context: ZarrTemporalContext = {},
 ): void {
-  const { headers, refs, readAttributes } = context;
+  const { headers, refs } = context;
+  // A folder the panel opened is not something the caller could have passed
+  // context for, so fall back to the reader filed under this layer's own url.
+  const readAttributes =
+    context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
   void (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
     if (!dimensionValues) return;
@@ -3641,7 +3705,13 @@ function createSplattingControl(
 }
 
 function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): ZarrLayerControl {
-  const control = new ZarrLayerControlClass(ZARR_OPTIONS);
+  const control = new ZarrLayerControlClass({
+    ...ZARR_OPTIONS,
+    // Only when the host registered one: without the option the panel shows no
+    // Browse folder button, which is what a browser with no directory picker
+    // should see.
+    ...(zarrLocalStoreProvider ? { localStoreProvider: zarrLocalStoreProvider } : {}),
+  });
   control.on("collapse", () => control.hide());
   control.on("layeradd", createZarrLayerAddHandler());
   control.on("layerremove", (event) => {

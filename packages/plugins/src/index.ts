@@ -108,8 +108,7 @@ export {
   type CloudNetcdfLayerOptions,
   addZarrRasterLayer,
   setZarrLayerSelector,
-  ZARR_SAMPLE_DATASETS,
-  type ZarrSampleDataset,
+  setZarrLocalStoreProvider,
   type ZarrRasterLayerOptions,
   type ZarrReadableStore,
   type ZarrTimeAttributesReader,
@@ -136,30 +135,12 @@ export {
   type KerchunkVariable,
 } from "./plugins/kerchunk-reference-store";
 export {
-  readZarrStoreMetadata,
-  createHttpZarrMetadataReader,
-  variablesFromConsolidatedV2,
-  variablesFromConsolidatedV3,
-  type ReadZarrStoreMetadataOptions,
-  type ZarrDirectoryLister,
-  type ZarrMetadataReader,
-  type ZarrStoreMetadata,
-  type ZarrStoreVariable,
-} from "./plugins/zarr-store-metadata";
-export {
-  readZarrCoordinateValues,
-  parseZarrSelectorValue,
-  createHttpZarrStore,
-  type ZarrCoordinateStore,
-  type ZarrCoordinateValues,
-} from "./plugins/zarr-coordinates";
-export {
   ZarrDirectoryStore,
-  createDirectoryZarrLister,
   createDirectoryZarrMetadataReader,
   localZarrStoreUrl,
   normalizeZarrKey,
   type ZarrDirectoryReader,
+  type ZarrMetadataReader,
 } from "./plugins/zarr-directory-store";
 export {
   openLocalNetcdf,

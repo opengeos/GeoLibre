@@ -14,7 +14,7 @@
 // cannot deliver.
 
 import { open } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile } from "@tauri-apps/plugin-fs";
+import { readFile } from "@tauri-apps/plugin-fs";
 import type { ZarrDirectoryReader } from "@geolibre/plugins";
 import { isTauri } from "./is-tauri";
 
@@ -24,7 +24,6 @@ interface DirectoryHandle {
   kind: "directory";
   getDirectoryHandle(name: string): Promise<DirectoryHandle>;
   getFileHandle(name: string): Promise<{ getFile(): Promise<Blob> }>;
-  values(): AsyncIterable<{ name: string; kind: "file" | "directory" }>;
 }
 
 interface DirectoryPickerWindow extends Window {
@@ -96,14 +95,6 @@ function createTauriDirectoryReader(root: string): ZarrDirectoryReader {
         return undefined;
       }
     },
-    async listEntries(path: string) {
-      try {
-        const entries = await readDir(resolve(path));
-        return entries.map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory }));
-      } catch {
-        return [];
-      }
-    },
   };
 }
 
@@ -131,19 +122,6 @@ function createHandleDirectoryReader(root: DirectoryHandle): ZarrDirectoryReader
       } catch {
         // As above: an absent key is how a store expresses an empty chunk.
         return undefined;
-      }
-    },
-    async listEntries(path: string) {
-      try {
-        const directory = await resolveDirectory(path);
-        if (!directory) return [];
-        const entries: Array<{ name: string; isDirectory: boolean }> = [];
-        for await (const entry of directory.values()) {
-          entries.push({ name: entry.name, isDirectory: entry.kind === "directory" });
-        }
-        return entries;
-      } catch {
-        return [];
       }
     },
   };
