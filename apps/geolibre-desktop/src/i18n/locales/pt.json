@@ -658,7 +658,7 @@
       "chooseFolder": "Escolher pasta",
       "chooseDifferentFolder": "Escolher outra pasta",
       "readingFolder": "A ler...",
-      "folderHelp": "Selecione a pasta que contém o armazenamento (a que inclui .zmetadata ou .zgroup). É lida diretamente do disco; nada é enviado.",
+      "folderHelp": "Selecione a pasta que contém o armazenamento (a que inclui .zmetadata, .zgroup ou zarr.json). É lida diretamente do disco; nada é enviado.",
       "folderUnsupported": "Este navegador não consegue abrir uma pasta. Use a aplicação de ambiente de trabalho, ou um navegador baseado em Chromium como o Chrome ou o Edge.",
       "foundVariables_one": "Encontrada {{count}} variável.",
       "foundVariables_other": "Encontradas {{count}} variáveis.",

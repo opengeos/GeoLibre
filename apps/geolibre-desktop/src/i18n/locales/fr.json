@@ -658,7 +658,7 @@
       "chooseFolder": "Choisir un dossier",
       "chooseDifferentFolder": "Choisir un autre dossier",
       "readingFolder": "Lecture...",
-      "folderHelp": "Sélectionnez le dossier contenant le magasin (celui qui contient .zmetadata ou .zgroup). Il est lu directement depuis le disque ; rien n'est envoyé.",
+      "folderHelp": "Sélectionnez le dossier contenant le magasin (celui qui contient .zmetadata, .zgroup ou zarr.json). Il est lu directement depuis le disque ; rien n'est envoyé.",
       "folderUnsupported": "Ce navigateur ne peut pas ouvrir de dossier. Utilisez l'application de bureau, ou un navigateur basé sur Chromium comme Chrome ou Edge.",
       "foundVariables_one": "{{count}} variable trouvée.",
       "foundVariables_other": "{{count}} variables trouvées.",

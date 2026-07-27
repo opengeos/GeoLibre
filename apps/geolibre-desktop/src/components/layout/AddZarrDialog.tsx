@@ -88,12 +88,7 @@ export function AddZarrDialog({ open, appApi, onOpenChange }: AddZarrDialogProps
 
   const folderPickerAvailable = zarrDirectoryPickerSupported();
   const selectedVariable = loaded?.variables.find((item) => item.name === variable);
-  // Only the trailing two dimensions are spatial, and only a store that declares
-  // its dimension names can say which the others are.
-  const leadingDims =
-    selectedVariable && selectedVariable.dims.length === selectedVariable.shape.length
-      ? selectedVariable.dims.slice(0, Math.max(0, selectedVariable.dims.length - 2))
-      : [];
+  const leadingDims = leadingDimsOf(selectedVariable);
 
   const reset = () => {
     opGen.current += 1;
@@ -142,10 +137,7 @@ export function AddZarrDialog({ open, appApi, onOpenChange }: AddZarrDialogProps
     item: ZarrStoreVariable,
     gen: number,
   ): Promise<void> => {
-    const dims =
-      item.dims.length === item.shape.length
-        ? item.dims.slice(0, Math.max(0, item.dims.length - 2))
-        : [];
+    const dims = leadingDimsOf(item);
     if (dims.length === 0) {
       if (gen === opGen.current) {
         setCoordinates({});
@@ -486,6 +478,22 @@ export function AddZarrDialog({ open, appApi, onOpenChange }: AddZarrDialogProps
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * The non-spatial dimensions of a variable: the ones a user has to choose a
+ * slice of, since the trailing two are the spatial grid.
+ *
+ * Only a store that names its dimensions can say which those are, so a variable
+ * whose `dims` do not line up with its `shape` reports none and is added on the
+ * renderer's own default slice.
+ *
+ * @param variable - The variable to inspect, if one is selected.
+ * @returns Its leading dimension names, in order.
+ */
+function leadingDimsOf(variable: ZarrStoreVariable | undefined): string[] {
+  if (!variable || variable.dims.length !== variable.shape.length) return [];
+  return variable.dims.slice(0, Math.max(0, variable.dims.length - 2));
 }
 
 /**

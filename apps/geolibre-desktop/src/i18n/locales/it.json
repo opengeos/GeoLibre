@@ -658,7 +658,7 @@
       "chooseFolder": "Scegli cartella",
       "chooseDifferentFolder": "Scegli un'altra cartella",
       "readingFolder": "Lettura...",
-      "folderHelp": "Seleziona la cartella che contiene l'archivio (quella con .zmetadata o .zgroup). Viene letta direttamente dal disco; non viene caricato nulla.",
+      "folderHelp": "Seleziona la cartella che contiene l'archivio (quella con .zmetadata, .zgroup o zarr.json). Viene letta direttamente dal disco; non viene caricato nulla.",
       "folderUnsupported": "Questo browser non può aprire una cartella. Usa l'app desktop, o un browser basato su Chromium come Chrome o Edge.",
       "foundVariables_one": "Trovata {{count}} variabile.",
       "foundVariables_other": "Trovate {{count}} variabili.",

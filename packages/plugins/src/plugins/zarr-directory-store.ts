@@ -135,6 +135,9 @@ export function createDirectoryZarrLister(reader: ZarrDirectoryReader): ZarrDire
   };
 }
 
+// Distinguishes one picked folder from the next; see localZarrStoreUrl.
+let localZarrStoreSequence = 0;
+
 /**
  * The pseudo-URL a local store is added under.
  *
@@ -144,9 +147,16 @@ export function createDirectoryZarrLister(reader: ZarrDirectoryReader): ZarrDire
  * fetched, and the folder name is encoded so a name with URL-special
  * characters survives the round trip.
  *
+ * The name alone will not do: the control keys per-URL state (and the host
+ * refcounts in-flight adds) by this string, so two folders both called
+ * `data.zarr` would collide and the second add could patch the first layer. A
+ * per-call sequence number in the query string keeps them apart while leaving
+ * the path — which is what the layer is *named* from — as the folder name.
+ *
  * @param name - The chosen folder's display name.
- * @returns The identifier to add the layer under.
+ * @returns A unique identifier to add the layer under.
  */
 export function localZarrStoreUrl(name: string): string {
-  return `local-zarr:${encodeURIComponent(name || "zarr")}`;
+  localZarrStoreSequence += 1;
+  return `local-zarr:${encodeURIComponent(name || "zarr")}?${localZarrStoreSequence}`;
 }

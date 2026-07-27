@@ -658,7 +658,7 @@
       "chooseFolder": "Klasör seç",
       "chooseDifferentFolder": "Başka bir klasör seç",
       "readingFolder": "Okunuyor...",
-      "folderHelp": "Depoyu içeren klasörü seçin (.zmetadata ya da .zgroup dosyasını içeren klasör). Doğrudan diskten okunur; hiçbir şey karşıya yüklenmez.",
+      "folderHelp": "Depoyu içeren klasörü seçin (.zmetadata, .zgroup ya da zarr.json dosyasını içeren klasör). Doğrudan diskten okunur; hiçbir şey karşıya yüklenmez.",
       "folderUnsupported": "Bu tarayıcı klasör açamıyor. Masaüstü uygulamasını ya da Chrome veya Edge gibi Chromium tabanlı bir tarayıcı kullanın.",
       "foundVariables_one": "{{count}} değişken bulundu.",
       "foundVariables_other": "{{count}} değişken bulundu.",

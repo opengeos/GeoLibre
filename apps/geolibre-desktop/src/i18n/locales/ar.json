@@ -714,7 +714,7 @@
       "chooseFolder": "اختيار مجلد",
       "chooseDifferentFolder": "اختيار مجلد آخر",
       "readingFolder": "جارٍ القراءة...",
-      "folderHelp": "اختر المجلد الذي يحتوي على المخزن (الذي يضم ‎.zmetadata أو ‎.zgroup). تتم قراءته مباشرة من القرص ولا يُرفع أي شيء.",
+      "folderHelp": "اختر المجلد الذي يحتوي على المخزن (الذي يضم ‎.zmetadata أو ‎.zgroup أو zarr.json). تتم قراءته مباشرة من القرص ولا يُرفع أي شيء.",
       "folderUnsupported": "لا يستطيع هذا المتصفح فتح مجلد. استخدم تطبيق سطح المكتب، أو متصفحًا مبنيًا على Chromium مثل Chrome أو Edge.",
       "foundVariables_one": "تم العثور على {{count}} متغير.",
       "foundVariables_two": "تم العثور على {{count}} من المتغيرات.",

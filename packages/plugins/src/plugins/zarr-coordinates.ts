@@ -122,7 +122,18 @@ export async function createHttpZarrStore(
 ): Promise<ZarrCoordinateStore> {
   const zarr = await loadZarrita();
   return new zarr.FetchStore(url.replace(/\/+$/, ""), {
-    ...(headers ? { overrides: { headers } } : {}),
+    // The `overrides` option zarrita used to take for this is deprecated in
+    // favor of a request handler, so set the headers on the request itself.
+    ...(headers
+      ? {
+          fetch: (request: Request) => {
+            for (const [name, value] of Object.entries(headers)) {
+              request.headers.set(name, value);
+            }
+            return globalThis.fetch(request);
+          },
+        }
+      : {}),
   }) as unknown as ZarrCoordinateStore;
 }
 

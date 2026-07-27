@@ -130,9 +130,11 @@ export async function readZarrStoreMetadata(
       "Not a Zarr store: no .zmetadata, zarr.json, .zgroup or .zarray document was found.",
     );
   }
-  if (!options.listEntries) {
+  if (!options.listEntries && consolidatedV2 === undefined && rootV3 === undefined) {
     // Over HTTP there is no listing to fall back on, so name the real cause
-    // rather than reporting the store as empty.
+    // rather than reporting the store as empty. Only when the store really has
+    // no consolidated document: one that *is* consolidated and simply holds
+    // nothing renderable would be misdirected by this advice.
     throw new Error(
       "This store's variables could not be listed: it has no consolidated metadata (.zmetadata, or a zarr.json carrying consolidated_metadata). Open it from a local folder instead, or consolidate the store's metadata.",
     );

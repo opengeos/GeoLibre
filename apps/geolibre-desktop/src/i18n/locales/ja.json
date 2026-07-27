@@ -644,7 +644,7 @@
       "chooseFolder": "フォルダーを選択",
       "chooseDifferentFolder": "別のフォルダーを選択",
       "readingFolder": "読み取り中...",
-      "folderHelp": "ストアを含むフォルダー（.zmetadata または .zgroup があるフォルダー）を選択してください。ディスクから直接読み取り、何もアップロードしません。",
+      "folderHelp": "ストアを含むフォルダー（.zmetadata、.zgroup または zarr.json があるフォルダー）を選択してください。ディスクから直接読み取り、何もアップロードしません。",
       "folderUnsupported": "このブラウザーではフォルダーを開けません。デスクトップアプリか、Chrome や Edge などの Chromium 系ブラウザーをお使いください。",
       "foundVariables_other": "{{count}} 個の変数が見つかりました。",
       "variableLabel": "変数",

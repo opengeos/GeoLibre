@@ -684,7 +684,7 @@
       "chooseFolder": "Choose folder",
       "chooseDifferentFolder": "Choose a different folder",
       "readingFolder": "Reading...",
-      "folderHelp": "Select the folder that holds the store (the one containing .zmetadata or .zgroup). It is read directly from disk; nothing is uploaded.",
+      "folderHelp": "Select the folder that holds the store (the one containing .zmetadata, .zgroup, or zarr.json). It is read directly from disk; nothing is uploaded.",
       "folderUnsupported": "This browser cannot open a folder. Use the desktop app, or a Chromium-based browser such as Chrome or Edge.",
       "foundVariables_one": "Found {{count}} variable.",
       "foundVariables_other": "Found {{count}} variables.",

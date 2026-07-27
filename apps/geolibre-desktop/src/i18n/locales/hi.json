@@ -658,7 +658,7 @@
       "chooseFolder": "फ़ोल्डर चुनें",
       "chooseDifferentFolder": "दूसरा फ़ोल्डर चुनें",
       "readingFolder": "पढ़ा जा रहा है...",
-      "folderHelp": "वह फ़ोल्डर चुनें जिसमें स्टोर है (जिसमें .zmetadata या .zgroup हो)। इसे सीधे डिस्क से पढ़ा जाता है; कुछ भी अपलोड नहीं होता।",
+      "folderHelp": "वह फ़ोल्डर चुनें जिसमें स्टोर है (जिसमें .zmetadata, .zgroup या zarr.json हो)। इसे सीधे डिस्क से पढ़ा जाता है; कुछ भी अपलोड नहीं होता।",
       "folderUnsupported": "यह ब्राउज़र फ़ोल्डर नहीं खोल सकता। डेस्कटॉप ऐप, या Chrome या Edge जैसा Chromium-आधारित ब्राउज़र उपयोग करें।",
       "foundVariables_one": "{{count}} चर मिला।",
       "foundVariables_other": "{{count}} चर मिले।",

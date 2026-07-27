@@ -658,7 +658,7 @@
       "chooseFolder": "Map kiezen",
       "chooseDifferentFolder": "Een andere map kiezen",
       "readingFolder": "Lezen...",
-      "folderHelp": "Selecteer de map met de opslag (die met .zmetadata of .zgroup). Deze wordt rechtstreeks van schijf gelezen; er wordt niets geüpload.",
+      "folderHelp": "Selecteer de map met de opslag (die met .zmetadata, .zgroup of zarr.json). Deze wordt rechtstreeks van schijf gelezen; er wordt niets geüpload.",
       "folderUnsupported": "Deze browser kan geen map openen. Gebruik de desktop-app of een op Chromium gebaseerde browser zoals Chrome of Edge.",
       "foundVariables_one": "{{count}} variabele gevonden.",
       "foundVariables_other": "{{count}} variabelen gevonden.",

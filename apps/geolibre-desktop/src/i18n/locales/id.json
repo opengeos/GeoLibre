@@ -644,7 +644,7 @@
       "chooseFolder": "Pilih folder",
       "chooseDifferentFolder": "Pilih folder lain",
       "readingFolder": "Membaca...",
-      "folderHelp": "Pilih folder yang memuat penyimpanan (yang berisi .zmetadata atau .zgroup). Folder dibaca langsung dari disk; tidak ada yang diunggah.",
+      "folderHelp": "Pilih folder yang memuat penyimpanan (yang berisi .zmetadata, .zgroup, atau zarr.json). Folder dibaca langsung dari disk; tidak ada yang diunggah.",
       "folderUnsupported": "Peramban ini tidak dapat membuka folder. Gunakan aplikasi desktop, atau peramban berbasis Chromium seperti Chrome atau Edge.",
       "foundVariables_other": "Ditemukan {{count}} variabel.",
       "variableLabel": "Variabel",

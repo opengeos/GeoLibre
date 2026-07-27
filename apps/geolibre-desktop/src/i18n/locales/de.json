@@ -658,7 +658,7 @@
       "chooseFolder": "Ordner auswählen",
       "chooseDifferentFolder": "Anderen Ordner auswählen",
       "readingFolder": "Wird gelesen...",
-      "folderHelp": "Wählen Sie den Ordner mit dem Speicher (den mit .zmetadata oder .zgroup). Er wird direkt von der Festplatte gelesen; nichts wird hochgeladen.",
+      "folderHelp": "Wählen Sie den Ordner mit dem Speicher (den mit .zmetadata, .zgroup oder zarr.json). Er wird direkt von der Festplatte gelesen; nichts wird hochgeladen.",
       "folderUnsupported": "Dieser Browser kann keinen Ordner öffnen. Verwenden Sie die Desktop-App oder einen Chromium-basierten Browser wie Chrome oder Edge.",
       "foundVariables_one": "{{count}} Variable gefunden.",
       "foundVariables_other": "{{count}} Variablen gefunden.",

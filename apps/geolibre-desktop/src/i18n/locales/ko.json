@@ -644,7 +644,7 @@
       "chooseFolder": "폴더 선택",
       "chooseDifferentFolder": "다른 폴더 선택",
       "readingFolder": "읽는 중...",
-      "folderHelp": "저장소가 들어 있는 폴더(.zmetadata 또는 .zgroup이 있는 폴더)를 선택하세요. 디스크에서 직접 읽으며 아무것도 업로드하지 않습니다.",
+      "folderHelp": "저장소가 들어 있는 폴더(.zmetadata, .zgroup 또는 zarr.json이 있는 폴더)를 선택하세요. 디스크에서 직접 읽으며 아무것도 업로드하지 않습니다.",
       "folderUnsupported": "이 브라우저에서는 폴더를 열 수 없습니다. 데스크톱 앱이나 Chrome, Edge 같은 Chromium 기반 브라우저를 사용하세요.",
       "foundVariables_other": "변수 {{count}}개를 찾았습니다.",
       "variableLabel": "변수",

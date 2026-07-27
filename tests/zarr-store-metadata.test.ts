@@ -184,6 +184,17 @@ describe("readZarrStoreMetadata", () => {
     );
   });
 
+  it("does not blame consolidation when a consolidated store has nothing to draw", async () => {
+    // The store *is* consolidated; telling the user to consolidate it would
+    // send them after a document that is already there.
+    await assert.rejects(
+      readZarrStoreMetadata(
+        readerFor({ ".zmetadata": { metadata: { "time/.zarray": { shape: [12] } } } }),
+      ),
+      /No renderable/,
+    );
+  });
+
   it("reports a store whose only arrays are coordinates", async () => {
     await assert.rejects(
       readZarrStoreMetadata(

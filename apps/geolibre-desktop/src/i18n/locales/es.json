@@ -658,7 +658,7 @@
       "chooseFolder": "Elegir carpeta",
       "chooseDifferentFolder": "Elegir otra carpeta",
       "readingFolder": "Leyendo...",
-      "folderHelp": "Seleccione la carpeta que contiene el almacén (la que incluye .zmetadata o .zgroup). Se lee directamente del disco; no se sube nada.",
+      "folderHelp": "Seleccione la carpeta que contiene el almacén (la que incluye .zmetadata, .zgroup o zarr.json). Se lee directamente del disco; no se sube nada.",
       "folderUnsupported": "Este navegador no puede abrir una carpeta. Use la aplicación de escritorio o un navegador basado en Chromium como Chrome o Edge.",
       "foundVariables_one": "Se encontró {{count}} variable.",
       "foundVariables_other": "Se encontraron {{count}} variables.",
