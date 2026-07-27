@@ -125,6 +125,19 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       const layer = state.layers.find((item) => item.id === target.layerId);
       if (!layer) throw new Error(`No layer with id "${target.layerId}"`);
       const ids = resolveHighlightIds(layer.geojson?.features ?? [], target);
+      // A request that names nothing is the documented "clear the highlight"
+      // form. A request that DOES name features but resolves to none is a
+      // failure, not a clear: the id may be a typo, or the layer may keep its
+      // features in its MapLibre source rather than `geojson` (vector tiles,
+      // source-owned layers), where nothing can be resolved here. Report that
+      // instead of wiping the user's selection behind an `ok` ack.
+      const askedForFeatures = target.featureIds.length > 0 || target.filter !== null;
+      if (askedForFeatures && ids.length === 0) {
+        throw new Error(
+          `highlightFeature matched no features in layer "${target.layerId}"` +
+            (layer.geojson ? "" : " (the layer's features are not readable from the store)"),
+        );
+      }
       // Drive the store as well as the map so the Attribute table and Layers
       // panel agree with what the host highlighted, exactly as a map click does.
       state.selectLayer(target.layerId);

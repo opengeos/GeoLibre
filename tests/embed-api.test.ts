@@ -267,21 +267,40 @@ describe("parseEmbedRequest: openTool", () => {
   });
 
   it("requires an id", () => {
-    assert.ok(parseEmbedRequest(message("openTool", {}))?.hasOwnProperty("error"));
+    const parsed = parseEmbedRequest(message("openTool", {}));
+    assert.ok(parsed && "error" in parsed);
   });
 });
 
 describe("resolveHighlightIds", () => {
-  const features: Feature[] = [
+  // Geometry is irrelevant here (only ids and properties are read), so these
+  // fixtures declare it as null and type accordingly.
+  const features: Feature<null>[] = [
     { type: "Feature", id: "f1", properties: { parcel: "A-1", area: 12 }, geometry: null },
     { type: "Feature", properties: { parcel: "A-2", area: 34 }, geometry: null },
     { type: "Feature", id: "f3", properties: { parcel: "A-1", area: 56 }, geometry: null },
   ];
 
-  it("returns explicit ids untouched when no filter is given", () => {
+  it("keeps an explicit id that the layer actually carries", () => {
     assert.deepEqual(resolveHighlightIds(features, highlightTarget({ featureIds: ["f3"] })), [
       "f3",
     ]);
+  });
+
+  it("resolves an explicit id against the index convention for an id-less feature", () => {
+    assert.deepEqual(resolveHighlightIds(features, highlightTarget({ featureIds: ["1"] })), ["1"]);
+  });
+
+  it("drops an explicit id no feature carries, rather than selecting a phantom", () => {
+    assert.deepEqual(resolveHighlightIds(features, highlightTarget({ featureIds: ["NOPE"] })), []);
+    assert.deepEqual(
+      resolveHighlightIds(features, highlightTarget({ featureIds: ["f1", "NOPE"] })),
+      ["f1"],
+    );
+  });
+
+  it("resolves nothing when the layer has no readable features", () => {
+    assert.deepEqual(resolveHighlightIds([], highlightTarget({ featureIds: ["f1"] })), []);
   });
 
   it("matches every feature satisfying the filter, in feature order", () => {

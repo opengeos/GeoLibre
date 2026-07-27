@@ -12,7 +12,7 @@
 // GeoLibre does not control — so it is off unless the deployment names the
 // origins it trusts, and every message is checked against that list.
 
-import type { Feature } from "geojson";
+import type { Feature, Geometry } from "geojson";
 
 /** Protocol version carried by every message in both directions. */
 export const EMBED_API_VERSION = 1;
@@ -324,16 +324,24 @@ export function parseEmbedRequest(
 /**
  * Resolve the feature ids a highlight target names within a layer's features.
  *
- * Explicit ids are kept as sent (they are matched against the same
- * `String(feature.id ?? index)` convention the map controller uses); a `filter`
- * selects every feature whose properties equal all of the filter's pairs.
+ * Ids are resolved against the layer, not taken on trust: an explicit id is kept
+ * only when a feature carries it under the same `String(feature.id ?? index)`
+ * convention the map controller uses, and a `filter` selects every feature whose
+ * properties equal all of the filter's pairs. An id that names nothing is
+ * dropped here so the caller can tell a real match from a typo (or from a layer
+ * whose features are not readable at all) rather than selecting a phantom.
  *
- * @param features - The layer's features, in map order.
+ * @param features - The layer's features, in map order. Only ids and properties
+ *   are read, so a null-geometry feature (an attribute-only table) is accepted.
  * @param target - The parsed highlight target.
  * @returns Feature ids to highlight, in feature order for filter matches.
  */
-export function resolveHighlightIds(features: Feature[], target: EmbedHighlightTarget): string[] {
-  const ids = [...target.featureIds];
+export function resolveHighlightIds(
+  features: Feature<Geometry | null>[],
+  target: EmbedHighlightTarget,
+): string[] {
+  const known = new Set(features.map((feature, index) => String(feature.id ?? index)));
+  const ids = target.featureIds.filter((id) => known.has(id));
   if (!target.filter) return ids;
   const pairs = Object.entries(target.filter);
   features.forEach((feature, index) => {

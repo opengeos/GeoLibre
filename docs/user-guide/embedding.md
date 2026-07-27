@@ -102,7 +102,9 @@ For a static build, bake it in instead:
 Entries are origins (`scheme://host[:port]`); a trailing path is ignored. `*`
 allows any origin and is only appropriate on a private network. The allowlist is
 enforced in both directions: a message from an unlisted origin is ignored, and
-every message the app sends is addressed to a listed origin, never `*`.
+every message the app sends is addressed to a listed origin. (With `*`
+configured, outbound messages are addressed to `*` until the host's first
+message identifies it, which is one more reason to name your origins.)
 
 Setting the allowlist also narrows the `?embed=1` project/scripting bridges (used
 by the [Python package](../python.md)) to the same origins. As extra hardening
@@ -129,9 +131,15 @@ them out of the other `postMessage` traffic on your page.
 | `highlightFeature` | `{ layerId, featureId \| featureIds \| filter, fit }`      | Selects and highlights features; `filter` matches properties. `fit` zooms to them.  |
 | `openTool`         | `{ id, params }`                                           | Opens the Processing dialog on a tool, pre-filling `params`. Runtime twin of `?tool=`. |
 
-Send `{ layerId }` alone to `highlightFeature` to clear the highlight. Add a
-`requestId` to any message and the app answers with an `ack` (below) reporting
-whether it worked.
+Send `{ layerId }` alone to `highlightFeature` to clear the highlight. A request
+that names features (or a filter) but matches none is rejected rather than
+treated as a clear, so a mistyped id does not silently wipe the user's selection.
+Highlighting reads the layer's features from the project, so it applies to vector
+layers GeoLibre holds as GeoJSON, not to ones whose features live only in a tile
+source.
+
+Add a `requestId` to any message and the app answers with an `ack` (below)
+reporting whether it worked.
 
 ### GeoLibre to host
 
