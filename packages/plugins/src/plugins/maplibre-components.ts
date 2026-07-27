@@ -2093,12 +2093,35 @@ export function setZarrLocalStoreProvider(
   zarrLocalStoreProvider = async () => {
     const reader = await provider();
     if (!reader) return null;
+    // A reader holds a directory handle — memory, and the capability to read
+    // that folder — so drop the ones no layer is using before taking another.
+    pruneZarrLocalStoreReaders();
     // Mint the identifier here rather than let the control derive one, so the
     // reader can be filed under the same string the layer will carry.
     const url = localZarrStoreUrl(reader.name);
     zarrLocalStoreReaders.set(url, reader);
     return { name: reader.name, store: new ZarrDirectoryStore(reader), url };
   };
+}
+
+/**
+ * Forget the folder readers no live Zarr layer is backed by.
+ *
+ * Run after a layer is removed, and before a new folder is taken: between the
+ * two it also covers a folder the user browsed to and then never added, which
+ * no layer removal would ever account for.
+ */
+function pruneZarrLocalStoreReaders(): void {
+  if (zarrLocalStoreReaders.size === 0) return;
+  const live = new Set(
+    useAppStore
+      .getState()
+      .layers.filter(isZarrControlLayer)
+      .map((layer) => layer.sourcePath),
+  );
+  for (const url of zarrLocalStoreReaders.keys()) {
+    if (!live.has(url)) zarrLocalStoreReaders.delete(url);
+  }
 }
 
 /** Options for {@link addCloudNetcdfLayer}. */
@@ -3727,6 +3750,7 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
         store.removeLayer(layer.id);
       }
     }
+    pruneZarrLocalStoreReaders();
   });
   zarrStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
@@ -3742,6 +3766,7 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
       clearExternalNativePaintBridge(layer.id);
       zarrControl?.removeLayer(layer.id);
     }
+    pruneZarrLocalStoreReaders();
   });
   return control;
 }
