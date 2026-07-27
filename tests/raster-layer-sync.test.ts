@@ -8,6 +8,7 @@ import {
   localRasterPath,
   rememberLocalRasterPath,
   removeRasterStoreLayers,
+  rendersNativeMapLibreLayer,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
   syncRasterLayersToStore,
@@ -77,6 +78,19 @@ function otherStoreLayer(id = "unrelated"): GeoLibreLayer {
     metadata: {},
   };
 }
+
+// The projection rule in maplibre-raster.ts keys off this: only the deck.gl
+// engine cannot draw on the globe, so only it forces the map to mercator.
+describe("rendersNativeMapLibreLayer", () => {
+  it("is true for the engines backed by a real MapLibre raster layer", () => {
+    assert.equal(rendersNativeMapLibreLayer("cog-tiler-wasm"), true);
+    assert.equal(rendersNativeMapLibreLayer("titiler"), true);
+  });
+
+  it("is false for the deck.gl engine", () => {
+    assert.equal(rendersNativeMapLibreLayer("maplibre-gl-raster"), false);
+  });
+});
 
 describe("createRasterStoreLayer", () => {
   it("mirrors a URL raster as an external custom cog layer", () => {

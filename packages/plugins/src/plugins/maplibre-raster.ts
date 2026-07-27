@@ -16,6 +16,7 @@ import {
 import {
   isRasterControlStoreLayer,
   rememberLocalRasterPath,
+  rendersNativeMapLibreLayer,
   resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
@@ -729,7 +730,20 @@ function createRasterControl(RasterControlClass: RasterControlConstructor): Rast
   // deck.gl's COG tile traversal does not support MapLibre's globe view
   // ("TODO: implement getBoundingVolume in Globe view"), so adding a raster
   // switches the map to mercator, like the other deck.gl-backed plugins.
-  control.on("rasteradd", () => ensureMercatorProjection(control.getMap()));
+  // Only the deck.gl engine needs this: the WASM and TiTiler engines render
+  // through a native MapLibre raster layer, which draws on the globe just like
+  // any other raster source, so forcing mercator there would drop the user out
+  // of globe view for no reason.
+  // Also on rasterchange, which is what setEngine emits: switching the panel
+  // from the WASM engine back to the deck.gl one has to force mercator for the
+  // rasters already on the map, not just for the next one added.
+  for (const event of ["rasteradd", "rasterchange"] as const) {
+    control.on(event, () => {
+      if (rendersNativeMapLibreLayer(control.getEngine())) return;
+      if (control.getRasters().length === 0) return;
+      ensureMercatorProjection(control.getMap());
+    });
+  }
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
     control.on(event, () => syncRasterLayersToStoreForRuntime(control));
   }

@@ -66,7 +66,7 @@ export type RasterSyncOptions = {
  * where the deck.gl overlay is a separate stacked canvas with no style layer at
  * all (issue #1463).
  */
-function rendersNativeMapLibreLayer(engine: RenderEngine): boolean {
+export function rendersNativeMapLibreLayer(engine: RenderEngine): boolean {
   return engine === "cog-tiler-wasm" || engine === "titiler";
 }
 
