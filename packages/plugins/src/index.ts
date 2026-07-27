@@ -340,6 +340,22 @@ export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export {
+  DEFAULT_EARTHDATA_GIS_LABELS,
+  EARTHDATA_GIS_PLUGIN_ID,
+  maplibreEarthdataGisPlugin,
+  setEarthdataGisLabels,
+  type EarthdataGisLabels,
+} from "./plugins/maplibre-earthdata-gis";
+// The catalog client's helpers (buildSearchUrl, parseSearchResponse, …) are
+// deliberately not re-exported here: those names are already taken by the
+// OpenAerialMap client below. Import them from the module path instead.
+export {
+  EARTHDATA_GIS_PORTAL_URL,
+  type EarthdataGisItem,
+  type EarthdataGisSearchResult,
+  type EarthdataServiceKind,
+} from "./plugins/earthdata-gis-api";
+export {
   DEFAULT_OPENAERIALMAP_LABELS,
   maplibreOpenAerialMapPlugin,
   OPENAERIALMAP_PLUGIN_ID,
