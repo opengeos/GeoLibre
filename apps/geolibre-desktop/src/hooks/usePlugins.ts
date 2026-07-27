@@ -657,6 +657,11 @@ export function bindTemporalLayer(
   if (!layer) return false;
   store.updateLayer(layerId, {
     metadata: { ...layer.metadata, timeBinding: binding },
+    // A selector binding replaces whatever was on the layer before. Drop any
+    // transient filter a previous vector binding left behind, or it would keep
+    // hiding features alongside the adapter (matching what the vector bind
+    // dialog does when it commits).
+    timeFilter: undefined,
   });
   if (!manager.isActive(TIME_SLIDER_PLUGIN_ID)) {
     manager.toggle(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));

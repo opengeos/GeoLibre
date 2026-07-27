@@ -3897,7 +3897,7 @@
     "styleCopied": "Gaya disalin dari \"{{name}}\".",
     "stylePasted": "Gaya ditempel dari \"{{name}}\".",
     "bindToTimeSlider": "Ikat ke Penggeser Waktu…",
-    "bindTimeDimensionToTimeSlider": "Tautkan dimensi waktu ke Penggeser Waktu",
+    "bindTimeDimensionToTimeSlider": "Ikat dimensi waktu ke Penggeser Waktu",
     "bindNoTimeDimension": "Lapisan ini tidak memiliki dimensi waktu yang dapat dibaca.",
     "unbindFromTimeSlider": "Lepas dari Penggeser Waktu",
     "bindDialogDescription": "Filter fitur layer ini berdasarkan properti tanggal atau timestamp saat Anda menggeser linimasa. Layer mempertahankan gaya dan opasitasnya.",

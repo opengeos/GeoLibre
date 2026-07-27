@@ -208,10 +208,20 @@ export interface FetchZarrTimeAttributesOptions {
   headers?: Record<string, string>;
   /** Injected fetch, for tests. Defaults to the global `fetch`. */
   fetchImpl?: typeof fetch;
+  /** Per-request timeout in milliseconds. Defaults to {@link METADATA_TIMEOUT_MS}. */
+  timeoutMs?: number;
 }
 
+/**
+ * How long one metadata document may take. A store that accepts the connection
+ * and never answers would otherwise leave the walk (and the cached promise
+ * every later add awaits) hanging for the life of the page.
+ */
+const METADATA_TIMEOUT_MS = 10_000;
+
 // One lookup per store+dimension, so re-binding or re-adding a layer does not
-// re-walk the metadata documents. Keyed by `<store url>|<dimension>`.
+// re-walk the metadata documents. Keyed by `<store url>|<dimension>`. Only a
+// *successful* lookup is kept: see the eviction in fetchZarrTimeAttributes.
 const attributeCache = new Map<string, Promise<ZarrTimeAttributes | null>>();
 
 /**
@@ -223,9 +233,13 @@ const attributeCache = new Map<string, Promise<ZarrTimeAttributes | null>>();
  * is also tried under a `0/` prefix, because a multiscale pyramid keeps its
  * coordinates inside the first level rather than at the root.
  *
+ * A lookup that finds nothing is **not** cached, so a transient outage (or a
+ * first, unauthenticated add of a store that later arrives with credentials)
+ * does not permanently disable the Time Slider binding for that store.
+ *
  * @param storeUrl - The Zarr store's base URL.
  * @param dimension - The time coordinate's name.
- * @param options - Optional headers and fetch override.
+ * @param options - Optional headers, timeout, and fetch override.
  * @returns The attributes, or null when the store exposes none.
  */
 export function fetchZarrTimeAttributes(
@@ -239,6 +253,11 @@ export function fetchZarrTimeAttributes(
   if (cached) return cached;
   const pending = readZarrTimeAttributes(base, dimension, options).catch(() => null);
   attributeCache.set(key, pending);
+  void pending.then((attributes) => {
+    // Keep only a hit. Evicting a miss costs one repeated walk per add of a
+    // store that has no attributes, and buys a retry after a failure.
+    if (!attributes && attributeCache.get(key) === pending) attributeCache.delete(key);
+  });
   return pending;
 }
 
@@ -247,12 +266,19 @@ async function readZarrTimeAttributes(
   dimension: string,
   options: FetchZarrTimeAttributesOptions,
 ): Promise<ZarrTimeAttributes | null> {
+  const timeoutMs = options.timeoutMs ?? METADATA_TIMEOUT_MS;
   const fetchJson = async (path: string): Promise<unknown> => {
     const doFetch = options.fetchImpl ?? globalThis.fetch;
     if (typeof doFetch !== "function") return null;
     try {
       const response = await doFetch(`${base}/${path}`, {
         ...(options.headers ? { headers: options.headers } : {}),
+        // Bound each document, so an unresponsive store aborts the walk rather
+        // than hanging it. `AbortSignal.timeout` is absent in older runtimes
+        // (and in some test stubs), so its absence just means no timeout.
+        ...(typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? { signal: AbortSignal.timeout(timeoutMs) }
+          : {}),
       });
       if (!response.ok) return null;
       return (await response.json()) as unknown;

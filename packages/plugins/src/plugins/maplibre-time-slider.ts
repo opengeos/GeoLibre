@@ -608,10 +608,16 @@ function applyBoundFilters(control: TimeSliderControl, bound: BoundLayer[]): voi
   }
 }
 
-// Last time index applied per selector-bound layer, so a tick that lands on the
-// slice already on screen costs nothing. Cleared when a layer is unbound or the
-// dock detaches.
+// Last time index *requested* per selector-bound layer, so a tick that lands on
+// the slice already showing costs nothing. Cleared when a layer is unbound or
+// the dock detaches.
 const appliedTimeIndices = new Map<string, number>();
+// The in-flight (or just-finished) apply for each layer. New applies chain onto
+// it so a layer's slices are handed to its adapter strictly in request order:
+// a `setSelector` fetches chunks, and two overlapping calls could otherwise
+// resolve out of order and leave the renderer on the older slice while the memo
+// above records the newer index, stranding the cube behind the handle.
+const selectorApplyChains = new Map<string, Promise<void>>();
 // Pending throttled apply, so scrubbing (or playback) issues at most one chunk
 // fetch per interval per layer instead of one per tick.
 let selectorApplyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -649,16 +655,39 @@ function applySelectorTimes(control: TimeSliderControl): void {
     appliedTimeIndices.set(id, index);
     // The adapter is handed the slice's own date, not the timeline's, so a
     // daily cube under a month-stepping slider lands on a real time value.
-    // Failures are the layer's own (a chunk fetch that 404s) and must not stop
-    // the other layers from stepping.
-    void (async () => {
-      try {
-        await adapter.setTime(new Date(axis[index]));
-      } catch {
-        // Let the next tick retry: drop the memo so the same index is reapplied.
-        if (appliedTimeIndices.get(id) === index) appliedTimeIndices.delete(id);
-      }
-    })();
+    // Chained per layer so the last requested index is also the last applied;
+    // failures are the layer's own (a chunk fetch that 404s) and must not stop
+    // the other layers, or this layer's later slices, from being applied.
+    const date = new Date(axis[index]);
+    const previous = selectorApplyChains.get(id) ?? Promise.resolve();
+    const chained = previous.then(
+      () => applySelectorTime(id, adapter, date, index),
+      () => applySelectorTime(id, adapter, date, index),
+    );
+    selectorApplyChains.set(id, chained);
+    // Drop the chain once it drains, so a quiet layer holds no reference to a
+    // settled promise (and a removed layer leaves nothing behind).
+    void chained.then(() => {
+      if (selectorApplyChains.get(id) === chained) selectorApplyChains.delete(id);
+    });
+  }
+}
+
+/**
+ * Hand one slice to a layer's adapter, swallowing its failure so the chain
+ * survives. A failed apply drops the memo (unless a newer index has since been
+ * requested) so the next tick retries rather than assuming the slice landed.
+ */
+async function applySelectorTime(
+  id: string,
+  adapter: TemporalLayerAdapter,
+  date: Date,
+  index: number,
+): Promise<void> {
+  try {
+    await adapter.setTime(date);
+  } catch {
+    if (appliedTimeIndices.get(id) === index) appliedTimeIndices.delete(id);
   }
 }
 
@@ -781,6 +810,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
   preBindingRange = null;
   appliedTimeIndices.clear();
+  selectorApplyChains.clear();
   appliedFilterKeys.clear();
   // `statechange` fires on every date change (scrub and each playback tick) plus
   // range/granularity changes, which is exactly when bound filters, data cubes,
@@ -830,6 +860,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
     // a real view of the data rather than a timeline artifact. Only the memo is
     // dropped, so reactivating the dock re-applies whatever date it opens on.
     appliedTimeIndices.clear();
+    selectorApplyChains.clear();
     appliedFilterKeys.clear();
     lastBoundRangeKey = null;
     preBindingRange = null;

@@ -2083,8 +2083,7 @@ export async function addCloudNetcdfLayer(
   // a prior operation, and addLayer resolves before async chunk loading finishes.
   // The references travel with the add so the time axis of a NetCDF cube is read
   // from their inline `.zattrs` rather than from the (non-Zarr) manifest URL.
-  pendingZarrRefs = refs;
-  pendingZarrHeaders = options.headers;
+  const endAdd = beginZarrAdd(options.url, { refs, headers: options.headers });
   try {
     await zarrControl.addLayer(options.url, options.variable, {
       store,
@@ -2095,8 +2094,7 @@ export async function addCloudNetcdfLayer(
       opacity: options.opacity,
     });
   } finally {
-    pendingZarrRefs = undefined;
-    pendingZarrHeaders = undefined;
+    endAdd();
   }
 
   // Unlike openZarrLayerPanel, the dialog-based flow intentionally leaves the
@@ -2235,7 +2233,7 @@ async function addZarrLayerExclusively(
   control.on("error", handleError);
   // Handed to the `layeradd` handler so an authenticated store's time-axis
   // metadata is fetched with the same credentials as its chunks.
-  pendingZarrHeaders = headers;
+  const endAdd = beginZarrAdd(url, { headers });
   try {
     // The control awaits its own load before resolving and reports failure by
     // emitting "error" rather than rejecting, so both outcomes are already
@@ -2257,7 +2255,7 @@ async function addZarrLayerExclusively(
   } finally {
     control.off("layeradd", handleLayerAdd);
     control.off("error", handleError);
-    pendingZarrHeaders = undefined;
+    endAdd();
   }
 
   if (!addedLayerId) {
@@ -2321,18 +2319,32 @@ export async function setZarrLayerSelector(
 // with no time axis simply never becomes bindable.
 
 /**
- * Headers for the add currently in flight, so the `layeradd` handler can reach
- * an authenticated store's metadata. Safe as a single slot because
- * `addZarrRasterLayer` serializes adds and the control emits `layeradd`
- * synchronously from within `addLayer`.
+ * What the `layeradd` handler needs to resolve a new layer's time axis but
+ * cannot read off the event: an authenticated store's request headers, and (for
+ * Cloud-Optimized NetCDF) the kerchunk references that carry the coordinate
+ * attributes inline, since that layer's `url` points at the manifest rather
+ * than at a Zarr store.
  */
-let pendingZarrHeaders: Record<string, string> | undefined;
+interface PendingZarrContext {
+  headers?: Record<string, string>;
+  refs?: KerchunkRefs;
+}
+
 /**
- * Kerchunk references for the Cloud-Optimized NetCDF add currently in flight,
- * which carry the coordinate attributes inline (the layer's `url` points at the
- * manifest, not at a Zarr store).
+ * In-flight add context, keyed by store URL. `addZarrRasterLayer` serializes
+ * its own adds, but `addCloudNetcdfLayer` runs off that queue, so the two can
+ * overlap; keying by URL keeps one add from resolving against the other's
+ * credentials or manifest. Entries are removed when their add settles.
  */
-let pendingZarrRefs: KerchunkRefs | undefined;
+const pendingZarrContexts = new Map<string, PendingZarrContext>();
+
+/** Record the context for an add, returning a disposer for its `finally`. */
+function beginZarrAdd(url: string, context: PendingZarrContext): () => void {
+  pendingZarrContexts.set(url, context);
+  return () => {
+    if (pendingZarrContexts.get(url) === context) pendingZarrContexts.delete(url);
+  };
+}
 
 // How long to wait for `@carbonplan/zarr-layer` to finish loading its coordinate
 // arrays. `addLayer` resolves once the store's metadata is read, but the
@@ -2391,17 +2403,14 @@ function zarrTimeAttributesFromRefs(
  * the temporal adapter that lets the Time Slider step it via
  * {@link setZarrLayerSelector}.
  *
+ * The add's headers/references are read from {@link pendingZarrContexts} by
+ * URL, because the `layeradd` event carries neither.
+ *
  * @param layerId - The new layer's id.
  * @param url - The store URL (or kerchunk manifest URL).
- * @param headers - Request headers for an authenticated store.
- * @param refs - Kerchunk references, when the layer came from one.
  */
-function registerZarrTemporalAdapter(
-  layerId: string,
-  url: string | undefined,
-  headers: Record<string, string> | undefined,
-  refs?: KerchunkRefs,
-): void {
+function registerZarrTemporalAdapter(layerId: string, url: string | undefined): void {
+  const { headers, refs } = pendingZarrContexts.get(url ?? "") ?? {};
   void (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
     if (!dimensionValues) return;
@@ -3492,8 +3501,8 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
       const shouldRemove = event.layerId
         ? layer.id === event.layerId
         : !activeLayerIds.has(layer.id);
-      unregisterTemporalLayer(layer.id);
       if (shouldRemove) {
+        unregisterTemporalLayer(layer.id);
         store.removeLayer(layer.id);
       }
     }
@@ -4311,7 +4320,7 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
     // A cube with a time axis becomes drivable by the Time Slider. Resolving the
     // axis needs the renderer's async metadata load plus a store lookup, so it
     // runs on its own and registers the adapter whenever it lands.
-    registerZarrTemporalAdapter(layer.id, layerInfo.url, pendingZarrHeaders, pendingZarrRefs);
+    registerZarrTemporalAdapter(layer.id, layerInfo.url);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,

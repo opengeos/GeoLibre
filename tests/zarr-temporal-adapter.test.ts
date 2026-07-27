@@ -27,6 +27,8 @@ const selectorCalls: {
   selector: Record<string, number | string>;
 }[] = [];
 let dimensionValues: Record<string, (number | string)[]> = {};
+// The live stub, so a test can drive the control's own `layerremove` path.
+let controlInstance: ZarrLayerControlStub | null = null;
 
 class ZarrLayerControlStub {
   private handlers = new Map<string, Set<(event: unknown) => void>>();
@@ -40,6 +42,10 @@ class ZarrLayerControlStub {
   }[] = [];
   private instances = new Map<string, unknown>();
   private counter = 0;
+
+  constructor() {
+    controlInstance = this;
+  }
 
   on(event: string, handler: (event: unknown) => void) {
     if (!this.handlers.has(event)) this.handlers.set(event, new Set());
@@ -79,7 +85,15 @@ class ZarrLayerControlStub {
 
   setLayerOpacity() {}
   setLayerVisibility() {}
-  removeLayer() {}
+
+  // The real control drops the layer and announces it with the surviving state,
+  // which is how the plugin learns to prune its store layer and its adapter.
+  removeLayer(id?: string) {
+    if (!id) return;
+    this.layers = this.layers.filter((layer) => layer.id !== id);
+    this.instances.delete(id);
+    this.emit("layerremove", { layerId: id, state: { layers: this.layers } });
+  }
 
   private emit(event: string, payload: unknown) {
     for (const handler of this.handlers.get(event) ?? []) handler(payload);
@@ -208,6 +222,30 @@ describe("a Zarr layer's temporal adapter", () => {
         variable: "climate",
       });
       assert.equal(await waitForAdapter(id, 6), undefined);
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("drops only the removed cube's adapter when the control announces a removal", async () => {
+    // Removal is unregistered in two places: the store subscription (covered
+    // below) and the control's own `layerremove`. This drives the latter, and
+    // asserts a second cube keeps tracking the timeline.
+    const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
+    try {
+      const first = await addZarrRasterLayer(app, { url: STORE_URL, variable: "t2m" });
+      const second = await addZarrRasterLayer(app, { url: STORE_URL, variable: "tp" });
+      assert.ok(await waitForAdapter(first));
+      assert.ok(await waitForAdapter(second));
+
+      controlInstance?.removeLayer(first);
+
+      assert.equal(getTemporalLayerAdapter(first), undefined);
+      assert.ok(getTemporalLayerAdapter(second), "expected the surviving cube to keep its adapter");
+      assert.equal(
+        useAppStore.getState().layers.some((layer) => layer.id === first),
+        false,
+      );
     } finally {
       restoreFetch();
     }

@@ -182,6 +182,29 @@ describe("fetchZarrTimeAttributes", () => {
     );
   });
 
+  it("retries after a lookup that found nothing", async () => {
+    // A transient outage (or a first, unauthenticated add) must not permanently
+    // disable the Time Slider binding for a store, so a miss is not cached.
+    const offline = stubFetch({});
+    assert.equal(
+      await fetchZarrTimeAttributes("https://example.org/cube.zarr", "time", {
+        fetchImpl: offline.fetchImpl,
+      }),
+      null,
+    );
+    const online = stubFetch({
+      "https://example.org/cube.zarr/.zmetadata": {
+        metadata: { "time/.zattrs": { units: "days since 1970-01-01" } },
+      },
+    });
+    assert.deepEqual(
+      await fetchZarrTimeAttributes("https://example.org/cube.zarr", "time", {
+        fetchImpl: online.fetchImpl,
+      }),
+      { units: "days since 1970-01-01" },
+    );
+  });
+
   it("caches the lookup so re-binding a layer does not re-walk the store", async () => {
     const { fetchImpl, requested } = stubFetch({
       "https://example.org/cube.zarr/.zmetadata": {
