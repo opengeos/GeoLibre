@@ -25,6 +25,7 @@
     "@geolibre/core": "*",
     "@geoman-io/maplibre-geoman-free": "^0.8.4",
     "@loaders.gl/i3s": "^4.4.3",
+    "@mapbox/vector-tile": "^2.0.5",
     "@maplibre/maplibre-gl-directions": "^0.9.1",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
@@ -58,6 +59,8 @@
     "maplibre-gl-usgs-lidar": "^0.11.1",
     "maplibre-gl-vector": "^0.10.1",
     "netcdfjs": "^4.0.0",
+    "pbf": "^4.0.2",
+    "pmtiles": "^4.4.1",
     "proj4": "^2.20.9",
     "shpjs": "^6.2.0",
     "three": "^0.185.1"

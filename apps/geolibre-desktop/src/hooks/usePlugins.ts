@@ -36,6 +36,7 @@ import {
   maplibreHuggingFacePlugin,
   maplibreGeoLensPlugin,
   maplibreOvertureMapsPlugin,
+  queryOvertureFeatures,
   maplibreGraticulePlugin,
   maplibreCloudsPlugin,
   maplibrePrecipitationPlugin,
@@ -723,7 +724,9 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         (typeof version !== "string" || !/^1\.\d/.test(version.trim()))
       ) {
         console.warn(
-          `[GeoLibre] addWmsLayer: unsupported WMS version "${String(version)}"; using "${resolvedVersion}".`,
+          `[GeoLibre] addWmsLayer: unsupported WMS version "${String(
+            version,
+          )}"; using "${resolvedVersion}".`,
         );
       }
       const tileUrl = createWmsTileUrl({
@@ -826,6 +829,12 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
     resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,
+    activatePlugin: (pluginId: string, state?: unknown) => {
+      manager.activate(pluginId, api);
+      if (!manager.isActive(pluginId)) return false;
+      return state === undefined ? true : manager.applyPluginState(pluginId, api, state);
+    },
+    queryOvertureFeatures,
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
@@ -960,7 +969,9 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       // forever.
       if (projection !== "globe" && projection !== "mercator") {
         console.warn(
-          `[GeoLibre] setMapProjection: ignoring unknown projection "${String(projection)}" (expected "globe" or "mercator").`,
+          `[GeoLibre] setMapProjection: ignoring unknown projection "${String(
+            projection,
+          )}" (expected "globe" or "mercator").`,
         );
         return;
       }

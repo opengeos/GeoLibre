@@ -911,7 +911,12 @@ describe("PluginManager markDefaultActive", () => {
     manager.markDefaultActive("bundled-drop-in");
 
     manager.restoreProjectState(
-      { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} },
+      {
+        manifestUrls: [],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: {},
+      },
       app,
     );
     assert.equal(manager.isActive("bundled-drop-in"), false);
@@ -933,5 +938,61 @@ describe("PluginManager markDefaultActive", () => {
 
     manager.restoreProjectState(null, app);
     assert.equal(manager.isActive("bundled-drop-in"), false);
+  });
+});
+
+describe("PluginManager plugin coordination", () => {
+  it("applies a state patch to one registered plugin", () => {
+    const manager = new PluginManager();
+    const states: unknown[] = [];
+    manager.register(
+      testPlugin({
+        id: "target",
+        applyProjectState: (_app, state) => {
+          states.push(state);
+        },
+      }),
+    );
+
+    assert.equal(manager.applyPluginState("target", app, { visible: true }), true);
+    assert.deepEqual(states, [{ visible: true }]);
+    assert.equal(manager.applyPluginState("missing", app, {}), false);
+  });
+
+  it("prevents recursive activation across coordinating plugins", () => {
+    const manager = new PluginManager();
+    let firstCalls = 0;
+    let secondCalls = 0;
+    const coordinatingApp = {
+      ...app,
+      activatePlugin: (id: string) => {
+        manager.activate(id, coordinatingApp);
+        return manager.isActive(id);
+      },
+    } as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "first",
+        activate: (scopedApp) => {
+          firstCalls += 1;
+          scopedApp.activatePlugin?.("second");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "second",
+        activate: (scopedApp) => {
+          secondCalls += 1;
+          scopedApp.activatePlugin?.("first");
+        },
+      }),
+    );
+
+    manager.activate("first", coordinatingApp);
+    assert.equal(firstCalls, 1);
+    assert.equal(secondCalls, 1);
+    assert.equal(manager.isActive("first"), true);
+    assert.equal(manager.isActive("second"), true);
   });
 });

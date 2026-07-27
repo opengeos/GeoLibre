@@ -151,6 +151,11 @@ export {
   type DuckDBIdentifyResult,
 } from "./plugins/maplibre-duckdb";
 export {
+  queryOvertureFeatures,
+  overtureFeatureMatchesFilter,
+  overtureTilesForBBox,
+} from "./plugins/overture-query";
+export {
   closePlanetaryComputerPanel,
   openPlanetaryComputerPanel,
   restorePlanetaryComputerLayers,

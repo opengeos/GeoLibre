@@ -11,6 +11,8 @@ import {
   type OvertureMapsControlOptions,
   type OvertureMapsEventHandler,
   type OvertureMapsState,
+  type OvertureLayerState,
+  type OvertureThemeState,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
@@ -69,6 +71,104 @@ function isOvertureMapsState(value: unknown): value is Partial<OvertureMapsState
   return "themes" in value || "release" in value || "collapsed" in value;
 }
 
+type OvertureStatePatch = Omit<Partial<OvertureMapsState>, "themes"> & {
+  themes?: Partial<
+    Record<
+      OvertureTheme,
+      Partial<Omit<OvertureThemeState, "layers">> & {
+        layers?: Record<string, Partial<OvertureLayerState>>;
+      }
+    >
+  >;
+};
+
+function defaultOvertureState(): OvertureMapsState {
+  return new OvertureMapsControl({
+    ...OVERTURE_OPTIONS,
+    position: overturePosition,
+  }).getState();
+}
+
+/** Deep-merge a partial Overture state patch without dropping other themes. */
+export function mergeOvertureMapsState(
+  base: OvertureMapsState,
+  patch: OvertureStatePatch,
+): OvertureMapsState {
+  const themes = Object.fromEntries(
+    Object.entries(base.themes).map(([theme, state]) => [
+      theme,
+      {
+        ...state,
+        layers: Object.fromEntries(
+          Object.entries(state.layers).map(([sourceLayer, layer]) => [sourceLayer, { ...layer }]),
+        ),
+      },
+    ]),
+  ) as OvertureMapsState["themes"];
+
+  for (const [theme, themePatch] of Object.entries(patch.themes ?? {}) as Array<
+    [OvertureTheme, NonNullable<OvertureStatePatch["themes"]>[OvertureTheme]]
+  >) {
+    const currentTheme = themes[theme];
+    if (!currentTheme || !themePatch) continue;
+    const layers = { ...currentTheme.layers };
+    for (const [sourceLayer, layerPatch] of Object.entries(themePatch.layers ?? {})) {
+      if (!layers[sourceLayer]) continue;
+      layers[sourceLayer] = { ...layers[sourceLayer], ...layerPatch };
+    }
+    themes[theme] = { ...currentTheme, ...themePatch, layers };
+  }
+
+  return { ...base, ...patch, themes };
+}
+
+function applyOvertureMapsState(control: OvertureMapsControl, patch: OvertureStatePatch): void {
+  const current = control.getState();
+  const next = mergeOvertureMapsState(current, patch);
+
+  if (next.release && next.release !== current.release) {
+    control.setRelease(next.release);
+  }
+  if (patch.inspect !== undefined && next.inspect !== current.inspect) {
+    control.setInspect(next.inspect);
+  }
+  for (const [theme, themePatch] of Object.entries(patch.themes ?? {}) as Array<
+    [OvertureTheme, NonNullable<OvertureStatePatch["themes"]>[OvertureTheme]]
+  >) {
+    if (!themePatch) continue;
+    if (
+      themePatch.expanded !== undefined &&
+      next.themes[theme].expanded !== current.themes[theme].expanded
+    ) {
+      control.setThemeExpanded(theme, next.themes[theme].expanded);
+    }
+    for (const [sourceLayer, layerPatch] of Object.entries(themePatch.layers ?? {})) {
+      const before = current.themes[theme].layers[sourceLayer];
+      const after = next.themes[theme].layers[sourceLayer];
+      if (!before || !after) continue;
+      if (layerPatch.visible !== undefined && after.visible !== before.visible) {
+        control.setLayerVisible(theme, sourceLayer, after.visible);
+      }
+      if (layerPatch.opacity !== undefined && after.opacity !== before.opacity) {
+        control.setLayerOpacity(theme, sourceLayer, after.opacity);
+      }
+      if (layerPatch.color !== undefined && after.color !== before.color) {
+        control.setLayerColor(theme, sourceLayer, after.color);
+      }
+      if (layerPatch.size !== undefined && after.size !== before.size) {
+        control.setLayerSize(theme, sourceLayer, after.size);
+      }
+    }
+  }
+  if (patch.panelWidth !== undefined) {
+    control.setState({ panelWidth: next.panelWidth });
+  }
+  if (patch.collapsed !== undefined && next.collapsed !== current.collapsed) {
+    if (next.collapsed) control.collapse();
+    else control.expand();
+  }
+}
+
 export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-overture-maps",
   name: "Overture Maps",
@@ -115,8 +215,16 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   getProjectState: () => overtureControl?.getState() ?? pendingState ?? undefined,
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
     if (!isOvertureMapsState(state)) return false;
-    pendingState = state;
-    overtureControl?.setState(state);
+    const patch = state as OvertureStatePatch;
+    if (overtureControl) {
+      applyOvertureMapsState(overtureControl, patch);
+      pendingState = overtureControl.getState();
+    } else {
+      pendingState = mergeOvertureMapsState(
+        mergeOvertureMapsState(defaultOvertureState(), pendingState ?? {}),
+        patch,
+      );
+    }
   },
 };
 

@@ -17,6 +17,7 @@ export class PluginManager {
   private urlParameterNamesById = new Map<string, string[]>();
   private listeners = new Set<() => void>();
   private activationGenerations = new Map<string, number>();
+  private activating = new Set<string>();
   private version = 0;
 
   register(plugin: GeoLibrePlugin): void {
@@ -85,6 +86,7 @@ export class PluginManager {
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
     this.activationGenerations.delete(id);
+    this.activating.delete(id);
     for (const handled of this.handledUrlParametersByContext.values()) {
       handled.delete(id);
     }
@@ -135,9 +137,15 @@ export class PluginManager {
 
   activate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
-    if (!plugin || this.active.has(id)) return;
+    if (!plugin || this.active.has(id) || this.activating.has(id)) return;
     const scopedApp = scopeAppToPlugin(app, id);
-    const activated = plugin.activate(scopedApp);
+    this.activating.add(id);
+    let activated: ReturnType<GeoLibrePlugin["activate"]>;
+    try {
+      activated = plugin.activate(scopedApp);
+    } finally {
+      this.activating.delete(id);
+    }
     if (activated === false) return;
     const generation = this.nextActivationGeneration(id);
     this.active.add(id);
@@ -221,6 +229,19 @@ export class PluginManager {
   toggle(id: string, app: GeoLibreAppAPI): void {
     if (this.active.has(id)) this.deactivate(id, app);
     else this.activate(id, app);
+  }
+
+  /**
+   * Apply a state patch to one registered plugin without restoring the whole
+   * project. Used by cooperating plugins after the target is active.
+   */
+  applyPluginState(id: string, app: GeoLibreAppAPI, state: unknown): boolean {
+    const plugin = this.plugins.get(id);
+    if (!plugin?.applyProjectState) return false;
+    const updated = plugin.applyProjectState(scopeAppToPlugin(app, id), state);
+    if (updated === false) return false;
+    this.notify();
+    return true;
   }
 
   async handleUrlParameters(
@@ -410,9 +431,15 @@ export class PluginManager {
     for (const id of targetActive) {
       if (this.active.has(id)) continue;
       const plugin = this.plugins.get(id);
-      if (!plugin) continue;
+      if (!plugin || this.activating.has(id)) continue;
       const scopedApp = scopeForRestore(id);
-      const activated = plugin.activate(scopedApp);
+      this.activating.add(id);
+      let activated: ReturnType<GeoLibrePlugin["activate"]>;
+      try {
+        activated = plugin.activate(scopedApp);
+      } finally {
+        this.activating.delete(id);
+      }
       if (activated === false) continue;
       const generation = this.nextActivationGeneration(id);
       this.active.add(id);
@@ -471,7 +498,8 @@ function scopeAppToPlugin(
 ): GeoLibreAppAPI {
   const { onControlAdded } = options;
   const register = app.registerToolbarMenu;
-  if (!register && !onControlAdded) return app;
+  const activatePlugin = app.activatePlugin;
+  if (!register && !onControlAdded && !activatePlugin) return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
 
@@ -493,6 +521,11 @@ function scopeAppToPlugin(
       if (added !== false) onControlAdded(control);
       return added;
     };
+  }
+
+  if (activatePlugin) {
+    scoped.activatePlugin = (targetPluginId, state) =>
+      targetPluginId === pluginId ? false : activatePlugin(targetPluginId, state);
   }
 
   return scoped;
