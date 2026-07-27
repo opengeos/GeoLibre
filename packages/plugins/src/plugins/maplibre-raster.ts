@@ -1147,10 +1147,16 @@ async function openLocalRasterPicker(): Promise<void> {
     for (const picked of await picker()) {
       // Sequential, matching the drag-and-drop path: each add awaits the
       // GeoTIFF header, and the control zooms to the raster it just added.
-      await addRasterToMap(app, picked.file, {
-        name: picked.file.name,
-        localPath: picked.path,
-      });
+      // Each add is isolated so one unreadable pick does not silently discard
+      // the rest of a multi-file selection.
+      try {
+        await addRasterToMap(app, picked.file, {
+          name: picked.file.name,
+          localPath: picked.path,
+        });
+      } catch (error) {
+        console.error(`[GeoLibre] Failed to add the raster "${picked.file.name}"`, error);
+      }
     }
   } catch (error) {
     console.error("[GeoLibre] Failed to add a raster from the file picker", error);

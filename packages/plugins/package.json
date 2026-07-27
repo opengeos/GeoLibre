@@ -32,6 +32,7 @@
     "@turf/union": "^7.3.5",
     "cog-tiler-wasm": "^0.3.1",
     "geotiff": "^3.0.5",
+    "geotiff-geokeys-to-proj4": "^2024.4.13",
     "h5wasm": "^0.10.3",
     "jspdf": "^4.2.1",
     "mapillary-js": "^4.1.2",
@@ -63,7 +64,8 @@
     "pmtiles": "^4.4.1",
     "proj4": "^2.20.9",
     "shpjs": "^6.2.0",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "whitebox-wasm": "^0.4.1"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
