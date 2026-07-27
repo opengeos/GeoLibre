@@ -2281,9 +2281,9 @@ async function addZarrLayerExclusively(
     zarrControl.hide();
   }
 
-  // The untiled Zarr renderer draws in Web Mercator; switch off globe first
-  // (matching the COG raster flow) so the layer paints.
-  ensureMercatorProjection(app.getMap?.());
+  // Zarr renders correctly in globe (proj4js reprojects on the GPU), so — unlike the
+  // COG/deck.gl path — do not force Mercator here. This keeps addZarrLayer consistent
+  // with the Add Data → Zarr panel, which never switched projection. See #1466.
 
   const control = zarrControl;
   const headers = options.headers;
