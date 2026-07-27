@@ -835,6 +835,9 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       return state === undefined ? true : manager.applyPluginState(pluginId, api, state);
     },
     queryOvertureFeatures,
+    addLayerGroup: (name?: string, layerIds?: string[]) =>
+      useAppStore.getState().addLayerGroup(name, layerIds),
+    removeLayerGroup: (id: string) => useAppStore.getState().removeLayerGroup(id),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,

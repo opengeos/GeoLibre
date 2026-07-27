@@ -26,6 +26,8 @@ export type GeoLibreBuiltInMapControl =
 export interface GeoLibreExternalNativeLayerRegistration {
   id: string;
   name: string;
+  /** Optional host layer-group id that should contain this layer. */
+  groupId?: string;
   type?: GeoLibreLayer["type"];
   source?: Record<string, unknown>;
   geojson?: FeatureCollection;
@@ -427,6 +429,13 @@ export interface GeoLibreAppAPI {
    * PMTiles integration. The host enforces tile and feature limits.
    */
   queryOvertureFeatures?: (query: GeoLibreOvertureQuery) => Promise<GeoLibreOvertureQueryResult>;
+  /**
+   * Create a named Layers-panel group, optionally assigning existing layer ids
+   * to it, and return the new group id.
+   */
+  addLayerGroup?: (name?: string, layerIds?: string[]) => string;
+  /** Remove a Layers-panel group without removing its child layers. */
+  removeLayerGroup?: (id: string) => void;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
   /**

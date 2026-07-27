@@ -159,4 +159,15 @@ describe("createExternalNativeStoreLayer", () => {
 
     assert.equal(layer.visible, false);
   });
+
+  it("assigns and preserves the requested host layer group", () => {
+    const grouped = createExternalNativeStoreLayer(baseRegistration({ groupId: "event-imagery" }));
+    assert.equal(grouped.groupId, "event-imagery");
+
+    const updated = createExternalNativeStoreLayer(
+      baseRegistration({ name: "Updated Plugin Layer" }),
+      grouped,
+    );
+    assert.equal(updated.groupId, "event-imagery");
+  });
 });

@@ -76,5 +76,6 @@ export function createExternalNativeStoreLayer(
     beforeId: registration.beforeId ?? existing?.beforeId,
     geojson: registration.geojson ?? existing?.geojson,
     sourcePath: registration.sourcePath ?? existing?.sourcePath,
+    groupId: registration.groupId ?? existing?.groupId,
   };
 }
