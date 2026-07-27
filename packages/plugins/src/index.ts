@@ -108,7 +108,10 @@ export {
   type CloudNetcdfLayerOptions,
   addZarrRasterLayer,
   setZarrLayerSelector,
+  setZarrLocalStoreProvider,
   type ZarrRasterLayerOptions,
+  type ZarrReadableStore,
+  type ZarrTimeAttributesReader,
   setBookmarkLabels,
   setViewStateLabels,
   subscribeBookmarkPanel,
@@ -131,6 +134,14 @@ export {
   type KerchunkRefs,
   type KerchunkVariable,
 } from "./plugins/kerchunk-reference-store";
+export {
+  ZarrDirectoryStore,
+  createDirectoryZarrMetadataReader,
+  localZarrStoreUrl,
+  normalizeZarrKey,
+  type ZarrDirectoryReader,
+  type ZarrMetadataReader,
+} from "./plugins/zarr-directory-store";
 export {
   openLocalNetcdf,
   buildInlineZarrRefs,

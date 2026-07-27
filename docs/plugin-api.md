@@ -526,6 +526,10 @@ if (layerId) {
 
 `addZarrLayer` is headless: it does not open the Zarr panel (the user can still open it from **Add Data → Zarr Layer** to tweak colormap and color limits). It resolves with the new layer's id once the layer is registered, and rejects when `variable` is missing or the store cannot be read. The layer supports visibility, opacity, ordering, and removal from the Layers panel like any other layer.
 
+`selector` picks a slice by coordinate **value**, not by index: on a `month` axis of 1-12, December is `{ month: 12 }`. The panel's Selector (JSON) field means the same thing, and editing it now re-slices the layers already on the map.
+
+The panel can also open a store from a folder on disk, via a **Browse folder** button next to the Zarr URL. It appears in the desktop app and in browsers with the File System Access API (Chromium), since reading a folder needs a filesystem API the plugin cannot supply; elsewhere the panel is unchanged. A local cube binds to the Time Slider like a remote one — its CF `units` are read out of the folder, because its recorded URL is an identifier rather than an address.
+
 ## Driving a layer's own time dimension from the Time Slider
 
 The Time Slider understands three kinds of temporal layer. Two are built in: a **vector** layer filtered by a timestamp property, and a **raster time series** of dated sources the dock steps between. The third is for a layer that is *one store* with time as an **internal dimension** — a Zarr data cube, or a plugin's own frame-based layer — where the timeline picks a slice rather than a source.

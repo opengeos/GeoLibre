@@ -881,9 +881,22 @@ async function fetchExport(url: string, signal?: AbortSignal): Promise<Uint8Arra
   const timer = setTimeout(() => controller.abort(), EXPORT_ATTEMPT_TIMEOUT_MS);
   const onCancel = (): void => controller.abort();
   signal?.addEventListener("abort", onCancel);
-  let response: Response;
+  // The deadline and the cancel listener stay armed through the body read, not
+  // just the headers: `fetch` resolves as soon as headers arrive, so tearing
+  // them down there would leave a slow multi-megabyte transfer both unbounded
+  // and impossible to cancel.
   try {
-    response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`the service returned ${response.status} at this size`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    // ArcGIS answers an invalid export with a JSON error envelope at HTTP 200,
+    // so the TIFF byte-order marker is what actually confirms a raster came back.
+    if ((bytes[0] === 0x49 && bytes[1] === 0x49) || (bytes[0] === 0x4d && bytes[1] === 0x4d)) {
+      return bytes;
+    }
+    throw new Error(
+      arcgisErrorMessage(bytes) ?? "the service did not return a GeoTIFF for this area",
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       if (signal?.aborted) throw error;
@@ -894,17 +907,6 @@ async function fetchExport(url: string, signal?: AbortSignal): Promise<Uint8Arra
     clearTimeout(timer);
     signal?.removeEventListener("abort", onCancel);
   }
-  if (!response.ok) throw new Error(`the service returned ${response.status} at this size`);
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  // ArcGIS answers an invalid export with a JSON error envelope at HTTP 200, so
-  // the TIFF byte-order marker is what actually confirms a raster came back.
-  if ((bytes[0] === 0x49 && bytes[1] === 0x49) || (bytes[0] === 0x4d && bytes[1] === 0x4d)) {
-    return bytes;
-  }
-  throw new Error(
-    arcgisErrorMessage(bytes) ?? "the service did not return a GeoTIFF for this area",
-  );
 }
 
 /** Reads the message out of an ArcGIS JSON error body, when that is what came back. */
