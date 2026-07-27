@@ -38,21 +38,28 @@ export const EARTHDATA_GIS_TILE_SIZE = 256;
 /** Default page size for a catalog search. The portal caps `num` at 100. */
 export const EARTHDATA_GIS_PAGE_SIZE = 20;
 
-/** The servable ArcGIS service flavors this catalog exposes. */
-export type EarthdataServiceKind = "image" | "map" | "feature";
+/**
+ * The item flavors this catalog exposes. The first three are ArcGIS services
+ * that render directly; `webmap` is an Esri Web Map, a saved composition that
+ * carries no renderable URL of its own and is expanded into its constituent
+ * layers on add (see {@link fetchWebMapLayers}).
+ */
+export type EarthdataServiceKind = "image" | "map" | "feature" | "webmap";
 
-/** The portal `type` string for each servable kind. */
+/** The portal `type` string for each kind. */
 const PORTAL_TYPE_BY_KIND: Record<EarthdataServiceKind, string> = {
   image: "Image Service",
   map: "Map Service",
   feature: "Feature Service",
+  webmap: "Web Map",
 };
 
-/** Every servable kind, in the order the panel offers them. */
+/** Every kind, in the order the panel offers them. */
 export const EARTHDATA_SERVICE_KINDS: readonly EarthdataServiceKind[] = [
   "image",
   "map",
   "feature",
+  "webmap",
 ] as const;
 
 /** One Earthdata GIS catalog item, normalized from a portal search result. */
@@ -288,10 +295,15 @@ export function buildItemPageUrl(itemId: string): string {
  * @returns A raster tile template, or null for a non-raster item
  */
 export function buildExportTileUrl(item: EarthdataGisItem): string | null {
-  if (item.kind === "feature") return null;
+  if (item.kind === "feature" || item.kind === "webmap") return null;
   if (!HTTP_URL_RE.test(item.url)) return null;
   const operation = item.kind === "image" ? "exportImage" : "export";
   const size = `${EARTHDATA_GIS_TILE_SIZE},${EARTHDATA_GIS_TILE_SIZE}`;
+  // A web map can reference a single MapServer sublayer (`…/MapServer/3`).
+  // `export` lives on the service, not the sublayer, so the index moves into a
+  // `layers=show:` filter instead of being appended to the operation path.
+  const sublayer = /^(.*\/MapServer)\/(\d+)$/.exec(trimTrailingSlash(item.url));
+  const base = sublayer ? sublayer[1] : trimTrailingSlash(item.url);
   const query = [
     "bbox={bbox-epsg-3857}",
     "bboxSR=3857",
@@ -300,9 +312,253 @@ export function buildExportTileUrl(item: EarthdataGisItem): string | null {
     "format=png32",
     "transparent=true",
     "dpi=96",
+    ...(sublayer ? [`layers=show:${sublayer[2]}`] : []),
     "f=image",
   ].join("&");
-  return `${trimTrailingSlash(item.url)}/${operation}?${query}`;
+  return `${base}/${operation}?${query}`;
+}
+
+/**
+ * Builds the URL of a Web Map item's data document, which holds its
+ * `operationalLayers`.
+ *
+ * @param itemId - Portal item id
+ * @param endpoint - Sharing REST base URL
+ * @returns The item `/data` URL
+ */
+export function buildWebMapDataUrl(
+  itemId: string,
+  endpoint: string = EARTHDATA_GIS_SHARING_URL,
+): string {
+  return `${trimTrailingSlash(endpoint)}/content/items/${encodeURIComponent(itemId)}/data?f=json`;
+}
+
+/** Esri `layerType` values this plugin knows how to render, mapped to a kind. */
+const WEB_MAP_LAYER_KINDS: Record<string, EarthdataServiceKind> = {
+  ArcGISImageServiceLayer: "image",
+  ArcGISMapServiceLayer: "map",
+  ArcGISTiledMapServiceLayer: "map",
+  ArcGISFeatureLayer: "feature",
+};
+
+/** One renderable layer pulled out of a Web Map's composition. */
+export interface WebMapLayer {
+  /** The layer's title within the web map. */
+  title: string;
+  /** Absolute service URL. */
+  url: string;
+  /** How the layer should be rendered. */
+  kind: EarthdataServiceKind;
+}
+
+/**
+ * Flattens a Web Map's `operationalLayers` into the layers this plugin can
+ * render.
+ *
+ * Group layers nest arbitrarily deep and carry no URL of their own, so they are
+ * walked rather than emitted. Layer types with no MapLibre equivalent (and any
+ * entry missing an http(s) URL) are skipped, so a web map contributes only the
+ * layers that will actually draw.
+ *
+ * @param body - Parsed JSON body from {@link buildWebMapDataUrl}
+ * @returns The renderable layers, in the web map's own order
+ */
+export function parseWebMapLayers(body: unknown): WebMapLayer[] {
+  const out: WebMapLayer[] = [];
+  const seen = new Set<unknown>();
+
+  const walk = (entries: unknown, depth: number): void => {
+    // Depth-guard a self-referencing group so a malformed document cannot spin.
+    if (!Array.isArray(entries) || depth > 10) return;
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object" || seen.has(entry)) continue;
+      seen.add(entry);
+      const layer = entry as Record<string, unknown>;
+      const layerType = asText(layer.layerType);
+      if (layerType === "GroupLayer") {
+        walk(layer.layers, depth + 1);
+        continue;
+      }
+      const kind = WEB_MAP_LAYER_KINDS[layerType];
+      const url = asText(layer.url).trim();
+      if (!kind || !HTTP_URL_RE.test(url)) continue;
+      out.push({ title: asText(layer.title).trim() || url, url, kind });
+    }
+  };
+
+  const parsed = (body ?? {}) as { operationalLayers?: unknown };
+  walk(parsed.operationalLayers, 0);
+  return out;
+}
+
+/**
+ * Reads the renderable layers out of a Web Map item.
+ *
+ * @param item - A `webmap` catalog item
+ * @param fetchImpl - Fetch-like function (defaults to the global `fetch`)
+ * @param signal - Aborts the request
+ * @param endpoint - Sharing REST base URL
+ * @returns The web map's renderable layers
+ * @throws When the item's data document cannot be read
+ */
+export async function fetchWebMapLayers(
+  item: EarthdataGisItem,
+  fetchImpl: EarthdataGisFetch = defaultFetch,
+  signal?: AbortSignal,
+  endpoint: string = EARTHDATA_GIS_SHARING_URL,
+): Promise<WebMapLayer[]> {
+  const response = await fetchImpl(buildWebMapDataUrl(item.id, endpoint), signal);
+  if (!response.ok) {
+    throw new Error(`Earthdata GIS web map request failed (${response.status})`);
+  }
+  return parseWebMapLayers(await response.json());
+}
+
+/**
+ * Projects one of a Web Map's layers into a standalone catalog item, so the
+ * add path treats it exactly like a service found by search.
+ *
+ * The parent's extent is inherited because a web map layer carries none of its
+ * own, and the parent id is folded into the child id to keep it unique.
+ *
+ * @param parent - The Web Map item the layer came from
+ * @param layer - One renderable layer from {@link parseWebMapLayers}
+ * @param index - The layer's position, used to build a stable id
+ * @returns A catalog item for the layer
+ */
+export function webMapLayerAsItem(
+  parent: EarthdataGisItem,
+  layer: WebMapLayer,
+  index: number,
+): EarthdataGisItem {
+  return {
+    ...parent,
+    id: `${parent.id}:${index}`,
+    title: layer.title,
+    kind: layer.kind,
+    url: layer.url,
+    thumbnailUrl: null,
+    raw: layer,
+  };
+}
+
+/**
+ * Ground resolution in metres per pixel at the equator for zoom 0 with 256px
+ * tiles — the constant behind every web-mercator zoom/resolution conversion.
+ */
+const EQUATOR_METRES_PER_PIXEL_Z0 = 156543.03392804097;
+
+/** Spatial-reference well-known ids whose units are metres. */
+const METRE_BASED_WKIDS = new Set([3857, 102100, 102113]);
+
+/**
+ * Builds the catalog statistics query that reports the coarsest pixel size at
+ * which an ImageServer's mosaic still draws.
+ *
+ * A mosaic dataset row carries `MaxPS` — the largest pixel size at which that
+ * raster participates. Requesting an image coarser than every row's `MaxPS`
+ * returns a fully transparent PNG rather than an error, which is why so many of
+ * this portal's high-resolution disaster services look "broken" when first
+ * added: the layer is fine, the view is simply too far out.
+ *
+ * @param serviceUrl - The `…/ImageServer` URL
+ * @returns The `/query` URL returning `MAX(MaxPS)`
+ */
+export function buildMaxPixelSizeUrl(serviceUrl: string): string {
+  const statistics = JSON.stringify([
+    { statisticType: "max", onStatisticField: "MaxPS", outStatisticFieldName: "maxPixelSize" },
+  ]);
+  const params = new URLSearchParams({
+    f: "json",
+    where: "1=1",
+    outStatistics: statistics,
+  });
+  return `${trimTrailingSlash(serviceUrl)}/query?${params.toString()}`;
+}
+
+/**
+ * Reads `MAX(MaxPS)` out of a catalog statistics response.
+ *
+ * @param body - Parsed JSON body from {@link buildMaxPixelSizeUrl}
+ * @returns The coarsest visible pixel size, or null when the service does not
+ *   report one (multidimensional CRF services have no such column)
+ */
+export function parseMaxPixelSize(body: unknown): number | null {
+  const parsed = (body ?? {}) as { features?: Array<{ attributes?: Record<string, unknown> }> };
+  const attributes = parsed.features?.[0]?.attributes;
+  if (!attributes) return null;
+  const value = attributes.maxPixelSize ?? attributes.MaxPixelSize ?? attributes.MAXPIXELSIZE;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Lowest web-mercator zoom whose ground resolution is fine enough for a mosaic
+ * with this `MaxPS` to draw.
+ *
+ * @param maxPixelSize - Coarsest visible pixel size, in metres
+ * @param latitude - Latitude the layer sits at (resolution is latitude-scaled)
+ * @param tileSize - Raster source tile size in pixels
+ * @returns The minimum zoom, clamped to [0, 24], or null when not computable
+ */
+export function minZoomForPixelSize(
+  maxPixelSize: number,
+  latitude: number,
+  tileSize: number = EARTHDATA_GIS_TILE_SIZE,
+): number | null {
+  if (!Number.isFinite(maxPixelSize) || maxPixelSize <= 0) return null;
+  if (!Number.isFinite(latitude) || Math.abs(latitude) > 85.05) return null;
+  if (!Number.isFinite(tileSize) || tileSize <= 0) return null;
+  const resolutionAtZoom0 =
+    (EQUATOR_METRES_PER_PIXEL_Z0 * Math.cos((latitude * Math.PI) / 180) * 256) / tileSize;
+  const zoom = Math.ceil(Math.log2(resolutionAtZoom0 / maxPixelSize));
+  if (!Number.isFinite(zoom)) return null;
+  return Math.min(24, Math.max(0, zoom));
+}
+
+/**
+ * Best-effort lookup of the zoom below which an image service renders nothing.
+ *
+ * Returns null — meaning "impose no constraint" — whenever the answer would be
+ * a guess: a non-image service, a service whose units are not metres (`MaxPS`
+ * would then be in degrees and incomparable), a service that reports no
+ * `MaxPS`, or any failed/slow request. Being wrong here would hide a layer that
+ * actually draws, so every uncertain case falls back to the unconstrained
+ * behavior.
+ *
+ * @param item - The catalog item being added
+ * @param fetchImpl - Fetch-like function (defaults to the global `fetch`)
+ * @param signal - Aborts the lookup
+ * @returns The minimum zoom at which the service draws, or null
+ */
+export async function fetchMinVisibleZoom(
+  item: EarthdataGisItem,
+  fetchImpl: EarthdataGisFetch = defaultFetch,
+  signal?: AbortSignal,
+): Promise<number | null> {
+  if (item.kind !== "image" || !item.bbox) return null;
+  try {
+    const metadataUrl = `${trimTrailingSlash(item.url)}?f=json`;
+    const metadataResponse = await fetchImpl(metadataUrl, signal);
+    if (!metadataResponse.ok) return null;
+    const metadata = (await metadataResponse.json()) as {
+      spatialReference?: { latestWkid?: number; wkid?: number };
+    };
+    const wkid = metadata.spatialReference?.latestWkid ?? metadata.spatialReference?.wkid;
+    // `MaxPS` is expressed in the mosaic's own units. Comparing a value in
+    // degrees against a metres-per-pixel resolution would be meaningless, so
+    // only metre-based services get a constraint.
+    if (wkid === undefined || !METRE_BASED_WKIDS.has(wkid)) return null;
+
+    const statsResponse = await fetchImpl(buildMaxPixelSizeUrl(item.url), signal);
+    if (!statsResponse.ok) return null;
+    const maxPixelSize = parseMaxPixelSize(await statsResponse.json());
+    if (maxPixelSize === null) return null;
+
+    const [, south, , north] = item.bbox;
+    return minZoomForPixelSize(maxPixelSize, (south + north) / 2);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -354,9 +610,11 @@ export function normalizeItem(
   const id = asText(record.id).trim();
   const kind = kindFromPortalType(record.type);
   const url = asText(record.url).trim();
-  // Every servable item needs all three: an id (thumbnail/details), a known
-  // service kind, and an http(s) service URL to render or query.
-  if (!id || !kind || !HTTP_URL_RE.test(url)) return null;
+  if (!id || !kind) return null;
+  // A service item is useless without an http(s) URL to render or query. A Web
+  // Map legitimately has none (the portal stores its `url` as ""); its layers
+  // are read from the item's data document by id instead.
+  if (kind !== "webmap" && !HTTP_URL_RE.test(url)) return null;
 
   return {
     id,

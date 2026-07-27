@@ -23,9 +23,14 @@ import {
   type EarthdataGisItem,
   type EarthdataGisSearchResult,
   type EarthdataServiceKind,
+  fetchMinVisibleZoom,
+  fetchWebMapLayers,
   HTTP_URL_RE,
   searchEarthdataGis,
+  type WebMapLayer,
+  webMapLayerAsItem,
 } from "./earthdata-gis-api";
+import { layerTypeForTiles } from "./web-service-sync";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 export const EARTHDATA_GIS_PLUGIN_ID = "maplibre-gl-earthdata-gis";
@@ -44,6 +49,13 @@ const PANEL_ID = EARTHDATA_GIS_PLUGIN_ID;
  * card to "Remove".
  */
 const FEATURE_ADD_TIMEOUT_MS = 60_000;
+
+/**
+ * How long the pre-add visibility lookup may take before the layer is added
+ * without a minimum-zoom constraint. Two small metadata requests; capping them
+ * keeps a slow or dead service from delaying the add noticeably.
+ */
+const VISIBILITY_LOOKUP_TIMEOUT_MS = 6_000;
 
 /** Which service kinds the type filter is showing. "all" means no restriction. */
 type KindFilter = "all" | EarthdataServiceKind;
@@ -73,11 +85,17 @@ export interface EarthdataGisLabels {
   kindImage: string;
   kindMap: string;
   kindFeature: string;
+  kindWebMap: string;
+  filterWebMap: string;
+  webMapAdded: (added: number, total: number) => string;
+  webMapEmpty: string;
   add: string;
   adding: string;
   remove: string;
   zoom: string;
   details: string;
+  portal: string;
+  portalTitle: string;
   addTitle: string;
   removeTitle: string;
   zoomTitle: string;
@@ -85,6 +103,7 @@ export interface EarthdataGisLabels {
   detailsTitle: string;
   addError: (message: string) => string;
   addTimeout: string;
+  zoomedToData: string;
   // Details dialog.
   detailsHeading: string;
   close: string;
@@ -123,11 +142,20 @@ export const DEFAULT_EARTHDATA_GIS_LABELS: EarthdataGisLabels = {
   kindImage: "Image service",
   kindMap: "Map service",
   kindFeature: "Feature service",
+  kindWebMap: "Web map",
+  filterWebMap: "Web maps",
+  webMapAdded: (added, total) =>
+    added === total
+      ? `Added ${added} layer${added === 1 ? "" : "s"} from this web map.`
+      : `Added ${added} of ${total} layers from this web map; the rest could not be reached.`,
+  webMapEmpty: "this web map has no layers GeoLibre can render.",
   add: "Add",
   adding: "Adding…",
   remove: "Remove",
   zoom: "Zoom",
   details: "Details",
+  portal: "Portal",
+  portalTitle: "Open this item on the Earthdata GIS portal",
   addTitle: "Add this service to the map",
   removeTitle: "Remove this service from the map",
   zoomTitle: "Zoom to this service",
@@ -135,6 +163,8 @@ export const DEFAULT_EARTHDATA_GIS_LABELS: EarthdataGisLabels = {
   detailsTitle: "View this service's metadata",
   addError: (message) => `Could not add the service: ${message}`,
   addTimeout: "it did not respond within a minute. The layer will still appear if it finishes.",
+  zoomedToData:
+    "Zoomed in past this layer's full extent: the service only renders at higher zoom levels.",
   detailsHeading: "Service details",
   close: "Close",
   metaTitle: "Title",
@@ -226,6 +256,7 @@ const pendingAdds = new Set<string>();
 function kindLabel(kind: EarthdataServiceKind): string {
   if (kind === "image") return labels.kindImage;
   if (kind === "map") return labels.kindMap;
+  if (kind === "webmap") return labels.kindWebMap;
   return labels.kindFeature;
 }
 
@@ -240,6 +271,11 @@ function kindLabel(kind: EarthdataServiceKind): string {
  */
 function findAddedLayerId(item: EarthdataGisItem): string | undefined {
   const layers = useAppStore.getState().layers;
+  if (item.kind === "webmap") {
+    // A web map owns no layer of its own; its children are stamped with its id
+    // on add, so the presence of any one of them means the web map is on.
+    return layers.find((candidate) => candidate.metadata.earthdataWebMapId === item.id)?.id;
+  }
   if (item.kind === "feature") {
     const servicePrefix = item.url.replace(/\/+$/, "");
     return layers.find((candidate) => candidate.sourcePath?.startsWith(servicePrefix))?.id;
@@ -275,43 +311,216 @@ function withFeatureTimeout(work: Promise<unknown>): Promise<unknown> {
 }
 
 /**
+ * Moves the view to a newly added raster layer.
+ *
+ * Fits the layer's extent, except when the service only draws below a coarser
+ * pixel size than that view would use — then it centers on the extent at the
+ * shallowest zoom that actually renders, because fitting the extent would
+ * otherwise land the user on a deliberately blank map.
+ *
+ * @param bbox - The layer's WGS84 bounds
+ * @param minVisibleZoom - Zoom below which the service renders nothing, if known
+ * @returns True when the view was zoomed past the fitted extent to reach data
+ */
+function revealRasterLayer(
+  bbox: [number, number, number, number],
+  minVisibleZoom: number | null,
+): boolean {
+  const map = appRef?.getMap?.();
+  if (!map || minVisibleZoom === null) {
+    appRef?.fitBounds?.(bbox);
+    return false;
+  }
+  const [west, south, east, north] = bbox;
+  // cameraForBounds reports the camera fitBounds would settle on without
+  // moving the map, so the two views can be compared before either is applied.
+  const fitted = map.cameraForBounds([
+    [west, south],
+    [east, north],
+  ]);
+  if (!fitted || (fitted.zoom ?? 0) >= minVisibleZoom) {
+    appRef?.fitBounds?.(bbox);
+    return false;
+  }
+  map.easeTo({
+    center: fitted.center ?? [(west + east) / 2, (south + north) / 2],
+    zoom: minVisibleZoom,
+  });
+  return true;
+}
+
+/**
  * Adds an item to the map.
  *
  * Raster services become a tile layer built from their export endpoint;
  * feature services are handed to the host's ArcGIS path, which fetches them as
  * GeoJSON (and therefore resolves asynchronously and can reject).
  *
+ * The layer is typed `wms` rather than `xyz` because an ArcGIS export template
+ * carries a `{bbox-epsg-3857}` placeholder instead of `{z}/{x}/{y}`. That is
+ * what {@link layerTypeForTiles} classifies it as, matching every other web
+ * service plugin, and it keeps tools that consume a tile template (Raster
+ * Subset) from handing the unsubstituted placeholder to an XYZ fetcher.
+ *
  * @param item - The catalog item to add
+ * @param onHint - Called with a status note when the view had to zoom past the
+ *   layer's extent to reach data
  * @returns A promise that settles once the layer is in the store
  */
-async function addToMap(item: EarthdataGisItem): Promise<void> {
+async function addToMap(item: EarthdataGisItem, onHint?: (hint: string) => void): Promise<void> {
   if (isAdded(item)) return;
+  if (item.kind === "webmap") {
+    await addWebMapToMap(item, onHint);
+    return;
+  }
+  await addServiceToMap(item, onHint);
+}
+
+/**
+ * Adds one ArcGIS service as a layer and returns its store id.
+ *
+ * @param item - A service item (never a web map)
+ * @param onHint - Called when the view had to zoom past the extent to show data
+ * @param webMapId - Set when the layer comes from a web map, so it can be
+ *   tracked and removed together with its siblings
+ * @param fit - Whether to move the view to the new layer
+ * @returns The new layer's store id, or null when the item yields no layer
+ */
+async function addServiceToMap(
+  item: EarthdataGisItem,
+  onHint?: (hint: string) => void,
+  webMapId?: string,
+  fit = true,
+): Promise<string | null> {
+  const ownerMetadata = webMapId ? { earthdataWebMapId: webMapId } : undefined;
+
   if (item.kind === "feature") {
     if (!appRef) throw new Error("The map is not ready.");
-    await withFeatureTimeout(
+    const layerId = (await withFeatureTimeout(
       addArcGISLayer(appRef, {
         layerType: "feature",
         sourceType: "url",
         url: item.url,
         name: item.title,
       }),
-    );
-    return;
+    )) as string | undefined;
+    if (typeof layerId !== "string") return null;
+    if (ownerMetadata) stampLayerMetadata(layerId, ownerMetadata);
+    return layerId;
   }
+
   const tileUrl = buildExportTileUrl(item);
-  if (!tileUrl || !appRef?.addTileLayer) return;
-  appRef.addTileLayer(item.title, tileUrl, {
-    attribution: EARTHDATA_GIS_ATTRIBUTION,
+  if (!tileUrl) return null;
+
+  // Best-effort: a service that never answers must not block the add, so the
+  // lookup is bounded and any failure simply leaves the layer unconstrained.
+  const minVisibleZoom = await withVisibilityTimeout(fetchMinVisibleZoom(item));
+
+  const layerId = useAppStore.getState().addTileLayer(item.title, {
+    type: layerTypeForTiles([tileUrl]),
+    tiles: [tileUrl],
+    url: item.url,
     tileSize: EARTHDATA_GIS_TILE_SIZE,
+    attribution: EARTHDATA_GIS_ATTRIBUTION,
+    ...(minVisibleZoom !== null ? { minzoom: minVisibleZoom } : {}),
     ...(item.bbox ? { bounds: item.bbox } : {}),
+    ...(ownerMetadata ? { metadata: ownerMetadata } : {}),
   });
-  if (item.bbox) appRef.fitBounds?.(item.bbox);
+
+  if (fit && item.bbox && revealRasterLayer(item.bbox, minVisibleZoom)) {
+    onHint?.(labels.zoomedToData);
+  }
+  return layerId;
 }
 
-/** Removes an item's layer from the store, if present. */
+/**
+ * Adds every renderable layer of a Web Map and collects them into one group.
+ *
+ * A web map is a composition, not a service, so "adding" it means adding its
+ * `operationalLayers`. They are added sequentially (rather than concurrently)
+ * so the resulting layer order matches the web map's own, and the view is moved
+ * once at the end rather than once per layer.
+ *
+ * @param item - The web map item
+ * @param onHint - Called when the view had to zoom past the extent to show data
+ * @throws When the web map contains no layer this plugin can render
+ */
+async function addWebMapToMap(
+  item: EarthdataGisItem,
+  onHint?: (hint: string) => void,
+): Promise<void> {
+  const layers = await withFeatureTimeout(fetchWebMapLayers(item));
+  const renderable = Array.isArray(layers) ? (layers as WebMapLayer[]) : [];
+  if (renderable.length === 0) throw new Error(labels.webMapEmpty);
+
+  const addedIds: string[] = [];
+  for (const [index, layer] of renderable.entries()) {
+    try {
+      const id = await addServiceToMap(
+        webMapLayerAsItem(item, layer, index),
+        undefined,
+        item.id,
+        false,
+      );
+      if (id) addedIds.push(id);
+    } catch {
+      // One unreachable layer must not abandon the rest of the web map; the
+      // shortfall is reported through the count below.
+    }
+  }
+  if (addedIds.length === 0) throw new Error(labels.webMapEmpty);
+
+  appRef?.addLayerGroup?.(item.title, addedIds);
+  if (item.bbox && revealRasterLayer(item.bbox, null)) onHint?.(labels.zoomedToData);
+  onHint?.(labels.webMapAdded(addedIds.length, renderable.length));
+}
+
+/** Merges extra metadata onto a store layer that was created elsewhere. */
+function stampLayerMetadata(layerId: string, metadata: Record<string, unknown>): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find((candidate) => candidate.id === layerId);
+  if (!layer) return;
+  store.updateLayer(layerId, { metadata: { ...layer.metadata, ...metadata } });
+}
+
+/**
+ * Resolves {@link fetchMinVisibleZoom} or gives up after
+ * {@link VISIBILITY_LOOKUP_TIMEOUT_MS}, so a slow catalog query delays the add
+ * by at most that long instead of stalling it.
+ *
+ * @param work - The in-flight visibility lookup
+ * @returns The minimum visible zoom, or null on timeout or failure
+ */
+function withVisibilityTimeout(work: Promise<number | null>): Promise<number | null> {
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), VISIBILITY_LOOKUP_TIMEOUT_MS);
+  });
+  return Promise.race([work, deadline])
+    .catch(() => null)
+    .finally(() => clearTimeout(timer));
+}
+
+/**
+ * Removes an item's layer from the store, if present. Removing a web map drops
+ * every layer it contributed plus the group they were collected into, so the
+ * Layers panel is left exactly as it was before the add.
+ */
 function removeFromMap(item: EarthdataGisItem): void {
+  const store = useAppStore.getState();
+  if (item.kind === "webmap") {
+    const children = store.layers.filter(
+      (candidate) => candidate.metadata.earthdataWebMapId === item.id,
+    );
+    const groupIds = new Set(
+      children.map((child) => child.groupId).filter((id): id is string => Boolean(id)),
+    );
+    for (const child of children) store.removeLayer(child.id);
+    for (const groupId of groupIds) store.removeLayerGroup(groupId);
+    return;
+  }
   const layerId = findAddedLayerId(item);
-  if (layerId) useAppStore.getState().removeLayer(layerId);
+  if (layerId) store.removeLayer(layerId);
 }
 
 /** Composes the "kind · publisher · modified" subtitle line. */
@@ -516,12 +725,14 @@ function buildPanel(container: HTMLElement): () => void {
     image: makeFilterButton(labels.filterImage),
     map: makeFilterButton(labels.filterMap),
     feature: makeFilterButton(labels.filterFeature),
+    webmap: makeFilterButton(labels.filterWebMap),
   };
   filterBar.append(
     filterButtons.all,
     filterButtons.image,
     filterButtons.map,
     filterButtons.feature,
+    filterButtons.webmap,
   );
 
   const viewRow = document.createElement("label");
@@ -583,6 +794,7 @@ function buildPanel(container: HTMLElement): () => void {
         buildCard(item, {
           openDetails: () => openDetailsModal(item),
           onAddError: (message) => setStatus(labels.addError(message), true),
+          onHint: (hint) => setStatus(hint),
           onChanged: () => renderResults(),
         }),
       );
@@ -664,13 +876,13 @@ function buildPanel(container: HTMLElement): () => void {
 
   const showFilter = (next: KindFilter): void => {
     filter = next;
-    for (const key of ["all", "image", "map", "feature"] as KindFilter[]) {
+    for (const key of ["all", "image", "map", "feature", "webmap"] as KindFilter[]) {
       filterButtons[key].style.cssText = key === next ? CSS.filterButtonActive : CSS.filterButton;
       filterButtons[key].setAttribute("aria-pressed", String(key === next));
     }
   };
 
-  for (const key of ["all", "image", "map", "feature"] as KindFilter[]) {
+  for (const key of ["all", "image", "map", "feature", "webmap"] as KindFilter[]) {
     filterButtons[key].addEventListener("click", () => {
       if (filter === key) return;
       showFilter(key);
@@ -725,6 +937,7 @@ function buildCard(
   handlers: {
     openDetails: () => void;
     onAddError: (message: string) => void;
+    onHint: (hint: string) => void;
     onChanged: () => void;
   },
 ): HTMLElement {
@@ -767,6 +980,15 @@ function buildCard(
   detailsButton.title = labels.detailsTitle;
   detailsButton.addEventListener("click", handlers.openDetails);
 
+  // Opens through the host so the desktop build hands the URL to the system
+  // browser instead of navigating the app's own webview away.
+  const portalButton = document.createElement("button");
+  portalButton.type = "button";
+  portalButton.textContent = labels.portal;
+  portalButton.style.cssText = CSS.action;
+  portalButton.title = labels.portalTitle;
+  portalButton.addEventListener("click", () => appRef?.openExternalUrl?.(item.itemPageUrl));
+
   const added = isAdded(item);
   const pending = pendingAdds.has(item.id);
   const addButton = document.createElement("button");
@@ -783,7 +1005,7 @@ function buildCard(
     }
     pendingAdds.add(item.id);
     handlers.onChanged();
-    addToMap(item)
+    addToMap(item, handlers.onHint)
       .catch((error: unknown) => {
         handlers.onAddError(error instanceof Error ? error.message : String(error));
       })
@@ -803,7 +1025,7 @@ function buildCard(
     if (item.bbox) appRef?.fitBounds?.(item.bbox);
   });
 
-  actions.append(detailsButton, addButton, zoomButton);
+  actions.append(detailsButton, portalButton, zoomButton, addButton);
 
   const body = document.createElement("div");
   body.style.cssText = CSS.body;

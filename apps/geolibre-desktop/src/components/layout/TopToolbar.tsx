@@ -294,11 +294,20 @@ export function TopToolbar({
       kindImage: t("earthdataGis.kindImage"),
       kindMap: t("earthdataGis.kindMap"),
       kindFeature: t("earthdataGis.kindFeature"),
+      kindWebMap: t("earthdataGis.kindWebMap"),
+      filterWebMap: t("earthdataGis.filterWebMap"),
+      webMapAdded: (added, total) =>
+        added === total
+          ? t("earthdataGis.webMapAdded", { count: added })
+          : t("earthdataGis.webMapAddedPartial", { added, total }),
+      webMapEmpty: t("earthdataGis.webMapEmpty"),
       add: t("earthdataGis.add"),
       adding: t("earthdataGis.adding"),
       remove: t("earthdataGis.remove"),
       zoom: t("earthdataGis.zoom"),
       details: t("earthdataGis.details"),
+      portal: t("earthdataGis.portal"),
+      portalTitle: t("earthdataGis.portalTitle"),
       addTitle: t("earthdataGis.addTitle"),
       removeTitle: t("earthdataGis.removeTitle"),
       zoomTitle: t("earthdataGis.zoomTitle"),
@@ -306,6 +315,7 @@ export function TopToolbar({
       detailsTitle: t("earthdataGis.detailsTitle"),
       addError: (message) => t("earthdataGis.addError", { message }),
       addTimeout: t("earthdataGis.addTimeout"),
+      zoomedToData: t("earthdataGis.zoomedToData"),
       detailsHeading: t("earthdataGis.detailsHeading"),
       close: t("earthdataGis.close"),
       metaTitle: t("earthdataGis.metaTitle"),

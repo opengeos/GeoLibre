@@ -3,17 +3,23 @@ import { describe, it } from "node:test";
 import {
   buildExportTileUrl,
   buildItemPageUrl,
+  buildMaxPixelSizeUrl,
   buildSearchQuery,
   buildSearchUrl,
   buildThumbnailUrl,
   EARTHDATA_GIS_SHARING_URL,
   type EarthdataGisFetch,
   type EarthdataGisItem,
+  fetchMinVisibleZoom,
   kindFromPortalType,
+  minZoomForPixelSize,
   normalizeItem,
+  parseMaxPixelSize,
   parseSearchResponse,
+  parseWebMapLayers,
   plainText,
   searchEarthdataGis,
+  webMapLayerAsItem,
 } from "../packages/plugins/src/plugins/earthdata-gis-api";
 
 /** A raw portal search record, close to the real API shape. */
@@ -51,10 +57,10 @@ function stubFetch(body: unknown, ok = true, status = 200) {
 
 describe("earthdata gis api", () => {
   describe("buildSearchQuery", () => {
-    it("scopes an empty search to every servable service type", () => {
+    it("scopes an empty search to every supported item type", () => {
       assert.equal(
         buildSearchQuery(""),
-        '(type:"Image Service" OR type:"Map Service" OR type:"Feature Service")',
+        '(type:"Image Service" OR type:"Map Service" OR type:"Feature Service" OR type:"Web Map")',
       );
     });
 
@@ -131,16 +137,19 @@ describe("earthdata gis api", () => {
   });
 
   describe("kindFromPortalType", () => {
-    it("maps the three servable portal types", () => {
+    it("maps every supported portal type", () => {
       assert.equal(kindFromPortalType("Image Service"), "image");
       assert.equal(kindFromPortalType("Map Service"), "map");
       assert.equal(kindFromPortalType("Feature Service"), "feature");
+      assert.equal(kindFromPortalType("Web Map"), "webmap");
     });
 
     it("rejects portal types this panel cannot render", () => {
-      // Web Maps are the single most common item type in the portal, so a
-      // regression here would flood the results with unaddable rows.
-      assert.equal(kindFromPortalType("Web Map"), null);
+      // Web Mapping Applications are the portal's second most common type
+      // (~1300), so a regression here would flood the results with rows that
+      // carry nothing addable.
+      assert.equal(kindFromPortalType("Web Mapping Application"), null);
+      assert.equal(kindFromPortalType("Dashboard"), null);
       assert.equal(kindFromPortalType(undefined), null);
     });
   });
@@ -169,7 +178,7 @@ describe("earthdata gis api", () => {
     });
 
     it("drops records without a servable type or an http(s) service URL", () => {
-      assert.equal(normalizeItem(rawResult({ type: "Web Map" })), null);
+      assert.equal(normalizeItem(rawResult({ type: "Web Mapping Application" })), null);
       assert.equal(normalizeItem(rawResult({ url: "" })), null);
       // A `javascript:` URL would otherwise reach a rendered <a href>.
       assert.equal(normalizeItem(rawResult({ url: "javascript:alert(1)" })), null);
@@ -260,11 +269,12 @@ describe("earthdata gis api", () => {
       const result = parseSearchResponse({
         total: 42,
         nextStart: 21,
-        results: [rawResult(), rawResult({ id: "two", type: "Web Map" })],
+        results: [rawResult(), rawResult({ id: "two", type: "Web Mapping Application" })],
       });
       assert.equal(result.total, 42);
       assert.equal(result.nextStart, 21);
-      // The Web Map is filtered out, but the total still reflects the portal's.
+      // The unsupported item is filtered out, but the total still reflects the
+      // portal's own count.
       assert.equal(result.items.length, 1);
     });
 
@@ -285,6 +295,233 @@ describe("earthdata gis api", () => {
 
     it("falls back to the item count when the portal omits a total", () => {
       assert.equal(parseSearchResponse({ results: [rawResult()] }).total, 1);
+    });
+  });
+
+  describe("minZoomForPixelSize", () => {
+    it("finds the shallowest zoom whose resolution is finer than MaxPS", () => {
+      // The Planet imagery for Hurricane Melissa has MaxPS 30 m at ~18N, and
+      // was verified against the live service: blank at 50 m/px, drawing at
+      // 25 m/px. z13 gives ~18 m/px there, z12 ~36 m/px.
+      assert.equal(minZoomForPixelSize(30, 17.9), 13);
+    });
+
+    it("imposes no zoom floor on a service visible at any scale", () => {
+      // MaxPS 324000 m is coarser than zoom 0, so the layer draws everywhere.
+      assert.equal(minZoomForPixelSize(324000, 64), 0);
+    });
+
+    it("scales the threshold with latitude", () => {
+      // A metre is fewer pixels near the poles, so high latitudes reach a given
+      // ground resolution at a shallower zoom.
+      const equator = minZoomForPixelSize(30, 0);
+      const arctic = minZoomForPixelSize(30, 70);
+      assert.ok(equator !== null && arctic !== null);
+      assert.ok(arctic < equator);
+    });
+
+    it("halves the requirement when tiles are twice as large", () => {
+      assert.equal(minZoomForPixelSize(30, 0, 512), (minZoomForPixelSize(30, 0) as number) - 1);
+    });
+
+    it("rejects inputs it cannot reason about", () => {
+      assert.equal(minZoomForPixelSize(0, 0), null);
+      assert.equal(minZoomForPixelSize(-5, 0), null);
+      assert.equal(minZoomForPixelSize(Number.NaN, 0), null);
+      assert.equal(minZoomForPixelSize(30, 95), null);
+      assert.equal(minZoomForPixelSize(30, 0, 0), null);
+    });
+
+    it("clamps an absurdly fine mosaic to the maximum zoom", () => {
+      assert.equal(minZoomForPixelSize(1e-9, 0), 24);
+    });
+  });
+
+  describe("buildMaxPixelSizeUrl", () => {
+    it("asks the catalog for the coarsest MaxPS", () => {
+      const url = new URL(buildMaxPixelSizeUrl("https://example.com/x/ImageServer/"));
+      assert.equal(url.pathname, "/x/ImageServer/query");
+      assert.equal(url.searchParams.get("where"), "1=1");
+      assert.deepEqual(JSON.parse(url.searchParams.get("outStatistics") ?? "[]"), [
+        { statisticType: "max", onStatisticField: "MaxPS", outStatisticFieldName: "maxPixelSize" },
+      ]);
+    });
+  });
+
+  describe("parseMaxPixelSize", () => {
+    it("reads the statistic out of the response", () => {
+      assert.equal(
+        parseMaxPixelSize({ features: [{ attributes: { maxPixelSize: 30.0026 } }] }),
+        30.0026,
+      );
+    });
+
+    it("returns null when the service reports no MaxPS column", () => {
+      // Multidimensional CRF services answer with an empty attribute bag; that
+      // must mean "no constraint", never "visible at zoom 0 only".
+      assert.equal(parseMaxPixelSize({ features: [{ attributes: {} }] }), null);
+      assert.equal(parseMaxPixelSize({ features: [] }), null);
+      assert.equal(parseMaxPixelSize({}), null);
+      assert.equal(parseMaxPixelSize({ features: [{ attributes: { maxPixelSize: null } }] }), null);
+      assert.equal(parseMaxPixelSize({ features: [{ attributes: { maxPixelSize: 0 } }] }), null);
+    });
+  });
+
+  describe("fetchMinVisibleZoom", () => {
+    const imageItem = (overrides: Record<string, unknown> = {}) =>
+      normalizeItem(rawResult(overrides)) as EarthdataGisItem;
+
+    function scriptedFetch(responses: Array<{ ok?: boolean; body: unknown }>) {
+      const calls: string[] = [];
+      let index = 0;
+      const impl: EarthdataGisFetch = async (url) => {
+        calls.push(url);
+        const next = responses[index++] ?? { body: {} };
+        return {
+          ok: next.ok ?? true,
+          status: next.ok === false ? 500 : 200,
+          json: async () => next.body,
+        };
+      };
+      return { calls, impl };
+    }
+
+    it("derives the floor from the service SR and the catalog statistic", async () => {
+      const { calls, impl } = scriptedFetch([
+        { body: { spatialReference: { latestWkid: 3857 } } },
+        { body: { features: [{ attributes: { maxPixelSize: 30 } }] } },
+      ]);
+      // rawResult's extent spans 14.5N..72.5N, so the midpoint is 43.5N.
+      assert.equal(await fetchMinVisibleZoom(imageItem(), impl), minZoomForPixelSize(30, 43.5));
+      assert.equal(calls.length, 2);
+    });
+
+    it("skips services whose units are degrees, where MaxPS is incomparable", async () => {
+      // A 4326 MaxPS of 30 is 30 DEGREES; treating it as metres would compute a
+      // huge zoom floor and hide a layer that renders fine.
+      const { calls, impl } = scriptedFetch([{ body: { spatialReference: { latestWkid: 4326 } } }]);
+      assert.equal(await fetchMinVisibleZoom(imageItem(), impl), null);
+      assert.equal(calls.length, 1);
+    });
+
+    it("imposes no floor for feature services or items without an extent", async () => {
+      const { impl } = scriptedFetch([]);
+      const feature = normalizeItem(
+        rawResult({ type: "Feature Service", url: "https://example.com/x/FeatureServer" }),
+      ) as EarthdataGisItem;
+      assert.equal(await fetchMinVisibleZoom(feature, impl), null);
+      assert.equal(await fetchMinVisibleZoom(imageItem({ extent: null }), impl), null);
+    });
+
+    it("falls back to no floor when a request fails or throws", async () => {
+      const failed = scriptedFetch([{ ok: false, body: {} }]);
+      assert.equal(await fetchMinVisibleZoom(imageItem(), failed.impl), null);
+      const throwing: EarthdataGisFetch = async () => {
+        throw new Error("network down");
+      };
+      assert.equal(await fetchMinVisibleZoom(imageItem(), throwing), null);
+    });
+  });
+
+  describe("web maps", () => {
+    const webMapData = {
+      operationalLayers: [
+        {
+          layerType: "ArcGISMapServiceLayer",
+          title: "Fire perimeters",
+          url: "https://gis.earthdata.nasa.gov/image/rest/services/F/P/MapServer",
+        },
+        {
+          layerType: "GroupLayer",
+          title: "VEG-DIST-STATUS",
+          layers: [
+            {
+              layerType: "ArcGISImageServiceLayer",
+              title: "Nested imagery",
+              url: "https://gis.earthdata.nasa.gov/image/rest/services/F/I/ImageServer",
+            },
+          ],
+        },
+        {
+          layerType: "ArcGISFeatureLayer",
+          title: "Analyzed area",
+          url: "https://gis.earthdata.nasa.gov/maphost/rest/services/Hosted/A/FeatureServer/0",
+        },
+        { layerType: "VectorTileLayer", title: "Unsupported", url: "https://example.com/vt" },
+        { layerType: "ArcGISFeatureLayer", title: "No url" },
+      ],
+    };
+
+    it("flattens group layers and keeps the web map's order", () => {
+      assert.deepEqual(
+        parseWebMapLayers(webMapData).map((layer) => [layer.kind, layer.title]),
+        [
+          ["map", "Fire perimeters"],
+          ["image", "Nested imagery"],
+          ["feature", "Analyzed area"],
+        ],
+      );
+    });
+
+    it("skips layer types with no MapLibre equivalent and entries with no URL", () => {
+      const titles = parseWebMapLayers(webMapData).map((layer) => layer.title);
+      assert.ok(!titles.includes("Unsupported"));
+      assert.ok(!titles.includes("No url"));
+    });
+
+    it("survives a malformed or self-referencing document", () => {
+      assert.deepEqual(parseWebMapLayers({}), []);
+      assert.deepEqual(parseWebMapLayers(null), []);
+      const cyclic: Record<string, unknown> = { layerType: "GroupLayer" };
+      cyclic.layers = [cyclic];
+      assert.deepEqual(parseWebMapLayers({ operationalLayers: [cyclic] }), []);
+    });
+
+    it("projects a web map layer into an addable item that inherits the extent", () => {
+      const parent = normalizeItem(rawResult({ type: "Web Map", url: "" })) as EarthdataGisItem;
+      const child = webMapLayerAsItem(parent, parseWebMapLayers(webMapData)[0], 0);
+      assert.equal(child.kind, "map");
+      assert.equal(child.id, `${parent.id}:0`);
+      assert.deepEqual(child.bbox, parent.bbox);
+      assert.equal(child.thumbnailUrl, null);
+    });
+
+    it("keeps a Web Map item even though the portal gives it no service URL", () => {
+      // The portal stores a Web Map's `url` as "", so the service-URL guard
+      // would otherwise drop every one of the portal's ~1900 web maps.
+      const item = normalizeItem(rawResult({ type: "Web Map", url: "" }));
+      assert.equal(item?.kind, "webmap");
+    });
+  });
+
+  describe("MapServer sublayer exports", () => {
+    it("moves a sublayer index into a layers=show filter", () => {
+      // A web map can reference `…/MapServer/3`; `export` lives on the service,
+      // so appending it to the sublayer path would 404.
+      const item = {
+        ...(normalizeItem(rawResult()) as EarthdataGisItem),
+        kind: "map" as const,
+        url: "https://gis.earthdata.nasa.gov/gis05/rest/services/A/B/MapServer/3",
+      };
+      const url = buildExportTileUrl(item);
+      assert.ok(
+        url?.startsWith("https://gis.earthdata.nasa.gov/gis05/rest/services/A/B/MapServer/export?"),
+      );
+      assert.ok(url?.includes("layers=show:3"));
+    });
+
+    it("leaves a plain MapServer URL alone", () => {
+      const item = {
+        ...(normalizeItem(rawResult()) as EarthdataGisItem),
+        kind: "map" as const,
+        url: "https://gis.earthdata.nasa.gov/gis05/rest/services/A/B/MapServer",
+      };
+      assert.ok(!buildExportTileUrl(item)?.includes("layers=show"));
+    });
+
+    it("has no tile template for a web map", () => {
+      const item = normalizeItem(rawResult({ type: "Web Map", url: "" })) as EarthdataGisItem;
+      assert.equal(buildExportTileUrl(item), null);
     });
   });
 
