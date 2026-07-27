@@ -22,6 +22,7 @@ import {
   restorePlanetaryComputerLayers,
   reattachSun,
   reattachRouteAnimation,
+  reattachFlightSimulator,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -124,6 +125,7 @@ import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
 import { SunPanel } from "../panels/SunPanel";
 import { RouteAnimationPanel } from "../panels/RouteAnimationPanel";
+import { FlightSimulatorPanel } from "../panels/FlightSimulatorPanel";
 import {
   PluginRightPanel,
   PLUGIN_PANEL_DEFAULT_WIDTH,
@@ -1051,6 +1053,9 @@ export function DesktopShell({
     // to the (possibly new) map after a re-init/basemap swap without deriving
     // open/closed state (project loads handle that via applyProjectState).
     reattachRouteAnimation(appAPI);
+    // The flight simulator holds a reference to the live map (and suspends its
+    // interaction handlers while flying), so rebind it after a map re-init too.
+    reattachFlightSimulator(appAPI);
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
@@ -2040,6 +2045,12 @@ export function DesktopShell({
             displayName={t("shell.section.routeAnimationPanel")}
           >
             <RouteAnimationPanel mapControllerRef={mapControllerRef} />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary
+            label="Flight simulator panel"
+            displayName={t("shell.section.flightSimulatorPanel")}
+          >
+            <FlightSimulatorPanel />
           </SectionErrorBoundary>
           <KnowledgeCardConsentDialog
             open={knowledgeNoticeOpen}

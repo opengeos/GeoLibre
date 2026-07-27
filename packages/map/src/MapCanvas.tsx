@@ -1014,7 +1014,7 @@ export const MapCanvas = memo(function MapCanvas({
       onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
     });
 
-    const updateView = (event?: { originalEvent?: unknown }) => {
+    const updateView = (event?: { originalEvent?: unknown; flightCameraToken?: number }) => {
       // While presenting a story map the presenter owns the camera. Syncing its
       // transient chapter flies and rotations back into the store would both
       // overwrite the saved project view and, worse, re-enter the applyView
@@ -1022,6 +1022,10 @@ export const MapCanvas = memo(function MapCanvas({
       // the rotate handler starts orbiting the previous chapter instead of the
       // one just clicked. Skipping the sync keeps the presenter authoritative.
       if (useAppStore.getState().ui.storymapPresenting) return;
+      // The flight simulator likewise owns the camera while it flies, and jumps
+      // it every animation frame. Writing each of those into the store would
+      // overwrite the project's saved view ~60 times a second.
+      if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
     };
     map.on("moveend", updateView);

@@ -580,6 +580,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "controls.flightSimulator",
+    menuId: "controls",
+    labelKey: "toolbar.item.flightSimulator",
+    tier: "intermediate",
+  },
+  {
     id: "controls.spinGlobe",
     menuId: "controls",
     labelKey: "toolbar.item.spinGlobe",

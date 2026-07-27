@@ -329,11 +329,15 @@ export function useCollaboration(
       });
     };
     const onMouseOut = () => conn.send({ type: "presence", cursor: null });
-    const onMoveEnd = () =>
+    const onMoveEnd = (event?: { flightCameraToken?: number }) => {
+      // Flight-simulator frames are camera jumps, not navigation; broadcasting
+      // one per animation frame would flood the presence channel.
+      if (event?.flightCameraToken !== undefined) return;
       conn.send({
         type: "presence",
         view: mapControllerRef.current?.readView() ?? null,
       });
+    };
     map.on("mousemove", onMouseMove);
     map.on("mouseout", onMouseOut);
     map.on("moveend", onMoveEnd);

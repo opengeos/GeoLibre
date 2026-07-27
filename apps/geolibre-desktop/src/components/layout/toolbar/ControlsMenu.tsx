@@ -145,6 +145,7 @@ export function ControlsMenu({
     show("controls.graticule") ||
     show("controls.sun") ||
     show("controls.routeAnimation") ||
+    show("controls.flightSimulator") ||
     show("controls.directions") ||
     show("controls.reverseGeocode");
   // Whether the middle group (panels) has any visible item. The separator that
@@ -225,6 +226,15 @@ export function ControlsMenu({
             >
               {t("toolbar.item.routeAnimation")}
               {panels.routeAnimation.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.flightSimulator") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.flightSimulatorTooltip")}
+              onSelect={panels.flightSimulator.toggle}
+            >
+              {t("toolbar.item.flightSimulator")}
+              {panels.flightSimulator.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.spinGlobe") && (

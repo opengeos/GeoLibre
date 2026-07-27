@@ -7,6 +7,7 @@ import {
   closeMinimapPanel,
   closePrintPanel,
   closeSearchPlacesPanel,
+  closeFlightSimulatorPanel,
   closeRouteAnimationPanel,
   closeSpinGlobePanel,
   closeSunPanel,
@@ -19,6 +20,7 @@ import {
   isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
+  isFlightSimulatorPanelVisible,
   isRouteAnimationPanelVisible,
   isSpinGlobePanelVisible,
   isSunPanelVisible,
@@ -30,6 +32,7 @@ import {
   openMinimapPanel,
   openPrintPanel,
   openSearchPlacesPanel,
+  openFlightSimulatorPanel,
   openRouteAnimationPanel,
   openSpinGlobePanel,
   openSunPanel,
@@ -42,6 +45,7 @@ import {
   subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
+  subscribeFlightSimulatorPanel,
   subscribeRouteAnimationPanel,
   subscribeSpinGlobePanel,
   subscribeSunPanel,
@@ -63,6 +67,7 @@ export interface ToolbarPanels {
   spinGlobe: ToolbarPanel;
   sun: ToolbarPanel;
   routeAnimation: ToolbarPanel;
+  flightSimulator: ToolbarPanel;
   print: ToolbarPanel;
   colorbar: ToolbarPanel;
   legend: ToolbarPanel;
@@ -98,6 +103,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     subscribeRouteAnimationPanel,
     isRouteAnimationPanelVisible,
     isRouteAnimationPanelVisible,
+  );
+  const flightSimulatorVisible = useSyncExternalStore(
+    subscribeFlightSimulatorPanel,
+    isFlightSimulatorPanelVisible,
+    isFlightSimulatorPanelVisible,
   );
   const printVisible = useSyncExternalStore(
     subscribePrintPanel,
@@ -184,6 +194,16 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
           return;
         }
         openRouteAnimationPanel(appApi);
+      },
+    },
+    flightSimulator: {
+      visible: flightSimulatorVisible,
+      toggle: () => {
+        if (flightSimulatorVisible) {
+          closeFlightSimulatorPanel(appApi);
+          return;
+        }
+        openFlightSimulatorPanel(appApi);
       },
     },
     print: {
