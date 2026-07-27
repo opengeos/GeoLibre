@@ -71,7 +71,7 @@ Layer rendering by type:
 ## Technical Details
 
 - **Coordinate System**: WGS84 (EPSG:4326)
-- **Bounds**: 
+- **Bounds**:
   - West: -70.586°, East: -70.518°
   - South: -33.415°, North: -33.374°
 - **Base Elevation**: ~570m (Santiago baseline)
