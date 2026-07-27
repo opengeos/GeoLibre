@@ -26,11 +26,13 @@ import {
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
+import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
   defaultModelFor,
+  hasDeploymentAssistantEnv,
   hasProviderKey,
   PROVIDER_MODELS,
   PROVIDER_LABELS,
@@ -187,22 +189,19 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     return storeSettings.aiProfiles.some((p) => p.id === stored) ? stored : null;
   });
 
+  const deploymentProxyConfigured = hasDeploymentAssistantEnv();
+
   // The currently active profile: if the user hasn't explicitly chosen one,
   // follow the default. Otherwise respect their explicit selection.
   const activeProfile: AssistantProfile | null = useMemo(() => {
-    // If the user explicitly chose a profile via the dropdown, use that.
-    if (userExplicitlyChoseProfile.current && selectedProfileId) {
-      const found = aiProfiles.find((p) => p.id === selectedProfileId);
-      if (found) return found;
-    }
-    // Fall back to the default profile.
-    if (defaultAiProfileId) {
-      const found = aiProfiles.find((p) => p.id === defaultAiProfileId);
-      if (found) return found;
-    }
-    // Fall back to the first profile.
-    return aiProfiles[0] ?? null;
-  }, [selectedProfileId, aiProfiles, defaultAiProfileId]);
+    return selectActiveAssistantProfile({
+      profiles: aiProfiles,
+      defaultProfileId: defaultAiProfileId,
+      selectedProfileId,
+      userExplicitlyChoseProfile: userExplicitlyChoseProfile.current,
+      deploymentProxyConfigured,
+    });
+  }, [selectedProfileId, aiProfiles, defaultAiProfileId, deploymentProxyConfigured]);
 
   // Queue of model-generated code snippets (run_python / run_maplibre_js)
   // awaiting the user's approval, each with the promise resolver its tool
@@ -597,6 +596,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 disabled={running}
                 onChange={(event) => onProfileChange(event.target.value)}
               >
+                {deploymentProxyConfigured ? (
+                  <option value="">{t("assistant.deploymentProxy")}</option>
+                ) : null}
                 {aiProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
                     {profile.name}

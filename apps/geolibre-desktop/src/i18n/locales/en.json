@@ -3009,6 +3009,7 @@
     "toolError": "failed",
     "provider": "LLM provider",
     "profile": "AI profile",
+    "deploymentProxy": "Deployment proxy",
     "model": "Model",
     "codeApprovalTitle": "Run assistant code?",
     "codeApprovalBody": "The assistant wants to run {{language}} code in the app. Review it first — it can change the map and access app data.",

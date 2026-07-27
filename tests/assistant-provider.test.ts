@@ -53,21 +53,41 @@ describe("build-time AI proxy", () => {
     );
   });
 
+  it("resolves a same-origin managed proxy path against the deployment origin", () => {
+    assert.deepEqual(
+      readBuildTimeAssistantEnv(
+        {
+          VITE_GEOLIBRE_AI_URL: "/ai",
+          VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
+        },
+        "http://localhost:8081",
+      ),
+      {
+        OPENAI_COMPATIBLE_BASE_URL: "http://localhost:8081/ai/v1",
+        OPENAI_COMPATIBLE_MODEL: "openai/gpt-5.5",
+      },
+    );
+  });
+
   it("reads Docker deployment config only when the entrypoint injects a URL", () => {
     const originalWindow = globalThis.window;
     try {
       globalThis.window = {
+        location: { origin: "http://localhost:8081" },
         __GEOLIBRE_DEPLOYMENT_ENV__: {
           VITE_GEOLIBRE_AI_URL: "/ai",
           VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
         },
       } as unknown as Window & typeof globalThis;
       assert.deepEqual(readDeploymentAssistantEnv(), {
-        OPENAI_COMPATIBLE_BASE_URL: "/ai/v1",
+        OPENAI_COMPATIBLE_BASE_URL: "http://localhost:8081/ai/v1",
         OPENAI_COMPATIBLE_MODEL: "openai/gpt-5.5",
+        GEOLIBRE_AI_PROXY_BASE_URL: "http://localhost:8081/ai/v1",
+        GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION: "1",
       });
 
       globalThis.window = {
+        location: { origin: "http://localhost:8081" },
         __GEOLIBRE_DEPLOYMENT_ENV__: {
           VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
         },
@@ -82,6 +102,7 @@ describe("build-time AI proxy", () => {
     const originalWindow = globalThis.window;
     try {
       globalThis.window = {
+        location: { origin: "http://localhost:8081" },
         __GEOLIBRE_DEPLOYMENT_ENV__: {
           VITE_GEOLIBRE_AI_URL: "/ai",
           VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
@@ -93,8 +114,9 @@ describe("build-time AI proxy", () => {
       const env = readRuntimeEnv();
       // The deployment supplies the endpoint, the user's own setting wins on
       // the model: runtime beats deployment, deployment beats build defaults.
-      assert.equal(env.OPENAI_COMPATIBLE_BASE_URL, "/ai/v1");
+      assert.equal(env.OPENAI_COMPATIBLE_BASE_URL, "http://localhost:8081/ai/v1");
       assert.equal(env.OPENAI_COMPATIBLE_MODEL, "anthropic/claude-opus-5");
+      assert.equal(env.GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION, "1");
     } finally {
       globalThis.window = originalWindow;
     }
@@ -210,7 +232,37 @@ describe("resolveProviderConfig", () => {
       apiKey: "k",
       baseURL: "https://api.example.com/v1",
       modelId: "my-model",
+      suppressAuthorizationHeader: false,
     });
+  });
+
+  it("suppresses Bearer auth only for the Docker-managed proxy endpoint", () => {
+    assert.deepEqual(
+      configForProvider("custom", undefined, {
+        OPENAI_COMPATIBLE_BASE_URL: "http://localhost:8081/ai/v1",
+        OPENAI_COMPATIBLE_MODEL: "openai/gpt-5.5",
+        GEOLIBRE_AI_PROXY_BASE_URL: "http://localhost:8081/ai/v1",
+        GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION: "1",
+      }),
+      {
+        provider: "custom",
+        apiKey: "not-needed",
+        baseURL: "http://localhost:8081/ai/v1",
+        modelId: "openai/gpt-5.5",
+        suppressAuthorizationHeader: true,
+      },
+    );
+
+    assert.equal(
+      configForProvider("custom", undefined, {
+        OPENAI_COMPATIBLE_BASE_URL: "https://api.example.com/v1",
+        OPENAI_COMPATIBLE_MODEL: "my-model",
+        OPENAI_COMPATIBLE_API_KEY: "k",
+        GEOLIBRE_AI_PROXY_BASE_URL: "http://localhost:8081/ai/v1",
+        GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION: "1",
+      })?.suppressAuthorizationHeader,
+      false,
+    );
   });
 });
 

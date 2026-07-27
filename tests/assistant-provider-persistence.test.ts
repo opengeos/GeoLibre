@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { normalizeDesktopSettings } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
+import { selectActiveAssistantProfile } from "../apps/geolibre-desktop/src/lib/assistant/profiles";
 import { mergeRuntimeEnv } from "../apps/geolibre-desktop/src/lib/assistant/provider";
+import type { AssistantProfile } from "../apps/geolibre-desktop/src/lib/assistant/provider";
 
 const NO_SOURCES = {
   osEnv: {},
@@ -127,6 +129,87 @@ describe("DesktopSettings.aiProfiles persistence and migration", () => {
     const result = normalizeDesktopSettings(stored);
     assert.equal(result.aiProfiles.length, 1);
     assert.deepEqual(result.aiProfiles[0].fieldValues, {});
+  });
+});
+
+describe("selectActiveAssistantProfile", () => {
+  const profiles: AssistantProfile[] = [
+    {
+      id: "prof_openai",
+      name: "OpenAI",
+      provider: "openai",
+      modelId: "gpt-5.6",
+      fieldValues: { OPENAI_API_KEY: "sk-openai" },
+    },
+    {
+      id: "prof_anthropic",
+      name: "Anthropic",
+      provider: "anthropic",
+      modelId: "claude-opus-5",
+      fieldValues: { ANTHROPIC_API_KEY: "sk-ant" },
+    },
+  ];
+
+  it("falls back to the first profile when no deployment proxy is injected", () => {
+    assert.equal(
+      selectActiveAssistantProfile({
+        profiles,
+        defaultProfileId: null,
+        selectedProfileId: null,
+        userExplicitlyChoseProfile: false,
+        deploymentProxyConfigured: false,
+      })?.id,
+      "prof_openai",
+    );
+  });
+
+  it("lets a Docker deployment proxy auto-resolve instead of pinning the first profile", () => {
+    assert.equal(
+      selectActiveAssistantProfile({
+        profiles,
+        defaultProfileId: null,
+        selectedProfileId: null,
+        userExplicitlyChoseProfile: false,
+        deploymentProxyConfigured: true,
+      }),
+      null,
+    );
+  });
+
+  it("honors explicit and default profiles over the deployment proxy", () => {
+    assert.equal(
+      selectActiveAssistantProfile({
+        profiles,
+        defaultProfileId: "prof_anthropic",
+        selectedProfileId: null,
+        userExplicitlyChoseProfile: false,
+        deploymentProxyConfigured: true,
+      })?.id,
+      "prof_anthropic",
+    );
+    assert.equal(
+      selectActiveAssistantProfile({
+        profiles,
+        defaultProfileId: "prof_openai",
+        selectedProfileId: "prof_anthropic",
+        userExplicitlyChoseProfile: true,
+        deploymentProxyConfigured: true,
+      })?.id,
+      "prof_anthropic",
+    );
+  });
+
+  it("lets an explicit empty selection use provider auto-resolution", () => {
+    assert.equal(
+      selectActiveAssistantProfile({
+        profiles,
+        defaultProfileId: "prof_openai",
+        selectedProfileId: "",
+        userExplicitlyChoseProfile: true,
+        deploymentProxyConfigured: true,
+      }),
+      null,
+    );
   });
 });
 

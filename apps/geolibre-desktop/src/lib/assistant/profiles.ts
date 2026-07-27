@@ -15,6 +15,40 @@ function generateProfileId(): string {
   return `prof_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export interface ActiveAssistantProfileOptions {
+  profiles: AssistantProfile[];
+  defaultProfileId: string | null;
+  selectedProfileId: string | null;
+  userExplicitlyChoseProfile: boolean;
+  deploymentProxyConfigured: boolean;
+}
+
+/**
+ * Choose the assistant profile that should pin the current session.
+ *
+ * @param options Profile state and deployment-proxy availability.
+ * @returns The active profile, or null to let provider auto-resolution choose.
+ */
+export function selectActiveAssistantProfile({
+  profiles,
+  defaultProfileId,
+  selectedProfileId,
+  userExplicitlyChoseProfile,
+  deploymentProxyConfigured,
+}: ActiveAssistantProfileOptions): AssistantProfile | null {
+  if (userExplicitlyChoseProfile) {
+    if (!selectedProfileId) return null;
+    const selected = profiles.find((profile) => profile.id === selectedProfileId);
+    if (selected) return selected;
+  }
+  if (defaultProfileId) {
+    const found = profiles.find((profile) => profile.id === defaultProfileId);
+    if (found) return found;
+  }
+  if (deploymentProxyConfigured) return null;
+  return profiles[0] ?? null;
+}
+
 /**
  * Migrate a legacy flat `aiProviderEnv` map to an array of {@link AssistantProfile}.
  * The legacy format stored every env var key/value in one flat map; we split it

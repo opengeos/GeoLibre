@@ -63,6 +63,8 @@ export interface AssistantProviderConfig {
   apiKey?: string;
   /** OpenAI-compatible base URL (ollama, custom). */
   baseURL?: string;
+  /** Suppress Bearer auth for same-origin proxies protected by browser auth. */
+  suppressAuthorizationHeader?: boolean;
   /** AWS region (bedrock). */
   region?: string;
   /** AWS credentials (bedrock). */
@@ -259,17 +261,32 @@ export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
  */
 export type RuntimeEnv = Record<string, string>;
 
+function browserOrigin(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const origin = window.location?.origin;
+  return origin && origin !== "null" ? origin : undefined;
+}
+
+function managedProxyBaseUrl(proxyUrl: string, baseOrigin?: string): string {
+  let normalized = proxyUrl.trim().replace(/\/+$/, "");
+  if (baseOrigin && normalized.startsWith("/")) {
+    normalized = new URL(normalized, baseOrigin).toString().replace(/\/+$/, "");
+  }
+  return normalized.endsWith("/v1") ? normalized : `${normalized}/v1`;
+}
+
 /** Public AI proxy configuration embedded by Vite for a managed build. */
 export function readBuildTimeAssistantEnv(
   viteEnv: Record<string, string | undefined> | undefined = (
     import.meta as ImportMeta & { env?: Record<string, string | undefined> }
   ).env,
+  baseOrigin?: string,
 ): RuntimeEnv {
   if (!viteEnv) return {};
   const result: RuntimeEnv = {};
   const proxyUrl = viteEnv.VITE_GEOLIBRE_AI_URL?.trim().replace(/\/+$/, "");
   if (proxyUrl) {
-    result.OPENAI_COMPATIBLE_BASE_URL = proxyUrl.endsWith("/v1") ? proxyUrl : `${proxyUrl}/v1`;
+    result.OPENAI_COMPATIBLE_BASE_URL = managedProxyBaseUrl(proxyUrl, baseOrigin);
     result.OPENAI_COMPATIBLE_MODEL =
       viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() || result.OPENAI_COMPATIBLE_MODEL || "openai/gpt-5.5";
   }
@@ -284,12 +301,22 @@ export function readDeploymentAssistantEnv(): RuntimeEnv {
       __GEOLIBRE_DEPLOYMENT_ENV__?: Record<string, string | undefined>;
     }
   ).__GEOLIBRE_DEPLOYMENT_ENV__;
-  return readBuildTimeAssistantEnv(deploymentEnv);
+  const result = readBuildTimeAssistantEnv(deploymentEnv, browserOrigin());
+  if (result.OPENAI_COMPATIBLE_BASE_URL) {
+    result.GEOLIBRE_AI_PROXY_BASE_URL = result.OPENAI_COMPATIBLE_BASE_URL;
+    result.GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION = "1";
+  }
+  return result;
+}
+
+/** True when a Docker deployment injected a managed AI proxy endpoint. */
+export function hasDeploymentAssistantEnv(): boolean {
+  return Boolean(readDeploymentAssistantEnv().OPENAI_COMPATIBLE_BASE_URL);
 }
 
 /** Read build-time credentials plus the live runtime environment map. */
 export function readRuntimeEnv(): RuntimeEnv {
-  const built = readBuildTimeAssistantEnv();
+  const built = readBuildTimeAssistantEnv(undefined, browserOrigin());
   if (typeof window === "undefined") return built;
   return {
     ...built,
@@ -390,11 +417,17 @@ export function configForProvider(
       const baseURL = firstValue(env, "OPENAI_COMPATIBLE_BASE_URL");
       if (!baseURL || !modelId) return null;
       const apiKey = firstValue(env, "OPENAI_COMPATIBLE_API_KEY") ?? "not-needed";
+      const normalizedBaseURL = baseURL.replace(/\/+$/, "");
+      const proxyBaseURL = firstValue(env, "GEOLIBRE_AI_PROXY_BASE_URL")?.replace(/\/+$/, "");
       return {
         provider,
         apiKey,
-        baseURL: baseURL.replace(/\/+$/, ""),
+        baseURL: normalizedBaseURL,
         modelId,
+        suppressAuthorizationHeader:
+          env.GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION === "1" &&
+          Boolean(proxyBaseURL) &&
+          normalizedBaseURL === proxyBaseURL,
       };
     }
     case "bedrock": {
@@ -496,6 +529,7 @@ export async function createModel(config: AssistantProviderConfig): Promise<Mode
         modelId: config.modelId,
         clientConfig: {
           baseURL: config.baseURL,
+          defaultHeaders: config.suppressAuthorizationHeader ? { Authorization: null } : undefined,
           dangerouslyAllowBrowser: true,
         },
       }) as unknown as Model;
