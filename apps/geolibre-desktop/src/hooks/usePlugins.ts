@@ -829,9 +829,9 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
     resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,
-    activatePlugin: (pluginId: string, state?: unknown) => {
-      manager.activate(pluginId, api);
-      if (!manager.isActive(pluginId)) return false;
+    activatePlugin: async (pluginId: string, state?: unknown) => {
+      const activated = await manager.activate(pluginId, api);
+      if (!activated || !manager.isActive(pluginId)) return false;
       return state === undefined ? true : manager.applyPluginState(pluginId, api, state);
     },
     queryOvertureFeatures,

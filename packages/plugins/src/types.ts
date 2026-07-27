@@ -5,8 +5,9 @@ import type {
   LayerStyle,
 } from "@geolibre/core";
 import type { FeatureCollection, Geometry } from "geojson";
-import type { TemporalLayerAdapter } from "./plugins/temporal-layers";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
+import type { OvertureTheme } from "maplibre-gl-overture-maps";
+import type { TemporalLayerAdapter } from "./plugins/temporal-layers";
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -118,13 +119,7 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
 }
 
 /** Overture Maps themes available through the host's official PMTiles source. */
-export type GeoLibreOvertureTheme =
-  | "addresses"
-  | "base"
-  | "buildings"
-  | "divisions"
-  | "places"
-  | "transportation";
+export type GeoLibreOvertureTheme = OvertureTheme;
 
 /** Parameters for a bounded Overture Maps feature query. */
 export interface GeoLibreOvertureQuery {
@@ -142,7 +137,10 @@ export interface GeoLibreOvertureQuery {
   maxFeatures?: number;
   /** Optional polygon filter applied before features are returned. */
   filterGeometry?: Geometry | FeatureCollection;
-  /** Spatial predicate for `filterGeometry`. Defaults to `intersects`. */
+  /**
+   * Spatial predicate for `filterGeometry`. Defaults to `intersects`.
+   * `centroid-within` uses the arithmetic mean of geometry vertices.
+   */
   filterMode?: "centroid-within" | "intersects";
   /** Optional request cancellation signal. */
   signal?: AbortSignal;
@@ -155,8 +153,11 @@ export interface GeoLibreOvertureQueryResult {
   theme: GeoLibreOvertureTheme;
   sourceLayer: string;
   zoom: number;
+  /** Number of PMTiles tile lookups completed before the query stopped. */
   tilesRead: number;
+  /** Number of matching features included in `data`. */
   matchedFeatureCount: number;
+  /** Whether at least one additional match was excluded by `maxFeatures`. */
   truncated: boolean;
 }
 
@@ -420,7 +421,7 @@ export interface GeoLibreAppAPI {
    * patch after activation. Returns false when the plugin is unavailable,
    * refuses activation, or rejects the state.
    */
-  activatePlugin?: (pluginId: string, state?: unknown) => boolean;
+  activatePlugin?: (pluginId: string, state?: unknown) => Promise<boolean>;
   /**
    * Query a bounded set of features from GeoLibre's official Overture Maps
    * PMTiles integration. The host enforces tile and feature limits.

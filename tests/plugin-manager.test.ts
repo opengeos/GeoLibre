@@ -397,16 +397,14 @@ describe("PluginManager async activation", () => {
       }),
     );
 
-    manager.activate("async-plugin", app);
+    const activation = manager.activate("async-plugin", app);
+    const repeatedActivation = manager.activate("async-plugin", app);
     // Optimistically active while the mount is in flight.
     assert.equal(manager.isActive("async-plugin"), true);
+    assert.equal(repeatedActivation, activation);
 
     resolveMount(false);
-    // watchAsyncActivation wraps the plugin promise in Promise.resolve().then(),
-    // so two microtask ticks are needed: one for the wrapper, one for the
-    // callback. (The other async tests below flush twice for the same reason.)
-    await Promise.resolve();
-    await Promise.resolve();
+    assert.equal(await activation, false);
 
     // A failed mount reverts the menu and tears down the partial activation.
     assert.equal(manager.isActive("async-plugin"), false);
@@ -423,9 +421,8 @@ describe("PluginManager async activation", () => {
       }),
     );
 
-    manager.activate("rejecting-plugin", app);
-    await Promise.resolve();
-    await Promise.resolve();
+    const activation = manager.activate("rejecting-plugin", app);
+    assert.equal(await activation, false);
 
     assert.equal(manager.isActive("rejecting-plugin"), false);
   });
@@ -440,9 +437,8 @@ describe("PluginManager async activation", () => {
       }),
     );
 
-    manager.activate("ok-plugin", app);
-    await Promise.resolve();
-    await Promise.resolve();
+    const activation = manager.activate("ok-plugin", app);
+    assert.equal(await activation, true);
 
     assert.equal(manager.isActive("ok-plugin"), true);
   });
@@ -959,16 +955,13 @@ describe("PluginManager plugin coordination", () => {
     assert.equal(manager.applyPluginState("missing", app, {}), false);
   });
 
-  it("prevents recursive activation across coordinating plugins", () => {
+  it("prevents recursive activation across coordinating plugins", async () => {
     const manager = new PluginManager();
     let firstCalls = 0;
     let secondCalls = 0;
     const coordinatingApp = {
       ...app,
-      activatePlugin: (id: string) => {
-        manager.activate(id, coordinatingApp);
-        return manager.isActive(id);
-      },
+      activatePlugin: async (id: string) => Boolean(await manager.activate(id, coordinatingApp)),
     } as GeoLibreAppAPI;
     manager.register(
       testPlugin({
@@ -989,7 +982,7 @@ describe("PluginManager plugin coordination", () => {
       }),
     );
 
-    manager.activate("first", coordinatingApp);
+    await manager.activate("first", coordinatingApp);
     assert.equal(firstCalls, 1);
     assert.equal(secondCalls, 1);
     assert.equal(manager.isActive("first"), true);

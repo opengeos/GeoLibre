@@ -17,6 +17,7 @@ export class PluginManager {
   private urlParameterNamesById = new Map<string, string[]>();
   private listeners = new Set<() => void>();
   private activationGenerations = new Map<string, number>();
+  private activationResults = new Map<string, Promise<boolean>>();
   private activating = new Set<string>();
   private version = 0;
 
@@ -86,6 +87,7 @@ export class PluginManager {
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
     this.activationGenerations.delete(id);
+    this.activationResults.delete(id);
     this.activating.delete(id);
     for (const handled of this.handledUrlParametersByContext.values()) {
       handled.delete(id);
@@ -135,9 +137,12 @@ export class PluginManager {
     return () => this.listeners.delete(listener);
   }
 
-  activate(id: string, app: GeoLibreAppAPI): void {
+  activate(id: string, app: GeoLibreAppAPI): boolean | Promise<boolean> {
     const plugin = this.plugins.get(id);
-    if (!plugin || this.active.has(id) || this.activating.has(id)) return;
+    if (!plugin || this.activating.has(id)) return false;
+    const pendingResult = this.activationResults.get(id);
+    if (pendingResult) return pendingResult;
+    if (this.active.has(id)) return true;
     const scopedApp = scopeAppToPlugin(app, id);
     this.activating.add(id);
     let activated: ReturnType<GeoLibrePlugin["activate"]>;
@@ -146,11 +151,14 @@ export class PluginManager {
     } finally {
       this.activating.delete(id);
     }
-    if (activated === false) return;
+    if (activated === false) return false;
     const generation = this.nextActivationGeneration(id);
     this.active.add(id);
     this.notify();
-    this.watchAsyncActivation(id, activated, scopedApp, generation);
+    const result = this.watchAsyncActivation(id, activated, scopedApp, generation);
+    if (!result) return true;
+    this.trackActivationResult(id, result);
+    return result;
   }
 
   /**
@@ -169,19 +177,24 @@ export class PluginManager {
     activated: boolean | void | PromiseLike<boolean | void>,
     app: GeoLibreAppAPI,
     generation: number,
-  ): void {
+  ): Promise<boolean> | null {
     // An async plugin (e.g. one mounted behind a dynamic import) reports
     // failure after the fact by resolving false or rejecting. Roll back so the
     // Plugins menu does not show a plugin that never mounted (e.g. when its
     // chunk fails to load after a web redeploy).
-    if (!isThenable(activated)) return;
-    void Promise.resolve(activated).then(
+    if (!isThenable(activated)) return null;
+    return Promise.resolve(activated).then(
       (result) => {
         if (result === false) {
           this.rollbackFailedActivation(id, app, generation);
+          return false;
         }
+        return this.active.has(id) && this.activationGenerations.get(id) === generation;
       },
-      (error) => this.rollbackFailedActivation(id, app, generation, error),
+      (error) => {
+        this.rollbackFailedActivation(id, app, generation, error);
+        return false;
+      },
     );
   }
 
@@ -218,11 +231,19 @@ export class PluginManager {
     this.notify();
   }
 
+  private trackActivationResult(id: string, result: Promise<boolean>): void {
+    this.activationResults.set(id, result);
+    void result.then(() => {
+      if (this.activationResults.get(id) === result) this.activationResults.delete(id);
+    });
+  }
+
   deactivate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || !this.active.has(id)) return;
     plugin.deactivate(scopeAppToPlugin(app, id));
     this.active.delete(id);
+    this.activationResults.delete(id);
     this.notify();
   }
 
@@ -305,7 +326,11 @@ export class PluginManager {
         // failure to this plugin instead of aborting the whole loop.
         if (!this.active.has(id)) {
           try {
-            this.activate(id, app);
+            const activated = await this.activate(id, app);
+            if (!activated) {
+              handledPluginIds.delete(id);
+              continue;
+            }
           } catch (error) {
             handledPluginIds.delete(id);
             console.warn(
@@ -447,7 +472,8 @@ export class PluginManager {
       // Restoring a saved project re-activates plugins the same way the user
       // would, so an async mount that later fails (e.g. a stale chunk after a
       // redeploy) must roll back here too, not just from activate().
-      this.watchAsyncActivation(id, activated, scopedApp, generation);
+      const result = this.watchAsyncActivation(id, activated, scopedApp, generation);
+      if (result) this.trackActivationResult(id, result);
     }
 
     if (changed) this.notify();
@@ -524,7 +550,7 @@ function scopeAppToPlugin(
   }
 
   if (activatePlugin) {
-    scoped.activatePlugin = (targetPluginId, state) =>
+    scoped.activatePlugin = async (targetPluginId, state) =>
       targetPluginId === pluginId ? false : activatePlugin(targetPluginId, state);
   }
 

@@ -26,6 +26,13 @@ interface TileCoordinate {
   z: number;
 }
 
+interface TileRange {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 function assertBBox(value: BBox): void {
   const [west, south, east, north] = value;
   if (
@@ -57,14 +64,26 @@ function latitudeTileY(latitude: number, zoom: number): number {
   return Math.max(0, Math.min(scale - 1, y));
 }
 
-/** Enumerate XYZ tiles covering a WGS84 bbox at a fixed zoom. */
-export function overtureTilesForBBox(bbox: BBox, zoom: number): TileCoordinate[] {
+function overtureTileRangeForBBox(bbox: BBox, zoom: number): TileRange {
   assertBBox(bbox);
   const [west, south, east, north] = bbox;
-  const minX = longitudeTileX(west, zoom);
-  const maxX = longitudeTileX(east, zoom);
-  const minY = latitudeTileY(north, zoom);
-  const maxY = latitudeTileY(south, zoom);
+  return {
+    minX: longitudeTileX(west, zoom),
+    maxX: longitudeTileX(east, zoom),
+    minY: latitudeTileY(north, zoom),
+    maxY: latitudeTileY(south, zoom),
+  };
+}
+
+/** Count XYZ tiles covering a WGS84 bbox without allocating tile objects. */
+export function overtureTileCountForBBox(bbox: BBox, zoom: number): number {
+  const { minX, maxX, minY, maxY } = overtureTileRangeForBBox(bbox, zoom);
+  return (maxX - minX + 1) * (maxY - minY + 1);
+}
+
+/** Enumerate XYZ tiles covering a WGS84 bbox at a fixed zoom. */
+export function overtureTilesForBBox(bbox: BBox, zoom: number): TileCoordinate[] {
+  const { minX, maxX, minY, maxY } = overtureTileRangeForBBox(bbox, zoom);
   const tiles: TileCoordinate[] = [];
   for (let x = minX; x <= maxX; x += 1) {
     for (let y = minY; y <= maxY; y += 1) {
@@ -186,11 +205,21 @@ function areaRings(areas: AreaGeometry[]): Position[][] {
   );
 }
 
-function lineIntersectsAreas(line: Position[], areas: AreaGeometry[]): boolean {
+function areaOuterRings(areas: AreaGeometry[]): Position[][] {
+  return areas.flatMap((area) => {
+    const polygons = area.type === "Polygon" ? [area.coordinates] : area.coordinates;
+    return polygons.flatMap((polygon) => (polygon[0] ? [polygon[0]] : []));
+  });
+}
+
+function lineIntersectsAreas(
+  line: Position[],
+  areas: AreaGeometry[],
+  rings: Position[][],
+): boolean {
   if (line.some((point) => areas.some((area) => pointInArea(point, area)))) {
     return true;
   }
-  const rings = areaRings(areas);
   for (let index = 1; index < line.length; index += 1) {
     for (const ring of rings) {
       for (let edge = 1; edge < ring.length; edge += 1) {
@@ -203,17 +232,60 @@ function lineIntersectsAreas(line: Position[], areas: AreaGeometry[]): boolean {
   return false;
 }
 
-function areaGeometries(filter?: Geometry | FeatureCollection): AreaGeometry[] {
-  if (!filter) return [];
-  if (filter.type === "FeatureCollection") {
-    return filter.features
-      .map((feature) => feature.geometry)
-      .filter(
-        (geometry): geometry is AreaGeometry =>
-          geometry?.type === "Polygon" || geometry?.type === "MultiPolygon",
-      );
+function collectAreaGeometries(geometry: Geometry | null, sink: AreaGeometry[]): void {
+  if (!geometry) return;
+  if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+    const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+    if (polygons.some((polygon) => (polygon[0]?.length ?? 0) >= 4)) {
+      sink.push(geometry);
+    }
+    return;
   }
-  return filter.type === "Polygon" || filter.type === "MultiPolygon" ? [filter] : [];
+  if (geometry.type === "GeometryCollection") {
+    for (const child of geometry.geometries) collectAreaGeometries(child, sink);
+  }
+}
+
+function areaGeometries(filter?: Geometry | FeatureCollection): AreaGeometry[] {
+  const areas: AreaGeometry[] = [];
+  if (!filter) return areas;
+  if (filter.type === "FeatureCollection") {
+    for (const feature of filter.features) collectAreaGeometries(feature.geometry, areas);
+  } else {
+    collectAreaGeometries(filter, areas);
+  }
+  return areas;
+}
+
+interface PreparedAreaFilter {
+  areas: AreaGeometry[];
+  rings: Position[][];
+  outerRings: Position[][];
+  bbox: BBox;
+}
+
+function prepareAreaFilter(
+  filter: Geometry | FeatureCollection | undefined,
+): PreparedAreaFilter | null {
+  if (!filter) return null;
+  const areas = areaGeometries(filter);
+  const boxes = areas
+    .map((area) => geometryBBox(area))
+    .filter((box): box is BBox => box !== null && box[0] < box[2] && box[1] < box[3]);
+  if (!areas.length || boxes.length !== areas.length) {
+    throw new Error("Overture query filterGeometry must contain a usable Polygon or MultiPolygon.");
+  }
+  return {
+    areas,
+    rings: areaRings(areas),
+    outerRings: areaOuterRings(areas),
+    bbox: [
+      Math.min(...boxes.map((box) => box[0])),
+      Math.min(...boxes.map((box) => box[1])),
+      Math.max(...boxes.map((box) => box[2])),
+      Math.max(...boxes.map((box) => box[3])),
+    ],
+  };
 }
 
 function geometryCentroid(geometry: Geometry): Position | null {
@@ -227,38 +299,87 @@ function geometryCentroid(geometry: Geometry): Position | null {
   return [sum[0] / positions.length, sum[1] / positions.length];
 }
 
+function geometryIntersectsFilter(geometry: Geometry, filter: PreparedAreaFilter): boolean {
+  if (geometry.type === "Point") {
+    return filter.areas.some((area) => pointInArea(geometry.coordinates, area));
+  }
+  if (geometry.type === "MultiPoint") {
+    return geometry.coordinates.some((point) =>
+      filter.areas.some((area) => pointInArea(point, area)),
+    );
+  }
+  if (geometry.type === "LineString") {
+    return lineIntersectsAreas(geometry.coordinates, filter.areas, filter.rings);
+  }
+  if (geometry.type === "MultiLineString") {
+    return geometry.coordinates.some((line) =>
+      lineIntersectsAreas(line, filter.areas, filter.rings),
+    );
+  }
+  if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+    const featureAreas: AreaGeometry[] = [geometry];
+    const featureRings = areaRings(featureAreas);
+    if (featureRings.some((ring) => lineIntersectsAreas(ring, filter.areas, filter.rings))) {
+      return true;
+    }
+    return filter.outerRings.some(
+      (ring) => ring.length > 0 && featureAreas.some((area) => pointInArea(ring[0], area)),
+    );
+  }
+  return geometry.geometries.some((child) => geometryIntersectsFilter(child, filter));
+}
+
+function featureMatchesPreparedFilter(
+  feature: Feature,
+  filter: PreparedAreaFilter | null,
+  mode: "centroid-within" | "intersects" = "intersects",
+  featureBBox?: BBox,
+): boolean {
+  if (!filter) return true;
+  if (!feature.geometry) return false;
+  const bounds = featureBBox ?? geometryBBox(feature.geometry);
+  if (!bounds || !bboxesIntersect(bounds, filter.bbox)) return false;
+  if (mode === "centroid-within") {
+    const center = geometryCentroid(feature.geometry);
+    return !!center && filter.areas.some((area) => pointInArea(center, area));
+  }
+  return geometryIntersectsFilter(feature.geometry, filter);
+}
+
 /** Test a feature against an optional polygon filter. */
 export function overtureFeatureMatchesFilter(
   feature: Feature,
   filter: Geometry | FeatureCollection | undefined,
   mode: "centroid-within" | "intersects" = "intersects",
 ): boolean {
-  if (!feature.geometry || !filter) return true;
-  const areas = areaGeometries(filter);
-  if (!areas.length) return true;
-  if (mode === "centroid-within") {
-    const center = geometryCentroid(feature.geometry);
-    return !!center && areas.some((area) => pointInArea(center, area));
-  }
-  const geometry = feature.geometry;
-  if (geometry.type === "Point") {
-    return areas.some((area) => pointInArea(geometry.coordinates, area));
-  }
-  if (geometry.type === "MultiPoint") {
-    return geometry.coordinates.some((point) => areas.some((area) => pointInArea(point, area)));
-  }
-  if (geometry.type === "LineString") {
-    return lineIntersectsAreas(geometry.coordinates, areas);
-  }
-  if (geometry.type === "MultiLineString") {
-    return geometry.coordinates.some((line) => lineIntersectsAreas(line, areas));
-  }
-  const center = geometryCentroid(geometry);
-  return !!center && areas.some((area) => pointInArea(center, area));
+  return featureMatchesPreparedFilter(feature, prepareAreaFilter(filter), mode);
 }
 
 function overtureArchiveUrl(release: string, theme: OvertureTheme): string {
   return `${DEFAULT_TILES_BASE_URL.replace(/\/+$/, "")}/${release}/${theme}.pmtiles`;
+}
+
+function boundedPositiveInteger(
+  value: number | undefined,
+  fallback: number,
+  maximum: number,
+): number {
+  const candidate = Number.isFinite(value) ? Math.floor(value as number) : fallback;
+  return Math.min(maximum, Math.max(1, candidate));
+}
+
+/** Select the highest zoom whose bbox tile count fits the requested cap. */
+export function overtureZoomForBBox(bbox: BBox, preferredZoom: number, maxTiles: number): number {
+  let zoom = preferredZoom;
+  let tileCount = overtureTileCountForBBox(bbox, zoom);
+  while (tileCount > maxTiles && zoom > 0) {
+    zoom -= 1;
+    tileCount = overtureTileCountForBBox(bbox, zoom);
+  }
+  if (tileCount > maxTiles) {
+    throw new Error(`Overture query covers ${tileCount} tiles, above the ${maxTiles}-tile limit.`);
+  }
+  return zoom;
 }
 
 /**
@@ -272,30 +393,20 @@ export async function queryOvertureFeatures(
   query: GeoLibreOvertureQuery,
 ): Promise<GeoLibreOvertureQueryResult> {
   assertBBox(query.bbox);
-  const maxTiles = Math.min(
-    MAX_TILES,
-    Math.max(1, Math.floor(query.maxTiles ?? DEFAULT_MAX_TILES)),
-  );
-  const maxFeatures = Math.min(
-    MAX_FEATURES,
-    Math.max(1, Math.floor(query.maxFeatures ?? DEFAULT_MAX_FEATURES)),
-  );
-  let zoom = Math.max(0, Math.min(14, Math.floor(query.zoom ?? DEFAULT_ZOOM)));
-  let tiles = overtureTilesForBBox(query.bbox, zoom);
-  while (tiles.length > maxTiles && zoom > 0) {
-    zoom -= 1;
-    tiles = overtureTilesForBBox(query.bbox, zoom);
-  }
-  if (tiles.length > maxTiles) {
-    throw new Error(
-      `Overture query covers ${tiles.length} tiles, above the ${maxTiles}-tile limit.`,
-    );
-  }
+  const maxTiles = boundedPositiveInteger(query.maxTiles, DEFAULT_MAX_TILES, MAX_TILES);
+  const maxFeatures = boundedPositiveInteger(query.maxFeatures, DEFAULT_MAX_FEATURES, MAX_FEATURES);
+  const requestedZoom = Number.isFinite(query.zoom)
+    ? Math.floor(query.zoom as number)
+    : DEFAULT_ZOOM;
+  const zoom = overtureZoomForBBox(query.bbox, Math.max(0, Math.min(14, requestedZoom)), maxTiles);
+  const tiles = overtureTilesForBBox(query.bbox, zoom);
+  const preparedFilter = prepareAreaFilter(query.filterGeometry);
 
   const { latest: release } = await fetchReleases();
   const archive = new PMTiles(overtureArchiveUrl(release, query.theme));
   const features: Feature[] = [];
   let matchedFeatureCount = 0;
+  let tilesRead = 0;
   let truncated = false;
   let nextTile = 0;
 
@@ -305,6 +416,7 @@ export async function queryOvertureFeatures(
       const tile = tiles[nextTile];
       nextTile += 1;
       const response = await archive.getZxy(tile.z, tile.x, tile.y, query.signal);
+      tilesRead += 1;
       if (!response) continue;
       if (truncated) return;
       const vectorTile = new VectorTile(new Pbf(response.data));
@@ -316,10 +428,9 @@ export async function queryOvertureFeatures(
         if (!feature.geometry) continue;
         const featureBox = geometryBBox(feature.geometry);
         if (!featureBox || !bboxesIntersect(featureBox, query.bbox)) continue;
-        if (!overtureFeatureMatchesFilter(feature, query.filterGeometry, query.filterMode)) {
+        if (!featureMatchesPreparedFilter(feature, preparedFilter, query.filterMode, featureBox)) {
           continue;
         }
-        matchedFeatureCount += 1;
         if (features.length >= maxFeatures) {
           truncated = true;
           break;
@@ -332,6 +443,7 @@ export async function queryOvertureFeatures(
           _overture_source_layer: query.sourceLayer,
         };
         features.push(feature);
+        matchedFeatureCount += 1;
       }
     }
   });
@@ -343,7 +455,7 @@ export async function queryOvertureFeatures(
     theme: query.theme,
     sourceLayer: query.sourceLayer,
     zoom,
-    tilesRead: tiles.length,
+    tilesRead,
     matchedFeatureCount,
     truncated,
   };
