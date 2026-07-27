@@ -28,7 +28,7 @@ buildings' construction year, from 1850 to 2025, so Manhattan fills in era by
 era — the camera stays put and the data moves. Click it to play the
 full-quality video.
 
-[![Animation of Manhattan buildings appearing by construction year as the Time Slider advances from 1850 to 2025](https://files.opengeos.org/nyc-buildings.gif)](https://files.opengeos.org/nyc-buildings.webm)
+[![Animation of Manhattan buildings appearing by construction year as the Time Slider advances from 1850 to 2025](https://files.opengeos.org/nyc-buildings-gif.gif)](https://files.opengeos.org/nyc-buildings.webm)
 
 [Open the live project](https://share.geolibre.app/giswqs/nyc-buildings-and-subways){ .md-button .md-button--primary }
 
