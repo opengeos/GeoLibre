@@ -3267,7 +3267,10 @@
       "noParameters": "This tool has no parameters.",
       "noOutput": "No output yet.",
       "enabled": "Enabled",
-      "requiredSuffix": " | required"
+      "requiredSuffix": " | required",
+      "selectField": "Select a field",
+      "fieldName": "Field name",
+      "vectorUnitsNote": "Vector layers are read as WGS84, so distance, spacing and tolerance values are in degrees, not meters. 1° is about 111 km, and 0.001° is about 111 m."
     },
     "sidecar": {
       "unavailableTitle": "The processing server isn't available.",

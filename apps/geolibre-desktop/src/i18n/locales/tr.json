@@ -3113,7 +3113,10 @@
       "noParameters": "Bu aracın parametresi yok.",
       "noOutput": "Henüz çıktı yok.",
       "enabled": "Etkin",
-      "requiredSuffix": " | zorunlu"
+      "requiredSuffix": " | zorunlu",
+      "selectField": "Bir alan seçin",
+      "fieldName": "Alan adı",
+      "vectorUnitsNote": "Vektör katmanları WGS84 olarak okunur; bu nedenle mesafe, aralık ve tolerans değerleri metre değil derece cinsindendir. 1° yaklaşık 111 km, 0,001° ise yaklaşık 111 m'dir."
     },
     "sidecar": {
       "unavailableTitle": "İşleme sunucusu kullanılamıyor.",

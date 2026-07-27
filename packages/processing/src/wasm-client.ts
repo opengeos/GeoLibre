@@ -61,7 +61,7 @@ interface ToolRunResult {
 }
 
 /** One tool's manifest as emitted by `geolibre manifests` (geolibre-wasm). */
-interface ToolManifest {
+export interface ToolManifest {
   id: string;
   display_name?: string;
   summary?: string;
@@ -69,6 +69,12 @@ interface ToolManifest {
   license_tier?: string;
   /** "geolibre" for GeoLibre-authored tools, "whitebox" otherwise. */
   source?: string;
+  /**
+   * Per-parameter default values, keyed by parameter name. Dataset entries are
+   * illustrative example paths rather than real defaults — see
+   * {@link manifestScalarDefaults}.
+   */
+  defaults?: Record<string, unknown>;
   params?: Array<{
     name: string;
     description?: string;
@@ -125,14 +131,51 @@ export async function listWhiteboxWasmTools(): Promise<string[]> {
 }
 
 /**
+ * A manifest's `defaults` map, restricted to the parameters it is safe to
+ * prefill: **optional** scalars, bools and enums.
+ *
+ * The map doubles as the tool's *example* invocation, so it also carries values
+ * for parameters that have no real default. `points_along_lines` declares
+ * `input: "lines.shp"` and `spacing: 50` next to `include_end: true`, yet the
+ * first two are required and the catalog snapshot leaves their `default` null.
+ * Prefilling them would put a path that does not exist on the user's machine
+ * into the input field and an arbitrary 50 into a required distance. So dataset
+ * parameters (`io_role` input/output) and required parameters are both dropped,
+ * leaving the 1028 genuinely-defaulted optional parameters.
+ *
+ * Dropping the whole map (what the dialog did before) is what surfaced as
+ * GeoLibre#1458: `include_end` documents "default true" but rendered as an
+ * unchecked box, so `--include_end=false` was sent and each line lost its
+ * endpoint. The Whitebox catalog snapshot already carries the same defaults for
+ * the tools it lists, so this only closes the gap for local (WASM) mode.
+ *
+ * @param manifest - The tool manifest.
+ * @returns Default values keyed by parameter name; dataset and required params omitted.
+ */
+export function manifestScalarDefaults(manifest: ToolManifest): Record<string, unknown> {
+  const defaults = manifest.defaults;
+  if (!defaults) return {};
+  const scalars: Record<string, unknown> = {};
+  for (const param of manifest.params ?? []) {
+    if (param.io_role || param.required) continue;
+    const value = defaults[param.name];
+    if (value !== undefined) scalars[param.name] = value;
+  }
+  return scalars;
+}
+
+/**
  * Map one WASM tool manifest to the {@link WhiteboxTool} shape the Processing
  * toolbox renders. Each manifest param already carries `io_role`/`data_kind`/
  * `schema`, which the dialog's `parameterKind` reads directly; we additionally
  * flatten an enum schema's choices to `options` so the param renders as a
- * dropdown. `source` is preserved only for GeoLibre-authored tools, matching how
- * the Whitebox catalog snapshot leaves Whitebox tools' `source` unset.
+ * dropdown, and lift the manifest's scalar defaults onto each param so the
+ * dialog opens with the values the tool documents ({@link manifestScalarDefaults}).
+ * `source` is preserved only for GeoLibre-authored tools, matching how the
+ * Whitebox catalog snapshot leaves Whitebox tools' `source` unset.
  */
 function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
+  const defaults = manifestScalarDefaults(manifest);
   return {
     id: manifest.id,
     display_name: manifest.display_name,
@@ -149,6 +192,7 @@ function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
         data_kind: param.data_kind,
         schema: param.schema,
       };
+      if (param.name in defaults) mapped.default = defaults[param.name];
       if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
         // Coerce to strings (not filter to strings): an enum with numeric or
         // boolean values would otherwise drop to an empty list and render as a
@@ -263,11 +307,22 @@ function reconcileToolParams(
   return wasmParams.map((param) => {
     const catalogParam = catalogByName.get(param.name);
     if (!catalogParam) return param;
+    const wasmKind = paramKind(param);
     const catalogKind = paramKind(catalogParam);
-    if (shouldPreferCatalogKind(param, paramKind(param), catalogKind)) {
-      return { ...param, kind: catalogKind as WhiteboxToolParameter["kind"] };
+    // A WASM manifest with no `defaults` entry for this param falls back to the
+    // catalog's documented default, so local (WASM) mode opens the tool with the
+    // same values the sidecar would (GeoLibre#1458). Dataset params are skipped:
+    // the catalog leaves their default `null`, and a path default would be
+    // meaningless on the user's machine anyway.
+    const isDataset = wasmKind.endsWith("_in") || wasmKind.endsWith("_out");
+    const merged =
+      !isDataset && param.default === undefined && catalogParam.default != null
+        ? { ...param, default: catalogParam.default }
+        : param;
+    if (shouldPreferCatalogKind(param, wasmKind, catalogKind)) {
+      return { ...merged, kind: catalogKind as WhiteboxToolParameter["kind"] };
     }
-    return param;
+    return merged;
   });
 }
 

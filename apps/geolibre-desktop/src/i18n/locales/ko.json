@@ -3059,7 +3059,10 @@
       "noParameters": "이 도구에는 매개변수가 없습니다.",
       "noOutput": "아직 출력이 없습니다.",
       "enabled": "사용",
-      "requiredSuffix": " | 필수"
+      "requiredSuffix": " | 필수",
+      "selectField": "필드 선택",
+      "fieldName": "필드 이름",
+      "vectorUnitsNote": "벡터 레이어는 WGS84로 읽으므로 거리, 간격, 허용 오차 값의 단위는 미터가 아니라 도입니다. 1°는 약 111km, 0.001°는 약 111m입니다."
     },
     "sidecar": {
       "unavailableTitle": "처리 서버를 사용할 수 없습니다.",

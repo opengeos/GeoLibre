@@ -3059,7 +3059,10 @@
       "noParameters": "Alat ini tidak memiliki parameter.",
       "noOutput": "Belum ada keluaran.",
       "enabled": "Aktif",
-      "requiredSuffix": " | wajib"
+      "requiredSuffix": " | wajib",
+      "selectField": "Pilih bidang",
+      "fieldName": "Nama bidang",
+      "vectorUnitsNote": "Lapisan vektor dibaca sebagai WGS84, sehingga nilai jarak, spasi, dan toleransi dinyatakan dalam derajat, bukan meter. 1° kira-kira 111 km dan 0,001° kira-kira 111 m."
     },
     "sidecar": {
       "unavailableTitle": "Server pemrosesan tidak tersedia.",

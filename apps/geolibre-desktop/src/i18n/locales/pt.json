@@ -3113,7 +3113,10 @@
       "noParameters": "Esta ferramenta não tem parâmetros.",
       "noOutput": "Ainda não há saída.",
       "enabled": "Ativado",
-      "requiredSuffix": " | obrigatório"
+      "requiredSuffix": " | obrigatório",
+      "selectField": "Selecione um campo",
+      "fieldName": "Nome do campo",
+      "vectorUnitsNote": "As camadas vetoriais são lidas como WGS84, portanto os valores de distância, espaçamento e tolerância estão em graus, não em metros. 1° equivale a cerca de 111 km e 0,001° a cerca de 111 m."
     },
     "sidecar": {
       "unavailableTitle": "O servidor de processamento não está disponível.",

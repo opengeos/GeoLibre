@@ -3059,7 +3059,10 @@
       "noParameters": "このツールにはパラメータがありません。",
       "noOutput": "まだ出力はありません。",
       "enabled": "有効",
-      "requiredSuffix": " | 必須"
+      "requiredSuffix": " | 必須",
+      "selectField": "フィールドを選択",
+      "fieldName": "フィールド名",
+      "vectorUnitsNote": "ベクターレイヤーは WGS84 として読み込まれるため、距離・間隔・許容値の単位はメートルではなく度です。1° は約 111 km、0.001° は約 111 m です。"
     },
     "sidecar": {
       "unavailableTitle": "処理サーバーを利用できません。",

@@ -3113,7 +3113,10 @@
       "noParameters": "Dieses Werkzeug hat keine Parameter.",
       "noOutput": "Noch keine Ausgabe.",
       "enabled": "Aktiviert",
-      "requiredSuffix": " | erforderlich"
+      "requiredSuffix": " | erforderlich",
+      "selectField": "Feld auswählen",
+      "fieldName": "Feldname",
+      "vectorUnitsNote": "Vektorebenen werden als WGS84 gelesen, daher sind Abstands-, Raster- und Toleranzwerte in Grad angegeben, nicht in Metern. 1° entspricht etwa 111 km und 0,001° etwa 111 m."
     },
     "sidecar": {
       "unavailableTitle": "Der Verarbeitungsserver ist nicht verfügbar.",

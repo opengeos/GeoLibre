@@ -3113,7 +3113,10 @@
       "noParameters": "Cet outil n'a aucun paramètre.",
       "noOutput": "Pas encore de sortie.",
       "enabled": "Activé",
-      "requiredSuffix": " | requis"
+      "requiredSuffix": " | requis",
+      "selectField": "Sélectionner un champ",
+      "fieldName": "Nom du champ",
+      "vectorUnitsNote": "Les couches vectorielles sont lues en WGS84 : les valeurs de distance, d'espacement et de tolérance sont donc exprimées en degrés, et non en mètres. 1° vaut environ 111 km et 0,001° environ 111 m."
     },
     "sidecar": {
       "unavailableTitle": "Le serveur de traitement n'est pas disponible.",

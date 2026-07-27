@@ -3113,7 +3113,10 @@
       "noParameters": "Questo strumento non ha parametri.",
       "noOutput": "Nessun output ancora.",
       "enabled": "Attivato",
-      "requiredSuffix": " | obbligatorio"
+      "requiredSuffix": " | obbligatorio",
+      "selectField": "Seleziona un campo",
+      "fieldName": "Nome del campo",
+      "vectorUnitsNote": "I livelli vettoriali vengono letti come WGS84, quindi i valori di distanza, spaziatura e tolleranza sono in gradi, non in metri. 1° corrisponde a circa 111 km e 0,001° a circa 111 m."
     },
     "sidecar": {
       "unavailableTitle": "Il server di elaborazione non è disponibile.",

@@ -3124,7 +3124,10 @@
       "noParameters": "Esta herramienta no tiene parámetros.",
       "noOutput": "Aún no hay salida.",
       "enabled": "Activado",
-      "requiredSuffix": " | obligatorio"
+      "requiredSuffix": " | obligatorio",
+      "selectField": "Seleccione un campo",
+      "fieldName": "Nombre del campo",
+      "vectorUnitsNote": "Las capas vectoriales se leen como WGS84, por lo que los valores de distancia, espaciado y tolerancia están en grados, no en metros. 1° equivale a unos 111 km y 0,001° a unos 111 m."
     },
     "sidecar": {
       "unavailableTitle": "El servidor de procesamiento no está disponible.",

@@ -3113,7 +3113,10 @@
       "noParameters": "Dit gereedschap heeft geen parameters.",
       "noOutput": "Nog geen uitvoer.",
       "enabled": "Ingeschakeld",
-      "requiredSuffix": " | vereist"
+      "requiredSuffix": " | vereist",
+      "selectField": "Selecteer een veld",
+      "fieldName": "Veldnaam",
+      "vectorUnitsNote": "Vectorlagen worden als WGS84 gelezen, dus afstands-, tussenruimte- en tolerantiewaarden zijn in graden, niet in meters. 1° is ongeveer 111 km en 0,001° ongeveer 111 m."
     },
     "sidecar": {
       "unavailableTitle": "De verwerkingsserver is niet beschikbaar.",

@@ -3059,7 +3059,10 @@
       "noParameters": "此工具没有参数。",
       "noOutput": "暂无输出。",
       "enabled": "启用",
-      "requiredSuffix": " | 必填"
+      "requiredSuffix": " | 必填",
+      "selectField": "选择字段",
+      "fieldName": "字段名称",
+      "vectorUnitsNote": "矢量图层以 WGS84 读取，因此距离、间距和容差值的单位是度，而不是米。1° 约为 111 公里，0.001° 约为 111 米。"
     },
     "sidecar": {
       "unavailableTitle": "处理服务器不可用。",

@@ -60,6 +60,7 @@ import {
   subsetUrlToolKind,
 } from "../../lib/subset-tool-url";
 import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
+import { fieldSourceInputName, isFieldParameterName } from "../../lib/whitebox-field-params";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
@@ -199,6 +200,16 @@ function isSubsetUrlParameter(tool: WhiteboxTool, param: WhiteboxToolParameter):
   return (
     param.name === "url" && parameterKind(param) === "string" && subsetUrlToolKind(tool.id) !== null
   );
+}
+
+// A `*_field` / `*_attribute` string param names a column of one of the tool's
+// vector inputs (points_to_line's `line_field`/`sort_field`, and ~170 other
+// tools), so the dialog can offer the selected layer's attribute names instead
+// of asking the user to recall a column name (GeoLibre#1459). The kind check is
+// what keeps a same-named *dataset* param out (join_tables' `primary_key_field`
+// is a vector input): only a scalar string names a column.
+function isFieldParameter(param: WhiteboxToolParameter): boolean {
+  return parameterKind(param) === "string" && isFieldParameterName(param.name);
 }
 
 function isPathParameter(param: WhiteboxToolParameter): boolean {
@@ -670,6 +681,60 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // Whether any GeoLibre-authored tools are present (WASM mode), gating the
   // source filter — pointless when every tool is from Whitebox.
   const hasGeolibreTools = useMemo(() => tools.some((tool) => tool.source === "geolibre"), [tools]);
+
+  // The selected tool's vector inputs, which decide both the coordinate-units
+  // note and where a field parameter's column names come from.
+  const vectorInputParams = useMemo(
+    () => (selectedTool?.params ?? []).filter((param) => parameterKind(param) === "vector_in"),
+    [selectedTool],
+  );
+
+  // Attribute-field names per layer, memoized on the layer set (and the dialog
+  // being open) so it doesn't recompute on every keystroke. GeoJSON is
+  // schemaless, so sample the first FIELD_SCAN_SAMPLE features rather than
+  // scanning a whole large layer on the React commit path.
+  const fieldsByLayer = useMemo(() => {
+    const FIELD_SCAN_SAMPLE = 1000;
+    const map = new Map<string, string[]>();
+    if (!open) return map;
+    for (const layer of layers) {
+      if (!layer.geojson) continue;
+      const keys = new Set<string>();
+      for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
+        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+      }
+      if (keys.size) map.set(layer.id, [...keys]);
+    }
+    return map;
+  }, [layers, open]);
+
+  // Column names to offer for a `*_field` parameter (GeoLibre#1459): those of
+  // the layer picked for the vector input the parameter names. With a single
+  // vector input that is unambiguous; with several, an unmatched name falls back
+  // to the union of every selected input's columns, so the right column is still
+  // in the list even when the naming doesn't line up. Empty when the input is a
+  // file path rather than a loaded layer — the field stays a plain text box.
+  const fieldOptions = useCallback(
+    (param: WhiteboxToolParameter): string[] => {
+      if (!vectorInputParams.length || !isFieldParameter(param)) return [];
+      const columnsOf = (input: WhiteboxToolParameter): string[] => {
+        const value = values[input.name];
+        if (typeof value !== "string" || !value.startsWith(LAYER_TOKEN_PREFIX)) return [];
+        return fieldsByLayer.get(value.slice(LAYER_TOKEN_PREFIX.length)) ?? [];
+      };
+      const sourceName =
+        vectorInputParams.length === 1
+          ? vectorInputParams[0].name
+          : fieldSourceInputName(
+              param.name,
+              vectorInputParams.map((input) => input.name),
+            );
+      const source = vectorInputParams.find((input) => input.name === sourceName);
+      if (source) return columnsOf(source);
+      return [...new Set(vectorInputParams.flatMap(columnsOf))];
+    },
+    [fieldsByLayer, values, vectorInputParams],
+  );
 
   // A shareable `?tool=` deep link for the selected tool: the tool id plus the
   // parameters the user changed from their defaults. Local file paths
@@ -1775,6 +1840,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
           <ScrollArea className="min-h-0">
             <div className="grid gap-4 pb-2 pe-5">
+              {/* Local (WASM) mode hands every vector input to the runner as
+                  GeoJSON, which RFC 7946 fixes to WGS84 — so a tool's distance,
+                  spacing or tolerance parameter is measured in degrees, not
+                  metres. Nothing in the tool descriptions says so, which is how
+                  a 0.1 "spacing" (≈ 11 km) yielded a handful of points on a
+                  city-scale line (GeoLibre#1458). */}
+              {runLocal && vectorInputParams.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("processing.whitebox.vectorUnitsNote")}
+                </p>
+              ) : null}
               {(selectedTool?.params ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {t("processing.whitebox.noParameters")}
@@ -1788,6 +1864,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                     toolId={selectedTool.id}
                     runLocal={runLocal}
                     value={values[param.name]}
+                    fieldOptions={fieldOptions(param)}
                     onChange={(value) => updateValue(param.name, value)}
                     onPickFile={(fileName, bytes) =>
                       handlePickInputFile(param.name, fileName, bytes)
@@ -1896,6 +1973,8 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
 interface ParameterFieldProps {
   param: WhiteboxToolParameter;
   layers: GeoLibreLayer[];
+  /** Attribute names to offer for a `*_field` parameter; empty keeps it free text. */
+  fieldOptions?: string[];
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
   /** When set, renders a "Use map extent" button that fills this bbox field
@@ -1917,6 +1996,7 @@ interface ParameterFieldProps {
 function ParameterField({
   param,
   layers,
+  fieldOptions,
   onChange,
   onPickFile,
   onUseMapExtent,
@@ -2069,6 +2149,32 @@ function ParameterField({
               {t("processing.whitebox.output.projectedHint")}
             </p>
           )}
+        </div>
+      ) : fieldOptions?.length ? (
+        // A `*_field` parameter with a layer chosen for its vector input: offer
+        // that layer's attribute names so the column need not be typed from
+        // memory (GeoLibre#1459). The text box stays editable alongside the
+        // picker, so a column the property sample missed can still be typed.
+        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+          <Select
+            aria-label={t("processing.whitebox.selectField")}
+            value={fieldOptions.includes(valueText) ? valueText : ""}
+            onChange={(event) => onChange(event.target.value)}
+          >
+            <option value="">{t("processing.whitebox.selectField")}</option>
+            {fieldOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            placeholder={t("processing.whitebox.fieldName")}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
+          />
         </div>
       ) : isPathParameter(param) ? (
         <PathPickerInput
