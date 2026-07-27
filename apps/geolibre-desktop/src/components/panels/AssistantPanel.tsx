@@ -32,7 +32,7 @@ import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
   defaultModelFor,
-  hasDeploymentAssistantEnv,
+  hasManagedAssistantProxy,
   hasProviderKey,
   PROVIDER_MODELS,
   PROVIDER_LABELS,
@@ -189,7 +189,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     return storeSettings.aiProfiles.some((p) => p.id === stored) ? stored : null;
   });
 
-  const deploymentProxyConfigured = hasDeploymentAssistantEnv();
+  const deploymentProxyConfigured = hasManagedAssistantProxy();
 
   // The currently active profile: if the user hasn't explicitly chosen one,
   // follow the default. Otherwise respect their explicit selection.

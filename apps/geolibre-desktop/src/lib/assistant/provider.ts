@@ -309,9 +309,17 @@ export function readDeploymentAssistantEnv(): RuntimeEnv {
   return result;
 }
 
-/** True when a Docker deployment injected a managed AI proxy endpoint. */
-export function hasDeploymentAssistantEnv(): boolean {
-  return Boolean(readDeploymentAssistantEnv().OPENAI_COMPATIBLE_BASE_URL);
+/**
+ * True when the build or the Docker entrypoint supplied a managed AI proxy.
+ *
+ * Deliberately ignores `__GEOLIBRE_RUNTIME_ENV__`: an endpoint the user typed
+ * into Settings is their own custom provider, not an operator-managed proxy.
+ */
+export function hasManagedAssistantProxy(viteEnv?: Record<string, string | undefined>): boolean {
+  return Boolean(
+    readBuildTimeAssistantEnv(viteEnv, browserOrigin()).OPENAI_COMPATIBLE_BASE_URL ||
+    readDeploymentAssistantEnv().OPENAI_COMPATIBLE_BASE_URL,
+  );
 }
 
 /** Read build-time credentials plus the live runtime environment map. */

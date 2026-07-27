@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   availableProviders,
   configForProvider,
+  hasManagedAssistantProxy,
   readBuildTimeAssistantEnv,
   readDeploymentAssistantEnv,
   readRuntimeEnv,
@@ -117,6 +118,46 @@ describe("build-time AI proxy", () => {
       assert.equal(env.OPENAI_COMPATIBLE_BASE_URL, "http://localhost:8081/ai/v1");
       assert.equal(env.OPENAI_COMPATIBLE_MODEL, "anthropic/claude-opus-5");
       assert.equal(env.GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION, "1");
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+});
+
+describe("hasManagedAssistantProxy", () => {
+  it("recognizes a proxy baked in at build time, with no Docker injection", () => {
+    assert.equal(
+      hasManagedAssistantProxy({ VITE_GEOLIBRE_AI_URL: "https://ai.example.com" }),
+      true,
+    );
+    assert.equal(hasManagedAssistantProxy({ VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5" }), false);
+  });
+
+  it("recognizes a proxy injected by the Docker entrypoint", () => {
+    const originalWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        location: { origin: "http://localhost:8081" },
+        __GEOLIBRE_DEPLOYMENT_ENV__: { VITE_GEOLIBRE_AI_URL: "/ai" },
+      } as unknown as Window & typeof globalThis;
+      assert.equal(hasManagedAssistantProxy({}), true);
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it("ignores an endpoint the user typed into Settings", () => {
+    const originalWindow = globalThis.window;
+    try {
+      // A custom OpenAI-compatible endpoint is the user's own provider, not an
+      // operator-managed proxy, so it must not take over profile selection.
+      globalThis.window = {
+        location: { origin: "http://localhost:8081" },
+        __GEOLIBRE_RUNTIME_ENV__: {
+          OPENAI_COMPATIBLE_BASE_URL: "https://api.example.com/v1",
+        },
+      } as unknown as Window & typeof globalThis;
+      assert.equal(hasManagedAssistantProxy({}), false);
     } finally {
       globalThis.window = originalWindow;
     }
