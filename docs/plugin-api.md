@@ -426,6 +426,44 @@ if (layerId) {
 
 `addZarrLayer` is headless: it does not open the Zarr panel (the user can still open it from **Add Data → Zarr Layer** to tweak colormap and color limits). It resolves with the new layer's id once the layer is registered, and rejects when `variable` is missing or the store cannot be read. The layer supports visibility, opacity, ordering, and removal from the Layers panel like any other layer.
 
+## Driving a layer's own time dimension from the Time Slider
+
+The Time Slider understands three kinds of temporal layer. Two are built in: a **vector** layer filtered by a timestamp property, and a **raster time series** of dated sources the dock steps between. The third is for a layer that is *one store* with time as an **internal dimension** — a Zarr data cube, or a plugin's own frame-based layer — where the timeline picks a slice rather than a source.
+
+That third kind is expressed as a **temporal adapter**:
+
+```typescript
+export interface TemporalLayerAdapter {
+  getTimeValues: () => ReadonlyArray<Date | number | string>;  // the time coordinate, in index order
+  setTime: (date: Date) => void | Promise<void>;               // apply a date to the layer
+  dimension?: string;                                          // the axis name, default "time"
+}
+```
+
+The slider owns the snapping: it reads `getTimeValues()`, finds the index nearest the current date, and calls `setTime()` with **that slice's own date**, skipping a tick that lands on the slice already showing. So a daily cube under a month-stepping timeline costs one chunk fetch per changed index, not one per tick. Calls are throttled while the handle is dragged, with the trailing edge always applied. Accepted value forms are `Date`s, epoch seconds/milliseconds, bare calendar years, and date strings.
+
+A Zarr layer added with `addZarrLayer` **registers its own adapter** for its `time` axis (decoding CF `units` such as `"days since 1970-01-01"` from the store's metadata), so it needs no call here. Use `registerTemporalLayer` for a custom layer you render yourself:
+
+```typescript
+const times = frames.map((frame) => frame.timestamp); // Date[] | number[] | string[]
+
+const detach = app.registerTemporalLayer?.(
+  layerId,
+  {
+    dimension: "time",
+    getTimeValues: () => times,
+    setTime: (date) => showFrame(nearestFrame(date)),
+  },
+  { bind: true },
+);
+```
+
+Registering makes the layer **bindable**: the Layers panel's row menu gains "Bind time dimension to Time Slider". Passing `{ bind: true }` binds it immediately and opens the dock, which is usually what a plugin that just loaded a cube wants. The binding is persisted on `layer.metadata.timeBinding` (as `{ kind: "selector", dimension, min, max, granularity }`) so it survives a project round-trip; the time values themselves are not persisted, because they belong to the data store — re-register the adapter when the layer is recreated and the timeline picks it back up.
+
+Call the returned function, or `app.unregisterTemporalLayer?.(layerId)`, to drop the adapter. Removing the layer does it too.
+
+A bound cube shares the timeline with any vector bindings and dated overlays: the track spans the union of their extents, and the widest dataset sets the stepping granularity.
+
 ## Custom (WebGL) layers and paint ownership
 
 `registerExternalNativeLayer` mirrors a layer the plugin added to the map itself into GeoLibre's layer store, so it appears in the Layers panel and persists with the project:

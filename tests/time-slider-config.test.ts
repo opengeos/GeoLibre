@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   configToOptions,
+  getLayerTimeBinding,
   createStoreLayer,
   isTimeSliderIdle,
   maplibreTimeSliderPlugin,
@@ -321,5 +322,55 @@ describe("isTimeSliderIdle", () => {
   it("treats a timespan without a numeric begin as inert", () => {
     withLayers([layer("kml", { timeSpan: { begin: null, end: null } })]);
     assert.equal(isTimeSliderIdle(), true);
+  });
+
+  describe("selector bindings on the Layers panel contract", () => {
+    const cube = (binding: unknown): GeoLibreLayer => ({
+      id: "cube",
+      name: "cube",
+      type: "zarr",
+      source: { type: "raster" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: { timeBinding: binding },
+    });
+
+    const selectorBinding = {
+      kind: "selector",
+      dimension: "time",
+      min: Date.UTC(2020, 0, 1),
+      max: Date.UTC(2020, 0, 31),
+      granularity: "day",
+    };
+
+    afterEach(() => {
+      useAppStore.setState({ layers: [] });
+    });
+
+    it("reads back a data cube's selector binding", () => {
+      // The Layers panel keys the Bind/Unbind label off this, so a cube whose
+      // binding is not recognized would offer "Bind" over an already-bound layer.
+      assert.deepEqual(getLayerTimeBinding(cube(selectorBinding)), selectorBinding);
+    });
+
+    it("still reads back a vector filter binding", () => {
+      const filterBinding = { property: "year", valueKind: "year" };
+      assert.deepEqual(getLayerTimeBinding(cube(filterBinding)), filterBinding);
+    });
+
+    it("rejects a selector binding with no usable extent", () => {
+      assert.equal(
+        getLayerTimeBinding(cube({ kind: "selector", dimension: "time", min: Number.NaN, max: 1 })),
+        undefined,
+      );
+    });
+
+    it("keeps the dock switched on while a cube is bound to it", () => {
+      // Otherwise unbinding a vector layer would close the dock out from under a
+      // Zarr cube that is still tracking the timeline.
+      useAppStore.setState({ layers: [cube(selectorBinding)] });
+      assert.equal(isTimeSliderIdle(), false);
+    });
   });
 });

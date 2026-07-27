@@ -8,6 +8,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,9 +32,12 @@ import {
   canEditLayerGeometry,
   detectTimePropertiesFromRecords,
   formatTimeExtentInput,
+  getTemporalLayerAdapter,
+  getTemporalLayersVersion,
   getLayerTimeBinding,
   isTileVectorLayer,
   isTimeSliderIdle,
+  subscribeTemporalLayers,
   parseTimeValue,
   sampleTileFeatureRecords,
   BASEMAP_CONTROL_PLUGIN_ID,
@@ -61,7 +65,7 @@ import {
   placeholderMessage,
 } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
-import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import { bindTemporalLayer, createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
   clearFeatureSelection,
@@ -642,6 +646,11 @@ export function LayerPanel({
   // stale async scan or confirm (even for the same layer reopened) is dropped
   // when it no longer matches the latest token.
   const bindRequestRef = useRef(0);
+  // A layer becomes temporal when its renderer finishes resolving a time axis
+  // (a Zarr cube loads its `time` coordinate asynchronously), which happens
+  // outside the store, so the menu subscribes to the adapter registry to offer
+  // "Bind to Time Slider" as soon as one appears.
+  useSyncExternalStore(subscribeTemporalLayers, getTemporalLayersVersion, getTemporalLayersVersion);
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
   // In the shared left-sidebar mode the parent owns collapse (controlled);
@@ -1713,6 +1722,23 @@ export function LayerPanel({
     closeBindTimeSliderDialog,
     t,
   ]);
+  // Bind a layer whose time is an internal dimension (a Zarr data cube's `time`
+  // axis, or a plugin's own custom layer). There is nothing to ask the user:
+  // the adapter already knows the axis, so the binding is written and the dock
+  // opens in one step rather than through the property-picking dialog.
+  const handleBindTemporalLayer = useCallback(
+    (layer: GeoLibreLayer) => {
+      const adapter = getTemporalLayerAdapter(layer.id);
+      if (!adapter) return;
+      if (bindTemporalLayer(layer.id, adapter, mapControllerRef)) return;
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: { type: "error", message: t("layers.bindNoTimeDimension") },
+      }));
+      scheduleStatusClear(layer.id);
+    },
+    [mapControllerRef, scheduleStatusClear, t],
+  );
 
   // Remove a layer's binding and clear its transient time filter so it shows
   // every feature again. The Time Slider stays active for any other bindings.
@@ -2488,7 +2514,12 @@ export function LayerPanel({
             // filter evaluated per feature as each tile decodes, so it needs no
             // local copy of the data (see the bind dialog for how the timeline's
             // extent is established without one).
-            const canBindTimeSlider = layer.type === "geojson" || isTileVectorLayer(layer);
+            // A layer whose time is an internal dimension (a Zarr data cube)
+            // binds through its registered temporal adapter instead, with no
+            // property to pick: see handleBindTemporalLayer.
+            const temporalAdapter = getTemporalLayerAdapter(layer.id);
+            const canBindTimeSlider =
+              layer.type === "geojson" || isTileVectorLayer(layer) || Boolean(temporalAdapter);
             const timeBinding = getLayerTimeBinding(layer);
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
@@ -2924,6 +2955,8 @@ export function LayerPanel({
                               onSelect={() => {
                                 if (timeBinding) {
                                   handleUnbindTimeSlider(layer);
+                                } else if (temporalAdapter) {
+                                  handleBindTemporalLayer(layer);
                                 } else {
                                   void openBindTimeSliderDialog(layer);
                                 }
@@ -2932,7 +2965,9 @@ export function LayerPanel({
                               <CalendarClock className="me-2 h-3.5 w-3.5" />
                               {timeBinding
                                 ? t("layers.unbindFromTimeSlider")
-                                : t("layers.bindToTimeSlider")}
+                                : temporalAdapter
+                                  ? t("layers.bindTimeDimensionToTimeSlider")
+                                  : t("layers.bindToTimeSlider")}
                             </DropdownMenuItem>
                           )}
                           {canExportLayer && (

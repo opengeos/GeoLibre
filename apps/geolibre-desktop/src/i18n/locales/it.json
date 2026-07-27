@@ -3955,6 +3955,8 @@
     "styleCopied": "Stile copiato da «{{name}}».",
     "stylePasted": "Stile incollato da «{{name}}».",
     "bindToTimeSlider": "Collega alla barra temporale…",
+    "bindTimeDimensionToTimeSlider": "Collega la dimensione temporale al cursore temporale",
+    "bindNoTimeDimension": "Questo livello non ha una dimensione temporale leggibile.",
     "unbindFromTimeSlider": "Scollega dalla barra temporale",
     "bindDialogDescription": "Filtra gli elementi di questo livello in base a una proprietà data o timestamp mentre scorri la timeline. Il livello mantiene il proprio stile e la propria opacità.",
     "bindScanning": "Analisi degli elementi alla ricerca di proprietà data e timestamp…",

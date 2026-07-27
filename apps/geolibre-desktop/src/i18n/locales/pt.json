@@ -3955,6 +3955,8 @@
     "styleCopied": "Estilo copiado de “{{name}}”.",
     "stylePasted": "Estilo colado de “{{name}}”.",
     "bindToTimeSlider": "Vincular ao controle deslizante de tempo…",
+    "bindTimeDimensionToTimeSlider": "Vincular a dimensão temporal ao controle de tempo",
+    "bindNoTimeDimension": "Esta camada não tem uma dimensão temporal legível.",
     "unbindFromTimeSlider": "Desvincular do controle deslizante de tempo",
     "bindDialogDescription": "Filtre as feições desta camada por uma propriedade de data ou timestamp enquanto você navega pela linha do tempo. A camada mantém seu estilo e opacidade.",
     "bindScanning": "Verificando feições em busca de propriedades de data e timestamp…",

@@ -3955,6 +3955,8 @@
     "styleCopied": "Style copié depuis « {{name}} ».",
     "stylePasted": "Style collé depuis « {{name}} ».",
     "bindToTimeSlider": "Lier au curseur temporel…",
+    "bindTimeDimensionToTimeSlider": "Lier la dimension temporelle au curseur temporel",
+    "bindNoTimeDimension": "Cette couche n'a pas de dimension temporelle lisible.",
     "unbindFromTimeSlider": "Délier du curseur temporel",
     "bindDialogDescription": "Filtrer les entités de cette couche par une propriété de date ou d'horodatage lorsque vous parcourez la chronologie. La couche conserve son style et son opacité.",
     "bindScanning": "Analyse des entités pour les propriétés de date et d'horodatage…",

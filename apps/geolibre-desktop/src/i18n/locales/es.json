@@ -3966,6 +3966,8 @@
     "styleCopied": "Estilo copiado de «{{name}}».",
     "stylePasted": "Estilo pegado de «{{name}}».",
     "bindToTimeSlider": "Vincular al control deslizante de tiempo…",
+    "bindTimeDimensionToTimeSlider": "Vincular la dimensión temporal al control de tiempo",
+    "bindNoTimeDimension": "Esta capa no tiene una dimensión temporal legible.",
     "unbindFromTimeSlider": "Desvincular del control deslizante de tiempo",
     "bindDialogDescription": "Filtra las entidades de esta capa por una propiedad de fecha o marca de tiempo mientras recorre la línea de tiempo. La capa conserva su estilo y opacidad.",
     "bindScanning": "Buscando propiedades de fecha y marca de tiempo en las entidades…",

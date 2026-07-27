@@ -3955,6 +3955,8 @@
     "styleCopied": "Stijl gekopieerd van ‘{{name}}’.",
     "stylePasted": "Stijl geplakt van ‘{{name}}’.",
     "bindToTimeSlider": "Koppelen aan tijdschuifregelaar…",
+    "bindTimeDimensionToTimeSlider": "Tijddimensie aan de tijdschuif koppelen",
+    "bindNoTimeDimension": "Deze laag heeft geen leesbare tijddimensie.",
     "unbindFromTimeSlider": "Loskoppelen van tijdschuifregelaar",
     "bindDialogDescription": "Filter de objecten van deze laag op een datum- of tijdstempeleigenschap terwijl u door de tijdlijn schuift. De laag behoudt haar stijl en dekking.",
     "bindScanning": "Objecten worden gescand op datum- en tijdstempeleigenschappen…",

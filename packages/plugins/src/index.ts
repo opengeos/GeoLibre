@@ -539,6 +539,29 @@ export {
   type TimeWindow,
 } from "./plugins/time-slider-binding";
 export {
+  buildSelectorTimeBinding,
+  getTemporalLayerAdapter,
+  getTemporalLayersVersion,
+  isSelectorTimeBinding,
+  nearestTimeIndex,
+  registerTemporalLayer,
+  subscribeTemporalLayers,
+  toEpochMsAxis,
+  unregisterTemporalLayer,
+  type SelectorTimeBinding,
+  type TemporalLayerAdapter,
+} from "./plugins/temporal-layers";
+export {
+  decodeCfTimeValues,
+  fetchZarrTimeAttributes,
+  parseCfTimeUnits,
+  pickTimeDimension,
+  resolveZarrTimeAxis,
+  type CfTimeUnits,
+  type ZarrTimeAttributes,
+  type ZarrTimeAxis,
+} from "./plugins/zarr-time-axis";
+export {
   isTileVectorLayer,
   resolveTileQueryTargets,
   sampleTileFeatureRecords,

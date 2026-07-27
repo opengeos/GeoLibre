@@ -3897,6 +3897,8 @@
     "styleCopied": "已复制“{{name}}”的样式。",
     "stylePasted": "已粘贴“{{name}}”的样式。",
     "bindToTimeSlider": "绑定到时间轴…",
+    "bindTimeDimensionToTimeSlider": "将时间维度绑定到时间滑块",
+    "bindNoTimeDimension": "该图层没有可读取的时间维度。",
     "unbindFromTimeSlider": "取消绑定时间轴",
     "bindDialogDescription": "在拖动时间轴时，按日期或时间戳属性筛选此图层的要素。图层将保留其样式和不透明度。",
     "bindScanning": "正在扫描要素中的日期和时间戳属性…",

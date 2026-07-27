@@ -3897,6 +3897,8 @@
     "styleCopied": "「{{name}}」のスタイルをコピーしました。",
     "stylePasted": "「{{name}}」のスタイルを貼り付けました。",
     "bindToTimeSlider": "タイムスライダーに連動…",
+    "bindTimeDimensionToTimeSlider": "時間次元をタイムスライダーに関連付ける",
+    "bindNoTimeDimension": "このレイヤーには読み取り可能な時間次元がありません。",
     "unbindFromTimeSlider": "タイムスライダーとの連動を解除",
     "bindDialogDescription": "タイムラインを操作すると、日付またはタイムスタンプのプロパティでこのレイヤーのフィーチャを絞り込みます。レイヤーのスタイルと不透明度は維持されます。",
     "bindScanning": "フィーチャの日付・タイムスタンプのプロパティをスキャン中…",

@@ -3955,6 +3955,8 @@
     "styleCopied": "Stil von „{{name}}“ kopiert.",
     "stylePasted": "Stil von „{{name}}“ eingefügt.",
     "bindToTimeSlider": "An Zeitschieberegler binden…",
+    "bindTimeDimensionToTimeSlider": "Zeitdimension mit dem Zeitregler verknüpfen",
+    "bindNoTimeDimension": "Diese Ebene hat keine lesbare Zeitdimension.",
     "unbindFromTimeSlider": "Von Zeitschieberegler lösen",
     "bindDialogDescription": "Filtert die Objekte dieser Ebene anhand einer Datums- oder Zeitstempel-Eigenschaft, während Sie die Zeitleiste durchlaufen. Die Ebene behält ihre Symbolisierung und Deckkraft.",
     "bindScanning": "Objekte werden nach Datums- und Zeitstempel-Eigenschaften durchsucht…",

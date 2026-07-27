@@ -73,6 +73,12 @@ import {
   loadKerchunkReference,
   type KerchunkRefs,
 } from "./kerchunk-reference-store";
+import {
+  nearestTimeIndex,
+  registerTemporalLayer,
+  unregisterTemporalLayer,
+} from "./temporal-layers";
+import { pickTimeDimension, resolveZarrTimeAxis } from "./zarr-time-axis";
 
 type ControlGridConstructor = (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor = (typeof import("maplibre-gl-components"))["AddVectorControl"];
@@ -2075,14 +2081,23 @@ export async function addCloudNetcdfLayer(
   // which adds the layer to the store. We intentionally do not read
   // getState().error here: the control is shared, so the error may be stale from
   // a prior operation, and addLayer resolves before async chunk loading finishes.
-  await zarrControl.addLayer(options.url, options.variable, {
-    store,
-    zarrVersion: 2,
-    selector: options.selector,
-    clim: options.clim,
-    colormap: options.colormap,
-    opacity: options.opacity,
-  });
+  // The references travel with the add so the time axis of a NetCDF cube is read
+  // from their inline `.zattrs` rather than from the (non-Zarr) manifest URL.
+  pendingZarrRefs = refs;
+  pendingZarrHeaders = options.headers;
+  try {
+    await zarrControl.addLayer(options.url, options.variable, {
+      store,
+      zarrVersion: 2,
+      selector: options.selector,
+      clim: options.clim,
+      colormap: options.colormap,
+      opacity: options.opacity,
+    });
+  } finally {
+    pendingZarrRefs = undefined;
+    pendingZarrHeaders = undefined;
+  }
 
   // Unlike openZarrLayerPanel, the dialog-based flow intentionally leaves the
   // Zarr control collapsed/hidden: the layer is managed from the layer and
@@ -2218,6 +2233,9 @@ async function addZarrLayerExclusively(
 
   control.on("layeradd", handleLayerAdd);
   control.on("error", handleError);
+  // Handed to the `layeradd` handler so an authenticated store's time-axis
+  // metadata is fetched with the same credentials as its chunks.
+  pendingZarrHeaders = headers;
   try {
     // The control awaits its own load before resolving and reports failure by
     // emitting "error" rather than rejecting, so both outcomes are already
@@ -2239,6 +2257,7 @@ async function addZarrLayerExclusively(
   } finally {
     control.off("layeradd", handleLayerAdd);
     control.off("error", handleError);
+    pendingZarrHeaders = undefined;
   }
 
   if (!addedLayerId) {
@@ -2294,6 +2313,118 @@ export async function setZarrLayerSelector(
     });
   }
   return true;
+}
+// ----- Zarr time axis --------------------------------------------------------
+// A Zarr cube's time is an internal dimension, so the Time Slider drives it
+// through a temporal adapter (see `temporal-layers.ts`) rather than by filtering
+// features or swapping sources. Registration is best-effort and silent: a store
+// with no time axis simply never becomes bindable.
+
+/**
+ * Headers for the add currently in flight, so the `layeradd` handler can reach
+ * an authenticated store's metadata. Safe as a single slot because
+ * `addZarrRasterLayer` serializes adds and the control emits `layeradd`
+ * synchronously from within `addLayer`.
+ */
+let pendingZarrHeaders: Record<string, string> | undefined;
+/**
+ * Kerchunk references for the Cloud-Optimized NetCDF add currently in flight,
+ * which carry the coordinate attributes inline (the layer's `url` points at the
+ * manifest, not at a Zarr store).
+ */
+let pendingZarrRefs: KerchunkRefs | undefined;
+
+// How long to wait for `@carbonplan/zarr-layer` to finish loading its coordinate
+// arrays. `addLayer` resolves once the store's metadata is read, but the
+// dimension values land a moment later, so the read polls rather than assuming.
+const ZARR_DIMENSION_POLL_MS = 250;
+const ZARR_DIMENSION_ATTEMPTS = 24;
+
+/**
+ * The raw non-spatial coordinate values `@carbonplan/zarr-layer` loaded for a
+ * layer.
+ *
+ * `dimensionValues` is a real instance property but is **not** part of the
+ * package's public type surface (it is declared `private`), so this reads it
+ * through a structural cast. If the renderer ever renames it, Zarr layers
+ * quietly stop offering a Time Slider binding rather than failing the build;
+ * `tests/zarr-time-axis.test.ts` asserts the property still exists so the drift
+ * shows up in CI instead.
+ *
+ * @param layerId - A live Zarr layer id.
+ * @returns The coordinate values, or null when the layer went away or loaded none.
+ */
+async function readZarrDimensionValues(
+  layerId: string,
+): Promise<Record<string, (number | string)[]> | null> {
+  for (let attempt = 0; attempt < ZARR_DIMENSION_ATTEMPTS; attempt += 1) {
+    const instance = zarrControl?.getLayersMap().get(layerId) as
+      | { dimensionValues?: Record<string, (number | string)[]> }
+      | undefined;
+    if (!instance) return null;
+    const values = instance.dimensionValues;
+    if (values && Object.keys(values).length > 0) return values;
+    await new Promise((resolve) => setTimeout(resolve, ZARR_DIMENSION_POLL_MS));
+  }
+  return null;
+}
+
+/** Read a coordinate's `units`/`calendar` out of an inline kerchunk `.zattrs`. */
+function zarrTimeAttributesFromRefs(
+  refs: KerchunkRefs | undefined,
+  dimension: string,
+): { units?: string; calendar?: string } | null {
+  const entry = refs?.[`${dimension}/.zattrs`];
+  if (typeof entry !== "string") return null;
+  try {
+    const parsed = JSON.parse(entry) as Record<string, unknown>;
+    const units = typeof parsed.units === "string" ? parsed.units : undefined;
+    const calendar = typeof parsed.calendar === "string" ? parsed.calendar : undefined;
+    return units === undefined && calendar === undefined ? null : { units, calendar };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a freshly added Zarr layer's time axis and, when it has one, register
+ * the temporal adapter that lets the Time Slider step it via
+ * {@link setZarrLayerSelector}.
+ *
+ * @param layerId - The new layer's id.
+ * @param url - The store URL (or kerchunk manifest URL).
+ * @param headers - Request headers for an authenticated store.
+ * @param refs - Kerchunk references, when the layer came from one.
+ */
+function registerZarrTemporalAdapter(
+  layerId: string,
+  url: string | undefined,
+  headers: Record<string, string> | undefined,
+  refs?: KerchunkRefs,
+): void {
+  void (async () => {
+    const dimensionValues = await readZarrDimensionValues(layerId);
+    if (!dimensionValues) return;
+    const attributes = refs
+      ? zarrTimeAttributesFromRefs(refs, pickTimeDimension(dimensionValues) ?? "time")
+      : undefined;
+    const axis = await resolveZarrTimeAxis(url ?? "", dimensionValues, {
+      ...(headers ? { headers } : {}),
+      ...(refs ? { attributes } : {}),
+    });
+    if (!axis) return;
+    // The layer may have been removed while the axis was being resolved.
+    if (!zarrControl?.getLayersMap().has(layerId)) return;
+    registerTemporalLayer(layerId, {
+      dimension: axis.dimension,
+      getTimeValues: () => axis.values,
+      setTime: async (date) => {
+        const index = nearestTimeIndex(axis.values, date.getTime());
+        if (index < 0) return;
+        await setZarrLayerSelector(layerId, { [axis.dimension]: index });
+      },
+    });
+  })();
 }
 
 // The control takes an explicit list of hex colors; the public option also
@@ -3361,6 +3492,7 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
       const shouldRemove = event.layerId
         ? layer.id === event.layerId
         : !activeLayerIds.has(layer.id);
+      unregisterTemporalLayer(layer.id);
       if (shouldRemove) {
         store.removeLayer(layer.id);
       }
@@ -3376,6 +3508,7 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
     for (const layer of previous.layers) {
       if (!isZarrControlLayer(layer)) continue;
       if (currentById.has(layer.id)) continue;
+      unregisterTemporalLayer(layer.id);
       clearExternalNativePaintBridge(layer.id);
       zarrControl?.removeLayer(layer.id);
     }
@@ -4175,6 +4308,10 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
     // The renderer owns the pixels, so the panel's opacity/visibility reach it
     // through the control's setters rather than MapLibre paint properties.
     registerZarrPaintBridge(layer.id);
+    // A cube with a time axis becomes drivable by the Time Slider. Resolving the
+    // axis needs the renderer's async metadata load plus a store lookup, so it
+    // runs on its own and registers the adapter whenever it lands.
+    registerZarrTemporalAdapter(layer.id, layerInfo.url, pendingZarrHeaders, pendingZarrRefs);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,

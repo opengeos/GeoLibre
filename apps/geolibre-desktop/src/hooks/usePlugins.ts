@@ -6,6 +6,11 @@ import {
 import {
   addCogRasterLayer,
   addZarrRasterLayer,
+  buildSelectorTimeBinding,
+  registerTemporalLayer,
+  unregisterTemporalLayer,
+  TIME_SLIDER_PLUGIN_ID,
+  type TemporalLayerAdapter,
   setZarrLayerSelector,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
@@ -625,6 +630,39 @@ function ensureExternalPluginsLoadedWithSettings(
   externalPluginsLoadPromise = loadPromise;
   return loadPromise;
 }
+/**
+ * Bind a layer's internal time dimension to the Time Slider: persist the
+ * binding on the layer's metadata (mirroring how a vector layer's `TimeBinding`
+ * is stored, so it survives a project round-trip) and open the dock if it is not
+ * already showing.
+ *
+ * Shared by the Layers panel's "Bind to Time Slider" action and the plugin API's
+ * `registerTemporalLayer(..., { bind: true })`, so both write the same thing.
+ *
+ * @param layerId - The store layer to bind.
+ * @param adapter - Its temporal adapter, whose time values set the timeline range.
+ * @param mapControllerRef - Used to build the app API when activating the dock.
+ * @returns True when the layer was bound; false when its time axis holds no
+ *   usable timestamp, or the layer is gone.
+ */
+export function bindTemporalLayer(
+  layerId: string,
+  adapter: TemporalLayerAdapter,
+  mapControllerRef?: RefObject<MapController | null>,
+): boolean {
+  const binding = buildSelectorTimeBinding(adapter.dimension ?? "time", adapter.getTimeValues());
+  if (!binding) return false;
+  const store = useAppStore.getState();
+  const layer = store.layers.find((item) => item.id === layerId);
+  if (!layer) return false;
+  store.updateLayer(layerId, {
+    metadata: { ...layer.metadata, timeBinding: binding },
+  });
+  if (!manager.isActive(TIME_SLIDER_PLUGIN_ID)) {
+    manager.toggle(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+  }
+  return true;
+}
 
 export function createAppAPI(mapControllerRef?: RefObject<MapController | null>) {
   const store = useAppStore.getState();
@@ -760,6 +798,20 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       }),
     setZarrLayerSelector: (layerId: string, selector: Record<string, number | string>) =>
       setZarrLayerSelector(layerId, selector),
+    // A layer whose time is an internal dimension joins the Time Slider through
+    // an adapter rather than a filter or a source swap. Registering only makes
+    // it bindable; `bind` writes the binding and opens the dock, which is what a
+    // plugin that just loaded a cube usually wants.
+    registerTemporalLayer: (
+      layerId: string,
+      adapter: TemporalLayerAdapter,
+      options?: { bind?: boolean },
+    ) => {
+      const detach = registerTemporalLayer(layerId, adapter);
+      if (options?.bind) bindTemporalLayer(layerId, adapter, mapControllerRef);
+      return detach;
+    },
+    unregisterTemporalLayer: (layerId: string) => unregisterTemporalLayer(layerId),
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
     onBasemapChange: (callback: (styleUrl: string) => void) =>
       useAppStore.subscribe((state, prev) => {

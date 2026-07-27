@@ -14,6 +14,15 @@ import {
   type TimeBinding,
   type TimeGranularity,
 } from "./time-slider-binding";
+import {
+  getTemporalLayerAdapter,
+  isSelectorTimeBinding,
+  nearestTimeIndex,
+  subscribeTemporalLayers,
+  toEpochMsAxis,
+  type SelectorTimeBinding,
+  type TemporalLayerAdapter,
+} from "./temporal-layers";
 import { usesMosaicManifest } from "./time-slider-source-url";
 
 /**
@@ -474,6 +483,17 @@ interface BoundLayer {
   binding: TimeBinding;
 }
 
+/**
+ * A layer whose time is an internal dimension (a Zarr data cube's `time` axis,
+ * or a plugin's own custom layer), driven through the temporal-adapter registry
+ * instead of a MapLibre filter or a source swap. See `temporal-layers.ts`.
+ */
+interface SelectorLayer {
+  id: string;
+  binding: SelectorTimeBinding;
+  adapter: TemporalLayerAdapter;
+}
+
 /** A KML `<TimeSpan>`/`<TimeStamp>` overlay frame's epoch-ms window. */
 interface TimeOverlayFrame {
   id: string;
@@ -541,6 +561,26 @@ function getBoundLayers(): BoundLayer[] {
 }
 
 /**
+ * Collect the store layers bound to their own internal time dimension **and**
+ * currently backed by a live adapter. A binding whose adapter is not registered
+ * (yet) is skipped rather than dropped: the registry subscription in
+ * {@link attachBindingSync} reconciles again the moment one appears, which is
+ * what lets a restored project's cube start tracking the timeline as soon as
+ * its renderer finishes loading.
+ */
+function getSelectorLayers(): SelectorLayer[] {
+  const selectors: SelectorLayer[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    const binding = layer.metadata?.timeBinding;
+    if (!isSelectorTimeBinding(binding)) continue;
+    const adapter = getTemporalLayerAdapter(layer.id);
+    if (!adapter) continue;
+    selectors.push({ id: layer.id, binding, adapter });
+  }
+  return selectors;
+}
+
+/**
  * Recompute and write each bound layer's time filter for the control's current
  * date. Writes are diffed so a no-op date tick does not churn the store, and a
  * re-entrancy guard keeps these writes from retriggering the store sync.
@@ -565,6 +605,60 @@ function applyBoundFilters(control: TimeSliderControl, bound: BoundLayer[]): voi
     }
   } finally {
     applyingBoundFilters = false;
+  }
+}
+
+// Last time index applied per selector-bound layer, so a tick that lands on the
+// slice already on screen costs nothing. Cleared when a layer is unbound or the
+// dock detaches.
+const appliedTimeIndices = new Map<string, number>();
+// Pending throttled apply, so scrubbing (or playback) issues at most one chunk
+// fetch per interval per layer instead of one per tick.
+let selectorApplyTimer: ReturnType<typeof setTimeout> | null = null;
+const SELECTOR_APPLY_INTERVAL_MS = 150;
+
+/**
+ * Step every selector-bound layer to the slice nearest the timeline's current
+ * date, throttled: a Zarr `setSelector` fetches chunks, so dragging the handle
+ * must not queue one request per intermediate date. The trailing edge always
+ * runs, so the layer settles on wherever the handle was released.
+ *
+ * The layer set is re-read inside the timer rather than captured, so a binding
+ * added or removed while an apply is pending is honored.
+ *
+ * @param control - The active control.
+ */
+function scheduleSelectorTimes(control: TimeSliderControl): void {
+  if (selectorApplyTimer !== null) return;
+  selectorApplyTimer = setTimeout(() => {
+    selectorApplyTimer = null;
+    applySelectorTimes(control);
+  }, SELECTOR_APPLY_INTERVAL_MS);
+}
+
+function applySelectorTimes(control: TimeSliderControl): void {
+  const selectors = getSelectorLayers();
+  if (selectors.length === 0) return;
+  const targetMs = new Date(control.getConfig().currentDate).getTime();
+  if (!Number.isFinite(targetMs)) return;
+  for (const { id, adapter } of selectors) {
+    const axis = toEpochMsAxis(adapter.getTimeValues());
+    if (!axis) continue;
+    const index = nearestTimeIndex(axis, targetMs);
+    if (index < 0 || appliedTimeIndices.get(id) === index) continue;
+    appliedTimeIndices.set(id, index);
+    // The adapter is handed the slice's own date, not the timeline's, so a
+    // daily cube under a month-stepping slider lands on a real time value.
+    // Failures are the layer's own (a chunk fetch that 404s) and must not stop
+    // the other layers from stepping.
+    void (async () => {
+      try {
+        await adapter.setTime(new Date(axis[index]));
+      } catch {
+        // Let the next tick retry: drop the memo so the same index is reapplied.
+        if (appliedTimeIndices.get(id) === index) appliedTimeIndices.delete(id);
+      }
+    })();
   }
 }
 
@@ -596,14 +690,19 @@ function clearBoundFilters(ids: string[]): void {
  * layers (or their bindings) changes.
  */
 function reconcileBoundLayers(control: TimeSliderControl): void {
+  const selectors = getSelectorLayers();
   const bound = getBoundLayers();
   const frames = getTimeOverlayFrames();
-  if (bound.length > 0 || frames.length > 0) {
+  if (bound.length > 0 || selectors.length > 0 || frames.length > 0) {
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
-    let granularity: TimeGranularity = bound[0]?.binding.granularity ?? "day";
+    let granularity: TimeGranularity =
+      bound[0]?.binding.granularity ?? selectors[0]?.binding.granularity ?? "day";
     let widestSpan = -1;
-    for (const { binding } of bound) {
+    // A vector filter binding and a data cube's selector binding describe the
+    // same thing here — an extent plus a suggested stepping unit — so they feed
+    // the shared track through one pass.
+    for (const { binding } of [...bound, ...selectors]) {
       if (binding.min < min) min = binding.min;
       if (binding.max > max) max = binding.max;
       const span = binding.max - binding.min;
@@ -619,10 +718,15 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       const frameMax = frame.end ?? frame.begin;
       if (frameMax > max) max = frameMax;
     }
-    // With no vector binding to set the stepping unit, derive one from the total
+    // With no data binding to set the stepping unit, derive one from the total
     // overlay span (reusing the vector path's bucketing so the two stay
     // consistent) so scrubbing steps through the frames at a sensible rate.
-    if (bound.length === 0 && Number.isFinite(min) && Number.isFinite(max)) {
+    if (
+      bound.length === 0 &&
+      selectors.length === 0 &&
+      Number.isFinite(min) &&
+      Number.isFinite(max)
+    ) {
       granularity = pickGranularity(max - min);
     }
     const rangeKey = `${min}|${max}|${granularity}`;
@@ -654,6 +758,13 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     preBindingRange = null;
     lastBoundRangeKey = null;
   }
+  // Drop the memo for any layer that is no longer selector-bound, so re-binding
+  // it re-applies the current date instead of assuming the last index still holds.
+  const selectorIds = new Set(selectors.map((entry) => entry.id));
+  for (const id of [...appliedTimeIndices.keys()]) {
+    if (!selectorIds.has(id)) appliedTimeIndices.delete(id);
+  }
+  scheduleSelectorTimes(control);
   applyBoundFilters(control, bound);
   applyTimeOverlayVisibility(control, frames);
 }
@@ -669,15 +780,21 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
 function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
   preBindingRange = null;
+  appliedTimeIndices.clear();
   appliedFilterKeys.clear();
   // `statechange` fires on every date change (scrub and each playback tick) plus
-  // range/granularity changes, which is exactly when bound filters and overlay
-  // frames must update.
+  // range/granularity changes, which is exactly when bound filters, data cubes,
+  // and overlay frames must update.
   const onStateChange = () => {
+    scheduleSelectorTimes(control);
     applyBoundFilters(control, getBoundLayers());
     applyTimeOverlayVisibility(control, getTimeOverlayFrames());
   };
   control.on("statechange", onStateChange);
+  // An adapter can register after its binding is restored (a cube's renderer
+  // loads asynchronously), and that never touches the store, so the registry is
+  // watched separately from it.
+  const unsubscribeTemporal = subscribeTemporalLayers(() => reconcileBoundLayers(control));
 
   // Track the bound layers AND time-overlay frames so a store change only
   // re-snaps the range when one of them was added, removed, or edited (not on
@@ -702,8 +819,17 @@ function attachBindingSync(control: TimeSliderControl): () => void {
 
   return () => {
     control.off("statechange", onStateChange);
+    unsubscribeTemporal();
+    if (selectorApplyTimer !== null) {
+      clearTimeout(selectorApplyTimer);
+      selectorApplyTimer = null;
+    }
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
+    // A cube stays on the slice it was last stepped to: unlike a filter, that is
+    // a real view of the data rather than a timeline artifact. Only the memo is
+    // dropped, so reactivating the dock re-applies whatever date it opens on.
+    appliedTimeIndices.clear();
     appliedFilterKeys.clear();
     lastBoundRangeKey = null;
     preBindingRange = null;
@@ -717,23 +843,28 @@ function attachBindingSync(control: TimeSliderControl): () => void {
  */
 function temporalSignature(): string {
   return JSON.stringify({
+    selectors: getSelectorLayers().map(({ id, binding }) => [id, binding]),
     bound: getBoundLayers().map(({ id, binding }) => [id, binding]),
     frames: getTimeOverlayFrames().map((frame) => [frame.id, frame.begin, frame.end]),
   });
 }
 
 /**
- * Read the {@link TimeBinding} stored on a layer's metadata, if any. Used by the
- * Layers panel to decide between the Bind and Unbind actions.
+ * Read the binding stored on a layer's metadata, if any. Used by the Layers
+ * panel to decide between the Bind and Unbind actions, and by
+ * {@link isTimeSliderIdle}. Returns either kind: a vector-filter
+ * {@link TimeBinding} or a data cube's {@link SelectorTimeBinding}.
  *
  * @param layer - A store layer.
  * @returns The binding, or `undefined` when the layer is not time-bound.
  */
 export function getLayerTimeBinding(layer: {
   metadata?: Record<string, unknown>;
-}): TimeBinding | undefined {
-  const binding = layer.metadata?.timeBinding as TimeBinding | undefined;
-  return binding && typeof binding.property === "string" ? binding : undefined;
+}): TimeBinding | SelectorTimeBinding | undefined {
+  const binding = layer.metadata?.timeBinding;
+  if (isSelectorTimeBinding(binding)) return binding;
+  const filterBinding = binding as TimeBinding | undefined;
+  return filterBinding && typeof filterBinding.property === "string" ? filterBinding : undefined;
 }
 
 /**
@@ -744,7 +875,8 @@ export function getLayerTimeBinding(layer: {
  * The slider drives three unrelated things, and all three have to be clear
  * before it is safe to switch off:
  *
- * - store layers carrying a {@link TimeBinding};
+ * - store layers carrying a binding, of either kind: a vector
+ *   {@link TimeBinding} or a data cube's {@link SelectorTimeBinding};
  * - the dock's own sources (COG stacks, mosaics, tile templates added through
  *   its "Add data" form), which are mirrored into the store under
  *   {@link STORE_LAYER_SOURCE_KIND};

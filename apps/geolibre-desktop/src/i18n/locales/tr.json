@@ -3955,6 +3955,8 @@
     "styleCopied": "\"{{name}}\" stili kopyalandı.",
     "stylePasted": "\"{{name}}\" stili yapıştırıldı.",
     "bindToTimeSlider": "Zaman Kaydırıcısına Bağla…",
+    "bindTimeDimensionToTimeSlider": "Zaman boyutunu Zaman Kaydırıcısına bağla",
+    "bindNoTimeDimension": "Bu katmanın okunabilir bir zaman boyutu yok.",
     "unbindFromTimeSlider": "Zaman Kaydırıcısından Ayır",
     "bindDialogDescription": "Zaman çizelgesini kaydırırken bu katmanın öğelerini bir tarih veya zaman damgası özniteliğine göre filtreleyin. Katman stilini ve opaklığını korur.",
     "bindScanning": "Tarih ve zaman damgası öznitelikleri için öğeler taranıyor…",

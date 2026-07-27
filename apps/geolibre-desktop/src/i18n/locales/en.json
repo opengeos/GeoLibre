@@ -4115,6 +4115,8 @@
     "styleCopied": "Copied style from \"{{name}}\".",
     "stylePasted": "Pasted style from \"{{name}}\".",
     "bindToTimeSlider": "Bind to Time Slider…",
+    "bindTimeDimensionToTimeSlider": "Bind time dimension to Time Slider",
+    "bindNoTimeDimension": "This layer has no readable time dimension.",
     "unbindFromTimeSlider": "Unbind from Time Slider",
     "bindDialogDescription": "Filter this layer's features by a date or timestamp property as you scrub the timeline. The layer keeps its styling and opacity.",
     "bindScanning": "Scanning features for date and timestamp properties…",

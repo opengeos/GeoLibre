@@ -5,6 +5,7 @@ import type {
   LayerStyle,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import type { TemporalLayerAdapter } from "./plugins/temporal-layers";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -327,6 +328,34 @@ export interface GeoLibreAppAPI {
     layerId: string,
     selector: Record<string, number | string>,
   ) => Promise<boolean>;
+  /**
+   * Declare that a layer's time is an **internal dimension** the Time Slider can
+   * drive, by registering a {@link TemporalLayerAdapter} for it. This is the
+   * third kind of temporal layer, alongside a vector layer filtered by a
+   * timestamp property and a raster time series of dated sources: the layer is
+   * one store and the timeline picks a slice inside it.
+   *
+   * Use it for a plugin's **own** custom layer (a data cube it renders itself, a
+   * frame animation). A Zarr layer added through {@link addZarrLayer} already
+   * registers one for its `time` axis, so it needs no call here.
+   *
+   * Registering makes the layer *bindable* — the Layers panel's "Bind to Time
+   * Slider" action appears for it. Pass `{ bind: true }` to bind it right away
+   * and open the dock, which is usually what a plugin that just loaded a cube
+   * wants. Call the returned function (or remove the layer) to unregister.
+   *
+   * Typed optional for forward-compatibility, so call it with optional chaining.
+   */
+  registerTemporalLayer?: (
+    layerId: string,
+    adapter: TemporalLayerAdapter,
+    options?: { bind?: boolean },
+  ) => () => void;
+  /**
+   * Drop a layer's temporal adapter registered with
+   * {@link registerTemporalLayer}. Removing the layer does this too.
+   */
+  unregisterTemporalLayer?: (layerId: string) => void;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;

@@ -3897,6 +3897,8 @@
     "styleCopied": "\"{{name}}\"의 스타일을 복사했습니다.",
     "stylePasted": "\"{{name}}\"의 스타일을 붙여넣었습니다.",
     "bindToTimeSlider": "타임 슬라이더에 연결…",
+    "bindTimeDimensionToTimeSlider": "시간 차원을 타임 슬라이더에 연결",
+    "bindNoTimeDimension": "이 레이어에는 읽을 수 있는 시간 차원이 없습니다.",
     "unbindFromTimeSlider": "타임 슬라이더 연결 해제",
     "bindDialogDescription": "타임라인을 이동함에 따라 날짜 또는 타임스탬프 속성으로 이 레이어의 피처를 필터링합니다. 레이어의 스타일과 불투명도는 유지됩니다.",
     "bindScanning": "날짜 및 타임스탬프 속성을 위해 피처를 검색하는 중…",
