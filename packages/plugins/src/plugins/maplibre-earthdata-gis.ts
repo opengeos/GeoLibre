@@ -373,25 +373,40 @@ async function addToMap(item: EarthdataGisItem, onHint?: (hint: string) => void)
     await addWebMapToMap(item, onHint);
     return;
   }
-  await addServiceToMap(item, onHint);
+  await addServiceToMap(item, { onHint });
+}
+
+/** Options for {@link addServiceToMap}. */
+interface AddServiceOptions {
+  /** Called when the view had to zoom past the extent to show data. */
+  onHint?: (hint: string) => void;
+  /**
+   * Set when the layer comes from a web map, so it can be tracked and removed
+   * together with its siblings.
+   */
+  webMapId?: string;
+  /** Whether to move the view to the new layer. @default true */
+  fit?: boolean;
+  /**
+   * An already-resolved minimum visible zoom, letting a caller that adds many
+   * layers run the lookups concurrently. Omit to look it up here; `null` means
+   * the lookup ran and found no constraint.
+   */
+  minVisibleZoom?: number | null;
 }
 
 /**
  * Adds one ArcGIS service as a layer and returns its store id.
  *
  * @param item - A service item (never a web map)
- * @param onHint - Called when the view had to zoom past the extent to show data
- * @param webMapId - Set when the layer comes from a web map, so it can be
- *   tracked and removed together with its siblings
- * @param fit - Whether to move the view to the new layer
+ * @param options - Hint sink, web map ownership, view and zoom-lookup control
  * @returns The new layer's store id, or null when the item yields no layer
  */
 async function addServiceToMap(
   item: EarthdataGisItem,
-  onHint?: (hint: string) => void,
-  webMapId?: string,
-  fit = true,
+  options: AddServiceOptions = {},
 ): Promise<string | null> {
+  const { onHint, webMapId, fit = true, minVisibleZoom: presetMinVisibleZoom } = options;
   const ownerMetadata = webMapId ? { earthdataWebMapId: webMapId } : undefined;
 
   if (item.kind === "feature") {
@@ -414,7 +429,12 @@ async function addServiceToMap(
 
   // Best-effort: a service that never answers must not block the add, so the
   // lookup is bounded and any failure simply leaves the layer unconstrained.
-  const minVisibleZoom = await withVisibilityTimeout(fetchMinVisibleZoom(item));
+  // `undefined` means "not looked up yet"; `null` is a completed lookup that
+  // found no constraint, so only the former triggers a fetch here.
+  const minVisibleZoom =
+    presetMinVisibleZoom !== undefined
+      ? presetMinVisibleZoom
+      : await withVisibilityTimeout(fetchMinVisibleZoom(item));
 
   const layerId = useAppStore.getState().addTileLayer(item.title, {
     type: layerTypeForTiles([tileUrl]),
@@ -453,15 +473,25 @@ async function addWebMapToMap(
   const renderable = Array.isArray(layers) ? (layers as WebMapLayer[]) : [];
   if (renderable.length === 0) throw new Error(labels.webMapEmpty);
 
+  const children = renderable.map((layer, index) => webMapLayerAsItem(item, layer, index));
+  // Each raster child's visibility lookup is a bounded pair of requests, so
+  // running them together keeps a web map of N unresponsive image layers from
+  // costing N x VISIBILITY_LOOKUP_TIMEOUT_MS. Only the store writes below need
+  // to stay ordered.
+  const minVisibleZooms = await Promise.all(
+    children.map((child) =>
+      child.kind === "image" ? withVisibilityTimeout(fetchMinVisibleZoom(child)) : null,
+    ),
+  );
+
   const addedIds: string[] = [];
-  for (const [index, layer] of renderable.entries()) {
+  for (const [index, child] of children.entries()) {
     try {
-      const id = await addServiceToMap(
-        webMapLayerAsItem(item, layer, index),
-        undefined,
-        item.id,
-        false,
-      );
+      const id = await addServiceToMap(child, {
+        webMapId: item.id,
+        fit: false,
+        minVisibleZoom: minVisibleZooms[index],
+      });
       if (id) addedIds.push(id);
     } catch {
       // One unreachable layer must not abandon the rest of the web map; the
@@ -471,7 +501,9 @@ async function addWebMapToMap(
   if (addedIds.length === 0) throw new Error(labels.webMapEmpty);
 
   appRef?.addLayerGroup?.(item.title, addedIds);
-  if (item.bbox && revealRasterLayer(item.bbox, null)) onHint?.(labels.zoomedToData);
+  // A web map is a curated composition, so its own extent is the right view;
+  // the per-layer zoom-to-data rule would over-zoom for its other layers.
+  if (item.bbox) appRef?.fitBounds?.(item.bbox);
   onHint?.(labels.webMapAdded(addedIds.length, renderable.length));
 }
 
@@ -597,12 +629,19 @@ function openDetailsModal(item: EarthdataGisItem): void {
   closeDetailsDialog?.();
 
   const overlay = document.createElement("div");
+  // Captured before the dialog steals focus so closing can hand it back to the
+  // card button that opened it, instead of dumping the user at the page top.
+  const previouslyFocused = document.activeElement as HTMLElement | null;
   overlay.style.cssText =
     "position:fixed;inset:0;z-index:2147483000;display:flex;" +
     "align-items:center;justify-content:center;padding:16px;" +
     "background:rgba(0,0,0,0.5);";
 
   const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", labels.detailsHeading);
+  dialog.tabIndex = -1;
   dialog.style.cssText =
     "display:flex;flex-direction:column;width:100%;max-width:560px;" +
     "max-height:80vh;border-radius:8px;overflow:hidden;" +
@@ -679,6 +718,7 @@ function openDetailsModal(item: EarthdataGisItem): void {
   const close = (): void => {
     overlay.remove();
     document.removeEventListener("keydown", onKey);
+    previouslyFocused?.focus?.();
     if (closeDetailsDialog === close) closeDetailsDialog = null;
   };
   const onKey = (event: KeyboardEvent): void => {
@@ -690,6 +730,9 @@ function openDetailsModal(item: EarthdataGisItem): void {
   closeButton.addEventListener("click", close);
   document.addEventListener("keydown", onKey);
   document.body.appendChild(overlay);
+  // Move focus inside so the dialog is reachable by keyboard and announced;
+  // without this, Tab keeps walking the panel behind the overlay.
+  closeButton.focus();
   closeDetailsDialog = close;
 }
 
@@ -1083,6 +1126,14 @@ export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;
+    // Both panel APIs above are optional-chained, so the host may never invoke
+    // the render cleanup. Tear the panel down here too, or its store
+    // subscription outlives deactivation and a later setEarthdataGisLabels
+    // remounts into a detached container. Already-run cleanup leaves
+    // disposePanel null, so this is a no-op in the normal case.
+    disposePanel?.();
+    disposePanel = null;
+    panelContainer = null;
     closeDetailsDialog?.();
     pendingAdds.clear();
     appRef = null;
