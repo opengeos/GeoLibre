@@ -450,13 +450,15 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const history = promptHistoryRef.current;
     if (history.length === 0) return;
 
-    // The arrows still move the caret inside a multi-line draft: recall only
-    // when the caret is collapsed at the edge it would leave anyway -- on the
-    // first line for Up, the last line for Down -- as shell prompt histories do.
+    // The arrows still move the caret inside a draft: recall only from a
+    // collapsed caret at the very start (Up) or very end (Down). A textarea
+    // soft-wraps long text into several visual lines with no newline of its
+    // own, so counting newlines would recall while the caret is still inside
+    // the draft; the absolute edges are the only unambiguous test.
     const { selectionStart, selectionEnd, value } = event.currentTarget;
     if (selectionStart !== selectionEnd) return;
-    if (event.key === "ArrowUp" && value.slice(0, selectionStart).includes("\n")) return;
-    if (event.key === "ArrowDown" && value.slice(selectionEnd).includes("\n")) return;
+    if (event.key === "ArrowUp" && selectionStart !== 0) return;
+    if (event.key === "ArrowDown" && selectionEnd !== value.length) return;
 
     const currentIndex = promptHistoryIndexRef.current;
     if (event.key === "ArrowUp") {

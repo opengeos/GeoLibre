@@ -52,6 +52,7 @@ if [ -n "${GEOLIBRE_AI_URL:-}" ] || [ -n "${GEOLIBRE_AI_PROXY_URL:-}" ] || [ -n 
   export GEOLIBRE_AI_PROXY_URL GEOLIBRE_AI_PROXY_TOKEN
 
   python -c '
+import ipaddress
 import json
 import os
 from urllib.parse import urlsplit
@@ -72,10 +73,35 @@ if (
     )
 
 host = parsed.hostname
-host_header = host if parsed.port is None else f"{host}:{parsed.port}"
+# urlsplit strips the brackets from an IPv6 literal; Host and SNI need them back
+# or the generated header is ambiguous and nginx rejects the config.
+authority = f"[{host}]" if ":" in host else host
+host_header = authority if parsed.port is None else f"{authority}:{parsed.port}"
+
+# Behind a fronting TLS proxy $remote_addr is that proxy, which would collapse
+# every user into a single rate-limit bucket upstream. Trust X-Forwarded-For
+# only from explicitly listed proxy CIDRs; unset means trust nobody. Each entry
+# is parsed as a network before it reaches the config, so nothing else can be
+# smuggled into the generated directives.
+trusted = []
+for entry in os.environ.get("GEOLIBRE_TRUSTED_PROXIES", "").split(","):
+    entry = entry.strip()
+    if not entry:
+        continue
+    try:
+        trusted.append(str(ipaddress.ip_network(entry, strict=False)))
+    except ValueError:
+        raise SystemExit(
+            f"ERROR: GEOLIBRE_TRUSTED_PROXIES entry {entry!r} is not an IP address or CIDR."
+        )
+real_ip = "".join(f"    set_real_ip_from {entry};\n" for entry in trusted)
+if real_ip:
+    real_ip += "    real_ip_header X-Forwarded-For;\n    real_ip_recursive on;\n"
+
 token = os.environ["GEOLIBRE_AI_PROXY_TOKEN"]
 config = f"""
 location /ai/ {{
+{real_ip}
     proxy_pass {upstream}/;
     proxy_http_version 1.1;
     proxy_ssl_server_name on;

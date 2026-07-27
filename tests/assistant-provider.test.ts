@@ -5,6 +5,7 @@ import {
   configForProvider,
   readBuildTimeAssistantEnv,
   readDeploymentAssistantEnv,
+  readRuntimeEnv,
   resolveProviderConfig,
   type RuntimeEnv,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider";
@@ -72,6 +73,28 @@ describe("build-time AI proxy", () => {
         },
       } as unknown as Window & typeof globalThis;
       assert.deepEqual(readDeploymentAssistantEnv(), {});
+    } finally {
+      globalThis.window = originalWindow;
+    }
+  });
+
+  it("lets the saved runtime environment override the deployment's proxy config", () => {
+    const originalWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        __GEOLIBRE_DEPLOYMENT_ENV__: {
+          VITE_GEOLIBRE_AI_URL: "/ai",
+          VITE_GEOLIBRE_AI_MODEL: "openai/gpt-5.5",
+        },
+        __GEOLIBRE_RUNTIME_ENV__: {
+          OPENAI_COMPATIBLE_MODEL: "anthropic/claude-opus-5",
+        },
+      } as unknown as Window & typeof globalThis;
+      const env = readRuntimeEnv();
+      // The deployment supplies the endpoint, the user's own setting wins on
+      // the model: runtime beats deployment, deployment beats build defaults.
+      assert.equal(env.OPENAI_COMPATIBLE_BASE_URL, "/ai/v1");
+      assert.equal(env.OPENAI_COMPATIBLE_MODEL, "anthropic/claude-opus-5");
     } finally {
       globalThis.window = originalWindow;
     }

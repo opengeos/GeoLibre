@@ -50,9 +50,13 @@ docker run --rm -p 8080:80 \
 ```
 
 `GEOLIBRE_AI_PROXY_TOKEN` must match the Worker secret. The browser receives
-only `/ai` and the model ID. Basic Auth protects nginx's `/ai` route, nginx
-removes the user's Basic credentials, and the Worker rejects calls without the
-instance token. Use HTTPS in front of Docker on untrusted networks.
+only `/ai` and the model ID; nginx removes the user's Basic credentials, and
+the Worker rejects calls without the instance token. The entrypoint injects the
+token on every `/ai` request, so gate the route yourself -- with
+`GEOLIBRE_AUTH_USER`/`GEOLIBRE_AUTH_PASSWORD` or your own authentication -- or
+anyone who can reach the container spends against your account. Use HTTPS in
+front of Docker on untrusted networks, and set `GEOLIBRE_TRUSTED_PROXIES` to
+that proxy's IP or CIDR so rate limiting still sees individual clients.
 
 Do not set `GEOLIBRE_AI_URL=https://ai.geolibre.app` in a public browser build:
 the Worker deliberately requires a token that must not be shipped to a browser.

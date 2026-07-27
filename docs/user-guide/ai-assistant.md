@@ -48,10 +48,10 @@ enables the panel immediately — no reload needed.
 
 A deployment operator can provide AI without distributing provider API keys.
 In this configuration, the browser calls the same-origin `/ai` route. Docker's
-nginx first checks the instance's HTTP Basic Auth username and password, then
-adds a server-only instance token and forwards the request to
-`ai.geolibre.app`. The browser receives neither the instance token nor the
-Cloudflare AI Gateway token.
+nginx checks the instance's HTTP Basic Auth username and password when the
+operator has configured it, then adds a server-only instance token and forwards
+the request to `ai.geolibre.app`. The browser receives neither the instance
+token nor the Cloudflare AI Gateway token.
 
 Users only need to sign in to the GeoLibre instance; they do not configure an
 AI provider key. Requests sent directly to `ai.geolibre.app` without the

@@ -1,3 +1,8 @@
+// How long to wait for the provider's response headers. Generous enough for a
+// slow non-streaming generation, and below the 600s nginx read timeout that a
+// self-hosted deployment puts in front of this worker.
+const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
+
 function jsonError(message: string, status: number, headers?: HeadersInit): Response {
   return Response.json({ error: { message, type: "geolibre_proxy_error" } }, { status, headers });
 }
@@ -41,11 +46,14 @@ async function hasValidInstanceToken(request: Request, env: Env): Promise<boolea
   const expected = env.GEOLIBRE_AI_PROXY_TOKEN ?? "";
   if (!supplied || !expected) return false;
 
+  // Digest first: timingSafeEqual throws on a length mismatch, so comparing the
+  // raw bytes would have to bail out early and leak the secret's length.
   const encoder = new TextEncoder();
-  const suppliedBytes = encoder.encode(supplied);
-  const expectedBytes = encoder.encode(expected);
-  if (suppliedBytes.byteLength !== expectedBytes.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(suppliedBytes, expectedBytes);
+  const [suppliedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(supplied)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(suppliedHash, expectedHash);
 }
 
 async function readBoundedJson(
@@ -86,18 +94,32 @@ async function readBoundedJson(
 }
 
 function clampOutputTokens(body: Record<string, unknown>, limit: number): void {
+  let capped = false;
   for (const field of ["max_tokens", "max_completion_tokens"] as const) {
+    if (!(field in body)) continue;
+    // Anything that is not a usable positive number -- null, a numeric string,
+    // NaN -- would otherwise reach upstream uncapped, so pin it to the limit.
     const requested = body[field];
-    if (typeof requested === "number" && Number.isFinite(requested)) {
-      body[field] = Math.max(1, Math.min(Math.floor(requested), limit));
-    }
+    const usable = typeof requested === "number" && Number.isFinite(requested) && requested >= 1;
+    body[field] = usable ? Math.min(Math.floor(requested as number), limit) : limit;
+    capped = true;
   }
-  if (body.max_tokens === undefined && body.max_completion_tokens === undefined) {
-    body.max_completion_tokens = limit;
-  }
+  if (!capped) body.max_completion_tokens = limit;
 }
 
 async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
+  // Check the limit before buffering: otherwise a throttled client can still
+  // make the worker hold MAX_BODY_BYTES in memory on every rejected request.
+  const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
+  const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";
+  const { success } = await env.AI_RATE_LIMITER.limit({ key: actor });
+  if (!success) {
+    return jsonError("Rate limit exceeded", 429, {
+      ...Object.fromEntries(responseHeaders(origin)),
+      "Retry-After": "60",
+    });
+  }
+
   const maximumBytes = positiveInteger(env.MAX_BODY_BYTES, 1_048_576);
   let body: Record<string, unknown>;
   try {
@@ -124,28 +146,35 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
   body.model = model;
   clampOutputTokens(body, positiveInteger(env.MAX_OUTPUT_TOKENS, 16_384));
 
-  const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
-  const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";
-  const { success } = await env.AI_RATE_LIMITER.limit({ key: actor });
-  if (!success) {
-    return jsonError("Rate limit exceeded", 429, {
-      ...Object.fromEntries(responseHeaders(origin)),
-      "Retry-After": "60",
-    });
-  }
-
   const endpoint =
     `https://api.cloudflare.com/client/v4/accounts/` +
     `${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/ai/v1/chat/completions`;
-  const upstream = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.CF_AI_GATEWAY_TOKEN}`,
-      "cf-aig-gateway-id": env.AI_GATEWAY_ID,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  // Bound the wait for response headers so a stalled provider fails as a
+  // deterministic 504 instead of hanging until the platform kills the request.
+  // The timer is cleared once headers arrive, leaving streamed bodies to run to
+  // completion however long the generation takes.
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), UPSTREAM_HEADER_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.CF_AI_GATEWAY_TOKEN}`,
+        "cf-aig-gateway-id": env.AI_GATEWAY_ID,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return jsonError("Upstream request timed out", 504, responseHeaders(origin));
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
 
   const headers = new Headers(upstream.headers);
   for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
