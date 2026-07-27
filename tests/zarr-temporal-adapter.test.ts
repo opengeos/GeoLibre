@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
 import {
   __setComponentsModuleLoaderForTests,
+  addCloudNetcdfLayer,
   addZarrRasterLayer,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/maplibre-components.ts";
@@ -29,6 +30,11 @@ const selectorCalls: {
 let dimensionValues: Record<string, (number | string)[]> = {};
 // The live stub, so a test can drive the control's own `layerremove` path.
 let controlInstance: ZarrLayerControlStub | null = null;
+// Adds inside `addLayer` right now, and the high-water mark across a test. The
+// control's `layeradd` carries no correlation id, so two adds in flight at once
+// is precisely the condition under which each latches onto the other's layer.
+let addsInFlight = 0;
+let maxAddsInFlight = 0;
 
 class ZarrLayerControlStub {
   private handlers = new Map<string, Set<(event: unknown) => void>>();
@@ -58,7 +64,21 @@ class ZarrLayerControlStub {
 
   hide() {}
 
+  /** Ids by variable, so a test can tell two overlapping adds apart. */
+  idForVariable(variable: string): string | undefined {
+    return this.layers.find((layer) => layer.variable === variable)?.id;
+  }
+
   async addLayer(url?: string, variable?: string) {
+    // Real asynchrony wide enough that two adds fired together are both parked
+    // here at once if the plugin does not serialize them -- which is when their
+    // `layeradd` events cross and each add latches onto the other's layer.
+    addsInFlight += 1;
+    maxAddsInFlight = Math.max(maxAddsInFlight, addsInFlight);
+    // Real asynchrony wide enough that two adds fired together are both parked
+    // here at once unless the plugin serializes them.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    addsInFlight -= 1;
     const id = `zarr-layer-${this.counter++}`;
     this.layers.push({
       id,
@@ -147,6 +167,8 @@ async function waitForAdapter(layerId: string, attempts = 40) {
 beforeEach(() => {
   dimensionValues = { time: [...RAW_TIME_VALUES], lat: [0, 1], lon: [0, 1] };
   selectorCalls.length = 0;
+  addsInFlight = 0;
+  maxAddsInFlight = 0;
   installStubModule();
 });
 
@@ -222,6 +244,45 @@ describe("a Zarr layer's temporal adapter", () => {
         variable: "climate",
       });
       assert.equal(await waitForAdapter(id, 6), undefined);
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("gives each add its own context when two adds of one store are fired together", async () => {
+    // The `layeradd` event carries no correlation id, so overlapping adds would
+    // each latch onto the other's event and resolve the wrong layer's time axis.
+    // Both programmatic entry points share one queue for exactly this reason, so
+    // a NetCDF add's inline kerchunk attributes and a Zarr add's store metadata
+    // cannot be swapped even when both target the same store.
+    const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
+    try {
+      const netcdf = addCloudNetcdfLayer(app, {
+        url: STORE_URL,
+        variable: "nc",
+        refs: { "time/.zattrs": JSON.stringify({ units: "days since 2000-01-01" }) },
+      });
+      const zarr = addZarrRasterLayer(app, { url: STORE_URL, variable: "zarr" });
+      await Promise.all([netcdf, zarr]);
+
+      assert.equal(
+        maxAddsInFlight,
+        1,
+        "expected the plugin to serialize programmatic adds; overlapping adds cross their `layeradd` events",
+      );
+
+      const netcdfId = controlInstance?.idForVariable("nc");
+      const zarrId = controlInstance?.idForVariable("zarr");
+      assert.ok(netcdfId && zarrId, "expected both adds to create a layer");
+      const netcdfAdapter = await waitForAdapter(netcdfId);
+      const zarrAdapter = await waitForAdapter(zarrId);
+      assert.ok(netcdfAdapter, "expected the NetCDF cube to register an adapter");
+      assert.ok(zarrAdapter, "expected the Zarr cube to register an adapter");
+
+      // Each axis is decoded from its own source: the references say 2000, the
+      // store's own metadata says 2020.
+      assert.equal(netcdfAdapter.getTimeValues()[0], Date.UTC(2000, 0, 1));
+      assert.equal(zarrAdapter.getTimeValues()[0], Date.UTC(2020, 0, 1));
     } finally {
       restoreFetch();
     }
