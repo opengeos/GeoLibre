@@ -77,6 +77,121 @@ Drop the viewer into an `<iframe>`:
 
 Use `layout=compact` when you want a slim toolbar to remain (for example, so viewers can switch basemaps), or `maponly` for a pure map.
 
+## Talking to the map at runtime
+
+URL parameters configure the app once, at load. To keep talking to a **live**
+embed (fly to the record the user just clicked in your app, highlight it, open a
+processing tool) and to hear what the user does inside the map, use the embed
+`postMessage` API.
+
+### Enabling it
+
+The API is **off by default**: a public deployment can never be driven by the
+page that frames it. Turn it on by naming the origins you trust. For the Docker
+image, that is one environment variable:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_EMBED_ORIGINS="https://portal.example.com,https://erp.example.com" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+For a static build, bake it in instead:
+`VITE_GEOLIBRE_EMBED_ORIGINS="https://portal.example.com" npm run build`.
+
+Entries are origins (`scheme://host[:port]`); a trailing path is ignored. `*`
+allows any origin and is only appropriate on a private network. The allowlist is
+enforced in both directions: a message from an unlisted origin is ignored, and
+every message the app sends is addressed to a listed origin, never `*`.
+
+Setting the allowlist also narrows the `?embed=1` project/scripting bridges (used
+by the [Python package](../python.md)) to the same origins. As extra hardening
+you can stop other sites from framing the app at all by adding
+`Content-Security-Policy: frame-ancestors <your origins>` at your reverse proxy.
+
+### Message shape
+
+Every message, in both directions, is versioned:
+
+```json
+{ "v": 1, "type": "setView", "payload": { "center": [-95.7, 37.1], "zoom": 5 } }
+```
+
+Messages the **app** sends also carry `"source": "geolibre"`, so you can filter
+them out of the other `postMessage` traffic on your page.
+
+### Host to GeoLibre
+
+| Type               | Payload                                                    | Effect                                                                             |
+| ------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `loadProject`      | `{ url }`                                                  | Loads a `.geolibre.json` project without reloading the iframe.                      |
+| `setView`          | `{ bbox }` or `{ center, zoom, bearing, pitch, duration }` | Fits a bounding box, or flies the camera to the properties you send.                |
+| `highlightFeature` | `{ layerId, featureId \| featureIds \| filter, fit }`      | Selects and highlights features; `filter` matches properties. `fit` zooms to them.  |
+| `openTool`         | `{ id, params }`                                           | Opens the Processing dialog on a tool, pre-filling `params`. Runtime twin of `?tool=`. |
+
+Send `{ layerId }` alone to `highlightFeature` to clear the highlight. Add a
+`requestId` to any message and the app answers with an `ack` (below) reporting
+whether it worked.
+
+### GeoLibre to host
+
+| Type                | Payload                                                        | Fires when                                                       |
+| ------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `ready`             | `{ version }`                                                  | The app has mounted and is listening.                             |
+| `ack`               | `{ requestId, ok, error }`                                     | A message you sent with a `requestId` was applied (or rejected).  |
+| `projectLoaded`     | `{ url, name, layerIds }`                                      | A project finished loading, whoever started it.                   |
+| `selectionChanged`  | `{ layerId, featureIds }`                                      | The user (or your `highlightFeature`) changed the selection.      |
+| `viewChanged`       | `{ bbox, center, zoom, bearing, pitch }`                       | The camera moved (throttled to about four events a second).       |
+| `toolCompleted`     | `{ id, name, status, engine, durationMs, outputLayerNames }`   | A processing run finished, successfully or not.                   |
+| `serverFileWritten` | `{ path, toolId }`                                             | A file-based tool wrote an output (conversion and raster tools).  |
+
+### A host page
+
+```html
+<iframe
+  id="map"
+  src="https://gis.example.com/?url=https://erp.example.com/fields.geolibre.json&maponly"
+  title="GeoLibre map"
+  width="100%"
+  height="600"
+  style="border: 0"
+></iframe>
+
+<script>
+  const frame = document.getElementById("map");
+  const APP_ORIGIN = "https://gis.example.com";
+
+  const send = (type, payload) =>
+    frame.contentWindow.postMessage({ v: 1, type, payload }, APP_ORIGIN);
+
+  window.addEventListener("message", (event) => {
+    if (event.origin !== APP_ORIGIN) return;
+    const message = event.data;
+    if (message?.source !== "geolibre" || message.v !== 1) return;
+
+    if (message.type === "ready") {
+      // Safe to start sending commands.
+    } else if (message.type === "selectionChanged") {
+      showRecordFor(message.payload.featureIds[0]);
+    }
+  });
+
+  // Click a record in your own UI: fly to it and highlight it, no reload.
+  function focusField(field) {
+    send("setView", { bbox: field.bbox });
+    send("highlightFeature", {
+      layerId: "fields",
+      filter: { parcel_id: field.id },
+      fit: true,
+    });
+  }
+</script>
+```
+
+Wait for `ready` before sending: messages that arrive before the app has mounted
+are not queued. Treat `ready` as idempotent, since it is re-sent whenever the app
+remounts (a navigation inside the frame, a development hot reload).
+
 ## What works in an embed
 
 The browser build supports map navigation, browser-selected and URL-based data, styling, the SQL Workspace, and most plugins. Desktop-only features (local file dialogs, local MBTiles and raster reads, project save/open, and the Python sidecar tools) are not available in an embed. See [Getting Started](../getting-started.md).

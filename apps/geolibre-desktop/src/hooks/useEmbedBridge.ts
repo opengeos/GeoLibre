@@ -153,7 +153,12 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapController | null>
     window.addEventListener("message", handleMessage);
     const unsubscribe = useAppStore.subscribe(scheduleState);
 
-    host.postMessage({ type: "geolibre:ready", version: __GEOLIBRE_VERSION__ }, "*");
+    // The one message sent before the host identifies itself. It carries only
+    // the version, and goes to "*" unless the deployment configured an origin
+    // allowlist, in which case it is sent to those origins instead.
+    for (const target of hostChannel.broadcastTargets()) {
+      host.postMessage({ type: "geolibre:ready", version: __GEOLIBRE_VERSION__ }, target);
+    }
 
     return () => {
       disposed = true;

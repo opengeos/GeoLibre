@@ -242,6 +242,23 @@ docker build --build-arg VITE_WELCOME_DISABLED=1 -t geolibre .
 Individual links can also opt out at runtime with `?welcome=0`. See
 [Embedding & Sharing](user-guide/embedding.md#url-parameters).
 
+#### Driving an embedded map from a host page
+
+To let a page that frames the app talk to the live map over `postMessage` (fly to
+a record, highlight a feature, open a processing tool, and receive selection,
+view, and tool events), list the origins you trust:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_EMBED_ORIGINS="https://portal.example.com" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+Unset (the default) the API stays off, so a public deployment can never be driven
+by whoever frames it. See
+[Talking to the map at runtime](user-guide/embedding.md#talking-to-the-map-at-runtime)
+for the message reference and a host-page example.
+
 ### Run the desktop app
 
 ```bash

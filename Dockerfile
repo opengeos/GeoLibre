@@ -27,10 +27,15 @@ ARG VITE_MAPILLARY_ACCESS_TOKEN=
 # Set to 1 (or true) to disable the first-launch welcome wizard for the whole
 # deployment; visitors land straight on the map.
 ARG VITE_WELCOME_DISABLED=
+# Comma-separated origins allowed to drive a framed app over the embed
+# postMessage API. Usually set at RUN time instead (-e GEOLIBRE_EMBED_ORIGINS=…),
+# which the entrypoint writes into the runtime config without a rebuild.
+ARG VITE_GEOLIBRE_EMBED_ORIGINS=
 ENV GEOLIBRE_APP_BASE=${GEOLIBRE_APP_BASE}
 ENV VITE_GEE_OAUTH_CLIENT_ID=${VITE_GEE_OAUTH_CLIENT_ID}
 ENV VITE_MAPILLARY_ACCESS_TOKEN=${VITE_MAPILLARY_ACCESS_TOKEN}
 ENV VITE_WELCOME_DISABLED=${VITE_WELCOME_DISABLED}
+ENV VITE_GEOLIBRE_EMBED_ORIGINS=${VITE_GEOLIBRE_EMBED_ORIGINS}
 
 RUN npm run build
 

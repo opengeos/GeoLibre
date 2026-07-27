@@ -4,6 +4,8 @@
 // (useCommandBridge) talk to the SAME host window and must apply the SAME trust
 // rules, so the detection and origin handshake live here once.
 
+import { EMBED_ORIGIN_WILDCARD, isEmbedOriginAllowed, readEmbedOrigins } from "../lib/embed-api";
+
 /**
  * Detects whether the app is running inside the GeoLibre Jupyter/embed host.
  *
@@ -21,7 +23,10 @@
  * broadcasts full project state to it. Because the legitimate hosts (the Jupyter
  * widget, Colab's proxy) have arbitrary, unknowable origins, an origin allowlist
  * is not viable here; instead the deployment constraint is: an `?embed=1`
- * export must only be served from a trusted context, never a public URL.
+ * export must only be served from a trusted context, never a public URL. A
+ * deployment that *can* name its hosts (a web build framed by a portal) should
+ * set `GEOLIBRE_EMBED_ORIGINS`, which both enables the embed API
+ * (`hooks/useEmbedApi.ts`) and narrows these bridges to those origins.
  *
  * @returns True when the postMessage bridges should be active.
  */
@@ -65,6 +70,11 @@ export interface EmbedHost {
   /** Origin to scope outbound posts to (`"*"` until the host is identified). */
   targetOrigin(): string;
   /**
+   * Origins a pre-handshake broadcast (the `ready` ping) may go to: the known
+   * host origin, else every allowlisted origin, else `["*"]`.
+   */
+  broadcastTargets(): string[];
+  /**
    * Record an inbound message from the host: marks the handshake complete and
    * learns the host's origin. Returns true when the message actually came from
    * the host window (callers should ignore messages where this is false).
@@ -77,9 +87,17 @@ export interface EmbedHost {
  * always defined; when the app is the top-level document (the `?embed=1`
  * self-test) it is `window` itself, so the bridge naturally posts to and
  * receives from itself.
+ *
+ * When the deployment configured an embed-API origin allowlist
+ * (`GEOLIBRE_EMBED_ORIGINS`), it applies here too: a host whose origin is not
+ * listed never completes the handshake, so an operator who names their trusted
+ * hosts also narrows the `?embed=1` project/scripting bridges to them. With no
+ * allowlist configured nothing changes (the Jupyter widget's host origin is
+ * arbitrary and unknowable, so it cannot be listed in advance).
  */
 export function createEmbedHost(): EmbedHost {
   const host = window.parent;
+  const allowedOrigins = readEmbedOrigins();
   let hostOrigin: string | null = null;
   let handshakeComplete = false;
   return {
@@ -88,8 +106,18 @@ export function createEmbedHost(): EmbedHost {
       return handshakeComplete;
     },
     targetOrigin: () => hostOrigin ?? "*",
+    broadcastTargets: () => {
+      if (hostOrigin) return [hostOrigin];
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(EMBED_ORIGIN_WILDCARD)) {
+        return [EMBED_ORIGIN_WILDCARD];
+      }
+      return allowedOrigins;
+    },
     note(event: MessageEvent): boolean {
       if (event.source !== host) return false;
+      if (allowedOrigins.length > 0 && !isEmbedOriginAllowed(event.origin, allowedOrigins)) {
+        return false;
+      }
       handshakeComplete = true;
       // "null" (opaque/file origins) stays "*".
       if (event.origin && event.origin !== "null") hostOrigin = event.origin;

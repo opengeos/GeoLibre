@@ -28,7 +28,6 @@ esac
 # restricted to the same-origin /ai route; the remote Worker URL and instance
 # token remain server-side in nginx.
 AI_PROXY_CONF=/etc/nginx/geolibre-ai-proxy.conf
-RUNTIME_CONFIG=/usr/share/nginx/html/geolibre-runtime-config.js
 if [ -n "${GEOLIBRE_AI_URL:-}" ] || [ -n "${GEOLIBRE_AI_PROXY_URL:-}" ] || [ -n "${GEOLIBRE_AI_PROXY_TOKEN:-}" ]; then
   if [ -z "${GEOLIBRE_AI_URL:-}" ] || [ -z "${GEOLIBRE_AI_PROXY_URL:-}" ] || [ -z "${GEOLIBRE_AI_PROXY_TOKEN:-}" ]; then
     echo "ERROR: GEOLIBRE_AI_URL, GEOLIBRE_AI_PROXY_URL, and GEOLIBRE_AI_PROXY_TOKEN must be set together." >&2
@@ -53,7 +52,6 @@ if [ -n "${GEOLIBRE_AI_URL:-}" ] || [ -n "${GEOLIBRE_AI_PROXY_URL:-}" ] || [ -n 
 
   python -c '
 import ipaddress
-import json
 import os
 from urllib.parse import urlsplit
 
@@ -118,21 +116,63 @@ location /ai/ {{
 }}
 """
 open("/etc/nginx/geolibre-ai-proxy.conf", "w").write(config)
-
-deployment = {
-    "VITE_GEOLIBRE_AI_URL": os.environ["GEOLIBRE_AI_URL"],
-    "VITE_GEOLIBRE_AI_MODEL": os.environ["GEOLIBRE_AI_MODEL"],
-}
-with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
-    output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
-    json.dump(deployment, output, separators=(",", ":"))
-    output.write(";\n")
 '
   chmod 640 "$AI_PROXY_CONF"
   echo "Authenticated AI proxy enabled at /ai."
 else
   printf '# AI proxy disabled (GEOLIBRE_AI_URL not set).\n' > "$AI_PROXY_CONF"
-  printf 'window.__GEOLIBRE_DEPLOYMENT_ENV__ = {};\n' > "$RUNTIME_CONFIG"
+fi
+
+# Runtime config the app reads at load (index.html pulls it in before the
+# bundle). Written on every boot, after the optional blocks above have exported
+# their values, so toggling any of these env vars across restarts takes effect.
+# Python JSON-encodes the values, so nothing an operator passes can break out of
+# the generated script.
+python -c '
+import json
+import os
+from urllib.parse import urlsplit
+
+deployment = {}
+if os.environ.get("GEOLIBRE_AI_URL"):
+    deployment["VITE_GEOLIBRE_AI_URL"] = os.environ["GEOLIBRE_AI_URL"]
+    deployment["VITE_GEOLIBRE_AI_MODEL"] = os.environ["GEOLIBRE_AI_MODEL"]
+
+# Origins allowed to drive a framed app over the embed postMessage API. Unset
+# means the API stays off, so a public deployment can never be driven by the
+# page that frames it. "*" allows any origin: private networks only.
+origins = []
+for entry in os.environ.get("GEOLIBRE_EMBED_ORIGINS", "").replace(",", " ").split():
+    if entry == "*":
+        origins.append(entry)
+        continue
+    parsed = urlsplit(entry)
+    # postMessage can only be scoped to an origin, so a path/query/fragment on an
+    # otherwise valid URL is dropped rather than rejected (matching how the app
+    # parses the same value). Credentials and other schemes are a mistake worth
+    # failing the boot for, since they can never match a real host.
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+    ):
+        raise SystemExit(
+            f"ERROR: GEOLIBRE_EMBED_ORIGINS entry {entry!r} must be an http(s) "
+            "origin such as https://portal.example.com."
+        )
+    origins.append(f"{parsed.scheme}://{parsed.netloc}")
+if origins:
+    deployment["VITE_GEOLIBRE_EMBED_ORIGINS"] = ",".join(origins)
+
+with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
+    output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
+    json.dump(deployment, output, separators=(",", ":"))
+    output.write(";\n")
+'
+
+if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
+  echo "Embed postMessage API enabled for: $GEOLIBRE_EMBED_ORIGINS"
 fi
 
 # Render the nginx config from the immutable image template on every boot. The
