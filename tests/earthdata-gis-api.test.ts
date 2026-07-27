@@ -14,6 +14,11 @@ import {
   kindFromPortalType,
   minZoomForPixelSize,
   normalizeItem,
+  bboxToMercator,
+  buildExportDownloadUrl,
+  exportFileName,
+  exportImageSize,
+  fetchExportLimits,
   parseMaxPixelSize,
   parseSearchResponse,
   parseWebMapLayers,
@@ -522,6 +527,176 @@ describe("earthdata gis api", () => {
     it("has no tile template for a web map", () => {
       const item = normalizeItem(rawResult({ type: "Web Map", url: "" })) as EarthdataGisItem;
       assert.equal(buildExportTileUrl(item), null);
+    });
+  });
+
+  describe("COG download", () => {
+    const imageItem = normalizeItem(rawResult()) as EarthdataGisItem;
+
+    describe("exportImageSize", () => {
+      it("preserves aspect ratio under the service caps", () => {
+        // A 2:1 box against a 1000x1000 cap is width-bound.
+        assert.deepEqual(exportImageSize([0, 0, 2000, 1000], { maxWidth: 1000, maxHeight: 1000 }), {
+          width: 1000,
+          height: 500,
+        });
+      });
+
+      it("lets whichever cap binds first win", () => {
+        // TEMPO-style caps (15000 x 4100) against a square box are height-bound.
+        assert.deepEqual(
+          exportImageSize([0, 0, 1000, 1000], { maxWidth: 15000, maxHeight: 4100 }),
+          {
+            width: 4100,
+            height: 4100,
+          },
+        );
+      });
+
+      it("never returns a zero dimension for a degenerate box", () => {
+        const size = exportImageSize([0, 0, 0, 0], { maxWidth: 4096, maxHeight: 4096 });
+        assert.ok(size.width >= 1 && size.height >= 1);
+      });
+    });
+
+    describe("buildExportDownloadUrl", () => {
+      it("requests a concrete bbox and a TIFF, not a tile template", () => {
+        const url = new URL(
+          buildExportDownloadUrl(imageItem, [1, 2, 3, 4], { width: 512, height: 256 }) as string,
+        );
+        assert.ok(url.pathname.endsWith("/ImageServer/exportImage"));
+        assert.equal(url.searchParams.get("bbox"), "1,2,3,4");
+        assert.equal(url.searchParams.get("size"), "512,256");
+        assert.equal(url.searchParams.get("format"), "tiff");
+        assert.equal(url.searchParams.get("f"), "image");
+        // The tile path's placeholder must never leak into a download URL.
+        assert.ok(!url.search.includes("bbox-epsg-3857"));
+      });
+
+      it("uses export and a layers filter for a MapServer sublayer", () => {
+        const item = {
+          ...imageItem,
+          kind: "map" as const,
+          url: "https://gis.earthdata.nasa.gov/gis05/rest/services/A/B/MapServer/2",
+        };
+        const url = new URL(
+          buildExportDownloadUrl(item, [1, 2, 3, 4], { width: 10, height: 10 }) as string,
+        );
+        assert.ok(url.pathname.endsWith("/MapServer/export"));
+        assert.equal(url.searchParams.get("layers"), "show:2");
+      });
+
+      it("is unavailable for kinds with no pixels to export", () => {
+        for (const kind of ["feature", "webmap"] as const) {
+          assert.equal(
+            buildExportDownloadUrl({ ...imageItem, kind }, [1, 2, 3, 4], {
+              width: 10,
+              height: 10,
+            }),
+            null,
+          );
+        }
+      });
+    });
+
+    describe("fetchExportLimits", () => {
+      it("reads the service's declared caps", async () => {
+        const { impl } = stubFetch({ maxImageWidth: 15000, maxImageHeight: 4100 });
+        assert.deepEqual((await fetchExportLimits(imageItem, impl)).limits, {
+          maxWidth: 15000,
+          maxHeight: 4100,
+        });
+      });
+
+      it("falls back to a safe cap when the service declares none or fails", async () => {
+        const missing = stubFetch({});
+        assert.deepEqual((await fetchExportLimits(imageItem, missing.impl)).limits, {
+          maxWidth: 4096,
+          maxHeight: 4096,
+        });
+        const failed = stubFetch({}, false, 500);
+        assert.deepEqual((await fetchExportLimits(imageItem, failed.impl)).limits, {
+          maxWidth: 4096,
+          maxHeight: 4096,
+        });
+      });
+
+      it("ignores a nonsensical cap rather than exporting a zero-pixel image", async () => {
+        const info = await fetchExportLimits(imageItem, stubFetch({ maxImageWidth: 0 }).impl);
+        assert.equal(info.limits.maxWidth, 4096);
+      });
+
+      it("falls back to the service extent when the portal item ships none", async () => {
+        // Every GSSICB coherence item has `extent: []`, so without this the
+        // "Full extent" option would be permanently unavailable for them.
+        const { impl } = stubFetch({
+          fullExtent: {
+            xmin: -1000,
+            ymin: -2000,
+            xmax: 3000,
+            ymax: 4000,
+            spatialReference: { latestWkid: 3857 },
+          },
+        });
+        assert.deepEqual(
+          (await fetchExportLimits(imageItem, impl)).extent3857,
+          [-1000, -2000, 3000, 4000],
+        );
+      });
+
+      it("projects a 4326 service extent into web mercator", async () => {
+        const { impl } = stubFetch({
+          fullExtent: {
+            xmin: -10,
+            ymin: -10,
+            xmax: 10,
+            ymax: 10,
+            spatialReference: { latestWkid: 4326 },
+          },
+        });
+        const extent = (await fetchExportLimits(imageItem, impl)).extent3857;
+        assert.ok(extent);
+        assert.deepEqual(extent, bboxToMercator([-10, -10, 10, 10]));
+      });
+
+      it("reports no extent for a degenerate or unknown-SR one", async () => {
+        const degenerate = stubFetch({
+          fullExtent: { xmin: 5, ymin: 5, xmax: 5, ymax: 9, spatialReference: { wkid: 3857 } },
+        });
+        assert.equal((await fetchExportLimits(imageItem, degenerate.impl)).extent3857, null);
+        const exotic = stubFetch({
+          fullExtent: { xmin: 0, ymin: 0, xmax: 1, ymax: 1, spatialReference: { wkid: 2263 } },
+        });
+        assert.equal((await fetchExportLimits(imageItem, exotic.impl)).extent3857, null);
+      });
+    });
+
+    describe("bboxToMercator", () => {
+      it("projects a WGS84 box to web-mercator metres", () => {
+        const [xmin, ymin, xmax, ymax] = bboxToMercator([-180, 0, 180, 0.000001]);
+        assert.ok(Math.abs(xmin + 20037508.34) < 1);
+        assert.ok(Math.abs(xmax - 20037508.34) < 1);
+        assert.ok(Math.abs(ymin) < 1 && ymax > ymin);
+      });
+
+      it("clamps the poles instead of returning infinity", () => {
+        const [, ymin, , ymax] = bboxToMercator([-1, -90, 1, 90]);
+        assert.ok(Number.isFinite(ymin) && Number.isFinite(ymax));
+      });
+    });
+
+    describe("exportFileName", () => {
+      it("makes a filesystem-safe name from the item title", () => {
+        assert.equal(
+          exportFileName("TEMPO NO2: Tropospheric / Column (V03)", "tif"),
+          "TEMPO_NO2_Tropospheric_Column_V03.tif",
+        );
+      });
+
+      it("falls back when the title has nothing usable", () => {
+        assert.equal(exportFileName("///", "tif"), "earthdata_gis.tif");
+        assert.equal(exportFileName("", "tif"), "earthdata_gis.tif");
+      });
     });
   });
 

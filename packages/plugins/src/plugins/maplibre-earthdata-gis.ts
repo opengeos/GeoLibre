@@ -23,6 +23,12 @@ import {
   type EarthdataGisItem,
   type EarthdataGisSearchResult,
   type EarthdataServiceKind,
+  bboxToMercator,
+  buildExportDownloadUrl,
+  type ExportLimits,
+  exportFileName,
+  exportImageSize,
+  fetchExportLimits,
   fetchMinVisibleZoom,
   fetchWebMapLayers,
   HTTP_URL_RE,
@@ -56,6 +62,28 @@ const FEATURE_ADD_TIMEOUT_MS = 60_000;
  * keeps a slow or dead service from delaying the add noticeably.
  */
 const VISIBILITY_LOOKUP_TIMEOUT_MS = 6_000;
+
+/**
+ * Ceiling on a COG export's pixel dimensions, independent of what the service
+ * advertises.
+ *
+ * `maxImageWidth`/`maxImageHeight` describe the largest size ArcGIS will accept
+ * as a parameter, not the largest it can actually render. The Planet disaster
+ * imagery advertises 15000x4100 yet times out at 4096px and answers 503 at
+ * 4977px, while GSSICB (5000x5000) serves 4977px in about a second. Both
+ * return a 2048px export promptly, so that is the default ask; the retry ladder
+ * in {@link downloadCog} covers services that cannot manage even that.
+ */
+const EXPORT_MAX_PIXELS = 2048;
+
+/** Smallest export worth falling back to before giving up. */
+const EXPORT_MIN_PIXELS = 512;
+
+/** How many progressively smaller sizes to try before reporting failure. */
+const EXPORT_ATTEMPTS = 3;
+
+/** Per-attempt export timeout; an oversized request can otherwise hang for minutes. */
+const EXPORT_ATTEMPT_TIMEOUT_MS = 45_000;
 
 /** Which service kinds the type filter is showing. "all" means no restriction. */
 type KindFilter = "all" | EarthdataServiceKind;
@@ -96,6 +124,21 @@ export interface EarthdataGisLabels {
   details: string;
   portal: string;
   portalTitle: string;
+  cog: string;
+  cogTitle: string;
+  cogHeading: string;
+  cogAreaView: string;
+  cogAreaExtent: string;
+  cogSize: (width: number, height: number) => string;
+  cogResolution: (metres: string) => string;
+  cogNote: string;
+  cogDownload: string;
+  cogDownloading: string;
+  cogRetrying: (width: number, height: number) => string;
+  cogDone: string;
+  cogFailed: (message: string) => string;
+  cogUnavailable: string;
+  cancel: string;
   addTitle: string;
   removeTitle: string;
   zoomTitle: string;
@@ -156,6 +199,23 @@ export const DEFAULT_EARTHDATA_GIS_LABELS: EarthdataGisLabels = {
   details: "Details",
   portal: "Portal",
   portalTitle: "Open this item on the Earthdata GIS portal",
+  cog: "COG",
+  cogTitle: "Download this service as a Cloud Optimized GeoTIFF",
+  cogHeading: "Download as COG",
+  cogAreaView: "Current view",
+  cogAreaExtent: "Full extent",
+  cogSize: (width, height) => `Export size: ${width} x ${height} px`,
+  cogResolution: (metres) => `Ground resolution: ${metres} m/px`,
+  cogNote:
+    "The service is re-exported at this size and re-encoded as a COG, so this is a resampled view of the area, not the source raster at native resolution.",
+  cogDownload: "Download",
+  cogDownloading: "Exporting and converting…",
+  cogRetrying: (width, height) =>
+    `The service refused that size; retrying at ${width} x ${height} px…`,
+  cogDone: "Saved the COG.",
+  cogFailed: (message) => `Could not download the COG: ${message}`,
+  cogUnavailable: "Downloading requires the desktop app or a browser save dialog.",
+  cancel: "Cancel",
   addTitle: "Add this service to the map",
   removeTitle: "Remove this service from the map",
   zoomTitle: "Zoom to this service",
@@ -505,6 +565,326 @@ async function addWebMapToMap(
   // the per-layer zoom-to-data rule would over-zoom for its other layers.
   if (item.bbox) appRef?.fitBounds?.(item.bbox);
   onHint?.(labels.webMapAdded(addedIds.length, renderable.length));
+}
+
+// ---------------------------------------------------------------------------
+// COG download
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts an ArcGIS GeoTIFF export into a Cloud Optimized GeoTIFF and saves it.
+ *
+ * ArcGIS has no COG output of its own — `format=cog` is not a recognized value
+ * and silently falls back to PNG, while `format=tiff` returns a tiled GeoTIFF
+ * with no overviews, which is not a valid COG. The re-encode and the file
+ * dialog both live in the host, so this plugin (which is framework- and
+ * I/O-free) receives them through {@link setEarthdataCogSaver}, the same
+ * injection the Timelapse plugin uses for its video save.
+ */
+export type EarthdataCogSaver = (geoTiffBytes: Uint8Array, defaultName: string) => Promise<boolean>;
+
+let cogSaver: EarthdataCogSaver | null = null;
+
+/**
+ * Installs the host's GeoTIFF-to-COG converter and file saver. Called once at
+ * startup; without it the panel's COG button reports that downloading is
+ * unavailable rather than failing mid-download.
+ *
+ * @param saver - Converts the bytes and saves them, resolving false if the user
+ *   cancelled the save dialog
+ */
+export function setEarthdataCogSaver(saver: EarthdataCogSaver | null): void {
+  cogSaver = saver;
+}
+
+/** The area a COG download covers. */
+type CogArea = "view" | "extent";
+
+/**
+ * Resolves the web-mercator box a COG download should cover.
+ *
+ * @param item - The service item being downloaded
+ * @param area - Whether to use the map view or the layer's full extent
+ * @returns The box in web-mercator metres, or null when it cannot be determined
+ */
+function cogBounds(
+  item: EarthdataGisItem,
+  area: CogArea,
+  serviceExtent3857: [number, number, number, number] | null,
+): [number, number, number, number] | null {
+  if (area === "extent") {
+    // Prefer the service's own extent: a portal item can ship an empty
+    // `extent: []` even when the service publishes a real one.
+    return serviceExtent3857 ?? (item.bbox ? bboxToMercator(item.bbox) : null);
+  }
+  const view = currentBbox();
+  if (!view) return null;
+  return bboxToMercator(view);
+}
+
+/** Formats a ground resolution for the download dialog. */
+function formatResolution(bbox3857: [number, number, number, number], width: number): string {
+  const metresPerPixel = Math.abs(bbox3857[2] - bbox3857[0]) / Math.max(1, width);
+  return metresPerPixel >= 10 ? metresPerPixel.toFixed(0) : metresPerPixel.toFixed(2);
+}
+
+/**
+ * Opens the COG download dialog for an image or map service.
+ *
+ * The export size is recomputed whenever the area changes, so the size and
+ * resolution shown are exactly what the request will ask ArcGIS for.
+ */
+function openCogModal(item: EarthdataGisItem): void {
+  closeDetailsDialog?.();
+
+  const overlay = document.createElement("div");
+  const previouslyFocused = document.activeElement as HTMLElement | null;
+  overlay.style.cssText =
+    "position:fixed;inset:0;z-index:2147483000;display:flex;" +
+    "align-items:center;justify-content:center;padding:16px;" +
+    "background:rgba(0,0,0,0.5);";
+
+  const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", labels.cogHeading);
+  dialog.tabIndex = -1;
+  dialog.style.cssText =
+    "display:flex;flex-direction:column;gap:10px;width:100%;max-width:420px;" +
+    "padding:12px;border-radius:8px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
+    "color:hsl(var(--foreground));box-shadow:0 10px 40px rgba(0,0,0,0.4);";
+
+  const heading = document.createElement("div");
+  heading.style.cssText = "font-size:13px;font-weight:600;";
+  heading.textContent = labels.cogHeading;
+
+  const areaBar = document.createElement("div");
+  areaBar.style.cssText = CSS.filterBar;
+  const areaButtons: Record<CogArea, HTMLButtonElement> = {
+    view: makeFilterButton(labels.cogAreaView),
+    extent: makeFilterButton(labels.cogAreaExtent),
+  };
+  areaBar.append(areaButtons.view, areaButtons.extent);
+
+  const sizeLine = document.createElement("div");
+  sizeLine.style.cssText = CSS.status;
+  const resolutionLine = document.createElement("div");
+  resolutionLine.style.cssText = CSS.status;
+  const note = document.createElement("div");
+  note.style.cssText = CSS.status;
+  note.textContent = labels.cogNote;
+  const status = document.createElement("div");
+  status.style.cssText = CSS.status;
+
+  const buttonRow = document.createElement("div");
+  buttonRow.style.cssText = "display:flex;gap:6px;justify-content:flex-end;";
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = labels.cancel;
+  cancelButton.style.cssText = CSS.action;
+  const downloadButton = document.createElement("button");
+  downloadButton.type = "button";
+  downloadButton.textContent = labels.cogDownload;
+  downloadButton.style.cssText = CSS.primaryButton;
+  buttonRow.append(cancelButton, downloadButton);
+
+  dialog.append(heading, areaBar, sizeLine, resolutionLine, note, status, buttonRow);
+  overlay.appendChild(dialog);
+
+  let area: CogArea = "view";
+  let limits: ExportLimits = { maxWidth: 4096, maxHeight: 4096 };
+  let serviceExtent3857: [number, number, number, number] | null = null;
+  let running = false;
+
+  const refresh = (): void => {
+    // A service with no published extent can only be exported over the map view.
+    areaButtons.extent.disabled = !cogBounds(item, "extent", serviceExtent3857);
+    for (const key of ["view", "extent"] as CogArea[]) {
+      areaButtons[key].style.cssText = key === area ? CSS.filterButtonActive : CSS.filterButton;
+      areaButtons[key].setAttribute("aria-pressed", String(key === area));
+    }
+    if (areaButtons.extent.disabled) areaButtons.extent.style.opacity = "0.5";
+    const bounds = cogBounds(item, area, serviceExtent3857);
+    if (!bounds) {
+      sizeLine.textContent = "";
+      resolutionLine.textContent = "";
+      downloadButton.disabled = true;
+      return;
+    }
+    const size = exportImageSize(bounds, cappedLimits(limits));
+    sizeLine.textContent = labels.cogSize(size.width, size.height);
+    resolutionLine.textContent = labels.cogResolution(formatResolution(bounds, size.width));
+    downloadButton.disabled = running;
+  };
+
+  for (const key of ["view", "extent"] as CogArea[]) {
+    areaButtons[key].addEventListener("click", () => {
+      if (area === key || areaButtons[key].disabled) return;
+      area = key;
+      refresh();
+    });
+  }
+
+  const close = (): void => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+    previouslyFocused?.focus?.();
+    if (closeDetailsDialog === close) closeDetailsDialog = null;
+  };
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && !running) close();
+  };
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay && !running) close();
+  });
+  cancelButton.addEventListener("click", () => {
+    if (!running) close();
+  });
+
+  downloadButton.addEventListener("click", () => {
+    if (running) return;
+    const bounds = cogBounds(item, area, serviceExtent3857);
+    if (!bounds) return;
+    if (!cogSaver) {
+      status.textContent = labels.cogUnavailable;
+      status.style.color = "hsl(var(--destructive))";
+      return;
+    }
+    running = true;
+    downloadButton.disabled = true;
+    status.style.color = "hsl(var(--muted-foreground))";
+    status.textContent = labels.cogDownloading;
+    void downloadCog(item, bounds, limits, (message) => {
+      status.textContent = message;
+    })
+      .then((saved) => {
+        if (saved) {
+          status.textContent = labels.cogDone;
+          close();
+        } else {
+          // The user dismissed the save dialog; leave the modal open so the
+          // download can be retried without re-opening it.
+          status.textContent = "";
+        }
+      })
+      .catch((error: unknown) => {
+        status.style.color = "hsl(var(--destructive))";
+        status.textContent = labels.cogFailed(
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => {
+        running = false;
+        refresh();
+      });
+  });
+
+  document.body.appendChild(overlay);
+  downloadButton.focus();
+  closeDetailsDialog = close;
+  refresh();
+
+  // The caps come from the service, so the first render uses the conservative
+  // default and the sizes are corrected once the metadata lands.
+  void fetchExportLimits(item).then((resolved) => {
+    limits = resolved.limits;
+    serviceExtent3857 = resolved.extent3857;
+    if (overlay.isConnected) refresh();
+  });
+}
+
+/**
+ * Exports the area as a GeoTIFF and hands it to the host to be re-encoded as a
+ * COG and saved.
+ *
+ * @returns True when a file was written, false when the save was cancelled
+ * @throws When the export request fails or returns something other than a TIFF
+ */
+async function downloadCog(
+  item: EarthdataGisItem,
+  bbox3857: [number, number, number, number],
+  limits: ExportLimits,
+  onProgress?: (message: string) => void,
+): Promise<boolean> {
+  if (!cogSaver) return false;
+  let size = exportImageSize(bbox3857, cappedLimits(limits));
+  let lastError: Error | null = null;
+
+  // A service's declared caps are what it accepts as a parameter, not what it
+  // can render: the Planet disaster imagery advertises 15000x4100 but times out
+  // at 4096px and answers 503 at 4977px. Step the request down on failure so a
+  // service that cannot manage the first size still yields a file.
+  for (let attempt = 0; attempt < EXPORT_ATTEMPTS; attempt += 1) {
+    const url = buildExportDownloadUrl(item, bbox3857, size, "tiff");
+    if (!url) return false;
+    if (attempt > 0) onProgress?.(labels.cogRetrying(size.width, size.height));
+    try {
+      const bytes = await fetchExport(url);
+      return cogSaver(bytes, exportFileName(item.title, "tif"));
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const next = { width: Math.round(size.width / 2), height: Math.round(size.height / 2) };
+      if (next.width < EXPORT_MIN_PIXELS && next.height < EXPORT_MIN_PIXELS) break;
+      size = next;
+    }
+  }
+  throw lastError ?? new Error("the export could not be completed");
+}
+
+/**
+ * Requests one export and returns its bytes, bounded by a timeout.
+ *
+ * @param url - The export request URL
+ * @returns The GeoTIFF bytes
+ * @throws With the service's own message when it reports an error, or a
+ *   timeout/status message otherwise
+ */
+async function fetchExport(url: string): Promise<Uint8Array> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), EXPORT_ATTEMPT_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("the service did not respond in time at this size");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) throw new Error(`the service returned ${response.status} at this size`);
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  // ArcGIS answers an invalid export with a JSON error envelope at HTTP 200, so
+  // the TIFF byte-order marker is what actually confirms a raster came back.
+  if ((bytes[0] === 0x49 && bytes[1] === 0x49) || (bytes[0] === 0x4d && bytes[1] === 0x4d)) {
+    return bytes;
+  }
+  throw new Error(
+    arcgisErrorMessage(bytes) ?? "the service did not return a GeoTIFF for this area",
+  );
+}
+
+/** Reads the message out of an ArcGIS JSON error body, when that is what came back. */
+function arcgisErrorMessage(bytes: Uint8Array): string | null {
+  try {
+    const body = JSON.parse(new TextDecoder().decode(bytes.slice(0, 4096))) as {
+      error?: { message?: string };
+    };
+    return body.error?.message ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Clamps a service's declared caps to a size services actually render. */
+function cappedLimits(limits: ExportLimits): ExportLimits {
+  return {
+    maxWidth: Math.min(limits.maxWidth, EXPORT_MAX_PIXELS),
+    maxHeight: Math.min(limits.maxHeight, EXPORT_MAX_PIXELS),
+  };
 }
 
 /** Merges extra metadata onto a store layer that was created elsewhere. */
@@ -1032,6 +1412,18 @@ function buildCard(
   portalButton.title = labels.portalTitle;
   portalButton.addEventListener("click", () => appRef?.openExternalUrl?.(item.itemPageUrl));
 
+  // Only raster services have an export endpoint to re-encode; feature services
+  // and web maps carry no pixels of their own.
+  const cogButton =
+    item.kind === "image" || item.kind === "map" ? document.createElement("button") : null;
+  if (cogButton) {
+    cogButton.type = "button";
+    cogButton.textContent = labels.cog;
+    cogButton.style.cssText = CSS.action;
+    cogButton.title = labels.cogTitle;
+    cogButton.addEventListener("click", () => openCogModal(item));
+  }
+
   const added = isAdded(item);
   const pending = pendingAdds.has(item.id);
   const addButton = document.createElement("button");
@@ -1069,6 +1461,7 @@ function buildCard(
   });
 
   actions.append(detailsButton, portalButton, zoomButton, addButton);
+  if (cogButton) actions.appendChild(cogButton);
 
   const body = document.createElement("div");
   body.style.cssText = CSS.body;

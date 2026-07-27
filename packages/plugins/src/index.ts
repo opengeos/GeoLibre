@@ -343,7 +343,9 @@ export {
   DEFAULT_EARTHDATA_GIS_LABELS,
   EARTHDATA_GIS_PLUGIN_ID,
   maplibreEarthdataGisPlugin,
+  setEarthdataCogSaver,
   setEarthdataGisLabels,
+  type EarthdataCogSaver,
   type EarthdataGisLabels,
 } from "./plugins/maplibre-earthdata-gis";
 // The catalog client's helpers (buildSearchUrl, parseSearchResponse, …) are

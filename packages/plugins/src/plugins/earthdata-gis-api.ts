@@ -318,6 +318,200 @@ export function buildExportTileUrl(item: EarthdataGisItem): string | null {
   return `${base}/${operation}?${query}`;
 }
 
+/** Fallback export size cap, used when a service declares none. */
+const DEFAULT_MAX_EXPORT_PIXELS = 4096;
+
+/** A service's `exportImage` pixel-dimension caps. */
+export interface ExportLimits {
+  maxWidth: number;
+  maxHeight: number;
+}
+
+/** Projects a WGS84 coordinate to web-mercator metres. */
+export function toMercator(longitude: number, latitude: number): [number, number] {
+  const clamped = Math.max(-85.05112878, Math.min(85.05112878, latitude));
+  return [
+    (longitude * 20037508.34) / 180,
+    (Math.log(Math.tan(((90 + clamped) * Math.PI) / 360)) / (Math.PI / 180)) * (20037508.34 / 180),
+  ];
+}
+
+/** Converts a WGS84 [w, s, e, n] bbox to a web-mercator one. */
+export function bboxToMercator(
+  bbox: [number, number, number, number],
+): [number, number, number, number] {
+  const [west, south, east, north] = bbox;
+  const [xmin, ymin] = toMercator(west, south);
+  const [xmax, ymax] = toMercator(east, north);
+  return [xmin, ymin, xmax, ymax];
+}
+
+/**
+ * Chooses the pixel dimensions for a one-shot `exportImage` request.
+ *
+ * ArcGIS refuses a request past the service's `maxImageWidth`/`maxImageHeight`,
+ * so the box's aspect ratio is preserved while the long side is pulled down to
+ * whichever cap binds first. The result is a resampled view of the extent, not
+ * the source raster at native resolution.
+ *
+ * @param bbox3857 - The area to export, in web-mercator metres
+ * @param limits - The service's declared caps
+ * @returns Integer pixel dimensions, each at least 1
+ */
+export function exportImageSize(
+  bbox3857: [number, number, number, number],
+  limits: ExportLimits,
+): { width: number; height: number } {
+  const [xmin, ymin, xmax, ymax] = bbox3857;
+  const spanX = Math.abs(xmax - xmin);
+  const spanY = Math.abs(ymax - ymin);
+  const maxWidth = Math.max(1, Math.floor(limits.maxWidth));
+  const maxHeight = Math.max(1, Math.floor(limits.maxHeight));
+  if (!(spanX > 0) || !(spanY > 0)) return { width: maxWidth, height: maxHeight };
+  // Start from the cap on the longer axis, then let the binding cap win.
+  const scale = Math.min(maxWidth / spanX, maxHeight / spanY);
+  return {
+    width: Math.max(1, Math.min(maxWidth, Math.round(spanX * scale))),
+    height: Math.max(1, Math.min(maxHeight, Math.round(spanY * scale))),
+  };
+}
+
+/**
+ * Builds a concrete (non-templated) export URL for one area, used for the
+ * GeoTIFF download rather than for map tiles.
+ *
+ * @param item - An image or map service item
+ * @param bbox3857 - The area to export, in web-mercator metres
+ * @param size - Pixel dimensions from {@link exportImageSize}
+ * @param format - ArcGIS export format. @default "tiff"
+ * @returns The request URL, or null for an item that cannot be exported
+ */
+export function buildExportDownloadUrl(
+  item: EarthdataGisItem,
+  bbox3857: [number, number, number, number],
+  size: { width: number; height: number },
+  format = "tiff",
+): string | null {
+  if (item.kind !== "image" && item.kind !== "map") return null;
+  if (!HTTP_URL_RE.test(item.url)) return null;
+  const operation = item.kind === "image" ? "exportImage" : "export";
+  const sublayer = /^(.*\/MapServer)\/(\d+)$/.exec(trimTrailingSlash(item.url));
+  const base = sublayer ? sublayer[1] : trimTrailingSlash(item.url);
+  const params = new URLSearchParams({
+    bbox: bbox3857.join(","),
+    bboxSR: "3857",
+    imageSR: "3857",
+    size: `${size.width},${size.height}`,
+    format,
+    // Keeps areas outside the mosaic transparent rather than black, which
+    // matters once the export is re-encoded as a COG.
+    transparent: "true",
+    f: "image",
+  });
+  if (sublayer) params.set("layers", `show:${sublayer[2]}`);
+  return `${base}/${operation}?${params.toString()}`;
+}
+
+/** What a service's own metadata contributes to an export request. */
+export interface ServiceExportInfo {
+  /** The service's declared pixel caps, or a conservative default. */
+  limits: ExportLimits;
+  /**
+   * The service's own full extent in web-mercator metres, used when the portal
+   * item declares none. Many items ship an empty `extent: []` (every GSSICB
+   * coherence service does), which would otherwise leave "Full extent"
+   * permanently unavailable even though the service publishes one.
+   */
+  extent3857: [number, number, number, number] | null;
+}
+
+/** Reads an ArcGIS extent object as a web-mercator box, whatever SR it is in. */
+function arcgisExtentToMercator(value: unknown): [number, number, number, number] | null {
+  if (!value || typeof value !== "object") return null;
+  const extent = value as {
+    xmin?: unknown;
+    ymin?: unknown;
+    xmax?: unknown;
+    ymax?: unknown;
+    spatialReference?: { latestWkid?: number; wkid?: number };
+  };
+  const box = [extent.xmin, extent.ymin, extent.xmax, extent.ymax];
+  if (!box.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+  const [xmin, ymin, xmax, ymax] = box as [number, number, number, number];
+  if (xmin >= xmax || ymin >= ymax) return null;
+  const wkid = extent.spatialReference?.latestWkid ?? extent.spatialReference?.wkid;
+  if (METRE_BASED_WKIDS.has(wkid ?? 0)) return [xmin, ymin, xmax, ymax];
+  if (wkid === 4326) return bboxToMercator([xmin, ymin, xmax, ymax]);
+  return null;
+}
+
+/**
+ * Reads a service's export pixel caps and its own full extent, falling back to
+ * conservative defaults when the service does not declare them or cannot be
+ * reached.
+ *
+ * @param item - An image or map service item
+ * @param fetchImpl - Fetch-like function (defaults to the global `fetch`)
+ * @param signal - Aborts the request
+ * @returns The service's caps and extent
+ */
+export async function fetchExportLimits(
+  item: EarthdataGisItem,
+  fetchImpl: EarthdataGisFetch = defaultFetch,
+  signal?: AbortSignal,
+): Promise<ServiceExportInfo> {
+  const fallback: ServiceExportInfo = {
+    limits: { maxWidth: DEFAULT_MAX_EXPORT_PIXELS, maxHeight: DEFAULT_MAX_EXPORT_PIXELS },
+    extent3857: null,
+  };
+  try {
+    const response = await fetchImpl(`${trimTrailingSlash(item.url)}?f=json`, signal);
+    if (!response.ok) return fallback;
+    const metadata = (await response.json()) as {
+      maxImageWidth?: unknown;
+      maxImageHeight?: unknown;
+      fullExtent?: unknown;
+      extent?: unknown;
+    };
+    const width = metadata.maxImageWidth;
+    const height = metadata.maxImageHeight;
+    return {
+      limits: {
+        maxWidth:
+          typeof width === "number" && Number.isFinite(width) && width > 0
+            ? width
+            : fallback.limits.maxWidth,
+        maxHeight:
+          typeof height === "number" && Number.isFinite(height) && height > 0
+            ? height
+            : fallback.limits.maxHeight,
+      },
+      extent3857:
+        arcgisExtentToMercator(metadata.fullExtent) ?? arcgisExtentToMercator(metadata.extent),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Builds a filesystem-safe file name for a downloaded service export.
+ *
+ * @param title - The item title
+ * @param extension - File extension without the dot
+ * @returns A sanitized file name
+ */
+export function exportFileName(title: string, extension: string): string {
+  const stem =
+    asText(title)
+      .replace(/[^\w\s.-]+/g, " ")
+      .replace(/\s+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^[._-]+|[._-]+$/g, "")
+      .slice(0, 80) || "earthdata_gis";
+  return `${stem}.${extension}`;
+}
+
 /**
  * Builds the URL of a Web Map item's data document, which holds its
  * `operationalLayers`.

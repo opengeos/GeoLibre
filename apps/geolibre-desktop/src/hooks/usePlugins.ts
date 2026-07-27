@@ -23,6 +23,7 @@ import {
   setEffectsSettings,
   type EffectsSettings,
   maplibreEarthdataGisPlugin,
+  setEarthdataCogSaver,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
   maplibreFemaWmsPlugin,
@@ -203,6 +204,25 @@ setTimelapseVideoSaver((blob, { defaultName, extension, mimeType }) =>
     mimeType,
   }),
 );
+
+// The Earthdata GIS plugin exports an ArcGIS service as a plain GeoTIFF but
+// cannot re-encode it: ArcGIS has no COG output (`format=cog` falls back to
+// PNG, and `format=tiff` returns a tiled file with no overviews), and the
+// plugins package owns neither the COG encoder nor the app's file dialogs. Both
+// are injected here once at startup, mirroring setTimelapseVideoSaver.
+setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
+  // Imported on demand so the COG encoder's WASM is only fetched when a user
+  // actually downloads one.
+  const { convertGeoTiffToCog } = await import("@geolibre/processing");
+  const cogBytes = await convertGeoTiffToCog(geoTiffBytes);
+  const saved = await saveBinaryFileWithFallback(cogBytes, {
+    defaultName,
+    filters: [{ name: "Cloud Optimized GeoTIFF", extensions: ["tif"] }],
+    browserTypes: [{ description: "Cloud Optimized GeoTIFF", accept: { "image/tiff": [".tif"] } }],
+    mimeType: "image/tiff",
+  });
+  return saved !== null;
+});
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
