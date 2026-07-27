@@ -7,10 +7,7 @@ import {
 } from "maplibre-gl-overture-maps";
 import Pbf from "pbf";
 import { PMTiles } from "pmtiles";
-import type {
-  GeoLibreOvertureQuery,
-  GeoLibreOvertureQueryResult,
-} from "../types";
+import type { GeoLibreOvertureQuery, GeoLibreOvertureQueryResult } from "../types";
 
 const WEB_MERCATOR_MAX_LAT = 85.05112878;
 const DEFAULT_ZOOM = 12;
@@ -40,9 +37,7 @@ function assertBBox(value: BBox): void {
     south < -90 ||
     north > 90
   ) {
-    throw new Error(
-      "Overture query bbox must be a valid [west, south, east, north] extent."
-    );
+    throw new Error("Overture query bbox must be a valid [west, south, east, north] extent.");
   }
 }
 
@@ -52,26 +47,18 @@ function clampLatitude(value: number): number {
 
 function longitudeTileX(longitude: number, zoom: number): number {
   const scale = 2 ** zoom;
-  return Math.max(
-    0,
-    Math.min(scale - 1, Math.floor(((longitude + 180) / 360) * scale))
-  );
+  return Math.max(0, Math.min(scale - 1, Math.floor(((longitude + 180) / 360) * scale)));
 }
 
 function latitudeTileY(latitude: number, zoom: number): number {
   const radians = (clampLatitude(latitude) * Math.PI) / 180;
   const scale = 2 ** zoom;
-  const y = Math.floor(
-    ((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2) * scale
-  );
+  const y = Math.floor(((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2) * scale);
   return Math.max(0, Math.min(scale - 1, y));
 }
 
 /** Enumerate XYZ tiles covering a WGS84 bbox at a fixed zoom. */
-export function overtureTilesForBBox(
-  bbox: BBox,
-  zoom: number
-): TileCoordinate[] {
+export function overtureTilesForBBox(bbox: BBox, zoom: number): TileCoordinate[] {
   assertBBox(bbox);
   const [west, south, east, north] = bbox;
   const minX = longitudeTileX(west, zoom);
@@ -138,17 +125,10 @@ function bboxesIntersect(first: BBox, second: BBox): boolean {
 function pointInRing(point: Position, ring: Position[]): boolean {
   const [x, y] = point;
   let inside = false;
-  for (
-    let index = 0, previous = ring.length - 1;
-    index < ring.length;
-    previous = index++
-  ) {
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
     const [xi, yi] = ring[index];
     const [xj, yj] = ring[previous];
-    if (
-      yi > y !== yj > y &&
-      x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi
-    ) {
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi) {
       inside = !inside;
     }
   }
@@ -156,8 +136,7 @@ function pointInRing(point: Position, ring: Position[]): boolean {
 }
 
 function pointInArea(point: Position, geometry: AreaGeometry): boolean {
-  const polygons =
-    geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
   return polygons.some(([outer, ...holes]) => {
     if (!outer || !pointInRing(point, outer)) return false;
     return !holes.some((hole) => pointInRing(point, hole));
@@ -166,16 +145,11 @@ function pointInArea(point: Position, geometry: AreaGeometry): boolean {
 
 function cross(first: Position, second: Position, third: Position): number {
   return (
-    (second[0] - first[0]) * (third[1] - first[1]) -
-    (second[1] - first[1]) * (third[0] - first[0])
+    (second[0] - first[0]) * (third[1] - first[1]) - (second[1] - first[1]) * (third[0] - first[0])
   );
 }
 
-function onSegment(
-  first: Position,
-  second: Position,
-  point: Position
-): boolean {
+function onSegment(first: Position, second: Position, point: Position): boolean {
   return (
     Math.abs(cross(first, second, point)) < 1e-12 &&
     point[0] >= Math.min(first[0], second[0]) &&
@@ -189,16 +163,13 @@ function segmentsIntersect(
   firstStart: Position,
   firstEnd: Position,
   secondStart: Position,
-  secondEnd: Position
+  secondEnd: Position,
 ): boolean {
   const d1 = cross(firstStart, firstEnd, secondStart);
   const d2 = cross(firstStart, firstEnd, secondEnd);
   const d3 = cross(secondStart, secondEnd, firstStart);
   const d4 = cross(secondStart, secondEnd, firstEnd);
-  if (
-    ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
-  ) {
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
     return true;
   }
   return (
@@ -211,7 +182,7 @@ function segmentsIntersect(
 
 function areaRings(areas: AreaGeometry[]): Position[][] {
   return areas.flatMap((area) =>
-    area.type === "Polygon" ? area.coordinates : area.coordinates.flat()
+    area.type === "Polygon" ? area.coordinates : area.coordinates.flat(),
   );
 }
 
@@ -223,14 +194,7 @@ function lineIntersectsAreas(line: Position[], areas: AreaGeometry[]): boolean {
   for (let index = 1; index < line.length; index += 1) {
     for (const ring of rings) {
       for (let edge = 1; edge < ring.length; edge += 1) {
-        if (
-          segmentsIntersect(
-            line[index - 1],
-            line[index],
-            ring[edge - 1],
-            ring[edge]
-          )
-        ) {
+        if (segmentsIntersect(line[index - 1], line[index], ring[edge - 1], ring[edge])) {
           return true;
         }
       }
@@ -246,12 +210,10 @@ function areaGeometries(filter?: Geometry | FeatureCollection): AreaGeometry[] {
       .map((feature) => feature.geometry)
       .filter(
         (geometry): geometry is AreaGeometry =>
-          geometry?.type === "Polygon" || geometry?.type === "MultiPolygon"
+          geometry?.type === "Polygon" || geometry?.type === "MultiPolygon",
       );
   }
-  return filter.type === "Polygon" || filter.type === "MultiPolygon"
-    ? [filter]
-    : [];
+  return filter.type === "Polygon" || filter.type === "MultiPolygon" ? [filter] : [];
 }
 
 function geometryCentroid(geometry: Geometry): Position | null {
@@ -259,9 +221,8 @@ function geometryCentroid(geometry: Geometry): Position | null {
   collectPositions(geometry, positions);
   if (!positions.length) return null;
   const sum = positions.reduce(
-    (current, [longitude, latitude]) =>
-      [current[0] + longitude, current[1] + latitude] as Position,
-    [0, 0] as Position
+    (current, [longitude, latitude]) => [current[0] + longitude, current[1] + latitude] as Position,
+    [0, 0] as Position,
   );
   return [sum[0] / positions.length, sum[1] / positions.length];
 }
@@ -270,7 +231,7 @@ function geometryCentroid(geometry: Geometry): Position | null {
 export function overtureFeatureMatchesFilter(
   feature: Feature,
   filter: Geometry | FeatureCollection | undefined,
-  mode: "centroid-within" | "intersects" = "intersects"
+  mode: "centroid-within" | "intersects" = "intersects",
 ): boolean {
   if (!feature.geometry || !filter) return true;
   const areas = areaGeometries(filter);
@@ -284,27 +245,20 @@ export function overtureFeatureMatchesFilter(
     return areas.some((area) => pointInArea(geometry.coordinates, area));
   }
   if (geometry.type === "MultiPoint") {
-    return geometry.coordinates.some((point) =>
-      areas.some((area) => pointInArea(point, area))
-    );
+    return geometry.coordinates.some((point) => areas.some((area) => pointInArea(point, area)));
   }
   if (geometry.type === "LineString") {
     return lineIntersectsAreas(geometry.coordinates, areas);
   }
   if (geometry.type === "MultiLineString") {
-    return geometry.coordinates.some((line) =>
-      lineIntersectsAreas(line, areas)
-    );
+    return geometry.coordinates.some((line) => lineIntersectsAreas(line, areas));
   }
   const center = geometryCentroid(geometry);
   return !!center && areas.some((area) => pointInArea(center, area));
 }
 
 function overtureArchiveUrl(release: string, theme: OvertureTheme): string {
-  return `${DEFAULT_TILES_BASE_URL.replace(
-    /\/+$/,
-    ""
-  )}/${release}/${theme}.pmtiles`;
+  return `${DEFAULT_TILES_BASE_URL.replace(/\/+$/, "")}/${release}/${theme}.pmtiles`;
 }
 
 /**
@@ -315,16 +269,16 @@ function overtureArchiveUrl(release: string, theme: OvertureTheme): string {
  * polygons can span tile boundaries.
  */
 export async function queryOvertureFeatures(
-  query: GeoLibreOvertureQuery
+  query: GeoLibreOvertureQuery,
 ): Promise<GeoLibreOvertureQueryResult> {
   assertBBox(query.bbox);
   const maxTiles = Math.min(
     MAX_TILES,
-    Math.max(1, Math.floor(query.maxTiles ?? DEFAULT_MAX_TILES))
+    Math.max(1, Math.floor(query.maxTiles ?? DEFAULT_MAX_TILES)),
   );
   const maxFeatures = Math.min(
     MAX_FEATURES,
-    Math.max(1, Math.floor(query.maxFeatures ?? DEFAULT_MAX_FEATURES))
+    Math.max(1, Math.floor(query.maxFeatures ?? DEFAULT_MAX_FEATURES)),
   );
   let zoom = Math.max(0, Math.min(14, Math.floor(query.zoom ?? DEFAULT_ZOOM)));
   let tiles = overtureTilesForBBox(query.bbox, zoom);
@@ -334,7 +288,7 @@ export async function queryOvertureFeatures(
   }
   if (tiles.length > maxTiles) {
     throw new Error(
-      `Overture query covers ${tiles.length} tiles, above the ${maxTiles}-tile limit.`
+      `Overture query covers ${tiles.length} tiles, above the ${maxTiles}-tile limit.`,
     );
   }
 
@@ -345,62 +299,42 @@ export async function queryOvertureFeatures(
   let truncated = false;
   let nextTile = 0;
 
-  const workers = Array.from(
-    { length: Math.min(DEFAULT_CONCURRENCY, tiles.length) },
-    async () => {
-      while (nextTile < tiles.length && !truncated) {
-        if (query.signal?.aborted)
-          throw new DOMException("Aborted", "AbortError");
-        const tile = tiles[nextTile];
-        nextTile += 1;
-        const response = await archive.getZxy(
-          tile.z,
-          tile.x,
-          tile.y,
-          query.signal
-        );
-        if (!response) continue;
-        if (truncated) return;
-        const vectorTile = new VectorTile(new Pbf(response.data));
-        const source = vectorTile.layers[query.sourceLayer];
-        if (!source) continue;
-        for (let index = 0; index < source.length; index += 1) {
-          const vectorFeature = source.feature(index);
-          const feature = vectorFeature.toGeoJSON(
-            tile.x,
-            tile.y,
-            tile.z
-          ) as Feature;
-          if (!feature.geometry) continue;
-          const featureBox = geometryBBox(feature.geometry);
-          if (!featureBox || !bboxesIntersect(featureBox, query.bbox)) continue;
-          if (
-            !overtureFeatureMatchesFilter(
-              feature,
-              query.filterGeometry,
-              query.filterMode
-            )
-          ) {
-            continue;
-          }
-          matchedFeatureCount += 1;
-          if (features.length >= maxFeatures) {
-            truncated = true;
-            break;
-          }
-          feature.properties = {
-            ...(feature.properties ?? {}),
-            _overture_id:
-              vectorFeature.id === undefined ? null : String(vectorFeature.id),
-            _overture_release: release,
-            _overture_theme: query.theme,
-            _overture_source_layer: query.sourceLayer,
-          };
-          features.push(feature);
+  const workers = Array.from({ length: Math.min(DEFAULT_CONCURRENCY, tiles.length) }, async () => {
+    while (nextTile < tiles.length && !truncated) {
+      if (query.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const tile = tiles[nextTile];
+      nextTile += 1;
+      const response = await archive.getZxy(tile.z, tile.x, tile.y, query.signal);
+      if (!response) continue;
+      if (truncated) return;
+      const vectorTile = new VectorTile(new Pbf(response.data));
+      const source = vectorTile.layers[query.sourceLayer];
+      if (!source) continue;
+      for (let index = 0; index < source.length; index += 1) {
+        const vectorFeature = source.feature(index);
+        const feature = vectorFeature.toGeoJSON(tile.x, tile.y, tile.z) as Feature;
+        if (!feature.geometry) continue;
+        const featureBox = geometryBBox(feature.geometry);
+        if (!featureBox || !bboxesIntersect(featureBox, query.bbox)) continue;
+        if (!overtureFeatureMatchesFilter(feature, query.filterGeometry, query.filterMode)) {
+          continue;
         }
+        matchedFeatureCount += 1;
+        if (features.length >= maxFeatures) {
+          truncated = true;
+          break;
+        }
+        feature.properties = {
+          ...(feature.properties ?? {}),
+          _overture_id: vectorFeature.id === undefined ? null : String(vectorFeature.id),
+          _overture_release: release,
+          _overture_theme: query.theme,
+          _overture_source_layer: query.sourceLayer,
+        };
+        features.push(feature);
       }
     }
-  );
+  });
   await Promise.all(workers);
 
   return {

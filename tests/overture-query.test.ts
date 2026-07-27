@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
-import type {
-  OvertureMapsState,
-  OvertureTheme,
-} from "maplibre-gl-overture-maps";
+import type { OvertureMapsState, OvertureTheme } from "maplibre-gl-overture-maps";
 import { mergeOvertureMapsState } from "../packages/plugins/src/plugins/maplibre-overture-maps";
 import {
   overtureFeatureMatchesFilter,
@@ -80,15 +77,9 @@ describe("Overture PMTiles query helpers", () => {
       },
     };
 
-    assert.equal(
-      overtureFeatureMatchesFilter(building, flood, "centroid-within"),
-      true
-    );
+    assert.equal(overtureFeatureMatchesFilter(building, flood, "centroid-within"), true);
     assert.equal(overtureFeatureMatchesFilter(road, flood, "intersects"), true);
-    assert.equal(
-      overtureFeatureMatchesFilter(outside, flood, "intersects"),
-      false
-    );
+    assert.equal(overtureFeatureMatchesFilter(outside, flood, "intersects"), false);
   });
 });
 
