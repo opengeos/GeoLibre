@@ -377,6 +377,29 @@ export function exportImageSize(
 }
 
 /**
+ * Halves an export size for the next retry, or reports that the ladder is
+ * exhausted.
+ *
+ * The floor is compared against the **longer** side. Testing both sides made it
+ * per-axis-independent — a 2048x512 request would keep halving as long as the
+ * width alone cleared the floor — while testing the shorter side would stop the
+ * ladder after one step for an ordinary 16:9 view, which is exactly the case
+ * the retry exists to rescue.
+ *
+ * @param size - The size that just failed
+ * @param minPixels - Smallest longer-side export worth attempting
+ * @returns The next size to try, or null when nothing smaller is worth asking for
+ */
+export function nextExportSize(
+  size: { width: number; height: number },
+  minPixels: number,
+): { width: number; height: number } | null {
+  const next = { width: Math.round(size.width / 2), height: Math.round(size.height / 2) };
+  if (Math.max(next.width, next.height) < minPixels) return null;
+  return next;
+}
+
+/**
  * Builds a concrete (non-templated) export URL for one area, used for the
  * GeoTIFF download rather than for map tiles.
  *

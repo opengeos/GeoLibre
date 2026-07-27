@@ -19,6 +19,7 @@ import {
   exportFileName,
   exportImageSize,
   fetchExportLimits,
+  nextExportSize,
   parseMaxPixelSize,
   parseSearchResponse,
   parseWebMapLayers,
@@ -556,6 +557,35 @@ describe("earthdata gis api", () => {
       it("never returns a zero dimension for a degenerate box", () => {
         const size = exportImageSize([0, 0, 0, 0], { maxWidth: 4096, maxHeight: 4096 });
         assert.ok(size.width >= 1 && size.height >= 1);
+      });
+    });
+
+    describe("nextExportSize", () => {
+      it("halves a square export until the floor", () => {
+        assert.deepEqual(nextExportSize({ width: 2048, height: 2048 }, 512), {
+          width: 1024,
+          height: 1024,
+        });
+        assert.equal(nextExportSize({ width: 512, height: 512 }, 512), null);
+      });
+
+      it("keeps stepping a 16:9 view down, where the retry is most useful", () => {
+        // Gating on the shorter side would stop after one step here.
+        assert.deepEqual(nextExportSize({ width: 2048, height: 1152 }, 512), {
+          width: 1024,
+          height: 576,
+        });
+        assert.deepEqual(nextExportSize({ width: 1024, height: 576 }, 512), {
+          width: 512,
+          height: 288,
+        });
+      });
+
+      it("stops once the longer side falls under the floor", () => {
+        // The previous guard tested both axes, so a thin export kept halving as
+        // long as its width alone cleared the floor.
+        assert.equal(nextExportSize({ width: 512, height: 128 }, 512), null);
+        assert.equal(nextExportSize({ width: 900, height: 100 }, 512), null);
       });
     });
 

@@ -32,6 +32,7 @@ import {
   fetchMinVisibleZoom,
   fetchWebMapLayers,
   HTTP_URL_RE,
+  nextExportSize,
   searchEarthdataGis,
   type WebMapLayer,
   webMapLayerAsItem,
@@ -135,7 +136,8 @@ export interface EarthdataGisLabels {
   cogDownload: string;
   cogDownloading: string;
   cogRetrying: (width: number, height: number) => string;
-  cogDone: string;
+  cogConverting: string;
+  cogDone: (width: number, height: number) => string;
   cogFailed: (message: string) => string;
   cogUnavailable: string;
   cancel: string;
@@ -212,7 +214,8 @@ export const DEFAULT_EARTHDATA_GIS_LABELS: EarthdataGisLabels = {
   cogDownloading: "Exporting and converting…",
   cogRetrying: (width, height) =>
     `The service refused that size; retrying at ${width} x ${height} px…`,
-  cogDone: "Saved the COG.",
+  cogConverting: "Converting to a COG…",
+  cogDone: (width, height) => `Saved the COG at ${width} x ${height} px.`,
   cogFailed: (message) => `Could not download the COG: ${message}`,
   cogUnavailable: "Downloading requires the desktop app or a browser save dialog.",
   cancel: "Cancel",
@@ -696,6 +699,10 @@ function openCogModal(item: EarthdataGisItem): void {
   let limits: ExportLimits = { maxWidth: 4096, maxHeight: 4096 };
   let serviceExtent3857: [number, number, number, number] | null = null;
   let running = false;
+  // Set while an export is in flight so Cancel / Escape / the backdrop can stop
+  // it: the retry ladder can otherwise hold the dialog for the better part of
+  // two minutes with no way out.
+  let inflight: AbortController | null = null;
 
   const refresh = (): void => {
     // A service with no published extent can only be exported over the map view.
@@ -727,20 +734,20 @@ function openCogModal(item: EarthdataGisItem): void {
   }
 
   const close = (): void => {
+    inflight?.abort();
+    inflight = null;
     overlay.remove();
     document.removeEventListener("keydown", onKey);
     previouslyFocused?.focus?.();
     if (closeDetailsDialog === close) closeDetailsDialog = null;
   };
   const onKey = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && !running) close();
+    if (event.key === "Escape") close();
   };
   overlay.addEventListener("click", (event) => {
-    if (event.target === overlay && !running) close();
+    if (event.target === overlay) close();
   });
-  cancelButton.addEventListener("click", () => {
-    if (!running) close();
-  });
+  cancelButton.addEventListener("click", close);
 
   downloadButton.addEventListener("click", () => {
     if (running) return;
@@ -755,12 +762,23 @@ function openCogModal(item: EarthdataGisItem): void {
     downloadButton.disabled = true;
     status.style.color = "hsl(var(--muted-foreground))";
     status.textContent = labels.cogDownloading;
-    void downloadCog(item, bounds, limits, (message) => {
-      status.textContent = message;
-    })
-      .then((saved) => {
-        if (saved) {
-          status.textContent = labels.cogDone;
+    const controller = new AbortController();
+    inflight = controller;
+    void downloadCog(
+      item,
+      bounds,
+      limits,
+      (message) => {
+        status.textContent = message;
+      },
+      controller.signal,
+    )
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        if (result.saved && result.size) {
+          // Report the size actually delivered: the retry ladder may have
+          // stepped it below what the dialog previewed.
+          status.textContent = labels.cogDone(result.size.width, result.size.height);
           close();
         } else {
           // The user dismissed the save dialog; leave the modal open so the
@@ -769,6 +787,7 @@ function openCogModal(item: EarthdataGisItem): void {
         }
       })
       .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
         status.style.color = "hsl(var(--destructive))";
         status.textContent = labels.cogFailed(
           error instanceof Error ? error.message : String(error),
@@ -776,7 +795,8 @@ function openCogModal(item: EarthdataGisItem): void {
       })
       .finally(() => {
         running = false;
-        refresh();
+        if (inflight === controller) inflight = null;
+        if (overlay.isConnected) refresh();
       });
   });
 
@@ -794,11 +814,18 @@ function openCogModal(item: EarthdataGisItem): void {
   });
 }
 
+/** What a COG download produced: whether a file was written, and at what size. */
+interface CogDownloadResult {
+  saved: boolean;
+  /** The size actually exported, which the retry ladder may have reduced. */
+  size: { width: number; height: number } | null;
+}
+
 /**
  * Exports the area as a GeoTIFF and hands it to the host to be re-encoded as a
  * COG and saved.
  *
- * @returns True when a file was written, false when the save was cancelled
+ * @returns Whether a file was written, and the size it was exported at
  * @throws When the export request fails or returns something other than a TIFF
  */
 async function downloadCog(
@@ -806,8 +833,9 @@ async function downloadCog(
   bbox3857: [number, number, number, number],
   limits: ExportLimits,
   onProgress?: (message: string) => void,
-): Promise<boolean> {
-  if (!cogSaver) return false;
+  signal?: AbortSignal,
+): Promise<CogDownloadResult> {
+  if (!cogSaver) return { saved: false, size: null };
   let size = exportImageSize(bbox3857, cappedLimits(limits));
   let lastError: Error | null = null;
 
@@ -816,16 +844,21 @@ async function downloadCog(
   // at 4096px and answers 503 at 4977px. Step the request down on failure so a
   // service that cannot manage the first size still yields a file.
   for (let attempt = 0; attempt < EXPORT_ATTEMPTS; attempt += 1) {
+    if (signal?.aborted) return { saved: false, size: null };
     const url = buildExportDownloadUrl(item, bbox3857, size, "tiff");
-    if (!url) return false;
+    if (!url) return { saved: false, size: null };
     if (attempt > 0) onProgress?.(labels.cogRetrying(size.width, size.height));
     try {
-      const bytes = await fetchExport(url);
-      return cogSaver(bytes, exportFileName(item.title, "tif"));
+      const bytes = await fetchExport(url, signal);
+      onProgress?.(labels.cogConverting);
+      const saved = await cogSaver(bytes, exportFileName(item.title, "tif"));
+      return { saved, size };
     } catch (error) {
+      // A cancel is the user's decision, not a failure to retry or report.
+      if (signal?.aborted) return { saved: false, size: null };
       lastError = error instanceof Error ? error : new Error(String(error));
-      const next = { width: Math.round(size.width / 2), height: Math.round(size.height / 2) };
-      if (next.width < EXPORT_MIN_PIXELS && next.height < EXPORT_MIN_PIXELS) break;
+      const next = nextExportSize(size, EXPORT_MIN_PIXELS);
+      if (!next) break;
       size = next;
     }
   }
@@ -840,19 +873,26 @@ async function downloadCog(
  * @throws With the service's own message when it reports an error, or a
  *   timeout/status message otherwise
  */
-async function fetchExport(url: string): Promise<Uint8Array> {
+async function fetchExport(url: string, signal?: AbortSignal): Promise<Uint8Array> {
+  // One controller fed by both the per-attempt deadline and the caller's cancel,
+  // so either can stop the request. (AbortSignal.any would do this, but it is
+  // newer than the browsers this app still targets.)
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), EXPORT_ATTEMPT_TIMEOUT_MS);
+  const onCancel = (): void => controller.abort();
+  signal?.addEventListener("abort", onCancel);
   let response: Response;
   try {
     response = await fetch(url, { signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
+      if (signal?.aborted) throw error;
       throw new Error("the service did not respond in time at this size");
     }
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", onCancel);
   }
   if (!response.ok) throw new Error(`the service returned ${response.status} at this size`);
 
