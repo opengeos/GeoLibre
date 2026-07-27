@@ -18,10 +18,12 @@ import {
   isFlying,
   normalizeFlightSimulatorSettings,
   openFlightSimulatorPanel,
+  reattachFlightSimulator,
   restoreFlightSimulator,
   setFlightSimulatorSettings,
   startFlying,
   stopFlying,
+  subscribeFlightHud,
 } from "../packages/plugins/src/plugins/flight-simulator";
 import {
   DEFAULT_FLIGHT_MODEL,
@@ -421,6 +423,31 @@ describe("normalizeFlightSimulatorSettings", () => {
     assert.deepEqual(settings, DEFAULT_FLIGHT_SIMULATOR_SETTINGS);
   });
 
+  it("falls back to the defaults for values that coerce to zero", () => {
+    // `Number(null)`, `Number("")` and `Number([])` are all 0 — finite, so a
+    // bare `Number()` would clamp these to the range minimum (30 m/s, 5 m)
+    // rather than restoring the documented default.
+    for (const junk of [null, "", [], "   "]) {
+      const settings = normalizeFlightSimulatorSettings({
+        maxSpeedMps: junk,
+        minAltitudeAglMeters: junk,
+      });
+      assert.equal(
+        settings.maxSpeedMps,
+        DEFAULT_FLIGHT_SIMULATOR_SETTINGS.maxSpeedMps,
+        `${JSON.stringify(junk)} should fall back, not clamp`,
+      );
+      assert.equal(
+        settings.minAltitudeAglMeters,
+        DEFAULT_FLIGHT_SIMULATOR_SETTINGS.minAltitudeAglMeters,
+      );
+    }
+  });
+
+  it("still accepts a numeric string", () => {
+    assert.equal(normalizeFlightSimulatorSettings({ maxSpeedMps: "120" }).maxSpeedMps, 120);
+  });
+
   it("keeps valid non-default choices", () => {
     const settings = normalizeFlightSimulatorSettings({
       units: "metric",
@@ -635,11 +662,27 @@ function stubMap() {
   };
 }
 
-/** Install a minimal `window` so the engine can install listeners and tick. */
-function withStubWindow<T>(run: (pump: () => void) => T): T {
+/** What {@link withStubWindow} hands the test: frame stepping plus key input. */
+interface StubWindow {
+  /** Advance one 60 Hz frame and run whatever the engine scheduled. */
+  pump: () => void;
+  /** Press a physical key code (e.g. "PageUp"), as the engine's listener sees it. */
+  hold: (code: string) => void;
+  /** Release a physical key code. */
+  release: (code: string) => void;
+}
+
+/**
+ * Install a minimal `window` so the engine can install its listeners and tick.
+ *
+ * The key listeners are captured rather than discarded, so a test can hold a
+ * control axis down across frames the way a user does.
+ */
+function withStubWindow<T>(run: (stub: StubWindow) => T): T {
   const original = (globalThis as { window?: unknown }).window;
   let frame: ((now: number) => void) | null = null;
   let clock = 0;
+  const listeners = new Map<string, (event: unknown) => void>();
   (globalThis as { window?: unknown }).window = {
     requestAnimationFrame: (cb: (now: number) => void) => {
       frame = cb;
@@ -648,18 +691,36 @@ function withStubWindow<T>(run: (pump: () => void) => T): T {
     cancelAnimationFrame: () => {
       frame = null;
     },
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: (type: string, handler: (event: unknown) => void) => {
+      listeners.set(type, handler);
+    },
+    removeEventListener: (type: string) => {
+      listeners.delete(type);
+    },
   };
-  // Advance the clock by one 60 Hz frame and run whatever the engine scheduled.
-  const pump = () => {
-    const next = frame;
-    frame = null;
-    clock += 16;
-    next?.(clock);
+  const dispatch = (type: string, code: string) => {
+    listeners.get(type)?.({
+      code,
+      target: null,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    });
+  };
+  const stub: StubWindow = {
+    pump: () => {
+      const next = frame;
+      frame = null;
+      clock += 16;
+      next?.(clock);
+    },
+    hold: (code) => dispatch("keydown", code),
+    release: (code) => dispatch("keyup", code),
   };
   try {
-    return run(pump);
+    return run(stub);
   } finally {
     (globalThis as { window?: unknown }).window = original;
   }
@@ -667,7 +728,7 @@ function withStubWindow<T>(run: (pump: () => void) => T): T {
 
 describe("flight simulator engine", () => {
   it("reports flying in the HUD across frames, not just at takeoff", () => {
-    withStubWindow((pump) => {
+    withStubWindow(({ pump }) => {
       resetStore();
       const map = stubMap();
       openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
@@ -714,7 +775,7 @@ describe("flight simulator engine", () => {
   });
 
   it("restores the pre-flight pitch rather than leaving the flight's own tilt", () => {
-    withStubWindow((pump) => {
+    withStubWindow(({ pump }) => {
       resetStore();
       const map = stubMap();
       openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
@@ -729,7 +790,7 @@ describe("flight simulator engine", () => {
   });
 
   it("tags every camera jump so the app's moveend listeners can skip them", () => {
-    withStubWindow((pump) => {
+    withStubWindow(({ pump }) => {
       resetStore();
       const map = stubMap();
       openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
@@ -748,7 +809,7 @@ describe("flight simulator engine", () => {
   });
 
   it("keeps the camera pitch below the projection singularity while flying", () => {
-    withStubWindow((pump) => {
+    withStubWindow(({ pump }) => {
       resetStore();
       const map = stubMap();
       openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
@@ -763,6 +824,90 @@ describe("flight simulator engine", () => {
         assert.ok(pitch >= MIN_CAMERA_PITCH, `camera pitch ${pitch} below the floor`);
       }
       stopFlying();
+      resetStore();
+    });
+  });
+
+  it("starts every flight at the cruise throttle, not the previous flight's", () => {
+    withStubWindow(({ pump, hold, release }) => {
+      resetStore();
+      const map = stubMap();
+      openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
+      startFlying();
+      pump();
+      const cruise = getFlightHudSnapshot().throttle;
+
+      // Firewall the throttle, which is what a user does before landing.
+      hold("PageUp");
+      for (let i = 0; i < 40; i += 1) pump();
+      release("PageUp");
+      assert.ok(
+        getFlightHudSnapshot().throttle > cruise,
+        "holding PageUp should have raised the throttle",
+      );
+
+      // Land and take off again: the airspeed is re-seeded to idle, so carrying
+      // the old throttle over would leave the HUD and the handling disagreeing.
+      stopFlying();
+      startFlying();
+      pump();
+      assert.equal(
+        getFlightHudSnapshot().throttle,
+        cruise,
+        "a new flight must not inherit the previous flight's throttle",
+      );
+      stopFlying();
+      resetStore();
+    });
+  });
+
+  it("does not outlive a stop triggered from a HUD subscriber", () => {
+    withStubWindow(({ pump }) => {
+      resetStore();
+      const map = stubMap();
+      openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
+      startFlying();
+      // Arm only after takeoff, so the stop lands on a HUD publish from inside
+      // tick() — where the rAF handle has already been nulled, making stop()'s
+      // cancelAnimationFrame a no-op. tick() throttles the HUD to 100 ms, so
+      // this needs several 16 ms frames to trigger.
+      let armed = true;
+      const unsubscribe = subscribeFlightHud(() => {
+        if (armed && isFlying()) {
+          armed = false;
+          stopFlying();
+        }
+      });
+      for (let i = 0; i < 10 && armed; i += 1) pump();
+      unsubscribe();
+      assert.equal(armed, false, "the HUD must have published from inside tick()");
+      assert.equal(isFlying(), false, "the subscriber's stop must take effect");
+      const jumpsAfterStop = map.state.jumps.length;
+      pump();
+      pump();
+      assert.equal(
+        map.state.jumps.length,
+        jumpsAfterStop,
+        "the loop must not keep driving the camera after the map was handed back",
+      );
+      resetStore();
+    });
+  });
+
+  it("does not tear down a live flight when the map instance is unchanged", () => {
+    withStubWindow(({ pump }) => {
+      resetStore();
+      const map = stubMap();
+      const app = { getMap: () => map } as unknown as GeoLibreAppAPI;
+      openFlightSimulatorPanel(app);
+      startFlying();
+      pump();
+      // The host calls this from an effect that also re-runs on a project load.
+      reattachFlightSimulator(app);
+      assert.equal(isFlying(), true, "an unchanged map must not interrupt the flight");
+      // A genuinely new map still rebinds (and ends the old flight with it).
+      reattachFlightSimulator({ getMap: () => stubMap() } as unknown as GeoLibreAppAPI);
+      assert.equal(isFlying(), false, "a new map instance must rebind the engine");
       resetStore();
     });
   });

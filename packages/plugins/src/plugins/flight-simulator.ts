@@ -67,6 +67,9 @@ export const MIN_CAMERA_PITCH = 20;
 /** How fast held throttle keys move the throttle, in units per second. */
 const THROTTLE_RATE_PER_SEC = 0.6;
 
+/** Throttle every flight starts at — a cruise setting, not idle or full power. */
+const DEFAULT_THROTTLE = 0.6;
+
 /**
  * Largest time step the model will integrate, in seconds. A backgrounded tab
  * pauses `requestAnimationFrame`; without this cap the first frame after
@@ -154,7 +157,15 @@ export const DEFAULT_FLIGHT_SIMULATOR_SETTINGS: FlightSimulatorSettings = {
 };
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const numeric = typeof value === "number" ? value : Number(value);
+  // Coerce only real numbers and non-empty numeric strings. `Number(null)`,
+  // `Number("")` and `Number([])` are all 0 — finite, so a bare `Number()` would
+  // clamp those to `min` rather than falling back to the documented default.
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value)
+        : Number.NaN;
   if (!Number.isFinite(numeric)) return fallback;
   return Math.min(max, Math.max(min, numeric));
 }
@@ -253,7 +264,7 @@ class FlightSimulatorEngine {
   private settings: FlightSimulatorSettings;
   private aircraft: AircraftState;
   private held = new Set<string>();
-  private throttle = 0.6;
+  private throttle = DEFAULT_THROTTLE;
   private rafId: number | null = null;
   /**
    * Whether flight is active. Deliberately separate from `rafId`: `tick()` nulls
@@ -339,6 +350,11 @@ class FlightSimulatorEngine {
     return this.running;
   }
 
+  /** The map this engine is bound to, so a reattach can skip an unchanged one. */
+  getMapInstance(): MapLibreMap {
+    return this.map;
+  }
+
   /** Take over the map: suspend interaction, widen the pitch limit, start flying. */
   start(): void {
     if (this.destroyed || this.running) return;
@@ -359,6 +375,10 @@ class FlightSimulatorEngine {
 
     this.aircraft = this.seedAircraft();
     this.held.clear();
+    // Reset with the rest of the per-flight state: the airspeed is re-seeded to
+    // idle, so carrying the previous flight's throttle over would leave the HUD
+    // and the handling disagreeing at takeoff.
+    this.throttle = DEFAULT_THROTTLE;
     this.grounded = false;
     this.lastFrame = null;
     this.lastHudAt = 0;
@@ -509,7 +529,7 @@ class FlightSimulatorEngine {
 
   private tick(now: number): void {
     this.rafId = null;
-    if (this.destroyed) return;
+    if (this.destroyed || !this.running) return;
 
     if (this.lastFrame !== null) {
       const dt = Math.min(MAX_STEP_SECONDS, (now - this.lastFrame) / 1000);
@@ -527,6 +547,11 @@ class FlightSimulatorEngine {
       this.lastHudAt = now;
       publishHud(this.hudState());
     }
+    // Re-check before re-arming: publishHud above notifies subscribers
+    // synchronously, and one of them may have stopped the flight. `stop()`
+    // cancels `rafId`, but tick() nulled it on entry, so that cancel is a no-op
+    // and only this guard keeps the loop from outliving the flight.
+    if (!this.running) return;
     this.rafId = window.requestAnimationFrame(this.tick);
   }
 }
@@ -618,6 +643,12 @@ export function getFlightHudSnapshot(): FlightHudState {
 /** Re-attach the engine after the map is rebuilt (style reload, project load). */
 export function reattachFlightSimulator(app: GeoLibreAppAPI): void {
   if (!panelVisible) return;
+  const map = app.getMap?.() ?? null;
+  // Rebinding tears the engine down, which hands the map back and ends any
+  // flight in progress. The host calls this from an effect that also re-runs on
+  // a project load, so skip the work when the map instance has not actually
+  // changed — that is the only thing a reattach exists to handle.
+  if (map && engine?.getMapInstance() === map) return;
   detachEngine();
   attachEngine(app);
 }
