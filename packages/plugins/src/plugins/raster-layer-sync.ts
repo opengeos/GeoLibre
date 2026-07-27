@@ -1,7 +1,39 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
-import type { RasterLayerInfo, RasterLayerState } from "maplibre-gl-raster";
+import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
+
+// Absolute filesystem paths of File-backed rasters, by raster id. The control
+// only ever sees a browser `File` -- the desktop host reads the bytes off disk
+// and wraps them -- so the path that would let a saved project reload the
+// raster is not recoverable from `RasterLayerInfo`. Hosts that opened the file
+// by path record it here, and it is mirrored onto the store layer as
+// `metadata.localFilePath` so it survives into the project file (issue #1463).
+const localRasterPaths = new Map<string, string>();
+
+/**
+ * Record (or, with `undefined`, forget) the absolute path a File-backed raster
+ * was read from, so a saved project can reload it. Callers that only have a
+ * browser `File` (a web drag-and-drop, a tool output) pass nothing and the
+ * raster stays unrestorable, as before.
+ *
+ * @param id - The raster/store layer id.
+ * @param path - The absolute filesystem path, or undefined to forget it.
+ */
+export function rememberLocalRasterPath(id: string, path: string | undefined): void {
+  if (path) localRasterPaths.set(id, path);
+  else localRasterPaths.delete(id);
+}
+
+/**
+ * The absolute path recorded for a File-backed raster, if any.
+ *
+ * @param id - The raster/store layer id.
+ * @returns The path, or undefined when the raster was not opened by path.
+ */
+export function localRasterPath(id: string): string | undefined {
+  return localRasterPaths.get(id);
+}
 
 /**
  * The slice of the maplibre-gl-raster RasterControl surface the store sync
@@ -18,7 +50,25 @@ export type RasterSyncableControl = {
 
 export type RasterSyncOptions = {
   interleaved?: boolean;
+  /**
+   * The control's active rendering backend. `maplibre-gl-raster` draws through
+   * a deck.gl overlay; the other two add a real MapLibre raster source/layer
+   * whose layer id is the raster id. Defaults to the deck.gl engine so callers
+   * that predate the option keep their behavior.
+   */
+  engine?: RenderEngine;
 };
+
+/**
+ * Whether an engine renders through a native MapLibre raster layer (rather than
+ * a deck.gl overlay). Those layers carry a real style layer id, so layer-sync
+ * can move them for ordering in every runtime -- including the desktop build,
+ * where the deck.gl overlay is a separate stacked canvas with no style layer at
+ * all (issue #1463).
+ */
+function rendersNativeMapLibreLayer(engine: RenderEngine): boolean {
+  return engine === "cog-tiler-wasm" || engine === "titiler";
+}
 
 let syncedControl: RasterSyncableControl | null = null;
 let storeUnsubscribe: (() => void) | null = null;
@@ -63,6 +113,7 @@ export function createRasterStoreLayer(
   options: RasterSyncOptions = {},
 ): GeoLibreLayer {
   const interleaved = options.interleaved ?? true;
+  const nativeMapLibreLayer = rendersNativeMapLibreLayer(options.engine ?? "maplibre-gl-raster");
   const url = info.source.kind === "url" ? info.source.url : undefined;
   // The control retains a File-backed raster's original bytes behind a blob
   // URL (source.objectUrl). Surface it as metadata.localBytesUrl so in-browser
@@ -71,6 +122,9 @@ export function createRasterStoreLayer(
   // the Add Data > Raster Layer panel's own drop zone, and tool outputs - since
   // they all funnel through the control's addRaster.
   const localBytesUrl = info.source.kind === "file" ? info.source.objectUrl : undefined;
+  // Only meaningful for a File-backed raster: a URL raster already restores
+  // from source.url, and the path registry is never populated for one.
+  const localFilePath = info.source.kind === "file" ? localRasterPaths.get(info.id) : undefined;
   const sourcePath = url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
   return {
     id: info.id,
@@ -85,16 +139,22 @@ export function createRasterStoreLayer(
     style: { ...DEFAULT_LAYER_STYLE },
     metadata: {
       customLayerType: "raster",
+      // Not literally a deck.gl layer under the WASM/TiTiler engines, but the
+      // flag is what makes layer-sync forward the computed beforeId to the
+      // control (applyRasterLayerOrder -> setRasterBeforeId). Those engines
+      // re-apply their own moveLayer on every render-setting change, so without
+      // it a later opacity edit would silently pull the raster back to the top.
       externalDeckLayer: true,
       externalNativeLayer: true,
       identifiable: false,
-      // In interleaved mode the deck.gl overlay inserts one custom style
-      // layer per raster, keyed by the raster id, so ordering moves reach it.
-      // The Tauri/WebKit fallback uses a separate deck.gl canvas, so there is
-      // no MapLibre style layer id to sync.
-      nativeLayerIds: interleaved ? [info.id] : [],
+      // The WASM/TiTiler engines add a native MapLibre raster layer keyed by
+      // the raster id, in every runtime. With the deck.gl engine there is a
+      // style layer id only in interleaved mode, where the overlay inserts one
+      // custom style layer per raster; the Tauri/WebKit fallback uses a
+      // separate deck.gl canvas, so there is no MapLibre style layer to sync.
+      nativeLayerIds: nativeMapLibreLayer || interleaved ? [info.id] : [],
       panelCollapsed,
-      rasterOverlayMode: interleaved ? "interleaved" : "overlaid",
+      rasterOverlayMode: nativeMapLibreLayer ? "native" : interleaved ? "interleaved" : "overlaid",
       // The visualization state is persisted so restoreRasterLayers can
       // replay URL-backed rasters when a saved project is reopened.
       rasterSource: info.source.kind,
@@ -108,6 +168,10 @@ export function createRasterStoreLayer(
       sourceIds: [],
       sourceKind: RASTER_SOURCE_KIND,
       ...(localBytesUrl ? { localBytesUrl } : {}),
+      // Persisted so restoreRasterLayers can re-read the file when the project
+      // is reopened on the machine that holds it (desktop only -- the browser
+      // has no path). Absent for a raster added from a browser File.
+      ...(localFilePath ? { localFilePath } : {}),
       ...(info.bounds
         ? {
             bounds: [info.bounds.west, info.bounds.south, info.bounds.east, info.bounds.north],

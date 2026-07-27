@@ -189,9 +189,14 @@ export {
   closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,
+  setLocalRasterFileReader,
+  setLocalRasterPicker,
   setNonTiledRasterHandler,
   setRasterPixelInspect,
+  type LocalRasterFileReader,
+  type LocalRasterPicker,
   type NonTiledRasterRequest,
+  type PickedLocalRaster,
 } from "./plugins/maplibre-raster";
 export {
   RASTER_MAX_CLASSES,

@@ -5,6 +5,8 @@ import type { RasterLayerInfo, RasterLayerState } from "maplibre-gl-raster";
 import {
   createRasterStoreLayer,
   isRasterControlStoreLayer,
+  localRasterPath,
+  rememberLocalRasterPath,
   removeRasterStoreLayers,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
@@ -165,6 +167,71 @@ describe("createRasterStoreLayer", () => {
     assert.equal(layer.metadata.externalDeckLayer, true);
     assert.equal(layer.metadata.rasterOverlayMode, "overlaid");
     assert.deepEqual(layer.metadata.nativeLayerIds, []);
+  });
+
+  // The WASM/TiTiler engines add a real MapLibre raster layer keyed by the
+  // raster id, so ordering works even in the runtime that forces the deck.gl
+  // overlay into its own stacked canvas (issue #1463).
+  for (const engine of ["cog-tiler-wasm", "titiler"] as const) {
+    it(`gives the ${engine} engine a native layer id even when not interleaved`, () => {
+      const layer = createRasterStoreLayer(rasterInfo(), true, {
+        interleaved: false,
+        engine,
+      });
+
+      assert.equal(layer.metadata.rasterOverlayMode, "native");
+      assert.deepEqual(layer.metadata.nativeLayerIds, ["raster-1"]);
+      // Still set: it is what makes layer-sync push the computed beforeId back
+      // into the control, which those engines re-apply on every render change.
+      assert.equal(layer.metadata.externalDeckLayer, true);
+    });
+  }
+
+  it("keeps the deck.gl engine's overlay bookkeeping when named explicitly", () => {
+    const layer = createRasterStoreLayer(rasterInfo(), true, {
+      interleaved: false,
+      engine: "maplibre-gl-raster",
+    });
+
+    assert.equal(layer.metadata.rasterOverlayMode, "overlaid");
+    assert.deepEqual(layer.metadata.nativeLayerIds, []);
+  });
+
+  it("records a local raster's path so a saved project can reload it", () => {
+    rememberLocalRasterPath("raster-1", "/data/local.tif");
+    try {
+      const layer = createRasterStoreLayer(
+        rasterInfo({
+          source: { kind: "file", fileName: "local.tif", objectUrl: "blob:x" },
+        }),
+      );
+
+      assert.equal(layer.metadata.localFilePath, "/data/local.tif");
+      assert.equal(localRasterPath("raster-1"), "/data/local.tif");
+    } finally {
+      rememberLocalRasterPath("raster-1", undefined);
+    }
+  });
+
+  it("omits the path for a raster added without one, and after it is forgotten", () => {
+    const fileInfo = rasterInfo({
+      source: { kind: "file", fileName: "local.tif", objectUrl: "blob:x" },
+    });
+    assert.equal("localFilePath" in createRasterStoreLayer(fileInfo).metadata, false);
+
+    rememberLocalRasterPath("raster-1", "/data/local.tif");
+    rememberLocalRasterPath("raster-1", undefined);
+    assert.equal("localFilePath" in createRasterStoreLayer(fileInfo).metadata, false);
+    assert.equal(localRasterPath("raster-1"), undefined);
+  });
+
+  it("never claims a path for a URL raster, even if one was recorded", () => {
+    rememberLocalRasterPath("raster-1", "/data/stale.tif");
+    try {
+      assert.equal("localFilePath" in createRasterStoreLayer(rasterInfo()).metadata, false);
+    } finally {
+      rememberLocalRasterPath("raster-1", undefined);
+    }
   });
 
   it("persists band count and serializes band names to pairs", () => {

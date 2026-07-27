@@ -26,6 +26,8 @@ import {
   restoreThreeDTilesLayers,
   restoreVectorLayers,
   setBookmarkLabels,
+  setLocalRasterFileReader,
+  setLocalRasterPicker,
   setNonTiledRasterHandler,
   setTerrainMeasureLabels,
   setViewStateLabels,
@@ -57,6 +59,8 @@ import {
   loadDroppedPhotoPaths,
   loadDroppedRasterFiles,
   loadDroppedRasterPaths,
+  pickLocalRasterFiles,
+  readRasterFileAtPath,
   isLoadedImageOverlay,
   isLoadedModel,
   loadDroppedVectorFiles,
@@ -931,6 +935,21 @@ export function DesktopShell({
     }
   }, []);
 
+  // Let the raster plugin reach the local filesystem on desktop: re-read a
+  // raster a saved project references by path, and open the native file dialog
+  // instead of the panel's own <input type="file"> (whose File carries no path,
+  // so the raster could never be restored). Both stay unregistered in the
+  // browser, where the plugin keeps its existing behavior. See issue #1463.
+  useEffect(() => {
+    if (!isTauri()) return;
+    setLocalRasterFileReader(readRasterFileAtPath);
+    setLocalRasterPicker(pickLocalRasterFiles);
+    return () => {
+      setLocalRasterFileReader(null);
+      setLocalRasterPicker(null);
+    };
+  }, []);
+
   // When a GeoTIFF fails to load because it is striped (not a tiled COG), offer
   // to convert it to a COG in the browser and load the result. Works for both a
   // local file and a remote URL (issue #916). The raster plugin detects the case
@@ -1241,7 +1260,12 @@ export function DesktopShell({
     if (!rasters.length) return 0;
     const appAPI = createAppAPI(mapControllerRef);
     for (const raster of rasters) {
-      await addRasterToMap(appAPI, raster.source, { name: raster.name });
+      // `path` is present only for a desktop pick/drop; it is what lets a saved
+      // project reload the raster instead of dropping it (issue #1463).
+      await addRasterToMap(appAPI, raster.source, {
+        name: raster.name,
+        ...(raster.path ? { localPath: raster.path } : {}),
+      });
     }
     return rasters.length;
   }, []);

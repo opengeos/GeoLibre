@@ -2412,6 +2412,12 @@ export interface DroppedRaster {
    * manages its object URL, matching how the Add Raster panel loads local files.
    */
   source: File;
+  /**
+   * The absolute path the bytes were read from, when there is one (Tauri).
+   * Recorded on the layer so a saved project can reload the raster; absent for
+   * a browser drag-and-drop, which has no path.
+   */
+  path?: string;
 }
 
 function fileBaseName(path: string): string {
@@ -2439,9 +2445,52 @@ export async function loadDroppedRasterPaths(paths: string[]): Promise<DroppedRa
     rasters.push({
       name,
       source: new File([bytes], name, { type: "image/tiff" }),
+      path,
     });
   }
   return rasters;
+}
+
+/**
+ * Read one raster file off disk into a browser `File`, for reloading a raster a
+ * saved project references by path (issue #1463). Rejects when the file is
+ * gone; the caller then drops that layer with a notice.
+ *
+ * @param path - The absolute path recorded when the raster was first added.
+ * @returns The file, named after its basename.
+ */
+export async function readRasterFileAtPath(path: string): Promise<File> {
+  const bytes = await readFile(path);
+  return new File([bytes], fileBaseName(path), { type: "image/tiff" });
+}
+
+/**
+ * Open a native file dialog for raster files and read each pick, keeping the
+ * absolute path alongside the bytes. Used in place of the raster panel's own
+ * `<input type="file">`, whose `File` carries no path. Resolves to an empty
+ * array when the dialog is cancelled or the app is not running under Tauri.
+ *
+ * @returns The picked rasters, each with its file and path.
+ */
+export async function pickLocalRasterFiles(): Promise<{ file: File; path: string }[]> {
+  if (!isTauri()) return [];
+  const selected = await open({
+    multiple: true,
+    filters: [{ name: "Rasters", extensions: [...RASTER_DROP_EXTENSIONS] }],
+  });
+  if (!selected) return [];
+  const paths = (Array.isArray(selected) ? selected : [selected]).filter(isRasterFileName);
+  const picked: { file: File; path: string }[] = [];
+  for (const path of paths) {
+    // Read each pick independently so one unreadable file does not abandon the
+    // rest of the selection, matching pickImageFilesWithFallback.
+    try {
+      picked.push({ file: await readRasterFileAtPath(path), path });
+    } catch (error) {
+      console.warn(`Could not read the selected raster "${path}".`, error);
+    }
+  }
+  return picked;
 }
 
 /**
