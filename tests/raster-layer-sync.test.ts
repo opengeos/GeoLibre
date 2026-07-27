@@ -305,6 +305,33 @@ describe("syncRasterLayersToStore", () => {
     assert.deepEqual(layer.metadata.nativeLayerIds, []);
   });
 
+  // localFilePath is derived from the path registry on every sync rather than
+  // carried in GEOLIBRE_OWNED_METADATA_KEYS, so a repeated sync (any control
+  // event: an opacity drag, a header load) must not drop it. The registry
+  // outlives a control teardown -- LayerManager.destroy() clears its layers
+  // without emitting rasterremove -- so the only thing that forgets a path is
+  // an actual raster removal, which drops the store layer too.
+  it("keeps a local raster's path across repeated syncs", () => {
+    const fileInfo = rasterInfo({
+      source: { kind: "file", fileName: "local.tif", objectUrl: "blob:x" },
+    });
+    rememberLocalRasterPath("raster-1", "/data/local.tif");
+    try {
+      syncRasterLayersToStore(fakeControl([fileInfo]).control);
+      assert.equal(useAppStore.getState().layers[0].metadata.localFilePath, "/data/local.tif");
+
+      // A later control event rebuilds the metadata wholesale.
+      syncRasterLayersToStore(
+        fakeControl([{ ...fileInfo, state: rasterState({ opacity: 0.4 }) }]).control,
+      );
+      const layer = useAppStore.getState().layers[0];
+      assert.equal(layer.opacity, 0.4);
+      assert.equal(layer.metadata.localFilePath, "/data/local.tif");
+    } finally {
+      rememberLocalRasterPath("raster-1", undefined);
+    }
+  });
+
   it("removes store layers whose rasters are gone", () => {
     const { control } = fakeControl([rasterInfo()]);
     syncRasterLayersToStore(control);
