@@ -670,6 +670,36 @@
       "adding": "Adding...",
       "addLayer": "Add layer"
     },
+    "zarr": {
+      "title": "Add Zarr Layer",
+      "description": "Render a Zarr data cube: a remote store over HTTP, or a store in a folder on this computer.",
+      "sourceLabel": "Source",
+      "sourceRemote": "Remote store (URL)",
+      "sourceFolder": "Local folder",
+      "urlLabel": "Zarr store URL",
+      "urlHelp": "Choose a sample dataset above, or paste your own Zarr store URL, then click Load variables.",
+      "loadVariables": "Load variables",
+      "loading": "Loading...",
+      "folderLabel": "Local folder",
+      "chooseFolder": "Choose folder",
+      "chooseDifferentFolder": "Choose a different folder",
+      "readingFolder": "Reading...",
+      "folderHelp": "Select the folder that holds the store (the one containing .zmetadata or .zgroup). It is read directly from disk; nothing is uploaded.",
+      "folderUnsupported": "This browser cannot open a folder. Use the desktop app, or a Chromium-based browser such as Chrome or Edge.",
+      "foundVariables_one": "Found {{count}} variable.",
+      "foundVariables_other": "Found {{count}} variables.",
+      "variableLabel": "Variable",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "This dimension's coordinate values could not be read. Type the value to show, as it appears in the store.",
+      "colorMin": "Color min (optional)",
+      "colorMax": "Color max (optional)",
+      "adding": "Adding...",
+      "addLayer": "Add layer",
+      "sample": {
+        "climate": "Climate (CarbonPlan)",
+        "sst": "Sea surface temperature, monthly (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Deck.gl Layer",
       "errorChooseFile": "Choose a CSV, JSON, or GeoJSON file.",

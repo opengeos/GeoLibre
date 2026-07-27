@@ -78,7 +78,7 @@ import {
   registerTemporalLayer,
   unregisterTemporalLayer,
 } from "./temporal-layers";
-import { pickTimeDimension, resolveZarrTimeAxis } from "./zarr-time-axis";
+import { pickTimeDimension, resolveZarrTimeAxis, type ZarrTimeAttributes } from "./zarr-time-axis";
 
 type ControlGridConstructor = (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor = (typeof import("maplibre-gl-components"))["AddVectorControl"];
@@ -613,6 +613,48 @@ function getStacColorRampModule(colormap: string): typeof STAC_COLOR_RAMP_MODULE
 // above ZARR_OPTIONS because that initializer resolves a ramp for its samples.
 const ZARR_COLORMAP_STOPS = 9;
 
+/** One of the Zarr sample stores offered in the UI. */
+export interface ZarrSampleDataset {
+  /** Stable key the host looks a translated label up by. */
+  id: string;
+  /** English label, used by the on-map panel's own sample dropdown. */
+  label: string;
+  /** Store URL. */
+  url: string;
+  /** Variable to render, when the store's default is not the one to show. */
+  variable?: string;
+  /** Color limits that suit this store. */
+  clim?: [number, number];
+  /** Colormap that suits this store. */
+  colormap?: string[];
+  /** Selector that suits this store. */
+  selector?: Record<string, number | string>;
+}
+
+/**
+ * The Zarr sample stores, shared by the on-map Zarr panel's sample dropdown and
+ * the Add Zarr Layer dialog's, so the two cannot drift apart.
+ *
+ * Each carries its own settings because the control's `default*` options are the
+ * CarbonPlan sample's: a -2..35 degree field drawn against a 0-300 ramp is a
+ * flat wash, and `{ band, month }` names dimensions the SST store does not have.
+ * Applying them on select needs maplibre-gl-components >= 0.28.0.
+ */
+export const ZARR_SAMPLE_DATASETS: ZarrSampleDataset[] = [
+  { id: "climate", label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL, variable: "climate" },
+  {
+    id: "sst",
+    label: "Sea surface temperature, monthly (NOAA)",
+    url: ZARR_TIME_SERIES_SAMPLE_URL,
+    variable: "sst",
+    clim: [-2, 32],
+    colormap: interpolateRampColors("turbo", ZARR_COLORMAP_STOPS),
+    // This store's only non-spatial dimension is `time`, which the Time Slider
+    // drives; an empty selector clears the climate sample's.
+    selector: {},
+  },
+];
+
 const ZARR_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-zarr-control",
@@ -632,23 +674,7 @@ const ZARR_OPTIONS = {
   defaultOpacity: 0.85,
   defaultPickable: false,
   defaultSelector: { band: "prec", month: 1 },
-  // The SST entry carries its own settings because the `default*` options below
-  // are the CarbonPlan sample's: a -2..35 degree field drawn against a 0-300
-  // ramp is a flat wash, and `{ band, month }` names dimensions it does not
-  // have. Needs maplibre-gl-components >= 0.28.0, which applies these on select.
-  sampleData: [
-    { label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL },
-    {
-      label: "Sea surface temperature, monthly (NOAA)",
-      url: ZARR_TIME_SERIES_SAMPLE_URL,
-      variable: "sst",
-      clim: [-2, 32],
-      colormap: interpolateRampColors("turbo", ZARR_COLORMAP_STOPS),
-      // This store's only non-spatial dimension is `time`, which the Time
-      // Slider drives; an empty selector clears the climate sample's.
-      selector: {},
-    },
-  ],
+  sampleData: ZARR_SAMPLE_DATASETS,
   defaultVariable: "climate",
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies ZarrLayerControlOptions;
@@ -2190,7 +2216,33 @@ export interface ZarrRasterLayerOptions {
   headers?: Record<string, string>;
   /** Insert the new layer directly beneath this layer. */
   beforeLayerId?: string | null;
+  /**
+   * A zarrita `Readable` to read the store through, instead of fetching `url`.
+   * With one supplied, `url` is only an identifier (see
+   * {@link localZarrStoreUrl}): it names the layer and keys the control's state,
+   * and is never requested. This is how a Zarr store on local disk renders.
+   */
+  store?: ZarrReadableStore;
+  /**
+   * Read the CF `units`/`calendar` of a coordinate, for a store the Time Slider
+   * cannot look up over HTTP (again: a local folder). Consulted in place of the
+   * metadata walk when the layer turns out to have a time axis.
+   */
+  readTimeAttributes?: ZarrTimeAttributesReader;
 }
+
+/** The minimum of zarrita's `Readable` that the renderer calls. */
+export interface ZarrReadableStore {
+  get(key: string): Promise<Uint8Array | undefined>;
+}
+
+/**
+ * Reads one coordinate's CF time attributes out of a store's own metadata.
+ *
+ * @param dimension - The coordinate's name, e.g. `"time"`.
+ * @returns Its `units`/`calendar`, or null when it declares neither.
+ */
+export type ZarrTimeAttributesReader = (dimension: string) => Promise<ZarrTimeAttributes | null>;
 
 /**
  * Add a Zarr layer through GeoLibre's own `@carbonplan/zarr-layer` instance and
@@ -2311,6 +2363,7 @@ async function addZarrLayerExclusively(
       clim: options.clim,
       colormap: resolveZarrColormap(options.colormap),
       opacity: options.opacity,
+      ...(options.store ? { store: options.store } : {}),
       zarrVersion: options.zarrVersion,
       crs: options.crs,
       proj4: options.proj4,
@@ -2334,7 +2387,10 @@ async function addZarrLayerExclusively(
   // here rather than from the shared `layeradd` handler so this add's own
   // headers reach the metadata lookup even when another add of the same store
   // overlaps it (opengeos/GeoLibre#1448 review).
-  registerZarrTemporalAdapter(addedLayerId, url, { headers });
+  registerZarrTemporalAdapter(addedLayerId, url, {
+    headers,
+    ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
+  });
 
   // `createZarrLayerAddHandler` has already mirrored the layer into the store
   // (the control emits "layeradd" synchronously) along with the spatial
@@ -2394,14 +2450,16 @@ export async function setZarrLayerSelector(
 
 /**
  * What resolving a new layer's time axis needs but the `layeradd` event does not
- * carry: an authenticated store's request headers, and (for Cloud-Optimized
- * NetCDF) the kerchunk references whose inline `.zattrs` hold the coordinate
- * attributes, since that layer's `url` points at the manifest rather than at a
- * Zarr store.
+ * carry: an authenticated store's request headers, and — for a layer whose `url`
+ * is not something the metadata walk can fetch — a way to read the coordinate
+ * attributes anyway. Cloud-Optimized NetCDF supplies the kerchunk references
+ * whose inline `.zattrs` hold them (its `url` names the manifest); a store on
+ * local disk supplies a reader over the folder.
  */
 interface ZarrTemporalContext {
   headers?: Record<string, string>;
   refs?: KerchunkRefs;
+  readAttributes?: ZarrTimeAttributesReader;
 }
 
 /**
@@ -2494,23 +2552,29 @@ function zarrTimeAttributesFromRefs(
  *
  * @param layerId - The new layer's id.
  * @param url - The store URL (or kerchunk manifest URL).
- * @param context - The add's headers/references, when the caller has them.
+ * @param context - The add's headers, references, or attribute reader, when the
+ *   caller has them.
  */
 function registerZarrTemporalAdapter(
   layerId: string,
   url: string | undefined,
   context: ZarrTemporalContext = {},
 ): void {
-  const { headers, refs } = context;
+  const { headers, refs, readAttributes } = context;
   void (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
     if (!dimensionValues) return;
+    const dimension = pickTimeDimension(dimensionValues) ?? "time";
+    // Either source of attributes replaces the HTTP metadata walk, which for
+    // these layers would only produce a run of failed requests.
     const attributes = refs
-      ? zarrTimeAttributesFromRefs(refs, pickTimeDimension(dimensionValues) ?? "time")
-      : undefined;
+      ? zarrTimeAttributesFromRefs(refs, dimension)
+      : readAttributes
+        ? await readAttributes(dimension).catch(() => null)
+        : undefined;
     const axis = await resolveZarrTimeAxis(url ?? "", dimensionValues, {
       ...(headers ? { headers } : {}),
-      ...(refs ? { attributes } : {}),
+      ...(attributes !== undefined ? { attributes } : {}),
     });
     if (!axis) return;
     // The layer may have been removed while the axis was being resolved.

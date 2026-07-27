@@ -524,7 +524,9 @@ if (layerId) {
 }
 ```
 
-`addZarrLayer` is headless: it does not open the Zarr panel (the user can still open it from **Add Data → Zarr Layer** to tweak colormap and color limits). It resolves with the new layer's id once the layer is registered, and rejects when `variable` is missing or the store cannot be read. The layer supports visibility, opacity, ordering, and removal from the Layers panel like any other layer.
+`addZarrLayer` is headless: it does not open the Zarr panel (the user can still open it from **Controls → Zarr Layer** to tweak colormap, color limits, and the dimension selector). It resolves with the new layer's id once the layer is registered, and rejects when `variable` is missing or the store cannot be read. The layer supports visibility, opacity, ordering, and removal from the Layers panel like any other layer.
+
+**Add Data → Zarr Layer** opens the Add Zarr Layer dialog instead, which loads a store from a URL or from a folder on disk, lists its variables, and offers one picker per non-spatial dimension holding that dimension's real coordinate values. The renderer selects a slice by coordinate *value*, not by index, so a `month` axis of 1-12 selects December as `12`; `selector` above works the same way.
 
 ## Driving a layer's own time dimension from the Time Slider
 

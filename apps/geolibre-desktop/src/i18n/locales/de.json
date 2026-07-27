@@ -644,6 +644,36 @@
       "adding": "Wird hinzugefügt...",
       "addLayer": "Ebene hinzufügen"
     },
+    "zarr": {
+      "title": "Zarr-Ebene hinzufügen",
+      "description": "Einen Zarr-Datenwürfel darstellen: ein entfernter Speicher über HTTP oder ein Speicher in einem Ordner auf diesem Computer.",
+      "sourceLabel": "Quelle",
+      "sourceRemote": "Entfernter Speicher (URL)",
+      "sourceFolder": "Lokaler Ordner",
+      "urlLabel": "URL des Zarr-Speichers",
+      "urlHelp": "Wählen Sie oben einen Beispieldatensatz oder fügen Sie die URL Ihres eigenen Zarr-Speichers ein und klicken Sie dann auf Variablen laden.",
+      "loadVariables": "Variablen laden",
+      "loading": "Wird geladen...",
+      "folderLabel": "Lokaler Ordner",
+      "chooseFolder": "Ordner auswählen",
+      "chooseDifferentFolder": "Anderen Ordner auswählen",
+      "readingFolder": "Wird gelesen...",
+      "folderHelp": "Wählen Sie den Ordner mit dem Speicher (den mit .zmetadata oder .zgroup). Er wird direkt von der Festplatte gelesen; nichts wird hochgeladen.",
+      "folderUnsupported": "Dieser Browser kann keinen Ordner öffnen. Verwenden Sie die Desktop-App oder einen Chromium-basierten Browser wie Chrome oder Edge.",
+      "foundVariables_one": "{{count}} Variable gefunden.",
+      "foundVariables_other": "{{count}} Variablen gefunden.",
+      "variableLabel": "Variable",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "Die Koordinatenwerte dieser Dimension konnten nicht gelesen werden. Geben Sie den anzuzeigenden Wert so ein, wie er im Speicher steht.",
+      "colorMin": "Farbe Min (optional)",
+      "colorMax": "Farbe Max (optional)",
+      "adding": "Wird hinzugefügt...",
+      "addLayer": "Ebene hinzufügen",
+      "sample": {
+        "climate": "Klima (CarbonPlan)",
+        "sst": "Meeresoberflächentemperatur, monatlich (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Deck.gl-Ebene",
       "errorChooseFile": "Wählen Sie eine CSV-, JSON- oder GeoJSON-Datei aus.",

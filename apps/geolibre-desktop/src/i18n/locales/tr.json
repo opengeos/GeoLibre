@@ -644,6 +644,36 @@
       "adding": "Ekleniyor...",
       "addLayer": "Katman ekle"
     },
+    "zarr": {
+      "title": "Zarr Katmanı Ekle",
+      "description": "Bir Zarr veri küpünü görüntüleyin: HTTP üzerinden uzak bir depo ya da bu bilgisayardaki bir klasörde bulunan bir depo.",
+      "sourceLabel": "Kaynak",
+      "sourceRemote": "Uzak depo (URL)",
+      "sourceFolder": "Yerel klasör",
+      "urlLabel": "Zarr depo URL'si",
+      "urlHelp": "Yukarıdan bir örnek veri kümesi seçin ya da kendi Zarr depo URL'nizi yapıştırın, sonra Değişkenleri yükle'ye tıklayın.",
+      "loadVariables": "Değişkenleri yükle",
+      "loading": "Yükleniyor...",
+      "folderLabel": "Yerel klasör",
+      "chooseFolder": "Klasör seç",
+      "chooseDifferentFolder": "Başka bir klasör seç",
+      "readingFolder": "Okunuyor...",
+      "folderHelp": "Depoyu içeren klasörü seçin (.zmetadata ya da .zgroup dosyasını içeren klasör). Doğrudan diskten okunur; hiçbir şey karşıya yüklenmez.",
+      "folderUnsupported": "Bu tarayıcı klasör açamıyor. Masaüstü uygulamasını ya da Chrome veya Edge gibi Chromium tabanlı bir tarayıcı kullanın.",
+      "foundVariables_one": "{{count}} değişken bulundu.",
+      "foundVariables_other": "{{count}} değişken bulundu.",
+      "variableLabel": "Değişken",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "Bu boyutun koordinat değerleri okunamadı. Gösterilecek değeri, depoda göründüğü biçimde yazın.",
+      "colorMin": "Renk min (isteğe bağlı)",
+      "colorMax": "Renk maks (isteğe bağlı)",
+      "adding": "Ekleniyor...",
+      "addLayer": "Katman ekle",
+      "sample": {
+        "climate": "İklim (CarbonPlan)",
+        "sst": "Deniz yüzeyi sıcaklığı, aylık (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Deck.gl Katmanı",
       "errorChooseFile": "Bir CSV, JSON veya GeoJSON dosyası seçin.",

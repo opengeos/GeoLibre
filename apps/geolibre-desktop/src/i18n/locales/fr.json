@@ -644,6 +644,36 @@
       "adding": "Ajout en cours...",
       "addLayer": "Ajouter la couche"
     },
+    "zarr": {
+      "title": "Ajouter une couche Zarr",
+      "description": "Afficher un cube de données Zarr : un magasin distant via HTTP, ou un magasin dans un dossier de cet ordinateur.",
+      "sourceLabel": "Source",
+      "sourceRemote": "Magasin distant (URL)",
+      "sourceFolder": "Dossier local",
+      "urlLabel": "URL du magasin Zarr",
+      "urlHelp": "Choisissez un jeu de données d'exemple ci-dessus, ou collez l'URL de votre propre magasin Zarr, puis cliquez sur Charger les variables.",
+      "loadVariables": "Charger les variables",
+      "loading": "Chargement...",
+      "folderLabel": "Dossier local",
+      "chooseFolder": "Choisir un dossier",
+      "chooseDifferentFolder": "Choisir un autre dossier",
+      "readingFolder": "Lecture...",
+      "folderHelp": "Sélectionnez le dossier contenant le magasin (celui qui contient .zmetadata ou .zgroup). Il est lu directement depuis le disque ; rien n'est envoyé.",
+      "folderUnsupported": "Ce navigateur ne peut pas ouvrir de dossier. Utilisez l'application de bureau, ou un navigateur basé sur Chromium comme Chrome ou Edge.",
+      "foundVariables_one": "{{count}} variable trouvée.",
+      "foundVariables_other": "{{count}} variables trouvées.",
+      "variableLabel": "Variable",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "Les valeurs de coordonnée de cette dimension n'ont pas pu être lues. Saisissez la valeur à afficher, telle qu'elle figure dans le magasin.",
+      "colorMin": "Couleur min (facultatif)",
+      "colorMax": "Couleur max (facultatif)",
+      "adding": "Ajout...",
+      "addLayer": "Ajouter la couche",
+      "sample": {
+        "climate": "Climat (CarbonPlan)",
+        "sst": "Température de surface de la mer, mensuelle (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Couche Deck.gl",
       "errorChooseFile": "Choisissez un fichier CSV, JSON ou GeoJSON.",

@@ -644,6 +644,36 @@
       "adding": "Aggiunta in corso...",
       "addLayer": "Aggiungi livello"
     },
+    "zarr": {
+      "title": "Aggiungi livello Zarr",
+      "description": "Visualizza un cubo di dati Zarr: un archivio remoto via HTTP, o un archivio in una cartella di questo computer.",
+      "sourceLabel": "Origine",
+      "sourceRemote": "Archivio remoto (URL)",
+      "sourceFolder": "Cartella locale",
+      "urlLabel": "URL dell'archivio Zarr",
+      "urlHelp": "Scegli un set di dati di esempio qui sopra, oppure incolla l'URL del tuo archivio Zarr, poi fai clic su Carica variabili.",
+      "loadVariables": "Carica variabili",
+      "loading": "Caricamento...",
+      "folderLabel": "Cartella locale",
+      "chooseFolder": "Scegli cartella",
+      "chooseDifferentFolder": "Scegli un'altra cartella",
+      "readingFolder": "Lettura...",
+      "folderHelp": "Seleziona la cartella che contiene l'archivio (quella con .zmetadata o .zgroup). Viene letta direttamente dal disco; non viene caricato nulla.",
+      "folderUnsupported": "Questo browser non può aprire una cartella. Usa l'app desktop, o un browser basato su Chromium come Chrome o Edge.",
+      "foundVariables_one": "Trovata {{count}} variabile.",
+      "foundVariables_other": "Trovate {{count}} variabili.",
+      "variableLabel": "Variabile",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "Non è stato possibile leggere i valori di coordinata di questa dimensione. Digita il valore da mostrare, così come compare nell'archivio.",
+      "colorMin": "Colore min (facoltativo)",
+      "colorMax": "Colore max (facoltativo)",
+      "adding": "Aggiunta...",
+      "addLayer": "Aggiungi livello",
+      "sample": {
+        "climate": "Clima (CarbonPlan)",
+        "sst": "Temperatura della superficie del mare, mensile (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Livello Deck.gl",
       "errorChooseFile": "Scegli un file CSV, JSON o GeoJSON.",

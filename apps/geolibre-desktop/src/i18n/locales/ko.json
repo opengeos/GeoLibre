@@ -630,6 +630,35 @@
       "adding": "추가하는 중...",
       "addLayer": "레이어 추가"
     },
+    "zarr": {
+      "title": "Zarr 레이어 추가",
+      "description": "Zarr 데이터 큐브를 렌더링합니다. HTTP를 통한 원격 저장소 또는 이 컴퓨터의 폴더에 있는 저장소를 사용할 수 있습니다.",
+      "sourceLabel": "소스",
+      "sourceRemote": "원격 저장소(URL)",
+      "sourceFolder": "로컬 폴더",
+      "urlLabel": "Zarr 저장소 URL",
+      "urlHelp": "위에서 샘플 데이터세트를 고르거나 직접 Zarr 저장소 URL을 붙여 넣은 뒤 '변수 불러오기'를 클릭하세요.",
+      "loadVariables": "변수 불러오기",
+      "loading": "불러오는 중...",
+      "folderLabel": "로컬 폴더",
+      "chooseFolder": "폴더 선택",
+      "chooseDifferentFolder": "다른 폴더 선택",
+      "readingFolder": "읽는 중...",
+      "folderHelp": "저장소가 들어 있는 폴더(.zmetadata 또는 .zgroup이 있는 폴더)를 선택하세요. 디스크에서 직접 읽으며 아무것도 업로드하지 않습니다.",
+      "folderUnsupported": "이 브라우저에서는 폴더를 열 수 없습니다. 데스크톱 앱이나 Chrome, Edge 같은 Chromium 기반 브라우저를 사용하세요.",
+      "foundVariables_other": "변수 {{count}}개를 찾았습니다.",
+      "variableLabel": "변수",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "이 차원의 좌표 값을 읽을 수 없습니다. 저장소에 기록된 형태 그대로 표시할 값을 입력하세요.",
+      "colorMin": "색상 최솟값(선택)",
+      "colorMax": "색상 최댓값(선택)",
+      "adding": "추가하는 중...",
+      "addLayer": "레이어 추가",
+      "sample": {
+        "climate": "기후(CarbonPlan)",
+        "sst": "해수면 온도, 월별(NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Deck.gl 레이어",
       "errorChooseFile": "CSV, JSON, GeoJSON 파일을 선택하세요.",

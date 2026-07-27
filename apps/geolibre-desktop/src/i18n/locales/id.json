@@ -630,6 +630,35 @@
       "adding": "Menambahkan...",
       "addLayer": "Tambah layer"
     },
+    "zarr": {
+      "title": "Tambah Layer Zarr",
+      "description": "Tampilkan kubus data Zarr: penyimpanan jarak jauh lewat HTTP, atau penyimpanan di dalam folder pada komputer ini.",
+      "sourceLabel": "Sumber",
+      "sourceRemote": "Penyimpanan jarak jauh (URL)",
+      "sourceFolder": "Folder lokal",
+      "urlLabel": "URL penyimpanan Zarr",
+      "urlHelp": "Pilih set data contoh di atas, atau tempel URL penyimpanan Zarr Anda sendiri, lalu klik Muat variabel.",
+      "loadVariables": "Muat variabel",
+      "loading": "Memuat...",
+      "folderLabel": "Folder lokal",
+      "chooseFolder": "Pilih folder",
+      "chooseDifferentFolder": "Pilih folder lain",
+      "readingFolder": "Membaca...",
+      "folderHelp": "Pilih folder yang memuat penyimpanan (yang berisi .zmetadata atau .zgroup). Folder dibaca langsung dari disk; tidak ada yang diunggah.",
+      "folderUnsupported": "Peramban ini tidak dapat membuka folder. Gunakan aplikasi desktop, atau peramban berbasis Chromium seperti Chrome atau Edge.",
+      "foundVariables_other": "Ditemukan {{count}} variabel.",
+      "variableLabel": "Variabel",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "Nilai koordinat dimensi ini tidak dapat dibaca. Ketikkan nilai yang ingin ditampilkan, persis seperti pada penyimpanan.",
+      "colorMin": "Warna min (opsional)",
+      "colorMax": "Warna maks (opsional)",
+      "adding": "Menambahkan...",
+      "addLayer": "Tambah layer",
+      "sample": {
+        "climate": "Iklim (CarbonPlan)",
+        "sst": "Suhu permukaan laut, bulanan (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Layer Deck.gl",
       "errorChooseFile": "Pilih file CSV, JSON, atau GeoJSON.",

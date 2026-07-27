@@ -644,6 +644,36 @@
       "adding": "Toevoegen...",
       "addLayer": "Laag toevoegen"
     },
+    "zarr": {
+      "title": "Zarr-laag toevoegen",
+      "description": "Een Zarr-datakubus weergeven: een externe opslag via HTTP, of een opslag in een map op deze computer.",
+      "sourceLabel": "Bron",
+      "sourceRemote": "Externe opslag (URL)",
+      "sourceFolder": "Lokale map",
+      "urlLabel": "URL van de Zarr-opslag",
+      "urlHelp": "Kies hierboven een voorbeelddataset, of plak de URL van uw eigen Zarr-opslag en klik op Variabelen laden.",
+      "loadVariables": "Variabelen laden",
+      "loading": "Laden...",
+      "folderLabel": "Lokale map",
+      "chooseFolder": "Map kiezen",
+      "chooseDifferentFolder": "Een andere map kiezen",
+      "readingFolder": "Lezen...",
+      "folderHelp": "Selecteer de map met de opslag (die met .zmetadata of .zgroup). Deze wordt rechtstreeks van schijf gelezen; er wordt niets geüpload.",
+      "folderUnsupported": "Deze browser kan geen map openen. Gebruik de desktop-app of een op Chromium gebaseerde browser zoals Chrome of Edge.",
+      "foundVariables_one": "{{count}} variabele gevonden.",
+      "foundVariables_other": "{{count}} variabelen gevonden.",
+      "variableLabel": "Variabele",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "De coördinaatwaarden van deze dimensie konden niet worden gelezen. Typ de waarde die u wilt tonen, zoals die in de opslag staat.",
+      "colorMin": "Kleur min (optioneel)",
+      "colorMax": "Kleur max (optioneel)",
+      "adding": "Toevoegen...",
+      "addLayer": "Laag toevoegen",
+      "sample": {
+        "climate": "Klimaat (CarbonPlan)",
+        "sst": "Zeeoppervlaktetemperatuur, maandelijks (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Deck.gl-laag",
       "errorChooseFile": "Kies een CSV-, JSON- of GeoJSON-bestand.",

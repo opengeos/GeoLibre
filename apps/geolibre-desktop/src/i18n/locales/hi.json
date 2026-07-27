@@ -644,6 +644,36 @@
       "adding": "जोड़ा जा रहा है...",
       "addLayer": "लेयर जोड़ें"
     },
+    "zarr": {
+      "title": "Zarr परत जोड़ें",
+      "description": "एक Zarr डेटा क्यूब प्रस्तुत करें: HTTP पर एक दूरस्थ स्टोर, या इस कंप्यूटर के किसी फ़ोल्डर में रखा स्टोर।",
+      "sourceLabel": "स्रोत",
+      "sourceRemote": "दूरस्थ स्टोर (URL)",
+      "sourceFolder": "स्थानीय फ़ोल्डर",
+      "urlLabel": "Zarr स्टोर URL",
+      "urlHelp": "ऊपर से कोई नमूना डेटासेट चुनें, या अपना Zarr स्टोर URL चिपकाएँ, फिर 'चर लोड करें' पर क्लिक करें।",
+      "loadVariables": "चर लोड करें",
+      "loading": "लोड हो रहा है...",
+      "folderLabel": "स्थानीय फ़ोल्डर",
+      "chooseFolder": "फ़ोल्डर चुनें",
+      "chooseDifferentFolder": "दूसरा फ़ोल्डर चुनें",
+      "readingFolder": "पढ़ा जा रहा है...",
+      "folderHelp": "वह फ़ोल्डर चुनें जिसमें स्टोर है (जिसमें .zmetadata या .zgroup हो)। इसे सीधे डिस्क से पढ़ा जाता है; कुछ भी अपलोड नहीं होता।",
+      "folderUnsupported": "यह ब्राउज़र फ़ोल्डर नहीं खोल सकता। डेस्कटॉप ऐप, या Chrome या Edge जैसा Chromium-आधारित ब्राउज़र उपयोग करें।",
+      "foundVariables_one": "{{count}} चर मिला।",
+      "foundVariables_other": "{{count}} चर मिले।",
+      "variableLabel": "चर",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "इस विमा के निर्देशांक मान नहीं पढ़े जा सके। दिखाने के लिए मान वैसे ही लिखें जैसा वह स्टोर में है।",
+      "colorMin": "रंग न्यूनतम (वैकल्पिक)",
+      "colorMax": "रंग अधिकतम (वैकल्पिक)",
+      "adding": "जोड़ा जा रहा है...",
+      "addLayer": "परत जोड़ें",
+      "sample": {
+        "climate": "जलवायु (CarbonPlan)",
+        "sst": "समुद्र सतह तापमान, मासिक (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Deck.gl लेयर",
       "errorChooseFile": "एक CSV, JSON, या GeoJSON फ़ाइल चुनें।",

@@ -644,6 +644,36 @@
       "adding": "Añadiendo...",
       "addLayer": "Añadir capa"
     },
+    "zarr": {
+      "title": "Añadir capa Zarr",
+      "description": "Representar un cubo de datos Zarr: un almacén remoto por HTTP, o un almacén en una carpeta de este equipo.",
+      "sourceLabel": "Fuente",
+      "sourceRemote": "Almacén remoto (URL)",
+      "sourceFolder": "Carpeta local",
+      "urlLabel": "URL del almacén Zarr",
+      "urlHelp": "Elija un conjunto de datos de muestra arriba, o pegue la URL de su propio almacén Zarr, y luego haga clic en Cargar variables.",
+      "loadVariables": "Cargar variables",
+      "loading": "Cargando...",
+      "folderLabel": "Carpeta local",
+      "chooseFolder": "Elegir carpeta",
+      "chooseDifferentFolder": "Elegir otra carpeta",
+      "readingFolder": "Leyendo...",
+      "folderHelp": "Seleccione la carpeta que contiene el almacén (la que incluye .zmetadata o .zgroup). Se lee directamente del disco; no se sube nada.",
+      "folderUnsupported": "Este navegador no puede abrir una carpeta. Use la aplicación de escritorio o un navegador basado en Chromium como Chrome o Edge.",
+      "foundVariables_one": "Se encontró {{count}} variable.",
+      "foundVariables_other": "Se encontraron {{count}} variables.",
+      "variableLabel": "Variable",
+      "dimLabel": "{{dim}}",
+      "dimValueHelp": "No se pudieron leer los valores de coordenada de esta dimensión. Escriba el valor que desea mostrar, tal como aparece en el almacén.",
+      "colorMin": "Color mín (opcional)",
+      "colorMax": "Color máx (opcional)",
+      "adding": "Añadiendo...",
+      "addLayer": "Añadir capa",
+      "sample": {
+        "climate": "Clima (CarbonPlan)",
+        "sst": "Temperatura de la superficie del mar, mensual (NOAA)"
+      }
+    },
     "deckViz": {
       "defaultName": "Capa Deck.gl",
       "errorChooseFile": "Elija un archivo CSV, JSON o GeoJSON.",
