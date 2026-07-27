@@ -155,6 +155,20 @@ const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-06-17.0/buildings.pmtiles";
 const ZARR_SAMPLE_URL =
   "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
+/**
+ * A cube with a real time axis, so the Zarr panel can demonstrate the Time
+ * Slider binding. The CarbonPlan sample above cannot: its non-spatial dims are
+ * `band` and a bare 1-12 `month` climatology with no CF `units`, which is not a
+ * series of instants, so no temporal adapter is registered for it and the
+ * Layers panel correctly offers no bind action.
+ *
+ * NOAA OI SST V2 monthly means, 1981-2023 on a 1-degree global grid, chunked
+ * one time step per chunk (~165 KiB) so stepping the timeline is a single small
+ * read. Public domain (U.S. Government work); see the store's own attributes
+ * for the citation.
+ */
+const ZARR_TIME_SERIES_SAMPLE_URL =
+  "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr";
 const LIDAR_SAMPLE_URL = "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz";
 const SPLATTING_SAMPLE_URL = "https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
@@ -594,6 +608,11 @@ function getStacColorRampModule(colormap: string): typeof STAC_COLOR_RAMP_MODULE
   };
 }
 
+// Matches the stop count of the control's own default colormap, so a named ramp
+// renders with the same smoothness as the built-in Zarr panel default. Declared
+// above ZARR_OPTIONS because that initializer resolves a ramp for its samples.
+const ZARR_COLORMAP_STOPS = 9;
+
 const ZARR_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-zarr-control",
@@ -613,7 +632,23 @@ const ZARR_OPTIONS = {
   defaultOpacity: 0.85,
   defaultPickable: false,
   defaultSelector: { band: "prec", month: 1 },
-  sampleData: [{ label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL }],
+  // The SST entry carries its own settings because the `default*` options below
+  // are the CarbonPlan sample's: a -2..35 degree field drawn against a 0-300
+  // ramp is a flat wash, and `{ band, month }` names dimensions it does not
+  // have. Needs maplibre-gl-components >= 0.28.0, which applies these on select.
+  sampleData: [
+    { label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL },
+    {
+      label: "Sea surface temperature, monthly (NOAA)",
+      url: ZARR_TIME_SERIES_SAMPLE_URL,
+      variable: "sst",
+      clim: [-2, 32],
+      colormap: interpolateRampColors("turbo", ZARR_COLORMAP_STOPS),
+      // This store's only non-spatial dimension is `time`, which the Time
+      // Slider drives; an empty selector clears the climate sample's.
+      selector: {},
+    },
+  ],
   defaultVariable: "climate",
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies ZarrLayerControlOptions;
@@ -2503,10 +2538,6 @@ function resolveZarrColormap(colormap: string | string[] | undefined): string[] 
   if (!name) return undefined;
   return interpolateRampColors(name, ZARR_COLORMAP_STOPS);
 }
-
-// Matches the stop count of the control's own default colormap, so a named ramp
-// renders with the same smoothness as the built-in Zarr panel default.
-const ZARR_COLORMAP_STOPS = 9;
 
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLidarControl(app);
