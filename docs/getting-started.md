@@ -8,7 +8,6 @@
 [![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
 [![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
 [![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?logo=codesandbox)](https://codesandbox.io/p/github/opengeos/geolibre)
-[![Open in StackBlitz](https://img.shields.io/badge/Open%20in-StackBlitz-blue?logo=stackblitz)](https://stackblitz.com/github/opengeos/geolibre)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-GeoLibre-0078D4?logo=windows)](https://apps.microsoft.com/detail/9nwt67rv531x)
 [![AUR version](https://img.shields.io/aur/version/geolibre-bin?logo=archlinux&label=AUR)](https://aur.archlinux.org/packages/geolibre-bin)
 [![FlatPark](https://img.shields.io/badge/FlatPark-GeoLibre-4A90D9?logo=flatpak)](https://flatpark.org/apps/app.geolibre.GeoLibre/)
@@ -122,6 +121,41 @@ docker pull ghcr.io/opengeos/geolibre:latest
 docker run --rm -p 8080:80 ghcr.io/opengeos/geolibre:latest
 ```
 
+#### Bundled conversion sidecar
+
+The image also bundles the Python conversion/Whitebox sidecar (uvicorn) and
+reverse-proxies it at `/sidecar`, so the browser reaches it same-origin with no
+CORS or separate process to manage. `/conversion/status` is reachable at
+`http://localhost:8080/sidecar/conversion/status`.
+
+- **Vector → GeoParquet** and **CSV → GeoParquet** run in the browser with
+  DuckDB-WASM and need no sidecar.
+- **Vector → FlatGeobuf**, **Vector → PMTiles**, and **Raster → COG** use the
+  sidecar. These read a file **path on the sidecar's filesystem**, so from a
+  pure browser they currently work for files mounted into the container (a
+  browser cannot hand the container an absolute path); upload-based input is a
+  planned follow-up. The desktop app passes real local paths, so all
+  conversions work there.
+- **PMTiles** and **Whitebox** are **amd64-only** in the container —
+  `freestiler` and `whitebox-workflows` publish no linux/arm64 wheels. On arm64
+  the other conversions still work; those two report unavailable.
+
+Because the sidecar is reachable same-origin, conversion reads/writes are
+confined to `GEOLIBRE_CONVERSION_ROOTS` (default `/data` in the image). Mount
+your files there:
+
+```bash
+docker run --rm -p 8080:80 -v "$PWD/data:/data" ghcr.io/opengeos/geolibre:latest
+```
+
+Set `GEOLIBRE_DISABLE_SIDECAR=1` to run nginx only (web-only behavior):
+
+```bash
+docker run --rm -p 8080:80 -e GEOLIBRE_DISABLE_SIDECAR=1 ghcr.io/opengeos/geolibre:latest
+```
+
+#### Password protection (optional)
+
 To require a username and password, set `GEOLIBRE_AUTH_USER` and
 `GEOLIBRE_AUTH_PASSWORD`; nginx then protects the app and the `/sidecar` API
 with HTTP Basic Auth (a single shared credential). Pair it with a
@@ -168,6 +202,25 @@ fronts the container, list its address in `GEOLIBRE_TRUSTED_PROXIES` (a
 comma-separated list of IPs or CIDRs) so per-client rate limiting sees the real
 client rather than counting every user as the proxy.
 
+The browser prompts for the credentials on first visit. `/healthz` stays
+unauthenticated so the container health check keeps working. When the variables
+are unset (the default), no authentication is applied.
+
+As with any Docker env var, a password passed with `-e` lands in your shell
+history and is readable on the host via `docker inspect`. Beyond quick local
+testing, prefer `--env-file` with a permission-restricted file, or a secrets
+manager.
+
+Basic Auth is a single shared credential, not per-user accounts, and sends
+credentials with every request. For multi-user or SSO needs, put an auth proxy
+such as `oauth2-proxy` or Authelia in front of the unmodified image instead.
+Also see the note in
+[`docker/nginx.conf`](https://github.com/opengeos/GeoLibre/blob/main/docker/nginx.conf)
+about dropping the `localhost` CSP allowances before exposing the image
+publicly.
+
+#### Subpath and onboarding build arguments
+
 For deployments under a URL subpath, pass the app base at build time:
 
 ```bash
@@ -175,6 +228,16 @@ docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
 ```
 
 The container always serves the app from its root path. The build argument only sets the URL prefix that the app expects, so subpath deployments also require a reverse proxy in front of the container that strips the prefix before forwarding requests (for example, nginx `proxy_pass http://geolibre/;` with a trailing slash).
+
+To skip the first-launch welcome wizard for every visitor (kiosk or embedded
+deployments), bake `VITE_WELCOME_DISABLED=1` into the build:
+
+```bash
+docker build --build-arg VITE_WELCOME_DISABLED=1 -t geolibre .
+```
+
+Individual links can also opt out at runtime with `?welcome=0`. See
+[Embedding & Sharing](user-guide/embedding.md#url-parameters).
 
 ### Run the desktop app
 
@@ -265,6 +328,32 @@ Protomaps reuses the key described in [Optional basemap credentials](#optional-b
 
 Keys set via **Settings → Environment Variables**, or typed directly into the panel's **API keys** view (the key button in the panel header), apply at runtime without reopening the project. A key baked into `apps/geolibre-desktop/.env.local` is read at build time and needs a dev server restart. When `VITE_AMAZON_LOCATION_API_KEY` is set in the environment it takes precedence over a key typed in the panel; removing it from the environment clears it on the next page reload.
 
+## Optional 3D globe credentials (Cesium Ion)
+
+The optional **Cesium 3D-globe view** — a split-pane globe rendered with [CesiumJS](https://cesium.com/platform/cesiumjs/) alongside the 2D MapLibre map — needs a [Cesium Ion](https://ion.cesium.com/) access token for its world imagery and terrain. Create a free Ion account, copy your default access token, and set it at build time:
+
+```env
+CESIUM_TOKEN=your_cesium_ion_access_token
+```
+
+`CESIUM_TOKEN` (or the `VITE_`-prefixed `VITE_CESIUM_TOKEN`) is read by `vite.config.ts` and baked into the build. You can **also set it at runtime** — with no rebuild — in the Settings dialog's **Environment Variables** section, which has a dedicated masked **Cesium Ion token** field. That token is stored locally on the device (in browser storage on the web build), **not** in the shared project file, and overrides the build-time value; it is how a web user brings their own Ion token. (A free-form `VITE_CESIUM_TOKEN` variable in the same section still works and takes precedence, as an override.) Without a token from any source, the 3D-globe toggle is hidden entirely (the 2D map is unaffected). Ion access tokens are designed to ship in client bundles. See [Architecture](architecture.md#3d-globe-view-cesiumjs) for how the globe integrates.
+
+## Optional runtime mirrors (offline and air-gapped)
+
+The **Python (Pyodide)** vector engine loads its runtime from the public jsDelivr CDN by default. To self-host it for offline or production use, point it at a mirrored copy of the Pyodide distribution:
+
+```env
+VITE_PYODIDE_INDEX_URL=https://your-host/pyodide/v0.27.7/full/
+```
+
+Similarly, the DuckDB Spatial extension is installed from DuckDB's remote extension repository by default. To load it from a mirror instead (so `INSTALL spatial` is skipped and the extension is loaded directly), set the full path or URL to the extension file:
+
+```env
+VITE_DUCKDB_SPATIAL_EXTENSION_PATH=https://your-host/duckdb/spatial.duckdb_extension.wasm
+```
+
+Both variables can also be set at runtime through the Settings dialog's environment variables (no rebuild required), so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors without rebuilding.
+
 ## Optional Python sidecar
 
 The optional FastAPI sidecar is reserved for heavier processing workflows and is not required for the desktop UI.
@@ -276,3 +365,37 @@ source .venv/bin/activate
 pip install -e .
 uvicorn geolibre_server.app.main:app --host 127.0.0.1 --port 8765
 ```
+
+The sidecar self-bootstraps a managed runtime on first use; set
+`GEOLIBRE_CONVERSION_PYTHON=$(which python)` to reuse the current environment
+instead. See the
+[sidecar README](https://github.com/opengeos/GeoLibre/blob/main/backend/geolibre_server/README.md)
+for details.
+
+### Optional extras
+
+The base install is deliberately small. Each group of tools has its own extra;
+install only the ones you need, then run `geolibre-server` (or the `uvicorn`
+command above):
+
+```bash
+# Conversion tools (DuckDB, rio-cogeo, freestiler)
+pip install -e "backend/geolibre_server[conversion]"
+
+# Vector tools — GeoPandas engine (GeoPandas, Shapely)
+pip install -e "backend/geolibre_server[vector]"
+
+# Raster tools (rasterio, numpy, contourpy)
+pip install -e "backend/geolibre_server[raster]"
+
+# AI Segmentation proxy (an HTTP client only; models live in samgeo-api)
+pip install -e "backend/geolibre_server[ml]"
+```
+
+To use the sidecar from the **web** build, start it and serve the app from
+`localhost:5173` — CORS is restricted to that origin and the Tauri origins.
+Where a tool has a browser engine (all Vector tools, and the GeoParquet/CSV
+conversions), the dialog falls back to it automatically when the sidecar or its
+extra is unavailable. See [Processing Tools](user-guide/processing.md) for what
+each engine does, and [AI Segmentation](user-guide/segmentation.md) for the
+separate `samgeo-api` model server.

@@ -40,6 +40,8 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Features: features.md
+  - Demos: demos.md
   - Downloads: downloads.md
   - Launch GeoLibre Web: /demo/
   - User Guide:
