@@ -5,7 +5,7 @@ import {
   fetchReleases,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
-import Pbf from "pbf";
+import { PbfReader } from "pbf";
 import { PMTiles } from "pmtiles";
 import type { GeoLibreOvertureQuery, GeoLibreOvertureQueryResult } from "../types";
 
@@ -419,7 +419,7 @@ export async function queryOvertureFeatures(
       tilesRead += 1;
       if (!response) continue;
       if (truncated) return;
-      const vectorTile = new VectorTile(new Pbf(response.data));
+      const vectorTile = new VectorTile(new PbfReader(response.data));
       const source = vectorTile.layers[query.sourceLayer];
       if (!source) continue;
       for (let index = 0; index < source.length; index += 1) {
