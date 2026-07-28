@@ -1342,3 +1342,111 @@ describe("MapController terrain auto-enable", () => {
     }
   });
 });
+
+describe("MapController Mapbox descriptor requests", () => {
+  const MAPBOX_STREETS = "https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token=tok";
+  const MAPBOX_DARK = "https://api.mapbox.com/styles/v1/mapbox/dark-v11?access_token=tok";
+  const OPENFREEMAP = "https://tiles.openfreemap.org/styles/liberty";
+
+  /** Minimal map stub: setStyle/remove are all the Mapbox path touches. */
+  function mapboxController(): { controller: MapController; styles: unknown[] } {
+    const styles: unknown[] = [];
+    const map = {
+      setStyle: (style: unknown) => {
+        styles.push(style);
+      },
+      remove: () => {},
+      addControl: () => {},
+      removeControl: () => {},
+      getTerrain: () => null,
+      setTerrain: () => {},
+      once: () => {},
+      on: () => {},
+      off: () => {},
+    };
+    const controller = createMapController();
+    const internal = controller as unknown as MapControllerInternals;
+    internal.map = map;
+    internal.styleReady = true;
+    return { controller, styles };
+  }
+
+  /**
+   * Runs `body` with a fetch that never settles on its own, so a descriptor
+   * request stays in flight until something aborts its signal. Every signal
+   * handed to fetch is collected in order.
+   */
+  async function withPendingFetch(
+    body: (signals: (AbortSignal | undefined)[]) => Promise<void> | void,
+  ): Promise<void> {
+    const signals: (AbortSignal | undefined)[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((_input: unknown, init?: { signal?: AbortSignal }) => {
+      signals.push(init?.signal);
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    }) as typeof globalThis.fetch;
+    try {
+      await body(signals);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  it("aborts a descriptor request the next basemap supersedes", async () => {
+    await withPendingFetch(async (signals) => {
+      const warnings: unknown[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args);
+      const { controller } = mapboxController();
+      try {
+        controller.setStyle(MAPBOX_STREETS);
+        controller.setStyle(MAPBOX_DARK);
+
+        assert.equal(signals.length, 2);
+        assert.equal(signals[0]?.aborted, true);
+        assert.equal(signals[1]?.aborted, false);
+
+        // The abort rejection is this controller cancelling its own request,
+        // so it must not surface as a failed-style warning.
+        await Promise.resolve();
+        await Promise.resolve();
+        assert.deepEqual(warnings, []);
+      } finally {
+        console.warn = originalWarn;
+        controller.destroy();
+      }
+    });
+  });
+
+  it("aborts a pending descriptor request when a non-Mapbox style is applied", async () => {
+    await withPendingFetch((signals) => {
+      const { controller, styles } = mapboxController();
+      try {
+        controller.setStyle(MAPBOX_STREETS);
+        controller.setStyle(OPENFREEMAP);
+
+        // The plain URL resolves synchronously, and no second fetch is made.
+        assert.deepEqual(styles, [OPENFREEMAP]);
+        assert.equal(signals.length, 1);
+        assert.equal(signals[0]?.aborted, true);
+      } finally {
+        controller.destroy();
+      }
+    });
+  });
+
+  it("aborts a pending descriptor request on destroy", async () => {
+    await withPendingFetch((signals) => {
+      const { controller } = mapboxController();
+      controller.setStyle(MAPBOX_STREETS);
+      assert.equal(signals[0]?.aborted, false);
+
+      controller.destroy();
+      assert.equal(signals[0]?.aborted, true);
+    });
+  });
+});
