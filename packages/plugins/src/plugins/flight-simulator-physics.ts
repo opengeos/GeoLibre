@@ -231,9 +231,7 @@ export function constrainToTerrain(
   minAltitudeAglMeters: number,
 ): FlightStepResult {
   const ground = Number.isFinite(groundElevationMeters) ? groundElevationMeters : 0;
-  const clearance = Number.isFinite(minAltitudeAglMeters)
-    ? Math.max(0, minAltitudeAglMeters)
-    : 0;
+  const clearance = Number.isFinite(minAltitudeAglMeters) ? Math.max(0, minAltitudeAglMeters) : 0;
   const floor = ground + clearance;
   if (state.altitude > floor) return { state, grounded: false };
   return { state: { ...state, altitude: floor }, grounded: true };
