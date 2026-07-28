@@ -167,6 +167,20 @@ export async function reloadVectorControlLayer(id: string): Promise<VectorLayerI
 }
 
 /**
+ * Reads one Add Vector Layer attribute without materializing tiled geometry.
+ *
+ * @param id The store/control layer id.
+ * @param property The attribute field name.
+ * @returns Non-null field values, or null when the control cannot read them.
+ */
+export function getVectorLayerPropertyValues(
+  id: string,
+  property: string,
+): Promise<unknown[] | null> {
+  return vectorControl?.getLayerPropertyValues(id, property) ?? Promise.resolve(null);
+}
+
+/**
  * Replays URL-backed vector layers from the loaded project into the
  * control and drops control layers the project does not contain. Called by
  * the desktop shell whenever a project is loaded or the map is

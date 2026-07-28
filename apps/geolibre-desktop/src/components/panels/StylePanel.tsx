@@ -6,7 +6,6 @@ import {
   type ExpressionVariable,
   type FillPattern,
   type GeometryGeneratorType,
-  type GraduatedClassificationScheme,
   type LabelStyle,
   type LayerType,
   type LineDecoration,
@@ -18,9 +17,7 @@ import {
   type VectorStyleMode,
   type VectorStyleStop,
   collectDiagramData,
-  createGraduatedClassBreaks,
   geojsonHasZCoordinates,
-  interpolateRampColors,
   isStyleLibraryTargetLayer,
   parseJsonExpression,
   pluginOwnsPaint,
@@ -49,6 +46,7 @@ import {
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_SOURCE_KIND,
   countAtlasDroppedDiagrams,
+  getVectorLayerPropertyValues,
 } from "@geolibre/plugins";
 import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
@@ -87,6 +85,13 @@ import {
   getAttributePropertyNames,
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
+import {
+  clampClassCount,
+  createCategorizedStops,
+  createGraduatedStops,
+  getPropertyValues,
+  numericBounds,
+} from "../../lib/vector-style-classification";
 
 /**
  * Data-defined label overrides (GH #1320): one row per {@link LabelStyle}
@@ -492,23 +497,6 @@ function RuleNumberInput({
   );
 }
 
-function getPropertyValues(
-  layer: {
-    geojson?: {
-      features?: Array<{
-        properties?: Record<string, unknown> | null;
-      }>;
-    };
-  },
-  property: string,
-): unknown[] {
-  if (!property) return [];
-
-  return (layer.geojson?.features ?? [])
-    .map((feature) => feature.properties?.[property])
-    .filter((value) => value !== null && value !== undefined);
-}
-
 const VECTOR_STYLE_COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
 
 const VECTOR_STYLE_CLASS_COUNTS = Array.from({ length: 12 }, (_, index) => index + 1);
@@ -531,87 +519,6 @@ const CATEGORIZED_CLASSIFICATION_SCHEMES: ReadonlyArray<{
   { value: "first-values", labelKey: "style.symbology.schemeFirstValues" },
 ];
 
-// Exported for the Style Manager, which regenerates a layer's stops when a
-// ramp preset is applied to an already-classified layer.
-export function createGraduatedStops(
-  layer: Parameters<typeof getPropertyValues>[0],
-  property: string,
-  classCount: number,
-  colorRamp: string,
-  classificationScheme: string,
-): VectorStyleStop[] {
-  const values = getPropertyValues(layer, property)
-    .map((value) => Number(value))
-    .filter(Number.isFinite);
-  const count = clampClassCount(classCount, 2);
-  const colors = interpolateRampColors(colorRamp, count);
-  if (values.length === 0) {
-    return colors.map((color, index) => ({ value: index, color }));
-  }
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (min === max) return [{ value: min, color: colors.at(-1) ?? "#2563eb" }];
-
-  // The breaks are class lower bounds, so `count` classes give `count` stops
-  // and the top class is open-ended above (see createGraduatedClassBreaks).
-  // normalizeClassificationScheme keeps the scheme to the three known values;
-  // anything else classifies as equal interval, as it did before.
-  const breaks = createGraduatedClassBreaks(
-    values,
-    count,
-    classificationScheme as GraduatedClassificationScheme,
-  );
-
-  // Any scheme can yield fewer breaks than the requested count when the layer
-  // has few unique values (duplicate breaks collapse); align the color count so
-  // none are dropped.
-  const stopColors =
-    breaks.length === count ? colors : interpolateRampColors(colorRamp, breaks.length);
-
-  return breaks.map((value, index) => ({
-    value: Number(value.toPrecision(8)),
-    color: stopColors[index] ?? stopColors.at(-1) ?? "#2563eb",
-  }));
-}
-
-// Exported for the Style Manager (see createGraduatedStops above).
-export function createCategorizedStops(
-  layer: Parameters<typeof getPropertyValues>[0],
-  property: string,
-  classCount: number,
-  colorRamp: string,
-  classificationScheme: string,
-): VectorStyleStop[] {
-  const counts = new Map<string, number>();
-  const firstSeen = new Map<string, number>();
-  for (const value of getPropertyValues(layer, property)) {
-    const key = String(value);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    if (!firstSeen.has(key)) firstSeen.set(key, firstSeen.size);
-  }
-
-  const count = clampClassCount(classCount, 1);
-  const categories = Array.from(counts.entries()).sort((a, b) => {
-    if (classificationScheme === "alphabetical") {
-      return a[0].localeCompare(b[0], undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    }
-    if (classificationScheme === "first-values") {
-      return (firstSeen.get(a[0]) ?? 0) - (firstSeen.get(b[0]) ?? 0);
-    }
-    return b[1] - a[1] || a[0].localeCompare(b[0]);
-  });
-  const colors = interpolateRampColors(colorRamp, Math.min(count, categories.length || count));
-
-  return categories.slice(0, count).map(([value], index) => ({
-    value,
-    color: colors[index] ?? nextStopColor(index),
-  }));
-}
-
 function createDefaultStops(
   layer: Parameters<typeof getPropertyValues>[0],
   mode: VectorStyleMode,
@@ -619,19 +526,29 @@ function createDefaultStops(
   classCount: number,
   colorRamp: string,
   classificationScheme: string,
+  propertyValues?: unknown[],
 ): VectorStyleStop[] {
   if (mode === "graduated") {
-    return createGraduatedStops(layer, property, classCount, colorRamp, classificationScheme);
+    return createGraduatedStops(
+      layer,
+      property,
+      classCount,
+      colorRamp,
+      classificationScheme,
+      propertyValues,
+    );
   }
   if (mode === "categorized") {
-    return createCategorizedStops(layer, property, classCount, colorRamp, classificationScheme);
+    return createCategorizedStops(
+      layer,
+      property,
+      classCount,
+      colorRamp,
+      classificationScheme,
+      propertyValues,
+    );
   }
   return styleValue(DEFAULT_LAYER_STYLE, "vectorStyleStops");
-}
-
-function clampClassCount(value: number, min: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(12, Math.max(min, Math.round(value)));
 }
 
 function normalizeVectorStyleClassCount(mode: VectorStyleMode, value: number): number {
@@ -660,7 +577,9 @@ function chooseDefaultStyleProperty(
     if (currentProperty && isNumericProperty(layer, currentProperty)) {
       return currentProperty;
     }
-    return chooseGraduatedProperty(layer, properties);
+    return (
+      chooseGraduatedProperty(layer, properties) || (!layer.geojson ? (properties[0] ?? "") : "")
+    );
   }
 
   if (mode === "categorized") {
@@ -697,7 +616,8 @@ function chooseGraduatedProperty(
       .filter(Number.isFinite);
     if (values.length < 2) continue;
 
-    const range = Math.max(...values) - Math.min(...values);
+    const { min, max } = numericBounds(values);
+    const range = max - min;
     const score = new Set(values).size * Math.log10(Math.max(1, range) + 1);
     if (score > bestScore) {
       bestProperty = property;
@@ -1129,6 +1049,12 @@ export function StylePanel({
   );
   const [vectorStyleError, setVectorStyleError] = useState<string | null>(null);
   const [extrusionError, setExtrusionError] = useState<string | null>(null);
+  const [loadedVectorPropertyValues, setLoadedVectorPropertyValues] = useState<{
+    layerId: string;
+    property: string;
+    values: unknown[];
+  } | null>(null);
+  const [vectorPropertyValuesLoading, setVectorPropertyValuesLoading] = useState(false);
   // Which expression surface the shared Expression Builder is editing; null
   // when the builder is closed. Targets carry the owning layer id so an edit
   // can never be applied to a different layer than the one it was opened for
@@ -1222,6 +1148,96 @@ export function StylePanel({
     layer?.style.vectorStyleMode,
     layer?.style.vectorStyleProperty,
     layer?.style.vectorStyleStops,
+  ]);
+
+  // Add Vector Layer keeps large tiled datasets in DuckDB instead of copying
+  // their geometry into the app store. Read only the selected attribute when
+  // classification needs its values, so categorized and graduated styling
+  // remain available without defeating tiled rendering.
+  useEffect(() => {
+    const needsValues =
+      layer?.metadata.sourceKind === "maplibre-gl-vector" &&
+      !layer.geojson &&
+      (draftVectorStyleMode === "graduated" || draftVectorStyleMode === "categorized") &&
+      draftVectorStyleProperty !== "";
+
+    if (!needsValues) {
+      setLoadedVectorPropertyValues(null);
+      setVectorPropertyValuesLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadedVectorPropertyValues((current) =>
+      current?.layerId === layer.id && current.property === draftVectorStyleProperty
+        ? current
+        : null,
+    );
+    setVectorPropertyValuesLoading(true);
+    void getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
+      .then((values) => {
+        if (cancelled) return;
+        setLoadedVectorPropertyValues({
+          layerId: layer.id,
+          property: draftVectorStyleProperty,
+          values: values ?? [],
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("[GeoLibre] Could not read vector attribute values", error);
+          setLoadedVectorPropertyValues({
+            layerId: layer.id,
+            property: draftVectorStyleProperty,
+            values: [],
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setVectorPropertyValuesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    draftVectorStyleMode,
+    draftVectorStyleProperty,
+    layer?.geojson,
+    layer?.id,
+    layer?.metadata.sourceKind,
+  ]);
+
+  useEffect(() => {
+    if (
+      !layer ||
+      !loadedVectorPropertyValues ||
+      loadedVectorPropertyValues.layerId !== layer.id ||
+      loadedVectorPropertyValues.property !== draftVectorStyleProperty ||
+      (draftVectorStyleMode !== "graduated" && draftVectorStyleMode !== "categorized")
+    ) {
+      return;
+    }
+
+    setDraftVectorStyleStops(
+      createDefaultStops(
+        layer,
+        draftVectorStyleMode,
+        draftVectorStyleProperty,
+        draftVectorStyleClassCount,
+        draftVectorStyleColorRamp,
+        draftVectorStyleClassificationScheme,
+        loadedVectorPropertyValues.values,
+      ),
+    );
+  }, [
+    draftVectorStyleClassCount,
+    draftVectorStyleClassificationScheme,
+    draftVectorStyleColorRamp,
+    draftVectorStyleMode,
+    draftVectorStyleProperty,
+    layer,
+    loadedVectorPropertyValues,
   ]);
 
   // Reset the "show basemap layers" advanced toggle back to its clean default
@@ -1526,6 +1542,11 @@ export function StylePanel({
     draftVectorStyleClassificationScheme !== styleValue(style, "vectorStyleClassificationScheme") ||
     draftVectorStyleExpression !== styleValue(style, "vectorStyleExpression") ||
     JSON.stringify(draftVectorStyleStops) !== JSON.stringify(currentVectorStops);
+  const draftVectorPropertyValues =
+    loadedVectorPropertyValues?.layerId === layer.id &&
+    loadedVectorPropertyValues.property === draftVectorStyleProperty
+      ? loadedVectorPropertyValues.values
+      : undefined;
   const regenerateDraftVectorStyleStops = (
     mode: VectorStyleMode,
     property: string,
@@ -1534,7 +1555,15 @@ export function StylePanel({
     classificationScheme: string,
   ) => {
     setDraftVectorStyleStops(
-      createDefaultStops(layer, mode, property, classCount, colorRamp, classificationScheme),
+      createDefaultStops(
+        layer,
+        mode,
+        property,
+        classCount,
+        colorRamp,
+        classificationScheme,
+        property === draftVectorStyleProperty ? draftVectorPropertyValues : undefined,
+      ),
     );
   };
   const extrusionSettingsChanged =
@@ -2072,6 +2101,9 @@ export function StylePanel({
               ))
             )}
           </Select>
+          {vectorPropertyValuesLoading && (
+            <p className="text-xs text-muted-foreground">{t("attributeTable.loadingAttributes")}</p>
+          )}
         </div>
       )}
       {usesAttributeSymbology && (
@@ -2491,7 +2523,7 @@ export function StylePanel({
           type="button"
           size="sm"
           className="w-full"
-          disabled={!vectorStyleSettingsChanged}
+          disabled={!vectorStyleSettingsChanged || vectorPropertyValuesLoading}
           onClick={applyVectorStyleSettings}
         >
           {t("style.symbology.applyStyleType")}
