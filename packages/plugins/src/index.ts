@@ -665,6 +665,7 @@ export {
   altitudeForZoom,
   approach,
   compassPoint,
+  constrainToTerrain,
   normalizeHeading,
   normalizeLongitude,
   offsetPosition,

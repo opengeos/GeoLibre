@@ -219,6 +219,27 @@ export interface FlightStepResult {
 }
 
 /**
+ * Keep an integrated aircraft state above the terrain at its new position.
+ *
+ * Terrain is sampled by the map rather than the pure flight model, so the
+ * engine applies this after moving. Keeping it here makes the collision rule
+ * explicit and independently testable.
+ */
+export function constrainToTerrain(
+  state: AircraftState,
+  groundElevationMeters: number,
+  minAltitudeAglMeters: number,
+): FlightStepResult {
+  const ground = Number.isFinite(groundElevationMeters) ? groundElevationMeters : 0;
+  const clearance = Number.isFinite(minAltitudeAglMeters)
+    ? Math.max(0, minAltitudeAglMeters)
+    : 0;
+  const floor = ground + clearance;
+  if (state.altitude > floor) return { state, grounded: false };
+  return { state: { ...state, altitude: floor }, grounded: true };
+}
+
+/**
  * Advance the aircraft by one time step.
  *
  * Order matters: attitude is integrated first, then the turn it produces, then
@@ -290,15 +311,16 @@ export function stepFlight(
   );
 
   // --- Terrain floor.
-  let altitude = state.altitude + verticalSpeed * dtSeconds;
-  const floor = groundElevationMeters + config.minAltitudeAglMeters;
-  const grounded = altitude <= floor;
-  if (grounded) altitude = floor;
-
-  return {
-    state: { lng, lat, altitude, heading, pitch, roll, airspeed },
-    grounded,
+  const next = {
+    lng,
+    lat,
+    altitude: state.altitude + verticalSpeed * dtSeconds,
+    heading,
+    pitch,
+    roll,
+    airspeed,
   };
+  return constrainToTerrain(next, groundElevationMeters, config.minAltitudeAglMeters);
 }
 
 /** Height above the terrain in meters, never negative. */

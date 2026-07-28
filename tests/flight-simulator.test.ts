@@ -34,6 +34,7 @@ import {
   altitudeForZoom,
   approach,
   compassPoint,
+  constrainToTerrain,
   normalizeHeading,
   normalizeLongitude,
   offsetPosition,
@@ -339,6 +340,22 @@ describe("stepFlight", () => {
     }
     assert.ok(Number.isFinite(state.lat) && Number.isFinite(state.lng));
     assert.ok(state.lat <= MAX_FLIGHT_LATITUDE);
+  });
+});
+
+describe("constrainToTerrain", () => {
+  it("uses the arrival terrain to keep the aircraft out of a hillside", () => {
+    const state = levelFlight({ altitude: 100 });
+    const result = constrainToTerrain(state, 120, 25);
+    assert.equal(result.grounded, true);
+    assert.equal(result.state.altitude, 145);
+  });
+
+  it("ignores invalid terrain samples without corrupting the aircraft", () => {
+    const state = levelFlight({ altitude: 100 });
+    const result = constrainToTerrain(state, Number.NaN, 25);
+    assert.equal(result.grounded, false);
+    assert.equal(result.state, state);
   });
 });
 

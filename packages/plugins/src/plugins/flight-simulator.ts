@@ -32,6 +32,7 @@ import {
   type FlightModelConfig,
   altitudeAboveGround,
   altitudeForZoom,
+  constrainToTerrain,
   stepFlight,
 } from "./flight-simulator-physics";
 
@@ -81,6 +82,10 @@ const DEFAULT_THROTTLE = 0.6;
  * ~7 fps) the aircraft would fly in visible slow motion.
  */
 const MAX_STEP_SECONDS = 0.25;
+
+/** Maximum integration slice. Short slices keep keyboard handling and terrain
+ * collision stable when rendering drops below 30 fps. */
+const MAX_PHYSICS_STEP_SECONDS = 1 / 30;
 
 /** Floor for the seeded altitude, in meters above the terrain. */
 const MIN_SEED_ALTITUDE_AGL = 200;
@@ -335,7 +340,8 @@ class FlightSimulatorEngine {
    */
   private groundElevation(lng: number, lat: number): number {
     try {
-      return this.map.queryTerrainElevation?.([lng, lat]) ?? 0;
+      const elevation = this.map.queryTerrainElevation?.([lng, lat]);
+      return Number.isFinite(elevation) ? (elevation as number) : 0;
     } catch {
       // Terrain can be mid-teardown (style reload); sea level is a safe floor.
       return 0;
@@ -500,14 +506,19 @@ class FlightSimulatorEngine {
       Math.max(MIN_CAMERA_PITCH, LEVEL_CAMERA_PITCH + pitch),
     );
     const cameraRoll = this.settings.bankCamera ? -roll : 0;
-    const options = this.map.calculateCameraOptionsFromCameraLngLatAltRotation(
-      [lng, lat],
-      altitude,
-      heading,
-      cameraPitch,
-      cameraRoll,
-    );
-    this.map.jumpTo(options, { [FLIGHT_CAMERA_TOKEN]: ++this.cameraToken });
+    try {
+      const options = this.map.calculateCameraOptionsFromCameraLngLatAltRotation(
+        [lng, lat],
+        altitude,
+        heading,
+        cameraPitch,
+        cameraRoll,
+      );
+      this.map.jumpTo(options, { [FLIGHT_CAMERA_TOKEN]: ++this.cameraToken });
+    } catch {
+      // A style/terrain reload can briefly make camera conversion unavailable.
+      // Keep the simulation alive; the next animation frame will retry.
+    }
   }
 
   private hudState(): FlightHudState {
@@ -532,12 +543,27 @@ class FlightSimulatorEngine {
     if (this.destroyed || !this.running) return;
 
     if (this.lastFrame !== null) {
-      const dt = Math.min(MAX_STEP_SECONDS, (now - this.lastFrame) / 1000);
-      const controls = this.controls(dt);
-      const ground = this.groundElevation(this.aircraft.lng, this.aircraft.lat);
-      const result = stepFlight(this.aircraft, controls, this.model(), dt, ground);
-      this.aircraft = result.state;
-      this.grounded = result.grounded;
+      let remaining = Math.max(0, Math.min(MAX_STEP_SECONDS, (now - this.lastFrame) / 1000));
+      this.grounded = false;
+      while (remaining > 0) {
+        const dt = Math.min(MAX_PHYSICS_STEP_SECONDS, remaining);
+        const controls = this.controls(dt);
+        const model = this.model();
+        const ground = this.groundElevation(this.aircraft.lng, this.aircraft.lat);
+        const result = stepFlight(this.aircraft, controls, model, dt, ground);
+        // Check the terrain at the *new* position as well. Sampling only the
+        // departure point lets a fast aircraft enter a steep hillside for one
+        // or more frames.
+        const arrivalGround = this.groundElevation(result.state.lng, result.state.lat);
+        const constrained = constrainToTerrain(
+          result.state,
+          arrivalGround,
+          model.minAltitudeAglMeters,
+        );
+        this.aircraft = constrained.state;
+        this.grounded ||= result.grounded || constrained.grounded;
+        remaining -= dt;
+      }
       this.applyCamera();
     }
     this.lastFrame = now;
