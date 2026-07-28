@@ -1,4 +1,9 @@
-import { getGoogleMapsApiKey, getProtomapsApiKey, useAppStore } from "@geolibre/core";
+import {
+  getGoogleMapsApiKey,
+  getMapboxAccessToken,
+  getProtomapsApiKey,
+  useAppStore,
+} from "@geolibre/core";
 import {
   BasemapControl,
   type BasemapChangeEvent,
@@ -76,13 +81,19 @@ function getAmazonCredentials(): { amazonApiKey: string; awsRegion?: string } | 
 function getStyleProviderCredentials(): {
   protomapsApiKey?: string;
   stadiaApiKey?: string;
+  mapboxAccessToken?: string;
 } {
   const env = getRuntimeEnvironment();
   const protomapsApiKey = getProtomapsApiKey(env);
   const stadiaApiKey = env.VITE_STADIA_API_KEY?.trim() || undefined;
+  // Mapbox styles need the user's own access token. Same "only when set" rule as
+  // the others: the panel's API keys view has a Mapbox field, so pushing an
+  // empty string would clobber a token typed there.
+  const mapboxAccessToken = getMapboxAccessToken(env);
   return {
     ...(protomapsApiKey ? { protomapsApiKey } : {}),
     ...(stadiaApiKey ? { stadiaApiKey } : {}),
+    ...(mapboxAccessToken ? { mapboxAccessToken } : {}),
   };
 }
 
@@ -275,9 +286,10 @@ function addRuntimeEnvListener(): void {
       basemapControl.setAmazonCredentials(amazon.amazonApiKey, amazon.awsRegion);
     }
     // Same rule for the style-provider keys: push only what the user actually set.
-    const { protomapsApiKey, stadiaApiKey } = getStyleProviderCredentials();
+    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken } = getStyleProviderCredentials();
     if (protomapsApiKey) basemapControl.setProtomapsApiKey(protomapsApiKey);
     if (stadiaApiKey) basemapControl.setStadiaApiKey(stadiaApiKey);
+    if (mapboxAccessToken) basemapControl.setMapboxAccessToken(mapboxAccessToken);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);

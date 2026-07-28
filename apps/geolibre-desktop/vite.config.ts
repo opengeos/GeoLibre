@@ -76,6 +76,19 @@ if (!process.env.VITE_CESIUM_TOKEN) {
   }
 }
 
+// Mapbox access token for the basemap control's Mapbox styles: same
+// bare→prefixed bridge as the Google Maps and Cesium keys. `MAPBOX_TOKEN` is the
+// spelling Mapbox's own tooling uses, so accept it from the shell or an .env
+// file and surface it as `VITE_MAPBOX_ACCESS_TOKEN`; getMapboxAccessToken() then
+// lets a runtime Settings override win over this build-time value.
+if (!process.env.VITE_MAPBOX_ACCESS_TOKEN) {
+  const mapboxAccessToken =
+    process.env.MAPBOX_TOKEN || FILE_ENV.VITE_MAPBOX_ACCESS_TOKEN || FILE_ENV.MAPBOX_TOKEN;
+  if (mapboxAccessToken) {
+    process.env.VITE_MAPBOX_ACCESS_TOKEN = mapboxAccessToken;
+  }
+}
+
 // Earth Engine OAuth client ID: same bare→prefixed bridge as the Google Maps
 // and Cesium keys. The app reads `import.meta.env.VITE_GEE_OAUTH_CLIENT_ID`, so
 // a bare `GEE_OAUTH_CLIENT_ID` (shell/.zshrc or an .env file) is surfaced under

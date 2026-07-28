@@ -91,6 +91,7 @@ export {
 export {
   getCesiumIonToken,
   getGoogleMapsApiKey,
+  getMapboxAccessToken,
   getProtomapsApiKey,
   getProtomapsStyleUrl,
   getRuntimeEnvironment,

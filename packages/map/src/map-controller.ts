@@ -40,6 +40,7 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
+import { isMapboxStyleUrl, loadMapboxStyle } from "./mapbox-style";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
 import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-basemap";
 import { ResetBearingControl } from "./reset-bearing-control";
@@ -380,6 +381,9 @@ export class MapController {
   // (reentrancy guard against a sync loop). See syncLayerControlState.
   private refreshingStyleEditor = false;
   private basemapStyleUrl = DEFAULT_BASEMAP;
+  // Bumped on every style application so an asynchronously resolved style (the
+  // Mapbox path in applyStyleToMap) can tell whether it is still the current one.
+  private styleGeneration = 0;
   private basemapVisible = true;
   private basemapOpacity = 1;
   private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
@@ -422,9 +426,14 @@ export class MapController {
     const maxPitch = clampNumber(mapPreferences.maxPitch, 0, DEFAULT_MAX_PITCH);
     this.mapPreferences = mapPreferences;
     this.basemapStyleUrl = options.styleUrl ?? DEFAULT_BASEMAP;
+    // A Mapbox descriptor has to be fetched and rewritten before MapLibre will
+    // take it (see applyStyleToMap), which the Map constructor cannot wait for.
+    // Start blank and apply it below, as soon as the listeners are wired — the
+    // path a project saved with a Mapbox basemap and a split-view pane both take.
+    const deferMapboxStyle = isMapboxStyleUrl(this.basemapStyleUrl);
     this.map = new maplibregl.Map({
       container,
-      style: resolveMapStyle(this.basemapStyleUrl),
+      style: deferMapboxStyle ? createBlankMapStyle() : resolveMapStyle(this.basemapStyleUrl),
       center: view?.center ?? [-100, 40],
       zoom: view?.zoom ?? 2,
       bearing: view?.bearing ?? 0,
@@ -496,6 +505,10 @@ export class MapController {
     this.addAttributionControl();
     this.addLogoControl();
     this.addMaptoolkitLogoControl();
+    // Kick off the deferred Mapbox descriptor fetch now that `style.load` and
+    // `styledata` are wired, so the real style is treated exactly like a later
+    // basemap switch rather than racing the listeners above.
+    if (deferMapboxStyle) this.applyStyleToMap(this.basemapStyleUrl);
     return this.map;
   }
 
@@ -875,11 +888,49 @@ export class MapController {
     this.styleReady = false;
     this.basemapOriginalPaintValues.clear();
     this.removeLayerControl();
-    this.map.setStyle(resolveMapStyle(url));
+    this.applyStyleToMap(url);
     // Switching to/from a planetary basemap changes the active body (the store's
     // ellipsoid subscription runs first, so the singleton is already current),
     // so redraw the scale bar for the new radius without waiting for a pan.
     this.scaleControl?.refresh();
+  }
+
+  /**
+   * Hands a basemap style URL to MapLibre.
+   *
+   * Everything except Mapbox resolves synchronously, so `setStyle` is handed the
+   * URL (or the inline style a GeoLibre sentinel expands to) directly. Mapbox
+   * style descriptors are Mapbox-flavored and must be fetched and rewritten
+   * before MapLibre will accept them (see ./mapbox-style), which makes that path
+   * asynchronous: a generation counter drops the result of a swap the user has
+   * already superseded, so a slow descriptor can never overwrite a newer
+   * basemap. Validation is off for those, matching how the basemap control
+   * applies them — the descriptor is transformed to spec, not authored here.
+   */
+  private applyStyleToMap(url: string): void {
+    const map = this.map;
+    if (!map) return;
+    const generation = ++this.styleGeneration;
+
+    if (!isMapboxStyleUrl(url)) {
+      map.setStyle(resolveMapStyle(url));
+      return;
+    }
+
+    void loadMapboxStyle(url)
+      .then((style) => {
+        if (this.map !== map || this.styleGeneration !== generation) return;
+        map.setStyle(style, { validate: false });
+      })
+      .catch((error: unknown) => {
+        if (this.map !== map || this.styleGeneration !== generation) return;
+        // Leave the current style alone: the basemap control watches its own
+        // parallel setStyle and rolls the basemap back through the store when a
+        // provider style fails, which lands here as a newer generation. When
+        // there is no control in play (a reopened project, a split-view pane)
+        // the map keeps whatever it had, which beats blanking it.
+        console.warn(`Failed to load the Mapbox basemap style "${url}".`, error);
+      });
   }
 
   setBasemapVisible(visible: boolean): void {
