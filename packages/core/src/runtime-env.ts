@@ -102,6 +102,14 @@ export function getGoogleMapsApiKey(env?: Record<string, string | undefined>): s
  * there too). When unset, the Mapbox basemaps prompt for a token in the basemap
  * panel's API keys view instead.
  *
+ * Note the precedence, shared with {@link getGoogleMapsApiKey} and
+ * {@link getCesiumIonToken}: the prefixed name always wins over the bare one,
+ * and `getRuntimeEnvironment` merges build-time and runtime vars into one
+ * record. So a build that baked in `VITE_MAPBOX_ACCESS_TOKEN` is overridden at
+ * runtime by a Settings entry under that *same* prefixed name; a bare
+ * `MAPBOX_TOKEN` entry is a fallback for when nothing was baked in, not a way
+ * to override a baked token.
+ *
  * @param env - Environment record (defaults to the runtime environment);
  *   injectable for testing.
  * @returns The trimmed token, or undefined when unset.

@@ -40,7 +40,7 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
-import { isMapboxStyleUrl, loadMapboxStyle } from "./mapbox-style";
+import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
 import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-basemap";
 import { ResetBearingControl } from "./reset-bearing-control";
@@ -885,14 +885,28 @@ export class MapController {
   setStyle(url: string): void {
     if (!this.map) return;
     this.basemapStyleUrl = url;
-    this.styleReady = false;
-    this.basemapOriginalPaintValues.clear();
-    this.removeLayerControl();
     this.applyStyleToMap(url);
     // Switching to/from a planetary basemap changes the active body (the store's
     // ellipsoid subscription runs first, so the singleton is already current),
     // so redraw the scale bar for the new radius without waiting for a pan.
     this.scaleControl?.refresh();
+  }
+
+  /**
+   * Tears down the state that belongs to the outgoing style, immediately before
+   * the incoming one is handed to MapLibre. `style.load` rebuilds all of it.
+   *
+   * Deliberately called per style application rather than at the top of
+   * `setStyle`: the Mapbox path below only reaches `map.setStyle` after an
+   * asynchronous fetch, and tearing down first would leave the controller
+   * wedged if that fetch failed — `styleReady` stuck false with no `style.load`
+   * coming to clear it, so layer syncing, basemap visibility/opacity and the
+   * layer control would all stay disabled over a still-rendered old style.
+   */
+  private beginStyleSwap(): void {
+    this.styleReady = false;
+    this.basemapOriginalPaintValues.clear();
+    this.removeLayerControl();
   }
 
   /**
@@ -913,6 +927,7 @@ export class MapController {
     const generation = ++this.styleGeneration;
 
     if (!isMapboxStyleUrl(url)) {
+      this.beginStyleSwap();
       map.setStyle(resolveMapStyle(url));
       return;
     }
@@ -920,16 +935,21 @@ export class MapController {
     void loadMapboxStyle(url)
       .then((style) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
+        this.beginStyleSwap();
         map.setStyle(style, { validate: false });
       })
       .catch((error: unknown) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
-        // Leave the current style alone: the basemap control watches its own
-        // parallel setStyle and rolls the basemap back through the store when a
-        // provider style fails, which lands here as a newer generation. When
-        // there is no control in play (a reopened project, a split-view pane)
-        // the map keeps whatever it had, which beats blanking it.
-        console.warn(`Failed to load the Mapbox basemap style "${url}".`, error);
+        // Nothing was torn down (beginStyleSwap runs only on success), so the
+        // controller stays fully live over the style it already had — better
+        // than blanking the map. The basemap control watches its own parallel
+        // setStyle and rolls the basemap back through the store when a provider
+        // style fails, which arrives here as a newer generation.
+        // The URL carries the user's access_token, so log the descriptor id only.
+        console.warn(
+          `Failed to load the Mapbox basemap style "${redactMapboxStyleUrl(url)}".`,
+          error,
+        );
       });
   }
 

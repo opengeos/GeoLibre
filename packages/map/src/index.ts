@@ -57,6 +57,7 @@ export {
   isMapboxStyleUrl,
   loadMapboxStyle,
   mapboxAccessTokenFromStyleUrl,
+  redactMapboxStyleUrl,
   resolveMapboxInternalUrl,
   transformMapboxStyle,
 } from "./mapbox-style";

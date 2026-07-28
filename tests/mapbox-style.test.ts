@@ -6,6 +6,7 @@ import type maplibregl from "maplibre-gl";
 import {
   isMapboxStyleUrl,
   mapboxAccessTokenFromStyleUrl,
+  redactMapboxStyleUrl,
   resolveMapboxInternalUrl,
   transformMapboxStyle,
 } from "../packages/map/src/mapbox-style";
@@ -68,9 +69,32 @@ describe("mapboxAccessTokenFromStyleUrl", () => {
     );
   });
 
+  it("trims a token padded by the query string", () => {
+    assert.equal(
+      mapboxAccessTokenFromStyleUrl(
+        "https://api.mapbox.com/styles/v1/mapbox/dark-v11?access_token=%20pk.token%20",
+      ),
+      "pk.token",
+    );
+  });
+
   it("returns an empty string when there is no token", () => {
     assert.equal(mapboxAccessTokenFromStyleUrl("https://api.mapbox.com/styles/v1/mapbox/x"), "");
     assert.equal(mapboxAccessTokenFromStyleUrl("nonsense"), "");
+  });
+});
+
+describe("redactMapboxStyleUrl", () => {
+  it("drops the query string so the access token never reaches a log", () => {
+    const redacted = redactMapboxStyleUrl(
+      "https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token=pk.secret",
+    );
+    assert.equal(redacted, "https://api.mapbox.com/styles/v1/mapbox/streets-v12");
+    assert.ok(!redacted.includes("pk.secret"));
+  });
+
+  it("never echoes an unparseable URL back", () => {
+    assert.equal(redactMapboxStyleUrl("not a url?access_token=pk.secret"), "(unparseable URL)");
   });
 });
 
@@ -151,6 +175,12 @@ describe("transformMapboxStyle", () => {
     transformMapboxStyle(raw, "tok");
     assert.equal(raw.sprite, "mapbox://sprites/mapbox/streets-v12");
     assert.deepEqual(raw.projection, { name: "globe" } as unknown as typeof raw.projection);
+    // Nested too: rewriting a source URL in place would leave the descriptor
+    // unusable for a retry while still passing the top-level assertions above.
+    assert.equal(
+      (raw.sources.composite as { url: string }).url,
+      "mapbox://mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2",
+    );
   });
 });
 

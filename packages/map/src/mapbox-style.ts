@@ -73,6 +73,25 @@ export function mapboxAccessTokenFromStyleUrl(styleUrl: string): string {
 }
 
 /**
+ * A Mapbox style URL with its credentials stripped, safe to put in a log line.
+ *
+ * Every Mapbox URL here carries the user's `access_token` in its query string,
+ * so the raw URL must never reach the console (or anything that captures it).
+ * The path alone identifies which style failed, which is all a log needs.
+ *
+ * @param styleUrl - A Mapbox style descriptor URL.
+ * @returns The URL's path, or `"(unparseable URL)"` when it is not a URL.
+ */
+export function redactMapboxStyleUrl(styleUrl: string): string {
+  try {
+    const parsed = new URL(styleUrl);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "(unparseable URL)";
+  }
+}
+
+/**
  * Rewrites a single `mapbox://` URL to its public HTTPS equivalent.
  *
  * Mirrors the three forms Mapbox styles use — sprites, font stacks, and tileset
