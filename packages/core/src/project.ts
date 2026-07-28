@@ -735,15 +735,20 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
 const MAX_PERSISTED_BINS = 50;
 
-const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
-  "histogram",
-  "scatter",
-  "bar",
-  "line",
-  "box",
-  "pie",
-  "indicator",
-];
+// Spelled as a Record so adding a member to DashboardWidgetType fails to
+// compile until it is listed here. A plain array accepted a short list
+// silently, and a type missing from it makes normalizeWidgets drop every widget
+// of that type — which is how selector widgets vanished on save and reload.
+const DASHBOARD_WIDGET_TYPES = Object.keys({
+  histogram: true,
+  scatter: true,
+  bar: true,
+  line: true,
+  box: true,
+  pie: true,
+  indicator: true,
+  selector: true,
+} satisfies Record<DashboardWidgetType, true>) as readonly DashboardWidgetType[];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
   "sum",
@@ -827,6 +832,11 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
       if (prefix) widget.prefix = prefix;
       const suffix = normalizeString(candidate.suffix);
       if (suffix) widget.suffix = suffix;
+    }
+    // Selector widget fields (issue #1381). Only a selector reads the flag, and
+    // false is the default, so persist it only when it is on.
+    if (type === "selector" && candidate.multiple === true) {
+      widget.multiple = true;
     }
     widgets.push(widget);
   }

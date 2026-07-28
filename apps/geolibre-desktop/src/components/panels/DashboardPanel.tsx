@@ -106,7 +106,7 @@ export function DashboardPanel() {
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const setDashboardColumns = useAppStore((s) => s.setDashboardColumns);
   const addWidget = useAppStore((s) => s.addWidget);
-  const updateWidget = useAppStore((s) => s.updateWidget);
+  const replaceWidget = useAppStore((s) => s.replaceWidget);
   const removeWidget = useAppStore((s) => s.removeWidget);
   const moveWidget = useAppStore((s) => s.moveWidget);
 
@@ -199,8 +199,11 @@ export function DashboardPanel() {
   };
   const handleSave = (widget: DashboardWidget) => {
     if (widgets.some((w) => w.id === widget.id)) {
-      const { id: _id, ...patch } = widget;
-      updateWidget(widget.id, patch);
+      // The editor hands back a complete record, so replace rather than merge:
+      // it omits the optional fields that were left empty, and merging would
+      // keep the previous title/color/prefix/suffix instead of clearing them.
+      const { id: _id, ...next } = widget;
+      replaceWidget(widget.id, next);
     } else {
       addWidget(widget);
     }

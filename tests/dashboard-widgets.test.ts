@@ -168,6 +168,37 @@ describe("normalizeWidgets", () => {
     assert.equal("suffix" in widget, false);
   });
 
+  // "selector" was missing from the type allow-list, so normalizeWidgets threw
+  // every selector widget away: they disappeared from a saved project and never
+  // came back on reload.
+  it("keeps a selector widget and its multi-select flag", () => {
+    const result = normalizeWidgets([
+      { id: "s", layerId: "l", type: "selector", category: "CONTINENT", multiple: true },
+    ] as never);
+    assert.equal(result?.length, 1);
+    assert.equal(result?.[0].type, "selector");
+    assert.equal(result?.[0].category, "CONTINENT");
+    assert.equal(result?.[0].multiple, true);
+  });
+
+  it("omits the multi-select flag when it is off or not a boolean", () => {
+    const result = normalizeWidgets([
+      { id: "a", layerId: "l", type: "selector", category: "c", multiple: false },
+      { id: "b", layerId: "l", type: "selector", category: "c", multiple: "yes" },
+      { id: "c", layerId: "l", type: "selector", category: "c" },
+    ] as never);
+    for (const id of ["a", "b", "c"]) {
+      assert.equal("multiple" in (result?.find((w) => w.id === id) ?? {}), false);
+    }
+  });
+
+  it("drops the multi-select flag from a non-selector widget", () => {
+    const result = normalizeWidgets([
+      { id: "p", layerId: "l", type: "pie", category: "kind", multiple: true },
+    ] as never);
+    assert.equal("multiple" in (result?.[0] ?? {}), false);
+  });
+
   it("returns null for a non-array or an all-invalid list", () => {
     assert.equal(normalizeWidgets(undefined), null);
     assert.equal(normalizeWidgets("nope"), null);
@@ -262,6 +293,35 @@ describe("widgets in the project file", () => {
       metadata: {},
     });
     assert.equal("widgets" in project, false);
+  });
+});
+
+describe("selector widgets in the project file", () => {
+  it("round-trips a selector widget through serialize/parse", () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: "sel-1",
+        layerId: "layer-a",
+        type: "selector",
+        category: "CONTINENT",
+        multiple: true,
+        title: "Continent",
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Selector",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      widgets,
+      metadata: {},
+    });
+    assert.deepEqual(project.widgets, widgets);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.widgets, widgets);
   });
 });
 
@@ -443,29 +503,85 @@ describe("selector widget values", () => {
   });
 });
 
-describe("selector widget multi-select persistence", () => {
+describe("saving an edited widget", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Test Project" });
   });
 
-  // updateWidget merges its patch onto the stored widget, so the editor has to
-  // write `multiple` explicitly. Omitting the key when the box is unchecked
-  // left an earlier `true` in place and the widget stayed in multi-select mode.
-  it("clears multi-select when the patch carries an explicit false", () => {
+  // The widget editor omits optional fields the user left empty, so saving has
+  // to replace the record. Merging kept the old values and an emptied title,
+  // color, prefix, or suffix silently reverted the moment the dialog closed.
+  it("clears the optional fields the new record omits", () => {
+    useAppStore.getState().addWidget(
+      widget({
+        id: "w",
+        type: "indicator",
+        title: "Old title",
+        color: "#004D43",
+        prefix: "€",
+        suffix: " ha",
+      }),
+    );
+    useAppStore.getState().replaceWidget("w", {
+      layerId: "layer-a",
+      type: "indicator",
+      indicatorAggregation: "count",
+    });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "w") ?? {};
+    assert.equal("title" in saved, false);
+    assert.equal("color" in saved, false);
+    assert.equal("prefix" in saved, false);
+    assert.equal("suffix" in saved, false);
+  });
+
+  it("clears multi-select when the new record omits the flag", () => {
     useAppStore
       .getState()
       .addWidget(widget({ id: "s", type: "selector", category: "CONTINENT", multiple: true }));
-    useAppStore.getState().updateWidget("s", { multiple: false });
-    const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
-    assert.equal(saved?.multiple, false);
+    useAppStore.getState().replaceWidget("s", {
+      layerId: "layer-a",
+      type: "selector",
+      category: "CONTINENT",
+    });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "s") ?? {};
+    assert.equal("multiple" in saved, false);
   });
 
-  it("retains the previous value when the patch omits the key", () => {
+  it("drops fields belonging to the previous widget type", () => {
+    useAppStore
+      .getState()
+      .addWidget(widget({ id: "w", type: "histogram", field: "pop", bins: 12 }));
+    useAppStore
+      .getState()
+      .replaceWidget("w", { layerId: "layer-a", type: "pie", category: "kind" });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "w") ?? {};
+    assert.equal("bins" in saved, false);
+    assert.equal("field" in saved, false);
+  });
+
+  it("keeps the widget's id and position, and ignores an unknown id", () => {
+    useAppStore.getState().addWidget(widget({ id: "a" }));
+    useAppStore.getState().addWidget(widget({ id: "b" }));
+    useAppStore.getState().replaceWidget("a", { layerId: "layer-z", type: "box", field: "area" });
+    assert.deepEqual(
+      useAppStore.getState().widgets.map((w) => w.id),
+      ["a", "b"],
+    );
+    assert.equal(useAppStore.getState().widgets[0].layerId, "layer-z");
+
+    useAppStore.getState().replaceWidget("missing", { layerId: "l", type: "box", field: "x" });
+    assert.equal(useAppStore.getState().widgets.length, 2);
+  });
+
+  // Kept distinct from replaceWidget: updateWidget is still the partial-patch
+  // API, and this merge behavior is why the editor cannot use it.
+  it("updateWidget still merges, retaining a field the patch omits", () => {
     useAppStore
       .getState()
       .addWidget(widget({ id: "s", type: "selector", category: "CONTINENT", multiple: true }));
     useAppStore.getState().updateWidget("s", { category: "REGION_UN" });
     const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
     assert.equal(saved?.multiple, true);
+    assert.equal(saved?.category, "REGION_UN");
   });
 });
