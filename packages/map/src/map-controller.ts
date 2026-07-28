@@ -979,8 +979,19 @@ export class MapController {
       }
     }
 
-    for (const [index, layer] of layers.entries()) {
-      syncLayer(map, layer, this.getBeforeStyleLayerId(layers, index));
+    // Top-down (`layers` is bottom-to-top, so the last entry is the topmost).
+    // Each layer is placed *beneath* the first style layer belonging to a layer
+    // above it, so every anchor must already sit where this pass wants it.
+    // Walking bottom-up would anchor a layer to a neighbour that has not been
+    // moved yet, which mis-stacks the whole map for one pass whenever a layer's
+    // native style layers appear out of band. An Add Vector Layer restore does
+    // exactly that: its control adds the layers on top of the style once the
+    // data has loaded, long after the first sync pass ran. A later sync would
+    // converge, but a map-only embed (`?maponly`) has no panels to trigger one,
+    // so the wrong stack is what the viewer keeps looking at. See
+    // opengeos/GeoLibre#1404.
+    for (let index = layers.length - 1; index >= 0; index -= 1) {
+      syncLayer(map, layers[index], this.getBeforeStyleLayerId(layers, index));
     }
     this.layerIds = nextIds;
     this.syncedLayers = layers;
