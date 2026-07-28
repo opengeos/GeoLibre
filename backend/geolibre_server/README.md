@@ -91,7 +91,7 @@ The **Apache Sedona** engine of the SQL Workspace runs Sedona spatial SQL on
 through the `/sql` endpoints. It is an optional extra:
 
 ```bash
-pip install -e ".[sedona]"   # apache-sedona[db] + geopandas + shapely
+pip install -e ".[sedona]"   # 'apache-sedona[db]' + geopandas + shapely
 geolibre-server
 ```
 
