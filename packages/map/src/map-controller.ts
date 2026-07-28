@@ -384,6 +384,9 @@ export class MapController {
   // Bumped on every style application so an asynchronously resolved style (the
   // Mapbox path in applyStyleToMap) can tell whether it is still the current one.
   private styleGeneration = 0;
+  // Aborts the in-flight Mapbox descriptor request, so a superseded basemap
+  // change (or destroy) does not leave the fetch running.
+  private pendingMapboxStyleAbort: AbortController | null = null;
   private basemapVisible = true;
   private basemapOpacity = 1;
   private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
@@ -876,6 +879,7 @@ export class MapController {
       clearTimeout(this.layerControlStyleRefreshTimer);
       this.layerControlStyleRefreshTimer = null;
     }
+    this.abortPendingMapboxStyle();
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
@@ -925,6 +929,11 @@ export class MapController {
     const map = this.map;
     if (!map) return;
     const generation = ++this.styleGeneration;
+    // Drop any descriptor still in flight for the basemap this one replaces:
+    // its result is already destined for the generation check below, so the
+    // request is pure waste. Also covers a request that never settles, which
+    // would otherwise keep its closure (and this controller) alive.
+    this.abortPendingMapboxStyle();
 
     if (!isMapboxStyleUrl(url)) {
       this.beginStyleSwap();
@@ -932,7 +941,9 @@ export class MapController {
       return;
     }
 
-    void loadMapboxStyle(url)
+    const pending = new AbortController();
+    this.pendingMapboxStyleAbort = pending;
+    void loadMapboxStyle(url, pending.signal)
       .then((style) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
         this.beginStyleSwap();
@@ -950,7 +961,25 @@ export class MapController {
           `Failed to load the Mapbox basemap style "${redactMapboxStyleUrl(url)}".`,
           error,
         );
+      })
+      .finally(() => {
+        if (this.pendingMapboxStyleAbort === pending) {
+          this.pendingMapboxStyleAbort = null;
+        }
       });
+  }
+
+  /**
+   * Cancels an in-flight Mapbox descriptor request, if any.
+   *
+   * An abort rejects the fetch with an `AbortError`, but that rejection always
+   * lands on a superseded generation (this is only called after bumping it, or
+   * from `destroy`, which nulls the map), so the handlers above return before
+   * reaching the warning — no aborted request is ever reported as a failure.
+   */
+  private abortPendingMapboxStyle(): void {
+    this.pendingMapboxStyleAbort?.abort();
+    this.pendingMapboxStyleAbort = null;
   }
 
   setBasemapVisible(visible: boolean): void {
