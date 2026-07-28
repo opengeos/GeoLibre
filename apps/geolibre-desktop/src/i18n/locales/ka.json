@@ -3109,7 +3109,7 @@
     "toolError": "ვერ მოხერხდა",
     "provider": "LLM პროვაიდერი",
     "profile": "AI პროფილი",
-    "deploymentProxy": "Deployment proxy",
+    "deploymentProxy": "განთავსების პროქსი",
     "model": "მოდელი",
     "codeApprovalTitle": "გავუშვათ ასისტენტის კოდი?",
     "codeApprovalBody": "ასისტენტს სურს გაუშვას {{language}} კოდი აპლიკაციაში. ჯერ განიხილეთ იგი — მას შეუძლია შეცვალოს რუკა და მიიღოს წვდომა აპლიკაციის მონაცემებზე.",
