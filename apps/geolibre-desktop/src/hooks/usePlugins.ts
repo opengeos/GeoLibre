@@ -686,7 +686,10 @@ export function bindTemporalLayer(
   adapter: TemporalLayerAdapter,
   mapControllerRef?: RefObject<MapController | null>,
 ): boolean {
-  const binding = buildSelectorTimeBinding(adapter.dimension ?? "time", adapter.getTimeValues());
+  const binding = buildSelectorTimeBinding(adapter.dimension ?? "time", adapter.getTimeValues(), {
+    granularity: adapter.granularity,
+    displayUnits: adapter.displayUnits,
+  });
   if (!binding) return false;
   const store = useAppStore.getState();
   const layer = store.layers.find((item) => item.id === layerId);

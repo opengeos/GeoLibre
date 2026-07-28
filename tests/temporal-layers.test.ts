@@ -99,6 +99,17 @@ describe("buildSelectorTimeBinding", () => {
     assert.equal(binding.granularity, "day");
   });
 
+  it("honors an adapter's granularity and displayed slider units", () => {
+    const values = Array.from({ length: 35 * 365 }, (_, i) => Date.UTC(1990, 0, 1) + i * DAY);
+    const binding = buildSelectorTimeBinding("time", values, {
+      granularity: "day",
+      displayUnits: ["day"],
+    });
+    assert.ok(binding);
+    assert.equal(binding.granularity, "day");
+    assert.deepEqual(binding.displayUnits, ["day"]);
+  });
+
   it("gives a single-slice cube a non-zero span so the slider can still move", () => {
     const binding = buildSelectorTimeBinding("time", [Date.UTC(2020, 0, 1)]);
     assert.ok(binding);

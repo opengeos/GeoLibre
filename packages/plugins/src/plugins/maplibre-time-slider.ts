@@ -466,6 +466,7 @@ let preBindingRange: {
   // value (setRange treats a null/undefined end as open).
   end: string | undefined;
   granularity: TimeBinding["granularity"];
+  granularities: TimeGranularity[];
 } | null = null;
 // Guards our own timeFilter writes from re-entering the store subscription.
 let applyingBoundFilters = false;
@@ -727,6 +728,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     let max = Number.NEGATIVE_INFINITY;
     let granularity: TimeGranularity =
       bound[0]?.binding.granularity ?? selectors[0]?.binding.granularity ?? "day";
+    const displayUnits = new Set<TimeGranularity>();
     let widestSpan = -1;
     // A vector filter binding and a data cube's selector binding describe the
     // same thing here — an extent plus a suggested stepping unit — so they feed
@@ -739,6 +741,9 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       if (span > widestSpan) {
         widestSpan = span;
         granularity = binding.granularity;
+      }
+      if (isSelectorTimeBinding(binding)) {
+        for (const unit of binding.displayUnits ?? []) displayUnits.add(unit);
       }
     }
     // Fold in the time-overlay frames' extents so the track covers them too.
@@ -758,7 +763,10 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     ) {
       granularity = pickGranularity(max - min);
     }
-    const rangeKey = `${min}|${max}|${granularity}`;
+    const orderedDisplayUnits = (["hour", "day", "month", "year"] as TimeGranularity[]).filter(
+      (unit) => displayUnits.has(unit),
+    );
+    const rangeKey = `${min}|${max}|${granularity}|${orderedDisplayUnits.join(",")}`;
     if (rangeKey !== lastBoundRangeKey) {
       // Capture the range the control had before any binding overrode it, so it
       // can be restored when every binding is later removed.
@@ -768,10 +776,17 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
           start: config.startDate,
           end: config.endDate,
           granularity: config.granularity,
+          granularities: [...(config.granularities ?? ["hour", "day", "month", "year"])],
         };
       }
       lastBoundRangeKey = rangeKey;
       control.setRange(new Date(min), new Date(max), undefined, granularity);
+      control.setGranularities(
+        orderedDisplayUnits.length > 0
+          ? orderedDisplayUnits
+          : (preBindingRange?.granularities ??
+              control.getConfig().granularities ?? ["hour", "day", "month", "year"]),
+      );
     }
   } else {
     // The last binding/frame was removed: restore the pre-binding range so any
@@ -783,6 +798,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
         undefined,
         preBindingRange.granularity,
       );
+      control.setGranularities(preBindingRange.granularities);
     }
     preBindingRange = null;
     lastBoundRangeKey = null;

@@ -28,6 +28,16 @@ export interface TemporalLayerAdapter {
    * axis the timeline was bound to. Defaults to `"time"`.
    */
   dimension?: string;
+  /**
+   * Stepping unit for the Time Slider. When omitted, GeoLibre derives one from
+   * the full axis span.
+   */
+  granularity?: TimeGranularity;
+  /**
+   * Units offered by the Time Slider's granularity controls. For example, a
+   * daily cube can use `["day"]` to keep the track and labels at its cadence.
+   */
+  displayUnits?: TimeGranularity[];
 }
 
 /**
@@ -48,6 +58,8 @@ export interface SelectorTimeBinding {
   max: number;
   /** Suggested stepping granularity derived from the axis span. */
   granularity: TimeGranularity;
+  /** Units offered by the Time Slider while this binding is active. */
+  displayUnits?: TimeGranularity[];
 }
 
 /**
@@ -142,6 +154,7 @@ export function nearestTimeIndex(axis: readonly number[], targetMs: number): num
 export function buildSelectorTimeBinding(
   dimension: string,
   values: ReadonlyArray<Date | number | string> | null | undefined,
+  options?: Pick<TemporalLayerAdapter, "granularity" | "displayUnits">,
 ): SelectorTimeBinding | null {
   const axis = toEpochMsAxis(values);
   if (!axis) return null;
@@ -161,7 +174,8 @@ export function buildSelectorTimeBinding(
     dimension: dimension.trim() || "time",
     min,
     max,
-    granularity: pickGranularity(max - min),
+    granularity: options?.granularity ?? pickGranularity(max - min),
+    ...(options?.displayUnits ? { displayUnits: [...options.displayUnits] } : {}),
   };
 }
 
