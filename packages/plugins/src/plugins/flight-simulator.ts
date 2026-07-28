@@ -68,6 +68,9 @@ export const MIN_CAMERA_PITCH = 20;
 /** How fast held throttle keys move the throttle, in units per second. */
 const THROTTLE_RATE_PER_SEC = 0.6;
 
+/** Throttle change applied immediately for a discrete key press. */
+const THROTTLE_KEY_STEP = 0.05;
+
 /** Throttle every flight starts at — a cruise setting, not idle or full power. */
 const DEFAULT_THROTTLE = 0.6;
 
@@ -136,8 +139,8 @@ export interface FlightSimulatorSettings {
   /** Roll the horizon with the aircraft during a banked turn. */
   bankCamera: boolean;
   /**
-   * Swap the pitch axis. Off (the default) is the yoke convention Google
-   * Earth uses — pull back (Down) to raise the nose.
+   * Swap the pitch axis. Off follows Google Earth's keyboard controls:
+   * Arrow Up climbs and Arrow Down dives.
    */
   invertPitch: boolean;
   /** Which units the HUD reads out in. */
@@ -481,6 +484,23 @@ class FlightSimulatorEngine {
     // here but are claimed for symmetry.
     event.preventDefault();
     event.stopPropagation();
+    // A quick key tap can begin and end between animation frames. Apply one
+    // discrete throttle step on the initial press so Page Up/Down behave like
+    // Google Earth's controls; the held-key path below still provides smooth
+    // continuous adjustment.
+    if (!event.repeat) {
+      const throttleDirection = (KEYS.throttleUp as readonly string[]).includes(event.code)
+        ? 1
+        : (KEYS.throttleDown as readonly string[]).includes(event.code)
+          ? -1
+          : 0;
+      if (throttleDirection !== 0) {
+        this.throttle = Math.min(
+          1,
+          Math.max(0, this.throttle + throttleDirection * THROTTLE_KEY_STEP),
+        );
+      }
+    }
     this.held.add(event.code);
   }
 
@@ -504,10 +524,11 @@ class FlightSimulatorEngine {
         Math.max(0, this.throttle + throttleInput * THROTTLE_RATE_PER_SEC * dtSeconds),
       );
     }
-    // ArrowUp pushes the nose down (yoke convention) unless inverted.
+    // Match Google Earth's keyboard controls: ArrowUp climbs and ArrowDown
+    // dives. The setting remains available for pilots who prefer a yoke axis.
     const rawPitch = this.axis(KEYS.pitchBack, KEYS.pitchForward);
     return {
-      elevator: this.settings.invertPitch ? rawPitch : -rawPitch,
+      elevator: this.settings.invertPitch ? -rawPitch : rawPitch,
       aileron: this.axis(KEYS.rollLeft, KEYS.rollRight),
       throttle: this.throttle,
     };

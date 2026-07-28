@@ -723,6 +723,7 @@ function withStubWindow<T>(run: (stub: StubWindow) => T): T {
       ctrlKey: false,
       metaKey: false,
       altKey: false,
+      repeat: false,
       preventDefault: () => {},
       stopPropagation: () => {},
     });
@@ -919,6 +920,60 @@ describe("flight simulator engine", () => {
         cruise,
         "a new flight must not inherit the previous flight's throttle",
       );
+      stopFlying();
+      resetStore();
+    });
+  });
+
+  it("changes throttle for quick Page Up and Page Down taps", () => {
+    withStubWindow(({ pump, hold, release }) => {
+      resetStore();
+      const map = stubMap();
+      openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
+      startFlying();
+      pump();
+      const cruise = getFlightHudSnapshot().throttle;
+
+      hold("PageUp");
+      release("PageUp");
+      for (let i = 0; i < 7; i += 1) pump();
+      const increased = getFlightHudSnapshot().throttle;
+      assert.ok(increased > cruise, "tapping Page Up should raise the throttle");
+
+      hold("PageDown");
+      release("PageDown");
+      for (let i = 0; i < 7; i += 1) pump();
+      assert.ok(
+        getFlightHudSnapshot().throttle < increased,
+        "tapping Page Down should lower the throttle",
+      );
+
+      stopFlying();
+      resetStore();
+    });
+  });
+
+  it("matches Google Earth pitch controls: Up climbs and Down dives", () => {
+    withStubWindow(({ pump, hold, release }) => {
+      resetStore();
+      const map = stubMap();
+      openFlightSimulatorPanel({ getMap: () => map } as unknown as GeoLibreAppAPI);
+      startFlying();
+      pump();
+
+      hold("ArrowUp");
+      for (let i = 0; i < 8; i += 1) pump();
+      release("ArrowUp");
+      assert.ok(getFlightHudSnapshot().pitchDeg > 0, "Arrow Up should raise the nose");
+
+      stopFlying();
+      startFlying();
+      pump();
+      hold("ArrowDown");
+      for (let i = 0; i < 8; i += 1) pump();
+      release("ArrowDown");
+      assert.ok(getFlightHudSnapshot().pitchDeg < 0, "Arrow Down should lower the nose");
+
       stopFlying();
       resetStore();
     });
