@@ -2,6 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   detectObjects,
+  readDetectionImage,
   readRasterData,
   type Detection,
   type RasterData,
@@ -29,16 +30,25 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
-import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { BUILTIN_DETECTION_MODELS, fetchDetectionModel } from "../../lib/detection-models";
+import { readPhotoLocation } from "../../lib/geotagged-photos";
+import {
+  DETECTION_PHOTO_EXTENSIONS,
+  detectionClassLabel,
+  detectionPhotoMimeType,
+  detectionsToPhotoFeatureCollection,
+  isDetectionPhotoFileName,
+} from "../../lib/object-detection-photo";
+import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
 interface ObjectDetectionDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
-const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff"] }];
-const IMAGE_ACCEPT = ".tif,.tiff";
+const IMAGE_EXTENSIONS = ["tif", "tiff", ...DETECTION_PHOTO_EXTENSIONS];
+const IMAGE_FILTERS = [{ name: "Imagery", extensions: IMAGE_EXTENSIONS }];
+const IMAGE_ACCEPT = IMAGE_EXTENSIONS.map((extension) => `.${extension}`).join(",");
 const MODEL_FILTERS = [{ name: "ONNX model", extensions: ["onnx"] }];
 const MODEL_ACCEPT = ".onnx";
 
@@ -77,7 +87,7 @@ function epsgFromGeoKeys(geoKeys: Record<string, unknown>): number | null {
  * falling back to `class_<index>` when the list is short or empty.
  */
 function classLabel(names: string[], index: number): string {
-  return names[index]?.trim() || `class_${index}`;
+  return detectionClassLabel(names, index);
 }
 
 /**
@@ -155,9 +165,11 @@ function detectionsToFeatureCollection(
 /**
  * Object detection panel (issue #902). A floating, draggable panel (not a modal)
  * that runs a user-supplied YOLO model exported to ONNX entirely in the browser
- * (onnxruntime-web) against a chosen GeoTIFF, georeferences the detected boxes,
- * and adds one GeoJSON layer per detected class. The map stays interactive while
- * the panel is open, matching the Raster Subset / Pixel Time Series panels.
+ * (onnxruntime-web) against a chosen GeoTIFF or geotagged photo. GeoTIFF boxes
+ * keep their raster georeferencing; photo detections become points at the
+ * camera's GPS location. Each detected class becomes a GeoJSON layer. The map
+ * stays interactive while the panel is open, matching the Raster Subset / Pixel
+ * Time Series panels.
  *
  * Unlike AI Segmentation, inference is client-side, so this works in both the
  * web and desktop builds with no Python sidecar.
@@ -311,6 +323,25 @@ export function ObjectDetectionDialog({
     inferringRef.current = true;
     setRunning(true);
     try {
+      const isPhoto = isDetectionPhotoFileName(imageName);
+      let photoLocation: [number, number] | null = null;
+      let raster: RasterData;
+      if (isPhoto) {
+        const mimeType = detectionPhotoMimeType(imageName);
+        const [decoded, location] = await Promise.all([
+          readDetectionImage(imageBytes, mimeType),
+          readPhotoLocation(new Blob([imageBytes], { type: mimeType })),
+        ]);
+        if (!location) {
+          setError(t("objectDetection.error.photoLocation"));
+          return;
+        }
+        raster = decoded;
+        photoLocation = location;
+      } else {
+        raster = await readRasterData(imageBytes);
+      }
+
       // Resolve the model bytes: download (and cache) the chosen built-in model,
       // or use the user-supplied file.
       let modelData = modelBytes;
@@ -334,7 +365,6 @@ export function ObjectDetectionDialog({
         setError(t("objectDetection.error.chooseModel"));
         return;
       }
-      const raster = await readRasterData(imageBytes);
       const detections = await detectObjects(raster, modelData, {
         inputSize,
         confidenceThreshold: confidence,
@@ -348,10 +378,13 @@ export function ObjectDetectionDialog({
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
-      const tagged = detectionsToFeatureCollection(detections, raster, names);
-      // Reproject once for the whole batch, then split by class so each class
-      // becomes its own layer (issue #902: "classes can be created as layers").
-      const fc = await reprojectFeatureCollectionToWgs84(tagged);
+      const fc = photoLocation
+        ? detectionsToPhotoFeatureCollection(detections, photoLocation, names, imageName)
+        : await reprojectFeatureCollectionToWgs84(
+            detectionsToFeatureCollection(detections, raster, names),
+          );
+      // Split by class so each class becomes its own layer (issue #902:
+      // "classes can be created as layers").
       const byClass = new Map<string, Feature[]>();
       for (const feature of fc.features) {
         const cls = String(feature.properties?.class ?? "detection");
@@ -373,13 +406,20 @@ export function ObjectDetectionDialog({
       let maxX = -Infinity;
       let maxY = -Infinity;
       for (const feature of fc.features) {
-        if (feature.geometry?.type !== "Polygon") continue;
-        for (const ring of feature.geometry.coordinates) {
-          for (const [x, y] of ring) {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
+        if (feature.geometry?.type === "Point") {
+          const [x, y] = feature.geometry.coordinates;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        } else if (feature.geometry?.type === "Polygon") {
+          for (const ring of feature.geometry.coordinates) {
+            for (const [x, y] of ring) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
           }
         }
       }
@@ -400,6 +440,7 @@ export function ObjectDetectionDialog({
     }
   }, [
     imageBytes,
+    imageName,
     modelSource,
     modelBytes,
     builtinModelId,

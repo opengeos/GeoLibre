@@ -3441,10 +3441,10 @@
   },
   "objectDetection": {
     "title": "Object Detection",
-    "description": "Run a YOLO model exported to ONNX over a GeoTIFF, fully in the browser. Detected boxes are georeferenced and each class is added as its own layer.",
-    "hint": "Use a built-in COCO model (downloaded and cached once) or bring your own YOLOv5/v8/v11 ONNX. Detection runs locally in the browser. Built-in models detect everyday objects; for aerial imagery, supply your own overhead-trained model.",
-    "imageLabel": "Image (GeoTIFF)",
-    "imagePlaceholder": "Choose a GeoTIFF…",
+    "description": "Run a YOLO model exported to ONNX over a GeoTIFF or geotagged photo, fully in the browser. Each detected class is added as its own layer.",
+    "hint": "Use a built-in COCO model (downloaded and cached once) or bring your own YOLOv5/v8/v11 ONNX. GeoTIFF detections become georeferenced boxes. Photo detections become points at the camera's GPS location because a photo does not define a ground footprint.",
+    "imageLabel": "Image (GeoTIFF or geotagged photo)",
+    "imagePlaceholder": "Choose a GeoTIFF, JPEG, PNG, or WebP…",
     "chooseImage": "Choose image",
     "modelLabel": "Model",
     "modelSourceBuiltin": "Built-in (download)",
@@ -3464,7 +3464,8 @@
     "added": "Added {{count}} detection(s) across {{classes}} class(es).",
     "layerName": "Detection: {{class}}",
     "error": {
-      "chooseImage": "Choose an image (GeoTIFF) to run detection on.",
+      "chooseImage": "Choose a GeoTIFF or geotagged photo to run detection on.",
+      "photoLocation": "This photo has no usable GPS coordinates. Choose a geotagged photo.",
       "chooseModel": "Choose a YOLO model exported to ONNX (.onnx).",
       "downloadModel": "Could not download the model. Check your connection and try again.",
       "failed": "Detection failed."

@@ -296,6 +296,18 @@ async function readPhotoExif(file: Blob): Promise<PhotoExif | null> {
   }
 }
 
+/**
+ * Read a photo's usable EXIF GPS position.
+ *
+ * @param file Encoded photo bytes supported by the EXIF parser.
+ * @returns `[longitude, latitude]`, or null when the image has no valid fix.
+ */
+export async function readPhotoLocation(file: Blob): Promise<[number, number] | null> {
+  const exif = await readPhotoExif(file);
+  const coordinate = exif && isValidLngLat(exif.longitude, exif.latitude);
+  return coordinate ? [coordinate.lng, coordinate.lat] : null;
+}
+
 /** The image data URLs generated for one photo. */
 interface PhotoImages {
   /** Downscaled JPEG thumbnail (data URL) for the map marker/popup, or null. */
