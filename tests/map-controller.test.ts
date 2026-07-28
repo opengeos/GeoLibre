@@ -237,7 +237,31 @@ function rasterLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLa
   };
 }
 
+// An Add Vector Layer entry: the maplibre-gl-vector control owns the paint and
+// creates the native style layers itself, so the store layer only names them.
+function controlVectorLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+  return {
+    id,
+    name: id,
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      controlOwnsPaint: true,
+      customLayerType: "fill",
+      externalNativeLayer: true,
+      nativeLayerIds: [`${id}-fill`, `${id}-outline`],
+      sourceIds: [`${id}-source`],
+      sourceKind: "maplibre-gl-vector",
+    },
+    ...patch,
+  };
+}
+
 const circleId = (id: string) => `layer-${id}-circle`;
+const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
 describe("MapController.syncLayers reconciliation", () => {
@@ -298,6 +322,30 @@ describe("MapController.syncLayers reconciliation", () => {
       fake.calls.some((c) => c.method === "moveLayer"),
       "reorder is applied via moveLayer, not a teardown",
     );
+  });
+
+  it("restacks every layer in one pass when a control adds its style layers late", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    // Bottom to top: a raster underlay, an Add Vector Layer polygon layer, and a
+    // point overlay, the shape of the shared project in opengeos/GeoLibre#1404.
+    const layers = [rasterLayer("under"), controlVectorLayer("vec"), pointLayer("over")];
+    const userOrder = () => fake.order.filter((id) => id !== "basemap-bg");
+
+    controller.syncLayers(layers);
+    // The control's data is still loading, so its native layers do not exist yet.
+    assert.deepEqual(userOrder(), [rasterId("under"), circleId("over")]);
+
+    // maplibre-gl-vector finishes loading and adds its layers on top of the
+    // style; the store write that follows drives one more sync pass.
+    const styled = map as unknown as {
+      addLayer: (spec: Record<string, unknown>) => void;
+    };
+    styled.addLayer({ id: "vec-fill", type: "fill", paint: {} });
+    styled.addLayer({ id: "vec-outline", type: "line", paint: {} });
+    controller.syncLayers(layers);
+
+    assert.deepEqual(userOrder(), [rasterId("under"), "vec-fill", "vec-outline", circleId("over")]);
   });
 
   it("updates data in place via setData rather than recreating the source", () => {
