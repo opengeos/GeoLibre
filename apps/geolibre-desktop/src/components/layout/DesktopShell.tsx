@@ -5,6 +5,7 @@ import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
+  prepareRasterControl,
   applyRasterLayerOrder,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -1363,6 +1364,15 @@ export function DesktopShell({
         .onDragDropEvent(async (event) => {
           if (event.payload.type === "enter" || event.payload.type === "over") {
             setIsDraggingFiles(true);
+            // Match the perceived speed of Add Raster Layer: that flow warms
+            // the lazy raster control while its native picker is open. A map
+            // drop otherwise starts all initialization only after release.
+            // Fire-and-forget here so drag feedback never waits on imports.
+            if (event.payload.type === "enter") {
+              void prepareRasterControl(createAppAPI(mapControllerRef)).catch((error) => {
+                console.warn("[GeoLibre] Could not prepare the raster drop handler", error);
+              });
+            }
             return;
           }
 

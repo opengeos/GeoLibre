@@ -185,6 +185,7 @@ export {
 } from "./plugins/maplibre-3d-tiles";
 export {
   addRasterToMap,
+  prepareRasterControl,
   applyRasterLayerOrder,
   closeRasterLayerPanel,
   openRasterLayerPanel,

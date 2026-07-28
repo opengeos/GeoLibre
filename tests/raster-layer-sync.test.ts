@@ -248,6 +248,28 @@ describe("createRasterStoreLayer", () => {
     }
   });
 
+  it("persists a Tauri asset URL as a local path instead of a session URL", () => {
+    rememberLocalRasterPath("raster-1", "/data/local.tif");
+    try {
+      const layer = createRasterStoreLayer(
+        rasterInfo({
+          source: {
+            kind: "url",
+            url: "http://asset.localhost/%2Fdata%2Flocal.tif",
+          },
+        }),
+      );
+
+      assert.equal(layer.metadata.localFilePath, "/data/local.tif");
+      assert.equal(layer.metadata.rasterSource, "file");
+      assert.equal(layer.metadata.localBytesUrl, "http://asset.localhost/%2Fdata%2Flocal.tif");
+      assert.equal(layer.source.url, undefined);
+      assert.equal(layer.sourcePath, "local.tif");
+    } finally {
+      rememberLocalRasterPath("raster-1", undefined);
+    }
+  });
+
   it("persists band count and serializes band names to pairs", () => {
     const layer = createRasterStoreLayer(
       rasterInfo({

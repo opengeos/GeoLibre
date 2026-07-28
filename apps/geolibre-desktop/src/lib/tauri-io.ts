@@ -1,5 +1,5 @@
 import { hasPathTraversal, parseProject, type GeoLibreProject } from "@geolibre/core";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   readDir,
@@ -2411,7 +2411,7 @@ export interface DroppedRaster {
    * The GeoTIFF/COG as a File. The raster control accepts a File directly and
    * manages its object URL, matching how the Add Raster panel loads local files.
    */
-  source: File;
+  source: File | string;
   /**
    * The absolute path the bytes were read from, when there is one (Tauri).
    * Recorded on the layer so a saved project can reload the raster; absent for
@@ -2432,23 +2432,18 @@ export function loadDroppedRasterFiles(droppedFiles: FileList | File[]): Dropped
 }
 
 /**
- * Read dropped raster file paths (Tauri) into File objects the control can load.
- * There is no asset-protocol scope configured, so the bytes are read and wrapped
- * in a File, matching how local vector files are loaded.
+ * Convert dropped raster paths (Tauri) to asset-protocol URLs. Tauri serves
+ * these with byte-range support, so a COG opens lazily instead of copying the
+ * entire file over IPC and then copying it again into a browser File.
  */
 export async function loadDroppedRasterPaths(paths: string[]): Promise<DroppedRaster[]> {
   const rasterPaths = paths.filter(isRasterFileName);
-  const rasters: DroppedRaster[] = [];
-  for (const path of rasterPaths) {
-    const bytes = await readFile(path);
-    const name = fileBaseName(path);
-    rasters.push({
-      name,
-      source: new File([bytes], name, { type: "image/tiff" }),
-      path,
-    });
-  }
-  return rasters;
+  await Promise.all(rasterPaths.map((path) => invoke("allow_raster_asset", { path })));
+  return rasterPaths.map((path) => ({
+    name: fileBaseName(path),
+    source: convertFileSrc(path),
+    path,
+  }));
 }
 
 /**
@@ -2459,9 +2454,9 @@ export async function loadDroppedRasterPaths(paths: string[]): Promise<DroppedRa
  * @param path - The absolute path recorded when the raster was first added.
  * @returns The file, named after its basename.
  */
-export async function readRasterFileAtPath(path: string): Promise<File> {
-  const bytes = await readFile(path);
-  return new File([bytes], fileBaseName(path), { type: "image/tiff" });
+export async function readRasterFileAtPath(path: string): Promise<string> {
+  await invoke("allow_raster_asset", { path });
+  return convertFileSrc(path);
 }
 
 /**
@@ -2472,7 +2467,7 @@ export async function readRasterFileAtPath(path: string): Promise<File> {
  *
  * @returns The picked rasters, each with its file and path.
  */
-export async function pickLocalRasterFiles(): Promise<{ file: File; path: string }[]> {
+export async function pickLocalRasterFiles(): Promise<{ file: File | string; path: string }[]> {
   if (!isTauri()) return [];
   const selected = await open({
     multiple: true,
@@ -2480,7 +2475,7 @@ export async function pickLocalRasterFiles(): Promise<{ file: File; path: string
   });
   if (!selected) return [];
   const paths = (Array.isArray(selected) ? selected : [selected]).filter(isRasterFileName);
-  const picked: { file: File; path: string }[] = [];
+  const picked: { file: File | string; path: string }[] = [];
   for (const path of paths) {
     // Read each pick independently so one unreadable file does not abandon the
     // rest of the selection, matching pickImageFilesWithFallback.

@@ -35,13 +35,11 @@ const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
 
 // The rendering backend rasters are decoded with unless the user picks another
-// one in the panel. Upstream defaults to `maplibre-gl-raster` (deck.gl on the
-// GPU), which draws through a deck.gl overlay rather than a MapLibre style
-// layer -- on the desktop build that overlay is a separate canvas stacked above
-// the map, so a raster always covers the vector layers above it in the layer
-// list no matter how they are ordered (issue #1463). `cog-tiler-wasm` decodes
-// tiles on the CPU in WebAssembly and feeds them to a *native* MapLibre raster
-// source/layer, so ordering is the map's own and works in both builds.
+// one in the panel. `cog-tiler-wasm` feeds a native MapLibre raster source/layer,
+// so ordering is the map's own in both the web and desktop builds. Tauri local
+// files are exposed through its range-capable asset protocol; do not switch the
+// desktop default back to the GPU engine to work around local-file stalls, since
+// that would only mask an asset-protocol/read-path regression.
 //
 // Trade-off: the WASM tiler renders from its own built-in colormaps, so the
 // GPU-only symbology GeoLibre injects into the deck.gl pipeline -- "Classify
@@ -223,11 +221,11 @@ export function setNonTiledRasterHandler(handler: NonTiledRasterHandler | null):
  * session recorded. Only the desktop host can implement this; in the browser
  * there is no path and none is registered.
  */
-export type LocalRasterFileReader = (path: string) => Promise<File>;
+export type LocalRasterFileReader = (path: string) => Promise<File | string>;
 
 /** A raster the user picked from a native file dialog: its bytes and its path. */
 export interface PickedLocalRaster {
-  file: File;
+  file: File | string;
   path: string;
 }
 
@@ -356,6 +354,24 @@ export async function addRasterToMap(
     syncRasterLayersToStoreForRuntime(control);
   }
   return id;
+}
+
+/**
+ * Mount and warm the raster control without opening its panel.
+ *
+ * Desktop calls this as soon as a native file drag enters the window, so the
+ * control and its selected rendering backend can initialize while the user is
+ * still positioning the drop. Without that head start, drag-and-drop pays the
+ * full lazy-import/setup cost after release; the Add Raster Layer picker hides
+ * the same work behind the native file dialog and therefore feels immediate.
+ *
+ * Safe to call repeatedly: {@link ensureRasterControl} reuses the mounted
+ * control and the module-level import promises.
+ *
+ * @param app - The GeoLibre app API for the current map.
+ */
+export async function prepareRasterControl(app: GeoLibreAppAPI): Promise<void> {
+  await ensureRasterControl(app);
 }
 
 /**
@@ -619,8 +635,8 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
  * @param control - The mounted raster control.
  * @returns The re-read files, by store layer id.
  */
-async function readLocalRasterFiles(control: RasterControl): Promise<Map<string, File>> {
-  const files = new Map<string, File>();
+async function readLocalRasterFiles(control: RasterControl): Promise<Map<string, File | string>> {
+  const files = new Map<string, File | string>();
   const reader = localRasterFileReader;
   if (!reader) return files;
 
@@ -1165,11 +1181,18 @@ async function openLocalRasterPicker(): Promise<void> {
       // the rest of a multi-file selection.
       try {
         await addRasterToMap(app, picked.file, {
-          name: picked.file.name,
+          name:
+            picked.file instanceof File
+              ? picked.file.name
+              : picked.path.split(/[\\/]/).pop() || picked.path,
           localPath: picked.path,
         });
       } catch (error) {
-        console.error(`[GeoLibre] Failed to add the raster "${picked.file.name}"`, error);
+        const name =
+          picked.file instanceof File
+            ? picked.file.name
+            : picked.path.split(/[\\/]/).pop() || picked.path;
+        console.error(`[GeoLibre] Failed to add the raster "${name}"`, error);
       }
     }
   } catch (error) {

@@ -29,7 +29,7 @@ panic = "abort"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = { version = "2", features = ["watch"] }
 # Native geolocation on Android/iOS: ships the location manifest permissions and
@@ -41,7 +41,7 @@ tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 # Persists the fs scope the folder picker grants, so Browser-panel pinned
 # folders stay readable across app restarts (no re-pick required).
-tauri-plugin-persisted-scope = "2"
+tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
 duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 # rustls-tls stays the default backend for every request. rustls-tls-native-roots

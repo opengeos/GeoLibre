@@ -114,18 +114,37 @@ export function createRasterStoreLayer(
 ): GeoLibreLayer {
   const interleaved = options.interleaved ?? true;
   const nativeMapLibreLayer = rendersNativeMapLibreLayer(options.engine ?? "maplibre-gl-raster");
-  const url = info.source.kind === "url" ? info.source.url : undefined;
+  // Desktop local paths are handed to the control as Tauri asset-protocol URLs
+  // so COG reads stay range-based. The path registry distinguishes those from
+  // genuinely remote URL rasters; never persist the session-specific asset URL.
+  const candidateLocalPath = localRasterPaths.get(info.id);
+  const localFilePath =
+    info.source.kind === "file" ||
+    (info.source.kind === "url" &&
+      (info.source.url.startsWith("asset:") ||
+        /^https?:\/\/asset\.localhost(?:\/|$)/i.test(info.source.url)))
+      ? candidateLocalPath
+      : undefined;
+  const url = info.source.kind === "url" && !localFilePath ? info.source.url : undefined;
   // The control retains a File-backed raster's original bytes behind a blob
   // URL (source.objectUrl). Surface it as metadata.localBytesUrl so in-browser
   // tools (the WASM Whitebox runner, the symbology stats reader, raster export)
   // can read the bytes back. This covers every File-add path - drag-and-drop,
   // the Add Data > Raster Layer panel's own drop zone, and tool outputs - since
   // they all funnel through the control's addRaster.
-  const localBytesUrl = info.source.kind === "file" ? info.source.objectUrl : undefined;
-  // Only meaningful for a File-backed raster: a URL raster already restores
-  // from source.url, and the path registry is never populated for one.
-  const localFilePath = info.source.kind === "file" ? localRasterPaths.get(info.id) : undefined;
-  const sourcePath = url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
+  const localBytesUrl =
+    info.source.kind === "file"
+      ? info.source.objectUrl
+      : localFilePath && info.source.kind === "url"
+        ? info.source.url
+        : undefined;
+  const sourcePath =
+    url ??
+    (localFilePath
+      ? localFilePath.split(/[\\/]/).pop() || localFilePath
+      : info.source.kind === "file"
+        ? info.source.fileName
+        : info.id);
   return {
     id: info.id,
     name: info.name,
@@ -157,7 +176,7 @@ export function createRasterStoreLayer(
       rasterOverlayMode: nativeMapLibreLayer ? "native" : interleaved ? "interleaved" : "overlaid",
       // The visualization state is persisted so restoreRasterLayers can
       // replay URL-backed rasters when a saved project is reopened.
-      rasterSource: info.source.kind,
+      rasterSource: localFilePath ? "file" : info.source.kind,
       rasterState: serializableRasterState(info.state),
       // Band metadata powers the symbology panel's band / RGB pickers. Known
       // only once the GeoTIFF header loads (null until then). The Map is
