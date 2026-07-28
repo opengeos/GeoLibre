@@ -16,7 +16,9 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useTranslation } from "react-i18next";
 import {
   distinctCategoryValues,
+  filterRowsBySelections,
   numericValues,
+  type CategorySelection,
   type ChartRow,
   type ChartType,
 } from "../../lib/attribute-charts";
@@ -32,6 +34,10 @@ const DEFAULT_DASHBOARD_HEIGHT = 360;
 // scrolls instead of crushing the charts. A single row has no floor, so it
 // fills and resizes with the panel height (issue #728).
 const MIN_DASHBOARD_ROW_HEIGHT = 200;
+// Shared empty selection, so an unselected widget gets a stable array identity
+// and does not re-run its filter memo on every render.
+const EMPTY_SELECTION: string[] = [];
+const EMPTY_SELECTIONS: CategorySelection[] = [];
 
 /** Compute the indicator value from layer data and an aggregation. Returns
  * null when there is no numeric data to aggregate. Count works on any layer. */
@@ -95,8 +101,9 @@ function widgetToSpec(widget: DashboardWidget, type: ChartType): ChartSpec {
  * The Dashboard panel: a bottom-docked, resizable strip of chart widgets, each
  * bound to a layer and field(s), in the spirit of CARTO Builder / Foursquare
  * Studio (issue #401). Widgets are stored in the project, so a dashboard
- * reopens intact. Rendered only while open. Charts are read-only summaries
- * here; cross-filtering the map is intentionally out of scope for now.
+ * reopens intact. Rendered only while open. Selector widgets cross-filter the
+ * other widgets bound to the same layer (issue #1381); filtering the map itself
+ * is still out of scope.
  */
 export function DashboardPanel() {
   const { t } = useTranslation();
@@ -128,6 +135,44 @@ export function DashboardPanel() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<DashboardWidget | null>(null);
+  // Each selector widget's picked values, by widget id. Held here rather than
+  // inside the selector so the other widgets on the same layer can filter by it
+  // (issue #1381). Deliberately not part of the project: a selection is a way
+  // of looking at the data, not a property of it, so it starts empty each time
+  // the dashboard opens.
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
+
+  const setSelection = (widgetId: string, values: string[]) => {
+    setSelections((prev) => ({ ...prev, [widgetId]: values }));
+  };
+  const clearSelection = (widgetId: string) => {
+    setSelections((prev) => {
+      if (!(widgetId in prev)) return prev;
+      const { [widgetId]: _dropped, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  // The filters each widget should honor: every *other* selector bound to the
+  // same layer. A selector never filters itself — its own chips stay complete
+  // so a choice can always be changed or undone. Memoized so a widget's filter
+  // list keeps its identity until the widgets or the selections actually move.
+  const selectionsByWidget = useMemo(() => {
+    const selectors = widgets.filter(
+      (widget): widget is DashboardWidget & { category: string } =>
+        widget.type === "selector" && Boolean(widget.category),
+    );
+    const byWidget: Record<string, CategorySelection[]> = {};
+    for (const widget of widgets) {
+      byWidget[widget.id] = selectors
+        .filter((other) => other.id !== widget.id && other.layerId === widget.layerId)
+        .map((other) => ({
+          field: other.category,
+          values: selections[other.id] ?? EMPTY_SELECTION,
+        }));
+    }
+    return byWidget;
+  }, [widgets, selections]);
 
   // Layers that expose chartable attributes, for the editor's layer picker.
   const chartableLayers = useMemo(
@@ -198,7 +243,18 @@ export function DashboardPanel() {
     setEditorOpen(true);
   };
   const handleSave = (widget: DashboardWidget) => {
-    if (widgets.some((w) => w.id === widget.id)) {
+    const previous = widgets.find((w) => w.id === widget.id);
+    if (previous) {
+      // Drop a selection the edit invalidates: values picked from another
+      // layer, another field, or in multi-select mode no longer apply once the
+      // selector points somewhere else.
+      if (
+        previous.layerId !== widget.layerId ||
+        previous.category !== widget.category ||
+        previous.multiple !== widget.multiple
+      ) {
+        clearSelection(widget.id);
+      }
       // The editor hands back a complete record, so replace rather than merge:
       // it omits the optional fields that were left empty, and merging would
       // keep the previous title/color/prefix/suffix instead of clearing them.
@@ -343,8 +399,14 @@ export function DashboardPanel() {
                   widget={widget}
                   index={index}
                   count={widgets.length}
+                  selected={selections[widget.id] ?? EMPTY_SELECTION}
+                  onSelect={(values) => setSelection(widget.id, values)}
+                  selections={selectionsByWidget[widget.id] ?? EMPTY_SELECTIONS}
                   onEdit={() => openEdit(widget)}
-                  onRemove={() => removeWidget(widget.id)}
+                  onRemove={() => {
+                    clearSelection(widget.id);
+                    removeWidget(widget.id);
+                  }}
                   onMove={(toIndex) => moveWidget(widget.id, toIndex)}
                 />
               ))}
@@ -368,6 +430,9 @@ function WidgetCard({
   widget,
   index,
   count,
+  selected,
+  onSelect,
+  selections,
   onEdit,
   onRemove,
   onMove,
@@ -375,18 +440,27 @@ function WidgetCard({
   widget: DashboardWidget;
   index: number;
   count: number;
+  selected: string[];
+  onSelect: (values: string[]) => void;
+  selections: CategorySelection[];
   onEdit: () => void;
   onRemove: () => void;
   onMove: (toIndex: number) => void;
 }) {
   const { t } = useTranslation();
   const data = useLayerChartData(widget.layerId);
+  // Rows narrowed by the other selectors on this layer. A selector reads the
+  // unfiltered rows instead, so its own chip list always offers every value.
+  const rows = useMemo(
+    () => (widget.type === "selector" ? data.rows : filterRowsBySelections(data.rows, selections)),
+    [data.rows, selections, widget.type],
+  );
   const result = useMemo(
     () =>
       widget.type === "indicator" || widget.type === "selector"
         ? null
-        : computeChart(data.rows, widgetToSpec(widget, widget.type)),
-    [data.rows, widget],
+        : computeChart(rows, widgetToSpec(widget, widget.type)),
+    [rows, widget],
   );
   // A readable title from the widget's chart type and fields when untitled.
   const defaultWidgetTitle = (): string => {
@@ -483,7 +557,7 @@ function WidgetCard({
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1">
           {(() => {
             const agg = widget.indicatorAggregation ?? "count";
-            const value = computeIndicator(data.rows, widget.field, agg);
+            const value = computeIndicator(rows, widget.field, agg);
             if (value === null) {
               return (
                 <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
@@ -516,7 +590,7 @@ function WidgetCard({
             }
             // Extract distinct values from the category field, sorted.
             const cat = widget.category!;
-            const values = distinctCategoryValues(data.rows, cat);
+            const values = distinctCategoryValues(rows, cat);
 
             if (values.length === 0) {
               return (
@@ -524,14 +598,12 @@ function WidgetCard({
               );
             }
 
-            // Keyed on the selector config so switching layer, field, or
-            // single/multi mode remounts with an empty selection instead of
-            // carrying over values that no longer apply.
             return (
               <SelectorValues
-                key={`${widget.layerId}:${cat}:${widget.multiple ?? false}`}
                 values={values}
                 multiple={widget.multiple ?? false}
+                selected={selected}
+                onChange={onSelect}
               />
             );
           })()}
@@ -552,29 +624,35 @@ function WidgetCard({
 }
 
 /** Renders the selector widget body: a scrollable list of clickable value
- * chips. In single mode clicking a value toggles it as the only selected value.
- * In multi mode each chip toggles independently. Cross-filtering is not yet
- * wired; this prepares the UI and selection state for it. */
-function SelectorValues({ values, multiple }: { values: string[]; multiple: boolean }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+ * chips. In single mode clicking a value selects it alone; in multi mode each
+ * chip toggles independently, and clicking a selected chip clears it. Controlled
+ * by the panel, which holds the selection so the other widgets on the layer can
+ * filter by it. */
+function SelectorValues({
+  values,
+  multiple,
+  selected,
+  onChange,
+}: {
+  values: string[];
+  multiple: boolean;
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const active = new Set(selected);
 
   const toggle = (value: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        if (!multiple) next.clear();
-        next.add(value);
-      }
-      return next;
-    });
+    if (active.has(value)) {
+      onChange(selected.filter((entry) => entry !== value));
+      return;
+    }
+    onChange(multiple ? [...selected, value] : [value]);
   };
 
   return (
     <div className="flex flex-wrap gap-1.5">
       {values.map((value) => {
-        const isSelected = selected.has(value);
+        const isSelected = active.has(value);
         return (
           <button
             key={value}

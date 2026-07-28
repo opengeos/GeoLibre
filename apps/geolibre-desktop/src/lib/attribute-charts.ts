@@ -60,6 +60,41 @@ export function distinctCategoryValues(rows: ChartRow[], key: string): string[] 
   return Array.from(values).sort((a, b) => a.localeCompare(b));
 }
 
+/** One selector widget's active choice: a category field and the values picked
+ * from it. An empty `values` list means the selector is not filtering. */
+export interface CategorySelection {
+  field: string;
+  values: string[];
+}
+
+/**
+ * Narrow rows to those matching every active selection. Values within one
+ * selection are OR-ed (a multi-select picking Africa and Asia keeps both), and
+ * separate selections are AND-ed (a continent selector and an income selector
+ * together keep only rows satisfying both). Selections with no values are
+ * ignored, so an untouched selector never hides anything.
+ *
+ * @param rows The rows to narrow.
+ * @param selections The active selections to apply.
+ * @returns The matching rows, or the original array when nothing is selected.
+ */
+export function filterRowsBySelections(
+  rows: ChartRow[],
+  selections: CategorySelection[],
+): ChartRow[] {
+  const active = selections.filter((selection) => selection.values.length > 0);
+  if (active.length === 0) return rows;
+  // Compare against the same string form distinctCategoryValues produces, so a
+  // numeric or boolean category matches the chip the user actually clicked.
+  const matchers = active.map((selection) => ({
+    field: selection.field,
+    values: new Set(selection.values),
+  }));
+  return rows.filter((row) =>
+    matchers.every((matcher) => matcher.values.has(String(row.properties[matcher.field] ?? ""))),
+  );
+}
+
 /**
  * Columns suitable for charting: a key counts as numeric when it has at least
  * two finite-number values and those make up at least half of its non-null

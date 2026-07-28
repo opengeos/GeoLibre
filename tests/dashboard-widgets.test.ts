@@ -24,6 +24,7 @@ import {
 } from "../apps/geolibre-desktop/src/components/panels/charts/chart-colors";
 import {
   distinctCategoryValues,
+  filterRowsBySelections,
   type ChartRow,
 } from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
@@ -298,6 +299,65 @@ describe("widgets in the project file", () => {
       metadata: {},
     });
     assert.equal("widgets" in project, false);
+  });
+});
+
+describe("cross-filtering by selector values", () => {
+  const rows: ChartRow[] = [
+    { properties: { CONTINENT: "Africa", INCOME_GRP: "5. Low income", NAME: "Chad" } },
+    { properties: { CONTINENT: "Africa", INCOME_GRP: "3. Upper middle", NAME: "Gabon" } },
+    { properties: { CONTINENT: "Asia", INCOME_GRP: "5. Low income", NAME: "Nepal" } },
+    { properties: { CONTINENT: "Europe", INCOME_GRP: "1. High income", NAME: "France" } },
+  ];
+  const names = (result: ChartRow[]) => result.map((row) => row.properties.NAME);
+
+  it("returns every row when nothing is selected", () => {
+    assert.equal(filterRowsBySelections(rows, []), rows);
+    assert.equal(filterRowsBySelections(rows, [{ field: "CONTINENT", values: [] }]), rows);
+  });
+
+  it("keeps only the rows matching a single selected value", () => {
+    const result = filterRowsBySelections(rows, [{ field: "CONTINENT", values: ["Africa"] }]);
+    assert.deepEqual(names(result), ["Chad", "Gabon"]);
+  });
+
+  it("ORs the values within one selection", () => {
+    const result = filterRowsBySelections(rows, [
+      { field: "CONTINENT", values: ["Africa", "Asia"] },
+    ]);
+    assert.deepEqual(names(result), ["Chad", "Gabon", "Nepal"]);
+  });
+
+  it("ANDs separate selections", () => {
+    const result = filterRowsBySelections(rows, [
+      { field: "CONTINENT", values: ["Africa", "Asia"] },
+      { field: "INCOME_GRP", values: ["5. Low income"] },
+    ]);
+    assert.deepEqual(names(result), ["Chad", "Nepal"]);
+  });
+
+  it("yields nothing when the selections cannot overlap", () => {
+    const result = filterRowsBySelections(rows, [
+      { field: "CONTINENT", values: ["Europe"] },
+      { field: "INCOME_GRP", values: ["5. Low income"] },
+    ]);
+    assert.deepEqual(result, []);
+  });
+
+  // The chips are built with String(...), so a numeric or boolean category has
+  // to match the same way or clicking a chip would filter everything away.
+  it("matches non-string values against their chip label", () => {
+    const mixed: ChartRow[] = [
+      { properties: { zone: 1, NAME: "one" } },
+      { properties: { zone: 2, NAME: "two" } },
+      { properties: { zone: true, NAME: "yes" } },
+    ];
+    assert.deepEqual(names(filterRowsBySelections(mixed, [{ field: "zone", values: ["1"] }])), [
+      "one",
+    ]);
+    assert.deepEqual(names(filterRowsBySelections(mixed, [{ field: "zone", values: ["true"] }])), [
+      "yes",
+    ]);
   });
 });
 
