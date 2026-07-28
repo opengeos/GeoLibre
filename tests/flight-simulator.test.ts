@@ -922,6 +922,15 @@ describe("flight simulator engine", () => {
       // The host calls this from an effect that also re-runs on a project load.
       reattachFlightSimulator(app);
       assert.equal(isFlying(), true, "an unchanged map must not interrupt the flight");
+      // A missing map means the old instance has been removed while the host
+      // rebuilds it, so the engine must release that stale instance.
+      reattachFlightSimulator({ getMap: () => null } as unknown as GeoLibreAppAPI);
+      assert.equal(isFlying(), false, "a missing map must tear down the old engine");
+
+      // Reattach the original engine so the replacement-map case also starts
+      // from a live flight rather than merely asserting the already-idle state.
+      reattachFlightSimulator(app);
+      startFlying();
       // A genuinely new map still rebinds (and ends the old flight with it).
       reattachFlightSimulator({ getMap: () => stubMap() } as unknown as GeoLibreAppAPI);
       assert.equal(isFlying(), false, "a new map instance must rebind the engine");
