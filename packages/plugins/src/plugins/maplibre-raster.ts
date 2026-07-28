@@ -124,6 +124,7 @@ type MapboxOverlayConstructor = new (props: Record<string, unknown>) => OverlayL
 type RasterLayerManagerInternals = {
   /** The currently selected raster id (read to restore it after inspect). */
   selectedId?: string | null;
+  _device?: unknown;
   _deps?: {
     createOverlay?: (map: MapControlHost, options: OverlayFactoryOptions) => OverlayLike;
     removeOverlay?: (map: MapControlHost, overlay: OverlayLike) => void;
@@ -681,6 +682,7 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
+    await warmTauriWasmEngine(rasterControl);
     // On web the control renders interleaved, which shares deck.gl's per-map
     // Deck with the other interleaved overlays; route it through the shared
     // overlay so it coexists with them (#1149). No-op on Tauri (overlaid).
@@ -898,6 +900,33 @@ async function patchTauriRasterOverlayFactory(control: RasterControl): Promise<v
     const loadGeoTIFF = deps.loadGeoTIFF;
     deps.loadGeoTIFF = async (url) => patchGeoTiffNumericNodata(await loadGeoTIFF(url));
     deps.geolibreTauriNodataPatched = true;
+  }
+}
+
+/**
+ * Initialize Tauri's raster GPU canvas once before starting the WASM backend.
+ *
+ * WebKitGTK on native Wayland can leave concurrent WebAssembly initialization
+ * pending until an accelerated canvas has created its device. The visible
+ * symptom is a fully loaded raster entry whose WASM source never opens; choosing
+ * the GPU engine and then switching back immediately releases it. Perform that
+ * same one-time initialization while the control is still hidden, then restore
+ * the requested WASM default before any raster is added.
+ */
+async function warmTauriWasmEngine(control: RasterControl): Promise<void> {
+  if (!isTauriRuntime() || control.getEngine() !== "cog-tiler-wasm") return;
+
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  if (!manager) return;
+
+  try {
+    control.setEngine("maplibre-gl-raster");
+    const deadline = performance.now() + 2_000;
+    while (!manager._device && performance.now() < deadline) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 16));
+    }
+  } finally {
+    control.setEngine("cog-tiler-wasm");
   }
 }
 
