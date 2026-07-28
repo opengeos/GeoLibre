@@ -522,7 +522,16 @@ function WidgetCard({
               );
             }
 
-            return <SelectorValues values={values} multiple={widget.multiple ?? false} />;
+            // Keyed on the selector config so switching field or single/multi
+            // mode remounts with an empty selection instead of carrying over
+            // values that no longer apply.
+            return (
+              <SelectorValues
+                key={`${cat}:${widget.multiple ?? false}`}
+                values={values}
+                multiple={widget.multiple ?? false}
+              />
+            );
           })()}
         </div>
       ) : (
@@ -568,6 +577,7 @@ function SelectorValues({ values, multiple }: { values: string[]; multiple: bool
           <button
             key={value}
             type="button"
+            aria-pressed={isSelected}
             onClick={() => toggle(value)}
             className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
               isSelected
