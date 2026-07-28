@@ -22,7 +22,10 @@ import {
   isHexColor,
   shadeRamp,
 } from "../apps/geolibre-desktop/src/components/panels/charts/chart-colors";
-import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
+import {
+  distinctCategoryValues,
+  type ChartRow,
+} from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
 function widget(patch: Partial<DashboardWidget> = {}): DashboardWidget {
   return {
@@ -407,5 +410,62 @@ describe("computeChart", () => {
   it("returns an empty result when the required field is missing", () => {
     const result = computeChart(rows, { type: "histogram" });
     assert.equal(chartResultHasData(result), false);
+  });
+});
+
+describe("selector widget values", () => {
+  // Rows carry their attributes in a `properties` bag, not on the row itself.
+  // Reading the row directly yields undefined for every feature, which left the
+  // selector widget rendering its "no data" fallback instead of any chips.
+  const rows: ChartRow[] = [
+    { properties: { CONTINENT: "Africa", NAME: "Kenya" } },
+    { properties: { CONTINENT: "Asia", NAME: "Nepal" } },
+    { properties: { CONTINENT: "Africa", NAME: "Chad" } },
+  ];
+
+  it("reads distinct values out of each row's property bag", () => {
+    assert.deepEqual(distinctCategoryValues(rows, "CONTINENT"), ["Africa", "Asia"]);
+  });
+
+  it("sorts values and drops blank and nullish ones", () => {
+    const sparse: ChartRow[] = [
+      { properties: { region: "Oceania" } },
+      { properties: { region: "" } },
+      { properties: { region: null } },
+      { properties: {} },
+      { properties: { region: "Americas" } },
+    ];
+    assert.deepEqual(distinctCategoryValues(sparse, "region"), ["Americas", "Oceania"]);
+  });
+
+  it("returns nothing for a field no row carries", () => {
+    assert.deepEqual(distinctCategoryValues(rows, "missing"), []);
+  });
+});
+
+describe("selector widget multi-select persistence", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Test Project" });
+  });
+
+  // updateWidget merges its patch onto the stored widget, so the editor has to
+  // write `multiple` explicitly. Omitting the key when the box is unchecked
+  // left an earlier `true` in place and the widget stayed in multi-select mode.
+  it("clears multi-select when the patch carries an explicit false", () => {
+    useAppStore
+      .getState()
+      .addWidget(widget({ id: "s", type: "selector", category: "CONTINENT", multiple: true }));
+    useAppStore.getState().updateWidget("s", { multiple: false });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
+    assert.equal(saved?.multiple, false);
+  });
+
+  it("retains the previous value when the patch omits the key", () => {
+    useAppStore
+      .getState()
+      .addWidget(widget({ id: "s", type: "selector", category: "CONTINENT", multiple: true }));
+    useAppStore.getState().updateWidget("s", { category: "REGION_UN" });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
+    assert.equal(saved?.multiple, true);
   });
 });

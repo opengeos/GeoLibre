@@ -14,7 +14,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { numericValues, type ChartRow, type ChartType } from "../../lib/attribute-charts";
+import {
+  distinctCategoryValues,
+  numericValues,
+  type ChartRow,
+  type ChartType,
+} from "../../lib/attribute-charts";
 import { isChartableLayer, useLayerChartData } from "../../hooks/useLayerChartData";
 import { ChartView, computeChart, type ChartSpec } from "./charts/chart-view";
 import { WidgetEditorDialog } from "./WidgetEditorDialog";
@@ -508,13 +513,7 @@ function WidgetCard({
             }
             // Extract distinct values from the category field, sorted.
             const cat = widget.category!;
-            const values = Array.from(
-              new Set(
-                data.rows
-                  .map((row) => String((row as unknown as Record<string, unknown>)[cat] ?? ""))
-                  .filter((v) => v !== ""),
-              ),
-            ).sort((a, b) => a.localeCompare(b));
+            const values = distinctCategoryValues(data.rows, cat);
 
             if (values.length === 0) {
               return (

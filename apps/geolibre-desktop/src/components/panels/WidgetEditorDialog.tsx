@@ -159,7 +159,11 @@ export function WidgetEditorDialog({
     }
     if (type === "selector") {
       next.category = pick(category, categoryCols);
-      if (multiple) next.multiple = true;
+      // Always write the flag rather than omitting it when false: editing an
+      // existing widget merges this patch onto the stored record, so a missing
+      // key would leave an earlier `true` in place and unchecking the box in
+      // the editor would never take effect.
+      next.multiple = multiple;
     }
     onSave(next);
     onOpenChange(false);

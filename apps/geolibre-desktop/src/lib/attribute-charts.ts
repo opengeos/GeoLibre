@@ -41,6 +41,23 @@ export function toFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * The distinct non-empty values of a category field, sorted for display. Used
+ * by the selector widget to build its list of value chips.
+ *
+ * @param rows The rows to read, each carrying its own property bag.
+ * @param key The category field to collect values from.
+ * @returns The sorted distinct values, with blanks and nullish entries dropped.
+ */
+export function distinctCategoryValues(rows: ChartRow[], key: string): string[] {
+  const values = new Set<string>();
+  for (const row of rows) {
+    const value = String(row.properties[key] ?? "");
+    if (value !== "") values.add(value);
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Columns suitable for charting: a key counts as numeric when it has at least
  * two finite-number values and those make up at least half of its non-null
  * values (so an id-like column of mostly strings with a stray number is
