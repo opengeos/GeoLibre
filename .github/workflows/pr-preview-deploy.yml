@@ -120,7 +120,7 @@ jobs:
 
       - name: Download the built site
         if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: pr-preview-site
           path: site
