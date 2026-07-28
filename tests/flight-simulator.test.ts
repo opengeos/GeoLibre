@@ -791,6 +791,51 @@ describe("flight simulator engine", () => {
     });
   });
 
+  it("enables 3D terrain for flight and restores the previous terrain state", () => {
+    withStubWindow(() => {
+      resetStore();
+      const map = stubMap();
+      let terrainEnabled = false;
+      const app = {
+        getMap: () => map,
+        setTerrainEnabled: (enabled: boolean) => {
+          terrainEnabled = enabled;
+          return true;
+        },
+      } as unknown as GeoLibreAppAPI;
+      openFlightSimulatorPanel(app);
+
+      startFlying();
+      assert.equal(terrainEnabled, true, "takeoff must enable 3D terrain");
+
+      stopFlying();
+      assert.equal(terrainEnabled, false, "landing must restore terrain to off");
+      resetStore();
+    });
+  });
+
+  it("leaves terrain enabled when it was already active before flight", () => {
+    withStubWindow(() => {
+      resetStore();
+      const map = stubMap();
+      map.getTerrain = () => ({ source: "geolibre-terrain-dem" });
+      const terrainChanges: boolean[] = [];
+      const app = {
+        getMap: () => map,
+        setTerrainEnabled: (enabled: boolean) => {
+          terrainChanges.push(enabled);
+          return true;
+        },
+      } as unknown as GeoLibreAppAPI;
+      openFlightSimulatorPanel(app);
+
+      startFlying();
+      stopFlying();
+      assert.deepEqual(terrainChanges, [true], "pre-existing terrain must not be disabled");
+      resetStore();
+    });
+  });
+
   it("restores the pre-flight pitch rather than leaving the flight's own tilt", () => {
     withStubWindow(({ pump }) => {
       resetStore();

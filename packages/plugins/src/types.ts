@@ -437,6 +437,10 @@ export interface GeoLibreAppAPI {
     control: GeoLibreBuiltInMapControl,
     position: GeoLibreMapControlPosition,
   ) => boolean;
+  /** Enable or disable GeoLibre's built-in DEM terrain without changing control visibility. */
+  setTerrainEnabled?: (enabled: boolean) => boolean;
+  /** Whether GeoLibre's built-in DEM terrain is currently active. */
+  isTerrainEnabled?: () => boolean;
   /**
    * Resolve GeoLibre's own deck.gl modules so an external plugin can render
    * deck.gl layers (e.g. an `ArcLayer`) on the host's single deck.gl instance.

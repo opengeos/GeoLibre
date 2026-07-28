@@ -257,6 +257,8 @@ interface SavedMapState {
   /** Camera pitch before flight, restored on exit. */
   pitch: number;
   centerClampedToGround: boolean;
+  /** Whether 3D terrain was active before flight took ownership of the map. */
+  terrainEnabled: boolean;
   enabledHandlers: boolean[];
 }
 
@@ -266,6 +268,7 @@ interface SavedMapState {
  */
 class FlightSimulatorEngine {
   private readonly map: MapLibreMap;
+  private readonly setTerrainEnabled?: (enabled: boolean) => boolean;
   private settings: FlightSimulatorSettings;
   private aircraft: AircraftState;
   private held = new Set<string>();
@@ -285,9 +288,14 @@ class FlightSimulatorEngine {
   private cameraToken = 0;
   private destroyed = false;
 
-  constructor(map: MapLibreMap, settings: FlightSimulatorSettings) {
+  constructor(
+    map: MapLibreMap,
+    settings: FlightSimulatorSettings,
+    setTerrainEnabled?: (enabled: boolean) => boolean,
+  ) {
     this.map = map;
     this.settings = settings;
+    this.setTerrainEnabled = setTerrainEnabled;
     this.aircraft = this.seedAircraft();
     this.tick = this.tick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -369,8 +377,13 @@ class FlightSimulatorEngine {
       maxPitch: this.map.getMaxPitch(),
       pitch: this.map.getPitch(),
       centerClampedToGround: this.map.getCenterClampedToGround(),
+      terrainEnabled: this.map.getTerrain?.() != null,
       enabledHandlers: handlers.map((handler) => handler.isEnabled()),
     };
+    // Terrain is part of flight mode, not an optional prerequisite. Enable it
+    // before seeding the aircraft so its starting altitude is measured above
+    // the rendered ground rather than sea level.
+    this.setTerrainEnabled?.(true);
     for (const handler of handlers) handler.disable();
     // The app's default max pitch is 85 but a user preference can lower it;
     // flight needs the full range or the camera would be clamped flat.
@@ -415,7 +428,7 @@ class FlightSimulatorEngine {
     this.lastFrame = null;
 
     if (this.saved) {
-      const { maxPitch, pitch, centerClampedToGround, enabledHandlers } = this.saved;
+      const { maxPitch, pitch, centerClampedToGround, terrainEnabled, enabledHandlers } = this.saved;
       // Level the wings and return to the tilt the user started from, keeping
       // where they flew to. Leaving the flight's own ~78 deg pitch in place
       // would drop them into a near-horizon view spanning half a continent.
@@ -423,6 +436,7 @@ class FlightSimulatorEngine {
       // the app considers valid and the store's `moveend` sync records it.
       this.map.jumpTo({ roll: 0, pitch: Math.min(pitch, maxPitch) });
       this.map.setMaxPitch(maxPitch);
+      if (!terrainEnabled) this.setTerrainEnabled?.(false);
       this.map.setCenterClampedToGround(centerClampedToGround);
       INTERACTION_HANDLERS.forEach((key, index) => {
         if (enabledHandlers[index]) this.map[key].enable();
@@ -619,7 +633,7 @@ function attachEngine(app: GeoLibreAppAPI): void {
   const map = app.getMap?.() ?? null;
   if (!map) return;
   if (engine) return;
-  engine = new FlightSimulatorEngine(map, settings);
+  engine = new FlightSimulatorEngine(map, settings, app.setTerrainEnabled);
 }
 
 function detachEngine(): void {

@@ -1169,6 +1169,37 @@ function makeTerrainDomStub(): { createElement: () => unknown } {
 }
 
 describe("MapController terrain auto-enable", () => {
+  it("lets a plugin enable and restore terrain while the map control is hidden", () => {
+    let terrain: maplibregl.TerrainSpecification | null = null;
+    let centerClamped = true;
+    const sources = new Set<string>();
+    const map = {
+      getSource: (id: string) => (sources.has(id) ? {} : undefined),
+      addSource: (id: string) => {
+        sources.add(id);
+      },
+      getTerrain: () => terrain,
+      setTerrain: (spec: maplibregl.TerrainSpecification | null) => {
+        terrain = spec;
+      },
+      setCenterClampedToGround: (value: boolean) => {
+        centerClamped = value;
+      },
+    };
+    const controller = createMapController();
+    const internal = controller as unknown as { map: unknown; styleReady: boolean };
+    internal.map = map;
+    internal.styleReady = true;
+
+    assert.equal(controller.setTerrainEnabled(true), true);
+    assert.equal(terrain?.source, "geolibre-terrain-dem");
+    assert.equal(centerClamped, false);
+
+    assert.equal(controller.setTerrainEnabled(false), true);
+    assert.equal(terrain, null);
+    assert.equal(centerClamped, true);
+  });
+
   it("enables terrain when the Terrain control is turned on, without a click", () => {
     const prevDoc = (globalThis as { document?: unknown }).document;
     (globalThis as { document?: unknown }).document = makeTerrainDomStub();

@@ -1558,7 +1558,7 @@ export class MapController {
   }
 
   private addTerrainSource(): boolean {
-    if (!this.map || !this.controlVisibility.terrain || !this.isStyleReady()) {
+    if (!this.map || !this.isStyleReady()) {
       return false;
     }
     if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
@@ -2292,6 +2292,42 @@ export class MapController {
     } else {
       this.terrainEnablePending = true;
     }
+  }
+
+  /** Whether GeoLibre's built-in 3D terrain is currently active. */
+  isTerrainEnabled(): boolean {
+    return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
+  }
+
+  /**
+   * Enable or disable GeoLibre's built-in 3D terrain independently of whether
+   * its map button is visible. Plugins such as Flight Simulator use this to
+   * guarantee relief while active without changing the user's control layout.
+   */
+  setTerrainEnabled(enabled: boolean): boolean {
+    if (!this.map) return false;
+    if (enabled) {
+      if (!this.addTerrainSource()) return false;
+      if (this.terrainControl) {
+        this.terrainControl.setEnabled(true);
+      } else if (!this.isTerrainEnabled()) {
+        this.map.setCenterClampedToGround(false);
+        this.map.setTerrain({
+          source: TERRAIN_SOURCE_ID,
+          exaggeration: this.terrainExaggeration,
+        });
+      }
+      return this.isTerrainEnabled();
+    }
+    if (this.isTerrainEnabled()) {
+      if (this.terrainControl) {
+        this.terrainControl.setEnabled(false);
+      } else {
+        this.map.setTerrain(null);
+        this.map.setCenterClampedToGround(true);
+      }
+    }
+    return !this.isTerrainEnabled();
   }
 
   private removeTerrainControl(): void {
