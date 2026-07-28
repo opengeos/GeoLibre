@@ -375,7 +375,7 @@ function WidgetCard({
   const data = useLayerChartData(widget.layerId);
   const result = useMemo(
     () =>
-      widget.type === "indicator" || widget.type === "selector"
+      widget.type === "indicator" || widget.type === "selector" || widget.type === "list"
         ? null
         : computeChart(data.rows, widgetToSpec(widget, widget.type)),
     [data.rows, widget],
@@ -409,6 +409,8 @@ function WidgetCard({
       }
       case "selector":
         return `${t("dashboard.chartType.selector")} · ${widget.category ?? ""}`;
+      case "list":
+        return `${t("dashboard.chartType.list")} · ${widget.layerId}`;
     }
   };
   const title = widget.title?.trim() || defaultWidgetTitle();
@@ -525,6 +527,46 @@ function WidgetCard({
             return <SelectorValues values={values} multiple={widget.multiple ?? false} />;
           })()}
         </div>
+      ) : widget.type === "list" ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          {(() => {
+            if (!data.hasData || !widget.listFields || widget.listFields.length === 0) {
+              return (
+                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
+              );
+            }
+            const rows = data.rows;
+            const sortBy = widget.sortBy;
+            const sortDir = widget.sortDir ?? "desc";
+            const limit = widget.limit ?? 20;
+
+            // Sort rows if sortBy is set.
+            let sorted = rows;
+            if (sortBy) {
+              sorted = [...rows].sort((a, b) => {
+                const av = (a as unknown as Record<string, unknown>)[sortBy];
+                const bv = (b as unknown as Record<string, unknown>)[sortBy];
+                // Numeric comparison if both values are numbers.
+                const an = Number(av);
+                const bn = Number(bv);
+                if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) {
+                  return sortDir === "asc" ? an - bn : bn - an;
+                }
+                // Fall back to string comparison.
+                const as = String(av ?? "");
+                const bs = String(bv ?? "");
+                return sortDir === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
+              });
+            }
+
+            return (
+              <ListTable
+                fields={widget.listFields}
+                rows={sorted.slice(0, limit) as unknown as Record<string, unknown>[]}
+              />
+            );
+          })()}
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
           {data.hasData && result ? (
@@ -586,5 +628,47 @@ function SelectorValues({
         );
       })}
     </div>
+  );
+}
+
+/** Renders the list widget body: a compact scrollable HTML table showing the
+ * selected columns for the top-N features (by sortBy/sortDir, limited by limit).
+ * Like the selector, this does not yet participate in cross-filtering. */
+function ListTable({
+  fields,
+  rows,
+}: {
+  fields: string[];
+  rows: Record<string, unknown>[];
+}) {
+  return (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr>
+          {fields.map((f) => (
+            <th
+              key={f}
+              className="border-b border-border px-1.5 py-1 text-left font-medium text-muted-foreground"
+            >
+              {f}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i} className="hover:bg-muted/50">
+            {fields.map((f) => {
+              const v = row[f];
+              return (
+                <td key={f} className="border-b border-border/50 px-1.5 py-0.5">
+                  {v === null || v === undefined ? "" : String(v)}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

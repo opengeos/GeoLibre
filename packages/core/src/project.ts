@@ -743,6 +743,8 @@ const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
   "box",
   "pie",
   "indicator",
+  "selector",
+  "list",
 ];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
