@@ -544,13 +544,7 @@ function WidgetCard({
  * chips. In single mode clicking a value toggles it as the only selected value.
  * In multi mode each chip toggles independently. Cross-filtering is not yet
  * wired; this prepares the UI and selection state for it. */
-function SelectorValues({
-  values,
-  multiple,
-}: {
-  values: string[];
-  multiple: boolean;
-}) {
+function SelectorValues({ values, multiple }: { values: string[]; multiple: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const toggle = (value: string) => {
