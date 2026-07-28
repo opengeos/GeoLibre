@@ -20,6 +20,7 @@ import {
   nearestTimeIndex,
   resolveSelectorDisplayUnits,
   subscribeTemporalLayers,
+  TIME_GRANULARITIES,
   toEpochMsAxis,
   type SelectorTimeBinding,
   type TemporalLayerAdapter,
@@ -774,7 +775,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
           start: config.startDate,
           end: config.endDate,
           granularity: config.granularity,
-          granularities: [...(config.granularities ?? ["hour", "day", "month", "year"])],
+          granularities: [...(config.granularities ?? TIME_GRANULARITIES)],
         };
       }
       lastBoundRangeKey = rangeKey;
@@ -783,7 +784,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
         orderedDisplayUnits
           ? orderedDisplayUnits
           : (preBindingRange?.granularities ??
-              control.getConfig().granularities ?? ["hour", "day", "month", "year"]),
+              control.getConfig().granularities ?? [...TIME_GRANULARITIES]),
       );
     }
   } else {
@@ -810,6 +811,11 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
   scheduleSelectorTimes(control);
   applyBoundFilters(control, bound);
   applyTimeOverlayVisibility(control, frames);
+}
+
+/** Exercise binding reconciliation with a stub control in unit tests. */
+export function __reconcileBoundLayersForTests(control: TimeSliderControl): void {
+  reconcileBoundLayers(control);
 }
 
 /**

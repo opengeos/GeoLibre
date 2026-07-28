@@ -1,6 +1,6 @@
 import { parseTimeValue, pickGranularity, type TimeGranularity } from "./time-slider-binding";
 
-const TIME_GRANULARITIES: TimeGranularity[] = ["hour", "day", "month", "year"];
+export const TIME_GRANULARITIES: readonly TimeGranularity[] = ["hour", "day", "month", "year"];
 
 /**
  * A layer whose time is an **internal dimension** rather than a feature property

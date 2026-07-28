@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  __reconcileBoundLayersForTests,
   configToOptions,
   getLayerTimeBinding,
   createStoreLayer,
   isTimeSliderIdle,
   maplibreTimeSliderPlugin,
 } from "../packages/plugins/src/plugins/maplibre-time-slider";
-import type { SourceSpec } from "maplibre-gl-time-slider";
+import { registerTemporalLayer } from "../packages/plugins/src/plugins/temporal-layers";
+import type { SourceSpec, TimeSliderControl } from "maplibre-gl-time-slider";
 
 // applyProjectState / getProjectState touch no app methods while no control is
 // active (the plugin is never activated here), so a bare stub satisfies the type.
@@ -66,6 +68,60 @@ describe("Time Slider open-ended end date persistence", () => {
     const config = baseConfig();
     delete config.startDate;
     assert.equal(apply(config), false);
+  });
+});
+
+describe("Time Slider selector display-unit restoration", () => {
+  it("restores the previous controls after the last selector is unbound", () => {
+    const store = useAppStore.getState();
+    const previousLayers = store.layers;
+    const layer = {
+      id: "restore-units",
+      name: "Daily cube",
+      type: "geojson",
+      source: {},
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {
+        timeBinding: {
+          kind: "selector",
+          dimension: "time",
+          min: Date.UTC(2020, 0, 1),
+          max: Date.UTC(2020, 0, 2),
+          granularity: "day",
+          displayUnits: ["day"],
+        },
+      },
+    } satisfies GeoLibreLayer;
+    const ranges: unknown[][] = [];
+    const granularities: string[][] = [];
+    const control = {
+      getConfig: () =>
+        baseConfig({
+          granularities: ["year", "month"],
+        }),
+      setRange: (...args: unknown[]) => ranges.push(args),
+      setGranularities: (units: string[]) => granularities.push(units),
+    } as unknown as TimeSliderControl;
+    const detach = registerTemporalLayer(layer.id, {
+      getTimeValues: () => [Date.UTC(2020, 0, 1), Date.UTC(2020, 0, 2)],
+      setTime: () => {},
+    });
+
+    try {
+      useAppStore.setState({ layers: [layer] });
+      __reconcileBoundLayersForTests(control);
+      assert.deepEqual(granularities.at(-1), ["day"]);
+
+      useAppStore.getState().updateLayer(layer.id, { metadata: {} });
+      __reconcileBoundLayersForTests(control);
+      assert.deepEqual(granularities.at(-1), ["year", "month"]);
+      assert.equal(ranges.at(-1)?.[3], "year");
+    } finally {
+      detach();
+      useAppStore.setState({ layers: previousLayers });
+    }
   });
 });
 
