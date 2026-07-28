@@ -428,7 +428,8 @@ class FlightSimulatorEngine {
     this.lastFrame = null;
 
     if (this.saved) {
-      const { maxPitch, pitch, centerClampedToGround, terrainEnabled, enabledHandlers } = this.saved;
+      const { maxPitch, pitch, centerClampedToGround, terrainEnabled, enabledHandlers } =
+        this.saved;
       // Level the wings and return to the tilt the user started from, keeping
       // where they flew to. Leaving the flight's own ~78 deg pitch in place
       // would drop them into a near-horizon view spanning half a continent.
