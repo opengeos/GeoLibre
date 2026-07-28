@@ -1211,6 +1211,7 @@ export function StylePanel({
   useEffect(() => {
     if (
       !layer ||
+      layer.metadata.sourceKind !== "maplibre-gl-vector" ||
       !loadedVectorPropertyValues ||
       loadedVectorPropertyValues.layerId !== layer.id ||
       loadedVectorPropertyValues.property !== draftVectorStyleProperty ||
@@ -1221,7 +1222,7 @@ export function StylePanel({
 
     setDraftVectorStyleStops(
       createDefaultStops(
-        layer,
+        { geojson: layer.geojson },
         draftVectorStyleMode,
         draftVectorStyleProperty,
         draftVectorStyleClassCount,
@@ -1236,7 +1237,9 @@ export function StylePanel({
     draftVectorStyleColorRamp,
     draftVectorStyleMode,
     draftVectorStyleProperty,
-    layer,
+    layer?.geojson,
+    layer?.id,
+    layer?.metadata.sourceKind,
     loadedVectorPropertyValues,
   ]);
 

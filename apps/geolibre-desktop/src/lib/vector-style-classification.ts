@@ -60,6 +60,7 @@ export function createGraduatedStops(
   propertyValues?: unknown[],
 ): VectorStyleStop[] {
   const values = (propertyValues ?? getPropertyValues(layer, property))
+    .filter((value) => value !== null && value !== undefined)
     .map((value) => Number(value))
     .filter(Number.isFinite);
   const count = clampClassCount(classCount, 2);
@@ -88,7 +89,7 @@ export function createGraduatedStops(
     breaks.length === count ? colors : interpolateRampColors(colorRamp, breaks.length);
 
   return breaks.map((value, index) => ({
-    value: Number(value.toPrecision(8)),
+    value,
     color: stopColors[index] ?? stopColors.at(-1) ?? "#2563eb",
   }));
 }
@@ -104,31 +105,51 @@ export function createCategorizedStops(
   classificationScheme: string,
   propertyValues?: unknown[],
 ): VectorStyleStop[] {
-  const counts = new Map<string, number>();
-  const firstSeen = new Map<string, number>();
+  const categories = new Map<
+    string,
+    {
+      value: string | number;
+      count: number;
+      firstSeen: number;
+    }
+  >();
   for (const value of propertyValues ?? getPropertyValues(layer, property)) {
-    const key = String(value);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    if (!firstSeen.has(key)) firstSeen.set(key, firstSeen.size);
+    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
+      continue;
+    }
+    const key = `${typeof value}:${String(value)}`;
+    const category = categories.get(key);
+    if (category) {
+      category.count += 1;
+    } else {
+      categories.set(key, {
+        value,
+        count: 1,
+        firstSeen: categories.size,
+      });
+    }
   }
 
   const count = clampClassCount(classCount, 1);
-  const categories = Array.from(counts.entries()).sort((a, b) => {
+  const sortedCategories = Array.from(categories.values()).sort((a, b) => {
     if (classificationScheme === "alphabetical") {
-      return a[0].localeCompare(b[0], undefined, {
+      return String(a.value).localeCompare(String(b.value), undefined, {
         numeric: true,
         sensitivity: "base",
       });
     }
     if (classificationScheme === "first-values") {
-      return (firstSeen.get(a[0]) ?? 0) - (firstSeen.get(b[0]) ?? 0);
+      return a.firstSeen - b.firstSeen;
     }
-    return b[1] - a[1] || a[0].localeCompare(b[0]);
+    return b.count - a.count || String(a.value).localeCompare(String(b.value));
   });
-  const colors = interpolateRampColors(colorRamp, Math.min(count, categories.length || count));
+  const colors = interpolateRampColors(
+    colorRamp,
+    Math.min(count, sortedCategories.length || count),
+  );
 
-  return categories.slice(0, count).map(([value], index) => ({
-    value,
+  return sortedCategories.slice(0, count).map((category, index) => ({
+    value: category.value,
     color:
       colors[index] ??
       CLASSIFICATION_FALLBACK_COLORS[index % CLASSIFICATION_FALLBACK_COLORS.length]!,
