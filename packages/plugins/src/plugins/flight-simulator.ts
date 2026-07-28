@@ -383,7 +383,7 @@ class FlightSimulatorEngine {
     // Terrain is part of flight mode, not an optional prerequisite. Enable it
     // before seeding the aircraft so its starting altitude is measured above
     // the rendered ground rather than sea level.
-    this.setTerrainEnabled?.(true);
+    if (!this.saved.terrainEnabled) this.setTerrainEnabled?.(true);
     for (const handler of handlers) handler.disable();
     // The app's default max pitch is 85 but a user preference can lower it;
     // flight needs the full range or the camera would be clamped flat.

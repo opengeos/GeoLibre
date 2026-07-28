@@ -815,11 +815,11 @@ describe("flight simulator engine", () => {
     });
   });
 
-  it("leaves terrain enabled when it was already active before flight", () => {
+  it("preserves a custom terrain source that was already active before flight", () => {
     withStubWindow(() => {
       resetStore();
       const map = stubMap();
-      map.getTerrain = () => ({ source: "geolibre-terrain-dem" });
+      map.getTerrain = () => ({ source: "custom-terrain" });
       const terrainChanges: boolean[] = [];
       const app = {
         getMap: () => map,
@@ -832,7 +832,7 @@ describe("flight simulator engine", () => {
 
       startFlying();
       stopFlying();
-      assert.deepEqual(terrainChanges, [true], "pre-existing terrain must not be disabled");
+      assert.deepEqual(terrainChanges, [], "pre-existing terrain must not be replaced or disabled");
       resetStore();
     });
   });
