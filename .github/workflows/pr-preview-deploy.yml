@@ -12,11 +12,15 @@ name: PR preview deploy
 # The invariant that makes that safe: this job must never execute anything from
 # the pull request. It downloads an artifact and copies files. Specifically:
 #
-#   * The checkout below takes the default branch. It must never be given
-#     `ref: ...head.sha` or anything else derived from the PR.
+#   * The GitHub Pages job checks out the default branch. It must never be
+#     given `ref: ...head.sha` or anything else derived from the PR.
+#   * The Cloudflare job does not check out any repository.
 #   * No `npm ci`, no build, no `npm run`, no running a script out of `site/`.
 #     The artifact is inert data here -- static files pushed to a host.
 #   * Nothing from the artifact may be interpolated into a `run:` block.
+#
+# GitHub Pages and Cloudflare deploy in separate jobs. They share only the PR
+# resolution job, so a failure in either host cannot block the other.
 #
 # The PR number is NOT taken from the artifact, which a fork controls and could
 # use to overwrite an unrelated PR's preview and comment on it. It is looked up
@@ -41,21 +45,19 @@ permissions:
   contents: read
   # Download the build artifact from the triggering run.
   actions: read
-  # The sticky preview comment. The deploy to opengeos/pages-preview does not
-  # use this token -- it uses PREVIEW_DEPLOY_TOKEN, which has no access to this
-  # repository.
+  # Update the sticky preview comments. The deploy to opengeos/pages-preview
+  # uses PREVIEW_DEPLOY_TOKEN, which has no access to this repository.
   pull-requests: write
 
 concurrency:
   group: pr-preview-deploy-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-  # NOT cancel-in-progress: unlike the build, this job pushes commits to
-  # opengeos/pages-preview. Queue overlapping runs instead of killing one
-  # mid-push.
+  # The GitHub Pages job pushes commits to opengeos/pages-preview. Queue
+  # overlapping runs instead of killing one mid-push.
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy preview
+  resolve:
+    name: Resolve pull request
     runs-on: ubuntu-latest
     # Only for builds that came from a pull request and actually succeeded. A
     # `workflow_dispatch` build of pr-preview.yml is a build smoke test and
@@ -63,6 +65,10 @@ jobs:
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
+    outputs:
+      found: ${{ steps.pr.outputs.found }}
+      number: ${{ steps.pr.outputs.number }}
+      action: ${{ steps.pr.outputs.action }}
     steps:
       # Resolve the PR from trusted event data only. `workflow_run.pull_requests`
       # is empty for fork PRs, so query by head instead: the (fork, branch) pair
@@ -110,16 +116,15 @@ jobs:
             echo "action=deploy" >> "$GITHUB_OUTPUT"
           fi
 
-      # The Pages deploy action needs a git repository in the workspace. This
-      # is the DEFAULT BRANCH -- never the PR head. Do not add a `ref:` here.
-      - name: Checkout repository
-        if: steps.pr.outputs.found == 'true'
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
+  cloudflare:
+    name: Deploy Cloudflare preview
+    needs: resolve
+    if: >-
+      needs.resolve.outputs.found == 'true' &&
+      needs.resolve.outputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    steps:
       - name: Download the built site
-        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
         uses: actions/download-artifact@v8
         with:
           name: pr-preview-site
@@ -127,21 +132,86 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      # ------------------------------------------------------- GitHub Pages
-      # Runs BEFORE the DuckDB deletion below: Pages allows 100 MB per file and
-      # ignores the `_redirects` file stage 1 wrote, so it serves those modules
-      # locally and needs them present.
+      - name: Drop the CDN-redirected DuckDB WASM
+        # Cloudflare Pages rejects any single file > 25 MiB. Stage 1 already
+        # wrote site/_redirects pointing every such file at jsDelivr and failed
+        # the build on any it could not map, so deleting by size alone here is
+        # safe: anything left over 25 MiB is already redirected.
+        run: |
+          set -euo pipefail
+          find site -type f -size +26214400c -printf 'dropping %p (%s bytes)\n' -delete
+          echo "----- site/_redirects -----"
+          cat site/_redirects || echo "(none)"
+
+      - name: Create a scratch directory for wrangler
+        run: mkdir -p .wrangler-deploy
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # wrangler-action installs wrangler with npm into its working
+          # directory. Point it at an empty scratch dir so it does not resolve
+          # against this monorepo's package.json / workspaces, and give the
+          # payload an absolute path.
+          workingDirectory: .wrangler-deploy
+          # A PR-number branch gives every PR an isolated preview and avoids
+          # collisions when forks use the same source branch name.
+          command: >-
+            pages deploy ${{ github.workspace }}/site
+            --project-name=geolibre-preview
+            --branch="pr-${{ needs.resolve.outputs.number }}"
+            --commit-hash="${{ github.event.workflow_run.head_sha }}"
+            --commit-dirty=true
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v9
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
+          PR_NUMBER: ${{ needs.resolve.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const url = process.env.DEPLOY_URL;
+            if (!url) return;
+            const marker = '<!-- cloudflare-preview -->';
+            const body = `${marker}\n### 🔍 Cloudflare PR preview\n\n| Item | Value |\n| --- | --- |\n| Site | ${url} |\n| Demo app | ${url}/demo/ |\n| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |`;
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  github-pages:
+    name: Deploy GitHub Pages preview
+    needs: resolve
+    if: needs.resolve.outputs.found == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      # The Pages deploy action needs a git repository in the workspace. This
+      # is the DEFAULT BRANCH -- never the PR head. Do not add a `ref:` here.
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download the built site
+        if: needs.resolve.outputs.action == 'deploy'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-preview-site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
       - name: Deploy preview to GitHub Pages
         id: pages
-        if: steps.pr.outputs.found == 'true'
-        # A Pages problem (bad deploy token, Pages size limit) would otherwise
-        # take the Cloudflare preview and the PR comment down with it. Let the
-        # job carry on; the comment says which target failed.
-        #
-        # Deploy runs only. On a removal this step IS the job -- everything
-        # after it is skipped -- so swallowing a failed removal would report
-        # success while the preview stayed published.
-        continue-on-error: ${{ steps.pr.outputs.action == 'deploy' }}
         # Pinned rather than tracking the v1 tag: this is a third-party action
         # and it receives PREVIEW_DEPLOY_TOKEN.
         uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
@@ -158,80 +228,33 @@ jobs:
           # There is no pull_request payload under `workflow_run`, so the PR
           # number and the deploy/remove decision have to be passed explicitly;
           # the action would otherwise read them off the event and do nothing.
-          pr-number: ${{ steps.pr.outputs.number }}
-          action: ${{ steps.pr.outputs.action }}
+          pr-number: ${{ needs.resolve.outputs.number }}
+          action: ${{ needs.resolve.outputs.action }}
           # Same reason: the default messages interpolate `github.event.number`,
           # which is empty here.
-          deploy-commit-message: Deploy preview for PR ${{ steps.pr.outputs.number }} 🛫
-          remove-commit-message: Remove preview for PR ${{ steps.pr.outputs.number }} 🛬
+          deploy-commit-message: Deploy preview for PR ${{ needs.resolve.outputs.number }} 🛫
+          remove-commit-message: Remove preview for PR ${{ needs.resolve.outputs.number }} 🛬
           wait-for-pages-deployment: true
-          # Both URLs go in one comment, posted below.
           comment: false
 
-      # --------------------------------------------------------- Cloudflare
-      - name: Drop the CDN-redirected DuckDB WASM
-        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
-        # Cloudflare Pages rejects any single file > 25 MiB. Stage 1 already
-        # wrote site/_redirects pointing every such file at jsDelivr and failed
-        # the build on any it could not map, so deleting by size alone here is
-        # safe: anything left over 25 MiB is already redirected.
-        run: |
-          set -euo pipefail
-          find site -type f -size +26214400c -printf 'dropping %p (%s bytes)\n' -delete
-          echo "----- site/_redirects -----"
-          cat site/_redirects || echo "(none)"
-
-      - name: Create a scratch directory for wrangler
-        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
-        run: mkdir -p .wrangler-deploy
-
-      - name: Deploy to Cloudflare Pages
-        id: deploy
-        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # wrangler-action installs wrangler with npm into its working
-          # directory. Point it at an empty scratch dir so it does not resolve
-          # against this monorepo's package.json / workspaces, and give the
-          # payload an absolute path.
-          workingDirectory: .wrangler-deploy
-          # --branch is anything other than the project's production branch, so
-          # every run here is a preview deployment with its own URL.
-          command: >-
-            pages deploy ${{ github.workspace }}/site
-            --project-name=geolibre-preview
-            --branch="${{ github.event.workflow_run.head_branch }}"
-            --commit-dirty=true
-
-      - name: Comment preview URLs on PR
-        if: steps.pr.outputs.found == 'true' && steps.pr.outputs.action == 'deploy'
+      - name: Comment GitHub Pages preview status
+        if: always() && needs.resolve.outputs.action == 'deploy'
         uses: actions/github-script@v9
         env:
-          DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
           PAGES_URL: ${{ steps.pages.outputs.preview-url }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PAGES_OUTCOME: ${{ steps.pages.outcome }}
+          PR_NUMBER: ${{ needs.resolve.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
           script: |
-            const url = process.env.DEPLOY_URL;
             const pagesUrl = process.env.PAGES_URL;
-            if (!url && !pagesUrl) return;
-            const marker = '<!-- cloudflare-preview -->';
-            const rows = [];
-            if (pagesUrl) {
-              rows.push(`| GitHub Pages | ${pagesUrl} |`);
-              rows.push(`| Demo app | ${pagesUrl}demo/ |`);
-            } else {
-              rows.push(`| GitHub Pages | deploy failed — see the job log |`);
-            }
-            if (url) {
-              rows.push(`| Cloudflare | ${url} |`);
-              rows.push(`| Demo app | ${url}/demo/ |`);
-            }
-            rows.push(`| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |`);
-            const body = `${marker}\n### 🔍 PR preview\n\n| Item | Value |\n| --- | --- |\n${rows.join('\n')}`;
+            const succeeded = process.env.PAGES_OUTCOME === 'success' && pagesUrl;
+            const marker = '<!-- github-pages-preview -->';
+            const site = succeeded ? pagesUrl : 'Deploy failed. See the job log.';
+            const demo = succeeded
+              ? `${pagesUrl}${pagesUrl.endsWith('/') ? '' : '/'}demo/`
+              : 'Unavailable';
+            const body = `${marker}\n### 🔍 GitHub Pages PR preview\n\n| Item | Value |\n| --- | --- |\n| Site | ${site} |\n| Demo app | ${demo} |\n| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |`;
             const { owner, repo } = context.repo;
             const issue_number = Number(process.env.PR_NUMBER);
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
