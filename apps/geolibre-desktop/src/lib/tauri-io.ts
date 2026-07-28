@@ -2471,7 +2471,9 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
   if (!isTauri()) return [];
   const selected = await open({
     multiple: true,
-    filters: [{ name: "Rasters", extensions: [...RASTER_DROP_EXTENSIONS] }],
+    filters: [
+      { name: i18next.t("raster.filePickerLabel"), extensions: [...RASTER_DROP_EXTENSIONS] },
+    ],
   });
   if (!selected) return [];
   const paths = (Array.isArray(selected) ? selected : [selected]).filter(isRasterFileName);

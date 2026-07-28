@@ -41,6 +41,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::Manager;
+use tauri_plugin_fs::FsExt;
 
 // OAuth popups are a desktop-only, multi-window concept; Android/iOS have no
 // equivalent, and `WebviewWindowBuilder::{on_new_window, window_features}` do
@@ -405,6 +406,11 @@ fn allow_raster_asset(app: tauri::AppHandle, path: String) -> Result<(), String>
     if !is_safe_absolute_path(&path) || !(lower.ends_with(".tif") || lower.ends_with(".tiff")) {
         return Err(format!(
             "Refusing to expose \"{path}\": not an absolute GeoTIFF path"
+        ));
+    }
+    if !app.fs_scope().is_allowed(&path) {
+        return Err(format!(
+            "Refusing to expose \"{path}\": the file was not selected or dropped by the user"
         ));
     }
     app.asset_protocol_scope()
