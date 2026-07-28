@@ -187,8 +187,11 @@ describe("normalizeWidgets", () => {
       { id: "b", layerId: "l", type: "selector", category: "c", multiple: "yes" },
       { id: "c", layerId: "l", type: "selector", category: "c" },
     ] as never);
+    assert.equal(result?.length, 3);
     for (const id of ["a", "b", "c"]) {
-      assert.equal("multiple" in (result?.find((w) => w.id === id) ?? {}), false);
+      const normalized = result?.find((w) => w.id === id);
+      assert.ok(normalized, `selector ${id} should survive normalization`);
+      assert.equal("multiple" in normalized, false);
     }
   });
 
@@ -196,7 +199,9 @@ describe("normalizeWidgets", () => {
     const result = normalizeWidgets([
       { id: "p", layerId: "l", type: "pie", category: "kind", multiple: true },
     ] as never);
-    assert.equal("multiple" in (result?.[0] ?? {}), false);
+    const normalized = result?.[0];
+    assert.ok(normalized, "the pie widget should survive normalization");
+    assert.equal("multiple" in normalized, false);
   });
 
   it("returns null for a non-array or an all-invalid list", () => {
@@ -487,15 +492,22 @@ describe("selector widget values", () => {
     assert.deepEqual(distinctCategoryValues(rows, "CONTINENT"), ["Africa", "Asia"]);
   });
 
-  it("sorts values and drops blank and nullish ones", () => {
+  it("sorts values and drops blank, whitespace-only, and nullish ones", () => {
     const sparse: ChartRow[] = [
       { properties: { region: "Oceania" } },
       { properties: { region: "" } },
+      { properties: { region: "   " } },
+      { properties: { region: "\t\n" } },
       { properties: { region: null } },
       { properties: {} },
       { properties: { region: "Americas" } },
     ];
     assert.deepEqual(distinctCategoryValues(sparse, "region"), ["Americas", "Oceania"]);
+  });
+
+  it("keeps a value's original spacing as its label", () => {
+    const padded: ChartRow[] = [{ properties: { region: " Asia " } }];
+    assert.deepEqual(distinctCategoryValues(padded, "region"), [" Asia "]);
   });
 
   it("returns nothing for a field no row carries", () => {
@@ -527,7 +539,8 @@ describe("saving an edited widget", () => {
       type: "indicator",
       indicatorAggregation: "count",
     });
-    const saved = useAppStore.getState().widgets.find((w) => w.id === "w") ?? {};
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "w");
+    assert.ok(saved, "the widget should survive being replaced");
     assert.equal("title" in saved, false);
     assert.equal("color" in saved, false);
     assert.equal("prefix" in saved, false);
@@ -543,7 +556,8 @@ describe("saving an edited widget", () => {
       type: "selector",
       category: "CONTINENT",
     });
-    const saved = useAppStore.getState().widgets.find((w) => w.id === "s") ?? {};
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
+    assert.ok(saved, "the widget should survive being replaced");
     assert.equal("multiple" in saved, false);
   });
 
@@ -554,7 +568,8 @@ describe("saving an edited widget", () => {
     useAppStore
       .getState()
       .replaceWidget("w", { layerId: "layer-a", type: "pie", category: "kind" });
-    const saved = useAppStore.getState().widgets.find((w) => w.id === "w") ?? {};
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "w");
+    assert.ok(saved, "the widget should survive being replaced");
     assert.equal("bins" in saved, false);
     assert.equal("field" in saved, false);
   });

@@ -524,12 +524,12 @@ function WidgetCard({
               );
             }
 
-            // Keyed on the selector config so switching field or single/multi
-            // mode remounts with an empty selection instead of carrying over
-            // values that no longer apply.
+            // Keyed on the selector config so switching layer, field, or
+            // single/multi mode remounts with an empty selection instead of
+            // carrying over values that no longer apply.
             return (
               <SelectorValues
-                key={`${cat}:${widget.multiple ?? false}`}
+                key={`${widget.layerId}:${cat}:${widget.multiple ?? false}`}
                 values={values}
                 multiple={widget.multiple ?? false}
               />

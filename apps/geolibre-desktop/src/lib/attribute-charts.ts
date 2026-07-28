@@ -46,13 +46,16 @@ export function toFiniteNumber(value: unknown): number | null {
  *
  * @param rows The rows to read, each carrying its own property bag.
  * @param key The category field to collect values from.
- * @returns The sorted distinct values, with blanks and nullish entries dropped.
+ * @returns The sorted distinct values, with blank, whitespace-only, and nullish
+ *   entries dropped.
  */
 export function distinctCategoryValues(rows: ChartRow[], key: string): string[] {
   const values = new Set<string>();
   for (const row of rows) {
+    // Keep the original spelling as the chip label, but treat an all-whitespace
+    // value as blank so it cannot render as an empty, unlabelled chip.
     const value = String(row.properties[key] ?? "");
-    if (value !== "") values.add(value);
+    if (value.trim() !== "") values.add(value);
   }
   return Array.from(values).sort((a, b) => a.localeCompare(b));
 }
