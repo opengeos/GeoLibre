@@ -69,3 +69,56 @@ describe("embed-appimage-update-info.sh", () => {
     );
   });
 });
+
+// The release and test-build workflows both feed the script above the one
+// AppImage out of tauri-action's artifactPaths. That selection lives in a
+// shared script so the two workflows cannot drift; guard the "exactly one"
+// contract here rather than only discovering a bundler change mid-release.
+const selectScript = path.join(repoRoot, "scripts", "select-single-appimage.sh");
+
+function select(artifacts: string[]): string {
+  return execFileSync("bash", [selectScript, JSON.stringify(artifacts)], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function selectError(artifacts: string[]): string {
+  try {
+    select(artifacts);
+  } catch (error) {
+    return String((error as { stderr?: Buffer }).stderr ?? "");
+  }
+  throw new Error("expected select-single-appimage.sh to fail");
+}
+
+// jq ships on the GitHub-hosted runners this is gated on, but a contributor's
+// machine may not have it.
+const hasJq = (() => {
+  try {
+    execFileSync("jq", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+describe("select-single-appimage.sh", { skip: hasJq ? false : "jq is not installed" }, () => {
+  const appimage = "/build/bundle/appimage/GeoLibre.Desktop_2.3.0_amd64.AppImage";
+  const others = [
+    "/build/bundle/deb/GeoLibre.Desktop_2.3.0_amd64.deb",
+    "/build/bundle/rpm/GeoLibre.Desktop-2.3.0-1.x86_64.rpm",
+  ];
+
+  it("picks the AppImage out of the other bundles", () => {
+    assert.equal(select([others[0], appimage, others[1]]), appimage);
+  });
+
+  it("fails when there is no AppImage", () => {
+    assert.match(selectError(others), /found 0/);
+  });
+
+  it("fails when there is more than one AppImage", () => {
+    assert.match(selectError([appimage, "/build/other_2.3.0_amd64.AppImage"]), /found 2/);
+  });
+});

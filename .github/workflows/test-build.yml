@@ -162,13 +162,9 @@ jobs:
           TAG: v${{ steps.tauri.outputs.appVersion }}
           ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
-          mapfile -t images < <(jq -r '.[] | select(endswith(".AppImage"))' <<< "$ARTIFACT_PATHS")
-          if [[ ${#images[@]} -ne 1 ]]; then
-            echo "::error::Expected exactly one AppImage artifact, found ${#images[@]}"
-            exit 1
-          fi
-          scripts/embed-appimage-update-info.sh "${images[0]}"
-          "${images[0]}" --appimage-updateinfo
+          image="$(scripts/select-single-appimage.sh "$ARTIFACT_PATHS")"
+          scripts/embed-appimage-update-info.sh "$image"
+          "$image" --appimage-updateinfo
 
       - name: Upload installers
         if: steps.want.outputs.build == 'true'
