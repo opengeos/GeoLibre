@@ -18,6 +18,7 @@ import {
   getTemporalLayerAdapter,
   isSelectorTimeBinding,
   nearestTimeIndex,
+  resolveSelectorDisplayUnits,
   subscribeTemporalLayers,
   toEpochMsAxis,
   type SelectorTimeBinding,
@@ -728,7 +729,6 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     let max = Number.NEGATIVE_INFINITY;
     let granularity: TimeGranularity =
       bound[0]?.binding.granularity ?? selectors[0]?.binding.granularity ?? "day";
-    const displayUnits = new Set<TimeGranularity>();
     let widestSpan = -1;
     // A vector filter binding and a data cube's selector binding describe the
     // same thing here — an extent plus a suggested stepping unit — so they feed
@@ -741,9 +741,6 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       if (span > widestSpan) {
         widestSpan = span;
         granularity = binding.granularity;
-      }
-      if (isSelectorTimeBinding(binding)) {
-        for (const unit of binding.displayUnits ?? []) displayUnits.add(unit);
       }
     }
     // Fold in the time-overlay frames' extents so the track covers them too.
@@ -763,10 +760,11 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     ) {
       granularity = pickGranularity(max - min);
     }
-    const orderedDisplayUnits = (["hour", "day", "month", "year"] as TimeGranularity[]).filter(
-      (unit) => displayUnits.has(unit),
+    const orderedDisplayUnits = resolveSelectorDisplayUnits(
+      selectors.map(({ binding }) => binding),
+      granularity,
     );
-    const rangeKey = `${min}|${max}|${granularity}|${orderedDisplayUnits.join(",")}`;
+    const rangeKey = `${min}|${max}|${granularity}|${orderedDisplayUnits?.join(",") ?? ""}`;
     if (rangeKey !== lastBoundRangeKey) {
       // Capture the range the control had before any binding overrode it, so it
       // can be restored when every binding is later removed.
@@ -782,7 +780,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       lastBoundRangeKey = rangeKey;
       control.setRange(new Date(min), new Date(max), undefined, granularity);
       control.setGranularities(
-        orderedDisplayUnits.length > 0
+        orderedDisplayUnits
           ? orderedDisplayUnits
           : (preBindingRange?.granularities ??
               control.getConfig().granularities ?? ["hour", "day", "month", "year"]),

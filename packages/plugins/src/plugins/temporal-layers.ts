@@ -1,5 +1,7 @@
 import { parseTimeValue, pickGranularity, type TimeGranularity } from "./time-slider-binding";
 
+const TIME_GRANULARITIES: TimeGranularity[] = ["hour", "day", "month", "year"];
+
 /**
  * A layer whose time is an **internal dimension** rather than a feature property
  * or a separate dated source: a Zarr data cube with a `time` axis, a plugin's
@@ -169,14 +171,40 @@ export function buildSelectorTimeBinding(
   // A single-slice cube still needs a non-zero span so the slider can move,
   // matching the vector path's treatment of a single-instant dataset.
   if (max <= min) max = min + 86_400_000;
+  const granularity = options?.granularity ?? pickGranularity(max - min);
+  const displayUnits = options?.displayUnits
+    ? TIME_GRANULARITIES.filter(
+        (unit) => unit === granularity || options.displayUnits?.includes(unit),
+      )
+    : undefined;
   return {
     kind: "selector",
     dimension: dimension.trim() || "time",
     min,
     max,
-    granularity: options?.granularity ?? pickGranularity(max - min),
-    ...(options?.displayUnits ? { displayUnits: [...options.displayUnits] } : {}),
+    granularity,
+    ...(displayUnits ? { displayUnits } : {}),
   };
+}
+
+/**
+ * Resolve display-unit constraints for a shared slider. Constrained selector
+ * bindings contribute their intersection. If that intersection cannot expose
+ * the active stepping unit, the active unit is the only safe shared control.
+ */
+export function resolveSelectorDisplayUnits(
+  bindings: readonly SelectorTimeBinding[],
+  activeGranularity: TimeGranularity,
+): TimeGranularity[] | undefined {
+  const constrained = bindings.filter(
+    (binding): binding is SelectorTimeBinding & { displayUnits: TimeGranularity[] } =>
+      Boolean(binding.displayUnits?.length),
+  );
+  if (constrained.length === 0) return undefined;
+  const intersection = TIME_GRANULARITIES.filter((unit) =>
+    constrained.every((binding) => binding.displayUnits.includes(unit)),
+  );
+  return intersection.includes(activeGranularity) ? intersection : [activeGranularity];
 }
 
 // ----- Registry --------------------------------------------------------------
