@@ -4136,7 +4136,7 @@
     "saveEditsPostgisNoConnection": "Для этого слоя недоступно подключение к PostgreSQL. Переподключитесь в «Добавить данные» > PostgreSQL, затем повторите попытку.",
     "typeBasemap": "базовая карта",
     "searchPlaces": "Поиск мест",
-    "searchPlacesPlaceholder": "Поиск мест...",
+    "searchPlacesPlaceholder": "Поиск мест, координат или ячейки H3...",
     "searchPlacesSearching": "Поиск...",
     "searchPlacesNoResults": "Места не найдены",
     "searchPlacesError": "Поиск не удался. Повторите попытку.",

@@ -3962,7 +3962,7 @@
     "saveEditsPostgisNoConnection": "이 레이어에 사용 가능한 PostgreSQL 연결이 없습니다. 데이터 추가 > PostgreSQL에서 다시 연결한 후 다시 시도하세요.",
     "typeBasemap": "배경지도",
     "searchPlaces": "장소 검색",
-    "searchPlacesPlaceholder": "장소 검색...",
+    "searchPlacesPlaceholder": "장소, 좌표 또는 H3 셀 검색...",
     "searchPlacesSearching": "검색 중...",
     "searchPlacesNoResults": "장소를 찾을 수 없습니다",
     "searchPlacesError": "검색에 실패했습니다. 다시 시도하세요.",

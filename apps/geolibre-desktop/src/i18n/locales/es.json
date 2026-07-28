@@ -4031,7 +4031,7 @@
     "saveEditsPostgisNoConnection": "No hay ninguna conexión de PostgreSQL disponible para esta capa. Vuelva a conectar en Añadir datos > PostgreSQL, e inténtelo de nuevo.",
     "typeBasemap": "mapa base",
     "searchPlaces": "Buscar lugares",
-    "searchPlacesPlaceholder": "Buscar lugares...",
+    "searchPlacesPlaceholder": "Buscar lugares, coordenadas o celda H3...",
     "searchPlacesSearching": "Buscando...",
     "searchPlacesNoResults": "No se encontraron lugares",
     "searchPlacesError": "Error en la búsqueda. Inténtelo de nuevo.",

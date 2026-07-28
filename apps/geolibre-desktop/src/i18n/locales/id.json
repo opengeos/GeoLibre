@@ -3962,7 +3962,7 @@
     "saveEditsPostgisNoConnection": "Tidak ada koneksi PostgreSQL yang tersedia untuk layer ini. Hubungkan kembali di Tambah Data > PostgreSQL, lalu coba lagi.",
     "typeBasemap": "peta dasar",
     "searchPlaces": "Cari tempat",
-    "searchPlacesPlaceholder": "Cari tempat...",
+    "searchPlacesPlaceholder": "Cari tempat, koordinat, atau sel H3...",
     "searchPlacesSearching": "Mencari...",
     "searchPlacesNoResults": "Tidak ada tempat yang ditemukan",
     "searchPlacesError": "Pencarian gagal. Coba lagi.",

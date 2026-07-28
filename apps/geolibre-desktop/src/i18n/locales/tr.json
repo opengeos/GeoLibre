@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "Bu katman için kullanılabilir bir PostgreSQL bağlantısı yok. Veri Ekle > PostgreSQL'den yeniden bağlanıp tekrar deneyin.",
     "typeBasemap": "temel harita",
     "searchPlaces": "Yer ara",
-    "searchPlacesPlaceholder": "Yer ara...",
+    "searchPlacesPlaceholder": "Yer, koordinat veya H3 hücresi ara...",
     "searchPlacesSearching": "Aranıyor...",
     "searchPlacesNoResults": "Yer bulunamadı",
     "searchPlacesError": "Arama başarısız oldu. Tekrar deneyin.",

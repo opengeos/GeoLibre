@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "ამ შრისთვის PostgreSQL კავშირი მიუწვდომელია. ხელახლა დაუკავშირდით მენიუში „მონაცემის დამატება > PostgreSQL“, შემდეგ სცადეთ ხელახლა.",
     "typeBasemap": "ბაზური რუკა",
     "searchPlaces": "ადგილების ძებნა",
-    "searchPlacesPlaceholder": "ადგილების ძებნა...",
+    "searchPlacesPlaceholder": "მოძებნეთ ადგილი, კოორდინატები ან H3 უჯრედი...",
     "searchPlacesSearching": "მიმდინარეობს ძებნა...",
     "searchPlacesNoResults": "ადგილები ვერ მოიძებნა",
     "searchPlacesError": "ძებნა ვერ მოხერხდა. სცადეთ ხელახლა.",

@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "Nenhuma conexão PostgreSQL está disponível para esta camada. Reconecte em Adicionar dados > PostgreSQL e tente novamente.",
     "typeBasemap": "mapa base",
     "searchPlaces": "Pesquisar lugares",
-    "searchPlacesPlaceholder": "Pesquisar lugares...",
+    "searchPlacesPlaceholder": "Pesquisar lugares, coordenadas ou célula H3...",
     "searchPlacesSearching": "Pesquisando...",
     "searchPlacesNoResults": "Nenhum lugar encontrado",
     "searchPlacesError": "Falha na pesquisa. Tente novamente.",

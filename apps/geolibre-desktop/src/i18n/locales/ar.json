@@ -4251,7 +4251,7 @@
     "saveEditsPostgisNoConnection": "لا يتوفر اتصال PostgreSQL لهذه الطبقة. أعد الاتصال من إضافة البيانات > PostgreSQL، ثم حاول مرة أخرى.",
     "typeBasemap": "خريطة أساس",
     "searchPlaces": "البحث عن أماكن",
-    "searchPlacesPlaceholder": "ابحث عن أماكن...",
+    "searchPlacesPlaceholder": "ابحث عن مكان أو إحداثيات أو خلية H3...",
     "searchPlacesSearching": "جارٍ البحث...",
     "searchPlacesNoResults": "لم يُعثر على أماكن",
     "searchPlacesError": "فشل البحث. حاول مرة أخرى.",

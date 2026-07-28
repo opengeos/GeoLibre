@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "Aucune connexion PostgreSQL n'est disponible pour cette couche. Reconnectez-vous dans Ajouter des données > PostgreSQL, puis réessayez.",
     "typeBasemap": "fond de carte",
     "searchPlaces": "Rechercher des lieux",
-    "searchPlacesPlaceholder": "Rechercher des lieux...",
+    "searchPlacesPlaceholder": "Rechercher un lieu, des coordonnées ou une cellule H3...",
     "searchPlacesSearching": "Recherche...",
     "searchPlacesNoResults": "Aucun lieu trouvé",
     "searchPlacesError": "Échec de la recherche. Réessayez.",

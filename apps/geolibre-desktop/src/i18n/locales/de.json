@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "Für diese Ebene ist keine PostgreSQL-Verbindung verfügbar. Stellen Sie die Verbindung unter Daten hinzufügen > PostgreSQL erneut her und versuchen Sie es dann noch einmal.",
     "typeBasemap": "Basiskarte",
     "searchPlaces": "Orte suchen",
-    "searchPlacesPlaceholder": "Orte suchen...",
+    "searchPlacesPlaceholder": "Orte, Koordinaten oder H3-Zelle suchen...",
     "searchPlacesSearching": "Suche läuft...",
     "searchPlacesNoResults": "Keine Orte gefunden",
     "searchPlacesError": "Suche fehlgeschlagen. Versuchen Sie es erneut.",

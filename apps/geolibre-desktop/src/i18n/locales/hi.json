@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "इस लेयर के लिए कोई PostgreSQL कनेक्शन उपलब्ध नहीं है। Add Data > PostgreSQL में पुनः कनेक्ट करें, फिर पुनः प्रयास करें।",
     "typeBasemap": "बेसमैप",
     "searchPlaces": "स्थान खोजें",
-    "searchPlacesPlaceholder": "स्थान खोजें...",
+    "searchPlacesPlaceholder": "स्थान, निर्देशांक या H3 सेल खोजें...",
     "searchPlacesSearching": "खोजा जा रहा है...",
     "searchPlacesNoResults": "कोई स्थान नहीं मिला",
     "searchPlacesError": "खोज विफल रही। पुनः प्रयास करें।",

@@ -3962,7 +3962,7 @@
     "saveEditsPostgisNoConnection": "このレイヤーに使用できるPostgreSQL接続がありません。データを追加 > PostgreSQLで再接続してから、もう一度お試しください。",
     "typeBasemap": "ベースマップ",
     "searchPlaces": "場所を検索",
-    "searchPlacesPlaceholder": "場所を検索...",
+    "searchPlacesPlaceholder": "場所・座標・H3 セルを検索...",
     "searchPlacesSearching": "検索中...",
     "searchPlacesNoResults": "場所が見つかりません",
     "searchPlacesError": "検索に失敗しました。再試行してください。",

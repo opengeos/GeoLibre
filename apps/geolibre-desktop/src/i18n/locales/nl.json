@@ -4020,7 +4020,7 @@
     "saveEditsPostgisNoConnection": "Er is geen PostgreSQL-verbinding beschikbaar voor deze laag. Maak opnieuw verbinding via Gegevens toevoegen > PostgreSQL en probeer het opnieuw.",
     "typeBasemap": "achtergrondkaart",
     "searchPlaces": "Plaatsen zoeken",
-    "searchPlacesPlaceholder": "Plaatsen zoeken...",
+    "searchPlacesPlaceholder": "Plaatsen, coördinaten of H3-cel zoeken...",
     "searchPlacesSearching": "Bezig met zoeken...",
     "searchPlacesNoResults": "Geen plaatsen gevonden",
     "searchPlacesError": "Zoeken mislukt. Probeer het opnieuw.",

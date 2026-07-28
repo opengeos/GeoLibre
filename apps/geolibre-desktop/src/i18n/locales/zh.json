@@ -3962,7 +3962,7 @@
     "saveEditsPostgisNoConnection": "此图层没有可用的 PostgreSQL 连接。请在“添加数据 > PostgreSQL”中重新连接，然后重试。",
     "typeBasemap": "底图",
     "searchPlaces": "搜索地点",
-    "searchPlacesPlaceholder": "搜索地点...",
+    "searchPlacesPlaceholder": "搜索地点、坐标或 H3 单元...",
     "searchPlacesSearching": "正在搜索...",
     "searchPlacesNoResults": "未找到地点",
     "searchPlacesError": "搜索失败。请重试。",
