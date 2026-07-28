@@ -4026,6 +4026,7 @@
     "searchPlacesError": "ძებნა ვერ მოხერხდა. სცადეთ ხელახლა.",
     "searchPlacesClear": "ძებნის გასუფთავება",
     "searchPlacesGoToCoordinate": "გადასვლა: {{coordinate}}",
+    "searchPlacesGoToH3Cell": "გადასვლა H3 უჯრედზე {{cell}} (რეზოლუცია {{resolution}})",
     "background": "ფონი",
     "backgroundCannotReorder": "ფონის თანმიმდევრობის შეცვლა შეუძლებელია",
     "hideBackground": "ფონის დამალვა",

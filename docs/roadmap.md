@@ -370,6 +370,7 @@
 - [x] Add Data gains a source **CRS field for delimited text**, so CSVs with projected easting and northing columns land in the right place, and a **layer picker for multi-layer GeoPackages**, so a container full of feature tables adds only what you asked for
 - [x] The layer metadata dialog reports a raster's real georeferencing read from the GeoTIFF header — CRS and EPSG code, pixel size and extent in CRS units, data type, nodata, compression, tiling, and overviews — in a resizable dialog
 - [x] Type a coordinate into the place-search box to fly straight to it, in decimal degrees, DMS, or DDM, with no geocoder round-trip
+- [x] Type an **H3 cell index** into the place-search box, as either a hexadecimal string (`8928308280fffff`) or a 64-bit integer (`617700169958293503`), to frame that cell and outline it on the map
 - [x] A new Random extract vector tool, the active layer now persists with the project, turning on the Terrain control enables 3D relief immediately, and a Logos submenu adds Maptoolkit branding alongside the MapLibre logo
 
 ## Plugin marketplace and registry (design)

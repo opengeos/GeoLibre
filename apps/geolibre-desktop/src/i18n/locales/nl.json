@@ -4026,6 +4026,7 @@
     "searchPlacesError": "Zoeken mislukt. Probeer het opnieuw.",
     "searchPlacesClear": "Zoekopdracht wissen",
     "searchPlacesGoToCoordinate": "Ga naar {{coordinate}}",
+    "searchPlacesGoToH3Cell": "Ga naar H3-cel {{cell}} (res. {{resolution}})",
     "background": "Achtergrond",
     "backgroundCannotReorder": "De volgorde van de achtergrond kan niet worden gewijzigd",
     "hideBackground": "Achtergrond verbergen",

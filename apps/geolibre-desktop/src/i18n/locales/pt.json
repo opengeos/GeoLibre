@@ -4026,6 +4026,7 @@
     "searchPlacesError": "Falha na pesquisa. Tente novamente.",
     "searchPlacesClear": "Limpar pesquisa",
     "searchPlacesGoToCoordinate": "Ir para {{coordinate}}",
+    "searchPlacesGoToH3Cell": "Ir para a célula H3 {{cell}} (res. {{resolution}})",
     "background": "Fundo",
     "backgroundCannotReorder": "O fundo não pode ser reordenado",
     "hideBackground": "Ocultar fundo",

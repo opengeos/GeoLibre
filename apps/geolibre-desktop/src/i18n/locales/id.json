@@ -3968,6 +3968,7 @@
     "searchPlacesError": "Pencarian gagal. Coba lagi.",
     "searchPlacesClear": "Bersihkan pencarian",
     "searchPlacesGoToCoordinate": "Menuju {{coordinate}}",
+    "searchPlacesGoToH3Cell": "Menuju sel H3 {{cell}} (res {{resolution}})",
     "background": "Latar belakang",
     "backgroundCannotReorder": "Latar belakang tidak dapat diurutkan ulang",
     "hideBackground": "Sembunyikan latar belakang",

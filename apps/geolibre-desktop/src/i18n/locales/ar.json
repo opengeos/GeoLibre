@@ -4257,6 +4257,7 @@
     "searchPlacesError": "فشل البحث. حاول مرة أخرى.",
     "searchPlacesClear": "مسح البحث",
     "searchPlacesGoToCoordinate": "الانتقال إلى {{coordinate}}",
+    "searchPlacesGoToH3Cell": "الانتقال إلى خلية H3 ‏{{cell}} (الدقة {{resolution}})",
     "background": "الخلفية",
     "backgroundCannotReorder": "لا يمكن إعادة ترتيب الخلفية",
     "hideBackground": "إخفاء الخلفية",

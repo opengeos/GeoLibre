@@ -19,8 +19,9 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
-import { Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
+import { Hexagon, Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
 import { formatLatLon, parseLatLon } from "../../lib/coordinates";
+import { type H3CellMatch, parseH3Cell } from "../../lib/h3-search";
 
 interface LayerPanelPlaceSearchProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -32,6 +33,12 @@ const DEBOUNCE_MS = 500;
 const MAX_RESULTS = 6;
 /** Don't search until the query is at least this many characters. */
 const MIN_QUERY_LENGTH = 2;
+/** Ephemeral map ids for the outline drawn around a searched H3 cell. */
+const H3_SOURCE_ID = "geolibre-h3-search-cell";
+const H3_FILL_LAYER_ID = "geolibre-h3-search-cell-fill";
+const H3_LINE_LAYER_ID = "geolibre-h3-search-cell-line";
+/** Highlight color for the H3 cell, matching the place-search marker. */
+const H3_HIGHLIGHT_COLOR = "#ef4444";
 
 type SearchStatus = "idle" | "loading" | "error" | "empty";
 
@@ -40,6 +47,11 @@ type SearchStatus = "idle" | "loading" | "error" | "empty";
  * panel. Forward-geocodes the typed query through the configured provider,
  * lists matches in a dropdown above the input, and on selection flies the map
  * to the place and drops a marker. Replaces the former advanced-formats note.
+ *
+ * Two query forms bypass the geocoder entirely and resolve locally: a lat/lon
+ * coordinate (see `coordinates.ts`) and an H3 cell index in either spelling
+ * (see `h3-search.ts`), the latter fitting the view to the cell and outlining
+ * it on the map.
  */
 export function LayerPanelPlaceSearch({
   mapControllerRef,
@@ -53,6 +65,9 @@ export function LayerPanelPlaceSearch({
   // True when the single result is a parsed lat/lon jump rather than a geocoder
   // match, so the row is labeled and iconed as a coordinate instead of a place.
   const [isCoordinate, setIsCoordinate] = useState(false);
+  // Set when the single result is a parsed H3 cell index, both to label the row
+  // and to supply the outline drawn on selection.
+  const [h3Cell, setH3Cell] = useState<H3CellMatch | null>(null);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -74,13 +89,28 @@ export function LayerPanelPlaceSearch({
     return Math.max(DEBOUNCE_MS, geocoderMinIntervalMs(endpoint));
   }, [geocodingPrefs]);
 
+  /**
+   * Remove the H3 cell outline from the map, if one is currently drawn. Safe to
+   * call when the map is gone or was never given the highlight (style reloads
+   * drop it), so callers never have to track whether it exists.
+   */
+  const clearH3Highlight = useCallback(() => {
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    for (const layerId of [H3_FILL_LAYER_ID, H3_LINE_LAYER_ID]) {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+    }
+    if (map.getSource(H3_SOURCE_ID)) map.removeSource(H3_SOURCE_ID);
+  }, [mapControllerRef]);
+
   useEffect(
     () => () => {
       abortRef.current?.abort();
       markerRef.current?.remove();
+      clearH3Highlight();
       if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     },
-    [],
+    [clearH3Highlight],
   );
 
   const runSearch = useCallback(
@@ -89,6 +119,7 @@ export function LayerPanelPlaceSearch({
       const controller = new AbortController();
       abortRef.current = controller;
       setIsCoordinate(false);
+      setH3Cell(null);
       setStatus("loading");
       setActiveIndex(-1);
       setOpen(true);
@@ -122,8 +153,23 @@ export function LayerPanelPlaceSearch({
       setResults([]);
       setActiveIndex(-1);
       setIsCoordinate(false);
+      setH3Cell(null);
       setStatus("idle");
       setOpen(false);
+      return;
+    }
+    // H3 short-circuit: a query that parses as an H3 cell index (hexadecimal or
+    // unsigned 64-bit integer) resolves locally to that cell's center, so the
+    // exact cell is used rather than whatever the geocoder makes of the digits.
+    const cell = parseH3Cell(trimmed);
+    if (cell) {
+      abortRef.current?.abort();
+      setResults([{ lat: cell.lat, lon: cell.lon, displayName: cell.cell, score: null }]);
+      setActiveIndex(0);
+      setIsCoordinate(false);
+      setH3Cell(cell);
+      setStatus("idle");
+      setOpen(true);
       return;
     }
     // Coordinate short-circuit: a query that parses as lat/lon (DD, DMS, or DDM)
@@ -138,6 +184,7 @@ export function LayerPanelPlaceSearch({
       ]);
       setActiveIndex(0);
       setIsCoordinate(true);
+      setH3Cell(null);
       setStatus("idle");
       setOpen(true);
       return;
@@ -151,16 +198,45 @@ export function LayerPanelPlaceSearch({
   const handleSelect = useCallback(
     (match: GeocodeMatch) => {
       const map = mapControllerRef.current?.getMap();
-      // Drop the previous marker unconditionally so it is never orphaned when
-      // the map is briefly unavailable (mount/teardown/headless).
+      // Drop the previous marker and cell outline unconditionally so neither is
+      // ever orphaned when the map is briefly unavailable (mount/teardown/
+      // headless) or when the next result is of a different kind.
       markerRef.current?.remove();
       markerRef.current = null;
-      if (map) {
+      clearH3Highlight();
+      if (map && h3Cell) {
+        // An H3 cell spans anything from a continent (resolution 0) to under a
+        // square meter (resolution 15), so frame the cell itself rather than
+        // flying to a fixed zoom, and outline it so the match is visible.
+        map.addSource(H3_SOURCE_ID, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: { h3: h3Cell.cell, resolution: h3Cell.resolution },
+            geometry: { type: "Polygon", coordinates: [h3Cell.boundary] },
+          },
+        });
+        map.addLayer({
+          id: H3_FILL_LAYER_ID,
+          type: "fill",
+          source: H3_SOURCE_ID,
+          paint: { "fill-color": H3_HIGHLIGHT_COLOR, "fill-opacity": 0.15 },
+        });
+        map.addLayer({
+          id: H3_LINE_LAYER_ID,
+          type: "line",
+          source: H3_SOURCE_ID,
+          paint: { "line-color": H3_HIGHLIGHT_COLOR, "line-width": 2 },
+        });
+        const bounds = new maplibregl.LngLatBounds();
+        for (const position of h3Cell.boundary) bounds.extend(position);
+        map.fitBounds(bounds, { padding: 60 });
+      } else if (map) {
         map.flyTo({
           center: [match.lon, match.lat],
           zoom: Math.max(map.getZoom(), 12),
         });
-        markerRef.current = new maplibregl.Marker({ color: "#ef4444" })
+        markerRef.current = new maplibregl.Marker({ color: H3_HIGHLIGHT_COLOR })
           .setLngLat([match.lon, match.lat])
           .addTo(map);
       }
@@ -169,23 +245,26 @@ export function LayerPanelPlaceSearch({
       setResults([]);
       setActiveIndex(-1);
       setIsCoordinate(false);
+      setH3Cell(null);
       setStatus("idle");
       setOpen(false);
     },
-    [mapControllerRef],
+    [clearH3Highlight, h3Cell, mapControllerRef],
   );
 
   const handleClear = useCallback(() => {
     abortRef.current?.abort();
     markerRef.current?.remove();
     markerRef.current = null;
+    clearH3Highlight();
     setQuery("");
     setResults([]);
     setActiveIndex(-1);
     setIsCoordinate(false);
+    setH3Cell(null);
     setStatus("idle");
     setOpen(false);
-  }, []);
+  }, [clearH3Highlight]);
 
   const showResults = status === "idle" && results.length > 0;
 
@@ -226,17 +305,24 @@ export function LayerPanelPlaceSearch({
                     }}
                     onMouseEnter={() => setActiveIndex(index)}
                   >
-                    {isCoordinate ? (
+                    {h3Cell ? (
+                      <Hexagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    ) : isCoordinate ? (
                       <LocateFixed className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     ) : (
                       <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
                     <span className="line-clamp-2">
-                      {isCoordinate
-                        ? t("layers.searchPlacesGoToCoordinate", {
-                            coordinate: match.displayName,
+                      {h3Cell
+                        ? t("layers.searchPlacesGoToH3Cell", {
+                            cell: h3Cell.cell,
+                            resolution: h3Cell.resolution,
                           })
-                        : match.displayName}
+                        : isCoordinate
+                          ? t("layers.searchPlacesGoToCoordinate", {
+                              coordinate: match.displayName,
+                            })
+                          : match.displayName}
                     </span>
                   </button>
                 </li>

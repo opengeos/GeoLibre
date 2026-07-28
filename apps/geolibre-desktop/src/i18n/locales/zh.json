@@ -3968,6 +3968,7 @@
     "searchPlacesError": "搜索失败。请重试。",
     "searchPlacesClear": "清除搜索",
     "searchPlacesGoToCoordinate": "前往 {{coordinate}}",
+    "searchPlacesGoToH3Cell": "前往 H3 单元 {{cell}}（分辨率 {{resolution}}）",
     "background": "背景",
     "backgroundCannotReorder": "背景无法重新排序",
     "hideBackground": "隐藏背景",

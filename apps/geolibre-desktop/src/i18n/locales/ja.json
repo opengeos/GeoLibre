@@ -3968,6 +3968,7 @@
     "searchPlacesError": "検索に失敗しました。再試行してください。",
     "searchPlacesClear": "検索をクリア",
     "searchPlacesGoToCoordinate": "{{coordinate}} へ移動",
+    "searchPlacesGoToH3Cell": "H3 セル {{cell}} へ移動 (解像度 {{resolution}})",
     "background": "背景",
     "backgroundCannotReorder": "背景は並べ替えできません",
     "hideBackground": "背景を非表示",

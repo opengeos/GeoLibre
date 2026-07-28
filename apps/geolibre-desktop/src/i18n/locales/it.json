@@ -4026,6 +4026,7 @@
     "searchPlacesError": "Ricerca non riuscita. Riprova.",
     "searchPlacesClear": "Cancella ricerca",
     "searchPlacesGoToCoordinate": "Vai a {{coordinate}}",
+    "searchPlacesGoToH3Cell": "Vai alla cella H3 {{cell}} (ris. {{resolution}})",
     "background": "Sfondo",
     "backgroundCannotReorder": "Lo sfondo non può essere riordinato",
     "hideBackground": "Nascondi sfondo",

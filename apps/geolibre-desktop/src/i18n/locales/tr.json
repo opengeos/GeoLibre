@@ -4026,6 +4026,7 @@
     "searchPlacesError": "Arama başarısız oldu. Tekrar deneyin.",
     "searchPlacesClear": "Aramayı temizle",
     "searchPlacesGoToCoordinate": "{{coordinate}} konumuna git",
+    "searchPlacesGoToH3Cell": "H3 hücresi {{cell}} konumuna git (çözünürlük {{resolution}})",
     "background": "Arka plan",
     "backgroundCannotReorder": "Arka plan yeniden sıralanamaz",
     "hideBackground": "Arka planı gizle",

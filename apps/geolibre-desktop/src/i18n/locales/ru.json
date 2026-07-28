@@ -4142,6 +4142,7 @@
     "searchPlacesError": "Поиск не удался. Повторите попытку.",
     "searchPlacesClear": "Очистить поиск",
     "searchPlacesGoToCoordinate": "Перейти к {{coordinate}}",
+    "searchPlacesGoToH3Cell": "Перейти к ячейке H3 {{cell}} (разрешение {{resolution}})",
     "background": "Фон",
     "backgroundCannotReorder": "Фон нельзя переупорядочить",
     "hideBackground": "Скрыть фон",

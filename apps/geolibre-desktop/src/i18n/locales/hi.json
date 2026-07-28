@@ -4026,6 +4026,7 @@
     "searchPlacesError": "खोज विफल रही। पुनः प्रयास करें।",
     "searchPlacesClear": "खोज साफ़ करें",
     "searchPlacesGoToCoordinate": "{{coordinate}} पर जाएँ",
+    "searchPlacesGoToH3Cell": "H3 सेल {{cell}} पर जाएँ (रेज़ॉल्यूशन {{resolution}})",
     "background": "पृष्ठभूमि",
     "backgroundCannotReorder": "पृष्ठभूमि का क्रम नहीं बदला जा सकता",
     "hideBackground": "पृष्ठभूमि छिपाएं",
