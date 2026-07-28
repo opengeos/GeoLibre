@@ -3044,7 +3044,8 @@
       "box": "Box plot",
       "pie": "Pie",
       "indicator": "Indicator",
-      "selector": "Selector"
+      "selector": "Selector",
+      "list": "List"
     },
     "aggregate": {
       "count": "Count",
@@ -3087,6 +3088,12 @@
       "prefix": "Prefix",
       "suffix": "Suffix",
       "multiSelect": "Allow multiple selection",
+      "listColumns": "Columns",
+      "sortBy": "Sort by",
+      "sortDir": "Direction",
+      "ascending": "Ascending",
+      "descending": "Descending",
+      "limit": "Row limit",
       "titleLabel": "Title",
       "titlePlaceholder": "Optional title",
       "color": "Color",

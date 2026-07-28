@@ -748,6 +748,7 @@ const DASHBOARD_WIDGET_TYPES = Object.keys({
   pie: true,
   indicator: true,
   selector: true,
+  list: true,
 } satisfies Record<DashboardWidgetType, true>) as readonly DashboardWidgetType[];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
