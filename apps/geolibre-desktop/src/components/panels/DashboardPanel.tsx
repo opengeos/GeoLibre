@@ -598,12 +598,27 @@ function WidgetCard({
               );
             }
 
+            // How many features the dashboard is left looking at, including
+            // this selector's own choice. Shown so a selection reads as having
+            // done something even on a dashboard with no other widget to
+            // filter — otherwise the chip highlight is the only feedback.
+            const matched =
+              selected.length > 0
+                ? filterRowsBySelections(rows, [...selections, { field: cat, values: selected }])
+                    .length
+                : null;
+
             return (
               <SelectorValues
                 values={values}
                 multiple={widget.multiple ?? false}
                 selected={selected}
                 onChange={onSelect}
+                matched={matched}
+                total={rows.length}
+                matchLabel={(count, total) => t("dashboard.selectorMatches", { count, total })}
+                onClear={() => onSelect(EMPTY_SELECTION)}
+                clearLabel={t("dashboard.selectorClear")}
               />
             );
           })()}
@@ -633,11 +648,22 @@ function SelectorValues({
   multiple,
   selected,
   onChange,
+  matched,
+  total,
+  matchLabel,
+  onClear,
+  clearLabel,
 }: {
   values: string[];
   multiple: boolean;
   selected: string[];
   onChange: (values: string[]) => void;
+  /** Features left after this selection, or null when nothing is selected. */
+  matched: number | null;
+  total: number;
+  matchLabel: (count: number, total: number) => string;
+  onClear: () => void;
+  clearLabel: string;
 }) {
   const active = new Set(selected);
 
@@ -650,25 +676,41 @@ function SelectorValues({
   };
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {values.map((value) => {
-        const isSelected = active.has(value);
-        return (
+    <>
+      <div className="flex flex-wrap gap-1.5">
+        {values.map((value) => {
+          const isSelected = active.has(value);
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => toggle(value)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                isSelected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50"
+              }`}
+            >
+              {value}
+            </button>
+          );
+        })}
+      </div>
+      {matched !== null ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 text-xs text-muted-foreground">
+          {/* aria-live so the count is announced when a chip changes it; the
+              chips themselves only convey selection, not its effect. */}
+          <span aria-live="polite">{matchLabel(matched, total)}</span>
           <button
-            key={value}
             type="button"
-            aria-pressed={isSelected}
-            onClick={() => toggle(value)}
-            className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-              isSelected
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background text-muted-foreground hover:border-primary/50"
-            }`}
+            onClick={onClear}
+            className="rounded px-1.5 py-0.5 underline-offset-2 hover:underline"
           >
-            {value}
+            {clearLabel}
           </button>
-        );
-      })}
-    </div>
+        </div>
+      ) : null}
+    </>
   );
 }
