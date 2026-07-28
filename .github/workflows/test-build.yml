@@ -110,7 +110,8 @@ jobs:
           workspaces: apps/geolibre-desktop/src-tauri -> target
 
       # Mirrors release.yml's Linux dependency list; libfuse2 and librsvg2-dev
-      # are needed for the AppImage bundle, rpm for the .rpm.
+      # are needed for the AppImage bundle, rpm for the .rpm, and zsync for the
+      # AppImage delta-update file.
       - name: Install Linux dependencies
         if: steps.want.outputs.build == 'true' && runner.os == 'Linux'
         run: |
@@ -127,7 +128,8 @@ jobs:
             libxdo-dev \
             patchelf \
             rpm \
-            wget
+            wget \
+            zsync
 
       - name: Install frontend dependencies
         if: steps.want.outputs.build == 'true'
@@ -138,6 +140,7 @@ jobs:
       # why no GITHUB_TOKEN is passed here -- the action only needs one to create
       # a release or upload assets to it, neither of which this workflow does.
       - name: Build the desktop bundles
+        id: tauri
         if: steps.want.outputs.build == 'true'
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0
         env:
@@ -146,6 +149,26 @@ jobs:
         with:
           projectPath: apps/geolibre-desktop
           args: ${{ matrix.args }}
+
+      # Same patch release.yml applies, minus the upload: it runs here so a
+      # break in the AppImage update information (a renamed bundle, a runtime
+      # without a .upd_info section) surfaces on a test build rather than
+      # halfway through a real release. The artifact uploaded below therefore
+      # carries the update information too.
+      - name: Embed AppImage update information
+        if: steps.want.outputs.build == 'true' && runner.os == 'Linux'
+        env:
+          REPO: ${{ github.repository }}
+          TAG: v${{ steps.tauri.outputs.appVersion }}
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          mapfile -t images < <(jq -r '.[] | select(endswith(".AppImage"))' <<< "$ARTIFACT_PATHS")
+          if [[ ${#images[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one AppImage artifact, found ${#images[@]}"
+            exit 1
+          fi
+          scripts/embed-appimage-update-info.sh "${images[0]}"
+          "${images[0]}" --appimage-updateinfo
 
       - name: Upload installers
         if: steps.want.outputs.build == 'true'

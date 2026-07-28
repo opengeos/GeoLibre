@@ -109,8 +109,9 @@ by Apple, so Gatekeeper allows them to open without any extra steps:
 
 GeoLibre offers several Linux install options. The AUR, COPR, and Flatpak
 packages auto-update (through your system package manager or `flatpak update`);
-the direct `.deb`, `.rpm`, and AppImage downloads are updated by re-downloading
-the new release.
+the AppImage updates itself in place with [AppImageUpdate](#appimage-any-distribution),
+and the direct `.deb` and `.rpm` downloads are updated by re-downloading the new
+release.
 
 ### Arch Linux / Manjaro (AUR)
 
@@ -171,6 +172,23 @@ chmod +x GeoLibre.Desktop_<version>_amd64.AppImage
 AppImages need FUSE. On distros that no longer ship it by default, install
 `libfuse2` (for example `sudo apt install libfuse2`) or run with
 `--appimage-extract-and-run`.
+
+#### Delta updates
+
+Releases after v2.3.0 embed update information in the AppImage, so
+[AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate),
+[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher),
+[AppManager](https://github.com/kem-a/AppManager) and
+[AM](https://github.com/ivan-hc/AM) can update it in place. Each release also
+ships a `.zsync` file next to the AppImage, so an update transfers only the
+blocks that changed rather than the whole image:
+
+```bash
+appimageupdatetool GeoLibre.Desktop_<version>_amd64.AppImage
+```
+
+Check what an AppImage points at with
+`./GeoLibre.Desktop_<version>_amd64.AppImage --appimage-updateinfo`.
 
 ## Build from source
 
