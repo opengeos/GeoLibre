@@ -3040,7 +3040,8 @@
       "line": "Line",
       "box": "Box plot",
       "pie": "Pie",
-      "indicator": "Indicator"
+      "indicator": "Indicator",
+      "selector": "Selector"
     },
     "aggregate": {
       "count": "Count",
@@ -3082,6 +3083,7 @@
       "value": "Value",
       "prefix": "Prefix",
       "suffix": "Suffix",
+      "multiSelect": "Allow multiple selection",
       "titleLabel": "Title",
       "titlePlaceholder": "Optional title",
       "color": "Color",

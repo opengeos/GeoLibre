@@ -375,7 +375,7 @@ function WidgetCard({
   const data = useLayerChartData(widget.layerId);
   const result = useMemo(
     () =>
-      widget.type === "indicator"
+      widget.type === "indicator" || widget.type === "selector"
         ? null
         : computeChart(data.rows, widgetToSpec(widget, widget.type)),
     [data.rows, widget],
@@ -407,6 +407,8 @@ function WidgetCard({
         const aggLabel = t(`dashboard.indicatorAggregation.${agg}`);
         return widget.field ? `${aggLabel} · ${widget.field}` : aggLabel;
       }
+      case "selector":
+        return `${t("dashboard.chartType.selector")} · ${widget.category ?? ""}`;
     }
   };
   const title = widget.title?.trim() || defaultWidgetTitle();
@@ -496,6 +498,33 @@ function WidgetCard({
             );
           })()}
         </div>
+      ) : widget.type === "selector" ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto">
+          {(() => {
+            if (!widget.category || !data.hasData) {
+              return (
+                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
+              );
+            }
+            // Extract distinct values from the category field, sorted.
+            const cat = widget.category!;
+            const values = Array.from(
+              new Set(
+                data.rows
+                  .map((row) => String((row as unknown as Record<string, unknown>)[cat] ?? ""))
+                  .filter((v) => v !== ""),
+              ),
+            ).sort((a, b) => a.localeCompare(b));
+
+            if (values.length === 0) {
+              return (
+                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
+              );
+            }
+
+            return <SelectorValues values={values} multiple={widget.multiple ?? false} />;
+          })()}
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
           {data.hasData && result ? (
@@ -507,6 +536,55 @@ function WidgetCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Renders the selector widget body: a scrollable list of clickable value
+ * chips. In single mode clicking a value toggles it as the only selected value.
+ * In multi mode each chip toggles independently. Cross-filtering is not yet
+ * wired; this prepares the UI and selection state for it. */
+function SelectorValues({
+  values,
+  multiple,
+}: {
+  values: string[];
+  multiple: boolean;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggle = (value: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        if (!multiple) next.clear();
+        next.add(value);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {values.map((value) => {
+        const isSelected = selected.has(value);
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => toggle(value)}
+            className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+              isSelected
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            {value}
+          </button>
+        );
+      })}
     </div>
   );
 }

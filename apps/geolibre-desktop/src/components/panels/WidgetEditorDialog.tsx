@@ -68,6 +68,8 @@ export function WidgetEditorDialog({
   const [indicatorAggregation, setIndicatorAggregation] = useState<IndicatorAggregation>("count");
   const [prefix, setPrefix] = useState("");
   const [suffix, setSuffix] = useState("");
+  // "selector" widget fields (issue #1381).
+  const [multiple, setMultiple] = useState(false);
   // "" means no custom color: fall back to the theme primary / palette.
   const [color, setColor] = useState("");
 
@@ -88,6 +90,7 @@ export function WidgetEditorDialog({
     setIndicatorAggregation(widget?.indicatorAggregation ?? "count");
     setPrefix(widget?.prefix ?? "");
     setSuffix(widget?.suffix ?? "");
+    setMultiple(widget?.multiple ?? false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, widget]);
 
@@ -104,15 +107,18 @@ export function WidgetEditorDialog({
   // aren't forced to the same column; the rest need one numeric field.
   const isCategorical = type === "bar" || type === "pie";
   const isIndicator = type === "indicator";
+  const isSelector = type === "selector";
   const canSave =
     layerId !== "" &&
     (isIndicator
       ? indicatorAggregation === "count" || hasNumeric
-      : isCategorical
-        ? hasCategory && (aggregation === "count" || hasNumeric)
-        : type === "scatter"
-          ? numericCols.length >= 2
-          : hasNumeric);
+      : isSelector
+        ? hasCategory
+        : isCategorical
+          ? hasCategory && (aggregation === "count" || hasNumeric)
+          : type === "scatter"
+            ? numericCols.length >= 2
+            : hasNumeric);
   const save = () => {
     if (!canSave) return;
     const next: DashboardWidget = {
@@ -150,6 +156,10 @@ export function WidgetEditorDialog({
       // Preserve whitespace: prefix/suffix may have intentional spaces (" ha").
       if (prefix) next.prefix = prefix;
       if (suffix) next.suffix = suffix;
+    }
+    if (type === "selector") {
+      next.category = pick(category, categoryCols);
+      if (multiple) next.multiple = true;
     }
     onSave(next);
     onOpenChange(false);
@@ -229,6 +239,9 @@ export function WidgetEditorDialog({
                     {t("dashboard.chartType.pie")}
                   </option>
                   <option value="indicator">{t("dashboard.chartType.indicator")}</option>
+                  <option value="selector" disabled={!hasCategory}>
+                    {t("dashboard.chartType.selector")}
+                  </option>
                 </Select>
               </div>
 
@@ -332,6 +345,26 @@ export function WidgetEditorDialog({
                       onChange={setValueField}
                     />
                   )}
+                </>
+              )}
+
+              {type === "selector" && (
+                <>
+                  <FieldSelect
+                    id="widget-selector-category"
+                    label={t("dashboard.editor.category")}
+                    value={pick(category, categoryCols)}
+                    options={categoryCols}
+                    onChange={setCategory}
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={multiple}
+                      onChange={(event) => setMultiple(event.target.checked)}
+                    />
+                    {t("dashboard.editor.multiSelect")}
+                  </label>
                 </>
               )}
 
