@@ -22,6 +22,7 @@ import {
   managedUrlSourcesForIds,
   pluginAssetUrlFromSource,
   resolvePluginAssetUrl,
+  withPluginAssetCacheToken,
 } from "./plugin-asset-url";
 import {
   computePluginBundleHash,
@@ -292,8 +293,14 @@ async function loadPluginUrlBundle(
     throw new Error("Plugin manifest is invalid.");
   }
 
-  const entryUrl = resolvePluginAssetUrl(manifestUrl, manifest.entry);
-  const styleUrl = manifest.style ? resolvePluginAssetUrl(manifestUrl, manifest.style) : null;
+  const cacheToken = pluginAssetCacheToken(manifestResponse, manifest);
+  const entryUrl = withPluginAssetCacheToken(
+    resolvePluginAssetUrl(manifestUrl, manifest.entry),
+    cacheToken,
+  );
+  const styleUrl = manifest.style
+    ? withPluginAssetCacheToken(resolvePluginAssetUrl(manifestUrl, manifest.style), cacheToken)
+    : null;
   const [entrySource, styleSource] = await Promise.all([
     fetchPluginText(entryUrl, "plugin entry", signal),
     styleUrl ? fetchPluginText(styleUrl, "plugin style", signal) : Promise.resolve(null),
@@ -306,6 +313,21 @@ async function loadPluginUrlBundle(
     entrySource,
     styleSource,
   };
+}
+
+function pluginAssetCacheToken(
+  response: Response,
+  manifest: GeoLibreExternalPluginManifest,
+): string {
+  return [
+    manifest.id,
+    manifest.version,
+    response.headers.get("etag"),
+    response.headers.get("last-modified"),
+  ]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+    .join("|");
 }
 
 async function fetchPluginText(url: string, label: string, signal?: AbortSignal): Promise<string> {

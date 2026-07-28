@@ -58,6 +58,20 @@ export function resolvePluginAssetUrl(manifestUrl: string, path: string): string
   return resolved.toString();
 }
 
+/**
+ * Append a cache token to a resolved plugin asset URL.
+ *
+ * Bundled plugin entries use stable filenames such as `dist/index.js`; adding
+ * a token lets a fresh manifest force browsers and CDNs past a stale entry.
+ */
+export function withPluginAssetCacheToken(url: string, token: string | null | undefined): string {
+  const value = token?.trim();
+  if (!value) return url;
+  const resolved = new URL(url);
+  resolved.searchParams.set("__geolibre_plugin_cache", value);
+  return resolved.toString();
+}
+
 // Resolve a plugin asset URL from the plugin's loaded source. Returns null for
 // a missing source, a desktop filesystem source (no URL base), or an unsafe
 // relative path, so callers can treat null as "no bundled asset URL".
