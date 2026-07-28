@@ -3985,6 +3985,7 @@
       "schemeAlphabetical": "Alphabetical",
       "schemeFirstValues": "First values",
       "errorChooseAttribute": "Choose an attribute for this style mode.",
+      "errorAttributesUnavailable": "Could not load this layer's attribute values.",
       "errorGraduatedStops": "Graduated style requires at least two numeric stops.",
       "errorCategorizedStops": "Categorized style requires at least one category.",
       "invertedFill": "Inverted fill",

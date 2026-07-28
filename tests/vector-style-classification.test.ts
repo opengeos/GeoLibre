@@ -55,6 +55,21 @@ describe("vector style classification", () => {
     );
   });
 
+  it("does not coerce blank or non-scalar values to zero", () => {
+    const stops = createGraduatedStops(tiledLayer, "height", 2, "viridis", "equal-interval", [
+      "",
+      false,
+      [],
+      10,
+      "20",
+    ]);
+
+    assert.deepEqual(
+      stops.map((stop) => stop.value),
+      [10, 15],
+    );
+  });
+
   it("preserves numeric category values", () => {
     const stops = createCategorizedStops(tiledLayer, "rank", 2, "viridis", "top-values", [1, 2, 1]);
 

@@ -48,6 +48,14 @@ export function clampClassCount(value: number, min: number): number {
   return Math.min(12, Math.max(min, Math.round(value)));
 }
 
+/** Convert a scalar numeric property value without coercing blanks or non-scalars. */
+function finitePropertyNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
 /**
  * Create graduated color stops from GeoJSON or separately loaded property values.
  */
@@ -60,9 +68,8 @@ export function createGraduatedStops(
   propertyValues?: unknown[],
 ): VectorStyleStop[] {
   const values = (propertyValues ?? getPropertyValues(layer, property))
-    .filter((value) => value !== null && value !== undefined)
-    .map((value) => Number(value))
-    .filter(Number.isFinite);
+    .map(finitePropertyNumber)
+    .filter((value): value is number => value !== null);
   const count = clampClassCount(classCount, 2);
   const colors = interpolateRampColors(colorRamp, count);
   if (values.length === 0) {

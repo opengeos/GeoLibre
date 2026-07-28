@@ -1055,6 +1055,7 @@ export function StylePanel({
     values: unknown[];
   } | null>(null);
   const [vectorPropertyValuesLoading, setVectorPropertyValuesLoading] = useState(false);
+  const [vectorPropertyValuesUnavailable, setVectorPropertyValuesUnavailable] = useState(false);
   // Which expression surface the shared Expression Builder is editing; null
   // when the builder is closed. Targets carry the owning layer id so an edit
   // can never be applied to a different layer than the one it was opened for
@@ -1164,6 +1165,7 @@ export function StylePanel({
     if (!needsValues) {
       setLoadedVectorPropertyValues(null);
       setVectorPropertyValuesLoading(false);
+      setVectorPropertyValuesUnavailable(false);
       return;
     }
 
@@ -1174,23 +1176,26 @@ export function StylePanel({
         : null,
     );
     setVectorPropertyValuesLoading(true);
+    setVectorPropertyValuesUnavailable(false);
     void getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
       .then((values) => {
         if (cancelled) return;
+        if (values === null) {
+          setLoadedVectorPropertyValues(null);
+          setVectorPropertyValuesUnavailable(true);
+          return;
+        }
         setLoadedVectorPropertyValues({
           layerId: layer.id,
           property: draftVectorStyleProperty,
-          values: values ?? [],
+          values,
         });
       })
       .catch((error) => {
         if (!cancelled) {
           console.error("[GeoLibre] Could not read vector attribute values", error);
-          setLoadedVectorPropertyValues({
-            layerId: layer.id,
-            property: draftVectorStyleProperty,
-            values: [],
-          });
+          setLoadedVectorPropertyValues(null);
+          setVectorPropertyValuesUnavailable(true);
         }
       })
       .finally(() => {
@@ -2107,6 +2112,11 @@ export function StylePanel({
           {vectorPropertyValuesLoading && (
             <p className="text-xs text-muted-foreground">{t("attributeTable.loadingAttributes")}</p>
           )}
+          {vectorPropertyValuesUnavailable && (
+            <p className="text-xs text-destructive">
+              {t("style.symbology.errorAttributesUnavailable")}
+            </p>
+          )}
         </div>
       )}
       {usesAttributeSymbology && (
@@ -2526,7 +2536,11 @@ export function StylePanel({
           type="button"
           size="sm"
           className="w-full"
-          disabled={!vectorStyleSettingsChanged || vectorPropertyValuesLoading}
+          disabled={
+            !vectorStyleSettingsChanged ||
+            vectorPropertyValuesLoading ||
+            vectorPropertyValuesUnavailable
+          }
           onClick={applyVectorStyleSettings}
         >
           {t("style.symbology.applyStyleType")}
