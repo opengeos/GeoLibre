@@ -353,9 +353,10 @@ describe("constrainToTerrain", () => {
 
   it("ignores invalid terrain samples without corrupting the aircraft", () => {
     const state = levelFlight({ altitude: 100 });
+    const expectedState = { ...state };
     const result = constrainToTerrain(state, Number.NaN, 25);
     assert.equal(result.grounded, false);
-    assert.equal(result.state, state);
+    assert.deepEqual(result.state, expectedState);
   });
 });
 
@@ -975,7 +976,8 @@ describe("flight simulator engine", () => {
       // Reattach the original engine so the replacement-map case also starts
       // from a live flight rather than merely asserting the already-idle state.
       reattachFlightSimulator(app);
-      startFlying();
+      assert.equal(startFlying(), true);
+      assert.equal(isFlying(), true);
       // A genuinely new map still rebinds (and ends the old flight with it).
       reattachFlightSimulator({ getMap: () => stubMap() } as unknown as GeoLibreAppAPI);
       assert.equal(isFlying(), false, "a new map instance must rebind the engine");
