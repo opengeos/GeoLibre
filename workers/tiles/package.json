@@ -11,7 +11,7 @@
     "upng-js": "^2.1.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260721.1",
+    "@cloudflare/workers-types": "^5.20260728.1",
     "@types/upng-js": "^2.1.5",
     "wrangler": "^4.114.0"
   }
