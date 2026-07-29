@@ -285,10 +285,11 @@ export function MapContextMenu({
         onCancel={cancelTravelTime}
         onConfirm={confirmTravelTime}
       />
-      // Keyed by the right-click id so each new right-click remounts the menu with // a fresh
-      anchor at the cursor. The key is tied to `menu` (not `open`), so a // normal close leaves the
-      key stable and Radix can play its exit animation; // only the next right-click forces the
-      remount that repositions the popup.
+      {/* Keyed by the right-click id so each new right-click remounts the menu
+          with a fresh anchor at the cursor. The key is tied to `menu` (not
+          `open`), so a normal close leaves the key stable and Radix can play
+          its exit animation; only the next right-click forces the remount that
+          repositions the popup. */}
       <DropdownMenu key={menu?.id ?? "init"} open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <span
