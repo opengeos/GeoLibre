@@ -891,6 +891,13 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     // what mirrors the layer as `maplibre-gl-raster`, making the full Raster
     // symbology section available in the Style panel.
     addCogLayer: (name: string, url: string, options?: GeoLibreCogLayerOptions) => {
+      // Some public STAC buckets allow anonymous range reads but omit browser
+      // CORS headers. Match the previous STAC renderer's local-development
+      // behavior so those assets pass through Vite's range-preserving proxy.
+      const rasterUrl =
+        isLocalDevHost() && /^https?:\/\//i.test(url)
+          ? `${RASTER_PROXY_PATH}?url=${encodeURIComponent(url)}`
+          : url;
       const bands = options?.bands
         ?.split(",")
         .map((value) => Number(value.trim()))
@@ -899,7 +906,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         options?.rescaleMin !== undefined && options.rescaleMax !== undefined
           ? ([options.rescaleMin, options.rescaleMax] as [number, number])
           : undefined;
-      return addRasterToMap(api, url, {
+      return addRasterToMap(api, rasterUrl, {
         name,
         state: {
           ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),

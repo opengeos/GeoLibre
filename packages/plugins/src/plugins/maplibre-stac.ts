@@ -424,9 +424,25 @@ function buildPanel(container: HTMLElement): () => void {
   const startField = field("Start date", "date");
   const endField = field("End date", "date");
   dates.append(startField.wrap, endField.wrap);
+  const additionalWrap = el("label");
+  additionalWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
+  const additionalCaption = el("span", "Additional search parameters (JSON, STAC API only)");
+  additionalCaption.style.cssText = style.label;
+  const additionalParams = el("textarea");
+  additionalParams.style.cssText = `${style.input}min-height:58px;resize:vertical;font-family:monospace;`;
+  additionalParams.placeholder =
+    '{"query":{"eo:cloud_cover":{"lt":10}},"sortby":[{"field":"properties.datetime","direction":"desc"}]}';
+  additionalWrap.append(additionalCaption, additionalParams);
+  const searchActions = el("div");
+  searchActions.style.cssText = style.row;
   const searchButton = el("button", "Search items");
   searchButton.type = "button";
-  searchButton.style.cssText = style.primary;
+  searchButton.style.cssText = `${style.primary}flex:1 1 0;`;
+  const clearResultsButton = el("button", "Clear results");
+  clearResultsButton.type = "button";
+  clearResultsButton.disabled = true;
+  clearResultsButton.style.cssText = `${style.button}flex:1 1 0;`;
+  searchActions.append(searchButton, clearResultsButton);
   searchSection.append(
     catalogInfo,
     collectionSelect,
@@ -434,7 +450,8 @@ function buildPanel(container: HTMLElement): () => void {
     bboxField.wrap,
     drawRow,
     dates,
-    searchButton,
+    additionalWrap,
+    searchActions,
   );
 
   // Raster rendering options, applied to every GeoTIFF/COG asset added from the
@@ -546,6 +563,21 @@ function buildPanel(container: HTMLElement): () => void {
   const selectItem = (itemId: string | null, scrollIntoView: boolean): void => {
     selectedItemId = itemId;
     applySelection(scrollIntoView);
+  };
+
+  const clearSearchResults = (announce = true): void => {
+    // Invalidate a response that may still be in flight before clearing the UI.
+    searchGeneration += 1;
+    allItems = [];
+    nextPage = undefined;
+    results.innerHTML = "";
+    cardsByItemId.clear();
+    selectItem(null, false);
+    removeFootprints();
+    loadMore.hidden = true;
+    clearResultsButton.disabled = true;
+    searchButton.disabled = false;
+    if (announce) setStatus("Search results cleared.");
   };
 
   const renderCatalogs = (): void => {
@@ -667,6 +699,16 @@ function buildPanel(container: HTMLElement): () => void {
     return values as [number, number, number, number];
   };
 
+  const parseAdditionalParams = (): Record<string, unknown> | undefined => {
+    const text = additionalParams.value.trim();
+    if (!text) return undefined;
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Additional search parameters must be a JSON object.");
+    }
+    return parsed as Record<string, unknown>;
+  };
+
   const runSearch = async (append: boolean): Promise<void> => {
     if (!connection) return;
     const generation = ++searchGeneration;
@@ -684,6 +726,7 @@ function buildPanel(container: HTMLElement): () => void {
         bbox: parseBbox(),
         datetime,
         collections: selectedCollections,
+        additional: parseAdditionalParams(),
         limit: 20,
         next: append ? nextPage : undefined,
         signal: controller.signal,
@@ -700,6 +743,7 @@ function buildPanel(container: HTMLElement): () => void {
       showFootprints(allItems);
       applySelection(false);
       loadMore.hidden = !nextPage;
+      clearResultsButton.disabled = allItems.length === 0;
       setStatus(
         allItems.length
           ? `Showing ${allItems.length}${response.matched ? ` of ${response.matched}` : ""} items.`
@@ -739,12 +783,7 @@ function buildPanel(container: HTMLElement): () => void {
       }
       searchSection.hidden = false;
       renderSection.hidden = false;
-      allItems = [];
-      nextPage = undefined;
-      results.innerHTML = "";
-      cardsByItemId.clear();
-      selectItem(null, false);
-      loadMore.hidden = true;
+      clearSearchResults(false);
       setStatus(connection.description || "Connected. Choose filters and search.");
     } catch (error) {
       connection = null;
@@ -756,6 +795,7 @@ function buildPanel(container: HTMLElement): () => void {
     }
   });
   searchButton.addEventListener("click", () => void runSearch(false));
+  clearResultsButton.addEventListener("click", () => clearSearchResults());
   loadMore.addEventListener("click", () => void runSearch(true));
   drawButton.addEventListener("click", () => {
     if (cancelDraw) {

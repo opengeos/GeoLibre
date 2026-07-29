@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  browserAssetHref,
   connectStac,
   isVisualizableAsset,
   itemBbox,
@@ -14,6 +15,17 @@ function jsonResponse(value: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+test("browserAssetHref converts anonymous S3 STAC assets to fetchable HTTPS URLs", () => {
+  assert.equal(
+    browserAssetHref("s3://public-bucket/path/to/data.tif", "https://example.com/catalog/"),
+    "https://public-bucket.s3.amazonaws.com/path/to/data.tif",
+  );
+  assert.equal(
+    browserAssetHref("./data.tif", "https://example.com/catalog/item.json"),
+    "https://example.com/catalog/data.tif",
+  );
+});
 
 test("connectStac discovers relative API links and collections", async () => {
   const calls: string[] = [];
@@ -59,7 +71,10 @@ test("searchStacApi sends spatial, temporal, and collection filters and follows 
           geometry: null,
           properties: { datetime: "2024-01-01T00:00:00Z" },
           assets: {
-            data: { href: "https://example.com/one.tif", type: "image/tiff; application=geotiff" },
+            data: {
+              href: "s3://public-bucket/one.tif",
+              type: "image/tiff; application=geotiff",
+            },
           },
         },
       ],
@@ -80,17 +95,27 @@ test("searchStacApi sends spatial, temporal, and collection filters and follows 
       bbox: [-10, -5, 10, 5],
       datetime: "2024-01-01/2024-02-01",
       collections: ["demo"],
+      additional: {
+        query: { "eo:cloud_cover": { lt: 10 } },
+        sortby: [{ field: "properties.datetime", direction: "desc" }],
+        // Standard form fields remain authoritative.
+        limit: 999,
+        bbox: [0, 0, 0, 0],
+      },
       limit: 10,
     },
     fetcher,
   );
   assert.deepEqual(body, {
+    query: { "eo:cloud_cover": { lt: 10 } },
+    sortby: [{ field: "properties.datetime", direction: "desc" }],
     limit: 10,
     bbox: [-10, -5, 10, 5],
     datetime: "2024-01-01/2024-02-01",
     collections: ["demo"],
   });
   assert.equal(result.items[0].id, "one");
+  assert.equal(result.items[0].assets.data.href, "https://public-bucket.s3.amazonaws.com/one.tif");
   assert.equal(result.matched, 4);
   assert.deepEqual(result.next, {
     href: "https://example.com/stac/search?token=next",
@@ -134,6 +159,7 @@ test("searchStacApi falls back to GET when the search endpoint rejects POST", as
       bbox: [-10, -5, 10, 5],
       datetime: "2024-01-01/2024-02-01",
       collections: ["demo"],
+      additional: { filter: { op: "=", args: [{ property: "platform" }, "sentinel-2a"] } },
       limit: 10,
     },
     fetcher,
@@ -148,6 +174,10 @@ test("searchStacApi falls back to GET when the search endpoint rejects POST", as
   assert.equal(fallback.searchParams.get("bbox"), "-10,-5,10,5");
   assert.equal(fallback.searchParams.get("datetime"), "2024-01-01/2024-02-01");
   assert.equal(fallback.searchParams.get("collections"), "demo");
+  assert.equal(
+    fallback.searchParams.get("filter"),
+    JSON.stringify({ op: "=", args: [{ property: "platform" }, "sentinel-2a"] }),
+  );
   assert.equal(result.items[0].id, "get-only");
   assert.equal(result.matched, 1);
 });

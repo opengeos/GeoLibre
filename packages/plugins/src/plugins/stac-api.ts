@@ -60,6 +60,8 @@ export interface StacSearchOptions {
   bbox?: [number, number, number, number];
   datetime?: string;
   collections?: string[];
+  /** Additional STAC API Item Search members such as query, filter, sortby, or fields. */
+  additional?: Record<string, unknown>;
   limit?: number;
   next?: StacNextPage;
   signal?: AbortSignal;
@@ -91,6 +93,20 @@ function httpUrl(value: unknown): value is string {
 
 function absoluteHref(href: string, base: string): string {
   return new URL(href, base).href;
+}
+
+/**
+ * Converts an anonymous S3 object URI into the HTTPS form browsers and raster
+ * range readers can fetch. STAC APIs such as Earth Search legitimately return
+ * `s3://` asset hrefs even though the catalog itself is accessed over HTTPS.
+ */
+export function browserAssetHref(href: string, base: string): string {
+  const resolved = absoluteHref(href, base);
+  const url = new URL(resolved);
+  if (url.protocol !== "s3:") return resolved;
+  const bucket = url.hostname;
+  if (!bucket) return resolved;
+  return `https://${bucket}.s3.amazonaws.com${url.pathname}${url.search}${url.hash}`;
 }
 
 async function fetchJson(url: string, init: RequestInit, fetcher: FetchLike): Promise<unknown> {
@@ -137,7 +153,7 @@ function normalizeItem(item: StacItem, base: string): StacItem {
     Object.entries(item.assets ?? {}).flatMap(([key, asset]) => {
       if (!asset?.href) return [];
       try {
-        return [[key, { ...asset, href: absoluteHref(asset.href, base) }]];
+        return [[key, { ...asset, href: browserAssetHref(asset.href, base) }]];
       } catch {
         return [];
       }
@@ -234,6 +250,7 @@ export async function searchStacApi(
 ): Promise<StacSearchResult> {
   if (!connection.searchUrl) throw new Error("This catalog does not advertise STAC Item Search");
   const body: Record<string, unknown> = {
+    ...options.additional,
     limit: Math.max(1, Math.min(options.limit ?? 20, 100)),
   };
   if (options.bbox) body.bbox = options.bbox;
@@ -265,6 +282,12 @@ export async function searchStacApi(
     if (options.bbox) query.set("bbox", options.bbox.join(","));
     if (options.datetime) query.set("datetime", options.datetime);
     if (options.collections?.length) query.set("collections", options.collections.join(","));
+    for (const [key, value] of Object.entries(options.additional ?? {})) {
+      if (["limit", "bbox", "datetime", "collections"].includes(key) || value === undefined) {
+        continue;
+      }
+      query.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    }
     const getUrl = `${href}${href.includes("?") ? "&" : "?"}${query}`;
     return parseItems(await fetchJson(getUrl, { signal: options.signal }, fetcher), getUrl);
   }
