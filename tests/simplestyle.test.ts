@@ -109,8 +109,21 @@ describe("simpleStyleNumberValue", () => {
   it("returns a to-number expression with the base as fallback when enabled", () => {
     assert.deepEqual(
       simpleStyleNumberValue(style({ simpleStyleEnabled: true }), "stroke-width", 2),
-      ["to-number", ["get", "stroke-width"], 2],
+      ["to-number", ["coalesce", ["get", "stroke-width"], 2], 2],
     );
+  });
+
+  it("falls back through coalesce so a feature missing the key is not painted at 0", () => {
+    // `to-number`'s own fallback only fires on a conversion failure, and a
+    // missing property converts to 0 rather than failing — hence the coalesce
+    // (#1552: an ArcGIS KML export carries `fill` but no `marker-opacity`, and
+    // every point rendered fully transparent).
+    const expression = simpleStyleNumberValue(
+      style({ simpleStyleEnabled: true }),
+      "marker-opacity",
+      0.9,
+    ) as unknown[];
+    assert.deepEqual(expression[1], ["coalesce", ["get", "marker-opacity"], 0.9]);
   });
 });
 
@@ -124,7 +137,11 @@ describe("paint with simplestyle enabled", () => {
     ]);
     assert.deepEqual(paint["fill-opacity"], [
       "*",
-      ["to-number", ["get", "fill-opacity"], DEFAULT_LAYER_STYLE.fillOpacity],
+      [
+        "to-number",
+        ["coalesce", ["get", "fill-opacity"], DEFAULT_LAYER_STYLE.fillOpacity],
+        DEFAULT_LAYER_STYLE.fillOpacity,
+      ],
       1,
     ]);
   });
@@ -138,7 +155,7 @@ describe("paint with simplestyle enabled", () => {
     ]);
     assert.deepEqual(paint["line-width"], [
       "to-number",
-      ["get", "stroke-width"],
+      ["coalesce", ["get", "stroke-width"], DEFAULT_LAYER_STYLE.strokeWidth],
       DEFAULT_LAYER_STYLE.strokeWidth,
     ]);
   });
@@ -152,7 +169,11 @@ describe("paint with simplestyle enabled", () => {
     ]);
     assert.deepEqual(paint["circle-opacity"], [
       "*",
-      ["to-number", ["get", "marker-opacity"], DEFAULT_LAYER_STYLE.fillOpacity],
+      [
+        "to-number",
+        ["coalesce", ["get", "marker-opacity"], DEFAULT_LAYER_STYLE.fillOpacity],
+        DEFAULT_LAYER_STYLE.fillOpacity,
+      ],
       1,
     ]);
   });

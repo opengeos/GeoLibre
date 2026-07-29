@@ -156,6 +156,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     getBearing: () => 0,
     getPitch: () => 0,
     getProjection: () => ({ type: "mercator" }),
+    // A laid-out viewport, so the camera helpers that scale with the canvas
+    // (the globe-safe fit ceiling) have a real size to work from.
+    getCanvas: () => ({ clientWidth: 576, clientHeight: 648 }),
     flyTo: record("flyTo"),
     fitBounds: record("fitBounds"),
     cameraForBounds: (...args: unknown[]) => {
@@ -639,6 +642,73 @@ describe("MapController camera and query helpers", () => {
     controller.fitBounds([0, 0, Number.NaN, 1]);
 
     assert.equal(fake.calls.length, 0);
+  });
+
+  it("caps a world-spanning fit at the flat-map zoom so the data stays in frame", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    // A mostly-US point layer with a few records in Europe and Asia: the
+    // globe camera would answer this 259°-wide box with zoom ~2, hiding every
+    // feature behind the horizon.
+    controller.fitBounds([-124.16, 16.53, 135.51, 51.58]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit, "fits the bounds");
+    const options = fit.args[1] as { maxZoom?: number };
+    assert.ok(typeof options.maxZoom === "number");
+    assert.ok(
+      Math.abs(options.maxZoom - 0.4255) < 0.001,
+      `expected the flat-map fit (~0.4255), got ${options.maxZoom}`,
+    );
+  });
+
+  it("leaves a small extent's fit uncapped by the viewport", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    // A city-sized box fits far past any zoom the globe would misjudge, so the
+    // ceiling must not drag the camera back out.
+    controller.fitBounds([-83.93, 35.94, -83.9, 35.97]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit);
+    const { maxZoom } = fit.args[1] as { maxZoom?: number };
+    assert.ok(
+      typeof maxZoom === "number" && maxZoom > 12,
+      `expected a loose ceiling, got ${maxZoom}`,
+    );
+  });
+
+  it("omits the fit ceiling when the canvas has not been laid out", () => {
+    const { map, fake } = makeFakeMap();
+    (map as { getCanvas: () => unknown }).getCanvas = () => ({
+      clientWidth: 0,
+      clientHeight: 0,
+    });
+    const controller = controllerWith(map);
+
+    controller.fitBounds([-124.16, 16.53, 135.51, 51.58]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit);
+    assert.ok(!("maxZoom" in (fit.args[1] as object)));
+  });
+
+  it("routes a layer fit through the globe-safe path", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("wide", {
+        geojson: undefined,
+        metadata: { bounds: [-124.16, 16.53, 135.51, 51.58] },
+      }),
+    );
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit, "zoom-to-layer fits the bounds");
+    assert.ok(typeof (fit.args[1] as { maxZoom?: number }).maxZoom === "number");
   });
 
   it("frames a scenegraph model layer at a tilt so it is not edge-on", () => {

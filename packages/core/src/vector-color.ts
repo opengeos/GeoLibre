@@ -111,6 +111,15 @@ export function mapZoomStepOutputs(
  * Resolve a numeric paint value, letting a per-feature simplestyle property
  * override the layer value when {@link LayerStyle.simpleStyleEnabled} is set.
  *
+ * The lookup is wrapped in a `coalesce` rather than leaning on `to-number`'s
+ * own fallback argument, because that fallback only fires when a value fails
+ * to convert — and a *missing* property does not fail, it converts to 0. Since
+ * simplestyle is enabled for the whole layer as soon as any feature carries any
+ * one of these keys, features that carry only some of them (an ArcGIS KML
+ * export writes `fill`/`fill-opacity` but no `marker-opacity`, for instance)
+ * would otherwise be painted at opacity 0 or width 0 — present in the layer,
+ * invisible on the map (#1552).
+ *
  * @param style - The layer style.
  * @param property - The simplestyle property name (e.g. `stroke-width`).
  * @param base - The layer-level fallback value.
@@ -122,7 +131,7 @@ export function simpleStyleNumberValue(
   base: number,
 ): number | unknown[] {
   if (!isSimpleStyleEnabled(style)) return base;
-  return ["to-number", ["get", property], base];
+  return ["to-number", ["coalesce", ["get", property], base], base];
 }
 
 /**
