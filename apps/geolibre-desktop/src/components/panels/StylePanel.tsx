@@ -2886,6 +2886,10 @@ export function StylePanel({
           {t("style.symbology.sizeByValue")}
         </label>
       </div>
+      {/* Outside the `proportionalEnabled` guard on purpose: rejecting a field
+          from the checkbox leaves proportional sizing off, so a message nested
+          inside that branch would unmount in the same render that set it. */}
+      {proportionalSizeError && <p className="text-xs text-destructive">{proportionalSizeError}</p>}
       {proportionalEnabled && (
         <>
           <div className="space-y-2">
@@ -2914,8 +2918,13 @@ export function StylePanel({
                   return;
                 }
                 // Non-empty sample proves nonnumeric / constant — reject and clear stale range.
+                // Stay enabled: the user is mid-edit here, so keep the field select
+                // mounted next to the message instead of collapsing the section.
                 if (hasDecisivePropertySample(property)) {
-                  clearProportionalSizeField(true, t("style.symbology.errorProportionalSizeField"));
+                  clearProportionalSizeField(
+                    false,
+                    t("style.symbology.errorProportionalSizeField"),
+                  );
                   return;
                 }
                 // No decisive sample yet (tiled/empty): commit the field; defaults until load.
@@ -2951,9 +2960,6 @@ export function StylePanel({
               <p className="text-xs text-destructive">
                 {t("style.symbology.errorAttributesUnavailable")}
               </p>
-            )}
-            {proportionalSizeError && (
-              <p className="text-xs text-destructive">{proportionalSizeError}</p>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
