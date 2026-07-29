@@ -236,6 +236,9 @@ export function DelimitedTextSource() {
             sourceKind: "delimited-text",
             totalRows: result.totalRows,
           },
+          // A non-spatial attribute table draws nothing, so it stays on the flat
+          // defaults rather than reserving a palette color no map ever shows.
+          { geojson: result.isTable ? undefined : geojson },
         ),
         geojson,
         sourcePath,

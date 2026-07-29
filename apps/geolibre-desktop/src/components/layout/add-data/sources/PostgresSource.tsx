@@ -384,6 +384,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
           // survives a reload (keys are not credentials).
           postgisBaselineKeys: postgisFeatureKeys(result.geojson),
         },
+        { geojson: result.geojson },
       ),
       geojson: result.geojson,
     };

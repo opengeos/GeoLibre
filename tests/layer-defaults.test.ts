@@ -27,8 +27,8 @@ function styled(id: string, fillColor: string): GeoLibreLayer {
   };
 }
 
-/** A layer built straight from the schema defaults, as the Add Data sources and
- *  every non-vector add path do — its fill happens to equal LAYER_PALETTE[0]. */
+/** A layer built straight from the schema defaults, as every add path that
+ *  paints from no collection does — its fill happens to equal LAYER_PALETTE[0]. */
 function schemaStyled(id: string, type: GeoLibreLayer["type"] = "geojson"): GeoLibreLayer {
   return {
     id,
@@ -118,14 +118,14 @@ describe("nextLayerPaletteColor", () => {
     // A raster carries DEFAULT_LAYER_STYLE, whose fill equals LAYER_PALETTE[0]
     // without ever rendering it; the first vector layer should still get blue.
     assert.equal(nextLayerPaletteColor([schemaStyled("dem", "raster")]), LAYER_PALETTE[0]);
-    // Same for the Add Data sources that assemble a geojson layer themselves
-    // rather than going through addGeoJsonLayer — the fill matches, but the
-    // outline is the schema's, not one derived from it.
-    assert.equal(nextLayerPaletteColor([schemaStyled("gpx")]), LAYER_PALETTE[0]);
+    // Same for a non-spatial attribute table (a delimited text file added with
+    // no coordinate columns) — the fill matches, but the outline is the
+    // schema's, not one derived from it, and nothing is drawn either way.
+    assert.equal(nextLayerPaletteColor([schemaStyled("csv-table")]), LAYER_PALETTE[0]);
     // ...and neither shifts the fallback cycle.
     const all = LAYER_PALETTE.map((color, index) => styled(`l${index}`, color));
     assert.equal(
-      nextLayerPaletteColor([schemaStyled("dem", "raster"), schemaStyled("gpx"), ...all]),
+      nextLayerPaletteColor([schemaStyled("dem", "raster"), schemaStyled("csv-table"), ...all]),
       LAYER_PALETTE[0],
     );
   });

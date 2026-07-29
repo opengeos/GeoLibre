@@ -106,6 +106,7 @@ export function GeoRssSource() {
             feedTitle: result.feedTitle,
             sourceKind: "georss",
           },
+          { geojson: result.features },
         ),
         geojson: result.features,
         sourcePath,

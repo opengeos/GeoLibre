@@ -65,11 +65,11 @@ function paletteEntryOf(color: string | undefined): string | undefined {
  * The pairing is what makes this precise. Testing the fill alone — or the layer
  * type — would miscount every layer built straight from
  * {@link DEFAULT_LAYER_STYLE}, whose `fillColor` happens to be
- * `LAYER_PALETTE[0]`: rasters and tilesets, but also the Add Data sources that
- * assemble a geojson layer themselves (delimited text, GPX, GeoRSS, CAD, GDB,
- * photos, PostGIS) instead of going through `addGeoJsonLayer`. Those carry the
- * schema's own `strokeColor`, not one derived from the fill, so they no longer
- * reserve blue and push the next added layer to red.
+ * `LAYER_PALETTE[0]`: rasters, tilesets, video overlays, and the non-spatial
+ * attribute tables the delimited-text source adds. None of those paint from a
+ * collection, so none should reserve blue and push the next added layer to red.
+ * They carry the schema's own `strokeColor`, not one derived from the fill, so
+ * this test leaves them out.
  */
 function wearsPaletteColor(style: LayerStyle | undefined): boolean {
   const entry = paletteEntryOf(style?.fillColor);

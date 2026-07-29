@@ -1,3 +1,4 @@
+import type { GeoLibreLayer } from "@geolibre/core";
 import { getLayerBounds } from "@geolibre/map";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
@@ -151,11 +152,15 @@ export function GpxSource() {
         label: t("addData.gpx.routePoints"),
       },
     ];
-    const layers = gpxLayerGroups
-      .filter(
-        (group) => selectedGpxLayerKinds[group.kind] && group.featureCollection.features.length > 0,
-      )
-      .map((group) => ({
+    // Built one at a time, each seeing the ones before it, so a GPX that yields
+    // tracks *and* waypoints gives the two different palette colors instead of
+    // handing both the first entry the store has not claimed yet.
+    const layers: GeoLibreLayer[] = [];
+    for (const group of gpxLayerGroups) {
+      if (!selectedGpxLayerKinds[group.kind] || group.featureCollection.features.length === 0) {
+        continue;
+      }
+      layers.push({
         ...createBaseLayer(
           `${name} ${group.label}`,
           "geojson",
@@ -173,10 +178,12 @@ export function GpxSource() {
             trackPointCount: result.trackPointCount,
             waypointCount: result.waypointCount,
           },
+          { geojson: group.featureCollection, pendingLayers: layers },
         ),
         geojson: group.featureCollection,
         sourcePath,
-      }));
+      });
+    }
 
     if (layers.length === 0) {
       throw new Error(t("addData.gpx.errorNotFound"));

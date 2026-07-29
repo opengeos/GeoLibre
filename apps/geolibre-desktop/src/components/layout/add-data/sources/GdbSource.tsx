@@ -248,6 +248,7 @@ export function GdbSource() {
             sourceCrs,
             featureCount: featureCollection.features.length,
           },
+          { geojson: featureCollection },
         ),
         geojson: featureCollection,
         sourcePath: gdbPath,
