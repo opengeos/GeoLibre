@@ -2365,6 +2365,7 @@
       "geolibre-timelapse": "Timelapse",
       "maplibre-gl-esri-wayback": "Citra Historis",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "geolibre-stac-catalogs": "Katalog STAC",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "Geser Lapisan",

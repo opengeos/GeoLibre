@@ -2365,6 +2365,7 @@
       "geolibre-timelapse": "タイムラプス",
       "maplibre-gl-esri-wayback": "過去の衛星画像",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "geolibre-stac-catalogs": "STAC カタログ",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "レイヤースワイプ",

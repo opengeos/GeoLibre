@@ -2365,6 +2365,7 @@
       "geolibre-timelapse": "타임랩스",
       "maplibre-gl-esri-wayback": "과거 영상",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "geolibre-stac-catalogs": "STAC 카탈로그",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "레이어 스와이프",

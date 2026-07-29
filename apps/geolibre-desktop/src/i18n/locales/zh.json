@@ -2365,6 +2365,7 @@
       "geolibre-timelapse": "延时影像",
       "maplibre-gl-esri-wayback": "历史影像",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "geolibre-stac-catalogs": "STAC 目录",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "图层滑动对比",

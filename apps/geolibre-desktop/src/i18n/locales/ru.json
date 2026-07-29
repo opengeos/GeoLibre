@@ -2488,6 +2488,7 @@
       "geolibre-timelapse": "Таймлапс",
       "maplibre-gl-esri-wayback": "Исторические снимки",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "geolibre-stac-catalogs": "Каталоги STAC",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "Сравнение слоёв",

@@ -2406,6 +2406,7 @@
       "geolibre-timelapse": "Timelapse",
       "maplibre-gl-esri-wayback": "Imágenes históricas",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "geolibre-stac-catalogs": "Catálogos STAC",
       "maplibre-gl-source-coop": "Source Cooperative",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "Comparador de capas",
