@@ -2806,7 +2806,7 @@
     "filterWebMap": "Webkaarten",
     "webMapAdded_one": "{{count}} laag toegevoegd uit deze webkaart.",
     "webMapAdded_other": "{{count}} lagen toegevoegd uit deze webkaart.",
-    "webMapAddedPartial": "{{added}} van {{total}} lagen toegevoegd uit deze webkaart; de rest was niet bereikbaar.",
+    "webMapAddedPartial": "Lagen toegevoegd: {{added}} van {{total}} uit deze webkaart; de rest was niet bereikbaar.",
     "webMapEmpty": "deze webkaart bevat geen lagen die GeoLibre kan weergeven.",
     "add": "Toevoegen",
     "adding": "Toevoegen…",

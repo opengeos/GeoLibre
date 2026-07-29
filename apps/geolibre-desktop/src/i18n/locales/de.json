@@ -2806,7 +2806,7 @@
     "filterWebMap": "Webkarten",
     "webMapAdded_one": "{{count}} Ebene aus dieser Webkarte hinzugefügt.",
     "webMapAdded_other": "{{count}} Ebenen aus dieser Webkarte hinzugefügt.",
-    "webMapAddedPartial": "{{added}} von {{total}} Ebenen aus dieser Webkarte hinzugefügt; die übrigen konnten nicht erreicht werden.",
+    "webMapAddedPartial": "Ebenen hinzugefügt: {{added}} von {{total}} aus dieser Webkarte; die übrigen konnten nicht erreicht werden.",
     "webMapEmpty": "diese Webkarte enthält keine Ebenen, die GeoLibre darstellen kann.",
     "add": "Hinzufügen",
     "adding": "Wird hinzugefügt…",

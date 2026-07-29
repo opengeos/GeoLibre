@@ -2692,7 +2692,7 @@
     "noSelection": "Nessuna cella selezionata",
     "copyId": "Copia id",
     "copied": "Copiato",
-    "parent": "Cella superiore",
+    "parent": "Cella padre",
     "children": "Celle figlie",
     "neighbors": "Celle adiacenti",
     "baseCell": "Cella di base",
@@ -2784,7 +2784,7 @@
     "metaRaw": "Metadati grezzi"
   },
   "earthdataGis": {
-    "hint": "Cerca in NASA Earthdata GIS servizi di immagini, di mappe e di elementi.",
+    "hint": "Cerca servizi di immagini, mappe ed elementi in NASA Earthdata GIS.",
     "searchPlaceholder": "Cerca in Earthdata GIS…",
     "search": "Cerca",
     "searching": "Ricerca in corso…",
@@ -2806,7 +2806,7 @@
     "filterWebMap": "Mappe web",
     "webMapAdded_one": "Aggiunto {{count}} livello da questa mappa web.",
     "webMapAdded_other": "Aggiunti {{count}} livelli da questa mappa web.",
-    "webMapAddedPartial": "Aggiunti {{added}} livelli su {{total}} da questa mappa web; gli altri non sono raggiungibili.",
+    "webMapAddedPartial": "Livelli aggiunti: {{added}} su {{total}} da questa mappa web; gli altri non sono raggiungibili.",
     "webMapEmpty": "questa mappa web non contiene livelli che GeoLibre possa renderizzare.",
     "add": "Aggiungi",
     "adding": "Aggiunta in corso…",

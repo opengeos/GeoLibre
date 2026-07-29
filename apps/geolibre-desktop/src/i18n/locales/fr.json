@@ -2704,7 +2704,7 @@
     "addAsLayer": "Ajouter la grille comme couche",
     "exportGeoJson": "Exporter en GeoJSON",
     "exportCsv": "Exporter en CSV",
-    "includeNeighbors": "Inclure les voisines de la cellule sélectionnée"
+    "includeNeighbors": "Inclure les cellules voisines de la cellule sélectionnée"
   },
   "timelapse": {
     "title": "Timelapse",
@@ -2806,7 +2806,7 @@
     "filterWebMap": "Cartes web",
     "webMapAdded_one": "{{count}} couche ajoutée depuis cette carte web.",
     "webMapAdded_other": "{{count}} couches ajoutées depuis cette carte web.",
-    "webMapAddedPartial": "{{added}} couches sur {{total}} ajoutées depuis cette carte web ; les autres n'ont pas pu être jointes.",
+    "webMapAddedPartial": "Couches ajoutées : {{added}} sur {{total}} depuis cette carte web ; les autres n'ont pas pu être jointes.",
     "webMapEmpty": "cette carte web ne contient aucune couche que GeoLibre puisse afficher.",
     "add": "Ajouter",
     "adding": "Ajout…",

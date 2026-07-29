@@ -285,7 +285,7 @@
       },
       "ogcFeatures": {
         "label": "Adicionar camada OGC API - Features",
-        "description": "Adiciona as feições de uma coleção OGC API - Features como camada vetorial, seguindo os links de paginação do serviço até carregar a quantidade de feições solicitada."
+        "description": "Adicione as feições de uma coleção OGC API - Features como camada vetorial, seguindo os links de paginação do serviço até carregar a quantidade de feições solicitada."
       }
     },
     "shared": {
@@ -2692,7 +2692,7 @@
     "noSelection": "Nenhuma célula selecionada",
     "copyId": "Copiar id",
     "copied": "Copiado",
-    "parent": "Célula superior",
+    "parent": "Célula pai",
     "children": "Células filhas",
     "neighbors": "Vizinhas",
     "baseCell": "Célula base",
@@ -2806,7 +2806,7 @@
     "filterWebMap": "Mapas web",
     "webMapAdded_one": "{{count}} camada adicionada deste mapa web.",
     "webMapAdded_other": "{{count}} camadas adicionadas deste mapa web.",
-    "webMapAddedPartial": "{{added}} de {{total}} camadas adicionadas deste mapa web; não foi possível acessar as demais.",
+    "webMapAddedPartial": "Camadas adicionadas: {{added}} de {{total}} deste mapa web; não foi possível acessar as demais.",
     "webMapEmpty": "este mapa web não tem camadas que o GeoLibre consiga renderizar.",
     "add": "Adicionar",
     "adding": "Adicionando…",
