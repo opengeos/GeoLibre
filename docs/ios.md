@@ -18,12 +18,10 @@ demand (same as the desktop and Android builds).
 >   archived, exported under manual signing, verified the signature, and
 >   published the `geolibre-ios-ipa` artifact.
 >
-> What has **not** happened: any App Store Connect upload or review submission.
-> Uploading additionally needs an App Store Connect app record for the bundle id,
-> and a `CFBundleVersion` that increases on every upload — it is currently the
-> `tauri.conf.json` version, so a second upload of the same version is rejected
-> (pass `tauri ios build --build-number ...`). Everything below still has to be
-> run on a Mac (iOS cannot be cross-compiled from Linux).
+> A first build (version 2.4.0, build 2.4.0) has been uploaded to App Store
+> Connect by hand via Transporter. What has **not** happened: any submission for
+> review. Everything below still has to be run on a Mac (iOS cannot be
+> cross-compiled from Linux).
 
 ## What works on iOS vs desktop
 
@@ -293,10 +291,25 @@ onboarding.
    handling — not a wrapper that loads a remote URL. Keep it that way: ship the
    web assets in the binary (the default here), don't point the webview at
    `geolibre.app`.
-3. **Upload** the `.ipa` from the `geolibre-ios-ipa` CI artifact (or Xcode) to a
-   TestFlight build, then submit that build for App Store review. The build
-   number (`CFBundleVersion`) is derived from the version in `tauri.conf.json`
-   and must increase on every upload.
+3. **Upload** the `.ipa` from the `geolibre-ios-ipa` CI artifact (or via
+   Transporter / Xcode Organizer) to a TestFlight build, then submit that build
+   for App Store review.
+
+   **Build numbers.** App Store Connect consumes a `CFBundleVersion`
+   permanently per marketing version, so every upload needs a fresh one. CI
+   stamps the archive's `CFBundleVersion` with `$GITHUB_RUN_NUMBER` — a single
+   integer that only ever rises — while `CFBundleShortVersionString` keeps
+   tracking `tauri.conf.json` and stays the version users see.
+
+   This is deliberately **not** done with `tauri ios build --build-number`:
+   that flag *appends* to the version, producing e.g. `2.4.0.42`. A
+   `CFBundleVersion` may hold at most **three** period-separated integers, so
+   App Store Connect rejects a four-component value at upload
+   (`ITMS-90060`) — after the whole build has run. The verify step asserts the
+   shape for that reason.
+
+   Uploading by hand (no CI) means setting the build number yourself if the
+   marketing version has been uploaded before.
 4. **Store listing:** icon (already generated under `src-tauri/icons/ios`),
    screenshots for the required device sizes (6.7" and 6.5" iPhone, plus 12.9"
    iPad — a GIS workspace is genuinely iPad-appropriate), description, keywords.
@@ -306,21 +319,25 @@ onboarding.
    collected by a backend. Point the privacy policy URL at the published
    [privacy policy](privacy.md).
 6. **Age rating** questionnaire and category (Navigation or Productivity).
-7. **Export compliance.** App Store Connect asks about encryption on *every*
-   upload, and an unanswered build cannot be submitted or sent to testers. To
-   answer it once instead of per upload, add the key to
-   `src-tauri/Info.ios.plist`:
+7. **Export compliance.** Already declared in `src-tauri/Info.ios.plist`:
 
    ```xml
    <key>ITSAppUsesNonExemptEncryption</key>
    <false/>
    ```
 
-   `false` is the right answer only if GeoLibre's use of encryption stays
-   limited to what Apple treats as exempt — HTTPS/TLS via the system libraries
-   for tiles, geocoding, the AI assistant, and the collaboration relay. That is
-   true today, but it is a **legal declaration**, so confirm it before adding the
-   key, and revisit it if the app ever ships its own cryptography.
+   App Store Connect asks about encryption on *every* upload, and a build with
+   the question unanswered cannot be submitted or sent to testers ("Missing
+   Compliance"). Declaring it in the plist answers it once, at build time.
+
+   `false` asserts that GeoLibre's use of encryption stays limited to what Apple
+   treats as exempt — HTTPS/TLS via the system libraries for tiles, geocoding,
+   the AI assistant, cloud catalogs, and the collaboration relay — and that the
+   app ships no cryptography of its own. That holds today, but it is a **legal
+   declaration**, not a build flag: revisit it if that ever changes.
+
+   Builds uploaded before this key was added (the first 2.4.0 upload) still
+   need the question answered by hand in App Store Connect.
 
 ## Known limitations / follow-ups
 

@@ -253,6 +253,47 @@ jobs:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
         run: npx tauri ios build --no-sign
 
+      - name: Stamp a unique build number
+        if: steps.signing.outputs.present == 'true'
+        # App Store Connect permanently consumes a CFBundleVersion per marketing
+        # version, so every upload needs a new one. CFBundleVersion here would
+        # otherwise be the tauri.conf.json version (2.4.0) on every run, and the
+        # second upload of a given version would be refused.
+        #
+        # This is NOT done with `tauri ios build --build-number`: that *appends*
+        # to the version, yielding e.g. "2.4.0.42" — four components, while
+        # CFBundleVersion may contain at most three period-separated integers.
+        # App Store Connect rejects that at upload (ITMS-90060), so the flag is
+        # unusable here. Stamping the archive instead keeps the value a single
+        # integer that rises forever and never collides.
+        #
+        # Safe to edit the archive at this point: it was built unsigned, and the
+        # export step below is what signs it, so the seal is computed over this
+        # plist rather than invalidated by it. CFBundleShortVersionString — the
+        # version users actually see — is deliberately left alone.
+        run: |
+          set -euo pipefail
+          gen="apps/geolibre-desktop/src-tauri/gen/apple"
+          archive="$(find "$gen/build" -maxdepth 1 -name '*.xcarchive' | head -1)"
+          if [ -z "$archive" ]; then
+            echo "::error::No .xcarchive produced under $gen/build"
+            exit 1
+          fi
+          app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "$app" ]; then
+            echo "::error::No .app inside $archive"
+            exit 1
+          fi
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" "$app/Info.plist"
+          # Keep the archive's own summary metadata consistent; not fatal if the
+          # key is absent in a future Xcode's archive layout.
+          /usr/libexec/PlistBuddy -c "Set :ApplicationProperties:CFBundleVersion $GITHUB_RUN_NUMBER" \
+            "$archive/Info.plist" 2>/dev/null || true
+
+          short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
+          echo "::notice::Version $short, build $GITHUB_RUN_NUMBER"
+
       - name: Export signed IPA
         if: steps.signing.outputs.present == 'true'
         env:
@@ -379,6 +420,19 @@ jobs:
 
           if [ ! -f "$app/embedded.mobileprovision" ]; then
             echo "::error::$ipa has no embedded provisioning profile"
+            exit 1
+          fi
+
+          # CFBundleVersion must be at most three period-separated integers or
+          # App Store Connect rejects the upload (ITMS-90060) — after the whole
+          # build. Assert the shape here, where it costs nothing.
+          build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")"
+          if ! printf '%s' "$build" | grep -qE '^[0-9]+(\.[0-9]+){0,2}$'; then
+            echo "::error::CFBundleVersion '$build' is not at most three period-separated integers; App Store Connect will reject it"
+            exit 1
+          fi
+          if [ "$build" != "$GITHUB_RUN_NUMBER" ]; then
+            echo "::error::CFBundleVersion is '$build', expected the stamped '$GITHUB_RUN_NUMBER'"
             exit 1
           fi
 
