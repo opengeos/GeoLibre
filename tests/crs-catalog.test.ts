@@ -53,6 +53,10 @@ describe("parseEpsgCode", () => {
     assert.equal(parseEpsgCode("EPSG:32617"), 32617);
     assert.equal(parseEpsgCode("epsg:3857 "), 3857);
     assert.equal(parseEpsgCode("urn:ogc:def:crs:EPSG::26911"), 26911);
+    // Prefix forms the picker's search also accepts, so a value that can be
+    // searched is a value whose name label resolves.
+    assert.equal(parseEpsgCode("EPSG 4326"), 4326);
+    assert.equal(parseEpsgCode("epsg4326"), 4326);
   });
 
   it("returns null for text with no code in it", () => {
@@ -67,6 +71,9 @@ describe("parseEpsgCode", () => {
     // typing.
     assert.equal(parseEpsgCode("layer4326"), null);
     assert.equal(parseEpsgCode("EPSG:4326 and more"), null);
+    // Only a recognized prefix is stripped, and only one code may be present.
+    assert.equal(parseEpsgCode("unrelatedEPSG:4326"), null);
+    assert.equal(parseEpsgCode("EPSG:4326 EPSG:3857"), null);
   });
 });
 

@@ -249,13 +249,18 @@ export function parseEpsgCode(value: string | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   // Strip an authority prefix in either the short (`EPSG:4326`) or the URN
   // (`urn:ogc:def:crs:EPSG::4326`) form, then require what is left to be nothing
-  // but the code. Anchoring both ends is what keeps unrelated text that merely
-  // ends in digits (`layer4326`) from resolving to a CRS, which would otherwise
-  // put a confident-looking name under the field mid-typing.
+  // but the code. Both ends are anchored: only a *recognized* prefix is stripped
+  // (so `unrelatedEPSG:4326` does not resolve) and nothing may follow the digits
+  // (so neither `layer4326` nor `EPSG:4326 EPSG:3857` does). Either would
+  // otherwise put a confident-looking CRS name under a half-typed field.
+  //
+  // The separator is as lenient as searchCrsCatalog's: the two agree on what
+  // counts as an EPSG prefix, so a value the picker can search (`EPSG 4326`,
+  // `EPSG4326`) is also a value the name label resolves.
   const match = String(value)
     .trim()
     .toUpperCase()
-    .replace(/^.*EPSG:+/, "")
+    .replace(/^(?:URN:OGC:DEF:CRS:)?EPSG\s*:*\s*/, "")
     .match(/^(\d{4,6})$/);
   if (!match) return null;
   const code = Number(match[1]);

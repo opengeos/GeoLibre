@@ -166,7 +166,10 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
               type="text"
               role="combobox"
               aria-expanded
-              aria-controls={listId}
+              // Only while the list is actually rendered: with no matches the
+              // <ul> is replaced by the "no results" message, and pointing at an
+              // id that is not in the DOM tells a screen reader nothing.
+              aria-controls={ordered.length > 0 ? listId : undefined}
               aria-activedescendant={
                 ordered.length > 0 ? `${listId}-option-${activeIndex}` : undefined
               }
