@@ -53,20 +53,36 @@ export function darkenHex(hex: string, factor: number): string {
 }
 
 /**
+ * Layers that actually wear a palette color.
+ *
+ * Only {@link initialLayerStyle} hands out palette entries, and only
+ * `addGeoJsonLayer` calls it — but every other add path still spreads
+ * {@link DEFAULT_LAYER_STYLE}, so a raster, image, or 3D tileset carries
+ * `fillColor: "#3b82f6"` without rendering anything with it. Counting those as
+ * "using blue" would push the first vector layer in a raster-bearing project
+ * straight to red. Widen this set if another add path adopts the palette.
+ */
+function occupiesPaletteColor(layer: GeoLibreLayer): boolean {
+  return layer.type === "geojson";
+}
+
+/**
  * Pick the next layer color: the first palette entry no current layer is
  * already using, so deleting a layer frees its color back up rather than
  * leaving the cycle permanently offset. Falls back to cycling by layer count
  * once every entry is in use.
  *
- * @param layers - The project's current layers.
+ * @param layers - The project's current layers. Non-vector layers are ignored;
+ *   they carry the schema default fill without ever painting with it.
  * @returns A `#rrggbb` color from {@link LAYER_PALETTE}.
  */
 export function nextLayerPaletteColor(layers: readonly GeoLibreLayer[]): string {
+  const styled = layers.filter(occupiesPaletteColor);
   const used = new Set(
-    layers.map((layer) => (layer.style?.fillColor ?? "").toLowerCase()).filter(Boolean),
+    styled.map((layer) => (layer.style?.fillColor ?? "").toLowerCase()).filter(Boolean),
   );
   const free = LAYER_PALETTE.find((color) => !used.has(color.toLowerCase()));
-  return free ?? LAYER_PALETTE[layers.length % LAYER_PALETTE.length];
+  return free ?? LAYER_PALETTE[styled.length % LAYER_PALETTE.length];
 }
 
 /** The geometry family a layer is mostly made of. */
@@ -109,15 +125,17 @@ export function dominantGeometry(geojson: FeatureCollection | undefined): Domina
     }
   }
 
-  const total = counts.point + counts.line + counts.polygon;
-  if (!total) return "mixed";
+  if (!counts.point && !counts.line && !counts.polygon) return "mixed";
   const [family, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] as [
     "point" | "line" | "polygon",
     number,
   ];
-  // A clear majority, not just the largest slice: a 40/35/25 split has no
-  // geometry whose sizing suits the layer, so treat it as mixed.
-  return count / total > 0.5 ? family : "mixed";
+  // A clear majority of everything sampled, not just of the geometries this
+  // switch understands: two points among three GeometryCollections is not a
+  // point layer, so `sampled` is the denominator rather than the matched total.
+  // And a majority, not merely the largest slice — a 40/35/25 split has no
+  // geometry whose sizing suits the layer.
+  return count / sampled > 0.5 ? family : "mixed";
 }
 
 /**
@@ -163,4 +181,40 @@ export function initialLayerStyle(options: InitialLayerStyleOptions = {}): Layer
     ...GEOMETRY_DEFAULTS[dominantGeometry(geojson)],
     ...overrides,
   };
+}
+
+/**
+ * True when a layer still wears exactly what {@link initialLayerStyle} gave it.
+ *
+ * The renderer mode alone is too weak a test for "untouched": nudging the fill,
+ * outline, or opacity leaves the mode on `"single"`, and a project restored
+ * from disk can carry deliberate single-symbol styling. Both cases should stop
+ * the Style panel volunteering suggestions, which is what this gates.
+ *
+ * The fill color cannot be compared against a fixed value — it is whichever
+ * palette entry the layer drew — so the test is that it is *still a palette
+ * entry* with the outline derived from it, which a hand-picked color will not
+ * satisfy.
+ *
+ * @param style - The layer's current style.
+ * @param geojson - Its data, so the geometry-derived sizes can be recomputed.
+ * @returns `true` when nothing about the as-added look has been changed.
+ */
+export function isInitialLayerStyle(style: LayerStyle, geojson?: FeatureCollection): boolean {
+  // Authored symbology, whatever the paint fields say.
+  if (style.simpleStyleEnabled) return false;
+  if (style.vectorStyleMode !== "single") return false;
+  if (style.pointRenderer !== "single") return false;
+  if ((style.vectorRules?.length ?? 0) > 0) return false;
+
+  const palette: readonly string[] = LAYER_PALETTE;
+  if (!palette.includes(style.fillColor)) return false;
+  if (style.strokeColor !== darkenHex(style.fillColor, STROKE_DARKEN)) return false;
+
+  const expected = { ...DEFAULT_LAYER_STYLE, ...GEOMETRY_DEFAULTS[dominantGeometry(geojson)] };
+  return (
+    style.fillOpacity === expected.fillOpacity &&
+    style.strokeWidth === expected.strokeWidth &&
+    style.circleRadius === expected.circleRadius
+  );
 }

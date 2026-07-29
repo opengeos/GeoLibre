@@ -32,7 +32,17 @@ export const HEATMAP_SUGGESTION_MIN_FEATURES = 200;
  * milliseconds or row numbers.
  */
 const UNMAPPABLE_NAME = /(^|[_\s-])(id|fid|gid|oid|objectid|uid|uuid|key|index)$/i;
-const TIMESTAMP_NAME = /(time|timestamp|datetime|date|updated|created|epoch|_at)$/i;
+const TIMESTAMP_NAME = /(^|[_\s-])(time|timestamp|datetime|date|updated|created|epoch|at)$/i;
+
+/**
+ * Insert a separator at every camelCase boundary so the name patterns above see
+ * `featureId` and `createdAt` the same way they see `feature_id` and
+ * `created_at`. Matching those suffixes without a boundary would swallow
+ * ordinary words — `grid` ends in "id", `candidate` ends in "date".
+ */
+function separateCamelCase(property: string): string {
+  return property.replace(/([a-z0-9])([A-Z])/g, "$1_$2");
+}
 
 /**
  * Share of distinct values above which a column is treated as an identifier
@@ -59,12 +69,14 @@ function isNearUnique(layer: ClassifiableLayer, property: string): boolean {
  * panel volunteers.
  */
 function mappableProperties(layer: ClassifiableLayer, properties: string[]): string[] {
-  return properties.filter(
-    (property) =>
-      !UNMAPPABLE_NAME.test(property) &&
-      !TIMESTAMP_NAME.test(property) &&
-      !isNearUnique(layer, property),
-  );
+  return properties.filter((property) => {
+    const normalized = separateCamelCase(property);
+    return (
+      !UNMAPPABLE_NAME.test(normalized) &&
+      !TIMESTAMP_NAME.test(normalized) &&
+      !isNearUnique(layer, property)
+    );
+  });
 }
 
 /** The layer shape a suggestion is derived from. */

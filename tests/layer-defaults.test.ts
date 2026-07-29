@@ -6,6 +6,7 @@ import {
   darkenHex,
   dominantGeometry,
   initialLayerStyle,
+  isInitialLayerStyle,
   nextLayerPaletteColor,
   useAppStore,
   type GeoLibreLayer,
@@ -97,9 +98,21 @@ describe("nextLayerPaletteColor", () => {
     );
   });
 
-  it("cycles once the whole palette is in use", () => {
+  it("cycles by layer count once the whole palette is in use", () => {
     const all = LAYER_PALETTE.map((color, index) => styled(`l${index}`, color));
-    assert.ok(LAYER_PALETTE.includes(nextLayerPaletteColor(all) as (typeof LAYER_PALETTE)[number]));
+    assert.equal(nextLayerPaletteColor(all), LAYER_PALETTE[0]);
+    // A ninth layer advances the cycle rather than pinning to one color.
+    assert.equal(nextLayerPaletteColor([...all, styled("l8", LAYER_PALETTE[0])]), LAYER_PALETTE[1]);
+  });
+
+  it("ignores layers that never paint with their fill color", () => {
+    // A raster carries DEFAULT_LAYER_STYLE (blue) without rendering it; the
+    // first vector layer should still get blue rather than skipping to red.
+    const raster: GeoLibreLayer = { ...styled("dem", LAYER_PALETTE[0]), type: "raster" };
+    assert.equal(nextLayerPaletteColor([raster]), LAYER_PALETTE[0]);
+    // ...and it must not shift the fallback cycle either.
+    const all = LAYER_PALETTE.map((color, index) => styled(`l${index}`, color));
+    assert.equal(nextLayerPaletteColor([raster, ...all]), LAYER_PALETTE[0]);
   });
 });
 
@@ -114,6 +127,23 @@ describe("dominantGeometry", () => {
     assert.equal(dominantGeometry(fc(["Point", "LineString"])), "mixed");
     assert.equal(dominantGeometry(fc([])), "mixed");
     assert.equal(dominantGeometry(undefined), "mixed");
+  });
+
+  it("counts geometries it does not understand against the majority", () => {
+    // Two points among five features is not a point layer, even though points
+    // are the only family the classifier recognizes here.
+    const mixed: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        ...fc(["Point", "Point"]).features,
+        ...Array.from({ length: 3 }, () => ({
+          type: "Feature" as const,
+          geometry: { type: "GeometryCollection" as const, geometries: [] },
+          properties: {},
+        })),
+      ],
+    } as FeatureCollection;
+    assert.equal(dominantGeometry(mixed), "mixed");
   });
 });
 
@@ -154,6 +184,46 @@ describe("initialLayerStyle", () => {
     });
     assert.equal(style.fillOpacity, 0.1);
     assert.equal(style.fillColor, "#000000");
+  });
+});
+
+describe("isInitialLayerStyle", () => {
+  const points = fc(["Point", "Point"]);
+
+  it("accepts what initialLayerStyle just produced", () => {
+    assert.equal(isInitialLayerStyle(initialLayerStyle({ geojson: points }), points), true);
+  });
+
+  it("rejects a hand-picked fill, which the mode alone would not catch", () => {
+    const style = { ...initialLayerStyle({ geojson: points }), fillColor: "#123456" };
+    assert.equal(isInitialLayerStyle(style, points), false);
+  });
+
+  it("rejects an outline no longer derived from the fill", () => {
+    const style = { ...initialLayerStyle({ geojson: points }), strokeColor: "#000000" };
+    assert.equal(isInitialLayerStyle(style, points), false);
+  });
+
+  for (const patch of [
+    { fillOpacity: 0.3 },
+    { strokeWidth: 8 },
+    { circleRadius: 20 },
+    { simpleStyleEnabled: true },
+    { vectorStyleMode: "categorized" as const },
+    { pointRenderer: "heatmap" as const },
+  ]) {
+    const field = Object.keys(patch)[0];
+    it(`rejects an edited ${field}`, () => {
+      const style = { ...initialLayerStyle({ geojson: points }), ...patch };
+      assert.equal(isInitialLayerStyle(style, points), false);
+    });
+  }
+
+  it("rejects a legacy project style whose colors predate the palette pairing", () => {
+    // fillColor happens to be palette[0], but the old outline is not derived
+    // from it — restored styling, so no suggestions.
+    const style = { ...DEFAULT_LAYER_STYLE, fillColor: "#3b82f6", strokeColor: "#1e40af" };
+    assert.equal(isInitialLayerStyle(style, points), false);
   });
 });
 

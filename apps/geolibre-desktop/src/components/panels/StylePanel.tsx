@@ -1,6 +1,8 @@
 import {
   DEFAULT_LAYER_STYLE,
+  isInitialLayerStyle,
   type DiagramField,
+  type GeoLibreLayer,
   type DiagramSizeMode,
   type DiagramType,
   type ExpressionVariable,
@@ -274,6 +276,25 @@ function isPointOnlyGeoJsonLayer(layer: {
     const type = feature.geometry?.type;
     return type === "Point" || type === "MultiPoint";
   });
+}
+
+/**
+ * True when the heatmap and cluster renderers apply to a layer: a point-only
+ * core GeoJSON layer, or a point layer painted by the maplibre-gl-vector
+ * control. Shared by the panel's own gating and the style-suggestion memo, so
+ * the two cannot disagree about where a heatmap is offerable.
+ *
+ * @param pointOnly - Result of {@link isPointOnlyGeoJsonLayer}, passed in so
+ *   the caller can reuse its memoized value instead of re-scanning features.
+ */
+function supportsPointRendererFor(layer: GeoLibreLayer, pointOnly: boolean): boolean {
+  if (hasExternalDeckLayer(layer)) return false;
+  if (!hasExternalNativeLayers(layer)) return pointOnly;
+  return (
+    layer.type === "geojson" &&
+    layer.metadata.sourceKind === "maplibre-gl-vector" &&
+    layer.metadata.geometryType === "point"
+  );
 }
 
 interface GeometryFlags {
@@ -1233,6 +1254,20 @@ export function StylePanel({
     () => (layer ? getGeometryFlags(layer) : { hasPoint: true, hasLine: true, hasPolygon: true }),
     [layer],
   );
+  // Style suggestions (#1519). The candidate scan reads every feature's
+  // properties, so it is memoized alongside the other per-feature scans rather
+  // than re-run on every panel render (an opacity drag, a zoom-range edit).
+  // Kept before the early returns below so the hook order stays stable.
+  //
+  // isInitialLayerStyle is the gate: a layer only gets suggestions while it
+  // still wears exactly what it was added with. The renderer mode alone would
+  // let an edited fill or a restored project keep being offered advice.
+  const styleSuggestions = useMemo(() => {
+    if (!layer || !isInitialLayerStyle(layer.style, layer.geojson)) return [];
+    return buildStyleSuggestions(layer, getAttributePropertyNames(layer), {
+      supportsPointRenderer: supportsPointRendererFor(layer, isPointOnlyGeoJsonLayer(layer)),
+    });
+  }, [layer]);
   // Expression Builder inputs, memoized for stable identities: the dialog
   // memoizes its validation/preview/field-type work off these props, so fresh
   // arrays on every panel render would defeat that memoization while the
@@ -1455,15 +1490,7 @@ export function StylePanel({
     (isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer);
   const hasTextMarkerControls = layer.type === "geojson" && hasTextMarkerFeatures(layer);
   // isPointOnly is memoized above the early returns to keep hook order stable.
-  const isCoreGeoJsonPoint =
-    isPointOnly && !hasExternalNativeLayers(layer) && !hasExternalDeckLayer(layer);
-  const isVectorControlPoint =
-    hasExternalNativeLayers(layer) &&
-    !hasExternalDeckLayer(layer) &&
-    layer.type === "geojson" &&
-    layer.metadata.sourceKind === "maplibre-gl-vector" &&
-    layer.metadata.geometryType === "point";
-  const supportsPointRenderer = isCoreGeoJsonPoint || isVectorControlPoint;
+  const supportsPointRenderer = supportsPointRendererFor(layer, isPointOnly);
   // The "Sketches" layer mixes geometry types under one style, so "Circle
   // radius" only applies to its point markers and is misleading otherwise (#483).
   const isSketchLayer = layer.metadata.sourceKind === SKETCHES_SOURCE_KIND;
@@ -2039,16 +2066,9 @@ export function StylePanel({
   const markerShape = styleValue(style, "markerShape");
 
   // --- Style suggestions (#1519) -------------------------------------------
-  // Offered only while the layer still carries its as-added symbology: once
-  // someone has chosen a renderer, second-guessing them is noise. Dismissal is
-  // per-layer and session-scoped — it is a nudge, not project state.
-  const suggestionsApply =
-    styleValue(style, "vectorStyleMode") === "single" &&
-    styleValue(style, "pointRenderer") === "single" &&
-    !dismissedSuggestions.has(layer.id);
-  const styleSuggestions = suggestionsApply
-    ? buildStyleSuggestions(layer, vectorStylePropertyOptions, { supportsPointRenderer })
-    : [];
+  // styleSuggestions is memoized above the early returns. Dismissal is
+  // per-layer and session-scoped — this is a nudge, not project state.
+  const visibleSuggestions = dismissedSuggestions.has(layer.id) ? [] : styleSuggestions;
 
   const applyStyleSuggestion = (suggestion: StyleSuggestion) => {
     if (suggestion.kind === "heatmap") {
@@ -2100,7 +2120,7 @@ export function StylePanel({
 
   const vectorSymbologyControls = (
     <div className="space-y-3">
-      {styleSuggestions.length > 0 && (
+      {visibleSuggestions.length > 0 && (
         <div className="space-y-2 rounded-md border border-dashed bg-muted/40 p-2">
           <div className="flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -2117,7 +2137,7 @@ export function StylePanel({
             </Button>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {styleSuggestions.map((suggestion) => (
+            {visibleSuggestions.map((suggestion) => (
               <Button
                 key={`${suggestion.kind}-${suggestion.property ?? ""}`}
                 variant="outline"

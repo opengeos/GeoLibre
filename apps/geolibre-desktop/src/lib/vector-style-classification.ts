@@ -164,13 +164,16 @@ export function createCategorizedStops(
 }
 
 /**
- * True when a property has at least two finite numeric values, so a graduated
- * classification has a range to break up.
+ * True when a property has at least two *distinct* finite numeric values, so a
+ * graduated classification has a range to break up.
+ *
+ * Distinct, not merely two values: a constant column yields a single class, and
+ * the Style panel then refuses to apply the renderer it was offered.
  */
 export function isNumericProperty(layer: ClassifiableLayer, property: string): boolean {
   const values = getPropertyValues(layer, property);
   const numericValues = values.map((value) => Number(value)).filter(Number.isFinite);
-  return numericValues.length > 1;
+  return new Set(numericValues).size > 1;
 }
 
 /**
@@ -188,11 +191,14 @@ export function chooseGraduatedProperty(layer: ClassifiableLayer, properties: st
     const values = getPropertyValues(layer, property)
       .map((value) => Number(value))
       .filter(Number.isFinite);
-    if (values.length < 2) continue;
+    // Distinct values, not just value count: a constant column cannot be split
+    // into the two stops a graduated renderer needs.
+    const distinct = new Set(values).size;
+    if (distinct < 2) continue;
 
     const { min, max } = numericBounds(values);
     const range = max - min;
-    const score = new Set(values).size * Math.log10(Math.max(1, range) + 1);
+    const score = distinct * Math.log10(Math.max(1, range) + 1);
     if (score > bestScore) {
       bestProperty = property;
       bestScore = score;

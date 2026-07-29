@@ -123,6 +123,39 @@ describe("buildStyleSuggestions", () => {
       assert.equal(graduated?.property, "mag");
     });
 
+    it("never suggests a camelCase identifier or timestamp column", () => {
+      // These evade a bare suffix match (no separator) and, on a small layer,
+      // also evade the near-unique ratio.
+      for (const name of ["featureId", "createdAt", "updatedAt", "objectId"]) {
+        const layer = layerWith([
+          { [name]: 1, score: 5 },
+          { [name]: 2, score: 40 },
+          { [name]: 3, score: 900 },
+        ]);
+        const graduated = buildStyleSuggestions(layer, [name, "score"], NO_POINTS).find(
+          (item) => item.kind === "graduated",
+        );
+        assert.equal(graduated?.property, "score", name);
+      }
+    });
+
+    it("keeps ordinary words that merely end in an excluded suffix", () => {
+      // "grid" ends in "id" and "candidate" ends in "date"; neither is an
+      // identifier, so a boundary is required rather than a bare suffix match.
+      for (const name of ["grid", "candidate", "valid"]) {
+        const layer = layerWith([{ [name]: 1 }, { [name]: 40 }, { [name]: 900 }]);
+        const graduated = buildStyleSuggestions(layer, [name], NO_POINTS).find(
+          (item) => item.kind === "graduated",
+        );
+        assert.equal(graduated?.property, name, name);
+      }
+    });
+
+    it("never suggests a constant numeric column, which cannot form two stops", () => {
+      const layer = layerWith([{ elevation: 100 }, { elevation: 100 }, { elevation: 100 }]);
+      assert.deepEqual(buildStyleSuggestions(layer, ["elevation"], NO_POINTS), []);
+    });
+
     it("never suggests an identifier column", () => {
       for (const name of ["id", "OBJECTID", "feature_id", "row-index", "uuid"]) {
         const layer = layerWith([
