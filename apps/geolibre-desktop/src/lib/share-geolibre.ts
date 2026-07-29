@@ -274,7 +274,9 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
           ? item.role
           : "edit";
       const visibility: ShareVisibility =
-        item.visibility === "public" || item.visibility === "private" ? item.visibility : "unlisted";
+        item.visibility === "public" || item.visibility === "private"
+          ? item.visibility
+          : "unlisted";
       return {
         id: String(item.id || ""),
         projectSlug: String(item.projectSlug || item.slug || ""),

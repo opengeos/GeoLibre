@@ -338,7 +338,9 @@ export function ShareProjectDialog({
                       disabled={status === "uploading"}
                     >
                       <option value="edit">{t("share.roleEdit", "Edit (full app)")}</option>
-                      <option value="comment">{t("share.roleComment", "Comment (view & comments)")}</option>
+                      <option value="comment">
+                        {t("share.roleComment", "Comment (view & comments)")}
+                      </option>
                       <option value="view">{t("share.roleView", "View (read-only)")}</option>
                     </Select>
                   </div>
@@ -390,7 +392,10 @@ export function ShareProjectDialog({
                     </Button>
                   </div>
                 ) : error ? (
-                  <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+                  <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 p-2 text-sm text-destructive"
+                  >
                     {error}
                   </p>
                 ) : null}
@@ -421,7 +426,10 @@ export function ShareProjectDialog({
             ) : (
               <div className="space-y-3">
                 {revokeError && (
-                  <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+                  <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 p-2 text-sm text-destructive"
+                  >
                     {revokeError}
                   </p>
                 )}
