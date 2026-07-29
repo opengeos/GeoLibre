@@ -5,6 +5,7 @@ import {
   bufferPresetsFor,
   clearQuickAnalysisStatus,
   clickedPointLayer,
+  formatBufferDistance,
   getQuickAnalysisStatus,
   QUICK_BUFFER_PRESETS,
   resolveQuickTool,
@@ -194,5 +195,56 @@ describe("runQuickAnalysis", () => {
     assert.equal(getQuickAnalysisStatus().phase, "error");
     clearQuickAnalysisStatus();
     assert.deepEqual(getQuickAnalysisStatus(), { phase: "idle" });
+  });
+});
+
+describe("formatBufferDistance", () => {
+  const unit = (key: string) => key.split(".").at(-1)?.slice(0, 2) ?? "";
+
+  it("localizes the number and appends the translated unit", () => {
+    assert.equal(
+      formatBufferDistance({ distance: 1000, units: "meters" }, "en", unit as never),
+      "1,000 me",
+    );
+    assert.equal(
+      formatBufferDistance({ distance: 1000, units: "meters" }, "de", unit as never),
+      "1.000 me",
+    );
+  });
+
+  it("renders a fractional imperial preset without rounding it away", () => {
+    assert.equal(
+      formatBufferDistance({ distance: 0.25, units: "miles" }, "en", unit as never),
+      "0.25 mi",
+    );
+  });
+});
+
+describe("the quick-analysis banner under concurrent runs", () => {
+  it("lets only the newest run write status", async () => {
+    useAppStore.setState({ layers: [pointsLayer("empty", [])] });
+    const point = clickedPointLayer(0, 0);
+
+    // A failing run started first, then a successful one: the older run must not
+    // repaint the banner after the newer one has finished.
+    const failing = runQuickAnalysis({
+      toolId: "buffer",
+      parameters: { layer: "empty", distance: 1, units: "kilometers" },
+      resultName: "never",
+      mapControllerRef: controllerRef() as never,
+    });
+    const succeeding = runQuickAnalysis({
+      toolId: "buffer",
+      parameters: { layer: point.id, distance: 1, units: "kilometers" },
+      extraLayers: [point],
+      resultName: "Buffer 1 km",
+      mapControllerRef: controllerRef() as never,
+    });
+    await Promise.all([failing, succeeding]);
+
+    assert.deepEqual(getQuickAnalysisStatus(), { phase: "idle" });
+    // The superseded run still leaves its durable record.
+    const history = useAppStore.getState().processingHistory;
+    assert.equal(history.filter((run) => run.status === "error").length, 1);
   });
 });

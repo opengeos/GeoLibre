@@ -171,6 +171,7 @@ import {
 } from "../../lib/sql-query-layer";
 import {
   bufferPresetsFor,
+  formatBufferDistance,
   runQuickAnalysis,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
@@ -679,10 +680,7 @@ export function LayerPanel({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
   const formatQuickDistance = useCallback(
-    (preset: QuickBufferPreset) =>
-      `${new Intl.NumberFormat(i18n.language).format(preset.distance)} ${t(
-        `quickAnalysis.unit.${preset.units}`,
-      )}`,
+    (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
     [i18n.language, t],
   );
 
@@ -2955,7 +2953,7 @@ export function LayerPanel({
                           {canSelectFeatures && (
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>
-                                <Sparkles className="me-2 h-3.5 w-3.5" />
+                                <Sparkles className="h-3.5 w-3.5" />
                                 {t("quickAnalysis.menu")}
                               </DropdownMenuSubTrigger>
                               <DropdownMenuSubContent>

@@ -80,6 +80,25 @@ export function bufferPresetsFor(unit: MapScaleUnit): QuickBufferPreset[] {
   return QUICK_BUFFER_PRESETS[unit] ?? QUICK_BUFFER_PRESETS.metric;
 }
 
+/**
+ * Render a preset for a menu label ("500 m", "0.25 mi"), localizing both the
+ * number and the unit. Shared by every menu that offers the ladder so the two
+ * entry points cannot drift apart.
+ *
+ * @param preset - The buffer preset to label.
+ * @param language - Active i18next language, for number formatting.
+ * @param t - Translator, for the unit abbreviation. Typed to the three unit
+ *   keys rather than `string` so it accepts i18next's key-checked `TFunction`.
+ */
+export function formatBufferDistance(
+  preset: QuickBufferPreset,
+  language: string,
+  t: (key: `quickAnalysis.unit.${QuickBufferPreset["units"]}`) => string,
+): string {
+  const value = new Intl.NumberFormat(language).format(preset.distance);
+  return `${value} ${t(`quickAnalysis.unit.${preset.units}`)}`;
+}
+
 /** Wrap a clicked coordinate as a one-feature layer a tool can consume. */
 export function clickedPointLayer(lng: number, lat: number): GeoLibreLayer {
   const feature: Feature = {
@@ -112,6 +131,16 @@ export type QuickAnalysisStatus =
 
 let status: QuickAnalysisStatus = { phase: "idle" };
 const listeners = new Set<() => void>();
+/**
+ * Monotonic id of the most recently started run. Nothing stops a user firing a
+ * fast buffer while a slow drive-time is still in flight, and the banner shows
+ * one thing at a time — without this, the quick run's success would reset the
+ * banner to idle under the slow one, and the slow one's later error would
+ * resurrect a banner for a run the user has moved on from. Only the newest run
+ * may write status; older runs still record their outcome in the Processing
+ * History, which is the durable record.
+ */
+let latestRun = 0;
 
 function setStatus(next: QuickAnalysisStatus): void {
   status = next;
@@ -179,7 +208,12 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
     return null;
   }
 
-  setStatus({ phase: "running", toolName: tool.name });
+  const run = ++latestRun;
+  const setRunStatus = (next: QuickAnalysisStatus): void => {
+    if (run === latestRun) setStatus(next);
+  };
+
+  setRunStatus({ phase: "running", toolName: tool.name });
   const tracker = beginProcessingRun({
     kind: "vector",
     toolId: tool.id,
@@ -212,14 +246,14 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
 
     if (softError) {
       tracker.finish("error", softError);
-      setStatus({ phase: "error", toolName: tool.name, message: softError });
+      setRunStatus({ phase: "error", toolName: tool.name, message: softError });
       return null;
     }
     const features = (captured as FeatureCollection | null)?.features ?? [];
     if (!features.length) {
       const message = logLines.at(-1) ?? "The tool produced no features";
       tracker.finish("error", message);
-      setStatus({ phase: "error", toolName: tool.name, message });
+      setRunStatus({ phase: "error", toolName: tool.name, message });
       return null;
     }
 
@@ -230,12 +264,12 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
     tracker.finish("success");
     const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
     if (layer) mapControllerRef.current?.fitLayer(layer);
-    setStatus({ phase: "idle" });
+    setRunStatus({ phase: "idle" });
     return layerId;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     tracker.finish("error", message);
-    setStatus({ phase: "error", toolName: tool.name, message });
+    setRunStatus({ phase: "error", toolName: tool.name, message });
     return null;
   }
 }
