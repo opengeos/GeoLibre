@@ -239,12 +239,18 @@ function assetLabel(key: string, asset: StacAsset): string {
   return asset.title || key;
 }
 
-async function visualizeAsset(item: StacItem, key: string, asset: StacAsset): Promise<void> {
+async function visualizeAsset(
+  item: StacItem,
+  key: string,
+  asset: StacAsset,
+  signal?: AbortSignal,
+): Promise<void> {
   const name = `${item.id} — ${assetLabel(key, asset)}`;
   const value = `${asset.type ?? ""} ${asset.href}`.toLowerCase();
   if (value.includes("geo+json") || /\.geojson($|\?)/i.test(asset.href)) {
     const response = await fetch(asset.href, {
       headers: { Accept: "application/geo+json, application/json" },
+      signal,
     });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const data = (await response.json()) as FeatureCollection;
@@ -393,7 +399,7 @@ function buildPanel(container: HTMLElement): () => void {
             add.disabled = true;
             setStatus(`Adding ${assetLabel(key, asset)}…`);
             try {
-              await visualizeAsset(item, key, asset);
+              await visualizeAsset(item, key, asset, controller.signal);
               setStatus(`Added ${assetLabel(key, asset)} to the map.`);
             } catch (error) {
               setStatus(error instanceof Error ? error.message : "Could not add asset", true);

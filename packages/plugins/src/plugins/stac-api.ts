@@ -313,10 +313,12 @@ export async function searchStaticStac(
       >);
     if (document.type === "Feature") {
       const item = normalizeItem(document as unknown as StacItem, current.url);
+      // itemBbox flattens 3D (6-element) bboxes; item.bbox[2]/[3] would be minZ/maxX there.
+      const bbox = itemBbox(item);
       if (
         (!options.collections?.length ||
           (item.collection && options.collections.includes(item.collection))) &&
-        (!options.bbox || (item.bbox && intersects(item.bbox, options.bbox))) &&
+        (!options.bbox || (bbox && intersects(bbox, options.bbox))) &&
         inTime(item, options.datetime)
       ) {
         items.push(item);

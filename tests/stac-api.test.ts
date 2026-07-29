@@ -99,6 +99,59 @@ test("searchStacApi sends spatial, temporal, and collection filters and follows 
   });
 });
 
+test("searchStacApi falls back to GET when the search endpoint rejects POST", async () => {
+  const calls: Array<{ url: string; method?: string }> = [];
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), method: init?.method });
+    if (init?.method === "POST") throw new Error("405 Method Not Allowed");
+    return jsonResponse({
+      type: "FeatureCollection",
+      numberMatched: 1,
+      features: [
+        {
+          type: "Feature",
+          id: "get-only",
+          bbox: [-1, -2, 3, 4],
+          geometry: null,
+          properties: { datetime: "2024-01-15T00:00:00Z" },
+          assets: { data: { href: "https://example.com/one.tif" } },
+        },
+      ],
+      links: [],
+    });
+  }) as typeof fetch;
+
+  const result = await searchStacApi(
+    {
+      url: "https://example.com/stac/",
+      title: "Demo",
+      isApi: true,
+      searchUrl: "https://example.com/stac/search",
+      collections: [],
+      root: {},
+    },
+    {
+      bbox: [-10, -5, 10, 5],
+      datetime: "2024-01-01/2024-02-01",
+      collections: ["demo"],
+      limit: 10,
+    },
+    fetcher,
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[1].method, undefined);
+  const fallback = new URL(calls[1].url);
+  assert.equal(fallback.pathname, "/stac/search");
+  assert.equal(fallback.searchParams.get("limit"), "10");
+  assert.equal(fallback.searchParams.get("bbox"), "-10,-5,10,5");
+  assert.equal(fallback.searchParams.get("datetime"), "2024-01-01/2024-02-01");
+  assert.equal(fallback.searchParams.get("collections"), "demo");
+  assert.equal(result.items[0].id, "get-only");
+  assert.equal(result.matched, 1);
+});
+
 test("searchStaticStac traverses child and item links and applies filters", async () => {
   const docs: Record<string, unknown> = {
     "https://example.com/collection.json": {
@@ -106,6 +159,7 @@ test("searchStaticStac traverses child and item links and applies filters", asyn
       links: [
         { rel: "item", href: "inside.json" },
         { rel: "item", href: "outside.json" },
+        { rel: "item", href: "elevated.json" },
       ],
     },
     "https://example.com/inside.json": {
@@ -126,6 +180,17 @@ test("searchStaticStac traverses child and item links and applies filters", asyn
       properties: { datetime: "2024-05-01T00:00:00Z" },
       assets: {},
     },
+    // 3D bbox: [minX, minY, minZ, maxX, maxY, maxZ]. Inside the search extent, but
+    // reading it as 2D would compare minZ (-500) against the extent's minX and drop it.
+    "https://example.com/elevated.json": {
+      type: "Feature",
+      id: "elevated",
+      collection: "demo",
+      bbox: [0, 0, -500, 2, 2, -100],
+      geometry: null,
+      properties: { datetime: "2024-05-01T00:00:00Z" },
+      assets: {},
+    },
   };
   const fetcher = (async (input: RequestInfo | URL) =>
     jsonResponse(docs[String(input)])) as typeof fetch;
@@ -142,7 +207,7 @@ test("searchStaticStac traverses child and item links and applies filters", asyn
   );
   assert.deepEqual(
     result.items.map((item) => item.id),
-    ["inside"],
+    ["inside", "elevated"],
   );
 });
 
