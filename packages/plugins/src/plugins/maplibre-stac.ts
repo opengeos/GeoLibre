@@ -1,7 +1,8 @@
 import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
-import type { FeatureCollection } from "geojson";
-import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { fillLayerId, lineLayerId } from "@geolibre/map";
+import type { FeatureCollection, Geometry } from "geojson";
+import type { GeoJSONSource, MapMouseEvent, Map as MapLibreMap } from "maplibre-gl";
+import type { GeoLibreAppAPI, GeoLibreCogLayerOptions, GeoLibrePlugin } from "../types";
 import {
   connectStac,
   isVisualizableAsset,
@@ -22,6 +23,42 @@ const FOOTPRINT_LAYER_NAME = "STAC search footprints";
 const DRAW_SOURCE = "geolibre-stac-draw-bbox";
 const DRAW_FILL = "geolibre-stac-draw-bbox-fill";
 const DRAW_LINE = "geolibre-stac-draw-bbox-line";
+// Selection highlight, like the draw rectangle: a transient interaction overlay
+// rather than data, so it stays off the Layers panel.
+const SELECT_SOURCE = "geolibre-stac-selected";
+const SELECT_FILL = "geolibre-stac-selected-fill";
+const SELECT_LINE = "geolibre-stac-selected-line";
+
+/**
+ * Colormaps the COG renderer knows by name (`ColormapName` in
+ * `maplibre-gl-components`). This is a convenience list for the dropdown, not a
+ * contract: `addCogLayer` documents an unrecognized name as falling back to the
+ * renderer default, so if the union gains or drops entries the worst case is a
+ * missing or inert choice here, never a runtime error.
+ */
+const COLORMAPS = [
+  "viridis",
+  "plasma",
+  "inferno",
+  "magma",
+  "cividis",
+  "coolwarm",
+  "bwr",
+  "seismic",
+  "RdBu",
+  "RdYlBu",
+  "RdYlGn",
+  "spectral",
+  "jet",
+  "rainbow",
+  "turbo",
+  "terrain",
+  "ocean",
+  "hot",
+  "cool",
+  "gray",
+  "bone",
+] as const;
 
 let appRef: GeoLibreAppAPI | null = null;
 // The result footprints are a first-class store layer, so they show up in the
@@ -50,7 +87,11 @@ const style = {
     "padding:6px 10px;border-radius:5px;border:1px solid hsl(var(--primary));" +
     "background:hsl(var(--primary));color:hsl(var(--primary-foreground));cursor:pointer;",
   status: "font-size:11px;line-height:1.4;color:hsl(var(--muted-foreground));",
-  results: "display:flex;flex:1 1 auto;min-height:0;overflow:auto;flex-direction:column;gap:7px;",
+  // The floor keeps a usable result list even with every filter section open;
+  // the controls above it scroll as a group rather than pushing it off-panel.
+  results:
+    "display:flex;flex:1 1 auto;min-height:150px;overflow:auto;flex-direction:column;gap:7px;",
+  controls: "display:flex;flex-direction:column;gap:10px;flex:0 1 auto;min-height:0;overflow:auto;",
   card:
     "display:flex;flex-direction:column;gap:5px;padding:8px;border:1px solid hsl(var(--border));" +
     "border-radius:7px;background:hsl(var(--muted));",
@@ -234,6 +275,51 @@ function showFootprints(items: StacItem[]): void {
   });
 }
 
+function removeSelectionHighlight(map: MapLibreMap): void {
+  if (map.getLayer(SELECT_LINE)) map.removeLayer(SELECT_LINE);
+  if (map.getLayer(SELECT_FILL)) map.removeLayer(SELECT_FILL);
+  if (map.getSource(SELECT_SOURCE)) map.removeSource(SELECT_SOURCE);
+}
+
+function showSelectionHighlight(geometry: Geometry | null): void {
+  const map = appRef?.getMap?.();
+  if (!map) return;
+  if (!geometry) {
+    removeSelectionHighlight(map);
+    return;
+  }
+  const data: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [{ type: "Feature", properties: {}, geometry }],
+  };
+  const source = map.getSource(SELECT_SOURCE) as GeoJSONSource | undefined;
+  if (source) {
+    source.setData(data);
+    return;
+  }
+  map.addSource(SELECT_SOURCE, { type: "geojson", data });
+  map.addLayer({
+    id: SELECT_FILL,
+    type: "fill",
+    source: SELECT_SOURCE,
+    paint: { "fill-color": "#f59e0b", "fill-opacity": 0.22 },
+  });
+  map.addLayer({
+    id: SELECT_LINE,
+    type: "line",
+    source: SELECT_SOURCE,
+    paint: { "line-color": "#f59e0b", "line-width": 3 },
+  });
+}
+
+/** Native style layers backing the footprint store layer, if it is on the map. */
+function footprintStyleLayers(map: MapLibreMap): string[] {
+  if (!footprintLayerId) return [];
+  return [fillLayerId(footprintLayerId), lineLayerId(footprintLayerId)].filter((id) =>
+    map.getLayer(id),
+  );
+}
+
 function assetLabel(key: string, asset: StacAsset): string {
   return asset.title || key;
 }
@@ -242,6 +328,7 @@ async function visualizeAsset(
   item: StacItem,
   key: string,
   asset: StacAsset,
+  cogOptions: GeoLibreCogLayerOptions,
   signal?: AbortSignal,
 ): Promise<void> {
   const name = `${item.id} — ${assetLabel(key, asset)}`;
@@ -255,7 +342,7 @@ async function visualizeAsset(
     const data = (await response.json()) as FeatureCollection;
     appRef?.addGeoJsonLayer(name, data, asset.href);
   } else if (appRef?.addCogLayer) {
-    await appRef.addCogLayer(name, asset.href);
+    await appRef.addCogLayer(name, asset.href, cogOptions);
   } else {
     throw new Error("This GeoLibre host cannot visualize remote GeoTIFF assets");
   }
@@ -330,6 +417,52 @@ function buildPanel(container: HTMLElement): () => void {
     searchButton,
   );
 
+  // Raster rendering options, applied to every GeoTIFF/COG asset added from the
+  // result list. Collapsed by default so the common case stays a single click.
+  const renderSection = el("details");
+  renderSection.style.cssText = style.section;
+  renderSection.hidden = true;
+  const renderSummary = el("summary", "Raster rendering options");
+  renderSummary.style.cssText = "cursor:pointer;font-weight:600;";
+  const bandsField = field("Bands");
+  bandsField.input.placeholder = "e.g. 1 or 1,2,3 (default: auto)";
+  const colormapWrap = el("label");
+  colormapWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+  const colormapCaption = el("span", "Colormap (single-band only)");
+  colormapCaption.style.cssText = style.label;
+  const colormapSelect = el("select");
+  colormapSelect.style.cssText = style.input;
+  const colormapDefault = el("option", "Renderer default");
+  colormapDefault.value = "";
+  colormapSelect.append(colormapDefault);
+  for (const name of COLORMAPS) {
+    const option = el("option", name);
+    option.value = name;
+    colormapSelect.append(option);
+  }
+  colormapWrap.append(colormapCaption, colormapSelect);
+  const rescaleRow = el("div");
+  rescaleRow.style.cssText = style.row;
+  const vminField = field("Min value", "number");
+  const vmaxField = field("Max value", "number");
+  rescaleRow.append(vminField.wrap, vmaxField.wrap);
+  const nodataField = field("NoData value", "number");
+  nodataField.input.placeholder = "Overrides the file's NoData tag";
+  const renderHint = el(
+    "div",
+    "Leave a field blank to let the renderer infer it from the GeoTIFF. " +
+      "Options apply to assets added after they change.",
+  );
+  renderHint.style.cssText = style.status;
+  renderSection.append(
+    renderSummary,
+    bandsField.wrap,
+    colormapWrap,
+    rescaleRow,
+    nodataField.wrap,
+    renderHint,
+  );
+
   const status = el("div", "Choose a catalog from STAC Index or enter a URL.");
   status.style.cssText = style.status;
   const results = el("div");
@@ -338,7 +471,10 @@ function buildPanel(container: HTMLElement): () => void {
   loadMore.type = "button";
   loadMore.style.cssText = style.primary;
   loadMore.hidden = true;
-  container.append(catalogSection, searchSection, status, results, loadMore);
+  const controls = el("div");
+  controls.style.cssText = style.controls;
+  controls.append(catalogSection, searchSection, renderSection);
+  container.append(controls, status, results, loadMore);
 
   let index: StacIndexCatalog[] = [];
   let filtered: StacIndexCatalog[] = [];
@@ -347,10 +483,49 @@ function buildPanel(container: HTMLElement): () => void {
   let allItems: StacItem[] = [];
   let searchGeneration = 0;
   let cancelDraw: (() => void) | null = null;
+  let selectedItemId: string | null = null;
+  const cardsByItemId = new Map<string, HTMLElement>();
 
   const setStatus = (message: string, error = false): void => {
     status.textContent = message;
     status.style.color = error ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))";
+  };
+
+  const cogOptions = (): GeoLibreCogLayerOptions => {
+    const numeric = (input: HTMLInputElement): number | undefined => {
+      const value = Number(input.value);
+      return input.value.trim() && Number.isFinite(value) ? value : undefined;
+    };
+    const bands = bandsField.input.value.trim();
+    const colormap = colormapSelect.value;
+    const rescaleMin = numeric(vminField.input);
+    const rescaleMax = numeric(vmaxField.input);
+    const nodata = numeric(nodataField.input);
+    return {
+      ...(bands ? { bands } : {}),
+      ...(colormap ? { colormap } : {}),
+      ...(rescaleMin !== undefined ? { rescaleMin } : {}),
+      ...(rescaleMax !== undefined ? { rescaleMax } : {}),
+      ...(nodata !== undefined ? { nodata } : {}),
+    };
+  };
+
+  /** Paint the selected card and mirror the selection onto the map. */
+  const applySelection = (scrollIntoView: boolean): void => {
+    for (const [itemId, card] of cardsByItemId) {
+      const active = itemId === selectedItemId;
+      card.style.borderColor = active ? "#f59e0b" : "hsl(var(--border))";
+      card.style.boxShadow = active ? "0 0 0 1px #f59e0b" : "none";
+    }
+    const card = selectedItemId ? cardsByItemId.get(selectedItemId) : undefined;
+    if (card && scrollIntoView) card.scrollIntoView({ block: "nearest" });
+    const item = allItems.find((entry) => entry.id === selectedItemId);
+    showSelectionHighlight(item?.geometry ?? null);
+  };
+
+  const selectItem = (itemId: string | null, scrollIntoView: boolean): void => {
+    selectedItemId = itemId;
+    applySelection(scrollIntoView);
   };
 
   const renderCatalogs = (): void => {
@@ -371,9 +546,19 @@ function buildPanel(container: HTMLElement): () => void {
 
   const renderItems = (): void => {
     results.innerHTML = "";
+    cardsByItemId.clear();
     for (const item of allItems) {
       const card = el("div");
       card.style.cssText = style.card;
+      card.style.cursor = "pointer";
+      cardsByItemId.set(item.id, card);
+      // Clicking anywhere on the card that is not a control selects the item,
+      // so the map highlight and the list stay in step in both directions.
+      card.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest("button, select")) return;
+        selectItem(item.id, false);
+      });
       const title = el("div", item.id);
       title.style.cssText = "font-weight:600;word-break:break-word;";
       const date = String(item.properties.datetime ?? item.properties.start_datetime ?? "");
@@ -429,7 +614,7 @@ function buildPanel(container: HTMLElement): () => void {
           syncAsset();
           setStatus(`Adding ${assetLabel(key, asset)}…`);
           try {
-            await visualizeAsset(item, key, asset, controller.signal);
+            await visualizeAsset(item, key, asset, cogOptions(), controller.signal);
             setStatus(`Added ${assetLabel(key, asset)} to the map.`);
           } catch (error) {
             setStatus(error instanceof Error ? error.message : "Could not add asset", true);
@@ -489,8 +674,11 @@ function buildPanel(container: HTMLElement): () => void {
       if (generation !== searchGeneration) return;
       allItems = append ? [...allItems, ...response.items] : response.items;
       nextPage = response.next;
+      // A fresh search invalidates the selection; "Load more" keeps it.
+      if (!append) selectedItemId = null;
       renderItems();
       showFootprints(allItems);
+      applySelection(false);
       loadMore.hidden = !nextPage;
       setStatus(
         allItems.length
@@ -530,14 +718,18 @@ function buildPanel(container: HTMLElement): () => void {
         collectionSelect.hidden = true;
       }
       searchSection.hidden = false;
+      renderSection.hidden = false;
       allItems = [];
       nextPage = undefined;
       results.innerHTML = "";
+      cardsByItemId.clear();
+      selectItem(null, false);
       loadMore.hidden = true;
       setStatus(connection.description || "Connected. Choose filters and search.");
     } catch (error) {
       connection = null;
       searchSection.hidden = true;
+      renderSection.hidden = true;
       setStatus(error instanceof Error ? error.message : "Could not connect to STAC", true);
     } finally {
       connectButton.disabled = false;
@@ -575,6 +767,30 @@ function buildPanel(container: HTMLElement): () => void {
     setStatus("Drawn bbox cleared.");
   });
 
+  // Clicking a footprint selects the matching result card. The bbox-draw mode
+  // owns the pointer while it is active, so both handlers stand down for it.
+  const footprintIdAt = (event: MapMouseEvent): string | null => {
+    const map = appRef?.getMap?.();
+    if (!map || cancelDraw) return null;
+    const layers = footprintStyleLayers(map);
+    if (!layers.length) return null;
+    const feature = map.queryRenderedFeatures(event.point, { layers })[0];
+    const id = feature?.properties?.id;
+    return typeof id === "string" ? id : null;
+  };
+  const onMapClick = (event: MapMouseEvent): void => {
+    const id = footprintIdAt(event);
+    if (id) selectItem(id, true);
+  };
+  const onMapMove = (event: MapMouseEvent): void => {
+    const map = appRef?.getMap?.();
+    if (!map || cancelDraw) return;
+    map.getCanvas().style.cursor = footprintIdAt(event) ? "pointer" : "";
+  };
+  const map = appRef?.getMap?.();
+  map?.on("click", onMapClick);
+  map?.on("mousemove", onMapMove);
+
   void loadStacIndex(fetch, controller.signal).then(
     (catalogs) => {
       index = catalogs;
@@ -593,8 +809,14 @@ function buildPanel(container: HTMLElement): () => void {
     searchGeneration += 1;
     // The footprints are the user's layer now, so closing the panel leaves them
     // on the map; only deactivating the plugin tears them down.
-    const map = appRef?.getMap?.();
-    if (map) removeDrawBox(map);
+    const activeMap = appRef?.getMap?.();
+    if (activeMap) {
+      activeMap.off("click", onMapClick);
+      activeMap.off("mousemove", onMapMove);
+      activeMap.getCanvas().style.cursor = "";
+      removeDrawBox(activeMap);
+      removeSelectionHighlight(activeMap);
+    }
   };
 }
 
@@ -633,7 +855,10 @@ export const maplibreStacCatalogsPlugin: GeoLibrePlugin = {
     unregisterPanel = null;
     removeFootprints();
     const map = app.getMap?.();
-    if (map) removeDrawBox(map);
+    if (map) {
+      removeDrawBox(map);
+      removeSelectionHighlight(map);
+    }
     appRef = null;
   },
 };
