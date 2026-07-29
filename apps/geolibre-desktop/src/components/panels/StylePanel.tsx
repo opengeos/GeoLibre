@@ -80,6 +80,7 @@ import {
   useState,
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { loadedVectorTileFeatures } from "../../hooks/useVectorTileGeometryBackfill";
 import { clamp } from "../../lib/clamp";
 import {
   getAttributePropertyNames,
@@ -1156,8 +1157,11 @@ export function StylePanel({
   // classification needs its values, so categorized and graduated styling
   // remain available without defeating tiled rendering.
   useEffect(() => {
+    const usesDuckDbVector = layer?.metadata.sourceKind === "maplibre-gl-vector";
+    const usesVectorTiles =
+      layer?.type === "vector-tiles" || layer?.type === "pmtiles" || layer?.type === "mbtiles";
     const needsValues =
-      layer?.metadata.sourceKind === "maplibre-gl-vector" &&
+      (usesDuckDbVector || usesVectorTiles) &&
       !layer.geojson &&
       (draftVectorStyleMode === "graduated" || draftVectorStyleMode === "categorized") &&
       draftVectorStyleProperty !== "";
@@ -1177,7 +1181,17 @@ export function StylePanel({
     );
     setVectorPropertyValuesLoading(true);
     setVectorPropertyValuesUnavailable(false);
-    void getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
+    const map = mapControllerRef.current?.getMap();
+    const valuesPromise = usesDuckDbVector
+      ? getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
+      : Promise.resolve(
+          map
+            ? loadedVectorTileFeatures(map, layer)
+                .map((feature) => feature.properties?.[draftVectorStyleProperty])
+                .filter((value) => value !== null && value !== undefined)
+            : null,
+        );
+    void valuesPromise
       .then((values) => {
         if (cancelled) return;
         if (values === null) {
@@ -1216,7 +1230,6 @@ export function StylePanel({
   useEffect(() => {
     if (
       !layer ||
-      layer.metadata.sourceKind !== "maplibre-gl-vector" ||
       !loadedVectorPropertyValues ||
       loadedVectorPropertyValues.layerId !== layer.id ||
       loadedVectorPropertyValues.property !== draftVectorStyleProperty ||
@@ -1540,7 +1553,12 @@ export function StylePanel({
     draftExtrusionHeightProperty,
   )
     ? extrusionHeightPropertyOptions
-    : [draftExtrusionHeightProperty, ...extrusionHeightPropertyOptions].filter(Boolean);
+    : extrusionHeightPropertyOptions;
+  const defaultExtrusionHeightProperty = extrusionHeightPropertyOptions.includes(
+    draftExtrusionHeightProperty,
+  )
+    ? draftExtrusionHeightProperty
+    : (extrusionHeightPropertyOptions[0] ?? "");
   const currentVectorStops = styleValue(style, "vectorStyleStops");
   const vectorStyleSettingsChanged =
     draftVectorStyleMode !== styleValue(style, "vectorStyleMode") ||
@@ -4217,9 +4235,11 @@ export function StylePanel({
                     checked={extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setVectorStyleError(null);
+                      setDraftExtrusionHeightProperty(defaultExtrusionHeightProperty);
                       setLayerStyle(layer.id, {
                         extrusionEnabled: true,
                         elevation3dEnabled: false,
+                        extrusionHeightProperty: defaultExtrusionHeightProperty,
                       });
                     }}
                   />
