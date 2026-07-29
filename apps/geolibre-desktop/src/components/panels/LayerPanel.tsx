@@ -602,6 +602,7 @@ export function LayerPanel({
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  const [metadataCopied, setMetadataCopied] = useState(false);
   // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
   // metadata dialog is open. The store layer does not carry them, so they are
   // read from the file on open (#1420): "loading" while the header is being
@@ -799,6 +800,23 @@ export function LayerPanel({
   // under the new layer's name.
   const metadataRasterInfo =
     rasterInfoState && rasterInfoState.layerId === metadataLayer?.id ? rasterInfoState : null;
+  const metadataJson = metadataLayer
+    ? JSON.stringify(
+        layerMetadataPayload(
+          metadataLayer,
+          metadataRasterInfo?.status === "ready" ? metadataRasterInfo.info : null,
+        ),
+        null,
+        2,
+      )
+    : "";
+  const copyMetadata = useCallback(() => {
+    if (!metadataJson) return;
+    void navigator.clipboard
+      ?.writeText(metadataJson)
+      .then(() => setMetadataCopied(true))
+      .catch(() => setMetadataCopied(false));
+  }, [metadataJson]);
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
     : null;
@@ -3555,7 +3573,10 @@ export function LayerPanel({
       <Dialog
         open={!!metadataLayer}
         onOpenChange={(open: boolean) => {
-          if (!open) setMetadataLayer(null);
+          if (!open) {
+            setMetadataLayer(null);
+            setMetadataCopied(false);
+          }
         }}
       >
         <DialogContent
@@ -3603,6 +3624,12 @@ export function LayerPanel({
             </DialogTitle>
             <DialogDescription>{t("layers.metadataDialogDescription")}</DialogDescription>
           </DialogHeader>
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={copyMetadata}>
+              <Copy className="h-4 w-4" />
+              {metadataCopied ? t("attributeStats.copiedToClipboard") : t("attributeStats.copy")}
+            </Button>
+          </div>
           {metadataRasterInfo && metadataRasterInfo.status !== "ready" && (
             <p className="text-xs text-muted-foreground">
               {metadataRasterInfo.status === "loading"
@@ -3610,20 +3637,14 @@ export function LayerPanel({
                 : t("layers.metadataRasterError")}
             </p>
           )}
-          {/* Capped at a readable height until the user resizes the dialog,
-              after which the payload fills whatever height they chose. */}
-          <ScrollArea className={cn("min-h-0", metadataDialogSize ? "flex-1" : "max-h-80")}>
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              {metadataLayer &&
-                JSON.stringify(
-                  layerMetadataPayload(
-                    metadataLayer,
-                    metadataRasterInfo?.status === "ready" ? metadataRasterInfo.info : null,
-                  ),
-                  null,
-                  2,
-                )}
-            </pre>
+          {/* A definite initial height lets Radix measure overflow on first
+              layout; max-height alone left its viewport unconstrained until
+              the resize handle caused a second measurement. */}
+          <ScrollArea
+            type="auto"
+            className={cn("min-h-0", metadataDialogSize ? "flex-1" : "h-80 shrink-0")}
+          >
+            <pre className="whitespace-pre-wrap break-all text-xs">{metadataJson}</pre>
           </ScrollArea>
         </DialogContent>
       </Dialog>
