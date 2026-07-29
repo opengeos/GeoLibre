@@ -104,12 +104,12 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                   position === activeIndex && "bg-accent",
                 )}
                 onMouseEnter={() => setActiveIndex(position)}
-                // mousedown, so the choice lands before the outside-click
-                // handler or the search box's blur can close the panel.
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  choose(entry);
-                }}
+                // click, not mousedown: these are real buttons, so a keyboard
+                // user who tabs onto a row can activate it with Enter/Space,
+                // which fires click and not mousedown. Nothing closes the panel
+                // on pointerdown inside it, so the click still lands.
+                onClick={() => choose(entry)}
+                onFocus={() => setActiveIndex(position)}
               >
                 <span>{entry.name}</span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{entry.code}</span>
@@ -147,6 +147,14 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
         <div
           ref={panelRef}
           className="absolute top-full z-30 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+          // On the panel rather than the search box, so Escape dismisses it from
+          // anywhere inside, including a row a keyboard user has tabbed onto.
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              close();
+            }
+          }}
         >
           <div className="relative border-b p-1.5">
             <Search
@@ -181,9 +189,6 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                   event.preventDefault();
                   const entry = ordered[activeIndex];
                   if (entry) choose(entry);
-                } else if (event.key === "Escape") {
-                  event.preventDefault();
-                  close();
                 }
               }}
             />

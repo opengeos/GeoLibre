@@ -62,6 +62,11 @@ describe("parseEpsgCode", () => {
     assert.equal(parseEpsgCode("326"), null);
     assert.equal(parseEpsgCode("WGS 84"), null);
     assert.equal(parseEpsgCode(undefined), null);
+    // Unrelated text that merely ends in digits must not resolve, or the picker
+    // would show a confident-looking CRS name for something the user is still
+    // typing.
+    assert.equal(parseEpsgCode("layer4326"), null);
+    assert.equal(parseEpsgCode("EPSG:4326 and more"), null);
   });
 });
 

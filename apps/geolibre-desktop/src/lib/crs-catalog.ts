@@ -247,9 +247,16 @@ export function crsEntryForCode(code: number | string | null | undefined): CrsEn
  */
 export function parseEpsgCode(value: string | null | undefined): number | null {
   if (value === null || value === undefined) return null;
+  // Strip an authority prefix in either the short (`EPSG:4326`) or the URN
+  // (`urn:ogc:def:crs:EPSG::4326`) form, then require what is left to be nothing
+  // but the code. Anchoring both ends is what keeps unrelated text that merely
+  // ends in digits (`layer4326`) from resolving to a CRS, which would otherwise
+  // put a confident-looking name under the field mid-typing.
   const match = String(value)
+    .trim()
     .toUpperCase()
-    .match(/(?:EPSG:+)?(\d{4,6})\s*$/);
+    .replace(/^.*EPSG:+/, "")
+    .match(/^(\d{4,6})$/);
   if (!match) return null;
   const code = Number(match[1]);
   return Number.isInteger(code) ? code : null;
