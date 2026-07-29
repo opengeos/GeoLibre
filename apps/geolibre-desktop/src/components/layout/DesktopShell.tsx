@@ -110,6 +110,7 @@ import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
 import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
+import { QuickAnalysisBanner } from "./QuickAnalysisBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
@@ -2029,6 +2030,7 @@ export function DesktopShell({
                 <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
+              <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}

@@ -1528,6 +1528,32 @@
     "viewInGoogleMaps": "ნახვა Google Maps-ში",
     "viewInGoogleEarth": "ნახვა Google Earth-ში"
   },
+  "quickAnalysis": {
+    "menu": "სწრაფი ანალიზი",
+    "bufferHere": "{{distance}} ბუფერი აქ",
+    "bufferFeatures": "ყველა ობიექტის {{distance}} ბუფერი",
+    "driveTimeHere": "მანქანით მგზავრობის დრო აქედან ({{contours}} წთ)",
+    "walkTimeHere": "ფეხით სიარულის დრო აქედან ({{contours}} წთ)",
+    "centroids": "ცენტროიდები",
+    "convexHull": "ამოზნექილი გარსი",
+    "boundingBox": "შემომსაზღვრელი ბლოკი",
+    "openInProcessing": "გახსნა დამუშავებაში…",
+    "bufferLayerName": "ბუფერი {{distance}}",
+    "bufferOfLayerName": "{{name}} ბუფერი {{distance}}",
+    "driveTimeLayerName": "მანქანით მგზავრობის დრო",
+    "walkTimeLayerName": "ფეხით სიარულის დრო",
+    "centroidsLayerName": "{{name}} ცენტროიდები",
+    "convexHullLayerName": "{{name}} ამოზნექილი გარსი",
+    "boundingBoxLayerName": "{{name}} შემომსაზღვრელი ბლოკი",
+    "running": "მიმდინარეობს {{tool}}…",
+    "failed": "{{tool}} ვერ შესრულდა",
+    "viewDetails": "დეტალების ნახვა",
+    "unit": {
+      "meters": "მ",
+      "kilometers": "კმ",
+      "miles": "მილი"
+    }
+  },
   "knowledgeCard": {
     "title": "ადგილის ინფორმაცია",
     "loading": "მიმდინარეობს ამ ადგილის ძებნა…",
@@ -4046,6 +4072,13 @@
       "errorCategorizedStops": "კატეგორიზებული სტილი მოითხოვს სულ მცირე ერთ კატეგორიას.",
       "invertedFill": "ინვერსიული შევსება",
       "invertedFillHint": "ობიექტების გარეთ შევსება"
+    },
+    "suggestions": {
+      "title": "სტილის შემოთავაზებები",
+      "dismiss": "შემოთავაზებების დახურვა",
+      "categorize": "კატეგორიზაცია {{field}}-ის მიხედვით",
+      "graduate": "გრადაცია {{field}}-ის მიხედვით",
+      "heatmap": "სითბოს რუკა"
     },
     "selectLayerHint": "აირჩიეთ შრე მისი სტილის რედაქტირებისთვის.",
     "layerOrderDefault": "შრეების რიგი (ნაგულისხმევი)",

@@ -1528,6 +1528,32 @@
     "viewInGoogleMaps": "Voir dans Google Maps",
     "viewInGoogleEarth": "Voir dans Google Earth"
   },
+  "quickAnalysis": {
+    "menu": "Analyse rapide",
+    "bufferHere": "Zone tampon de {{distance}} ici",
+    "bufferFeatures": "Zone tampon de {{distance}} sur toutes les entités",
+    "driveTimeHere": "Temps de trajet en voiture depuis ici ({{contours}} min)",
+    "walkTimeHere": "Temps de marche depuis ici ({{contours}} min)",
+    "centroids": "Centroïdes",
+    "convexHull": "Enveloppe convexe",
+    "boundingBox": "Boîte englobante",
+    "openInProcessing": "Ouvrir dans Traitement…",
+    "bufferLayerName": "Zone tampon {{distance}}",
+    "bufferOfLayerName": "{{name}} zone tampon {{distance}}",
+    "driveTimeLayerName": "Temps de trajet en voiture",
+    "walkTimeLayerName": "Temps de marche",
+    "centroidsLayerName": "{{name}} centroïdes",
+    "convexHullLayerName": "{{name}} enveloppe convexe",
+    "boundingBoxLayerName": "{{name}} boîte englobante",
+    "running": "Exécution de {{tool}}…",
+    "failed": "Échec de {{tool}}",
+    "viewDetails": "Voir les détails",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "mi"
+    }
+  },
   "knowledgeCard": {
     "title": "Infos sur le lieu",
     "loading": "Recherche de ce lieu…",
@@ -4046,6 +4072,13 @@
       "errorCategorizedStops": "Le style catégorisé nécessite au moins une catégorie.",
       "invertedFill": "Remplissage inversé",
       "invertedFillHint": "Remplir hors des entités"
+    },
+    "suggestions": {
+      "title": "Suggestions de style",
+      "dismiss": "Masquer les suggestions",
+      "categorize": "Catégoriser par {{field}}",
+      "graduate": "Graduer par {{field}}",
+      "heatmap": "Carte de chaleur"
     },
     "selectLayerHint": "Sélectionnez une couche pour modifier son style.",
     "layerOrderDefault": "Ordre des couches (par défaut)",

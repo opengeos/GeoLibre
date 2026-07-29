@@ -1528,6 +1528,32 @@
     "viewInGoogleMaps": "Google Maps में देखें",
     "viewInGoogleEarth": "Google Earth में देखें"
   },
+  "quickAnalysis": {
+    "menu": "त्वरित विश्लेषण",
+    "bufferHere": "यहाँ {{distance}} का बफर",
+    "bufferFeatures": "सभी फ़ीचर पर {{distance}} का बफर",
+    "driveTimeHere": "यहाँ से गाड़ी का समय ({{contours}} मिनट)",
+    "walkTimeHere": "यहाँ से पैदल का समय ({{contours}} मिनट)",
+    "centroids": "केन्द्रक",
+    "convexHull": "उत्तल पिंड (Convex hull)",
+    "boundingBox": "बाउंडिंग बॉक्स",
+    "openInProcessing": "प्रोसेसिंग में खोलें…",
+    "bufferLayerName": "बफर {{distance}}",
+    "bufferOfLayerName": "{{name}} बफर {{distance}}",
+    "driveTimeLayerName": "गाड़ी का समय",
+    "walkTimeLayerName": "पैदल का समय",
+    "centroidsLayerName": "{{name}} केन्द्रक",
+    "convexHullLayerName": "{{name}} उत्तल पिंड",
+    "boundingBoxLayerName": "{{name}} बाउंडिंग बॉक्स",
+    "running": "{{tool}} चल रहा है…",
+    "failed": "{{tool}} विफल रहा",
+    "viewDetails": "विवरण देखें",
+    "unit": {
+      "meters": "मी",
+      "kilometers": "किमी",
+      "miles": "मील"
+    }
+  },
   "knowledgeCard": {
     "title": "स्थान जानकारी",
     "loading": "इस स्थान की खोज हो रही है…",
@@ -4046,6 +4072,13 @@
       "errorCategorizedStops": "वर्गीकृत शैली के लिए कम से कम एक श्रेणी आवश्यक है।",
       "invertedFill": "उलटा भराव",
       "invertedFillHint": "आकृतियों के बाहर भरें"
+    },
+    "suggestions": {
+      "title": "शैली सुझाव",
+      "dismiss": "सुझाव बंद करें",
+      "categorize": "{{field}} के अनुसार वर्गीकृत करें",
+      "graduate": "{{field}} के अनुसार श्रेणीबद्ध करें",
+      "heatmap": "हीटमैप"
     },
     "selectLayerHint": "इसकी शैली संपादित करने के लिए एक लेयर चुनें।",
     "layerOrderDefault": "लेयर क्रम (डिफ़ॉल्ट)",

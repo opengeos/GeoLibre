@@ -137,6 +137,7 @@ import {
   RefreshCw,
   Save,
   Shuffle,
+  Sparkles,
   SquareDashed,
   SquareFunction,
   SquarePen,
@@ -168,6 +169,12 @@ import {
   isSqlQueryLayer,
   refreshSqlQueryLayer,
 } from "../../lib/sql-query-layer";
+import {
+  bufferPresetsFor,
+  formatBufferDistance,
+  runQuickAnalysis,
+  type QuickBufferPreset,
+} from "../../lib/quick-analysis";
 import { requestSqlWorkspaceQuery } from "../../lib/sql-workspace-prefill";
 import { canExportRasterLayer, exportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { readRasterInfo, type RasterInfo } from "../../lib/raster-info";
@@ -535,7 +542,7 @@ export function LayerPanel({
   onCollapsedChange,
   hideOwnRail = false,
 }: LayerPanelProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const isBeginnerProfile = useDesktopSettingsStore(
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
@@ -664,6 +671,31 @@ export function LayerPanel({
   // owner applies so every existing call site keeps working.
   const isControlled = controlledCollapsed !== undefined;
   const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
+  // Quick analysis (#1523): run an existing vector tool over a whole layer from
+  // its actions menu, with defaults filled in. No new algorithms — each entry
+  // dispatches the same tool the Processing dialog would, so the run shows up in
+  // the Processing History panel and can be re-run or copied as Python there.
+  const quickScaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
+  const quickBufferPresets = useMemo(() => bufferPresetsFor(quickScaleUnit), [quickScaleUnit]);
+  const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
+
+  const formatQuickDistance = useCallback(
+    (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
+    [i18n.language, t],
+  );
+
+  const runLayerQuickTool = useCallback(
+    (layer: GeoLibreLayer, toolId: string, parameters: Record<string, unknown>, name: string) => {
+      void runQuickAnalysis({
+        toolId,
+        parameters: { layer: layer.id, ...parameters },
+        resultName: name,
+        mapControllerRef,
+      });
+    },
+    [mapControllerRef],
+  );
+
   const setIsCollapsed = useCallback(
     (value: boolean) => {
       if (isControlled) onCollapsedChange?.(value);
@@ -2917,6 +2949,82 @@ export function LayerPanel({
                               <TableProperties className="me-2 h-3.5 w-3.5" />
                               {t("layers.openAttributeTable")}
                             </DropdownMenuItem>
+                          )}
+                          {canSelectFeatures && (
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <Sparkles className="h-3.5 w-3.5" />
+                                {t("quickAnalysis.menu")}
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                {quickBufferPresets.map((preset) => (
+                                  <DropdownMenuItem
+                                    key={`${preset.distance}-${preset.units}`}
+                                    onSelect={() =>
+                                      runLayerQuickTool(
+                                        layer,
+                                        "buffer",
+                                        { distance: preset.distance, units: preset.units },
+                                        t("quickAnalysis.bufferOfLayerName", {
+                                          name: layer.name,
+                                          distance: formatQuickDistance(preset),
+                                        }),
+                                      )
+                                    }
+                                  >
+                                    {t("quickAnalysis.bufferFeatures", {
+                                      distance: formatQuickDistance(preset),
+                                    })}
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    runLayerQuickTool(
+                                      layer,
+                                      "centroids",
+                                      {},
+                                      t("quickAnalysis.centroidsLayerName", { name: layer.name }),
+                                    )
+                                  }
+                                >
+                                  {t("quickAnalysis.centroids")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    runLayerQuickTool(
+                                      layer,
+                                      "convex-hull",
+                                      {},
+                                      t("quickAnalysis.convexHullLayerName", { name: layer.name }),
+                                    )
+                                  }
+                                >
+                                  {t("quickAnalysis.convexHull")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    runLayerQuickTool(
+                                      layer,
+                                      "bounding-box",
+                                      {},
+                                      t("quickAnalysis.boundingBoxLayerName", { name: layer.name }),
+                                    )
+                                  }
+                                >
+                                  {t("quickAnalysis.boundingBox")}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    selectLayer(layer.id);
+                                    setVectorToolOpen("buffer");
+                                  }}
+                                >
+                                  {t("quickAnalysis.openInProcessing")}
+                                </DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
                           )}
                           {canSelectFeatures && (
                             <>

@@ -1528,6 +1528,32 @@
     "viewInGoogleMaps": "Weergeven in Google Maps",
     "viewInGoogleEarth": "Weergeven in Google Earth"
   },
+  "quickAnalysis": {
+    "menu": "Snelle analyse",
+    "bufferHere": "Hier een buffer van {{distance}}",
+    "bufferFeatures": "Alle objecten met {{distance}} bufferen",
+    "driveTimeHere": "Rijtijd vanaf hier ({{contours}} min)",
+    "walkTimeHere": "Looptijd vanaf hier ({{contours}} min)",
+    "centroids": "Zwaartepunten",
+    "convexHull": "Convexe romp",
+    "boundingBox": "Begrenzingskader",
+    "openInProcessing": "Openen in Verwerking…",
+    "bufferLayerName": "Buffer {{distance}}",
+    "bufferOfLayerName": "{{name}} buffer {{distance}}",
+    "driveTimeLayerName": "Rijtijd",
+    "walkTimeLayerName": "Looptijd",
+    "centroidsLayerName": "{{name}} zwaartepunten",
+    "convexHullLayerName": "{{name}} convexe romp",
+    "boundingBoxLayerName": "{{name}} begrenzingskader",
+    "running": "{{tool}} wordt uitgevoerd…",
+    "failed": "{{tool}} mislukt",
+    "viewDetails": "Details bekijken",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "mi"
+    }
+  },
   "knowledgeCard": {
     "title": "Plaatsinfo",
     "loading": "Deze plaats opzoeken…",
@@ -4046,6 +4072,13 @@
       "errorCategorizedStops": "Gecategoriseerde stijl vereist minstens één categorie.",
       "invertedFill": "Omgekeerde vulling",
       "invertedFillHint": "Buiten objecten vullen"
+    },
+    "suggestions": {
+      "title": "Stijlsuggesties",
+      "dismiss": "Suggesties verbergen",
+      "categorize": "Categoriseren op {{field}}",
+      "graduate": "Gradueren op {{field}}",
+      "heatmap": "Heatmap"
     },
     "selectLayerHint": "Selecteer een laag om de stijl ervan te bewerken.",
     "layerOrderDefault": "Laagvolgorde (standaard)",

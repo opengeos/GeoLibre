@@ -1606,6 +1606,32 @@
     "viewInGoogleMaps": "Открыть в Google Maps",
     "viewInGoogleEarth": "Открыть в Google Earth"
   },
+  "quickAnalysis": {
+    "menu": "Быстрый анализ",
+    "bufferHere": "Буфер {{distance}} здесь",
+    "bufferFeatures": "Буфер {{distance}} для всех объектов",
+    "driveTimeHere": "Время в пути на авто отсюда ({{contours}} мин)",
+    "walkTimeHere": "Время пешком отсюда ({{contours}} мин)",
+    "centroids": "Центроиды",
+    "convexHull": "Выпуклая оболочка",
+    "boundingBox": "Ограничивающий прямоугольник",
+    "openInProcessing": "Открыть в Обработке…",
+    "bufferLayerName": "Буфер {{distance}}",
+    "bufferOfLayerName": "{{name}} буфер {{distance}}",
+    "driveTimeLayerName": "Время в пути на авто",
+    "walkTimeLayerName": "Время пешком",
+    "centroidsLayerName": "{{name}} центроиды",
+    "convexHullLayerName": "{{name}} выпуклая оболочка",
+    "boundingBoxLayerName": "{{name}} ограничивающий прямоугольник",
+    "running": "Выполняется {{tool}}…",
+    "failed": "Не удалось выполнить {{tool}}",
+    "viewDetails": "Подробнее",
+    "unit": {
+      "meters": "м",
+      "kilometers": "км",
+      "miles": "ми"
+    }
+  },
   "knowledgeCard": {
     "title": "О месте",
     "loading": "Поиск сведений о месте…",
@@ -4180,6 +4206,13 @@
       "errorCategorizedStops": "Категоризированный стиль требует не менее одной категории.",
       "invertedFill": "Инвертированная заливка",
       "invertedFillHint": "Заливка вне объектов"
+    },
+    "suggestions": {
+      "title": "Предложения по стилю",
+      "dismiss": "Скрыть предложения",
+      "categorize": "Категоризовать по «{{field}}»",
+      "graduate": "Градуировать по «{{field}}»",
+      "heatmap": "Тепловая карта"
     },
     "selectLayerHint": "Выберите слой, чтобы изменить его стиль.",
     "layerOrderDefault": "Порядок слоёв (по умолчанию)",

@@ -1489,6 +1489,32 @@
     "viewInGoogleMaps": "在 Google 地图中查看",
     "viewInGoogleEarth": "在 Google Earth 中查看"
   },
+  "quickAnalysis": {
+    "menu": "快速分析",
+    "bufferHere": "在此创建 {{distance}} 缓冲区",
+    "bufferFeatures": "为所有要素创建 {{distance}} 缓冲区",
+    "driveTimeHere": "从此处的驾车时间（{{contours}} 分钟）",
+    "walkTimeHere": "从此处的步行时间（{{contours}} 分钟）",
+    "centroids": "质心",
+    "convexHull": "凸包",
+    "boundingBox": "边界框",
+    "openInProcessing": "在处理中打开…",
+    "bufferLayerName": "缓冲区 {{distance}}",
+    "bufferOfLayerName": "{{name}} 缓冲区 {{distance}}",
+    "driveTimeLayerName": "驾车时间",
+    "walkTimeLayerName": "步行时间",
+    "centroidsLayerName": "{{name}} 质心",
+    "convexHullLayerName": "{{name}} 凸包",
+    "boundingBoxLayerName": "{{name}} 边界框",
+    "running": "正在运行 {{tool}}…",
+    "failed": "{{tool}} 失败",
+    "viewDetails": "查看详情",
+    "unit": {
+      "meters": "米",
+      "kilometers": "千米",
+      "miles": "英里"
+    }
+  },
   "knowledgeCard": {
     "title": "地点信息",
     "loading": "正在查询此地点…",
@@ -3979,6 +4005,13 @@
       "errorCategorizedStops": "分类符号样式至少需要一个类别。",
       "invertedFill": "反转填充",
       "invertedFillHint": "填充要素外部区域"
+    },
+    "suggestions": {
+      "title": "样式建议",
+      "dismiss": "关闭建议",
+      "categorize": "按 {{field}} 分类",
+      "graduate": "按 {{field}} 分级",
+      "heatmap": "热力图"
     },
     "selectLayerHint": "选择要编辑样式的图层。",
     "layerOrderDefault": "图层顺序（默认）",

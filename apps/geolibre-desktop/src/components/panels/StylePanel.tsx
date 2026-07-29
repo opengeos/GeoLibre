@@ -1,6 +1,8 @@
 import {
   DEFAULT_LAYER_STYLE,
+  isInitialLayerStyle,
   type DiagramField,
+  type GeoLibreLayer,
   type DiagramSizeMode,
   type DiagramType,
   type ExpressionVariable,
@@ -67,8 +69,10 @@ import {
   PanelRightOpen,
   Plus,
   SlidersHorizontal,
+  Sparkles,
   SquareFunction,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -80,6 +84,7 @@ import {
   useState,
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { isMobile } from "../../lib/is-mobile";
 import { loadedVectorTileFeatures } from "../../hooks/useVectorTileGeometryBackfill";
 import { clamp } from "../../lib/clamp";
 import {
@@ -87,12 +92,15 @@ import {
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
 import {
+  chooseGraduatedProperty,
   clampClassCount,
   createCategorizedStops,
   createGraduatedStops,
   getPropertyValues,
-  numericBounds,
+  isCategoricalProperty,
+  isNumericProperty,
 } from "../../lib/vector-style-classification";
+import { buildStyleSuggestions, type StyleSuggestion } from "../../lib/style-suggestions";
 
 /**
  * Data-defined label overrides (GH #1320): one row per {@link LabelStyle}
@@ -270,6 +278,25 @@ function isPointOnlyGeoJsonLayer(layer: {
     const type = feature.geometry?.type;
     return type === "Point" || type === "MultiPoint";
   });
+}
+
+/**
+ * True when the heatmap and cluster renderers apply to a layer: a point-only
+ * core GeoJSON layer, or a point layer painted by the maplibre-gl-vector
+ * control. Shared by the panel's own gating and the style-suggestion memo, so
+ * the two cannot disagree about where a heatmap is offerable.
+ *
+ * @param pointOnly - Result of {@link isPointOnlyGeoJsonLayer}, passed in so
+ *   the caller can reuse its memoized value instead of re-scanning features.
+ */
+function supportsPointRendererFor(layer: GeoLibreLayer, pointOnly: boolean): boolean {
+  if (hasExternalDeckLayer(layer)) return false;
+  if (!hasExternalNativeLayers(layer)) return pointOnly;
+  return (
+    layer.type === "geojson" &&
+    layer.metadata.sourceKind === "maplibre-gl-vector" &&
+    layer.metadata.geometryType === "point"
+  );
 }
 
 interface GeometryFlags {
@@ -593,49 +620,6 @@ function chooseDefaultStyleProperty(
   }
 
   return currentProperty;
-}
-
-function isNumericProperty(
-  layer: Parameters<typeof getPropertyValues>[0],
-  property: string,
-): boolean {
-  const values = getPropertyValues(layer, property);
-  const numericValues = values.map((value) => Number(value)).filter(Number.isFinite);
-  return numericValues.length > 1;
-}
-
-function chooseGraduatedProperty(
-  layer: Parameters<typeof getPropertyValues>[0],
-  properties: string[],
-): string {
-  let bestProperty = "";
-  let bestScore = -1;
-
-  for (const property of properties) {
-    const values = getPropertyValues(layer, property)
-      .map((value) => Number(value))
-      .filter(Number.isFinite);
-    if (values.length < 2) continue;
-
-    const { min, max } = numericBounds(values);
-    const range = max - min;
-    const score = new Set(values).size * Math.log10(Math.max(1, range) + 1);
-    if (score > bestScore) {
-      bestProperty = property;
-      bestScore = score;
-    }
-  }
-
-  return bestProperty;
-}
-
-function isCategoricalProperty(
-  layer: Parameters<typeof getPropertyValues>[0],
-  property: string,
-): boolean {
-  const values = getPropertyValues(layer, property).map((value) => String(value));
-  const uniqueCount = new Set(values).size;
-  return uniqueCount > 1 && uniqueCount <= 12;
 }
 
 function normalizeVectorStyleStops(
@@ -979,7 +963,14 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
+  // Start collapsed on a narrow viewport *or* on a mobile platform. The viewport
+  // check alone misses the iPad: it is ~1024pt wide, so it reads as a desktop
+  // and opens Layers and Style at once, squeezing the map into a narrow strip
+  // between them. Initial state only — the user can expand the panel, and the
+  // choice sticks for the session.
+  const [internalCollapsed, setInternalCollapsed] = useState(
+    () => getIsMobileViewport() || isMobile(),
+  );
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
   // owner applies so every existing call site keeps working.
@@ -1057,6 +1048,8 @@ export function StylePanel({
     DEFAULT_LAYER_STYLE.extrusionAdvancedStyleEnabled,
   );
   const [vectorStyleError, setVectorStyleError] = useState<string | null>(null);
+  // Layers whose style suggestions the user waved off this session (#1519).
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   const [extrusionError, setExtrusionError] = useState<string | null>(null);
   const [loadedVectorPropertyValues, setLoadedVectorPropertyValues] = useState<{
     layerId: string;
@@ -1331,6 +1324,30 @@ export function StylePanel({
     () => (layer ? getGeometryFlags(layer) : { hasPoint: true, hasLine: true, hasPolygon: true }),
     [layer],
   );
+  // Style suggestions (#1519). The candidate scan reads every feature's
+  // properties, so it is memoized alongside the other per-feature scans rather
+  // than re-run on every panel render (an opacity drag, a zoom-range edit).
+  // Kept before the early returns below so the hook order stays stable.
+  //
+  // isInitialLayerStyle is the gate: a layer only gets suggestions while it
+  // still wears exactly what it was added with. The renderer mode alone would
+  // let an edited fill or a restored project keep being offered advice.
+  //
+  // Deliberately NOT keyed on `layer`: that is `layers.find(...)`, and every
+  // `updateLayer` patch (an opacity drag, a rename, a zoom-range edit) rebuilds
+  // the layer object, so a `[layer]` dependency would re-scan on exactly the
+  // interactions this memo exists to survive. The fields below are the only
+  // ones the call actually reads, and each keeps its identity across an
+  // unrelated patch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const styleSuggestions = useMemo(() => {
+    if (!layer || !isInitialLayerStyle(layer.style, layer.geojson)) return [];
+    return buildStyleSuggestions(layer, getAttributePropertyNames(layer), {
+      // Reuse the memo above rather than re-scanning: supportsPointRendererFor
+      // takes `pointOnly` precisely so the caller can.
+      supportsPointRenderer: supportsPointRendererFor(layer, isPointOnly),
+    });
+  }, [layer?.id, layer?.type, layer?.style, layer?.geojson, layer?.metadata, isPointOnly]);
   // Expression Builder inputs, memoized for stable identities: the dialog
   // memoizes its validation/preview/field-type work off these props, so fresh
   // arrays on every panel render would defeat that memoization while the
@@ -1553,15 +1570,7 @@ export function StylePanel({
     (isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer);
   const hasTextMarkerControls = layer.type === "geojson" && hasTextMarkerFeatures(layer);
   // isPointOnly is memoized above the early returns to keep hook order stable.
-  const isCoreGeoJsonPoint =
-    isPointOnly && !hasExternalNativeLayers(layer) && !hasExternalDeckLayer(layer);
-  const isVectorControlPoint =
-    hasExternalNativeLayers(layer) &&
-    !hasExternalDeckLayer(layer) &&
-    layer.type === "geojson" &&
-    layer.metadata.sourceKind === "maplibre-gl-vector" &&
-    layer.metadata.geometryType === "point";
-  const supportsPointRenderer = isCoreGeoJsonPoint || isVectorControlPoint;
+  const supportsPointRenderer = supportsPointRendererFor(layer, isPointOnly);
   // The "Sketches" layer mixes geometry types under one style, so "Circle
   // radius" only applies to its point markers and is misleading otherwise (#483).
   const isSketchLayer = layer.metadata.sourceKind === SKETCHES_SOURCE_KIND;
@@ -2141,8 +2150,95 @@ export function StylePanel({
   const markerEnabled = styleValue(style, "markerEnabled");
   const markerShape = styleValue(style, "markerShape");
 
+  // --- Style suggestions (#1519) -------------------------------------------
+  // styleSuggestions is memoized above the early returns. Dismissal is
+  // per-layer and session-scoped — this is a nudge, not project state.
+  const visibleSuggestions = dismissedSuggestions.has(layer.id) ? [] : styleSuggestions;
+
+  const applyStyleSuggestion = (suggestion: StyleSuggestion) => {
+    if (suggestion.kind === "heatmap") {
+      setLayerStyle(layer.id, { pointRenderer: "heatmap" });
+      return;
+    }
+    const mode = suggestion.kind;
+    const property = suggestion.property ?? "";
+    const classCount = normalizeVectorStyleClassCount(
+      mode,
+      DEFAULT_LAYER_STYLE.vectorStyleClassCount,
+    );
+    const classificationScheme = defaultClassificationScheme(mode);
+    // The layer's committed ramp, not the draft dropdown: a suggestion should
+    // start from the same baseline every time, not from a ramp someone left
+    // selected in the editor without applying it.
+    const colorRamp = styleValue(style, "vectorStyleColorRamp");
+    const stops = normalizeVectorStyleStops(
+      mode,
+      createDefaultStops(layer, mode, property, classCount, colorRamp, classificationScheme),
+    );
+    // A suggestion that classifies to nothing (all-null column, one distinct
+    // value) would apply an empty renderer and blank the layer — the same
+    // guard applyVectorStyleSettings uses, just silent here.
+    if (mode === "graduated" ? stops.length < 2 : stops.length === 0) return;
+
+    setDraftVectorStyleMode(mode);
+    setDraftVectorStyleProperty(property);
+    setDraftVectorStyleClassCount(classCount);
+    setDraftVectorStyleClassificationScheme(classificationScheme);
+    setDraftVectorStyleStops(stops);
+    setVectorStyleError(null);
+    setLayerStyle(layer.id, {
+      vectorStyleMode: mode,
+      vectorStyleProperty: property,
+      vectorStyleClassCount: classCount,
+      vectorStyleColorRamp: colorRamp,
+      vectorStyleClassificationScheme: classificationScheme,
+      vectorStyleStops: stops,
+    });
+  };
+
+  const suggestionLabel = (suggestion: StyleSuggestion): string =>
+    suggestion.kind === "heatmap"
+      ? t("style.suggestions.heatmap")
+      : t(
+          suggestion.kind === "categorized"
+            ? "style.suggestions.categorize"
+            : "style.suggestions.graduate",
+          { field: suggestion.property },
+        );
+
   const vectorSymbologyControls = (
     <div className="space-y-3">
+      {visibleSuggestions.length > 0 && (
+        <div className="space-y-2 rounded-md border border-dashed bg-muted/40 p-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="text-xs font-medium">{t("style.suggestions.title")}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ms-auto h-5 w-5"
+              aria-label={t("style.suggestions.dismiss")}
+              title={t("style.suggestions.dismiss")}
+              onClick={() => setDismissedSuggestions((current) => new Set(current).add(layer.id))}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {visibleSuggestions.map((suggestion) => (
+              <Button
+                key={`${suggestion.kind}-${suggestion.property ?? ""}`}
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => applyStyleSuggestion(suggestion)}
+              >
+                {suggestionLabel(suggestion)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="vectorStyleMode">{t("style.symbology.styleType")}</Label>
         <Select

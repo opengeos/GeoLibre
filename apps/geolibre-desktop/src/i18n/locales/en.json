@@ -1544,6 +1544,32 @@
     "viewInGoogleMaps": "View in Google Maps",
     "viewInGoogleEarth": "View in Google Earth"
   },
+  "quickAnalysis": {
+    "menu": "Quick analysis",
+    "bufferHere": "Buffer {{distance}} here",
+    "bufferFeatures": "Buffer all features by {{distance}}",
+    "driveTimeHere": "Drive time from here ({{contours}} min)",
+    "walkTimeHere": "Walk time from here ({{contours}} min)",
+    "centroids": "Centroids",
+    "convexHull": "Convex hull",
+    "boundingBox": "Bounding box",
+    "openInProcessing": "Open in Processing…",
+    "bufferLayerName": "Buffer {{distance}}",
+    "bufferOfLayerName": "{{name}} buffer {{distance}}",
+    "driveTimeLayerName": "Drive time",
+    "walkTimeLayerName": "Walk time",
+    "centroidsLayerName": "{{name}} centroids",
+    "convexHullLayerName": "{{name}} convex hull",
+    "boundingBoxLayerName": "{{name}} bounding box",
+    "running": "Running {{tool}}…",
+    "failed": "{{tool}} failed",
+    "viewDetails": "View details",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "mi"
+    }
+  },
   "knowledgeCard": {
     "title": "Place info",
     "loading": "Looking up this place…",
@@ -4130,6 +4156,13 @@
       "errorCategorizedStops": "Categorized style requires at least one category.",
       "invertedFill": "Inverted fill",
       "invertedFillHint": "Fill outside features"
+    },
+    "suggestions": {
+      "title": "Style suggestions",
+      "dismiss": "Dismiss suggestions",
+      "categorize": "Categorize by {{field}}",
+      "graduate": "Graduate by {{field}}",
+      "heatmap": "Heatmap"
     },
     "selectLayerHint": "Select a layer to edit its style.",
     "layerOrderDefault": "Layer order (default)",

@@ -1528,6 +1528,32 @@
     "viewInGoogleMaps": "Ver en Google Maps",
     "viewInGoogleEarth": "Ver en Google Earth"
   },
+  "quickAnalysis": {
+    "menu": "Análisis rápido",
+    "bufferHere": "Búfer de {{distance}} aquí",
+    "bufferFeatures": "Búfer de {{distance}} en todas las entidades",
+    "driveTimeHere": "Tiempo en coche desde aquí ({{contours}} min)",
+    "walkTimeHere": "Tiempo a pie desde aquí ({{contours}} min)",
+    "centroids": "Centroides",
+    "convexHull": "Envolvente convexa",
+    "boundingBox": "Cuadro delimitador",
+    "openInProcessing": "Abrir en Procesamiento…",
+    "bufferLayerName": "Búfer {{distance}}",
+    "bufferOfLayerName": "{{name}} búfer {{distance}}",
+    "driveTimeLayerName": "Tiempo en coche",
+    "walkTimeLayerName": "Tiempo a pie",
+    "centroidsLayerName": "{{name}} centroides",
+    "convexHullLayerName": "{{name}} envolvente convexa",
+    "boundingBoxLayerName": "{{name}} cuadro delimitador",
+    "running": "Ejecutando {{tool}}…",
+    "failed": "{{tool}} falló",
+    "viewDetails": "Ver detalles",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "mi"
+    }
+  },
   "knowledgeCard": {
     "title": "Información del lugar",
     "loading": "Buscando información sobre este lugar…",
@@ -4046,6 +4072,13 @@
       "errorCategorizedStops": "El estilo categorizado requiere al menos una categoría.",
       "invertedFill": "Relleno invertido",
       "invertedFillHint": "Rellenar fuera de los elementos"
+    },
+    "suggestions": {
+      "title": "Sugerencias de estilo",
+      "dismiss": "Descartar sugerencias",
+      "categorize": "Categorizar por {{field}}",
+      "graduate": "Graduar por {{field}}",
+      "heatmap": "Mapa de calor"
     },
     "selectLayerHint": "Seleccione una capa para editar su estilo.",
     "layerOrderDefault": "Orden de capas (predeterminado)",

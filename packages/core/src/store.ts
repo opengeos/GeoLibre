@@ -16,6 +16,7 @@ import {
   createEmptyProject,
   DEFAULT_PROJECT_NAME,
 } from "./project";
+import { initialLayerStyle } from "./layer-defaults";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
@@ -1490,10 +1491,13 @@ export const useAppStore = create<AppState>()(
           source: { type: "geojson" },
           visible: true,
           opacity: 1,
-          style: {
-            ...DEFAULT_LAYER_STYLE,
-            simpleStyleEnabled: hasSimpleStyleProperties(geojson),
-          },
+          // Its own palette color and geometry-appropriate sizing (#1519), so a
+          // stack of freshly added layers is legible without restyling each one.
+          style: initialLayerStyle({
+            geojson,
+            layers: get().layers,
+            overrides: { simpleStyleEnabled: hasSimpleStyleProperties(geojson) },
+          }),
           metadata: {},
           geojson,
           sourcePath,

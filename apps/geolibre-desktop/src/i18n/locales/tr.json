@@ -1528,6 +1528,32 @@
     "viewInGoogleMaps": "Google Haritalar'da görüntüle",
     "viewInGoogleEarth": "Google Earth'te görüntüle"
   },
+  "quickAnalysis": {
+    "menu": "Hızlı analiz",
+    "bufferHere": "Burada {{distance}} tampon bölge",
+    "bufferFeatures": "Tüm nesnelere {{distance}} tampon bölge",
+    "driveTimeHere": "Buradan araçla süre ({{contours}} dk)",
+    "walkTimeHere": "Buradan yürüme süresi ({{contours}} dk)",
+    "centroids": "Ağırlık merkezleri",
+    "convexHull": "Dış bükey kabuk",
+    "boundingBox": "Sınırlayıcı kutu",
+    "openInProcessing": "İşleme'de aç…",
+    "bufferLayerName": "Tampon bölge {{distance}}",
+    "bufferOfLayerName": "{{name}} tampon bölge {{distance}}",
+    "driveTimeLayerName": "Araçla süre",
+    "walkTimeLayerName": "Yürüme süresi",
+    "centroidsLayerName": "{{name}} ağırlık merkezleri",
+    "convexHullLayerName": "{{name}} dış bükey kabuk",
+    "boundingBoxLayerName": "{{name}} sınırlayıcı kutu",
+    "running": "{{tool}} çalıştırılıyor…",
+    "failed": "{{tool}} başarısız oldu",
+    "viewDetails": "Ayrıntıları görüntüle",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "mil"
+    }
+  },
   "knowledgeCard": {
     "title": "Yer bilgisi",
     "loading": "Bu yer aranıyor…",
@@ -4046,6 +4072,13 @@
       "errorCategorizedStops": "Kategorize stil en az bir kategori gerektirir.",
       "invertedFill": "Ters dolgu",
       "invertedFillHint": "Objelerin dışını doldur"
+    },
+    "suggestions": {
+      "title": "Stil önerileri",
+      "dismiss": "Önerileri kapat",
+      "categorize": "{{field}} alanına göre kategorilendir",
+      "graduate": "{{field}} alanına göre derecelendir",
+      "heatmap": "Isı haritası"
     },
     "selectLayerHint": "Stilini düzenlemek için bir katman seçin.",
     "layerOrderDefault": "Katman sırası (varsayılan)",

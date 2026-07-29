@@ -1489,6 +1489,32 @@
     "viewInGoogleMaps": "Lihat di Google Maps",
     "viewInGoogleEarth": "Lihat di Google Earth"
   },
+  "quickAnalysis": {
+    "menu": "Analisis cepat",
+    "bufferHere": "Buffer {{distance}} di sini",
+    "bufferFeatures": "Buffer semua fitur sebesar {{distance}}",
+    "driveTimeHere": "Waktu berkendara dari sini ({{contours}} mnt)",
+    "walkTimeHere": "Waktu berjalan dari sini ({{contours}} mnt)",
+    "centroids": "Sentroid",
+    "convexHull": "Convex hull",
+    "boundingBox": "Kotak pembatas",
+    "openInProcessing": "Buka di Pemrosesan…",
+    "bufferLayerName": "Buffer {{distance}}",
+    "bufferOfLayerName": "{{name}} buffer {{distance}}",
+    "driveTimeLayerName": "Waktu berkendara",
+    "walkTimeLayerName": "Waktu berjalan",
+    "centroidsLayerName": "{{name}} sentroid",
+    "convexHullLayerName": "{{name}} convex hull",
+    "boundingBoxLayerName": "{{name}} kotak pembatas",
+    "running": "Menjalankan {{tool}}…",
+    "failed": "{{tool}} gagal",
+    "viewDetails": "Lihat detail",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "mi"
+    }
+  },
   "knowledgeCard": {
     "title": "Info tempat",
     "loading": "Mencari info tempat ini…",
@@ -3979,6 +4005,13 @@
       "errorCategorizedStops": "Gaya berkategori memerlukan setidaknya satu kategori.",
       "invertedFill": "Isian terbalik",
       "invertedFillHint": "Isi di luar fitur"
+    },
+    "suggestions": {
+      "title": "Saran gaya",
+      "dismiss": "Tutup saran",
+      "categorize": "Kategorikan menurut {{field}}",
+      "graduate": "Gradasikan menurut {{field}}",
+      "heatmap": "Peta panas"
     },
     "selectLayerHint": "Pilih layer untuk mengedit gayanya.",
     "layerOrderDefault": "Urutan layer (default)",

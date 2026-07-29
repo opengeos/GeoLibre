@@ -1489,6 +1489,32 @@
     "viewInGoogleMaps": "Google Mapsで表示",
     "viewInGoogleEarth": "Google Earthで表示"
   },
+  "quickAnalysis": {
+    "menu": "クイック分析",
+    "bufferHere": "ここに {{distance}} のバッファ",
+    "bufferFeatures": "すべてのフィーチャを {{distance}} でバッファ",
+    "driveTimeHere": "ここからの車での所要時間（{{contours}} 分）",
+    "walkTimeHere": "ここからの徒歩での所要時間（{{contours}} 分）",
+    "centroids": "重心",
+    "convexHull": "凸包",
+    "boundingBox": "バウンディングボックス",
+    "openInProcessing": "プロセシングで開く…",
+    "bufferLayerName": "バッファ {{distance}}",
+    "bufferOfLayerName": "{{name}} バッファ {{distance}}",
+    "driveTimeLayerName": "車での所要時間",
+    "walkTimeLayerName": "徒歩での所要時間",
+    "centroidsLayerName": "{{name}} 重心",
+    "convexHullLayerName": "{{name}} 凸包",
+    "boundingBoxLayerName": "{{name}} バウンディングボックス",
+    "running": "{{tool}} を実行中…",
+    "failed": "{{tool}} に失敗しました",
+    "viewDetails": "詳細を表示",
+    "unit": {
+      "meters": "m",
+      "kilometers": "km",
+      "miles": "マイル"
+    }
+  },
   "knowledgeCard": {
     "title": "場所の情報",
     "loading": "この場所を調べています…",
@@ -3979,6 +4005,13 @@
       "errorCategorizedStops": "分類スタイルには少なくとも1つのカテゴリが必要です。",
       "invertedFill": "反転塗りつぶし",
       "invertedFillHint": "地物の外側を塗りつぶす"
+    },
+    "suggestions": {
+      "title": "スタイルの提案",
+      "dismiss": "提案を閉じる",
+      "categorize": "{{field}} で分類",
+      "graduate": "{{field}} で段階分け",
+      "heatmap": "ヒートマップ"
     },
     "selectLayerHint": "スタイルを編集するレイヤーを選択してください。",
     "layerOrderDefault": "レイヤー順序 (既定)",

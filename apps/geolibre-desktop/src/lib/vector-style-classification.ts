@@ -5,7 +5,7 @@ import {
   interpolateRampColors,
 } from "@geolibre/core";
 
-interface ClassifiableLayer {
+export interface ClassifiableLayer {
   geojson?: {
     features?: Array<{
       properties?: Record<string, unknown> | null;
@@ -161,4 +161,62 @@ export function createCategorizedStops(
       colors[index] ??
       CLASSIFICATION_FALLBACK_COLORS[index % CLASSIFICATION_FALLBACK_COLORS.length]!,
   }));
+}
+
+/**
+ * True when a property has at least two *distinct* finite numeric values, so a
+ * graduated classification has a range to break up.
+ *
+ * Distinct, not merely two values: a constant column yields a single class, and
+ * the Style panel then refuses to apply the renderer it was offered.
+ */
+export function isNumericProperty(layer: ClassifiableLayer, property: string): boolean {
+  const values = getPropertyValues(layer, property);
+  const numericValues = values.map((value) => Number(value)).filter(Number.isFinite);
+  return new Set(numericValues).size > 1;
+}
+
+/**
+ * Pick the numeric property that best suits a graduated renderer: the one with
+ * the most distinct values spread over the widest range, so the classes carry
+ * real information rather than splitting a near-constant column.
+ *
+ * @returns The property name, or `""` when no column qualifies.
+ */
+export function chooseGraduatedProperty(layer: ClassifiableLayer, properties: string[]): string {
+  let bestProperty = "";
+  let bestScore = -1;
+
+  for (const property of properties) {
+    const values = getPropertyValues(layer, property)
+      .map((value) => Number(value))
+      .filter(Number.isFinite);
+    // Distinct values, not just value count: a constant column cannot be split
+    // into the two stops a graduated renderer needs.
+    const distinct = new Set(values).size;
+    if (distinct < 2) continue;
+
+    const { min, max } = numericBounds(values);
+    const range = max - min;
+    const score = distinct * Math.log10(Math.max(1, range) + 1);
+    if (score > bestScore) {
+      bestProperty = property;
+      bestScore = score;
+    }
+  }
+
+  return bestProperty;
+}
+
+/** Upper bound on distinct values before a column is too fine to categorize. */
+export const MAX_CATEGORICAL_VALUES = 12;
+
+/**
+ * True when a property has between 2 and {@link MAX_CATEGORICAL_VALUES}
+ * distinct values — enough to distinguish, few enough to read as a legend.
+ */
+export function isCategoricalProperty(layer: ClassifiableLayer, property: string): boolean {
+  const values = getPropertyValues(layer, property).map((value) => String(value));
+  const uniqueCount = new Set(values).size;
+  return uniqueCount > 1 && uniqueCount <= MAX_CATEGORICAL_VALUES;
 }

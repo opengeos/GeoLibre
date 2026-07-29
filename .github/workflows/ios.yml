@@ -45,7 +45,15 @@ jobs:
     name: Build iOS app
     # Apple Silicon macOS image; ships a recent Xcode + CocoaPods. Pin the major
     # image so a runner update can't silently change the Xcode/SDK under us.
-    runs-on: macos-14
+    #
+    # macos-14 does NOT work: `tauri ios init` generates an Xcode project in
+    # object format 77, which only Xcode 16+ can open. That image's Xcode is
+    # older, so the archive died before compiling anything with:
+    #   The project 'geolibre-desktop' cannot be opened because it is in a
+    #   future Xcode project file format (77).
+    # The floor is therefore set by the Tauri CLI's generated project format,
+    # not by our own code — re-check it when the Tauri CLI is bumped.
+    runs-on: macos-15
     permissions:
       contents: write
     steps:
@@ -53,6 +61,33 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Select the newest available Xcode
+        # The image default is not trusted: it moves under us on image updates,
+        # and too-old is a hard failure (project format 77 needs Xcode 16+) while
+        # too-old-but-openable is a *silent* one — App Store Connect rejects
+        # uploads built against an SDK below its current floor, which would only
+        # surface after a full archive. Pick the newest Xcode present and record
+        # the version and SDK in the log so a rejected upload can be diagnosed
+        # from the run rather than guessed at.
+        run: |
+          set -euo pipefail
+          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$newest" ]; then
+            echo "::error::No Xcode found on the runner"
+            exit 1
+          fi
+          sudo xcode-select -s "$newest/Contents/Developer"
+
+          version="$(xcodebuild -version | head -1 | awk '{print $2}')"
+          major="${version%%.*}"
+          if [ "$major" -lt 16 ]; then
+            echo "::error::Xcode $version is too old — the generated project uses object format 77, which requires Xcode 16+. Use a newer runner image."
+            exit 1
+          fi
+          echo "::notice::Using Xcode $version at $newest"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i "iOS" || true
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -91,9 +126,10 @@ jobs:
       - name: Generate iOS project
         # gen/apple is not committed; regenerate it on the clean runner. The
         # Tauri CLI is resolved through the geolibre-desktop workspace. This also
-        # merges src-tauri/tauri.ios.conf.json (bundle id, drops the Python
-        # backend) and src-tauri/Info.ios.plist (the NSLocation usage string) into
-        # the generated Xcode project.
+        # picks up src-tauri/tauri.ios.conf.json (bundle id, drops the Python
+        # backend). src-tauri/Info.ios.plist (the NSLocation usage string) is
+        # *not* merged here — that happens during the `tauri ios build` step
+        # below, which is why regenerating the project alone never shows it.
         working-directory: apps/geolibre-desktop
         run: npx tauri ios init
 
@@ -168,49 +204,274 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: \
             -s -k "$keychain_pass" "$keychain" >/dev/null
 
-          # Install the provisioning profile where Xcode looks for it.
-          profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$profiles"
-          echo "$APPLE_IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode \
-            > "$profiles/geolibre.mobileprovision"
+          # Install the provisioning profile where Xcode looks for it. Xcode 16+
+          # reads UserData/Provisioning Profiles; older versions read the
+          # MobileDevice path. Install to both so the job is not coupled to the
+          # runner image's Xcode version.
+          profile="$RUNNER_TEMP/geolibre.mobileprovision"
+          echo "$APPLE_IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile"
 
-      - name: Build signed IPA
+          # The export step must name the profile, so read its identity out of
+          # the decoded payload rather than hardcoding a name that would silently
+          # drift from whatever profile the secret actually holds.
+          plist="$RUNNER_TEMP/profile.plist"
+          security cms -D -i "$profile" > "$plist"
+          profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$plist")"
+          profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist")"
+          rm -f "$plist"
+          echo "PROFILE_NAME=$profile_name" >> "$GITHUB_ENV"
+          echo "PROFILE_UUID=$profile_uuid" >> "$GITHUB_ENV"
+
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                     "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp "$profile" "$dir/$profile_uuid.mobileprovision"
+          done
+          rm -f "$profile"
+          echo "::notice::Installed provisioning profile '$profile_name' ($profile_uuid)."
+
+      # The archive and the export are deliberately two steps.
+      #
+      # `tauri ios build --export-method ...` cannot sign this project: the Xcode
+      # project `tauri ios init` generates bakes CODE_SIGN_IDENTITY = "iPhone
+      # Developer" into both configurations, so Xcode's automatic signing looks
+      # for an *iOS App Development* profile no matter which export method is
+      # requested — and then fails ("Your team has no devices from which to
+      # generate a provisioning profile"). Installing an App Store profile above
+      # does not help, because that changes which profile is available, not which
+      # type Xcode goes looking for. Forcing CODE_SIGN_IDENTITY="Apple
+      # Distribution" fails differently: Xcode refuses to mix an automatic
+      # signing style with a manually specified identity.
+      #
+      # Archiving unsigned sidesteps the whole resolution problem, and the export
+      # step then signs with the imported identity under an explicit *manual*
+      # style. Distribution profiles do not enumerate devices, so no device has to
+      # be registered to the team.
+      - name: Archive (unsigned)
         if: steps.signing.outputs.present == 'true'
         working-directory: apps/geolibre-desktop
         env:
-          # Tauri passes this through to the Xcode DEVELOPMENT_TEAM setting. The
-          # Team ID is account-wide, so this reuses the existing macOS/Homebrew
-          # signing secret rather than duplicating it.
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+        run: npx tauri ios build --no-sign
+
+      - name: Stamp a unique build number
+        if: steps.signing.outputs.present == 'true'
+        # App Store Connect permanently consumes a CFBundleVersion per marketing
+        # version, so every upload needs a new one. CFBundleVersion here would
+        # otherwise be the tauri.conf.json version (2.4.0) on every run, and the
+        # second upload of a given version would be refused.
+        #
+        # This is NOT done with `tauri ios build --build-number`: that *appends*
+        # to the version, yielding e.g. "2.4.0.42" — four components, while
+        # CFBundleVersion may contain at most three period-separated integers.
+        # App Store Connect rejects that at upload (ITMS-90060), so the flag is
+        # unusable here. Stamping the archive instead keeps the value inside the
+        # three-component budget while rising forever.
+        #
+        # GITHUB_RUN_NUMBER alone is not enough: it is fixed for the lifetime of
+        # a run, so re-running a run that already produced an uploaded IPA would
+        # regenerate the same CFBundleVersion. GITHUB_RUN_ATTEMPT is appended on
+        # re-runs (attempt 1 is left bare so the common case stays a single
+        # integer), giving e.g. "42" then "42.2" — still at most three
+        # components, and ordered the way App Store Connect compares them.
+        #
+        # Apple also requires each upload to sort *above* the last one consumed
+        # for the same marketing version. The one hand-uploaded 2.4.0 build used
+        # CFBundleVersion 2.4.0, and dotted-integer comparison makes any run
+        # number from 3 up ("N" reads as N.0.0) beat it. The counter is already
+        # past that, so it only ever climbs from here.
+        #
+        # Safe to edit the archive at this point: it was built unsigned, and the
+        # export step below is what signs it, so the seal is computed over this
+        # plist rather than invalidated by it. CFBundleShortVersionString — the
+        # version users actually see — is deliberately left alone.
+        run: |
+          set -euo pipefail
+          gen="apps/geolibre-desktop/src-tauri/gen/apple"
+          # `|| true` so a missing directory falls through to the check below:
+          # find exits non-zero, and under pipefail that would otherwise abort
+          # the step with a bare failure instead of the message underneath.
+          archive="$(find "$gen/build" -maxdepth 1 -name '*.xcarchive' | head -1 || true)"
+          if [ -z "$archive" ]; then
+            echo "::error::No .xcarchive produced under $gen/build"
+            exit 1
+          fi
+          app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1 || true)"
+          if [ -z "$app" ]; then
+            echo "::error::No .app inside $archive"
+            exit 1
+          fi
+
+          build="$GITHUB_RUN_NUMBER"
+          if [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
+            build="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT"
+          fi
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$app/Info.plist"
+          # Keep the archive's own summary metadata consistent; not fatal if the
+          # key is absent in a future Xcode's archive layout.
+          /usr/libexec/PlistBuddy -c "Set :ApplicationProperties:CFBundleVersion $build" \
+            "$archive/Info.plist" 2>/dev/null || true
+
+          short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
+          echo "::notice::Version $short, build $build"
+          # Handed to the verify step so it asserts against what was actually
+          # stamped rather than recomputing it and agreeing with itself.
+          echo "IOS_BUILD_NUMBER=$build" >> "$GITHUB_ENV"
+          echo "IOS_SHORT_VERSION=$short" >> "$GITHUB_ENV"
+
+      - name: Export signed IPA
+        if: steps.signing.outputs.present == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # Passed via env, not interpolated into the run script, so a workflow
           # context expression can't be injected into the shell.
           EXPORT_METHOD: ${{ github.event.inputs.export_method || 'app-store-connect' }}
         run: |
-          npx tauri ios build --export-method "$EXPORT_METHOD"
+          set -euo pipefail
+          gen="apps/geolibre-desktop/src-tauri/gen/apple"
 
-      - name: Verify built bundle id
+          archive="$(find "$gen/build" -maxdepth 1 -name '*.xcarchive' | head -1)"
+          if [ -z "$archive" ]; then
+            echo "::error::No .xcarchive produced under $gen/build"
+            exit 1
+          fi
+
+          # The signing certificate has to match the profile type the export
+          # method implies, or xcodebuild fails deep inside the export with an
+          # opaque error.
+          if [ "$EXPORT_METHOD" = "debugging" ]; then
+            cert="Apple Development"
+          else
+            cert="Apple Distribution"
+          fi
+
+          # Built with PlistBuddy rather than a heredoc so the values are encoded
+          # by a plist writer instead of pasted into raw XML. PROFILE_NAME comes
+          # from the Developer portal and is free text: a display name like
+          # "GeoLibre R&D" would produce malformed XML by string interpolation,
+          # and xcodebuild would reject the options file with an unhelpful parse
+          # error rather than pointing at the name.
+          opts="$RUNNER_TEMP/ExportOptions.plist"
+          rm -f "$opts"
+          plutil -create xml1 "$opts"
+          /usr/libexec/PlistBuddy \
+            -c "Add :method string $EXPORT_METHOD" \
+            -c "Add :teamID string $APPLE_TEAM_ID" \
+            -c "Add :signingStyle string manual" \
+            -c "Add :signingCertificate string $cert" \
+            -c "Add :uploadSymbols bool true" \
+            -c "Add :provisioningProfiles dict" \
+            -c "Add :provisioningProfiles:$EXPECTED_BUNDLE_ID string $PROFILE_NAME" \
+            "$opts"
+          plutil -lint "$opts"
+
+          # Carried to the verify step so it can assert the *shipped* signature
+          # matches the certificate this export actually asked for.
+          echo "SIGNING_CERT=$cert" >> "$GITHUB_ENV"
+
+          # APPLE_IOS_PROVISIONING_PROFILE_BASE64 must hold a *manually managed*
+          # profile created in the Developer portal. An Xcode-managed one (the
+          # kind Xcode generates itself, named "iOS Team Store Provisioning
+          # Profile: ...") is rejected here with:
+          #   Provisioning profile "..." is Xcode managed, but signing settings
+          #   require a manually managed profile.
+          # Likewise the .p12 must be an Apple Distribution certificate; a
+          # cloud-managed signing identity is not exportable and will surface as
+          # 'No signing certificate "iOS Distribution" found'.
+          #
+          # No -allowProvisioningUpdates: signing assets come from the secrets,
+          # and the runner has no Apple account session to create them with. If
+          # something is missing this must fail loudly rather than silently
+          # reach out to Apple.
+          xcodebuild -exportArchive \
+            -archivePath "$archive" \
+            -exportOptionsPlist "$opts" \
+            -exportPath "$gen/build/export"
+
+      - name: Verify the signed IPA
         if: steps.signing.outputs.present == 'true'
         # Assert on the shipped bytes, not the config: the App Store burns the
         # bundle id from the .ipa on first upload and it can never be changed, so
         # it is checked rather than assumed (mirrors android.yml's package-id
         # gate).
+        #
+        # The path is pinned to the export directory rather than searched for.
+        # The unsigned archive step also leaves an .ipa behind (under
+        # build/arm64), so a `find ... | head -1` here could pick the *unsigned*
+        # one and upload something that cannot be submitted.
         run: |
           set -euo pipefail
-          ipa="$(find apps/geolibre-desktop/src-tauri/gen/apple -name '*.ipa' | head -1)"
+          gen="apps/geolibre-desktop/src-tauri/gen/apple"
+          ipa="$(find "$gen/build/export" -maxdepth 1 -name '*.ipa' | head -1)"
           if [ -z "$ipa" ]; then
-            echo "::error::No .ipa produced under gen/apple"
+            echo "::error::No .ipa produced under $gen/build/export"
             exit 1
           fi
+
           workdir="$(mktemp -d)"
           unzip -o -q "$ipa" -d "$workdir"
-          plist="$(find "$workdir/Payload" -maxdepth 2 -name Info.plist | head -1)"
+          app="$(find "$workdir/Payload" -maxdepth 1 -name '*.app' | head -1)"
+          plist="$app/Info.plist"
+
           bid="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
           if [ "$bid" != "$EXPECTED_BUNDLE_ID" ]; then
             echo "::error::$ipa has bundle id '$bid', expected '$EXPECTED_BUNDLE_ID'"
             exit 1
           fi
-          echo "IPA $ipa reports bundle id $EXPECTED_BUNDLE_ID."
+
+          # An unsigned .ipa is structurally valid and passes every check above,
+          # so signing is verified explicitly — otherwise the failure surfaces at
+          # App Store Connect upload time, the most expensive place to find it.
+          # --deep because App Store validation is itself deep: without it only
+          # the outer bundle's seal is checked, and an unsigned or mismatched
+          # nested binary would pass here and still be rejected at upload.
+          if ! codesign --verify --deep --strict "$app" 2>/dev/null; then
+            echo "::error::$ipa failed codesign verification"
+            exit 1
+          fi
+
+          # Asserted against the certificate the export step actually requested,
+          # not merely "some Apple identity". A distribution build that came out
+          # signed for development is not submittable, and accepting either kind
+          # here would let that through to fail at upload instead.
+          authority="$(codesign -dvvv "$app" 2>&1 | grep '^Authority=' | head -1 | cut -d= -f2-)"
+          case "$authority" in
+            "$SIGNING_CERT"*) ;;
+            *)
+              echo "::error::$ipa signed by '$authority', expected '$SIGNING_CERT'"
+              exit 1
+              ;;
+          esac
+
+          if [ ! -f "$app/embedded.mobileprovision" ]; then
+            echo "::error::$ipa has no embedded provisioning profile"
+            exit 1
+          fi
+
+          # CFBundleVersion must be at most three period-separated integers or
+          # App Store Connect rejects the upload (ITMS-90060) — after the whole
+          # build. Assert the shape here, where it costs nothing.
+          build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")"
+          if ! printf '%s' "$build" | grep -qE '^[0-9]+(\.[0-9]+){0,2}$'; then
+            echo "::error::CFBundleVersion '$build' is not at most three period-separated integers; App Store Connect will reject it"
+            exit 1
+          fi
+          if [ "$build" != "$IOS_BUILD_NUMBER" ]; then
+            echo "::error::CFBundleVersion is '$build', expected the stamped '$IOS_BUILD_NUMBER'"
+            exit 1
+          fi
+
+          # The marketing version is never stamped, only carried through from
+          # tauri.conf.json — so assert it survived export unchanged rather than
+          # trusting that nothing rewrote the plist between archive and IPA.
+          short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
+          if [ "$short" != "$IOS_SHORT_VERSION" ]; then
+            echo "::error::CFBundleShortVersionString is '$short', expected '$IOS_SHORT_VERSION'"
+            exit 1
+          fi
+
+          echo "IPA $ipa: bundle id $EXPECTED_BUNDLE_ID, version $short ($build), signed by $authority."
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 
       - name: Clean up the signing keychain
@@ -220,7 +481,12 @@ jobs:
           if [ -n "${SIGNING_KEYCHAIN:-}" ] && [ -f "$SIGNING_KEYCHAIN" ]; then
             security delete-keychain "$SIGNING_KEYCHAIN" || true
           fi
-          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/geolibre.mobileprovision" || true
+          # Mirrors both install locations above, keyed by UUID. Guarded because
+          # this runs on failure too, possibly before PROFILE_UUID was set.
+          if [ -n "${PROFILE_UUID:-}" ]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision" || true
+            rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$PROFILE_UUID.mobileprovision" || true
+          fi
 
       - name: Upload signed IPA
         if: steps.signing.outputs.present == 'true'

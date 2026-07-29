@@ -389,6 +389,7 @@
 - [x] **Indicator (KPI) tiles in the Dashboard panel**: a big-number widget with count, sum, mean, min, max, or median aggregation and custom prefix and suffix, alongside the existing chart widgets
 - [x] **Editing GeoLens datasets in place**: a dataset added as GeoJSON can be redrawn with the GeoEditor or retyped in the attribute table, and the plugin's Edits section shows what changed and writes it back to the GeoLens dataset — added, moved, and deleted features become per-feature `POST`/`PUT`/`PATCH`/`DELETE` calls, with the row ids GeoLens assigns stamped back onto the layer. Private GeoLens rasters also render now, with the API key attached to exactly their tile URLs and nothing else
 - [x] Plugins can call `addZarrLayer` to use the Zarr renderer GeoLibre already ships instead of bundling their own, keep their own paint properties on custom layers so the Style panel's sliders actually do something, and expose layer groups of their own
+- [x] GeoLibre is on **[Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app)**, so Android users can install the signed, auto-updating build in one tap instead of sideloading an APK (see [Downloads](downloads.md#android-installation))
 - [x] Linux **AppImage releases now carry update information and a `.zsync`**, so AppImageUpdate, AppImageLauncher, AppManager, and AM can update the app and transfer only the blocks that changed instead of the whole download
 - [x] All 15 non-English locales are back at 100% coverage, Georgian included
 
