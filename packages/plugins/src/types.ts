@@ -425,6 +425,21 @@ export interface GeoLibreAppAPI {
    */
   activatePlugin?: (pluginId: string, state?: unknown) => Promise<boolean>;
   /**
+   * Deactivate an installed plugin, the counterpart of {@link activatePlugin}.
+   * Lets a plugin that opened another plugin's panel close it again when the
+   * reason for opening it is gone — for example a plugin that bound its layer to
+   * the Time Slider and has since unbound the last one.
+   *
+   * A plugin may not deactivate **itself**: tearing a plugin down from inside
+   * its own callback would unmount the code that is still running. Such a call
+   * returns false, mirroring how `activatePlugin` refuses to reactivate the
+   * caller.
+   *
+   * Returns true when the plugin ended up inactive, false when it is unknown,
+   * was not active, is the caller, or threw while unmounting.
+   */
+  deactivatePlugin?: (pluginId: string) => boolean;
+  /**
    * Query a bounded set of features from GeoLibre's official Overture Maps
    * PMTiles integration. The host enforces tile and feature limits.
    */

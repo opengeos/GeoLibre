@@ -568,6 +568,19 @@ Call the returned function, or `app.unregisterTemporalLayer?.(layerId)`, to drop
 
 A bound cube shares the timeline with any vector bindings and dated overlays: the track spans the union of their extents, and the widest dataset sets the stepping granularity.
 
+**Closing the dock again.** A dock that a binding opened closes itself once the last temporal layer is gone, so it never lingers over a map with no timeline. Removing the bound layer is enough; if your plugin keeps the layer and only drops its binding, clear `layer.metadata.timeBinding` as well as unregistering the adapter. A dock the *user* opened from the Plugins menu is left alone, and so is one that still has raster sources of its own or a KML `<TimeSpan>` overlay to drive.
+
+## Activating and deactivating other plugins
+
+```typescript
+await app.activatePlugin?.("maplibre-gl-time-slider");
+app.deactivatePlugin?.("maplibre-gl-time-slider");
+```
+
+`activatePlugin` takes an optional second argument, a project-state patch applied once the target is active; it resolves false when the plugin is unavailable, refuses to activate, or rejects the state. `deactivatePlugin` is its counterpart and returns true when the plugin ended up inactive.
+
+Neither may target the **calling** plugin: `activatePlugin` on yourself is meaningless, and deactivating yourself would unmount the code still on the stack. Both return false in that case.
+
 ## Custom (WebGL) layers and paint ownership
 
 `registerExternalNativeLayer` mirrors a layer the plugin added to the map itself into GeoLibre's layer store, so it appears in the Layers panel and persists with the project:

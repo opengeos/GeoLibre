@@ -90,6 +90,7 @@ import {
   usePluginRegistry,
   useProjectPluginTrust,
   useSwipeSplitViewExclusivity,
+  useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
@@ -735,6 +736,9 @@ export function DesktopShell({
   // Keep Layer Swipe and split view mutually exclusive (#844): entering a
   // multi-pane grid turns the swipe slider off.
   useSwipeSplitViewExclusivity(mapControllerRef);
+  // Close a binding-opened Time Slider once the last temporal layer is gone
+  // (#1512), so the dock does not linger over a map with no timeline.
+  useTimeSliderAutoClose(mapControllerRef);
   // Live-collaboration session. Owned here (rather than in TopToolbar) so both
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.

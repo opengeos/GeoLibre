@@ -1057,4 +1057,37 @@ describe("PluginManager plugin coordination", () => {
     assert.equal(manager.isActive("first"), true);
     assert.equal(manager.isActive("second"), true);
   });
+
+  it("lets one plugin deactivate another but never itself", () => {
+    const manager = new PluginManager();
+    const coordinatingApp = {
+      ...app,
+      deactivatePlugin: (id: string) => {
+        manager.deactivate(id, coordinatingApp);
+        return !manager.isActive(id);
+      },
+    } as GeoLibreAppAPI;
+    let closer: GeoLibreAppAPI | null = null;
+    manager.register(
+      testPlugin({
+        id: "closer",
+        activate: (scopedApp) => {
+          closer = scopedApp;
+        },
+      }),
+    );
+    manager.register(testPlugin({ id: "dock" }));
+
+    manager.activate("dock", coordinatingApp);
+    manager.activate("closer", coordinatingApp);
+    assert.ok(closer);
+
+    // Deactivating itself is refused, so the plugin that is still running is
+    // never unmounted from inside its own call.
+    assert.equal(closer!.deactivatePlugin?.("closer"), false);
+    assert.equal(manager.isActive("closer"), true);
+
+    assert.equal(closer!.deactivatePlugin?.("dock"), true);
+    assert.equal(manager.isActive("dock"), false);
+  });
 });

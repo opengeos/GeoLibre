@@ -65,7 +65,12 @@ import {
   placeholderMessage,
 } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
-import { bindTemporalLayer, createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import {
+  activateTimeSliderForBinding,
+  bindTemporalLayer,
+  createAppAPI,
+  usePluginRegistry,
+} from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
   clearFeatureSelection,
@@ -1703,9 +1708,7 @@ export function LayerPanel({
       },
       timeFilter: undefined,
     });
-    if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
-      togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
-    }
+    activateTimeSliderForBinding(mapControllerRef);
     closeBindTimeSliderDialog();
   }, [
     bindTimeSliderLayer,
@@ -1717,8 +1720,6 @@ export function LayerPanel({
     bindWindowMode,
     mapControllerRef,
     updateLayer,
-    isPluginActive,
-    togglePlugin,
     closeBindTimeSliderDialog,
     t,
   ]);
