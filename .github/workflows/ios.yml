@@ -288,12 +288,15 @@ jobs:
         run: |
           set -euo pipefail
           gen="apps/geolibre-desktop/src-tauri/gen/apple"
-          archive="$(find "$gen/build" -maxdepth 1 -name '*.xcarchive' | head -1)"
+          # `|| true` so a missing directory falls through to the check below:
+          # find exits non-zero, and under pipefail that would otherwise abort
+          # the step with a bare failure instead of the message underneath.
+          archive="$(find "$gen/build" -maxdepth 1 -name '*.xcarchive' | head -1 || true)"
           if [ -z "$archive" ]; then
             echo "::error::No .xcarchive produced under $gen/build"
             exit 1
           fi
-          app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)"
+          app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1 || true)"
           if [ -z "$app" ]; then
             echo "::error::No .app inside $archive"
             exit 1
