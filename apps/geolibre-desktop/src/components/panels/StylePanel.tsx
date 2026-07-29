@@ -2823,11 +2823,7 @@ export function StylePanel({
       : null;
   };
 
-  const rememberProportionalSeed = (
-    property: string,
-    min: number,
-    max: number,
-  ) => {
+  const rememberProportionalSeed = (property: string, min: number, max: number) => {
     seededProportionalBoundsRef.current = { key: `${layer.id}:${property}`, min, max };
   };
 
