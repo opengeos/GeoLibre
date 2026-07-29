@@ -297,17 +297,17 @@ export function NewProjectDialog({
 
               {templateLibrary.length > 0 ? (
                 <div className="space-y-2">
-                  <Label>Saved Templates</Label>
+                  <Label>{t("newProject.savedTemplates")}</Label>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {templateLibrary.map((template) => (
                       <div
                         key={template.id}
-                        className="flex items-center justify-between gap-2 rounded-md border p-2.5 text-left transition-colors hover:bg-accent"
+                        className="flex items-center justify-between gap-2 rounded-md border p-2.5 text-start transition-colors hover:bg-accent"
                       >
                         <button
                           type="button"
                           onClick={() => handleSelectTemplate(template.project, template.name)}
-                          className="flex-1 text-left"
+                          className="flex-1 text-start"
                         >
                           <p className="text-sm font-medium">{template.name}</p>
                           {template.description ? (
@@ -322,7 +322,8 @@ export function NewProjectDialog({
                           size="sm"
                           className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                           onClick={() => deleteTemplateEntry(template.id)}
-                          title="Delete template"
+                          title={t("newProject.deleteTemplate")}
+                          aria-label={t("newProject.deleteTemplate")}
                         >
                           &times;
                         </Button>

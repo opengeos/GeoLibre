@@ -9,7 +9,7 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 
@@ -26,19 +26,24 @@ export function SaveTemplateDialog({ open, onOpenChange, getProject }: SaveTempl
   const [description, setDescription] = useState("");
   const [stripDataLayers, setStripDataLayers] = useState(true);
 
+  const getProjectRef = useRef(getProject);
+  useEffect(() => {
+    getProjectRef.current = getProject;
+  });
+
   useEffect(() => {
     if (open) {
-      const { defaultProjectName } = getProject();
+      const { defaultProjectName } = getProjectRef.current();
       setName(defaultProjectName || t("template.defaultName"));
       setDescription("");
       setStripDataLayers(true);
     }
-  }, [open, getProject, t]);
+  }, [open, t]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const templateName = name.trim() || t("template.defaultName");
-    const { project } = getProject();
+    const { project } = getProjectRef.current();
     const templateProject = createProjectTemplate(project, {
       name: templateName,
       stripDataLayers,

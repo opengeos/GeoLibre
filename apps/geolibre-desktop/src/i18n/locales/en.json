@@ -177,6 +177,8 @@
     "saving": "Saving...",
     "title": "New project",
     "projectName": "Project name",
+    "savedTemplates": "Saved Templates",
+    "deleteTemplate": "Delete template",
     "basemapLabel": "Basemap",
     "create": "Create"
   },
