@@ -158,6 +158,8 @@ const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL = "https://flatgeobuf.org/test/data/UScounties.fgb";
+const BUILDING_COUNT_H3_PMTILES_SAMPLE_URL =
+  "https://data.source.coop/giswqs/opengeos/building_count_h3.pmtiles";
 const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-06-17.0/buildings.pmtiles";
 const ZARR_SAMPLE_URL =
@@ -262,7 +264,10 @@ const PMTILES_OPTIONS = {
   defaultLineColor: DEFAULT_LAYER_STYLE.strokeColor,
   defaultOpacity: 0.8,
   defaultPickable: false,
-  sampleData: [{ label: "Overture buildings", url: PMTILES_SAMPLE_URL }],
+  sampleData: [
+    { label: "Overture buildings", url: PMTILES_SAMPLE_URL },
+    { label: "H3 building counts", url: BUILDING_COUNT_H3_PMTILES_SAMPLE_URL },
+  ],
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies PMTilesLayerControlOptions;
 
