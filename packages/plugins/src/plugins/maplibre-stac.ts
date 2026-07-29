@@ -19,7 +19,6 @@ import {
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 const PANEL_ID = STAC_PLUGIN_ID;
-const FOOTPRINT_LAYER_NAME = "STAC search footprints";
 // The footprints layer is a normal store layer, so it is saved into the project
 // while `footprintLayerId` only lives for the session. This marker is how a
 // later search — or a reopened project — recognizes the layer as ours instead
@@ -64,6 +63,156 @@ const COLORMAPS = [
   "gray",
   "bone",
 ] as const;
+
+/**
+ * User-facing strings for the STAC panel. This package is framework-agnostic
+ * and cannot call react-i18next's `t()` directly, so the host pushes translated
+ * values via {@link setStacLabels} (the pattern used by `maplibre-graticule`
+ * and `maplibre-timelapse`). Defaults are English.
+ */
+export interface StacLabels {
+  title: string;
+  /** Title getter pushed by the host so the panel header re-localizes live. */
+  getTitle?: () => string;
+  footprintLayerName: string;
+  catalogSearch: string;
+  catalogSearchPlaceholder: string;
+  indexLoading: string;
+  indexUnavailable: string;
+  indexLoadFailed: string;
+  urlLabel: string;
+  connect: string;
+  connecting: string;
+  connected: string;
+  connectFailed: string;
+  selectCatalog: string;
+  noMatchingCatalogs: string;
+  catalogApiSuffix: string;
+  catalogStaticSuffix: string;
+  kindApi: string;
+  kindStatic: string;
+  collectionsHint: string;
+  limitToExtent: string;
+  bboxLabel: string;
+  bboxPlaceholder: string;
+  bboxInvalid: string;
+  drawBbox: string;
+  cancelDrawing: string;
+  clearDrawnBbox: string;
+  drawHint: string;
+  drawnBboxCleared: string;
+  mapNotReady: string;
+  startDate: string;
+  endDate: string;
+  additionalParams: string;
+  additionalInvalid: string;
+  searchItems: string;
+  clearResults: string;
+  resultsCleared: string;
+  searching: string;
+  loadingMore: string;
+  noResults: string;
+  searchFailed: string;
+  loadMore: string;
+  renderOptions: string;
+  bands: string;
+  bandsPlaceholder: string;
+  colormap: string;
+  colormapDefault: string;
+  minValue: string;
+  maxValue: string;
+  nodata: string;
+  nodataPlaceholder: string;
+  renderHint: string;
+  initialStatus: string;
+  zoom: string;
+  add: string;
+  download: string;
+  addUnsupported: string;
+  addFailed: string;
+  cogUnsupported: string;
+  showing: (count: number) => string;
+  showingOfMatched: (count: number, matched: number) => string;
+  adding: (asset: string) => string;
+  added: (asset: string) => string;
+  drawnBbox: (bbox: string) => string;
+  catalogInfo: (title: string, kind: string) => string;
+}
+
+let labels: StacLabels = {
+  title: "STAC Catalogs",
+  footprintLayerName: "STAC search footprints",
+  catalogSearch: "Find a public catalog from STAC Index",
+  catalogSearchPlaceholder: "Search catalog names…",
+  indexLoading: "Loading STAC Index…",
+  indexUnavailable: "STAC Index unavailable — enter a URL",
+  indexLoadFailed: "Could not load STAC Index",
+  urlLabel: "STAC catalog or API URL",
+  connect: "Connect",
+  connecting: "Connecting to STAC…",
+  connected: "Connected. Choose filters and search.",
+  connectFailed: "Could not connect to STAC",
+  selectCatalog: "Select a catalog…",
+  noMatchingCatalogs: "No matching catalogs",
+  catalogApiSuffix: " (API)",
+  catalogStaticSuffix: " (static)",
+  kindApi: "STAC API",
+  kindStatic: "static catalog",
+  collectionsHint: "Hold Ctrl/Cmd to select multiple collections; drag the bottom edge to resize",
+  limitToExtent: "Limit search to the current map extent",
+  bboxLabel: "Bounding box (west, south, east, north)",
+  bboxPlaceholder: "Optional; overrides map extent",
+  bboxInvalid: "Enter a valid bbox: west, south, east, north.",
+  drawBbox: "Draw bbox on map",
+  cancelDrawing: "Cancel drawing",
+  clearDrawnBbox: "Clear drawn bbox",
+  drawHint: "Click and drag on the map to draw a search bounding box.",
+  drawnBboxCleared: "Drawn bbox cleared.",
+  mapNotReady: "The map is not ready for drawing.",
+  startDate: "Start date",
+  endDate: "End date",
+  additionalParams: "Additional search parameters (JSON, STAC API only)",
+  additionalInvalid: "Additional search parameters must be a JSON object.",
+  searchItems: "Search items",
+  clearResults: "Clear results",
+  resultsCleared: "Search results cleared.",
+  searching: "Searching STAC items…",
+  loadingMore: "Loading more items…",
+  noResults: "No STAC items matched these filters.",
+  searchFailed: "STAC search failed",
+  loadMore: "Load more",
+  renderOptions: "Raster rendering options",
+  bands: "Bands",
+  bandsPlaceholder: "e.g. 1 or 1,2,3 (default: auto)",
+  colormap: "Colormap (single-band only)",
+  colormapDefault: "Renderer default",
+  minValue: "Min value",
+  maxValue: "Max value",
+  nodata: "NoData value",
+  nodataPlaceholder: "Overrides the file's NoData tag",
+  renderHint:
+    "Leave a field blank to let the renderer infer it from the GeoTIFF. " +
+    "Options apply to assets added after they change.",
+  initialStatus: "Choose a catalog from STAC Index or enter a URL.",
+  zoom: "Zoom",
+  add: "Add",
+  download: "Download",
+  addUnsupported: "Only GeoTIFF/COG and GeoJSON assets can be added to the map",
+  addFailed: "Could not add asset",
+  cogUnsupported: "This GeoLibre host cannot visualize remote GeoTIFF assets",
+  showing: (count) => `Showing ${count} items.`,
+  showingOfMatched: (count, matched) => `Showing ${count} of ${matched} items.`,
+  adding: (asset) => `Adding ${asset}…`,
+  added: (asset) => `Added ${asset} to the map.`,
+  drawnBbox: (bbox) => `Drawn bbox: ${bbox}`,
+  catalogInfo: (title, kind) => `${title} · ${kind}`,
+};
+
+/** Push translated strings from the host; rebuilds the open panel in place. */
+export function setStacLabels(next: Partial<StacLabels>): void {
+  labels = { ...labels, ...next };
+  if (panelContainer) mountPanel(panelContainer);
+}
 
 let appRef: GeoLibreAppAPI | null = null;
 // The result footprints are a first-class store layer, so they show up in the
@@ -282,7 +431,7 @@ function showFootprints(items: StacItem[]): void {
     store.updateLayer(existing.id, { geojson: data });
     return;
   }
-  footprintLayerId = store.addGeoJsonLayer(FOOTPRINT_LAYER_NAME, data);
+  footprintLayerId = store.addGeoJsonLayer(labels.footprintLayerName, data);
   store.updateLayer(footprintLayerId, {
     metadata: { sourceKind: FOOTPRINT_SOURCE_KIND },
     style: {
@@ -364,7 +513,7 @@ async function visualizeAsset(
   } else if (appRef?.addCogLayer) {
     await appRef.addCogLayer(name, asset.href, cogOptions);
   } else {
-    throw new Error("This GeoLibre host cannot visualize remote GeoTIFF assets");
+    throw new Error(labels.cogUnsupported);
   }
 }
 
@@ -375,16 +524,16 @@ function buildPanel(container: HTMLElement): () => void {
 
   const catalogSection = el("div");
   catalogSection.style.cssText = style.section;
-  const catalogSearch = field("Find a public catalog from STAC Index");
-  catalogSearch.input.placeholder = "Search catalog names…";
+  const catalogSearch = field(labels.catalogSearch);
+  catalogSearch.input.placeholder = labels.catalogSearchPlaceholder;
   const catalogSelect = el("select");
   catalogSelect.style.cssText = style.input;
-  const firstOption = el("option", "Loading STAC Index…");
+  const firstOption = el("option", labels.indexLoading);
   firstOption.value = "";
   catalogSelect.append(firstOption);
-  const urlField = field("STAC catalog or API URL", "url");
+  const urlField = field(labels.urlLabel, "url");
   urlField.input.placeholder = "https://example.org/stac/";
-  const connectButton = el("button", "Connect");
+  const connectButton = el("button", labels.connect);
   connectButton.type = "button";
   connectButton.style.cssText = style.primary;
   catalogSection.append(catalogSearch.wrap, catalogSelect, urlField.wrap, connectButton);
@@ -399,34 +548,33 @@ function buildPanel(container: HTMLElement): () => void {
   collectionSelect.size = 3;
   // Catalogs can advertise hundreds of collections, so let the list be dragged taller.
   collectionSelect.style.cssText = `${style.input}resize:vertical;overflow:auto;min-height:58px;`;
-  collectionSelect.title =
-    "Hold Ctrl/Cmd to select multiple collections; drag the bottom edge to resize";
+  collectionSelect.title = labels.collectionsHint;
   const extentRow = el("label");
   extentRow.style.cssText = style.row;
   const useExtent = el("input");
   useExtent.type = "checkbox";
   useExtent.checked = true;
-  extentRow.append(useExtent, el("span", "Limit search to the current map extent"));
-  const bboxField = field("Bounding box (west, south, east, north)");
-  bboxField.input.placeholder = "Optional; overrides map extent";
+  extentRow.append(useExtent, el("span", labels.limitToExtent));
+  const bboxField = field(labels.bboxLabel);
+  bboxField.input.placeholder = labels.bboxPlaceholder;
   const drawRow = el("div");
   drawRow.style.cssText = style.row;
-  const drawButton = el("button", "Draw bbox on map");
+  const drawButton = el("button", labels.drawBbox);
   drawButton.type = "button";
   drawButton.style.cssText = style.button;
-  const clearDrawButton = el("button", "Clear drawn bbox");
+  const clearDrawButton = el("button", labels.clearDrawnBbox);
   clearDrawButton.type = "button";
   clearDrawButton.style.cssText = style.button;
   clearDrawButton.hidden = true;
   drawRow.append(drawButton, clearDrawButton);
   const dates = el("div");
   dates.style.cssText = style.row;
-  const startField = field("Start date", "date");
-  const endField = field("End date", "date");
+  const startField = field(labels.startDate, "date");
+  const endField = field(labels.endDate, "date");
   dates.append(startField.wrap, endField.wrap);
   const additionalWrap = el("label");
   additionalWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
-  const additionalCaption = el("span", "Additional search parameters (JSON, STAC API only)");
+  const additionalCaption = el("span", labels.additionalParams);
   additionalCaption.style.cssText = style.label;
   const additionalParams = el("textarea");
   additionalParams.style.cssText = `${style.input}min-height:58px;resize:vertical;font-family:monospace;`;
@@ -435,10 +583,10 @@ function buildPanel(container: HTMLElement): () => void {
   additionalWrap.append(additionalCaption, additionalParams);
   const searchActions = el("div");
   searchActions.style.cssText = style.row;
-  const searchButton = el("button", "Search items");
+  const searchButton = el("button", labels.searchItems);
   searchButton.type = "button";
   searchButton.style.cssText = `${style.primary}flex:1 1 0;`;
-  const clearResultsButton = el("button", "Clear results");
+  const clearResultsButton = el("button", labels.clearResults);
   clearResultsButton.type = "button";
   clearResultsButton.disabled = true;
   clearResultsButton.style.cssText = `${style.button}flex:1 1 0;`;
@@ -459,17 +607,17 @@ function buildPanel(container: HTMLElement): () => void {
   const renderSection = el("details");
   renderSection.style.cssText = style.section;
   renderSection.hidden = true;
-  const renderSummary = el("summary", "Raster rendering options");
+  const renderSummary = el("summary", labels.renderOptions);
   renderSummary.style.cssText = "cursor:pointer;font-weight:600;";
-  const bandsField = field("Bands");
-  bandsField.input.placeholder = "e.g. 1 or 1,2,3 (default: auto)";
+  const bandsField = field(labels.bands);
+  bandsField.input.placeholder = labels.bandsPlaceholder;
   const colormapWrap = el("label");
   colormapWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
-  const colormapCaption = el("span", "Colormap (single-band only)");
+  const colormapCaption = el("span", labels.colormap);
   colormapCaption.style.cssText = style.label;
   const colormapSelect = el("select");
   colormapSelect.style.cssText = style.input;
-  const colormapDefault = el("option", "Renderer default");
+  const colormapDefault = el("option", labels.colormapDefault);
   colormapDefault.value = "";
   colormapSelect.append(colormapDefault);
   for (const name of COLORMAPS) {
@@ -480,16 +628,12 @@ function buildPanel(container: HTMLElement): () => void {
   colormapWrap.append(colormapCaption, colormapSelect);
   const rescaleRow = el("div");
   rescaleRow.style.cssText = style.row;
-  const vminField = field("Min value", "number");
-  const vmaxField = field("Max value", "number");
+  const vminField = field(labels.minValue, "number");
+  const vmaxField = field(labels.maxValue, "number");
   rescaleRow.append(vminField.wrap, vmaxField.wrap);
-  const nodataField = field("NoData value", "number");
-  nodataField.input.placeholder = "Overrides the file's NoData tag";
-  const renderHint = el(
-    "div",
-    "Leave a field blank to let the renderer infer it from the GeoTIFF. " +
-      "Options apply to assets added after they change.",
-  );
+  const nodataField = field(labels.nodata, "number");
+  nodataField.input.placeholder = labels.nodataPlaceholder;
+  const renderHint = el("div", labels.renderHint);
   renderHint.style.cssText = style.status;
   renderSection.append(
     renderSummary,
@@ -500,11 +644,11 @@ function buildPanel(container: HTMLElement): () => void {
     renderHint,
   );
 
-  const status = el("div", "Choose a catalog from STAC Index or enter a URL.");
+  const status = el("div", labels.initialStatus);
   status.style.cssText = style.status;
   const results = el("div");
   results.style.cssText = style.results;
-  const loadMore = el("button", "Load more");
+  const loadMore = el("button", labels.loadMore);
   loadMore.type = "button";
   loadMore.style.cssText = style.primary;
   loadMore.hidden = true;
@@ -577,7 +721,7 @@ function buildPanel(container: HTMLElement): () => void {
     loadMore.hidden = true;
     clearResultsButton.disabled = true;
     searchButton.disabled = false;
-    if (announce) setStatus("Search results cleared.");
+    if (announce) setStatus(labels.resultsCleared);
   };
 
   const renderCatalogs = (): void => {
@@ -586,11 +730,14 @@ function buildPanel(container: HTMLElement): () => void {
       .filter((entry) => !query || `${entry.title} ${entry.summary}`.toLowerCase().includes(query))
       .slice(0, 150);
     catalogSelect.innerHTML = "";
-    const prompt = el("option", filtered.length ? "Select a catalog…" : "No matching catalogs");
+    const prompt = el("option", filtered.length ? labels.selectCatalog : labels.noMatchingCatalogs);
     prompt.value = "";
     catalogSelect.append(prompt);
     for (const entry of filtered) {
-      const option = el("option", `${entry.title}${entry.isApi ? " (API)" : " (static)"}`);
+      const option = el(
+        "option",
+        `${entry.title}${entry.isApi ? labels.catalogApiSuffix : labels.catalogStaticSuffix}`,
+      );
       option.value = entry.url;
       catalogSelect.append(option);
     }
@@ -620,7 +767,7 @@ function buildPanel(container: HTMLElement): () => void {
       actions.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;align-items:center;";
       const bbox = itemBbox(item);
       if (bbox) {
-        const zoom = el("button", "Zoom");
+        const zoom = el("button", labels.zoom);
         zoom.type = "button";
         zoom.style.cssText = style.button;
         zoom.addEventListener("click", () => appRef?.fitBounds?.(bbox));
@@ -640,10 +787,10 @@ function buildPanel(container: HTMLElement): () => void {
         if (firstAddable) assetSelect.value = firstAddable[0];
         const selected = (): [string, StacAsset] =>
           assets.find(([key]) => key === assetSelect.value) ?? assets[0];
-        const add = el("button", "Add");
+        const add = el("button", labels.add);
         add.type = "button";
         add.style.cssText = style.button;
-        const download = el("button", "Download");
+        const download = el("button", labels.download);
         download.type = "button";
         download.style.cssText = style.button;
         let adding = false;
@@ -654,9 +801,7 @@ function buildPanel(container: HTMLElement): () => void {
           assetSelect.title = asset.href;
           download.title = asset.href;
           add.disabled = adding || !addable;
-          add.title = addable
-            ? asset.href
-            : "Only GeoTIFF/COG and GeoJSON assets can be added to the map";
+          add.title = addable ? asset.href : labels.addUnsupported;
         };
 
         assetSelect.addEventListener("change", syncAsset);
@@ -664,12 +809,12 @@ function buildPanel(container: HTMLElement): () => void {
           const [key, asset] = selected();
           adding = true;
           syncAsset();
-          setStatus(`Adding ${assetLabel(key, asset)}…`);
+          setStatus(labels.adding(assetLabel(key, asset)));
           try {
             await visualizeAsset(item, key, asset, cogOptions(), controller.signal);
-            setStatus(`Added ${assetLabel(key, asset)} to the map.`);
+            setStatus(labels.added(assetLabel(key, asset)));
           } catch (error) {
-            setStatus(error instanceof Error ? error.message : "Could not add asset", true);
+            setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
             adding = false;
             syncAsset();
@@ -694,7 +839,7 @@ function buildPanel(container: HTMLElement): () => void {
       values[0] >= values[2] ||
       values[1] >= values[3]
     ) {
-      throw new Error("Enter a valid bbox: west, south, east, north.");
+      throw new Error(labels.bboxInvalid);
     }
     return values as [number, number, number, number];
   };
@@ -704,7 +849,7 @@ function buildPanel(container: HTMLElement): () => void {
     if (!text) return undefined;
     const parsed = JSON.parse(text) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("Additional search parameters must be a JSON object.");
+      throw new Error(labels.additionalInvalid);
     }
     return parsed as Record<string, unknown>;
   };
@@ -714,7 +859,7 @@ function buildPanel(container: HTMLElement): () => void {
     const generation = ++searchGeneration;
     searchButton.disabled = true;
     loadMore.disabled = true;
-    setStatus(append ? "Loading more items…" : "Searching STAC items…");
+    setStatus(append ? labels.loadingMore : labels.searching);
     try {
       const selectedCollections = Array.from(collectionSelect.selectedOptions)
         .map((option) => option.value)
@@ -746,11 +891,13 @@ function buildPanel(container: HTMLElement): () => void {
       clearResultsButton.disabled = allItems.length === 0;
       setStatus(
         allItems.length
-          ? `Showing ${allItems.length}${response.matched ? ` of ${response.matched}` : ""} items.`
-          : "No STAC items matched these filters.",
+          ? response.matched
+            ? labels.showingOfMatched(allItems.length, response.matched)
+            : labels.showing(allItems.length)
+          : labels.noResults,
       );
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "STAC search failed", true);
+      setStatus(error instanceof Error ? error.message : labels.searchFailed, true);
     } finally {
       if (generation === searchGeneration) {
         searchButton.disabled = false;
@@ -766,10 +913,13 @@ function buildPanel(container: HTMLElement): () => void {
   connectButton.addEventListener("click", async () => {
     const url = urlField.input.value.trim();
     connectButton.disabled = true;
-    setStatus("Connecting to STAC…");
+    setStatus(labels.connecting);
     try {
       connection = await connectStac(url, fetch, controller.signal);
-      catalogInfo.textContent = `${connection.title} · ${connection.isApi ? "STAC API" : "static catalog"}`;
+      catalogInfo.textContent = labels.catalogInfo(
+        connection.title,
+        connection.isApi ? labels.kindApi : labels.kindStatic,
+      );
       collectionSelect.innerHTML = "";
       if (connection.collections.length) {
         for (const collection of connection.collections) {
@@ -784,12 +934,12 @@ function buildPanel(container: HTMLElement): () => void {
       searchSection.hidden = false;
       renderSection.hidden = false;
       clearSearchResults(false);
-      setStatus(connection.description || "Connected. Choose filters and search.");
+      setStatus(connection.description || labels.connected);
     } catch (error) {
       connection = null;
       searchSection.hidden = true;
       renderSection.hidden = true;
-      setStatus(error instanceof Error ? error.message : "Could not connect to STAC", true);
+      setStatus(error instanceof Error ? error.message : labels.connectFailed, true);
     } finally {
       connectButton.disabled = false;
     }
@@ -801,22 +951,22 @@ function buildPanel(container: HTMLElement): () => void {
     if (cancelDraw) {
       cancelDraw();
       cancelDraw = null;
-      drawButton.textContent = "Draw bbox on map";
+      drawButton.textContent = labels.drawBbox;
       return;
     }
-    drawButton.textContent = "Cancel drawing";
-    setStatus("Click and drag on the map to draw a search bounding box.");
+    drawButton.textContent = labels.cancelDrawing;
+    setStatus(labels.drawHint);
     cancelDraw = beginBboxDraw((bbox) => {
       cancelDraw = null;
-      drawButton.textContent = "Draw bbox on map";
+      drawButton.textContent = labels.drawBbox;
       bboxField.input.value = bbox.map((value) => value.toFixed(6)).join(", ");
       useExtent.checked = false;
       clearDrawButton.hidden = false;
-      setStatus(`Drawn bbox: ${bboxField.input.value}`);
+      setStatus(labels.drawnBbox(bboxField.input.value));
     });
     if (!cancelDraw) {
-      drawButton.textContent = "Draw bbox on map";
-      setStatus("The map is not ready for drawing.", true);
+      drawButton.textContent = labels.drawBbox;
+      setStatus(labels.mapNotReady, true);
     }
   });
   clearDrawButton.addEventListener("click", () => {
@@ -824,7 +974,7 @@ function buildPanel(container: HTMLElement): () => void {
     clearDrawButton.hidden = true;
     const map = appRef?.getMap?.();
     if (map) removeDrawBox(map);
-    setStatus("Drawn bbox cleared.");
+    setStatus(labels.drawnBboxCleared);
   });
 
   // Clicking a footprint selects the matching result card. The bbox-draw mode
@@ -858,8 +1008,8 @@ function buildPanel(container: HTMLElement): () => void {
     },
     (error) => {
       catalogSelect.innerHTML = "";
-      catalogSelect.append(el("option", "STAC Index unavailable — enter a URL"));
-      setStatus(error instanceof Error ? error.message : "Could not load STAC Index", true);
+      catalogSelect.append(el("option", labels.indexUnavailable));
+      setStatus(error instanceof Error ? error.message : labels.indexLoadFailed, true);
     },
   );
 
@@ -895,7 +1045,7 @@ export const maplibreStacCatalogsPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: "STAC Catalogs",
+        title: () => labels.getTitle?.() ?? labels.title,
         dock: "right-of-style",
         defaultWidth: 380,
         render(container) {

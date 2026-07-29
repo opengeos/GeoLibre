@@ -392,7 +392,12 @@ export {
   type OamSearchResult,
   type OpenAerialMapSearchOptions,
 } from "./plugins/openaerialmap-api";
-export { maplibreStacCatalogsPlugin, STAC_PLUGIN_ID } from "./plugins/maplibre-stac";
+export {
+  maplibreStacCatalogsPlugin,
+  setStacLabels,
+  STAC_PLUGIN_ID,
+  type StacLabels,
+} from "./plugins/maplibre-stac";
 export {
   connectStac,
   isVisualizableAsset,
