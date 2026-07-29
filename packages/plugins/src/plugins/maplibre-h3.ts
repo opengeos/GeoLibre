@@ -130,6 +130,25 @@ type H3PolygonGeometry = Polygon | MultiPolygon;
 let currentGrid: FeatureCollection<H3PolygonGeometry> = { type: "FeatureCollection", features: [] };
 let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
+let pendingRefresh: number | null = null;
+
+/**
+ * Coalesce viewport-driven rebuilds. Inertial pans emit `moveend` in bursts,
+ * and each rebuild walks up to H3_VIEWPORT_CELL_LIMIT cells on the main thread.
+ */
+function scheduleRefresh(): void {
+  if (pendingRefresh !== null) return;
+  pendingRefresh = requestAnimationFrame(() => {
+    pendingRefresh = null;
+    refresh();
+  });
+}
+
+function cancelScheduledRefresh(): void {
+  if (pendingRefresh === null) return;
+  cancelAnimationFrame(pendingRefresh);
+  pendingRefresh = null;
+}
 
 /** Reuse a font already present in the active basemap to avoid glyph 404s. */
 function pickTextFont(activeMap: MapLibreMap): string[] {
@@ -198,7 +217,14 @@ export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
     const [lat, lng] = cellToLatLng(selectedCell);
     selectedCell = latLngToCell(lat, lng, settings.resolution);
   }
-  refresh();
+  // Only the resolution changes the geometry, so a paint/layout-only edit skips
+  // rebuilding up to H3_VIEWPORT_CELL_LIMIT features.
+  if (settings.resolution !== previousResolution) {
+    refresh();
+  } else {
+    applyStyle();
+    updateSelectedSource();
+  }
   if (panelContainer) renderPanel(panelContainer);
 }
 
@@ -263,19 +289,17 @@ export function h3BoundaryGeometry(
     return { type: "Polygon", coordinates: [unwrapped] };
   }
 
-  if (max > 180) {
-    const west = clipRingAtLongitude(unwrapped, 180, true);
-    const east = clipRingAtLongitude(unwrapped, 180, false).map(
-      ([longitude, latitude]) => [longitude - 360, latitude] as [number, number],
-    );
-    return { type: "MultiPolygon", coordinates: [[west], [east]] };
-  }
-
-  const east = clipRingAtLongitude(unwrapped, -180, false);
-  const west = clipRingAtLongitude(unwrapped, -180, true).map(
-    ([longitude, latitude]) => [longitude + 360, latitude] as [number, number],
+  // A ring can graze the seam so narrowly that one side clips to nothing; an
+  // empty linear ring would be invalid GeoJSON, so drop it and emit a Polygon.
+  const seam = max > 180 ? 180 : -180;
+  const shift = max > 180 ? -360 : 360;
+  const kept = clipRingAtLongitude(unwrapped, seam, max > 180);
+  const wrapped = clipRingAtLongitude(unwrapped, seam, max <= 180).map(
+    ([longitude, latitude]) => [longitude + shift, latitude] as [number, number],
   );
-  return { type: "MultiPolygon", coordinates: [[east], [west]] };
+  const rings = [kept, wrapped].filter((ring) => ring.length >= 4);
+  if (rings.length === 1) return { type: "Polygon", coordinates: [rings[0]] };
+  return { type: "MultiPolygon", coordinates: rings.map((ring) => [ring]) };
 }
 
 /** Convert an H3 cell to a GeoJSON polygon with useful export attributes. */
@@ -426,6 +450,18 @@ function ensureLayers(): void {
   }
 }
 
+function applyStyle(): void {
+  if (!map) return;
+  ensureLayers();
+  map.setPaintProperty(FILL_LAYER_ID, "fill-color", settings.fillColor);
+  map.setPaintProperty(FILL_LAYER_ID, "fill-opacity", settings.fillOpacity);
+  map.setPaintProperty(LINE_LAYER_ID, "line-color", settings.lineColor);
+  map.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
+  map.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.lineColor);
+  map.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
+  map.setLayerZoomRange(LABEL_LAYER_ID, h3LabelMinZoom(settings.resolution), 24);
+}
+
 function refresh(): void {
   if (!map) return;
   try {
@@ -440,15 +476,8 @@ function refresh(): void {
     currentError =
       error instanceof RangeError ? labels.tooManyCells(H3_VIEWPORT_CELL_LIMIT) : String(error);
   }
-  ensureLayers();
+  applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
-  map.setPaintProperty(FILL_LAYER_ID, "fill-color", settings.fillColor);
-  map.setPaintProperty(FILL_LAYER_ID, "fill-opacity", settings.fillOpacity);
-  map.setPaintProperty(LINE_LAYER_ID, "line-color", settings.lineColor);
-  map.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
-  map.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.lineColor);
-  map.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
-  map.setLayerZoomRange(LABEL_LAYER_ID, h3LabelMinZoom(settings.resolution), 24);
   updateSelectedSource();
   if (panelContainer) renderPanel(panelContainer);
 }
@@ -563,7 +592,9 @@ function renderPanel(container: HTMLElement): void {
     const input = document.createElement("input");
     input.type = "color";
     input.value = settings[key];
-    input.addEventListener("input", () => setH3GridSettings({ [key]: input.value }));
+    // `change` (not `input`): setH3GridSettings re-renders the panel, which
+    // would destroy the picker mid-drag.
+    input.addEventListener("change", () => setH3GridSettings({ [key]: input.value }));
     row(text, input);
   }
   for (const [text, key, min, max, step] of [
@@ -714,7 +745,7 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     if (!activeMap) return false;
     map = activeMap;
     appRef = app;
-    moveHandler = () => refresh();
+    moveHandler = () => scheduleRefresh();
     clickHandler = (event) => {
       selectedCell = latLngToCell(event.lngLat.lat, event.lngLat.lng, settings.resolution);
       updateSelectedSource();
@@ -738,6 +769,7 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     app.openRightPanel?.(PANEL_ID);
   },
   deactivate: (app) => {
+    cancelScheduledRefresh();
     if (map && moveHandler) map.off("moveend", moveHandler);
     if (map && clickHandler) map.off("click", clickHandler);
     unsubscribeBasemap?.();

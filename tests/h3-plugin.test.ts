@@ -75,6 +75,10 @@ describe("H3 grid plugin helpers", () => {
     assert.ok(coordinates.every(([longitude]) => longitude >= -180 && longitude <= 180));
     for (const polygon of feature.geometry.coordinates) {
       const longitudes = polygon[0].map(([longitude]) => longitude);
+      // A side that clips to nothing must be dropped, never emitted as an
+      // empty or unclosed linear ring.
+      assert.ok(polygon[0].length >= 4);
+      assert.deepEqual(polygon[0].at(0), polygon[0].at(-1));
       assert.ok(Math.max(...longitudes) - Math.min(...longitudes) < 10);
     }
 
