@@ -5,10 +5,14 @@ v2 mobile** — no separate app. The webview UI (WKWebView) is bundled in the ap
 so the shell works offline; map tiles and the heavier engines are fetched on
 demand (same as the desktop and Android builds).
 
-> **Status: scaffolding.** The iOS config, `Info.ios.plist`, and CI workflow are
-> in place, but — unlike Android — no iOS build has been shipped yet. Everything
-> below has to be run and verified on a Mac (iOS cannot be cross-compiled from
-> Linux). Treat the first `tauri ios build` as a bring-up, not a routine build.
+> **Status: builds, unsigned; not yet shipped.** The full local pipeline has been
+> run through on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` →
+> `tauri ios build --no-sign` produces `gen/apple/build/arm64/GeoLibre.ipa` with
+> the correct bundle id (`org.geolibre.app`), the merged location usage string,
+> and the web assets embedded in the binary. What has **not** happened is a
+> *signed* build or an App Store upload — that needs the Apple Distribution
+> certificate and provisioning profile described under *Signing*. Everything
+> below still has to be run on a Mac (iOS cannot be cross-compiled from Linux).
 
 ## What works on iOS vs desktop
 
@@ -43,7 +47,7 @@ string is present.** GeoLibre supplies it in
 ```
 
 Tauri merges `Info.ios.plist` into the generated
-`gen/apple/geolibre_iOS/Info.plist` at build time. `gen/apple` is git-ignored, so
+`gen/apple/geolibre-desktop_iOS/Info.plist` at build time. `gen/apple` is git-ignored, so
 this file is the durable home for the string — the same reason Android's manifest
 permissions come from the plugin rather than a hand-edited, regenerated manifest.
 It covers all three location consumers: Field Collection, GPS Tracking, and the
@@ -74,8 +78,60 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 cd apps/geolibre-desktop
 npx tauri ios init                     # generate src-tauri/gen/apple (once)
 npx tauri ios dev                      # run in the simulator / on a tethered device
-npx tauri ios build                    # release archive → signed .ipa (needs signing, below)
+npx tauri ios build --no-sign          # unsigned .ipa + .xcarchive (no Apple account needed)
 ```
+
+> **`npx tauri ios build --export-method app-store-connect` does not work as-is.**
+> The project `tauri ios init` generates bakes `CODE_SIGN_IDENTITY = "iPhone
+> Developer"` into *both* the debug and release configurations, so Xcode resolves
+> **development** signing even when the export method is App Store. Automatic
+> development signing then demands a registered device and fails with:
+>
+> ```
+> error: Your team has no devices from which to generate a provisioning profile.
+> error: No profiles for 'org.geolibre.app' were found: Xcode couldn't find any
+>        iOS App Development provisioning profiles matching 'org.geolibre.app'.
+> ```
+>
+> Overriding `CODE_SIGN_IDENTITY="Apple Distribution"` does not help either —
+> Xcode rejects it as *"automatically signed for development, but a conflicting
+> code signing identity … has been manually specified."*
+>
+> Split the archive from the export instead. Archive **unsigned**, then let the
+> export step do the distribution signing — this needs no registered device, and
+> Xcode creates the Apple Distribution certificate, registers the App ID, and
+> generates the App Store profile on the fly:
+>
+> ```bash
+> cd apps/geolibre-desktop
+> npx tauri ios build --no-sign          # → gen/apple/build/geolibre-desktop_iOS.xcarchive
+>
+> G=src-tauri/gen/apple
+> cat > "$G/ExportOptions-appstore.plist" <<'PLIST'
+> <?xml version="1.0" encoding="UTF-8"?>
+> <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+> <plist version="1.0"><dict>
+>   <key>method</key><string>app-store-connect</string>
+>   <key>teamID</key><string>YOUR_TEAM_ID</string>
+>   <key>signingStyle</key><string>automatic</string>
+>   <key>uploadSymbols</key><true/>
+> </dict></plist>
+> PLIST
+>
+> xcodebuild -exportArchive -allowProvisioningUpdates \
+>   -archivePath "$G/build/geolibre-desktop_iOS.xcarchive" \
+>   -exportOptionsPlist "$G/ExportOptions-appstore.plist" \
+>   -exportPath "$G/build/appstore"
+> ```
+>
+> This produces a genuinely submittable `build/appstore/GeoLibre.ipa`: signed by
+> `Apple Distribution`, `get-task-allow=false`, entitlement
+> `<TEAM>.org.geolibre.app`, and an embedded *iOS Team Store Provisioning
+> Profile*. Verify with `codesign -dvvv` before uploading.
+>
+> Note the certificate Xcode creates this way is **Cloud Managed**, so it does
+> *not* appear in `security find-identity -v -p codesigning`. An empty identity
+> list is not evidence the signing failed — check the `.ipa` itself.
 
 - `gen/apple` is generated (git-ignored) and regenerated on demand. `init` also
   merges `tauri.ios.conf.json` (bundle id, drops the Python backend) and
@@ -89,8 +145,17 @@ npx tauri ios build                    # release archive → signed .ipa (needs 
 
   ```bash
   /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' \
-    src-tauri/gen/apple/geolibre_iOS/Info.plist
+    src-tauri/gen/apple/geolibre-desktop_iOS/Info.plist
   ```
+
+  The merge happens during `tauri ios build`/`dev`, **not** during `ios init` —
+  straight after `init` the generated plist does not contain the key yet, and
+  that is expected. Note also that the Xcode project, target, and plist
+  directory are named from the **Cargo package** (`geolibre-desktop` in
+  `src-tauri/Cargo.toml`), not from `productName`. The user-visible app name and
+  bundle id still come from `tauri.ios.conf.json` — they land as `PRODUCT_NAME:
+  GeoLibre` and `PRODUCT_BUNDLE_IDENTIFIER: org.geolibre.app` in the generated
+  `project.yml`.
 
 ## Signing
 
@@ -103,9 +168,22 @@ there is no debug-keystore shortcut like Android's. You need:
 3. A **provisioning profile** for the `org.geolibre.app` app id.
 4. Your **Team ID** (App Store Connect → Membership).
 
-Locally, opening `gen/apple/geolibre.xcodeproj` in Xcode once and enabling
+Locally, opening `gen/apple/geolibre-desktop.xcodeproj` in Xcode once and enabling
 "Automatically manage signing" with your team is the simplest path. For CI, the
 identity is imported from secrets (below).
+
+> **The local and CI identities are not interchangeable.** The export recipe
+> above lets Xcode create a **Cloud Managed** Apple Distribution certificate and
+> an Xcode-managed profile. Neither can be fed to CI: a cloud-managed identity
+> has no exportable private key, so there is no `.p12` to base64, and CI's
+> manual-signing export rejects an Xcode-managed profile outright
+> (*"is Xcode managed, but signing settings require a manually managed
+> profile"*). For CI you must create a **separate, manually managed** pair in the
+> Developer portal — an Apple Distribution certificate from a CSR you generate in
+> Keychain Access (so you hold the private key and can export the `.p12`), plus
+> an App Store provisioning profile for `org.geolibre.app` bound to it. Holding
+> both a cloud-managed and a manual distribution certificate at once is fine and
+> normal.
 
 ## Continuous integration
 
@@ -138,6 +216,26 @@ they're created under the **same paid Apple Developer account** at no extra cost
 add an Apple Distribution certificate and an App Store provisioning profile for
 `org.geolibre.app` in the Developer portal, and reuse the existing `APPLE_TEAM_ID`.
 
+> **The signed CI path is unproven and probably broken.** No repository has ever
+> had the `APPLE_IOS_*` secrets set, so the "Build signed IPA" step has never
+> run. It calls `npx tauri ios build --export-method "$EXPORT_METHOD"` — the
+> exact command that fails locally on the baked-in `CODE_SIGN_IDENTITY = "iPhone
+> Developer"` (see *Build*). Importing an App Store profile into the runner's
+> keychain does not change which *type* of profile Xcode's automatic signing goes
+> looking for, so the step is expected to fail the same way the first time it is
+> exercised. Fix it the same way as locally: archive with `--no-sign`, then run a
+> separate `xcodebuild -exportArchive` step. Do that before depending on a
+> release-triggered build.
+
+> **Check the runner's Xcode before relying on CI for a submission.** The job
+> pins `runs-on: macos-14` and uses whatever Xcode that image happens to default
+> to. App Store Connect rejects uploads built against an SDK older than its
+> current floor, so an image defaulting to an older Xcode will still pass the
+> compile check and still produce an `.ipa` — and then fail at upload, which is
+> the most expensive place to find out. If that happens, pin the version
+> explicitly (`maxim-lobanov/setup-xcode`) or move the job to a newer `macos-*`
+> image. A local build is unaffected; this only concerns the CI artifact.
+
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc
 registered devices, `debugging` for development).
@@ -146,7 +244,7 @@ registered devices, `debugging` for development).
 
 - **Simulator:** `npx tauri ios dev` and pick a simulator, or open the Xcode
   project and Run. No paid account needed for the simulator.
-- **Your own device:** tether it, open `gen/apple/geolibre.xcodeproj` in Xcode,
+- **Your own device:** tether it, open `gen/apple/geolibre-desktop.xcodeproj` in Xcode,
   select the device, and Run (a free Apple ID allows 7-day device signing).
 - **Testers:** distribute a signed build through **TestFlight** (upload the `.ipa`
   via Xcode Organizer or Transporter, then invite testers in App Store Connect).
@@ -177,6 +275,21 @@ onboarding.
    collected by a backend. Point the privacy policy URL at the published
    [privacy policy](privacy.md).
 6. **Age rating** questionnaire and category (Navigation or Productivity).
+7. **Export compliance.** App Store Connect asks about encryption on *every*
+   upload, and an unanswered build cannot be submitted or sent to testers. To
+   answer it once instead of per upload, add the key to
+   `src-tauri/Info.ios.plist`:
+
+   ```xml
+   <key>ITSAppUsesNonExemptEncryption</key>
+   <false/>
+   ```
+
+   `false` is the right answer only if GeoLibre's use of encryption stays
+   limited to what Apple treats as exempt — HTTPS/TLS via the system libraries
+   for tiles, geocoding, the AI assistant, and the collaboration relay. That is
+   true today, but it is a **legal declaration**, so confirm it before adding the
+   key, and revisit it if the app ever ships its own cryptography.
 
 ## Known limitations / follow-ups
 
