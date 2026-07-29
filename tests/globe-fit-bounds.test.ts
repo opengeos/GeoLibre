@@ -94,6 +94,13 @@ describe("globeSafeMaxZoom", () => {
     assert.equal(globeSafeMaxZoom([-140, 20, -50, 60], VIEWPORT, 40, 16), 16);
   });
 
+  it("leaves a tall, narrow extent to MapLibre", () => {
+    // Latitude cannot span more than 180°, and the globe fit was measured to
+    // keep a near-pole-to-pole box in frame, so height alone never triggers
+    // the cap; a whole-world extent is caught by its width instead.
+    assert.equal(globeSafeMaxZoom([-2, -85, 2, 85], VIEWPORT, 40), null);
+  });
+
   it("caps a whole-world extent", () => {
     const maxZoom = globeSafeMaxZoom([-180, -85, 180, 85], VIEWPORT, 40);
     assert.ok(maxZoom !== null && maxZoom < 1, `expected a whole-globe fit, got ${maxZoom}`);

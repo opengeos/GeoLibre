@@ -50,6 +50,13 @@ const TILE_SIZE = 512;
  * geometric limit is used rather than a viewport-tuned constant: extents in
  * that narrow band keep MapLibre's own fit, which puts only their extreme
  * east/west edges just outside the padding.
+ *
+ * Only longitude is tested. Latitude tops out at 180° of span, and the same
+ * outline sampling shows the globe fit copes with a tall, narrow extent right
+ * up to that limit: 82/84 samples in frame for a 120°-tall box, 80/84 at 160°,
+ * 76/84 at 170° (a couple of near-polar samples grazing the padding, not the
+ * data-behind-the-horizon failure). The one tall case that does break — the
+ * whole world, 46/84 — is 360° wide, so the longitude test already catches it.
  */
 const GLOBE_VISIBLE_LONGITUDE_SPAN = 180;
 
