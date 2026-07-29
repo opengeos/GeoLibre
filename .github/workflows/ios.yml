@@ -133,6 +133,16 @@ jobs:
         working-directory: apps/geolibre-desktop
         run: npx tauri ios init
 
+      - name: Sync the real app icons into the generated catalog
+        # `tauri ios init` fills the asset catalog from cargo-mobile2's *template*
+        # placeholder icon and ignores src-tauri/icons/ios. gen/apple is
+        # git-ignored and regenerated every run, so without this every build
+        # ships the placeholder — build 2.4.0 (5) reached App Store Connect that
+        # way, because a wrong icon produces no build error anywhere. The script
+        # also asserts no icon carries an alpha channel, which Apple rejects at
+        # upload rather than at build time.
+        run: ./scripts/sync-ios-app-icon.sh
+
       - name: Check for Apple signing secrets
         id: signing
         # `secrets` can't be used in a step-level `if:`, so presence is turned
