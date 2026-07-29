@@ -192,13 +192,15 @@ identity is imported from secrets (below).
 
 ## Continuous integration
 
-`.github/workflows/ios.yml` runs on `macos-14` on each published GitHub release
+`.github/workflows/ios.yml` runs on `macos-15` on each published GitHub release
 (and on demand via "Run workflow"). Because iOS can't be cross-compiled from
-Linux, this is the only mobile workflow that needs a macOS runner.
+Linux, this is the only mobile workflow that needs a macOS runner. The image is
+not free to choose — see the Xcode floor below.
 
 - **With Apple signing secrets set**, it imports the identity into a throwaway
-  keychain, archives, exports a signed `.ipa`, verifies its bundle id, and
-  uploads it as the `geolibre-ios-ipa` artifact:
+  keychain, archives **unsigned**, exports a signed `.ipa` under manual signing,
+  verifies the bundle id and the signature, and uploads it as the
+  `geolibre-ios-ipa` artifact:
   - `APPLE_IOS_CERTIFICATE_BASE64` — `base64 -i dist.p12`
   - `APPLE_IOS_CERTIFICATE_PASSWORD`
   - `APPLE_IOS_PROVISIONING_PROFILE_BASE64` — `base64 -i profile.mobileprovision`
