@@ -84,6 +84,7 @@ import {
   useState,
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { isMobile } from "../../lib/is-mobile";
 import { loadedVectorTileFeatures } from "../../hooks/useVectorTileGeometryBackfill";
 import { clamp } from "../../lib/clamp";
 import {
@@ -962,7 +963,14 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
+  // Start collapsed on a narrow viewport *or* on a mobile platform. The viewport
+  // check alone misses the iPad: it is ~1024pt wide, so it reads as a desktop
+  // and opens Layers and Style at once, squeezing the map into a narrow strip
+  // between them. Initial state only — the user can expand the panel, and the
+  // choice sticks for the session.
+  const [internalCollapsed, setInternalCollapsed] = useState(
+    () => getIsMobileViewport() || isMobile(),
+  );
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
   // owner applies so every existing call site keeps working.
