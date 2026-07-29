@@ -244,21 +244,29 @@ jobs:
             cert="Apple Distribution"
           fi
 
+          # Built with PlistBuddy rather than a heredoc so the values are encoded
+          # by a plist writer instead of pasted into raw XML. PROFILE_NAME comes
+          # from the Developer portal and is free text: a display name like
+          # "GeoLibre R&D" would produce malformed XML by string interpolation,
+          # and xcodebuild would reject the options file with an unhelpful parse
+          # error rather than pointing at the name.
           opts="$RUNNER_TEMP/ExportOptions.plist"
-          cat > "$opts" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>$EXPORT_METHOD</string>
-            <key>teamID</key><string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>signingCertificate</key><string>$cert</string>
-            <key>provisioningProfiles</key><dict>
-              <key>$EXPECTED_BUNDLE_ID</key><string>$PROFILE_NAME</string>
-            </dict>
-            <key>uploadSymbols</key><true/>
-          </dict></plist>
-          PLIST
+          rm -f "$opts"
+          plutil -create xml1 "$opts"
+          /usr/libexec/PlistBuddy \
+            -c "Add :method string $EXPORT_METHOD" \
+            -c "Add :teamID string $APPLE_TEAM_ID" \
+            -c "Add :signingStyle string manual" \
+            -c "Add :signingCertificate string $cert" \
+            -c "Add :uploadSymbols bool true" \
+            -c "Add :provisioningProfiles dict" \
+            -c "Add :provisioningProfiles:$EXPECTED_BUNDLE_ID string $PROFILE_NAME" \
+            "$opts"
+          plutil -lint "$opts"
+
+          # Carried to the verify step so it can assert the *shipped* signature
+          # matches the certificate this export actually asked for.
+          echo "SIGNING_CERT=$cert" >> "$GITHUB_ENV"
 
           # APPLE_IOS_PROVISIONING_PROFILE_BASE64 must hold a *manually managed*
           # profile created in the Developer portal. An Xcode-managed one (the
@@ -313,15 +321,23 @@ jobs:
           # An unsigned .ipa is structurally valid and passes every check above,
           # so signing is verified explicitly — otherwise the failure surfaces at
           # App Store Connect upload time, the most expensive place to find it.
-          if ! codesign --verify --strict "$app" 2>/dev/null; then
+          # --deep because App Store validation is itself deep: without it only
+          # the outer bundle's seal is checked, and an unsigned or mismatched
+          # nested binary would pass here and still be rejected at upload.
+          if ! codesign --verify --deep --strict "$app" 2>/dev/null; then
             echo "::error::$ipa failed codesign verification"
             exit 1
           fi
+
+          # Asserted against the certificate the export step actually requested,
+          # not merely "some Apple identity". A distribution build that came out
+          # signed for development is not submittable, and accepting either kind
+          # here would let that through to fail at upload instead.
           authority="$(codesign -dvvv "$app" 2>&1 | grep '^Authority=' | head -1 | cut -d= -f2-)"
           case "$authority" in
-            "Apple Distribution"*|"Apple Development"*) ;;
+            "$SIGNING_CERT"*) ;;
             *)
-              echo "::error::$ipa signed by unexpected authority '$authority'"
+              echo "::error::$ipa signed by '$authority', expected '$SIGNING_CERT'"
               exit 1
               ;;
           esac

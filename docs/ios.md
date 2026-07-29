@@ -5,14 +5,19 @@ v2 mobile** — no separate app. The webview UI (WKWebView) is bundled in the ap
 so the shell works offline; map tiles and the heavier engines are fetched on
 demand (same as the desktop and Android builds).
 
-> **Status: builds, unsigned; not yet shipped.** The full local pipeline has been
-> run through on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` →
-> `tauri ios build --no-sign` produces `gen/apple/build/arm64/GeoLibre.ipa` with
-> the correct bundle id (`org.geolibre.app`), the merged location usage string,
-> and the web assets embedded in the binary. What has **not** happened is a
-> *signed* build or an App Store upload — that needs the Apple Distribution
-> certificate and provisioning profile described under *Signing*. Everything
-> below still has to be run on a Mac (iOS cannot be cross-compiled from Linux).
+> **Status: builds and signs locally; not yet shipped.** The full pipeline has
+> been run through on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` →
+> unsigned archive → `xcodebuild -exportArchive` produces a **submittable**
+> `.ipa` — bundle id `org.geolibre.app`, signed by *Apple Distribution*,
+> `get-task-allow=false`, an embedded App Store provisioning profile, the merged
+> location usage string, and the web assets embedded in the binary. The
+> manual-signing recipe CI uses has also been exercised locally against a
+> portal-issued certificate and profile.
+>
+> What has **not** happened: a run of the signed **CI** job on a GitHub runner,
+> and any App Store Connect upload or review submission. Uploading additionally
+> needs an App Store Connect app record for the bundle id. Everything below still
+> has to be run on a Mac (iOS cannot be cross-compiled from Linux).
 
 ## What works on iOS vs desktop
 
@@ -216,16 +221,16 @@ they're created under the **same paid Apple Developer account** at no extra cost
 add an Apple Distribution certificate and an App Store provisioning profile for
 `org.geolibre.app` in the Developer portal, and reuse the existing `APPLE_TEAM_ID`.
 
-> **The signed CI path is unproven and probably broken.** No repository has ever
-> had the `APPLE_IOS_*` secrets set, so the "Build signed IPA" step has never
-> run. It calls `npx tauri ios build --export-method "$EXPORT_METHOD"` — the
-> exact command that fails locally on the baked-in `CODE_SIGN_IDENTITY = "iPhone
-> Developer"` (see *Build*). Importing an App Store profile into the runner's
-> keychain does not change which *type* of profile Xcode's automatic signing goes
-> looking for, so the step is expected to fail the same way the first time it is
-> exercised. Fix it the same way as locally: archive with `--no-sign`, then run a
-> separate `xcodebuild -exportArchive` step. Do that before depending on a
-> release-triggered build.
+> **The signed CI job has not yet run on a GitHub runner.** The job archives with
+> `npx tauri ios build --no-sign` and then signs in a separate
+> `xcodebuild -exportArchive` step using **manual** signing, for the reason given
+> under *Build*: `tauri ios build --export-method` cannot sign this project,
+> because the generated project bakes in `CODE_SIGN_IDENTITY = "iPhone
+> Developer"` and automatic signing therefore hunts for a development profile no
+> matter what the export method says. That sequence has been reproduced locally
+> against a portal-issued certificate and profile and produces a valid signed
+> `.ipa`, but the workflow itself is still unexercised end to end — treat the
+> first release-triggered run as a bring-up.
 
 > **Check the runner's Xcode before relying on CI for a submission.** The job
 > pins `runs-on: macos-14` and uses whatever Xcode that image happens to default
