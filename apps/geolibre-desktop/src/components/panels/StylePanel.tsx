@@ -80,6 +80,7 @@ import {
   useState,
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { loadedVectorTileFeatures } from "../../hooks/useVectorTileGeometryBackfill";
 import { clamp } from "../../lib/clamp";
 import {
   getAttributePropertyNames,
@@ -696,6 +697,14 @@ const STYLE_PANEL_ASIDE_CLASS =
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
+/**
+ * How long to wait for a tiled source to produce features before reporting its
+ * attributes as unavailable. A tiled layer whose data sits outside the viewport
+ * never yields a sample, and the map may already be idle, so the wait has to be
+ * bounded in wall-clock time rather than in retries.
+ */
+const VECTOR_TILE_SAMPLE_TIMEOUT_MS = 6000;
+
 function stepPrecision(step: number): number {
   const [, decimals = ""] = String(step).split(".");
   return decimals.length;
@@ -1156,8 +1165,11 @@ export function StylePanel({
   // classification needs its values, so categorized and graduated styling
   // remain available without defeating tiled rendering.
   useEffect(() => {
+    const usesDuckDbVector = layer?.metadata.sourceKind === "maplibre-gl-vector";
+    const usesVectorTiles =
+      layer?.type === "vector-tiles" || layer?.type === "pmtiles" || layer?.type === "mbtiles";
     const needsValues =
-      layer?.metadata.sourceKind === "maplibre-gl-vector" &&
+      (usesDuckDbVector || usesVectorTiles) &&
       !layer.geojson &&
       (draftVectorStyleMode === "graduated" || draftVectorStyleMode === "categorized") &&
       draftVectorStyleProperty !== "";
@@ -1177,6 +1189,56 @@ export function StylePanel({
     );
     setVectorPropertyValuesLoading(true);
     setVectorPropertyValuesUnavailable(false);
+
+    if (!usesDuckDbVector) {
+      // Tiled sources only expose the features currently loaded, so an empty
+      // sample means the tiles have not arrived yet rather than an empty
+      // attribute — keep re-reading until the map settles with features.
+      const map = mapControllerRef.current?.getMap();
+      if (!map) {
+        setLoadedVectorPropertyValues(null);
+        setVectorPropertyValuesUnavailable(true);
+        setVectorPropertyValuesLoading(false);
+        return;
+      }
+      const sampleValues = (): boolean => {
+        const features = loadedVectorTileFeatures(map, layer);
+        if (features.length === 0) return false;
+        setLoadedVectorPropertyValues({
+          layerId: layer.id,
+          property: draftVectorStyleProperty,
+          values: features
+            .map((feature) => feature.properties?.[draftVectorStyleProperty])
+            .filter((value) => value !== null && value !== undefined),
+        });
+        setVectorPropertyValuesLoading(false);
+        return true;
+      };
+      if (sampleValues()) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const onIdle = (): void => {
+        if (cancelled || !sampleValues()) return;
+        map.off("idle", onIdle);
+        clearTimeout(timer);
+      };
+      // The sample may never fill: the layer's data can lie outside the
+      // viewport, and a map that is already idle fires no further events. Give
+      // up rather than leaving the panel loading with Apply disabled forever.
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        map.off("idle", onIdle);
+        setLoadedVectorPropertyValues(null);
+        setVectorPropertyValuesUnavailable(true);
+        setVectorPropertyValuesLoading(false);
+      }, VECTOR_TILE_SAMPLE_TIMEOUT_MS);
+      map.on("idle", onIdle);
+      return () => {
+        cancelled = true;
+        map.off("idle", onIdle);
+        clearTimeout(timer);
+      };
+    }
+
     void getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
       .then((values) => {
         if (cancelled) return;
@@ -1211,12 +1273,12 @@ export function StylePanel({
     layer?.geojson,
     layer?.id,
     layer?.metadata.sourceKind,
+    layer?.type,
   ]);
 
   useEffect(() => {
     if (
       !layer ||
-      layer.metadata.sourceKind !== "maplibre-gl-vector" ||
       !loadedVectorPropertyValues ||
       loadedVectorPropertyValues.layerId !== layer.id ||
       loadedVectorPropertyValues.property !== draftVectorStyleProperty ||
@@ -1540,7 +1602,12 @@ export function StylePanel({
     draftExtrusionHeightProperty,
   )
     ? extrusionHeightPropertyOptions
-    : [draftExtrusionHeightProperty, ...extrusionHeightPropertyOptions].filter(Boolean);
+    : extrusionHeightPropertyOptions;
+  const defaultExtrusionHeightProperty = extrusionHeightPropertyOptions.includes(
+    draftExtrusionHeightProperty,
+  )
+    ? draftExtrusionHeightProperty
+    : (extrusionHeightPropertyOptions[0] ?? "");
   const currentVectorStops = styleValue(style, "vectorStyleStops");
   const vectorStyleSettingsChanged =
     draftVectorStyleMode !== styleValue(style, "vectorStyleMode") ||
@@ -4217,9 +4284,11 @@ export function StylePanel({
                     checked={extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setVectorStyleError(null);
+                      setDraftExtrusionHeightProperty(defaultExtrusionHeightProperty);
                       setLayerStyle(layer.id, {
                         extrusionEnabled: true,
                         elevation3dEnabled: false,
+                        extrusionHeightProperty: defaultExtrusionHeightProperty,
                       });
                     }}
                   />
