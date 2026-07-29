@@ -2874,7 +2874,9 @@ export function StylePanel({
               )}
             </Select>
             {vectorPropertyValuesLoading && (
-              <p className="text-xs text-muted-foreground">{t("attributeTable.loadingAttributes")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("attributeTable.loadingAttributes")}
+              </p>
             )}
             {vectorPropertyValuesUnavailable && (
               <p className="text-xs text-destructive">
