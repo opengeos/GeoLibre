@@ -121,7 +121,10 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
     // Single symbology with proportional sizing: the size ramp IS the legend.
     if (sizeRange) {
       return [
-        ...proportionalSizeSwatches(sizeRange, styleValue(layer.style, "fillColor") || NEUTRAL_SWATCH),
+        ...proportionalSizeSwatches(
+          sizeRange,
+          styleValue(layer.style, "fillColor") || NEUTRAL_SWATCH,
+        ),
         ...diagrams,
       ];
     }
@@ -521,10 +524,7 @@ function sizeClassSwatches(
 }
 
 /** Fill color for a standalone size ramp appended after class rows. */
-function sizeRampColor(
-  classSwatches: { color: string }[],
-  style: LayerStyle,
-): string {
+function sizeRampColor(classSwatches: { color: string }[], style: LayerStyle): string {
   if (classSwatches.length > 0) {
     return classSwatches[Math.floor(classSwatches.length / 2)]!.color;
   }
