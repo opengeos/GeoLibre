@@ -220,9 +220,9 @@ adb install -r geolibre-x86_64.apk
 GeoLibre is live on Play as
 [`org.geolibre.app`](https://play.google.com/store/apps/details?id=org.geolibre.app);
 this section records the onboarding for reference and for anyone publishing a
-fork. Routine updates are steps 2–3: build the AAB with the upload key and bump
+fork. Only step 3 recurs per release: build the AAB with the upload key and bump
 the `versionCode`. The build side is covered by the CI workflow above; the rest
-is Play Console onboarding.
+is one-time Play Console onboarding.
 
 1. **Developer account** ($25, one-time). Register as an **organization** rather
    than a personal account if you can: personal accounts created after
