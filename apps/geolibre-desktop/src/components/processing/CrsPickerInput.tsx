@@ -1,6 +1,6 @@
 import { Button, Input, cn } from "@geolibre/ui";
 import { Globe2, Search } from "lucide-react";
-import { type ReactElement, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type CrsEntry,
@@ -48,16 +48,24 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
   const ordered = useMemo(() => [...geographic, ...projected], [geographic, projected]);
   const selected = crsEntryForCode(value);
 
+  // Every way of leaving the panel clears the search, so reopening it starts on
+  // the curated default list rather than resuming a search the user dismissed.
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    setActiveIndex(0);
+  }, []);
+
   // Close on a click anywhere outside the control (the panel floats over the
   // tool form, so there is no backdrop to catch the click).
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!containerRef.current?.contains(event.target as Node)) close();
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+  }, [close, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,9 +78,7 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
 
   const choose = (entry: CrsEntry) => {
     onChange(String(entry.code));
-    setOpen(false);
-    setQuery("");
-    setActiveIndex(0);
+    close();
   };
 
   const renderGroup = (label: string, entries: CrsEntry[], offset: number) =>
@@ -130,7 +136,7 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
           variant="outline"
           aria-haspopup="listbox"
           aria-expanded={open}
-          onClick={() => setOpen((wasOpen) => !wasOpen)}
+          onClick={() => (open ? close() : setOpen(true))}
         >
           <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
           {t("processing.whitebox.crs.browse")}
@@ -177,7 +183,7 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                   if (entry) choose(entry);
                 } else if (event.key === "Escape") {
                   event.preventDefault();
-                  setOpen(false);
+                  close();
                 }
               }}
             />

@@ -66,9 +66,27 @@ describe("parseEpsgCode", () => {
 });
 
 describe("searchCrsCatalog", () => {
-  it("returns the curated order for a blank query", () => {
+  it("returns the whole catalog, in curated order, for a blank query", () => {
     const results = searchCrsCatalog("");
     assert.equal(results[0].code, 4326);
+    // The default limit has to cover the catalog: a limit shorter than it would
+    // drop whole zone families off the end of the picker's default list, and
+    // they only reappear once the user types something specific.
+    assert.equal(results.length, CRS_CATALOG.length);
+    for (const code of [32760, 26923, 25838, 28358, 7859, 6687, 4501]) {
+      assert.ok(
+        results.some((entry) => entry.code === code),
+        `EPSG:${code} missing from the blank-query list`,
+      );
+    }
+  });
+
+  it("ignores an EPSG prefix written with or without a colon", () => {
+    // "EPSG 4326" is a natural way to type a code; leaving `epsg` as a token
+    // would match no name or code and reject every entry.
+    for (const query of ["EPSG 4326", "epsg4326", "EPSG:4326", "epsg :: 4326"]) {
+      assert.equal(searchCrsCatalog(query)[0]?.code, 4326, query);
+    }
   });
 
   it("ranks an exact code match first", () => {

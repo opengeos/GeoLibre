@@ -281,14 +281,18 @@ const RANK_NAME_MATCH = 3;
  * name hit, and within a rank keep the catalog's own order.
  *
  * @param query - The user's search text.
- * @param limit - Maximum results to return.
+ * @param limit - Maximum results to return; the whole catalog by default, so the
+ *   blank-query list is never silently truncated mid-family.
  * @returns Matching entries, best first.
  */
-export function searchCrsCatalog(query: string, limit = 200): CrsEntry[] {
-  // Drop an `EPSG:` prefix so both `epsg:32617` and `32617` search by code.
+export function searchCrsCatalog(query: string, limit = CRS_CATALOG.length): CrsEntry[] {
+  // Drop an `EPSG` prefix so `epsg:32617`, `EPSG 32617`, `EPSG32617` and a bare
+  // `32617` all search by code. Both the colon and the separator are optional:
+  // without that, a spelled-out `EPSG 4326` would leave `epsg` as a token that
+  // matches no name or code, rejecting every entry.
   const normalized = query
     .toLowerCase()
-    .replace(/epsg\s*:+\s*/g, " ")
+    .replace(/\bepsg\s*:*\s*/g, " ")
     .trim();
   if (!normalized) return CRS_CATALOG.slice(0, limit);
   const tokens = normalized.split(/\s+/);
