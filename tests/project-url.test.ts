@@ -216,3 +216,16 @@ describe("fetchProjectFromUrl", () => {
     );
   });
 });
+
+describe("parseShareRole", () => {
+  it("parses valid role strings and rejects invalid ones", () => {
+    const { parseShareRole } = require("../apps/geolibre-desktop/src/lib/project-url");
+    assert.equal(parseShareRole("view"), "view");
+    assert.equal(parseShareRole("comment"), "comment");
+    assert.equal(parseShareRole("edit"), "edit");
+    assert.equal(parseShareRole("admin"), null);
+    assert.equal(parseShareRole(""), null);
+    assert.equal(parseShareRole(null), null);
+    assert.equal(parseShareRole(undefined), null);
+  });
+});

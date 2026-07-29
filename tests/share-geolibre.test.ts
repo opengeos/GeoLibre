@@ -3,11 +3,14 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_PROJECT_TITLE,
   DEFAULT_SHARE_BASE_URL,
+  fetchProjectShares,
   isShareableTitle,
   MAX_PROJECT_TITLE_LENGTH,
   resolveShareBaseUrl,
+  revokeShare,
   ShareUploadError,
   uploadProjectToShare,
+  verifySharePassword,
 } from "../apps/geolibre-desktop/src/lib/share-geolibre";
 
 const PROJECT_DTO = {
@@ -212,5 +215,119 @@ describe("uploadProjectToShare", () => {
     assert.equal(result.username, "");
     assert.equal(result.slug, "");
     assert.equal(result.viewerUrl, "");
+  });
+
+  it("sends role, expiresIn, and password when provided", async () => {
+    const { fn, calls } = fakeFetch(201, {
+      project: {
+        ...PROJECT_DTO,
+        role: "view",
+        expiresAt: "2026-07-30T12:00:00Z",
+        hasPassword: true,
+      },
+    });
+    const result = await uploadProjectToShare({
+      ...baseArgs,
+      role: "view",
+      expiresIn: "24h",
+      password: "secretpassword",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    const body = JSON.parse(calls[0].init.body as string);
+    assert.equal(body.role, "view");
+    assert.equal(body.expiresIn, "24h");
+    assert.equal(body.password, "secretpassword");
+    assert.equal(result.role, "view");
+    assert.equal(result.hasPassword, true);
+  });
+});
+
+describe("fetchProjectShares", () => {
+  it("fetches active shares for authenticated user", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      shares: [
+        {
+          id: "s1",
+          slug: "my-map",
+          title: "My Map",
+          visibility: "unlisted",
+          role: "view",
+          expiresAt: null,
+          hasPassword: false,
+          createdAt: "2026-07-29T12:00:00Z",
+          projectUrl: "https://share.geolibre.app/u/my-map",
+          viewerUrl: "https://share.geolibre.app/viewer?url=https://share.geolibre.app/u/my-map",
+        },
+      ],
+    });
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://share.geolibre.app/api/shares");
+    assert.equal(shares.length, 1);
+    assert.equal(shares[0].id, "s1");
+    assert.equal(shares[0].role, "view");
+    assert.equal(shares[0].visibility, "unlisted");
+  });
+
+  it("rejects when no token is provided", async () => {
+    await assert.rejects(() => fetchProjectShares({ token: "   " }), /token/i);
+  });
+});
+
+describe("revokeShare", () => {
+  it("deletes the specified share", async () => {
+    const { fn, calls } = fakeFetch(200, { ok: true });
+    await revokeShare({
+      token: "glb_secrettoken",
+      shareId: "s1",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://share.geolibre.app/api/shares/s1");
+    assert.equal(calls[0].init.method, "DELETE");
+  });
+
+  it("rejects when no token is provided", async () => {
+    await assert.rejects(() => revokeShare({ token: "", shareId: "s1" }), /token/i);
+  });
+});
+
+describe("verifySharePassword", () => {
+  it("POSTs password and returns project content on success", async () => {
+    const { fn, calls } = fakeFetch(200, { content: '{"version":"1.0.0"}', role: "view" });
+    const result = await verifySharePassword({
+      shareUrl: "https://share.geolibre.app/u/protected-share",
+      password: "secretpassword",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://share.geolibre.app/u/protected-share/access");
+    assert.equal(calls[0].init.method, "POST");
+    assert.equal(result.projectContent, '{"version":"1.0.0"}');
+    assert.equal(result.role, "view");
+  });
+
+  it("rejects with incorrect password on 401/403", async () => {
+    const { fn } = fakeFetch(401, { error: "Incorrect password" });
+    await assert.rejects(
+      () =>
+        verifySharePassword({
+          shareUrl: "https://share.geolibre.app/u/protected-share",
+          password: "wrongpassword",
+          fetchImpl: fn,
+        }),
+      /incorrect password/i,
+    );
   });
 });

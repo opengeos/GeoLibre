@@ -39,12 +39,32 @@ export class ShareUploadError extends Error {
 // point to the server's error vocabulary is obvious and easy to update.
 const USERNAME_REQUIRED_PATTERN = /username required/i;
 
+export type ShareRole = "view" | "comment" | "edit";
+export type ShareExpiry = "24h" | "7d" | "30d" | "never";
+
+export interface ActiveShare {
+  id: string;
+  projectSlug: string;
+  title?: string;
+  visibility: ShareVisibility;
+  role: ShareRole;
+  expiresAt: string | null;
+  hasPassword: boolean;
+  createdAt: string;
+  projectUrl: string;
+  viewerUrl: string;
+}
+
 export interface ShareUploadResult {
+  id?: string;
   username: string;
   slug: string;
   projectUrl: string;
   viewerUrl: string;
   rawJsonUrl: string;
+  role?: ShareRole;
+  expiresAt?: string | null;
+  hasPassword?: boolean;
 }
 
 export interface ShareUploadOptions {
@@ -52,6 +72,9 @@ export interface ShareUploadOptions {
   filename: string;
   content: string;
   visibility: ShareVisibility;
+  role?: ShareRole;
+  expiresIn?: ShareExpiry;
+  password?: string;
   /** Override the share host; defaults to the configured/production URL. */
   baseUrl?: string;
   signal?: AbortSignal;
@@ -121,11 +144,15 @@ export function resolveShareBaseUrl(
 
 interface ShareProjectResponse {
   project?: {
+    id?: string;
     username?: string;
     slug?: string;
     projectUrl?: string;
     viewerUrl?: string;
     rawJsonUrl?: string;
+    role?: ShareRole;
+    expiresAt?: string | null;
+    hasPassword?: boolean;
   };
 }
 
@@ -159,6 +186,9 @@ export async function uploadProjectToShare(
         filename: options.filename,
         content: options.content,
         visibility: options.visibility,
+        ...(options.role ? { role: options.role } : {}),
+        ...(options.expiresIn ? { expiresIn: options.expiresIn } : {}),
+        ...(options.password ? { password: options.password } : {}),
       }),
       signal,
     });
@@ -184,11 +214,165 @@ export async function uploadProjectToShare(
     throw new Error("share.geolibre.app returned an unexpected response.");
   }
   return {
+    id: project.id,
     username: project.username ?? "",
     slug: project.slug ?? "",
     projectUrl: project.projectUrl,
     viewerUrl: project.viewerUrl ?? "",
     rawJsonUrl: project.rawJsonUrl,
+    role: project.role,
+    expiresAt: project.expiresAt,
+    hasPassword: project.hasPassword,
+  };
+}
+
+export interface FetchSharesOptions {
+  token: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export async function fetchProjectShares(options: FetchSharesOptions): Promise<ActiveShare[]> {
+  const token = options.token.trim();
+  if (!token) {
+    throw new Error("Add a share.geolibre.app API token in Settings before managing shares.");
+  }
+
+  const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base}/api/shares`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Could not reach share.geolibre.app. Check your internet connection.");
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Invalid or expired API token.");
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to fetch shares (HTTP ${response.status}).`);
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as { shares?: unknown[] };
+  const rawShares = Array.isArray(payload.shares) ? payload.shares : [];
+  return rawShares
+    .map((item: any) => {
+      const role: ShareRole =
+        item.role === "view" || item.role === "comment" || item.role === "edit"
+          ? item.role
+          : "edit";
+      const visibility: ShareVisibility =
+        item.visibility === "public" || item.visibility === "private" ? item.visibility : "unlisted";
+      return {
+        id: String(item.id || ""),
+        projectSlug: String(item.projectSlug || item.slug || ""),
+        title: String(item.title || ""),
+        visibility,
+        role,
+        expiresAt: item.expiresAt ? String(item.expiresAt) : null,
+        hasPassword: Boolean(item.hasPassword || item.passwordProtected),
+        createdAt: String(item.createdAt || ""),
+        projectUrl: String(item.projectUrl || `${base}/u/${item.slug || ""}`),
+        viewerUrl: String(item.viewerUrl || `${base}/viewer?url=${item.projectUrl || ""}`),
+      };
+    })
+    .filter((s) => s.id !== "");
+}
+
+export interface RevokeShareOptions {
+  token: string;
+  shareId: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export async function revokeShare(options: RevokeShareOptions): Promise<void> {
+  const token = options.token.trim();
+  if (!token) {
+    throw new Error("API token required to revoke share.");
+  }
+
+  const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base}/api/shares/${encodeURIComponent(options.shareId)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Could not reach share.geolibre.app to revoke share.");
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Invalid or expired API token.");
+  }
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to revoke share (HTTP ${response.status}).`);
+  }
+}
+
+export interface VerifySharePasswordOptions {
+  shareUrl: string;
+  password: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export async function verifySharePassword(
+  options: VerifySharePasswordOptions,
+): Promise<{ projectContent: string; role?: ShareRole }> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${options.shareUrl.replace(/\/+$/, "")}/access`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Share-Password": options.password,
+      },
+      body: JSON.stringify({ password: options.password }),
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Could not reach share server.");
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Incorrect password.");
+  }
+  if (!response.ok) {
+    throw new Error(`Password verification failed (HTTP ${response.status}).`);
+  }
+
+  const data = (await response.json()) as { content?: string; role?: ShareRole };
+  return {
+    projectContent: typeof data.content === "string" ? data.content : JSON.stringify(data),
+    role: data.role,
   };
 }
 

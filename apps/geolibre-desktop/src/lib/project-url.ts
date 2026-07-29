@@ -15,6 +15,36 @@ export const PROJECT_URL_PARAMS = ["url", "project", "projectUrl", "project_url"
  *
  * @returns The normalized project URL, or `null` when none is present or valid.
  */
+import type { ShareRole } from "./share-geolibre";
+
+/**
+ * Parses a share role string ("view", "comment", "edit") into a valid ShareRole or null.
+ */
+export function parseShareRole(value: unknown): ShareRole | null {
+  if (value === "view" || value === "comment" || value === "edit") {
+    return value;
+  }
+  return null;
+}
+
+/**
+ * Reads a share access role from the current `window.location` query string if present (?role=view, ?role=comment, ?role=edit).
+ */
+export function shareRoleFromLocation(): ShareRole | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  return parseShareRole(params.get("role") || params.get("shareRole"));
+}
+
+/**
+ * Reads a `.geolibre.json` project URL from the current `window.location` query
+ * string, if one is present.
+ *
+ * Accepts any of {@link PROJECT_URL_PARAMS} or a bare `?https://...` query, and
+ * normalizes the value via `normalizeProjectUrl` (absolute http/https only).
+ *
+ * @returns The normalized project URL, or `null` when none is present or valid.
+ */
 export function projectUrlFromLocation(): string | null {
   if (typeof window === "undefined") return null;
 
