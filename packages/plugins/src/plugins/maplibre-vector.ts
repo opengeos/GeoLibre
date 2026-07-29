@@ -70,6 +70,10 @@ const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
     label: "Las Vegas buildings",
     url: "https://data.source.coop/giswqs/opengeos/las-vegas-buildings.geojson",
   },
+  {
+    label: "H3 building counts",
+    url: "https://data.source.coop/giswqs/opengeos/building_count_h3.parquet",
+  },
 ];
 
 // This type mirrors an undocumented private member of VectorControl from
