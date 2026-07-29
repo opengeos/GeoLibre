@@ -1044,6 +1044,14 @@ export function StylePanel({
   // Layers whose style suggestions the user waved off this session (#1519).
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   const [extrusionError, setExtrusionError] = useState<string | null>(null);
+  const [proportionalSizeError, setProportionalSizeError] = useState<string | null>(null);
+  // Tracks auto-seeded proportional min/max so later tile samples can refine the
+  // range without overwriting a user's intentional 0–100 (or other) edit.
+  const seededProportionalBoundsRef = useRef<{
+    key: string;
+    min: number;
+    max: number;
+  } | null>(null);
   const [loadedVectorPropertyValues, setLoadedVectorPropertyValues] = useState<{
     layerId: string;
     /** Attribute samples keyed by property name (classification and/or size field). */
@@ -1324,25 +1332,60 @@ export function StylePanel({
   ]);
 
   // When tiled attribute samples arrive for the proportional size field, seed
-  // min/max if the style is still on the default 0–100 range (so a later
-  // user edit is not overwritten by a tile refresh).
+  // (or refine) min/max. A ref records the last auto-applied range so a user's
+  // intentional 0–100 is never overwritten, while a partial first tile sample
+  // can still widen as more tiles load.
   useEffect(() => {
     if (!layer || !loadedVectorPropertyValues) return;
     if (!styleValue(layer.style, "proportionalSizeEnabled")) return;
     const property = styleValue(layer.style, "proportionalSizeProperty");
     if (!property || loadedVectorPropertyValues.layerId !== layer.id) return;
     const values = loadedVectorPropertyValues.byProperty[property];
-    if (!values) return;
+    // An empty tile sample is inconclusive — wait for features with values.
+    if (!values || values.length === 0) return;
+    const bounds = proportionalSizeBounds(layer, property, values);
+    if (!bounds) return;
+
+    const seedKey = `${layer.id}:${property}`;
     const minValue = styleValue(layer.style, "proportionalSizeMinValue");
     const maxValue = styleValue(layer.style, "proportionalSizeMaxValue");
+    const seeded = seededProportionalBoundsRef.current;
+
+    if (seeded?.key === seedKey) {
+      // Still wearing our auto-seed: refine when a richer sample expands/shifts it.
+      if (
+        minValue === seeded.min &&
+        maxValue === seeded.max &&
+        (bounds.min !== seeded.min || bounds.max !== seeded.max)
+      ) {
+        seededProportionalBoundsRef.current = {
+          key: seedKey,
+          min: bounds.min,
+          max: bounds.max,
+        };
+        setLayerStyle(layer.id, {
+          proportionalSizeMinValue: bounds.min,
+          proportionalSizeMaxValue: bounds.max,
+        });
+      }
+      return;
+    }
+
+    // New layer/property pair: only auto-seed from the unseeded defaults.
     if (
       minValue !== DEFAULT_LAYER_STYLE.proportionalSizeMinValue ||
       maxValue !== DEFAULT_LAYER_STYLE.proportionalSizeMaxValue
     ) {
+      // Non-default without our seed record → intentional; don't overwrite.
+      seededProportionalBoundsRef.current = { key: seedKey, min: minValue, max: maxValue };
       return;
     }
-    const bounds = proportionalSizeBounds(layer, property, values);
-    if (!bounds) return;
+
+    seededProportionalBoundsRef.current = {
+      key: seedKey,
+      min: bounds.min,
+      max: bounds.max,
+    };
     setLayerStyle(layer.id, {
       proportionalSizeMinValue: bounds.min,
       proportionalSizeMaxValue: bounds.max,
@@ -1354,6 +1397,8 @@ export function StylePanel({
   // does not re-collapse while the user edits other style fields.
   useEffect(() => {
     setShowBasemapStyleLayers(false);
+    seededProportionalBoundsRef.current = null;
+    setProportionalSizeError(null);
   }, [layer?.id]);
 
   // Heatmap/cluster apply to point layers in two render paths: core GeoJSON
@@ -1672,10 +1717,11 @@ export function StylePanel({
     draftVectorStyleClassificationScheme !== styleValue(style, "vectorStyleClassificationScheme") ||
     draftVectorStyleExpression !== styleValue(style, "vectorStyleExpression") ||
     JSON.stringify(draftVectorStyleStops) !== JSON.stringify(currentVectorStops);
-  const draftVectorPropertyValues =
+  const matchingPropertyValues = (property: string): unknown[] | undefined =>
     loadedVectorPropertyValues?.layerId === layer.id
-      ? loadedVectorPropertyValues.byProperty[draftVectorStyleProperty]
+      ? loadedVectorPropertyValues.byProperty[property]
       : undefined;
+  const draftVectorPropertyValues = matchingPropertyValues(draftVectorStyleProperty);
   const regenerateDraftVectorStyleStops = (
     mode: VectorStyleMode,
     property: string,
@@ -2761,15 +2807,14 @@ export function StylePanel({
       {vectorStyleError && <p className="text-xs text-destructive">{vectorStyleError}</p>}
     </div>
   );
-  /** Seed min/max from the field's numeric range when proportional sizing turns on or the field changes. */
-  const matchingPropertyValues = (property: string): unknown[] | undefined =>
-    loadedVectorPropertyValues?.layerId === layer.id
-      ? loadedVectorPropertyValues.byProperty[property]
-      : undefined;
-
-  /** True when we already have a sample that can prove the field has (or lacks) a usable range. */
-  const hasPropertySample = (property: string): boolean =>
-    Boolean(layer.geojson?.features?.length) || matchingPropertyValues(property) !== undefined;
+  /** True when a sample can prove the field lacks a usable numeric range (non-empty). */
+  const hasDecisivePropertySample = (property: string): boolean => {
+    if (layer.geojson?.features?.length) return true;
+    const sample = matchingPropertyValues(property);
+    // Empty tile samples are inconclusive — sparse/null viewport values must not
+    // disable a field that is numeric elsewhere in the dataset.
+    return Array.isArray(sample) && sample.length > 0;
+  };
 
   const proportionalBoundsPatch = (property: string) => {
     const bounds = proportionalSizeBounds(layer, property, matchingPropertyValues(property));
@@ -2778,13 +2823,24 @@ export function StylePanel({
       : null;
   };
 
-  const clearProportionalSizeField = (disable: boolean) =>
+  const rememberProportionalSeed = (
+    property: string,
+    min: number,
+    max: number,
+  ) => {
+    seededProportionalBoundsRef.current = { key: `${layer.id}:${property}`, min, max };
+  };
+
+  const clearProportionalSizeField = (disable: boolean, error: string | null = null) => {
+    seededProportionalBoundsRef.current = null;
+    setProportionalSizeError(error);
     setLayerStyle(layer.id, {
       ...(disable ? { proportionalSizeEnabled: false } : {}),
       proportionalSizeProperty: "",
       proportionalSizeMinValue: DEFAULT_LAYER_STYLE.proportionalSizeMinValue,
       proportionalSizeMaxValue: DEFAULT_LAYER_STYLE.proportionalSizeMaxValue,
     });
+  };
 
   const proportionalSizeControls = (
     <div className="space-y-3">
@@ -2798,27 +2854,36 @@ export function StylePanel({
             onChange={(event) => {
               const enabled = event.target.checked;
               if (!enabled) {
+                setProportionalSizeError(null);
                 setLayerStyle(layer.id, { proportionalSizeEnabled: false });
                 return;
               }
               if (!proportionalProperty) {
+                setProportionalSizeError(null);
                 setLayerStyle(layer.id, { proportionalSizeEnabled: true });
                 return;
               }
               const boundsPatch = proportionalBoundsPatch(proportionalProperty);
               if (boundsPatch) {
+                setProportionalSizeError(null);
+                rememberProportionalSeed(
+                  proportionalProperty,
+                  boundsPatch.proportionalSizeMinValue,
+                  boundsPatch.proportionalSizeMaxValue,
+                );
                 setLayerStyle(layer.id, {
                   proportionalSizeEnabled: true,
                   ...boundsPatch,
                 });
                 return;
               }
-              // Sample proves the field is unusable — do not enable with a stale range.
-              if (hasPropertySample(proportionalProperty)) {
-                clearProportionalSizeField(true);
+              // Non-empty sample proves the field is unusable — do not enable with a stale range.
+              if (hasDecisivePropertySample(proportionalProperty)) {
+                clearProportionalSizeField(true, t("style.symbology.errorProportionalSizeField"));
                 return;
               }
-              // Tiled / unloaded: enable and keep the field; the loader effect seeds bounds.
+              // Tiled / unloaded / empty sample: enable and keep the field; the loader seeds bounds.
+              setProportionalSizeError(null);
               setLayerStyle(layer.id, { proportionalSizeEnabled: true });
             }}
           />
@@ -2840,18 +2905,26 @@ export function StylePanel({
                 }
                 const boundsPatch = proportionalBoundsPatch(property);
                 if (boundsPatch) {
+                  setProportionalSizeError(null);
+                  rememberProportionalSeed(
+                    property,
+                    boundsPatch.proportionalSizeMinValue,
+                    boundsPatch.proportionalSizeMaxValue,
+                  );
                   setLayerStyle(layer.id, {
                     proportionalSizeProperty: property,
                     ...boundsPatch,
                   });
                   return;
                 }
-                // Sample proves nonnumeric / empty / constant — reject and clear stale range.
-                if (hasPropertySample(property)) {
-                  clearProportionalSizeField(true);
+                // Non-empty sample proves nonnumeric / constant — reject and clear stale range.
+                if (hasDecisivePropertySample(property)) {
+                  clearProportionalSizeField(true, t("style.symbology.errorProportionalSizeField"));
                   return;
                 }
-                // No sample yet (tiled): commit the field and reset to defaults until load.
+                // No decisive sample yet (tiled/empty): commit the field; defaults until load.
+                seededProportionalBoundsRef.current = null;
+                setProportionalSizeError(null);
                 setLayerStyle(layer.id, {
                   proportionalSizeProperty: property,
                   proportionalSizeMinValue: DEFAULT_LAYER_STYLE.proportionalSizeMinValue,
@@ -2882,6 +2955,9 @@ export function StylePanel({
               <p className="text-xs text-destructive">
                 {t("style.symbology.errorAttributesUnavailable")}
               </p>
+            )}
+            {proportionalSizeError && (
+              <p className="text-xs text-destructive">{proportionalSizeError}</p>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
