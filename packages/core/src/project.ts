@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from "uuid";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
@@ -83,12 +84,12 @@ export function createEmptyProject(
     styles: {},
     preferences: options.ellipsoidId
       ? {
-          ...DEFAULT_PROJECT_PREFERENCES,
-          map: {
-            ...DEFAULT_PROJECT_PREFERENCES.map,
-            ellipsoidId: getEllipsoid(options.ellipsoidId).id,
-          },
-        }
+        ...DEFAULT_PROJECT_PREFERENCES,
+        map: {
+          ...DEFAULT_PROJECT_PREFERENCES.map,
+          ellipsoidId: getEllipsoid(options.ellipsoidId).id,
+        },
+      }
       : DEFAULT_PROJECT_PREFERENCES,
     legend: { ...DEFAULT_LEGEND_CONFIG },
     metadata: {},
@@ -115,7 +116,7 @@ export function parseProject(json: string): GeoLibreProject {
     data.selectedLayerId === null
       ? null
       : typeof data.selectedLayerId === "string" &&
-          layers.some((layer) => layer.id === data.selectedLayerId)
+        layers.some((layer) => layer.id === data.selectedLayerId)
         ? data.selectedLayerId
         : undefined;
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
@@ -152,12 +153,12 @@ export function parseProject(json: string): GeoLibreProject {
     // single-map projects serialize byte-identically to before this feature.
     ...(mapLayout.rows * mapLayout.cols > 1
       ? {
-          mapLayout,
-          secondaryMapViews,
-          ...(normalizeString(data.primaryMapLabel)
-            ? { primaryMapLabel: normalizeString(data.primaryMapLabel) }
-            : {}),
-        }
+        mapLayout,
+        secondaryMapViews,
+        ...(normalizeString(data.primaryMapLabel)
+          ? { primaryMapLabel: normalizeString(data.primaryMapLabel) }
+          : {}),
+      }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     metadata: data.metadata ?? {},
@@ -276,9 +277,9 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
 
   const panelPosition =
     candidate.panelPosition === "top-left" ||
-    candidate.panelPosition === "top-right" ||
-    candidate.panelPosition === "bottom-left" ||
-    candidate.panelPosition === "bottom-right"
+      candidate.panelPosition === "top-right" ||
+      candidate.panelPosition === "bottom-left" ||
+      candidate.panelPosition === "bottom-right"
       ? candidate.panelPosition
       : undefined;
 
@@ -323,10 +324,10 @@ export function normalizeStoryMap(storymap: unknown): StoryMap | null {
   const seenChapterIds = new Set<string>();
   const chapters = Array.isArray(candidate.chapters)
     ? candidate.chapters.map(normalizeStoryChapter).filter((chapter): chapter is StoryChapter => {
-        if (!chapter || seenChapterIds.has(chapter.id)) return false;
-        seenChapterIds.add(chapter.id);
-        return true;
-      })
+      if (!chapter || seenChapterIds.has(chapter.id)) return false;
+      seenChapterIds.add(chapter.id);
+      return true;
+    })
     : [];
 
   const normalized: StoryMap = {
@@ -550,10 +551,10 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     const inputLayerNames =
       candidate.inputLayerNames && typeof candidate.inputLayerNames === "object"
         ? Object.fromEntries(
-            Object.entries(candidate.inputLayerNames).filter(
-              ([, name]) => typeof name === "string",
-            ),
-          )
+          Object.entries(candidate.inputLayerNames).filter(
+            ([, name]) => typeof name === "string",
+          ),
+        )
         : undefined;
     const outputLayerNames = Array.isArray(candidate.outputLayerNames)
       ? candidate.outputLayerNames.filter((name): name is string => typeof name === "string")
@@ -888,8 +889,8 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables
-          .map(normalizeEnvironmentVariable)
-          .filter((variable): variable is RuntimeEnvironmentVariable => Boolean(variable))
+        .map(normalizeEnvironmentVariable)
+        .filter((variable): variable is RuntimeEnvironmentVariable => Boolean(variable))
       : [],
     geocoding: normalizeGeocodingPreferences(candidate.geocoding),
   };
@@ -1157,7 +1158,7 @@ export function projectFromStore(state: {
     state.selectedLayerId === null
       ? null
       : typeof state.selectedLayerId === "string" &&
-          state.layers.some((layer) => layer.id === state.selectedLayerId)
+        state.layers.some((layer) => layer.id === state.selectedLayerId)
         ? state.selectedLayerId
         : undefined;
   return {
@@ -1181,12 +1182,12 @@ export function projectFromStore(state: {
     ...(dashboardColumns !== DEFAULT_DASHBOARD_COLUMNS ? { dashboardColumns } : {}),
     ...(persistGrid
       ? {
-          mapLayout,
-          secondaryMapViews,
-          ...(normalizeString(state.primaryMapLabel)
-            ? { primaryMapLabel: normalizeString(state.primaryMapLabel) }
-            : {}),
-        }
+        mapLayout,
+        secondaryMapViews,
+        ...(normalizeString(state.primaryMapLabel)
+          ? { primaryMapLabel: normalizeString(state.primaryMapLabel) }
+          : {}),
+      }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     metadata: state.metadata,
@@ -1352,3 +1353,61 @@ export function applyProjectToStore(project: GeoLibreProject): {
     metadata: project.metadata,
   };
 }
+
+/**
+ * Create an unlinked copy of a project, suffixed with "(copy)" by default and
+ * stripped of share-specific metadata (shareId, shareUrl, etc.).
+ */
+export function detachProjectCopy(
+  project: GeoLibreProject,
+  options: { nameSuffix?: string } = {},
+): GeoLibreProject {
+  const suffix = options.nameSuffix ?? "(copy)";
+  const rawName = project.name.trim() || DEFAULT_PROJECT_NAME;
+  const name = suffix
+    ? rawName.endsWith(suffix)
+      ? rawName
+      : `${rawName} ${suffix}`
+    : rawName;
+
+  const metadata = { ...(project.metadata ?? {}) };
+  for (const key of Object.keys(metadata)) {
+    if (/^share/i.test(key)) {
+      delete metadata[key];
+    }
+  }
+
+  return {
+    ...project,
+    id: uuidv4(),
+    name,
+    metadata,
+  };
+}
+
+/**
+ * Create a template snapshot of a project. Optionally strips data layers while
+ * keeping basemap, layer groups, styles, legend config, preferences, widgets, and
+ * print layout.
+ */
+export function createProjectTemplate(
+  project: GeoLibreProject,
+  options: { name?: string; stripDataLayers?: boolean } = {},
+): GeoLibreProject {
+  const detached = detachProjectCopy(project, { nameSuffix: "" });
+  const name = options.name?.trim() || detached.name;
+  const stripDataLayers = options.stripDataLayers !== false;
+
+  const layers = stripDataLayers ? [] : detached.layers;
+
+  return {
+    ...detached,
+    name,
+    layers,
+    metadata: {
+      ...detached.metadata,
+      isTemplate: true,
+    },
+  };
+}
+

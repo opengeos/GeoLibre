@@ -1116,7 +1116,9 @@
     "errorUsernameRequired": "Set a username on your share.geolibre.app account before loading your projects.",
     "retry": "Retry",
     "open": "Open",
+    "openCopy": "Open a copy",
     "opening": "Opening…",
+    "openingCopy": "Opening copy…",
     "openOnWeb": "View on the web",
     "openError": "Could not open this project.",
     "byAuthor": "by {{author}}",
@@ -1133,6 +1135,18 @@
     "emptyMine": "You have not shared any projects yet.",
     "visibilityUnlisted": "Unlisted",
     "visibilityPrivate": "Private"
+  },
+  "template": {
+    "saveTitle": "Save as template",
+    "saveDescription": "Save this project pre-configured as a reusable template in your personal library.",
+    "defaultName": "Untitled Template",
+    "nameLabel": "Template name",
+    "namePlaceholder": "e.g. Standard Organization Map",
+    "descriptionLabel": "Description (optional)",
+    "descriptionPlaceholder": "e.g. Pre-configured basemap, styles, and dashboard layout for team maps",
+    "stripDataLayersLabel": "Strip data layers",
+    "stripDataLayersDesc": "Keep basemap, layer groups, styles, legend, widgets, and layout, but remove data layer content.",
+    "saveAction": "Save to Template Library"
   },
   "language": {
     "label": "Language",
@@ -2214,7 +2228,9 @@
       "noRecentProjects": "No recent projects",
       "removeFromRecent": "Remove {{name}} from recent projects",
       "clearRecentProjects": "Clear Recent Projects",
+      "duplicate": "Duplicate project",
       "saveAsEllipsis": "Save As...",
+      "saveAsTemplateEllipsis": "Save as template...",
       "shareEllipsis": "Share...",
       "exportHtmlEllipsis": "Export as HTML...",
       "htmlFile": "HTML",

@@ -13,6 +13,8 @@ import {
 } from "@geolibre/ui";
 import {
   BookOpen,
+  Bookmark,
+  Copy,
   FileCode2,
   FilePen,
   FilePlus2,
@@ -44,6 +46,8 @@ interface ProjectMenuProps {
   onOpenRecent: (path: string) => void;
   onSave: () => void;
   onSaveAs: () => void;
+  onDuplicate?: () => void;
+  onSaveAsTemplate?: () => void;
   onShare: () => void;
   onExportHtml: () => void;
   onCollaborate: () => void;
@@ -62,6 +66,8 @@ export function ProjectMenu({
   onOpenRecent,
   onSave,
   onSaveAs,
+  onDuplicate,
+  onSaveAsTemplate,
   onShare,
   onExportHtml,
   onCollaborate,
@@ -81,6 +87,8 @@ export function ProjectMenu({
   const showSaveGroup =
     show("project.save") ||
     show("project.saveAs") ||
+    show("project.duplicate") ||
+    show("project.saveAsTemplate") ||
     show("project.share") ||
     show("project.exportHtml") ||
     (collaborationEnabled && show("project.collaborate"));
@@ -202,6 +210,18 @@ export function ProjectMenu({
           <DropdownMenuItem onSelect={onSaveAs}>
             <FilePen className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.saveAsEllipsis")}
+          </DropdownMenuItem>
+        )}
+        {show("project.duplicate") && onDuplicate && (
+          <DropdownMenuItem onSelect={onDuplicate}>
+            <Copy className="me-2 h-3.5 w-3.5" />
+            {t("toolbar.item.duplicate")}
+          </DropdownMenuItem>
+        )}
+        {show("project.saveAsTemplate") && onSaveAsTemplate && (
+          <DropdownMenuItem onSelect={onSaveAsTemplate}>
+            <Bookmark className="me-2 h-3.5 w-3.5" />
+            {t("toolbar.item.saveAsTemplateEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.share") && (

@@ -51,7 +51,11 @@ interface ProjectGalleryDialogProps {
    * authorizes the fetch. Resolves on success and rejects with a descriptive
    * error the dialog surfaces inline.
    */
-  onOpenProject: (rawJsonUrl: string, authToken?: string) => Promise<void>;
+  onOpenProject: (
+    rawJsonUrl: string,
+    authToken?: string,
+    options?: { asCopy?: boolean },
+  ) => Promise<void>;
 }
 
 // Page size for each listing request. The endpoint paginates by limit + offset.
@@ -251,13 +255,14 @@ export function ProjectGalleryDialog({
     }
   }, [open, loadPage]);
 
-  const handleOpen = async (project: SharedProject) => {
+  const handleOpen = async (project: SharedProject, options: { asCopy?: boolean } = {}) => {
     setOpeningId(project.id);
     setOpenError(null);
     try {
       await onOpenProject(
         project.rawJsonUrl,
         effectiveScope === "mine" ? projectOpenToken(project, trimmedToken) : undefined,
+        options,
       );
       onOpenChange(false);
     } catch (err) {
@@ -285,11 +290,11 @@ export function ProjectGalleryDialog({
         style={
           dialogSize
             ? {
-                width: dialogSize.width,
-                height: dialogSize.height,
-                maxWidth: "none",
-                maxHeight: "none",
-              }
+              width: dialogSize.width,
+              height: dialogSize.height,
+              maxWidth: "none",
+              maxHeight: "none",
+            }
             : undefined
         }
         bodyClassName="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 sm:p-6"
@@ -405,6 +410,7 @@ export function ProjectGalleryDialog({
                     opening={openingId === project.id}
                     disabled={openingId !== null}
                     onOpen={() => void handleOpen(project)}
+                    onOpenCopy={() => void handleOpen(project, { asCopy: true })}
                   />
                 ))}
               </div>
@@ -451,11 +457,10 @@ function ScopeTab({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors sm:flex-none ${
-        active
+      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors sm:flex-none ${active
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground"
-      }`}
+        }`}
     >
       {icon}
       {label}
@@ -481,9 +486,10 @@ interface GalleryCardProps {
   opening: boolean;
   disabled: boolean;
   onOpen: () => void;
+  onOpenCopy: () => void;
 }
 
-function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
+function GalleryCard({ project, opening, disabled, onOpen, onOpenCopy }: GalleryCardProps) {
   const { t } = useTranslation();
   const [thumbBroken, setThumbBroken] = useState(false);
 
@@ -532,7 +538,7 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
           </span>
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
           <Button size="sm" className="flex-1" disabled={disabled} onClick={onOpen}>
             {opening ? (
               <>
@@ -542,6 +548,9 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
             ) : (
               t("gallery.open")
             )}
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1" disabled={disabled} onClick={onOpenCopy}>
+            {t("gallery.openCopy")}
           </Button>
           {project.projectUrl ? (
             <Button

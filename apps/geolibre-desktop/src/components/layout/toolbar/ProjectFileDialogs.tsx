@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -11,6 +12,7 @@ import {
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
+import { SaveTemplateDialog } from "../SaveTemplateDialog";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -201,6 +203,15 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <SaveTemplateDialog
+        open={projectFiles.saveTemplateDialogOpen}
+        onOpenChange={projectFiles.setSaveTemplateDialogOpen}
+        getProject={() => {
+          const { project } = projectFiles.buildCurrentProject();
+          const currentName = useAppStore.getState().projectName;
+          return { project, defaultProjectName: currentName };
+        }}
+      />
     </>
   );
 }

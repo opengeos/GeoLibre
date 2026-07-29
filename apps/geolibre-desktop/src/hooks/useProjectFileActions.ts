@@ -1,5 +1,6 @@
 import {
   DEFAULT_PROJECT_NAME,
+  detachProjectCopy,
   projectFromStore,
   serializeProject,
   useAppStore,
@@ -200,9 +201,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // might reference. Token-authenticated opens are not remembered as recent
   // (path = null), since reopening a private URL on restart would 403 without
   // the header.
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
+
   const openProjectFromShareUrl = async (
     url: string,
-    options: { authToken?: string } = {},
+    options: { authToken?: string; asCopy?: boolean } = {},
   ): Promise<void> => {
     const normalizedUrl = normalizeProjectUrl(url);
     if (!normalizedUrl) {
@@ -214,30 +217,31 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     shareUrlAbortRef.current = controller;
 
     try {
+      let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;
       if (options.authToken) {
         const fetched = await fetchProjectFromUrl(normalizedUrl, {
           signal: controller.signal,
           fetchImpl: shareAuthorizedFetch(
             options.authToken,
             resolveShareBaseUrl(),
-            // Matches fetchMyProjects: on desktop this routes the share host
-            // through Tauri's native HTTP, which is exempt from the WebView's
-            // CORS enforcement. Omitting it falls back to browser `fetch`,
-            // which is why listing a private project worked but opening it did
-            // not.
             getShareFetch(),
           ),
         });
-        const project = await resolveProjectXyzLayers(fetched, controller.signal);
-        if (controller.signal.aborted) return;
-        loadProject(project, null);
-        return;
+        project = await resolveProjectXyzLayers(fetched, controller.signal);
+      } else {
+        const result = await openRecentProjectFile(normalizedUrl, controller.signal);
+        project = await resolveProjectXyzLayers(result.project, controller.signal);
       }
 
-      const result = await openRecentProjectFile(normalizedUrl, controller.signal);
-      const project = await resolveProjectXyzLayers(result.project, controller.signal);
       if (controller.signal.aborted) return;
-      loadProject(project, result.path);
+
+      if (options.asCopy) {
+        const detached = detachProjectCopy(project, { nameSuffix: "" });
+        loadProject(detached, null);
+        useAppStore.setState({ isDirty: true });
+      } else {
+        loadProject(project, options.authToken ? null : normalizedUrl);
+      }
     } finally {
       if (shareUrlAbortRef.current === controller) {
         shareUrlAbortRef.current = null;
@@ -569,9 +573,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         !options?.saveAs && existingLocalPath
           ? await saveProjectFileToPath(contentToSave, existingLocalPath)
           : await saveProjectFile(
-              contentToSave,
-              promptForName ? saveName : (existingLocalPath ?? saveName),
-            );
+            contentToSave,
+            promptForName ? saveName : (existingLocalPath ?? saveName),
+          );
     } catch (error) {
       console.error("Failed to save project", error);
       setActionError(
@@ -689,6 +693,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  const handleDuplicate = () => {
+    const { project } = buildCurrentProject();
+    const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
+    loadProject(duplicated, null);
+    useAppStore.setState({ isDirty: true });
+  };
+
   return {
     actionError,
     setActionError,
@@ -700,6 +711,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     projectUrlError,
     setProjectUrlError,
     projectUrlLoading,
+    saveTemplateDialogOpen,
+    setSaveTemplateDialogOpen,
+    handleDuplicate,
+    handleSaveAsTemplate: () => setSaveTemplateDialogOpen(true),
     envStripPrompt,
     resolveEnvStripPrompt,
     embedVectorDataPrompt,

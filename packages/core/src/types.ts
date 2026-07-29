@@ -1608,7 +1608,18 @@ export interface StyleLibraryEntry {
   updatedAt: string;
 }
 
+/** One saved template in the Template Library. */
+export interface ProjectTemplateEntry {
+  id: string;
+  name: string;
+  description?: string;
+  project: GeoLibreProject;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GeoLibreProject {
+  id?: string;
   version: string;
   name: string;
   mapView: MapViewState;
