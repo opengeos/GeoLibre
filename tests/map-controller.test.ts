@@ -691,6 +691,33 @@ describe("MapController camera and query helpers", () => {
     assert.ok(!("maxZoom" in (fit.args[1] as object)));
   });
 
+  it("applies the fit ceiling before comparing against a layer's min render zoom", () => {
+    const { map, fake } = makeFakeMap();
+    // `cameraForBounds` shares the globe over-zoom, so the fake reports a
+    // camera above the tile source's minzoom for a world-scale extent. Capped
+    // at the flat-map fit the extent is well below it, and the layer must fly
+    // to its minimum render zoom rather than fit to an empty viewport.
+    (map as { cameraForBounds: unknown }).cameraForBounds = () => ({
+      center: { lng: 0, lat: 0 },
+      zoom: 2.36,
+    });
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("global-tiles", {
+        type: "vector-tile",
+        source: { type: "vector-tile", minzoom: 2 },
+        geojson: undefined,
+        metadata: { bounds: [-180, -85, 180, 85] },
+      }),
+    );
+
+    const flyTo = fake.calls.find((c) => c.method === "flyTo");
+    assert.ok(flyTo, "flies to the layer's minimum render zoom");
+    assert.equal((flyTo.args[0] as { zoom: number }).zoom, 2);
+    assert.ok(!fake.calls.some((c) => c.method === "fitBounds"));
+  });
+
   it("routes a layer fit through the globe-safe path", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);

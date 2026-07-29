@@ -1229,6 +1229,14 @@ export class MapController {
       [bounds[0], bounds[1]],
       [bounds[2], bounds[3]],
     ];
+    // `fitBounds` is built on `cameraForBounds`, so the camera the branches
+    // below read back carries the same globe over-zoom on a hemisphere-wide
+    // extent. Apply the ceiling to it too, or a world-scale layer is compared
+    // (and flown to) at a zoom the map would never actually settle on.
+    const fitCeiling = globeSafeMaxZoom(bounds, this.getViewportSize(), FIT_BOUNDS_PADDING);
+    const cappedZoom = (zoom: number): number =>
+      fitCeiling === null ? zoom : Math.min(zoom, fitCeiling);
+
     // Tile layers only carry data from their source `minzoom` up (e.g. an OGC
     // API vector tileset served only at z17). Fitting the whole extent would
     // land far below that zoom and render nothing, so when the fit is too far
@@ -1236,7 +1244,11 @@ export class MapController {
     const minRenderZoom = this.getLayerMinRenderZoom(layer);
     if (minRenderZoom !== null) {
       const camera = this.map.cameraForBounds(box, { padding: FIT_BOUNDS_PADDING });
-      if (camera?.center && typeof camera.zoom === "number" && camera.zoom < minRenderZoom) {
+      if (
+        camera?.center &&
+        typeof camera.zoom === "number" &&
+        cappedZoom(camera.zoom) < minRenderZoom
+      ) {
         this.map.flyTo({
           center: camera.center,
           zoom: minRenderZoom,
@@ -1255,7 +1267,7 @@ export class MapController {
       if (camera?.center && typeof camera.zoom === "number") {
         this.map.flyTo({
           center: camera.center,
-          zoom: Math.max(camera.zoom - 0.75, 0),
+          zoom: Math.max(cappedZoom(camera.zoom) - 0.75, 0),
           pitch: 60,
           duration: 800,
         });
