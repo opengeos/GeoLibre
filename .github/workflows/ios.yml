@@ -126,9 +126,10 @@ jobs:
       - name: Generate iOS project
         # gen/apple is not committed; regenerate it on the clean runner. The
         # Tauri CLI is resolved through the geolibre-desktop workspace. This also
-        # merges src-tauri/tauri.ios.conf.json (bundle id, drops the Python
-        # backend) and src-tauri/Info.ios.plist (the NSLocation usage string) into
-        # the generated Xcode project.
+        # picks up src-tauri/tauri.ios.conf.json (bundle id, drops the Python
+        # backend). src-tauri/Info.ios.plist (the NSLocation usage string) is
+        # *not* merged here — that happens during the `tauri ios build` step
+        # below, which is why regenerating the project alone never shows it.
         working-directory: apps/geolibre-desktop
         run: npx tauri ios init
 
@@ -264,8 +265,21 @@ jobs:
         # to the version, yielding e.g. "2.4.0.42" — four components, while
         # CFBundleVersion may contain at most three period-separated integers.
         # App Store Connect rejects that at upload (ITMS-90060), so the flag is
-        # unusable here. Stamping the archive instead keeps the value a single
-        # integer that rises forever and never collides.
+        # unusable here. Stamping the archive instead keeps the value inside the
+        # three-component budget while rising forever.
+        #
+        # GITHUB_RUN_NUMBER alone is not enough: it is fixed for the lifetime of
+        # a run, so re-running a run that already produced an uploaded IPA would
+        # regenerate the same CFBundleVersion. GITHUB_RUN_ATTEMPT is appended on
+        # re-runs (attempt 1 is left bare so the common case stays a single
+        # integer), giving e.g. "42" then "42.2" — still at most three
+        # components, and ordered the way App Store Connect compares them.
+        #
+        # Apple also requires each upload to sort *above* the last one consumed
+        # for the same marketing version. The one hand-uploaded 2.4.0 build used
+        # CFBundleVersion 2.4.0, and dotted-integer comparison makes any run
+        # number from 3 up ("N" reads as N.0.0) beat it. The counter is already
+        # past that, so it only ever climbs from here.
         #
         # Safe to edit the archive at this point: it was built unsigned, and the
         # export step below is what signs it, so the seal is computed over this
@@ -285,14 +299,23 @@ jobs:
             exit 1
           fi
 
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" "$app/Info.plist"
+          build="$GITHUB_RUN_NUMBER"
+          if [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
+            build="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT"
+          fi
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$app/Info.plist"
           # Keep the archive's own summary metadata consistent; not fatal if the
           # key is absent in a future Xcode's archive layout.
-          /usr/libexec/PlistBuddy -c "Set :ApplicationProperties:CFBundleVersion $GITHUB_RUN_NUMBER" \
+          /usr/libexec/PlistBuddy -c "Set :ApplicationProperties:CFBundleVersion $build" \
             "$archive/Info.plist" 2>/dev/null || true
 
           short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
-          echo "::notice::Version $short, build $GITHUB_RUN_NUMBER"
+          echo "::notice::Version $short, build $build"
+          # Handed to the verify step so it asserts against what was actually
+          # stamped rather than recomputing it and agreeing with itself.
+          echo "IOS_BUILD_NUMBER=$build" >> "$GITHUB_ENV"
+          echo "IOS_SHORT_VERSION=$short" >> "$GITHUB_ENV"
 
       - name: Export signed IPA
         if: steps.signing.outputs.present == 'true'
@@ -431,12 +454,21 @@ jobs:
             echo "::error::CFBundleVersion '$build' is not at most three period-separated integers; App Store Connect will reject it"
             exit 1
           fi
-          if [ "$build" != "$GITHUB_RUN_NUMBER" ]; then
-            echo "::error::CFBundleVersion is '$build', expected the stamped '$GITHUB_RUN_NUMBER'"
+          if [ "$build" != "$IOS_BUILD_NUMBER" ]; then
+            echo "::error::CFBundleVersion is '$build', expected the stamped '$IOS_BUILD_NUMBER'"
             exit 1
           fi
 
-          echo "IPA $ipa: bundle id $EXPECTED_BUNDLE_ID, signed by $authority."
+          # The marketing version is never stamped, only carried through from
+          # tauri.conf.json — so assert it survived export unchanged rather than
+          # trusting that nothing rewrote the plist between archive and IPA.
+          short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
+          if [ "$short" != "$IOS_SHORT_VERSION" ]; then
+            echo "::error::CFBundleShortVersionString is '$short', expected '$IOS_SHORT_VERSION'"
+            exit 1
+          fi
+
+          echo "IPA $ipa: bundle id $EXPECTED_BUNDLE_ID, version $short ($build), signed by $authority."
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 
       - name: Clean up the signing keychain

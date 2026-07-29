@@ -296,10 +296,18 @@ onboarding.
    for App Store review.
 
    **Build numbers.** App Store Connect consumes a `CFBundleVersion`
-   permanently per marketing version, so every upload needs a fresh one. CI
-   stamps the archive's `CFBundleVersion` with `$GITHUB_RUN_NUMBER` — a single
-   integer that only ever rises — while `CFBundleShortVersionString` keeps
-   tracking `tauri.conf.json` and stays the version users see.
+   permanently per marketing version, and each upload must also sort above the
+   last one consumed, so every upload needs a fresh, higher value. CI stamps the
+   archive's `CFBundleVersion` with `$GITHUB_RUN_NUMBER` — an integer that only
+   ever rises — while `CFBundleShortVersionString` keeps tracking
+   `tauri.conf.json` and stays the version users see.
+
+   Re-running an existing run appends `$GITHUB_RUN_ATTEMPT` (`42` becomes
+   `42.2`), because the run number itself is fixed for a run's lifetime: without
+   the suffix, re-running a run whose IPA was already uploaded would regenerate
+   the same build number. The one hand-uploaded 2.4.0 build used `2.4.0`, which
+   a bare run number of 3 or more already beats under Apple's dotted-integer
+   comparison.
 
    This is deliberately **not** done with `tauri ios build --build-number`:
    that flag *appends* to the version, producing e.g. `2.4.0.42`. A
