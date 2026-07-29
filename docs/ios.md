@@ -232,14 +232,27 @@ add an Apple Distribution certificate and an App Store provisioning profile for
 > `.ipa`, but the workflow itself is still unexercised end to end — treat the
 > first release-triggered run as a bring-up.
 
-> **Check the runner's Xcode before relying on CI for a submission.** The job
-> pins `runs-on: macos-14` and uses whatever Xcode that image happens to default
-> to. App Store Connect rejects uploads built against an SDK older than its
-> current floor, so an image defaulting to an older Xcode will still pass the
-> compile check and still produce an `.ipa` — and then fail at upload, which is
-> the most expensive place to find out. If that happens, pin the version
-> explicitly (`maxim-lobanov/setup-xcode`) or move the job to a newer `macos-*`
-> image. A local build is unaffected; this only concerns the CI artifact.
+> **The runner's Xcode sets a hard floor.** `tauri ios init` generates an Xcode
+> project in **object format 77**, which only **Xcode 16+** can open. On
+> `macos-14` the archive failed immediately, before compiling anything:
+>
+> ```
+> xcodebuild: error: Unable to load workspace '.../geolibre-desktop.xcodeproj/project.xcworkspace/'.
+>   Reason: The project 'geolibre-desktop' cannot be opened because it is in a
+>   future Xcode project file format (77).
+> ```
+>
+> The job therefore runs on `macos-15` and explicitly selects the newest Xcode on
+> the image rather than trusting its default, failing early with a clear message
+> if that is older than 16. Note this floor comes from the **Tauri CLI's**
+> generated project, not from anything in this repo — re-check it whenever the
+> Tauri CLI is bumped.
+>
+> Separately, App Store Connect rejects uploads built against an SDK below its
+> current floor. That failure is *silent* at build time — an older-but-openable
+> Xcode still produces an `.ipa` and only fails at upload. The Xcode version and
+> iOS SDK list are printed into the run log so a rejected upload can be diagnosed
+> from the run instead of guessed at.
 
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc

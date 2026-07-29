@@ -45,7 +45,15 @@ jobs:
     name: Build iOS app
     # Apple Silicon macOS image; ships a recent Xcode + CocoaPods. Pin the major
     # image so a runner update can't silently change the Xcode/SDK under us.
-    runs-on: macos-14
+    #
+    # macos-14 does NOT work: `tauri ios init` generates an Xcode project in
+    # object format 77, which only Xcode 16+ can open. That image's Xcode is
+    # older, so the archive died before compiling anything with:
+    #   The project 'geolibre-desktop' cannot be opened because it is in a
+    #   future Xcode project file format (77).
+    # The floor is therefore set by the Tauri CLI's generated project format,
+    # not by our own code — re-check it when the Tauri CLI is bumped.
+    runs-on: macos-15
     permissions:
       contents: write
     steps:
@@ -53,6 +61,33 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Select the newest available Xcode
+        # The image default is not trusted: it moves under us on image updates,
+        # and too-old is a hard failure (project format 77 needs Xcode 16+) while
+        # too-old-but-openable is a *silent* one — App Store Connect rejects
+        # uploads built against an SDK below its current floor, which would only
+        # surface after a full archive. Pick the newest Xcode present and record
+        # the version and SDK in the log so a rejected upload can be diagnosed
+        # from the run rather than guessed at.
+        run: |
+          set -euo pipefail
+          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$newest" ]; then
+            echo "::error::No Xcode found on the runner"
+            exit 1
+          fi
+          sudo xcode-select -s "$newest/Contents/Developer"
+
+          version="$(xcodebuild -version | head -1 | awk '{print $2}')"
+          major="${version%%.*}"
+          if [ "$major" -lt 16 ]; then
+            echo "::error::Xcode $version is too old — the generated project uses object format 77, which requires Xcode 16+. Use a newer runner image."
+            exit 1
+          fi
+          echo "::notice::Using Xcode $version at $newest"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i "iOS" || true
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
