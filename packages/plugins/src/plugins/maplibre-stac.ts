@@ -20,6 +20,11 @@ import {
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 const PANEL_ID = STAC_PLUGIN_ID;
 const FOOTPRINT_LAYER_NAME = "STAC search footprints";
+// The footprints layer is a normal store layer, so it is saved into the project
+// while `footprintLayerId` only lives for the session. This marker is how a
+// later search — or a reopened project — recognizes the layer as ours instead
+// of adding a second copy.
+const FOOTPRINT_SOURCE_KIND = "stac-footprints";
 const DRAW_SOURCE = "geolibre-stac-draw-bbox";
 const DRAW_FILL = "geolibre-stac-draw-bbox-fill";
 const DRAW_LINE = "geolibre-stac-draw-bbox-line";
@@ -128,8 +133,20 @@ function currentExtent(): [number, number, number, number] | undefined {
   return [west, Math.max(-90, bounds.getSouth()), east, Math.min(90, bounds.getNorth())];
 }
 
+/** The footprints layer, matched by id first and by ownership marker after a restore. */
+function findFootprintLayer(): { id: string } | undefined {
+  return useAppStore
+    .getState()
+    .layers.find(
+      (layer) =>
+        (footprintLayerId !== null && layer.id === footprintLayerId) ||
+        layer.metadata.sourceKind === FOOTPRINT_SOURCE_KIND,
+    );
+}
+
 function removeFootprints(): void {
-  if (footprintLayerId) useAppStore.getState().removeLayer(footprintLayerId);
+  const layer = findFootprintLayer();
+  if (layer) useAppStore.getState().removeLayer(layer.id);
   footprintLayerId = null;
 }
 
@@ -259,12 +276,15 @@ function showFootprints(items: StacItem[]): void {
   const data: FeatureCollection = { type: "FeatureCollection", features };
   const store = useAppStore.getState();
   // The user may have deleted the layer between searches; fall through and re-add.
-  if (footprintLayerId && store.layers.some((layer) => layer.id === footprintLayerId)) {
-    store.updateLayer(footprintLayerId, { geojson: data });
+  const existing = findFootprintLayer();
+  if (existing) {
+    footprintLayerId = existing.id;
+    store.updateLayer(existing.id, { geojson: data });
     return;
   }
   footprintLayerId = store.addGeoJsonLayer(FOOTPRINT_LAYER_NAME, data);
   store.updateLayer(footprintLayerId, {
+    metadata: { sourceKind: FOOTPRINT_SOURCE_KIND },
     style: {
       ...DEFAULT_LAYER_STYLE,
       fillColor: "#8b5cf6",
