@@ -3,6 +3,7 @@ import type { Layer } from "@deck.gl/core";
 import type {
   RasterControl,
   RasterControlEventHandler,
+  RasterLayerState,
   RasterSampleDataset,
   RenderEngine,
 } from "maplibre-gl-raster";
@@ -324,7 +325,15 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
 export async function addRasterToMap(
   app: GeoLibreAppAPI,
   source: string | File,
-  options: { name?: string; localPath?: string; defaults?: RasterVisualizationDefaults } = {},
+  options: {
+    name?: string;
+    localPath?: string;
+    defaults?: RasterVisualizationDefaults;
+    /** Initial renderer state supplied by programmatic COG callers. */
+    state?: Partial<RasterLayerState>;
+    /** Existing map style layer beneath which the raster is inserted. */
+    beforeId?: string;
+  } = {},
 ): Promise<string> {
   const control = await ensureRasterControl(app);
   if (!control) {
@@ -344,7 +353,15 @@ export async function addRasterToMap(
     zoomTo: true,
     // Safe to pass before the band count is known: the renderer applies a
     // colormap only in single-band mode and ignores it otherwise.
-    ...(options.defaults?.colormap ? { state: { colormap: options.defaults.colormap } } : {}),
+    ...(options.state || options.defaults?.colormap
+      ? {
+          state: {
+            ...(options.defaults?.colormap ? { colormap: options.defaults.colormap } : {}),
+            ...options.state,
+          },
+        }
+      : {}),
+    ...(options.beforeId ? { beforeId: options.beforeId } : {}),
   });
   applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
   if (options.localPath) {
