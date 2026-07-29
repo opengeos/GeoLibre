@@ -52,18 +52,29 @@ export function darkenHex(hex: string, factor: number): string {
     .join("")}`;
 }
 
+/** Case-insensitive palette lookup, returning the canonical (lowercase) entry. */
+function paletteEntryOf(color: string | undefined): string | undefined {
+  const normalized = (color ?? "").trim().toLowerCase();
+  return LAYER_PALETTE.find((entry) => entry === normalized);
+}
+
 /**
- * Layers that actually wear a palette color.
+ * True when a style's colors are a palette assignment {@link initialLayerStyle}
+ * made: a palette fill *paired with* the outline derived from it.
  *
- * Only {@link initialLayerStyle} hands out palette entries, and only
- * `addGeoJsonLayer` calls it — but every other add path still spreads
- * {@link DEFAULT_LAYER_STYLE}, so a raster, image, or 3D tileset carries
- * `fillColor: "#3b82f6"` without rendering anything with it. Counting those as
- * "using blue" would push the first vector layer in a raster-bearing project
- * straight to red. Widen this set if another add path adopts the palette.
+ * The pairing is what makes this precise. Testing the fill alone — or the layer
+ * type — would miscount every layer built straight from
+ * {@link DEFAULT_LAYER_STYLE}, whose `fillColor` happens to be
+ * `LAYER_PALETTE[0]`: rasters and tilesets, but also the Add Data sources that
+ * assemble a geojson layer themselves (delimited text, GPX, GeoRSS, CAD, GDB,
+ * photos, PostGIS) instead of going through `addGeoJsonLayer`. Those carry the
+ * schema's own `strokeColor`, not one derived from the fill, so they no longer
+ * reserve blue and push the next added layer to red.
  */
-function occupiesPaletteColor(layer: GeoLibreLayer): boolean {
-  return layer.type === "geojson";
+function wearsPaletteColor(style: LayerStyle | undefined): boolean {
+  const entry = paletteEntryOf(style?.fillColor);
+  if (!entry) return false;
+  return (style?.strokeColor ?? "").trim().toLowerCase() === darkenHex(entry, STROKE_DARKEN);
 }
 
 /**
@@ -72,16 +83,14 @@ function occupiesPaletteColor(layer: GeoLibreLayer): boolean {
  * leaving the cycle permanently offset. Falls back to cycling by layer count
  * once every entry is in use.
  *
- * @param layers - The project's current layers. Non-vector layers are ignored;
- *   they carry the schema default fill without ever painting with it.
+ * @param layers - The project's current layers. Only those actually wearing a
+ *   palette assignment count; see {@link wearsPaletteColor}.
  * @returns A `#rrggbb` color from {@link LAYER_PALETTE}.
  */
 export function nextLayerPaletteColor(layers: readonly GeoLibreLayer[]): string {
-  const styled = layers.filter(occupiesPaletteColor);
-  const used = new Set(
-    styled.map((layer) => (layer.style?.fillColor ?? "").toLowerCase()).filter(Boolean),
-  );
-  const free = LAYER_PALETTE.find((color) => !used.has(color.toLowerCase()));
+  const styled = layers.filter((layer) => wearsPaletteColor(layer.style));
+  const used = new Set(styled.map((layer) => layer.style.fillColor.trim().toLowerCase()));
+  const free = LAYER_PALETTE.find((color) => !used.has(color));
   return free ?? LAYER_PALETTE[styled.length % LAYER_PALETTE.length];
 }
 
@@ -207,9 +216,7 @@ export function isInitialLayerStyle(style: LayerStyle, geojson?: FeatureCollecti
   if (style.pointRenderer !== "single") return false;
   if ((style.vectorRules?.length ?? 0) > 0) return false;
 
-  const palette: readonly string[] = LAYER_PALETTE;
-  if (!palette.includes(style.fillColor)) return false;
-  if (style.strokeColor !== darkenHex(style.fillColor, STROKE_DARKEN)) return false;
+  if (!wearsPaletteColor(style)) return false;
 
   const expected = { ...DEFAULT_LAYER_STYLE, ...GEOMETRY_DEFAULTS[dominantGeometry(geojson)] };
   return (

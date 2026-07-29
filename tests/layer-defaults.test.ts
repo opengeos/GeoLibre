@@ -13,6 +13,7 @@ import {
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 
+/** A layer wearing a real palette assignment: the fill paired with its outline. */
 function styled(id: string, fillColor: string): GeoLibreLayer {
   return {
     id,
@@ -21,7 +22,22 @@ function styled(id: string, fillColor: string): GeoLibreLayer {
     source: { type: "geojson" },
     visible: true,
     opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE, fillColor },
+    style: { ...DEFAULT_LAYER_STYLE, fillColor, strokeColor: darkenHex(fillColor, 0.55) },
+    metadata: {},
+  };
+}
+
+/** A layer built straight from the schema defaults, as the Add Data sources and
+ *  every non-vector add path do — its fill happens to equal LAYER_PALETTE[0]. */
+function schemaStyled(id: string, type: GeoLibreLayer["type"] = "geojson"): GeoLibreLayer {
+  return {
+    id,
+    name: id,
+    type,
+    source: { type },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
     metadata: {},
   };
 }
@@ -91,13 +107,6 @@ describe("nextLayerPaletteColor", () => {
     assert.equal(nextLayerPaletteColor(remaining), LAYER_PALETTE[1]);
   });
 
-  it("matches a used color case-insensitively", () => {
-    assert.equal(
-      nextLayerPaletteColor([styled("a", LAYER_PALETTE[0].toUpperCase())]),
-      LAYER_PALETTE[1],
-    );
-  });
-
   it("cycles by layer count once the whole palette is in use", () => {
     const all = LAYER_PALETTE.map((color, index) => styled(`l${index}`, color));
     assert.equal(nextLayerPaletteColor(all), LAYER_PALETTE[0]);
@@ -105,14 +114,32 @@ describe("nextLayerPaletteColor", () => {
     assert.equal(nextLayerPaletteColor([...all, styled("l8", LAYER_PALETTE[0])]), LAYER_PALETTE[1]);
   });
 
-  it("ignores layers that never paint with their fill color", () => {
-    // A raster carries DEFAULT_LAYER_STYLE (blue) without rendering it; the
-    // first vector layer should still get blue rather than skipping to red.
-    const raster: GeoLibreLayer = { ...styled("dem", LAYER_PALETTE[0]), type: "raster" };
-    assert.equal(nextLayerPaletteColor([raster]), LAYER_PALETTE[0]);
-    // ...and it must not shift the fallback cycle either.
+  it("ignores layers that never wore a palette assignment", () => {
+    // A raster carries DEFAULT_LAYER_STYLE, whose fill equals LAYER_PALETTE[0]
+    // without ever rendering it; the first vector layer should still get blue.
+    assert.equal(nextLayerPaletteColor([schemaStyled("dem", "raster")]), LAYER_PALETTE[0]);
+    // Same for the Add Data sources that assemble a geojson layer themselves
+    // rather than going through addGeoJsonLayer — the fill matches, but the
+    // outline is the schema's, not one derived from it.
+    assert.equal(nextLayerPaletteColor([schemaStyled("gpx")]), LAYER_PALETTE[0]);
+    // ...and neither shifts the fallback cycle.
     const all = LAYER_PALETTE.map((color, index) => styled(`l${index}`, color));
-    assert.equal(nextLayerPaletteColor([raster, ...all]), LAYER_PALETTE[0]);
+    assert.equal(
+      nextLayerPaletteColor([schemaStyled("dem", "raster"), schemaStyled("gpx"), ...all]),
+      LAYER_PALETTE[0],
+    );
+  });
+
+  it("matches a palette assignment whatever the hex casing", () => {
+    const upper: GeoLibreLayer = {
+      ...styled("a", LAYER_PALETTE[0]),
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        fillColor: LAYER_PALETTE[0].toUpperCase(),
+        strokeColor: darkenHex(LAYER_PALETTE[0], 0.55).toUpperCase(),
+      },
+    };
+    assert.equal(nextLayerPaletteColor([upper]), LAYER_PALETTE[1]);
   });
 });
 
@@ -218,6 +245,16 @@ describe("isInitialLayerStyle", () => {
       assert.equal(isInitialLayerStyle(style, points), false);
     });
   }
+
+  it("accepts an uppercase-hex palette assignment, matching nextLayerPaletteColor", () => {
+    const base = initialLayerStyle({ geojson: points });
+    const style = {
+      ...base,
+      fillColor: base.fillColor.toUpperCase(),
+      strokeColor: base.strokeColor.toUpperCase(),
+    };
+    assert.equal(isInitialLayerStyle(style, points), true);
+  });
 
   it("rejects a legacy project style whose colors predate the palette pairing", () => {
     // fillColor happens to be palette[0], but the old outline is not derived

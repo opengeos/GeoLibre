@@ -1327,9 +1327,11 @@ export function StylePanel({
   const styleSuggestions = useMemo(() => {
     if (!layer || !isInitialLayerStyle(layer.style, layer.geojson)) return [];
     return buildStyleSuggestions(layer, getAttributePropertyNames(layer), {
-      supportsPointRenderer: supportsPointRendererFor(layer, isPointOnlyGeoJsonLayer(layer)),
+      // Reuse the memo above rather than re-scanning: supportsPointRendererFor
+      // takes `pointOnly` precisely so the caller can.
+      supportsPointRenderer: supportsPointRendererFor(layer, isPointOnly),
     });
-  }, [layer]);
+  }, [layer, isPointOnly]);
   // Expression Builder inputs, memoized for stable identities: the dialog
   // memoizes its validation/preview/field-type work off these props, so fresh
   // arrays on every panel render would defeat that memoization while the
