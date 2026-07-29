@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   createCategorizedStops,
   createGraduatedStops,
+  proportionalSizeBounds,
 } from "../apps/geolibre-desktop/src/lib/vector-style-classification";
 
 const tiledLayer = {};
@@ -91,5 +92,41 @@ describe("vector style classification", () => {
 
     assert.equal(stops.length, 3);
     assert.equal(new Set(stops.map((stop) => stop.value)).size, 3);
+  });
+});
+
+describe("proportionalSizeBounds", () => {
+  it("returns the numeric min and max of a property", () => {
+    const layer = {
+      geojson: {
+        features: [
+          { properties: { count: 12 } },
+          { properties: { count: 4 } },
+          { properties: { count: "40" } },
+          { properties: { count: null } },
+        ],
+      },
+    };
+    assert.deepEqual(proportionalSizeBounds(layer, "count"), { min: 4, max: 40 });
+  });
+
+  it("returns null for an empty, missing, or constant column", () => {
+    assert.equal(proportionalSizeBounds({}, "count"), null);
+    assert.equal(proportionalSizeBounds({ geojson: { features: [] } }, "count"), null);
+    assert.equal(
+      proportionalSizeBounds(
+        {
+          geojson: {
+            features: [{ properties: { count: 7 } }, { properties: { count: 7 } }],
+          },
+        },
+        "count",
+      ),
+      null,
+    );
+  });
+
+  it("accepts separately loaded property values", () => {
+    assert.deepEqual(proportionalSizeBounds({}, "height", [1, 5, 9]), { min: 1, max: 9 });
   });
 });

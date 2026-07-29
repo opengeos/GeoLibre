@@ -672,3 +672,80 @@ describe("legend config mutations", () => {
     assert.deepEqual(unchanged.order, []);
   });
 });
+
+describe("buildLegend proportional size", () => {
+  it("emits a three-step size ramp for a point layer with proportional sizing", () => {
+    const legend = buildLegend([
+      makeLayer({
+        id: "apiaries",
+        name: "Apiaries",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#3b82f6",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "nb_ruches",
+          proportionalSizeMinValue: 2,
+          proportionalSizeMaxValue: 48,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 24,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend.length, 1);
+    assert.deepEqual(
+      legend[0].swatches.map((swatch) => [swatch.label, swatch.size, swatch.color]),
+      [
+        ["2", 4, "#3b82f6"],
+        ["25", 14, "#3b82f6"],
+        ["48", 24, "#3b82f6"],
+      ],
+    );
+  });
+
+  it("omits the size ramp for polygon layers", () => {
+    const legend = buildLegend([
+      makeLayer({
+        id: "zones",
+        name: "Zones",
+        metadata: { geometryType: "polygon" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#22c55e",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "area",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 100,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 24,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.deepEqual(legend[0].swatches, [{ color: "#22c55e" }]);
+  });
+
+  it("preserves sizes through applyLegendConfig", () => {
+    const base = buildLegend([
+      makeLayer({
+        id: "pts",
+        name: "Points",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#111111",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "pop",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 100,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 12,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    const applied = applyLegendConfig(base, config());
+    assert.deepEqual(
+      applied[0].swatches.map((swatch) => swatch.size),
+      [4, 8, 12],
+    );
+  });
+});

@@ -7,6 +7,7 @@ import {
   effectiveVectorRules,
   isHexColor,
   normalizeHexColor,
+  proportionalSizeRange,
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
@@ -14,6 +15,7 @@ import {
   type LegendConfig,
   type LegendItemOverride,
   type MarkerShape,
+  type ProportionalSizeRange,
   type VectorStyleStop,
 } from "@geolibre/core";
 import type { LegendEntry, LegendMarker, LegendSwatch } from "./print-layout";
@@ -79,16 +81,45 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
     // Diagram symbology adds one labeled swatch per charted attribute after the
     // base symbology's swatches, mirroring the QGIS legend.
     const diagrams = diagramSwatches(layer);
+    const sizeRange = layerSupportsProportionalLegend(layer)
+      ? proportionalSizeRange(layer.style)
+      : null;
     if (
       (mode === "graduated" || mode === "categorized") &&
       Array.isArray(stops) &&
       stops.length > 0
     ) {
-      return [...rampSwatches(stops, mode), ...diagrams];
+      const ramp = rampSwatches(stops, mode);
+      const classProperty = styleValue(layer.style, "vectorStyleProperty");
+      // Same field classified and sized: merge sizes into the class rows so the
+      // print legend matches the on-map auto-legend (one block, not two).
+      if (sizeRange && mode === "graduated" && sizeRange.property === classProperty) {
+        return [...sizeClassSwatches(ramp, stops, sizeRange), ...diagrams];
+      }
+      return [
+        ...ramp,
+        ...(sizeRange ? proportionalSizeSwatches(sizeRange, sizeRampColor(ramp, layer.style)) : []),
+        ...diagrams,
+      ];
     }
     if (mode === "rule-based") {
       const swatches = ruleSwatches(layer);
-      if (swatches.length > 0) return [...swatches, ...diagrams];
+      if (swatches.length > 0) {
+        return [
+          ...swatches,
+          ...(sizeRange
+            ? proportionalSizeSwatches(sizeRange, sizeRampColor(swatches, layer.style))
+            : []),
+          ...diagrams,
+        ];
+      }
+    }
+    // Single symbology with proportional sizing: the size ramp IS the legend.
+    if (sizeRange) {
+      return [
+        ...proportionalSizeSwatches(sizeRange, styleValue(layer.style, "fillColor") || NEUTRAL_SWATCH),
+        ...diagrams,
+      ];
     }
     const primary = pointMarkerSwatch(layer.style) ?? {
       color: styleValue(layer.style, "fillColor"),
@@ -225,6 +256,9 @@ export function applyLegendConfig(base: LegendEntry[], config: LegendConfig): Le
         // diagram symbology (a multi-swatch entry: [marker primary, ...diagrams])
         // still draws its marker rather than regressing to a color square.
         marker: swatch.marker,
+        // Preserve proportional-symbol sizes so a customized size-ramp entry
+        // still draws graduated circles in the print layout.
+        size: swatch.size,
       });
     });
     // Every class hidden: drop the whole entry rather than render an empty box.
@@ -421,6 +455,77 @@ function rampSwatches(
     color: stop.color,
     label: mode === "graduated" ? `≥ ${formatStopValue(stop.value)}` : formatStopValue(stop.value),
   }));
+}
+
+/**
+ * Whether the map would size this layer's symbols (circles / line strokes).
+ * Polygon fills ignore proportional sizing, matching the on-map auto-legend.
+ */
+function layerSupportsProportionalLegend(layer: GeoLibreLayer): boolean {
+  const geometryType =
+    typeof layer.metadata?.geometryType === "string" ? layer.metadata.geometryType : null;
+  if (geometryType === "point" || geometryType === "line") return true;
+  if (geometryType === "polygon") return false;
+
+  const features = layer.geojson?.features;
+  if (!features || features.length === 0) return true;
+  for (const feature of features.slice(0, 200)) {
+    const type = feature.geometry?.type ?? "";
+    if (type === "Point" || type === "MultiPoint") return true;
+    if (type === "LineString" || type === "MultiLineString") return true;
+    if (type === "Polygon" || type === "MultiPolygon") return false;
+  }
+  return true;
+}
+
+function lerp(from: number, to: number, ratio: number): number {
+  return from + (to - from) * ratio;
+}
+
+/**
+ * Proportional-symbol size rows: min / middle / max symbol sizes with their
+ * data values, mirroring the interpolate the map renders and the on-map legend.
+ */
+function proportionalSizeSwatches(range: ProportionalSizeRange, color: string): LegendSwatch[] {
+  return [0, 0.5, 1].map((ratio) => ({
+    color,
+    label: formatStopValue(lerp(range.minValue, range.maxValue, ratio)),
+    size: lerp(range.minRadius, range.maxRadius, ratio),
+  }));
+}
+
+/**
+ * Size each graduated class swatch at the symbol the map draws for that class
+ * (midpoint of the class range, or the lower bound for the open-ended top
+ * class). Applied when color and size read the same field.
+ */
+function sizeClassSwatches(
+  swatches: { color: string; label: string }[],
+  stops: VectorStyleStop[],
+  range: ProportionalSizeRange,
+): LegendSwatch[] {
+  return swatches.map((swatch, index) => {
+    const from = Number(stops[index]?.value);
+    const to = Number(stops[index + 1]?.value);
+    const representative = Number.isFinite(to) ? (from + to) / 2 : from;
+    if (!Number.isFinite(representative)) return swatch;
+    const ratio = (representative - range.minValue) / (range.maxValue - range.minValue);
+    return {
+      ...swatch,
+      size: lerp(range.minRadius, range.maxRadius, Math.min(1, Math.max(0, ratio))),
+    };
+  });
+}
+
+/** Fill color for a standalone size ramp appended after class rows. */
+function sizeRampColor(
+  classSwatches: { color: string }[],
+  style: LayerStyle,
+): string {
+  if (classSwatches.length > 0) {
+    return classSwatches[Math.floor(classSwatches.length / 2)]!.color;
+  }
+  return styleValue(style, "fillColor") || NEUTRAL_SWATCH;
 }
 
 function sampleEvenly<T>(items: T[], count: number): T[] {

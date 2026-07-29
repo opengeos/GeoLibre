@@ -98,6 +98,7 @@ import {
   getPropertyValues,
   isCategoricalProperty,
   isNumericProperty,
+  proportionalSizeBounds,
 } from "../../lib/vector-style-classification";
 import { buildStyleSuggestions, type StyleSuggestion } from "../../lib/style-suggestions";
 
@@ -2708,6 +2709,14 @@ export function StylePanel({
       {vectorStyleError && <p className="text-xs text-destructive">{vectorStyleError}</p>}
     </div>
   );
+  /** Seed min/max from the field's numeric range when proportional sizing turns on or the field changes. */
+  const proportionalBoundsPatch = (property: string) => {
+    const bounds = proportionalSizeBounds(layer, property);
+    return bounds
+      ? { proportionalSizeMinValue: bounds.min, proportionalSizeMaxValue: bounds.max }
+      : {};
+  };
+
   const proportionalSizeControls = (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -2717,11 +2726,17 @@ export function StylePanel({
             id="proportionalSizeEnabled"
             type="checkbox"
             checked={proportionalEnabled}
-            onChange={(event) =>
-              setLayerStyle(layer.id, {
-                proportionalSizeEnabled: event.target.checked,
-              })
-            }
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              if (enabled && proportionalProperty) {
+                setLayerStyle(layer.id, {
+                  proportionalSizeEnabled: true,
+                  ...proportionalBoundsPatch(proportionalProperty),
+                });
+                return;
+              }
+              setLayerStyle(layer.id, { proportionalSizeEnabled: enabled });
+            }}
           />
           {t("style.symbology.sizeByValue")}
         </label>
@@ -2733,11 +2748,13 @@ export function StylePanel({
             <Select
               id="proportionalSizeProperty"
               value={proportionalProperty}
-              onChange={(event) =>
+              onChange={(event) => {
+                const property = event.target.value;
                 setLayerStyle(layer.id, {
-                  proportionalSizeProperty: event.target.value,
-                })
-              }
+                  proportionalSizeProperty: property,
+                  ...proportionalBoundsPatch(property),
+                });
+              }}
               disabled={vectorStylePropertyOptions.length === 0}
             >
               {vectorStylePropertyOptions.length === 0 ? (

@@ -202,6 +202,12 @@ export interface LegendSwatch {
    * back to the square if a custom SVG icon has not been preloaded.
    */
   marker?: LegendMarker;
+  /**
+   * Circle radius in map pixels for a proportional-symbol row. When set, the
+   * legend draws a filled circle instead of a color square (scaled to fit the
+   * legend box, keeping ratios across the entry).
+   */
+  size?: number;
 }
 
 export interface LegendEntry {
@@ -1990,7 +1996,7 @@ function drawLegend(
   // multi-class entry renders a layer heading (when groupByLayer is on) above
   // its class swatches, or just the flat class swatches when it is off. A row
   // draws a swatch when it has a color or a marker; a group heading has neither.
-  const rows: { color: string; text: string; marker?: LegendMarker }[] = [];
+  const rows: { color: string; text: string; marker?: LegendMarker; size?: number }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
       // Prefer the swatch's own label so a multi-class entry collapsed to one
@@ -2002,19 +2008,43 @@ function drawLegend(
         color: swatch?.color ?? "#999999",
         text: swatch?.label ?? entry.name,
         marker: swatch?.marker,
+        size: swatch?.size,
       });
     } else {
       if (opts.groupByLayer) rows.push({ color: "", text: entry.name });
       for (const sw of entry.swatches) {
         // Carry the marker so a marker + diagram layer (a multi-swatch entry
         // whose primary swatch is the marker) draws its marker, not a square.
-        rows.push({ color: sw.color, text: sw.label ?? "", marker: sw.marker });
+        rows.push({ color: sw.color, text: sw.label ?? "", marker: sw.marker, size: sw.size });
       }
     }
   }
 
   const rowHasSwatch = (r: { color: string; marker?: LegendMarker }): boolean =>
     Boolean(r.color) || Boolean(r.marker);
+
+  // Cap proportional circles so a huge max radius still fits the legend box,
+  // while keeping ratios within each entry (same idea as the on-map LegendSwatch).
+  const MAX_CIRCLE_R = swatch * 0.55;
+  const rowScale: number[] = rows.map(() => 1);
+  {
+    let i = 0;
+    while (i < rows.length) {
+      if (rows[i]!.size === undefined) {
+        i += 1;
+        continue;
+      }
+      let j = i;
+      let maxSize = 0;
+      while (j < rows.length && rows[j]!.size !== undefined) {
+        maxSize = Math.max(maxSize, rows[j]!.size!);
+        j += 1;
+      }
+      const scale = maxSize > MAX_CIRCLE_R ? MAX_CIRCLE_R / maxSize : 1;
+      for (let k = i; k < j; k++) rowScale[k] = scale;
+      i = j;
+    }
+  }
 
   // Measure required width.
   ctx.save();
@@ -2053,7 +2083,8 @@ function drawLegend(
     cy += unit;
   }
 
-  for (const r of rows) {
+  for (let index = 0; index < rows.length; index++) {
+    const r = rows[index]!;
     cy += rowH;
     const hasSwatch = rowHasSwatch(r);
     const textX = hasSwatch ? x + pad + swatch + unit : x + pad;
@@ -2061,6 +2092,17 @@ function drawLegend(
     const sy = cy - swatch * 0.85;
     if (r.marker) {
       drawLegendMarker(ctx, r.marker, sx, sy, swatch, r.color, opts.markerIcons);
+    } else if (r.size !== undefined && r.color) {
+      const radius = Math.max(unit * 0.35, r.size * rowScale[index]!);
+      const cx = sx + swatch / 2;
+      const cyc = sy + swatch / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cyc, radius, 0, Math.PI * 2);
+      ctx.fillStyle = r.color;
+      ctx.fill();
+      ctx.strokeStyle = BORDER;
+      ctx.lineWidth = Math.max(1, unit * 0.1);
+      ctx.stroke();
     } else if (r.color) {
       ctx.fillStyle = r.color;
       ctx.fillRect(sx, sy, swatch, swatch);

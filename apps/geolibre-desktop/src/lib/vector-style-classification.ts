@@ -164,6 +164,27 @@ export function createCategorizedStops(
 }
 
 /**
+ * Numeric min/max for a property, used to seed proportional-symbol value
+ * bounds when the user picks a size field. Returns `null` when the column has
+ * no finite numbers or every value is the same (a zero-width range cannot
+ * drive an interpolate).
+ */
+export function proportionalSizeBounds(
+  layer: ClassifiableLayer,
+  property: string,
+  propertyValues?: unknown[],
+): { min: number; max: number } | null {
+  if (!property) return null;
+  const values = (propertyValues ?? getPropertyValues(layer, property))
+    .map(finitePropertyNumber)
+    .filter((value): value is number => value !== null);
+  if (values.length === 0) return null;
+  const { min, max } = numericBounds(values);
+  if (!(Number.isFinite(min) && Number.isFinite(max)) || min === max) return null;
+  return { min, max };
+}
+
+/**
  * True when a property has at least two *distinct* finite numeric values, so a
  * graduated classification has a range to break up.
  *
