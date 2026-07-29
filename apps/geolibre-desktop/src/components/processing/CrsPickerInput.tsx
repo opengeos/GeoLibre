@@ -99,47 +99,51 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
     close(true);
   };
 
+  // A named `group` inside the listbox, the ARIA shape for a split option list:
+  // the group carries the name, so a screen reader announces "Geographic" or
+  // "Projected" as the virtual cursor crosses into it, and the sticky heading
+  // that shows the same word visually is hidden from the tree so it is not read
+  // twice. `presentation` on the heading alone would leave the split silent.
   const renderGroup = (label: string, entries: CrsEntry[], offset: number) =>
     entries.length === 0 ? null : (
-      <>
-        <li
-          role="presentation"
+      <div key={label} role="group" aria-label={label}>
+        <div
+          aria-hidden="true"
           className="sticky top-0 bg-popover px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
         >
           {label}
-        </li>
+        </div>
         {entries.map((entry, index) => {
           const position = offset + index;
           return (
-            <li key={entry.code}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={position === activeIndex}
-                id={`${listId}-option-${position}`}
-                // Out of the tab order: with `aria-activedescendant` on the
-                // search box, DOM focus stays there and the arrow keys move a
-                // virtual highlight. Leaving 300 rows as tab stops would also
-                // bury the rest of the form behind them.
-                tabIndex={-1}
-                className={cn(
-                  "flex w-full items-baseline justify-between gap-2 px-2 py-1 text-start text-xs hover:bg-accent",
-                  position === activeIndex && "bg-accent",
-                )}
-                onMouseEnter={() => setActiveIndex(position)}
-                // click, not mousedown: nothing closes the panel on pointerdown
-                // inside it, so the click lands, and a click is what a row
-                // reached by any means fires.
-                onClick={() => choose(entry)}
-                onFocus={() => setActiveIndex(position)}
-              >
-                <span>{entry.name}</span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">{entry.code}</span>
-              </button>
-            </li>
+            <button
+              key={entry.code}
+              type="button"
+              role="option"
+              aria-selected={position === activeIndex}
+              id={`${listId}-option-${position}`}
+              // Out of the tab order: with `aria-activedescendant` on the search
+              // box, DOM focus stays there and the arrow keys move a virtual
+              // highlight. Leaving 300 rows as tab stops would also bury the
+              // rest of the form behind them.
+              tabIndex={-1}
+              className={cn(
+                "flex w-full items-baseline justify-between gap-2 px-2 py-1 text-start text-xs hover:bg-accent",
+                position === activeIndex && "bg-accent",
+              )}
+              onMouseEnter={() => setActiveIndex(position)}
+              // click, not mousedown: nothing closes the panel on pointerdown
+              // inside it, so the click lands, and a click is what a row reached
+              // by any means fires.
+              onClick={() => choose(entry)}
+              onFocus={() => setActiveIndex(position)}
+            >
+              <span>{entry.name}</span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">{entry.code}</span>
+            </button>
           );
         })}
-      </>
+      </div>
     );
 
   return (
@@ -203,7 +207,7 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                 role="combobox"
                 aria-expanded
                 // Only while the list is actually rendered: with no matches the
-                // <ul> is replaced by the "no results" message, and pointing at an
+                // listbox is replaced by the "no results" message, and pointing at an
                 // id that is not in the DOM tells a screen reader nothing.
                 aria-controls={ordered.length > 0 ? listId : undefined}
                 aria-activedescendant={
@@ -239,10 +243,10 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                 {t("processing.whitebox.crs.noResults")}
               </p>
             ) : (
-              <ul id={listId} role="listbox" className="max-h-64 overflow-y-auto py-1">
+              <div id={listId} role="listbox" className="max-h-64 overflow-y-auto py-1">
                 {renderGroup(t("processing.whitebox.crs.geographic"), geographic, 0)}
                 {renderGroup(t("processing.whitebox.crs.projected"), projected, geographic.length)}
-              </ul>
+              </div>
             )}
           </div>
         ) : null}
