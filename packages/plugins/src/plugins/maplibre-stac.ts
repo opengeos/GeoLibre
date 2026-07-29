@@ -1,3 +1,4 @@
+import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -17,14 +18,15 @@ import {
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 const PANEL_ID = STAC_PLUGIN_ID;
-const FOOTPRINT_SOURCE = "geolibre-stac-results";
-const FOOTPRINT_FILL = "geolibre-stac-results-fill";
-const FOOTPRINT_LINE = "geolibre-stac-results-line";
+const FOOTPRINT_LAYER_NAME = "STAC search footprints";
 const DRAW_SOURCE = "geolibre-stac-draw-bbox";
 const DRAW_FILL = "geolibre-stac-draw-bbox-fill";
 const DRAW_LINE = "geolibre-stac-draw-bbox-line";
 
 let appRef: GeoLibreAppAPI | null = null;
+// The result footprints are a first-class store layer, so they show up in the
+// Layers panel and can be hidden, restyled, or removed like any other layer.
+let footprintLayerId: string | null = null;
 let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
@@ -85,10 +87,9 @@ function currentExtent(): [number, number, number, number] | undefined {
   return [west, Math.max(-90, bounds.getSouth()), east, Math.min(90, bounds.getNorth())];
 }
 
-function removeFootprints(map: MapLibreMap): void {
-  if (map.getLayer(FOOTPRINT_LINE)) map.removeLayer(FOOTPRINT_LINE);
-  if (map.getLayer(FOOTPRINT_FILL)) map.removeLayer(FOOTPRINT_FILL);
-  if (map.getSource(FOOTPRINT_SOURCE)) map.removeSource(FOOTPRINT_SOURCE);
+function removeFootprints(): void {
+  if (footprintLayerId) useAppStore.getState().removeLayer(footprintLayerId);
+  footprintLayerId = null;
 }
 
 function removeDrawBox(map: MapLibreMap): void {
@@ -203,35 +204,33 @@ function beginBboxDraw(
 }
 
 function showFootprints(items: StacItem[]): void {
-  const map = appRef?.getMap?.();
-  if (!map) return;
-  const data: FeatureCollection = {
-    type: "FeatureCollection",
-    features: items
-      .filter((item) => item.geometry)
-      .map((item) => ({
-        type: "Feature",
-        geometry: item.geometry!,
-        properties: { id: item.id, collection: item.collection ?? "" },
-      })),
-  };
-  const source = map.getSource(FOOTPRINT_SOURCE) as GeoJSONSource | undefined;
-  if (source) {
-    source.setData(data);
+  const features = items
+    .filter((item) => item.geometry)
+    .map<FeatureCollection["features"][number]>((item) => ({
+      type: "Feature",
+      geometry: item.geometry!,
+      properties: { id: item.id, collection: item.collection ?? "" },
+    }));
+  if (!features.length) {
+    removeFootprints();
     return;
   }
-  map.addSource(FOOTPRINT_SOURCE, { type: "geojson", data });
-  map.addLayer({
-    id: FOOTPRINT_FILL,
-    type: "fill",
-    source: FOOTPRINT_SOURCE,
-    paint: { "fill-color": "#8b5cf6", "fill-opacity": 0.12 },
-  });
-  map.addLayer({
-    id: FOOTPRINT_LINE,
-    type: "line",
-    source: FOOTPRINT_SOURCE,
-    paint: { "line-color": "#8b5cf6", "line-width": 2 },
+  const data: FeatureCollection = { type: "FeatureCollection", features };
+  const store = useAppStore.getState();
+  // The user may have deleted the layer between searches; fall through and re-add.
+  if (footprintLayerId && store.layers.some((layer) => layer.id === footprintLayerId)) {
+    store.updateLayer(footprintLayerId, { geojson: data });
+    return;
+  }
+  footprintLayerId = store.addGeoJsonLayer(FOOTPRINT_LAYER_NAME, data);
+  store.updateLayer(footprintLayerId, {
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      fillColor: "#8b5cf6",
+      strokeColor: "#8b5cf6",
+      fillOpacity: 0.12,
+      strokeWidth: 2,
+    },
   });
 }
 
@@ -592,11 +591,10 @@ function buildPanel(container: HTMLElement): () => void {
     controller.abort();
     cancelDraw?.();
     searchGeneration += 1;
+    // The footprints are the user's layer now, so closing the panel leaves them
+    // on the map; only deactivating the plugin tears them down.
     const map = appRef?.getMap?.();
-    if (map) {
-      removeFootprints(map);
-      removeDrawBox(map);
-    }
+    if (map) removeDrawBox(map);
   };
 }
 
@@ -633,11 +631,9 @@ export const maplibreStacCatalogsPlugin: GeoLibrePlugin = {
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;
+    removeFootprints();
     const map = app.getMap?.();
-    if (map) {
-      removeFootprints(map);
-      removeDrawBox(map);
-    }
+    if (map) removeDrawBox(map);
     appRef = null;
   },
 };
