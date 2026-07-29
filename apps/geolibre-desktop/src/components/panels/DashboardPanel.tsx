@@ -760,13 +760,7 @@ function SelectorValues({
 /** Renders the list widget body: a compact scrollable HTML table showing the
  * selected columns for the top-N features (by sortBy/sortDir, limited by limit).
  * Like the selector, this does not yet participate in cross-filtering. */
-function ListTable({
-  fields,
-  rows,
-}: {
-  fields: string[];
-  rows: Record<string, unknown>[];
-}) {
+function ListTable({ fields, rows }: { fields: string[]; rows: Record<string, unknown>[] }) {
   return (
     <table className="w-full border-collapse text-xs">
       <thead>

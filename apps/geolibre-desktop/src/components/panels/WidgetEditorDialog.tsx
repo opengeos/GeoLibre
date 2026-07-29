@@ -430,16 +430,12 @@ export function WidgetEditorDialog({
                       onChange={setSortBy}
                     />
                     <div className="grid gap-1.5">
-                      <Label htmlFor="widget-list-sortdir">
-                        {t("dashboard.editor.sortDir")}
-                      </Label>
+                      <Label htmlFor="widget-list-sortdir">{t("dashboard.editor.sortDir")}</Label>
                       <Select
                         id="widget-list-sortdir"
                         className="w-28"
                         value={sortDir}
-                        onChange={(event) =>
-                          setSortDir(event.target.value as "asc" | "desc")
-                        }
+                        onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
                       >
                         <option value="asc">{t("dashboard.editor.ascending")}</option>
                         <option value="desc">{t("dashboard.editor.descending")}</option>
