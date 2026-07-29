@@ -1181,17 +1181,44 @@ export function StylePanel({
     );
     setVectorPropertyValuesLoading(true);
     setVectorPropertyValuesUnavailable(false);
-    const map = mapControllerRef.current?.getMap();
-    const valuesPromise = usesDuckDbVector
-      ? getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
-      : Promise.resolve(
-          map
-            ? loadedVectorTileFeatures(map, layer)
-                .map((feature) => feature.properties?.[draftVectorStyleProperty])
-                .filter((value) => value !== null && value !== undefined)
-            : null,
-        );
-    void valuesPromise
+
+    if (!usesDuckDbVector) {
+      // Tiled sources only expose the features currently loaded, so an empty
+      // sample means the tiles have not arrived yet rather than an empty
+      // attribute — keep re-reading until the map settles with features.
+      const map = mapControllerRef.current?.getMap();
+      if (!map) {
+        setLoadedVectorPropertyValues(null);
+        setVectorPropertyValuesUnavailable(true);
+        setVectorPropertyValuesLoading(false);
+        return;
+      }
+      const sampleValues = (): boolean => {
+        const features = loadedVectorTileFeatures(map, layer);
+        if (features.length === 0) return false;
+        setLoadedVectorPropertyValues({
+          layerId: layer.id,
+          property: draftVectorStyleProperty,
+          values: features
+            .map((feature) => feature.properties?.[draftVectorStyleProperty])
+            .filter((value) => value !== null && value !== undefined),
+        });
+        setVectorPropertyValuesLoading(false);
+        return true;
+      };
+      if (sampleValues()) return;
+      const onIdle = (): void => {
+        if (cancelled) return;
+        if (sampleValues()) map.off("idle", onIdle);
+      };
+      map.on("idle", onIdle);
+      return () => {
+        cancelled = true;
+        map.off("idle", onIdle);
+      };
+    }
+
+    void getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
       .then((values) => {
         if (cancelled) return;
         if (values === null) {
@@ -1225,6 +1252,7 @@ export function StylePanel({
     layer?.geojson,
     layer?.id,
     layer?.metadata.sourceKind,
+    layer?.type,
   ]);
 
   useEffect(() => {
