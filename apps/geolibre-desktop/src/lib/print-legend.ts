@@ -89,12 +89,16 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
       Array.isArray(stops) &&
       stops.length > 0
     ) {
-      const ramp = rampSwatches(stops, mode);
+      // Sample once so color/label rows and proportional sizes stay paired when
+      // the class list exceeds MAX_RAMP_SWATCHES.
+      const displayedStops =
+        stops.length > MAX_RAMP_SWATCHES ? sampleEvenly(stops, MAX_RAMP_SWATCHES) : stops;
+      const ramp = rampSwatches(displayedStops, mode);
       const classProperty = styleValue(layer.style, "vectorStyleProperty");
       // Same field classified and sized: merge sizes into the class rows so the
       // print legend matches the on-map auto-legend (one block, not two).
       if (sizeRange && mode === "graduated" && sizeRange.property === classProperty) {
-        return [...sizeClassSwatches(ramp, stops, sizeRange), ...diagrams];
+        return [...sizeClassSwatches(ramp, displayedStops, sizeRange), ...diagrams];
       }
       return [
         ...ramp,
@@ -450,8 +454,7 @@ function rampSwatches(
   stops: VectorStyleStop[],
   mode: "graduated" | "categorized",
 ): { color: string; label: string }[] {
-  const limited = stops.length > MAX_RAMP_SWATCHES ? sampleEvenly(stops, MAX_RAMP_SWATCHES) : stops;
-  return limited.map((stop) => ({
+  return stops.map((stop) => ({
     color: stop.color,
     label: mode === "graduated" ? `≥ ${formatStopValue(stop.value)}` : formatStopValue(stop.value),
   }));

@@ -1148,19 +1148,37 @@ export function StylePanel({
 
   // Add Vector Layer keeps large tiled datasets in DuckDB instead of copying
   // their geometry into the app store. Read only the selected attribute when
-  // classification needs its values, so categorized and graduated styling
-  // remain available without defeating tiled rendering.
+  // classification or proportional sizing needs its values, so categorized /
+  // graduated styling and size-by-value remain available without defeating
+  // tiled rendering.
   useEffect(() => {
-    const usesDuckDbVector = layer?.metadata.sourceKind === "maplibre-gl-vector";
+    if (!layer) return;
+    const usesDuckDbVector = layer.metadata.sourceKind === "maplibre-gl-vector";
     const usesVectorTiles =
-      layer?.type === "vector-tiles" || layer?.type === "pmtiles" || layer?.type === "mbtiles";
-    const needsValues =
-      (usesDuckDbVector || usesVectorTiles) &&
-      !layer.geojson &&
+      layer.type === "vector-tiles" || layer.type === "pmtiles" || layer.type === "mbtiles";
+    if (!(usesDuckDbVector || usesVectorTiles) || layer.geojson) {
+      setLoadedVectorPropertyValues(null);
+      setVectorPropertyValuesLoading(false);
+      setVectorPropertyValuesUnavailable(false);
+      return;
+    }
+
+    const classificationNeedsValues =
       (draftVectorStyleMode === "graduated" || draftVectorStyleMode === "categorized") &&
       draftVectorStyleProperty !== "";
+    const proportionalPropertyToLoad = styleValue(layer.style, "proportionalSizeProperty");
+    const proportionalNeedsValues =
+      styleValue(layer.style, "proportionalSizeEnabled") && proportionalPropertyToLoad !== "";
+    // Prefer the classification field when both need values so graduated /
+    // categorized stop regeneration keeps the existing load path. Proportional
+    // sizing in single mode (or with the same field) still gets a sample.
+    const propertyToLoad = classificationNeedsValues
+      ? draftVectorStyleProperty
+      : proportionalNeedsValues
+        ? proportionalPropertyToLoad
+        : "";
 
-    if (!needsValues) {
+    if (!propertyToLoad) {
       setLoadedVectorPropertyValues(null);
       setVectorPropertyValuesLoading(false);
       setVectorPropertyValuesUnavailable(false);
@@ -1169,9 +1187,7 @@ export function StylePanel({
 
     let cancelled = false;
     setLoadedVectorPropertyValues((current) =>
-      current?.layerId === layer.id && current.property === draftVectorStyleProperty
-        ? current
-        : null,
+      current?.layerId === layer.id && current.property === propertyToLoad ? current : null,
     );
     setVectorPropertyValuesLoading(true);
     setVectorPropertyValuesUnavailable(false);
@@ -1192,9 +1208,9 @@ export function StylePanel({
         if (features.length === 0) return false;
         setLoadedVectorPropertyValues({
           layerId: layer.id,
-          property: draftVectorStyleProperty,
+          property: propertyToLoad,
           values: features
-            .map((feature) => feature.properties?.[draftVectorStyleProperty])
+            .map((feature) => feature.properties?.[propertyToLoad])
             .filter((value) => value !== null && value !== undefined),
         });
         setVectorPropertyValuesLoading(false);
@@ -1225,7 +1241,7 @@ export function StylePanel({
       };
     }
 
-    void getVectorLayerPropertyValues(layer.id, draftVectorStyleProperty)
+    void getVectorLayerPropertyValues(layer.id, propertyToLoad)
       .then((values) => {
         if (cancelled) return;
         if (values === null) {
@@ -1235,7 +1251,7 @@ export function StylePanel({
         }
         setLoadedVectorPropertyValues({
           layerId: layer.id,
-          property: draftVectorStyleProperty,
+          property: propertyToLoad,
           values,
         });
       })
@@ -1259,6 +1275,8 @@ export function StylePanel({
     layer?.geojson,
     layer?.id,
     layer?.metadata.sourceKind,
+    layer?.style.proportionalSizeEnabled,
+    layer?.style.proportionalSizeProperty,
     layer?.type,
   ]);
 
@@ -1295,6 +1313,36 @@ export function StylePanel({
     layer?.metadata.sourceKind,
     loadedVectorPropertyValues,
   ]);
+
+  // When tiled attribute samples arrive for the proportional size field, seed
+  // min/max if the style is still on the default 0–100 range (so a later
+  // user edit is not overwritten by a tile refresh).
+  useEffect(() => {
+    if (!layer || !loadedVectorPropertyValues) return;
+    if (!styleValue(layer.style, "proportionalSizeEnabled")) return;
+    const property = styleValue(layer.style, "proportionalSizeProperty");
+    if (
+      !property ||
+      loadedVectorPropertyValues.layerId !== layer.id ||
+      loadedVectorPropertyValues.property !== property
+    ) {
+      return;
+    }
+    const minValue = styleValue(layer.style, "proportionalSizeMinValue");
+    const maxValue = styleValue(layer.style, "proportionalSizeMaxValue");
+    if (
+      minValue !== DEFAULT_LAYER_STYLE.proportionalSizeMinValue ||
+      maxValue !== DEFAULT_LAYER_STYLE.proportionalSizeMaxValue
+    ) {
+      return;
+    }
+    const bounds = proportionalSizeBounds(layer, property, loadedVectorPropertyValues.values);
+    if (!bounds) return;
+    setLayerStyle(layer.id, {
+      proportionalSizeMinValue: bounds.min,
+      proportionalSizeMaxValue: bounds.max,
+    });
+  }, [layer, loadedVectorPropertyValues, setLayerStyle]);
 
   // Reset the "show basemap layers" advanced toggle back to its clean default
   // whenever a different layer is selected. Keyed on the layer id alone so it
@@ -2710,12 +2758,30 @@ export function StylePanel({
     </div>
   );
   /** Seed min/max from the field's numeric range when proportional sizing turns on or the field changes. */
+  const matchingPropertyValues = (property: string): unknown[] | undefined =>
+    loadedVectorPropertyValues?.layerId === layer.id &&
+    loadedVectorPropertyValues.property === property
+      ? loadedVectorPropertyValues.values
+      : undefined;
+
+  /** True when we already have a sample that can prove the field has (or lacks) a usable range. */
+  const hasPropertySample = (property: string): boolean =>
+    Boolean(layer.geojson?.features?.length) || matchingPropertyValues(property) !== undefined;
+
   const proportionalBoundsPatch = (property: string) => {
-    const bounds = proportionalSizeBounds(layer, property);
+    const bounds = proportionalSizeBounds(layer, property, matchingPropertyValues(property));
     return bounds
       ? { proportionalSizeMinValue: bounds.min, proportionalSizeMaxValue: bounds.max }
-      : {};
+      : null;
   };
+
+  const clearProportionalSizeField = (disable: boolean) =>
+    setLayerStyle(layer.id, {
+      ...(disable ? { proportionalSizeEnabled: false } : {}),
+      proportionalSizeProperty: "",
+      proportionalSizeMinValue: DEFAULT_LAYER_STYLE.proportionalSizeMinValue,
+      proportionalSizeMaxValue: DEFAULT_LAYER_STYLE.proportionalSizeMaxValue,
+    });
 
   const proportionalSizeControls = (
     <div className="space-y-3">
@@ -2728,14 +2794,29 @@ export function StylePanel({
             checked={proportionalEnabled}
             onChange={(event) => {
               const enabled = event.target.checked;
-              if (enabled && proportionalProperty) {
+              if (!enabled) {
+                setLayerStyle(layer.id, { proportionalSizeEnabled: false });
+                return;
+              }
+              if (!proportionalProperty) {
+                setLayerStyle(layer.id, { proportionalSizeEnabled: true });
+                return;
+              }
+              const boundsPatch = proportionalBoundsPatch(proportionalProperty);
+              if (boundsPatch) {
                 setLayerStyle(layer.id, {
                   proportionalSizeEnabled: true,
-                  ...proportionalBoundsPatch(proportionalProperty),
+                  ...boundsPatch,
                 });
                 return;
               }
-              setLayerStyle(layer.id, { proportionalSizeEnabled: enabled });
+              // Sample proves the field is unusable — do not enable with a stale range.
+              if (hasPropertySample(proportionalProperty)) {
+                clearProportionalSizeField(true);
+                return;
+              }
+              // Tiled / unloaded: enable and keep the field; the loader effect seeds bounds.
+              setLayerStyle(layer.id, { proportionalSizeEnabled: true });
             }}
           />
           {t("style.symbology.sizeByValue")}
@@ -2750,9 +2831,28 @@ export function StylePanel({
               value={proportionalProperty}
               onChange={(event) => {
                 const property = event.target.value;
+                if (!property) {
+                  clearProportionalSizeField(false);
+                  return;
+                }
+                const boundsPatch = proportionalBoundsPatch(property);
+                if (boundsPatch) {
+                  setLayerStyle(layer.id, {
+                    proportionalSizeProperty: property,
+                    ...boundsPatch,
+                  });
+                  return;
+                }
+                // Sample proves nonnumeric / empty / constant — reject and clear stale range.
+                if (hasPropertySample(property)) {
+                  clearProportionalSizeField(true);
+                  return;
+                }
+                // No sample yet (tiled): commit the field and reset to defaults until load.
                 setLayerStyle(layer.id, {
                   proportionalSizeProperty: property,
-                  ...proportionalBoundsPatch(property),
+                  proportionalSizeMinValue: DEFAULT_LAYER_STYLE.proportionalSizeMinValue,
+                  proportionalSizeMaxValue: DEFAULT_LAYER_STYLE.proportionalSizeMaxValue,
                 });
               }}
               disabled={vectorStylePropertyOptions.length === 0}
