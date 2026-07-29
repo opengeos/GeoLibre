@@ -210,3 +210,24 @@ describe("buildStyleSuggestions", () => {
     });
   });
 });
+
+describe("the scan bound", () => {
+  it("reads at most a bounded sample when choosing, however large the layer", () => {
+    // 5,000 features whose category only becomes high-cardinality past the cap.
+    // A full scan would see 5,000 distinct values and reject `zone`; a bounded
+    // one sees a handful and offers it. Asserting the offer is how we observe
+    // that the scan stopped.
+    const rows = Array.from({ length: 5000 }, (_, index) => ({
+      zone: index < 500 ? `Z${index % 4}` : `Z${index}`,
+    }));
+    const suggestions = buildStyleSuggestions(layerWith(rows), ["zone"], NO_POINTS);
+    assert.deepEqual(suggestions, [{ kind: "categorized", property: "zone" }]);
+  });
+
+  it("still reads every feature of a layer under the cap", () => {
+    const rows = Array.from({ length: 60 }, (_, index) => ({ zone: `Z${index}` }));
+    // 60 distinct values is well past the categorical limit, so nothing is
+    // offered — proof the sample did not truncate a small layer into shape.
+    assert.deepEqual(buildStyleSuggestions(layerWith(rows), ["zone"], NO_POINTS), []);
+  });
+});

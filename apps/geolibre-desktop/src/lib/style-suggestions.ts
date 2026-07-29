@@ -100,6 +100,37 @@ export type SuggestableLayer = ClassifiableLayer & {
 };
 
 /**
+ * Features read when *choosing* what to suggest.
+ *
+ * Every predicate below walks the layer's values, and it happens once per
+ * candidate column, so an unbounded scan is O(columns x features) on the main
+ * thread the moment the Style panel opens. Matching the cap `dominantGeometry`
+ * already applies for the same reason keeps that bounded.
+ *
+ * This bounds the *choice* only. Applying a suggestion classifies the layer
+ * through the ordinary Style panel path, which still sees every feature, so a
+ * sampled decision never produces sampled class breaks.
+ *
+ * The trade-off is real but small: on a layer with several comparable numeric
+ * columns the sample can rank them differently than a full scan would (on the
+ * USGS earthquake feed the pick moves from `dmin` to `gap`). Both are offers
+ * the user accepts or ignores, and the attribute dropdown sits directly below,
+ * so a different-but-reasonable suggestion costs less than an unbounded scan
+ * on the main thread every time the panel opens.
+ */
+const SUGGESTION_SAMPLE_SIZE = 500;
+
+/** A view of the layer over at most {@link SUGGESTION_SAMPLE_SIZE} features. */
+function sampleLayer(layer: SuggestableLayer): SuggestableLayer {
+  const features = layer.geojson?.features ?? [];
+  if (features.length <= SUGGESTION_SAMPLE_SIZE) return layer;
+  return {
+    ...layer,
+    geojson: { ...layer.geojson, features: features.slice(0, SUGGESTION_SAMPLE_SIZE) },
+  };
+}
+
+/**
  * Suggest up to three renderers for a layer, best first.
  *
  * @param layer - The layer to inspect; its GeoJSON supplies the values.
@@ -114,16 +145,18 @@ export function buildStyleSuggestions(
   options: { supportsPointRenderer: boolean },
 ): StyleSuggestion[] {
   const suggestions: StyleSuggestion[] = [];
-  const candidates = mappableProperties(layer, properties);
+  // Every predicate below scans values per column; do it over a bounded sample.
+  const sample = sampleLayer(layer);
+  const candidates = mappableProperties(sample, properties);
 
   // Categorized first: a low-cardinality label is what a reader most often
   // wants a map colored by, and it needs no scale to interpret.
-  const categorical = candidates.find((property) => isCategoricalProperty(layer, property));
+  const categorical = candidates.find((property) => isCategoricalProperty(sample, property));
   if (categorical) suggestions.push({ kind: "categorized", property: categorical });
 
   // No fallback to the unfiltered list: when every numeric column is an id or a
   // timestamp, offering none is better than recommending a meaningless one.
-  const numeric = chooseGraduatedProperty(layer, candidates);
+  const numeric = chooseGraduatedProperty(sample, candidates);
   if (numeric) suggestions.push({ kind: "graduated", property: numeric });
 
   if (

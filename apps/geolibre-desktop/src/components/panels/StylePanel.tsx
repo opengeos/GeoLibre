@@ -1324,6 +1324,14 @@ export function StylePanel({
   // isInitialLayerStyle is the gate: a layer only gets suggestions while it
   // still wears exactly what it was added with. The renderer mode alone would
   // let an edited fill or a restored project keep being offered advice.
+  //
+  // Deliberately NOT keyed on `layer`: that is `layers.find(...)`, and every
+  // `updateLayer` patch (an opacity drag, a rename, a zoom-range edit) rebuilds
+  // the layer object, so a `[layer]` dependency would re-scan on exactly the
+  // interactions this memo exists to survive. The fields below are the only
+  // ones the call actually reads, and each keeps its identity across an
+  // unrelated patch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const styleSuggestions = useMemo(() => {
     if (!layer || !isInitialLayerStyle(layer.style, layer.geojson)) return [];
     return buildStyleSuggestions(layer, getAttributePropertyNames(layer), {
@@ -1331,7 +1339,7 @@ export function StylePanel({
       // takes `pointOnly` precisely so the caller can.
       supportsPointRenderer: supportsPointRendererFor(layer, isPointOnly),
     });
-  }, [layer, isPointOnly]);
+  }, [layer?.id, layer?.type, layer?.style, layer?.geojson, layer?.metadata, isPointOnly]);
   // Expression Builder inputs, memoized for stable identities: the dialog
   // memoizes its validation/preview/field-type work off these props, so fresh
   // arrays on every panel render would defeat that memoization while the
@@ -2151,7 +2159,10 @@ export function StylePanel({
       DEFAULT_LAYER_STYLE.vectorStyleClassCount,
     );
     const classificationScheme = defaultClassificationScheme(mode);
-    const colorRamp = draftVectorStyleColorRamp;
+    // The layer's committed ramp, not the draft dropdown: a suggestion should
+    // start from the same baseline every time, not from a ramp someone left
+    // selected in the editor without applying it.
+    const colorRamp = styleValue(style, "vectorStyleColorRamp");
     const stops = normalizeVectorStyleStops(
       mode,
       createDefaultStops(layer, mode, property, classCount, colorRamp, classificationScheme),
