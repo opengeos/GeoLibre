@@ -37,6 +37,7 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const matches = useMemo(() => searchCrsCatalog(query), [query]);
   // Group before ranking is applied to the display: the request was for the list
@@ -50,10 +51,17 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
 
   // Every way of leaving the panel clears the search, so reopening it starts on
   // the curated default list rather than resuming a search the user dismissed.
-  const close = useCallback(() => {
+  //
+  // `restoreFocus` is for the deliberate dismissals (Escape, picking a row, the
+  // toggle): the focused element unmounts with the panel, so without this focus
+  // would land on <body> and the keyboard flow would be lost. It stays off when
+  // focus has already left the control or the user clicked elsewhere, where
+  // pulling focus back to the trigger would fight them.
+  const close = useCallback((restoreFocus = false) => {
     setOpen(false);
     setQuery("");
     setActiveIndex(0);
+    if (restoreFocus) triggerRef.current?.focus();
   }, []);
 
   // Close on a click anywhere outside the control (the panel floats over the
@@ -76,9 +84,19 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
     panelRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [open]);
 
+  // Keep the arrow-key highlight visible. DOM focus stays on the search box, so
+  // the list never scrolls on its own, and a broad query ("utm") returns far
+  // more rows than the capped list shows.
+  useEffect(() => {
+    if (!open || ordered.length === 0) return;
+    document.getElementById(`${listId}-option-${activeIndex}`)?.scrollIntoView?.({
+      block: "nearest",
+    });
+  }, [activeIndex, listId, open, ordered.length]);
+
   const choose = (entry: CrsEntry) => {
     onChange(String(entry.code));
-    close();
+    close(true);
   };
 
   const renderGroup = (label: string, entries: CrsEntry[], offset: number) =>
@@ -150,11 +168,12 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
           onChange={(event) => onChange(event.target.value)}
         />
         <Button
+          ref={triggerRef}
           type="button"
           variant="outline"
           aria-haspopup="listbox"
           aria-expanded={open}
-          onClick={() => (open ? close() : setOpen(true))}
+          onClick={() => (open ? close(true) : setOpen(true))}
         >
           <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
           {t("processing.whitebox.crs.browse")}
@@ -169,7 +188,7 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault();
-                close();
+                close(true);
               }
             }}
           >
@@ -201,7 +220,9 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                 onKeyDown={(event) => {
                   if (event.key === "ArrowDown") {
                     event.preventDefault();
-                    setActiveIndex((index) => Math.min(index + 1, ordered.length - 1));
+                    // Floor the ceiling at 0 so an empty result set leaves the
+                    // index at 0 rather than walking it negative.
+                    setActiveIndex((index) => Math.min(index + 1, Math.max(ordered.length - 1, 0)));
                   } else if (event.key === "ArrowUp") {
                     event.preventDefault();
                     setActiveIndex((index) => Math.max(index - 1, 0));
