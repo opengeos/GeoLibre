@@ -697,6 +697,14 @@ const STYLE_PANEL_ASIDE_CLASS =
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
+/**
+ * How long to wait for a tiled source to produce features before reporting its
+ * attributes as unavailable. A tiled layer whose data sits outside the viewport
+ * never yields a sample, and the map may already be idle, so the wait has to be
+ * bounded in wall-clock time rather than in retries.
+ */
+const VECTOR_TILE_SAMPLE_TIMEOUT_MS = 6000;
+
 function stepPrecision(step: number): number {
   const [, decimals = ""] = String(step).split(".");
   return decimals.length;
@@ -1207,14 +1215,27 @@ export function StylePanel({
         return true;
       };
       if (sampleValues()) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const onIdle = (): void => {
-        if (cancelled) return;
-        if (sampleValues()) map.off("idle", onIdle);
+        if (cancelled || !sampleValues()) return;
+        map.off("idle", onIdle);
+        clearTimeout(timer);
       };
+      // The sample may never fill: the layer's data can lie outside the
+      // viewport, and a map that is already idle fires no further events. Give
+      // up rather than leaving the panel loading with Apply disabled forever.
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        map.off("idle", onIdle);
+        setLoadedVectorPropertyValues(null);
+        setVectorPropertyValuesUnavailable(true);
+        setVectorPropertyValuesLoading(false);
+      }, VECTOR_TILE_SAMPLE_TIMEOUT_MS);
       map.on("idle", onIdle);
       return () => {
         cancelled = true;
         map.off("idle", onIdle);
+        clearTimeout(timer);
       };
     }
 
