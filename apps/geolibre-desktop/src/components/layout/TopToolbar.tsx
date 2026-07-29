@@ -905,14 +905,14 @@ export function TopToolbar({
     // Only surfaced when live collaboration is configured (env flag).
     ...(collaboration.enabled
       ? [
-        {
-          id: "project.collaborate",
-          title: t("toolbar.command.projectCollaborate"),
-          group: t("toolbar.commandGroup.project"),
-          icon: Users,
-          run: () => setCollaborateDialogOpen(true),
-        },
-      ]
+          {
+            id: "project.collaborate",
+            title: t("toolbar.command.projectCollaborate"),
+            group: t("toolbar.commandGroup.project"),
+            icon: Users,
+            run: () => setCollaborateDialogOpen(true),
+          },
+        ]
       : []),
     {
       id: "project.print-layout",
@@ -1314,17 +1314,17 @@ export function TopToolbar({
     ...(IS_STORE_BUILD
       ? []
       : [
-        {
-          id: "help.updates",
-          title: t("toolbar.command.checkForUpdates"),
-          group: t("toolbar.commandGroup.help"),
-          icon: RefreshCw,
-          run: () => {
-            setAboutOpen(true);
-            setCheckForUpdatesRequest((value) => value + 1);
+          {
+            id: "help.updates",
+            title: t("toolbar.command.checkForUpdates"),
+            group: t("toolbar.commandGroup.help"),
+            icon: RefreshCw,
+            run: () => {
+              setAboutOpen(true);
+              setCheckForUpdatesRequest((value) => value + 1);
+            },
           },
-        },
-      ]),
+        ]),
     {
       id: "help.about",
       title: t("toolbar.command.about"),
@@ -1404,7 +1404,7 @@ export function TopToolbar({
         compact
           ? "flex-nowrap overflow-x-auto px-1.5"
           : // Wrap below md; scroll a single row at md+ so tablets reach every menu (#871).
-          "flex-wrap px-2 md:flex-nowrap md:overflow-x-auto",
+            "flex-wrap px-2 md:flex-nowrap md:overflow-x-auto",
       )}
     >
       <span className="me-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:me-2">

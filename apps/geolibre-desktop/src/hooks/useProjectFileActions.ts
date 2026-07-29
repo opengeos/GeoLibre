@@ -573,9 +573,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         !options?.saveAs && existingLocalPath
           ? await saveProjectFileToPath(contentToSave, existingLocalPath)
           : await saveProjectFile(
-            contentToSave,
-            promptForName ? saveName : (existingLocalPath ?? saveName),
-          );
+              contentToSave,
+              promptForName ? saveName : (existingLocalPath ?? saveName),
+            );
     } catch (error) {
       console.error("Failed to save project", error);
       setActionError(

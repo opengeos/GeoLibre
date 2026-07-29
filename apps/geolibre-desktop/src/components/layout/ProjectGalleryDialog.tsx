@@ -290,11 +290,11 @@ export function ProjectGalleryDialog({
         style={
           dialogSize
             ? {
-              width: dialogSize.width,
-              height: dialogSize.height,
-              maxWidth: "none",
-              maxHeight: "none",
-            }
+                width: dialogSize.width,
+                height: dialogSize.height,
+                maxWidth: "none",
+                maxHeight: "none",
+              }
             : undefined
         }
         bodyClassName="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 sm:p-6"
@@ -457,10 +457,11 @@ function ScopeTab({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors sm:flex-none ${active
+      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors sm:flex-none ${
+        active
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground"
-        }`}
+      }`}
     >
       {icon}
       {label}
@@ -549,7 +550,13 @@ function GalleryCard({ project, opening, disabled, onOpen, onOpenCopy }: Gallery
               t("gallery.open")
             )}
           </Button>
-          <Button size="sm" variant="outline" className="flex-1" disabled={disabled} onClick={onOpenCopy}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1"
+            disabled={disabled}
+            onClick={onOpenCopy}
+          >
             {t("gallery.openCopy")}
           </Button>
           {project.projectUrl ? (

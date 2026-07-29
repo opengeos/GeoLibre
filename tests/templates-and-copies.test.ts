@@ -44,7 +44,9 @@ function sampleProject(patch: Partial<GeoLibreProject> = {}): GeoLibreProject {
     basemapVisible: true,
     basemapOpacity: 1,
     layers: [layerA],
-    layerGroups: [{ id: "grp-1", name: "Water Resources", collapsed: false, visible: true, opacity: 1 }],
+    layerGroups: [
+      { id: "grp-1", name: "Water Resources", collapsed: false, visible: true, opacity: 1 },
+    ],
     styles: {
       customStyle1: { ...DEFAULT_LAYER_STYLE, fillColor: "#ffaa00" },
     },

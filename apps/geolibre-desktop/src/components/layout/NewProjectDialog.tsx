@@ -225,11 +225,16 @@ export function NewProjectDialog({
     } finally {
       setIsSaving(false);
     }
-  };  const handleSelectTemplate = (templateProject: Parameters<typeof detachProjectCopy>[0], templateName: string) => {
+  };
+  const handleSelectTemplate = (
+    templateProject: Parameters<typeof detachProjectCopy>[0],
+    templateName: string,
+  ) => {
     const copy = detachProjectCopy(templateProject, { nameSuffix: "" });
-    const finalName = projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""
-      ? projectName.trim()
-      : templateName;
+    const finalName =
+      projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""
+        ? projectName.trim()
+        : templateName;
     loadProject({ ...copy, name: finalName }, null);
     useAppStore.setState({ isDirty: true });
     onProjectCreated?.();
@@ -306,7 +311,9 @@ export function NewProjectDialog({
                         >
                           <p className="text-sm font-medium">{template.name}</p>
                           {template.description ? (
-                            <p className="text-xs text-muted-foreground truncate">{template.description}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {template.description}
+                            </p>
                           ) : null}
                         </button>
                         <Button

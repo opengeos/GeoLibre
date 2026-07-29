@@ -771,14 +771,14 @@ export const MENU_ITEM_GROUPS: ReadonlyArray<{
   menuId: MenuOwnerId;
   labelKey: ParseKeys;
 }> = [
-    { menuId: "project", labelKey: "toolbar.menu.project" },
-    { menuId: "edit", labelKey: "toolbar.menu.edit" },
-    { menuId: "view", labelKey: "toolbar.menu.view" },
-    { menuId: "processing", labelKey: "toolbar.menu.processing" },
-    { menuId: "controls", labelKey: "toolbar.menu.controls" },
-    { menuId: "settings", labelKey: "settings.title" },
-    { menuId: "help", labelKey: "toolbar.menu.help" },
-  ];
+  { menuId: "project", labelKey: "toolbar.menu.project" },
+  { menuId: "edit", labelKey: "toolbar.menu.edit" },
+  { menuId: "view", labelKey: "toolbar.menu.view" },
+  { menuId: "processing", labelKey: "toolbar.menu.processing" },
+  { menuId: "controls", labelKey: "toolbar.menu.controls" },
+  { menuId: "settings", labelKey: "settings.title" },
+  { menuId: "help", labelKey: "toolbar.menu.help" },
+];
 
 const DEFAULT_PLUGIN_TIER: ComplexityTier = "intermediate";
 

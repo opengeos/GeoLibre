@@ -1,8 +1,4 @@
-import {
-  createProjectTemplate,
-  useAppStore,
-  type GeoLibreProject,
-} from "@geolibre/core";
+import { createProjectTemplate, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -23,11 +19,7 @@ interface SaveTemplateDialogProps {
   getProject: () => { project: GeoLibreProject; defaultProjectName: string };
 }
 
-export function SaveTemplateDialog({
-  open,
-  onOpenChange,
-  getProject,
-}: SaveTemplateDialogProps) {
+export function SaveTemplateDialog({ open, onOpenChange, getProject }: SaveTemplateDialogProps) {
   const { t } = useTranslation();
   const saveTemplateEntry = useAppStore((s) => s.saveTemplateEntry);
   const [name, setName] = useState("");
@@ -100,18 +92,21 @@ export function SaveTemplateDialog({
               onChange={(e) => setStripDataLayers(e.target.checked)}
               className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
             />
-            <Label htmlFor="strip-data-layers" className="cursor-pointer text-sm font-normal leading-snug">
+            <Label
+              htmlFor="strip-data-layers"
+              className="cursor-pointer text-sm font-normal leading-snug"
+            >
               <span className="block font-medium">{t("template.stripDataLayersLabel")}</span>
-              <span className="block text-xs text-muted-foreground">{t("template.stripDataLayersDesc")}</span>
+              <span className="block text-xs text-muted-foreground">
+                {t("template.stripDataLayersDesc")}
+              </span>
             </Label>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit">
-              {t("template.saveAction")}
-            </Button>
+            <Button type="submit">{t("template.saveAction")}</Button>
           </div>
         </form>
       </DialogContent>
