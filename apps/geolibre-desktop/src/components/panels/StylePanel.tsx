@@ -1046,8 +1046,8 @@ export function StylePanel({
   const [extrusionError, setExtrusionError] = useState<string | null>(null);
   const [loadedVectorPropertyValues, setLoadedVectorPropertyValues] = useState<{
     layerId: string;
-    property: string;
-    values: unknown[];
+    /** Attribute samples keyed by property name (classification and/or size field). */
+    byProperty: Record<string, unknown[]>;
   } | null>(null);
   const [vectorPropertyValuesLoading, setVectorPropertyValuesLoading] = useState(false);
   const [vectorPropertyValuesUnavailable, setVectorPropertyValuesUnavailable] = useState(false);
@@ -1147,10 +1147,12 @@ export function StylePanel({
   ]);
 
   // Add Vector Layer keeps large tiled datasets in DuckDB instead of copying
-  // their geometry into the app store. Read only the selected attribute when
-  // classification or proportional sizing needs its values, so categorized /
+  // their geometry into the app store. Read only the selected attribute(s) when
+  // classification or proportional sizing needs values, so categorized /
   // graduated styling and size-by-value remain available without defeating
-  // tiled rendering.
+  // tiled rendering. Classification and size fields are sampled together when
+  // they differ so proportional min/max can still seed from field B while
+  // graduated colors load field A.
   useEffect(() => {
     if (!layer) return;
     const usesDuckDbVector = layer.metadata.sourceKind === "maplibre-gl-vector";
@@ -1169,16 +1171,12 @@ export function StylePanel({
     const proportionalPropertyToLoad = styleValue(layer.style, "proportionalSizeProperty");
     const proportionalNeedsValues =
       styleValue(layer.style, "proportionalSizeEnabled") && proportionalPropertyToLoad !== "";
-    // Prefer the classification field when both need values so graduated /
-    // categorized stop regeneration keeps the existing load path. Proportional
-    // sizing in single mode (or with the same field) still gets a sample.
-    const propertyToLoad = classificationNeedsValues
-      ? draftVectorStyleProperty
-      : proportionalNeedsValues
-        ? proportionalPropertyToLoad
-        : "";
+    const propertiesToLoad = [
+      ...(classificationNeedsValues ? [draftVectorStyleProperty] : []),
+      ...(proportionalNeedsValues ? [proportionalPropertyToLoad] : []),
+    ].filter((property, index, all) => property !== "" && all.indexOf(property) === index);
 
-    if (!propertyToLoad) {
+    if (propertiesToLoad.length === 0) {
       setLoadedVectorPropertyValues(null);
       setVectorPropertyValuesLoading(false);
       setVectorPropertyValuesUnavailable(false);
@@ -1187,7 +1185,12 @@ export function StylePanel({
 
     let cancelled = false;
     setLoadedVectorPropertyValues((current) =>
-      current?.layerId === layer.id && current.property === propertyToLoad ? current : null,
+      current?.layerId === layer.id &&
+      propertiesToLoad.every((property) =>
+        Object.prototype.hasOwnProperty.call(current.byProperty, property),
+      )
+        ? current
+        : null,
     );
     setVectorPropertyValuesLoading(true);
     setVectorPropertyValuesUnavailable(false);
@@ -1206,13 +1209,13 @@ export function StylePanel({
       const sampleValues = (): boolean => {
         const features = loadedVectorTileFeatures(map, layer);
         if (features.length === 0) return false;
-        setLoadedVectorPropertyValues({
-          layerId: layer.id,
-          property: propertyToLoad,
-          values: features
-            .map((feature) => feature.properties?.[propertyToLoad])
-            .filter((value) => value !== null && value !== undefined),
-        });
+        const byProperty: Record<string, unknown[]> = {};
+        for (const property of propertiesToLoad) {
+          byProperty[property] = features
+            .map((feature) => feature.properties?.[property])
+            .filter((value) => value !== null && value !== undefined);
+        }
+        setLoadedVectorPropertyValues({ layerId: layer.id, byProperty });
         setVectorPropertyValuesLoading(false);
         return true;
       };
@@ -1241,19 +1244,24 @@ export function StylePanel({
       };
     }
 
-    void getVectorLayerPropertyValues(layer.id, propertyToLoad)
-      .then((values) => {
+    void Promise.all(
+      propertiesToLoad.map(async (property) => {
+        const values = await getVectorLayerPropertyValues(layer.id, property);
+        return [property, values] as const;
+      }),
+    )
+      .then((entries) => {
         if (cancelled) return;
-        if (values === null) {
-          setLoadedVectorPropertyValues(null);
-          setVectorPropertyValuesUnavailable(true);
-          return;
+        const byProperty: Record<string, unknown[]> = {};
+        for (const [property, values] of entries) {
+          if (values === null) {
+            setLoadedVectorPropertyValues(null);
+            setVectorPropertyValuesUnavailable(true);
+            return;
+          }
+          byProperty[property] = values;
         }
-        setLoadedVectorPropertyValues({
-          layerId: layer.id,
-          property: propertyToLoad,
-          values,
-        });
+        setLoadedVectorPropertyValues({ layerId: layer.id, byProperty });
       })
       .catch((error) => {
         if (!cancelled) {
@@ -1285,11 +1293,12 @@ export function StylePanel({
       !layer ||
       !loadedVectorPropertyValues ||
       loadedVectorPropertyValues.layerId !== layer.id ||
-      loadedVectorPropertyValues.property !== draftVectorStyleProperty ||
       (draftVectorStyleMode !== "graduated" && draftVectorStyleMode !== "categorized")
     ) {
       return;
     }
+    const values = loadedVectorPropertyValues.byProperty[draftVectorStyleProperty];
+    if (!values) return;
 
     setDraftVectorStyleStops(
       createDefaultStops(
@@ -1299,7 +1308,7 @@ export function StylePanel({
         draftVectorStyleClassCount,
         draftVectorStyleColorRamp,
         draftVectorStyleClassificationScheme,
-        loadedVectorPropertyValues.values,
+        values,
       ),
     );
   }, [
@@ -1321,13 +1330,9 @@ export function StylePanel({
     if (!layer || !loadedVectorPropertyValues) return;
     if (!styleValue(layer.style, "proportionalSizeEnabled")) return;
     const property = styleValue(layer.style, "proportionalSizeProperty");
-    if (
-      !property ||
-      loadedVectorPropertyValues.layerId !== layer.id ||
-      loadedVectorPropertyValues.property !== property
-    ) {
-      return;
-    }
+    if (!property || loadedVectorPropertyValues.layerId !== layer.id) return;
+    const values = loadedVectorPropertyValues.byProperty[property];
+    if (!values) return;
     const minValue = styleValue(layer.style, "proportionalSizeMinValue");
     const maxValue = styleValue(layer.style, "proportionalSizeMaxValue");
     if (
@@ -1336,7 +1341,7 @@ export function StylePanel({
     ) {
       return;
     }
-    const bounds = proportionalSizeBounds(layer, property, loadedVectorPropertyValues.values);
+    const bounds = proportionalSizeBounds(layer, property, values);
     if (!bounds) return;
     setLayerStyle(layer.id, {
       proportionalSizeMinValue: bounds.min,
@@ -1668,9 +1673,8 @@ export function StylePanel({
     draftVectorStyleExpression !== styleValue(style, "vectorStyleExpression") ||
     JSON.stringify(draftVectorStyleStops) !== JSON.stringify(currentVectorStops);
   const draftVectorPropertyValues =
-    loadedVectorPropertyValues?.layerId === layer.id &&
-    loadedVectorPropertyValues.property === draftVectorStyleProperty
-      ? loadedVectorPropertyValues.values
+    loadedVectorPropertyValues?.layerId === layer.id
+      ? loadedVectorPropertyValues.byProperty[draftVectorStyleProperty]
       : undefined;
   const regenerateDraftVectorStyleStops = (
     mode: VectorStyleMode,
@@ -2759,9 +2763,8 @@ export function StylePanel({
   );
   /** Seed min/max from the field's numeric range when proportional sizing turns on or the field changes. */
   const matchingPropertyValues = (property: string): unknown[] | undefined =>
-    loadedVectorPropertyValues?.layerId === layer.id &&
-    loadedVectorPropertyValues.property === property
-      ? loadedVectorPropertyValues.values
+    loadedVectorPropertyValues?.layerId === layer.id
+      ? loadedVectorPropertyValues.byProperty[property]
       : undefined;
 
   /** True when we already have a sample that can prove the field has (or lacks) a usable range. */
@@ -2870,6 +2873,14 @@ export function StylePanel({
                 </>
               )}
             </Select>
+            {vectorPropertyValuesLoading && (
+              <p className="text-xs text-muted-foreground">{t("attributeTable.loadingAttributes")}</p>
+            )}
+            {vectorPropertyValuesUnavailable && (
+              <p className="text-xs text-destructive">
+                {t("style.symbology.errorAttributesUnavailable")}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <NumericStyleInput
