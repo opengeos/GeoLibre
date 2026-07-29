@@ -116,7 +116,9 @@ export function ProjectGalleryDialog({
   // otherwise undershoot the offset and re-deliver already-seen entries).
   const [rawOffset, setRawOffset] = useState(0);
   const [query, setQuery] = useState("");
-  const [openingState, setOpeningState] = useState<{ id: string; action: "open" | "copy" } | null>(null);
+  const [openingState, setOpeningState] = useState<{ id: string; action: "open" | "copy" } | null>(
+    null,
+  );
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
