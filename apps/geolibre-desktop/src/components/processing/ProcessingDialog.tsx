@@ -68,6 +68,7 @@ import {
   MAX_TRACKED_HISTORY_JOBS,
   type ProcessingRunTracker,
 } from "../../lib/processing-history";
+import { CrsPickerInput } from "./CrsPickerInput";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
 interface ProcessingDialogProps {
@@ -210,6 +211,18 @@ function isSubsetUrlParameter(tool: WhiteboxTool, param: WhiteboxToolParameter):
 // is a vector input): only a scalar string names a column.
 function isFieldParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param) === "string" && isFieldParameterName(param.name);
+}
+
+// A numeric `epsg` parameter names a coordinate reference system, so the field
+// can offer a searchable CRS list instead of asking for a code from memory
+// (GeoLibre#1538). Matching the name suffix covers `epsg`
+// (assign_projection_vector), `dst_epsg` (reproject_vector/raster/lidar),
+// `epsg_code`, `output_epsg` and the rest without hard-coding tool ids. The kind
+// check keeps a *string* CRS override out (`sidewalks_epsg` takes an authority
+// string, not a bare code), since the picker fills in a plain numeric code.
+function isCrsParameter(param: WhiteboxToolParameter): boolean {
+  const kind = parameterKind(param);
+  return (kind === "int" || kind === "double") && /(^|_)epsg(_code)?$/i.test(param.name);
 }
 
 function isPathParameter(param: WhiteboxToolParameter): boolean {
@@ -2051,6 +2064,13 @@ function ParameterField({
             </option>
           ))}
         </Select>
+      ) : isCrsParameter(param) ? (
+        // Checked before the path and number branches (like the map-extent one
+        // below): an EPSG code is a number, but a bare stepper walks to
+        // unrelated systems, so this field gets the searchable CRS list instead
+        // (GeoLibre#1538). Placed ahead of isPathParameter so an epsg
+        // description that happens to mention a file can't shadow the picker.
+        <CrsPickerInput id={`whitebox-${param.name}`} value={valueText} onChange={onChange} />
       ) : onUseMapExtent ? (
         // Checked before the path/data-input branches: once isMapExtentParameter
         // has identified this bbox field, the "Use map extent" affordance should

@@ -3518,6 +3518,15 @@
       "requiredSuffix": " | required",
       "selectField": "Select a field",
       "fieldName": "Field name",
+      "crs": {
+        "browse": "Browse",
+        "codePlaceholder": "EPSG code",
+        "searchLabel": "Search coordinate reference systems",
+        "searchPlaceholder": "Search by name or EPSG code",
+        "geographic": "Geographic",
+        "projected": "Projected",
+        "noResults": "No matching coordinate system. Any EPSG code can still be typed."
+      },
       "vectorUnitsNote": "Vector layers are read as WGS84, so distance, spacing and tolerance values are in degrees, not meters. 1° is about 111 km, and 0.001° is about 111 m."
     },
     "sidecar": {
