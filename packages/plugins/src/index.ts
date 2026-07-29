@@ -473,6 +473,24 @@ export {
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
+export {
+  maplibreH3Plugin,
+  H3_PLUGIN_ID,
+  H3_VIEWPORT_CELL_LIMIT,
+  DEFAULT_H3_GRID_SETTINGS,
+  DEFAULT_H3_LABELS,
+  getH3GridSettings,
+  setH3GridSettings,
+  setH3Labels,
+  normalizeH3GridSettings,
+  h3LabelMinZoom,
+  h3CellFeature,
+  h3GridForBounds,
+  h3BoundaryGeometry,
+  unwrapH3Boundary,
+  type H3GridSettings,
+  type H3Labels,
+} from "./plugins/maplibre-h3";
 export type { WeatherAnimationState, WeatherLayerController } from "./plugins/weather-layer";
 export {
   maplibreCloudsPlugin,
