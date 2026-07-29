@@ -55,7 +55,7 @@ See the [Python Package](python.md) reference to get started.
 
 ### On Android
 
-GeoLibre ships as a native Android app built from the same codebase, with a responsive touch layout for phones and tablets. Install it from Google Play and it updates automatically:
+GeoLibre ships as a native Android app built from the same codebase, with a responsive touch layout for phones. Install it from Google Play and it updates automatically:
 
 [Get GeoLibre on Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app){ .md-button .md-button--primary }
 
