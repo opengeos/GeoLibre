@@ -45,17 +45,32 @@ function separateCamelCase(property: string): string {
 }
 
 /**
- * Share of distinct values above which a column is treated as an identifier
- * regardless of its name: a value per feature classifies into noise.
+ * Share of distinct values above which a *label* column is treated as an
+ * identifier regardless of its name: a value per feature classifies into noise.
  */
 const NEAR_UNIQUE_RATIO = 0.9;
 /** Below this many features, a high distinct ratio is just a small sample. */
 const NEAR_UNIQUE_MIN_FEATURES = 20;
 
-/** True when a column's values are so nearly all-distinct it behaves as an id. */
-function isNearUnique(layer: ClassifiableLayer, property: string): boolean {
+/** A value that reads as a number — not a blank, a boolean, or free text. */
+function isNumericValue(value: unknown): boolean {
+  if (value === null || value === "" || typeof value === "boolean") return false;
+  return Number.isFinite(Number(value));
+}
+
+/**
+ * True when a column's values are so nearly all-distinct it behaves as an id.
+ *
+ * Deliberately **not** applied to columns that are numeric throughout. A
+ * continuous measurement is near-unique by its nature — building heights,
+ * areas, populations — and rejecting those would throw away precisely the
+ * columns a graduated renderer exists to show. Numeric identifiers are caught
+ * by their name instead; distinctness cannot tell `height` from `parcel_id`.
+ */
+function isNearUniqueLabel(layer: ClassifiableLayer, property: string): boolean {
   const values = getPropertyValues(layer, property);
   if (values.length < NEAR_UNIQUE_MIN_FEATURES) return false;
+  if (values.every(isNumericValue)) return false;
   return new Set(values.map(String)).size / values.length > NEAR_UNIQUE_RATIO;
 }
 
@@ -74,7 +89,7 @@ function mappableProperties(layer: ClassifiableLayer, properties: string[]): str
     return (
       !UNMAPPABLE_NAME.test(normalized) &&
       !TIMESTAMP_NAME.test(normalized) &&
-      !isNearUnique(layer, property)
+      !isNearUniqueLabel(layer, property)
     );
   });
 }

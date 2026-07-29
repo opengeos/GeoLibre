@@ -170,15 +170,29 @@ describe("buildStyleSuggestions", () => {
       }
     });
 
-    it("never suggests a near-unique column even when its name looks innocent", () => {
+    it("never suggests a near-unique label column, whatever its name", () => {
       const rows = Array.from({ length: 50 }, (_, index) => ({
-        reading: index * 7.31,
+        ref: `bldg-${index}`,
         band: index % 4,
       }));
-      const graduated = buildStyleSuggestions(layerWith(rows), ["reading", "band"], NO_POINTS).find(
+      const graduated = buildStyleSuggestions(layerWith(rows), ["ref", "band"], NO_POINTS).find(
         (item) => item.kind === "graduated",
       );
       assert.equal(graduated?.property, "band");
+    });
+
+    it("still suggests a near-unique *measurement*, which is what graduation is for", () => {
+      // Matches the las_vegas_buildings dataset: an `id` of hashes plus a
+      // `height` that is 538 distinct across 540 features. Excluding a column
+      // for being near-unique would throw away the canonical choropleth —
+      // distinctness cannot tell a measurement from an identifier, so only
+      // non-numeric columns are judged that way.
+      const rows = Array.from({ length: 50 }, (_, index) => ({
+        id: `08b2986b81b34fff${index}`,
+        height: 2.5 + index * 0.37,
+      }));
+      const suggestions = buildStyleSuggestions(layerWith(rows), ["id", "height"], NO_POINTS);
+      assert.deepEqual(suggestions, [{ kind: "graduated", property: "height" }]);
     });
 
     it("keeps a small layer's distinct column, where the ratio proves nothing", () => {
