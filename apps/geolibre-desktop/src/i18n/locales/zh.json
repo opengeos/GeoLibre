@@ -2940,7 +2940,7 @@
     "rgbHint": "当影像有三个或更多波段时，哪些波段对应红、绿、蓝。序号从 1 开始；之后仍可在样式面板中修改任意图层。",
     "bandR": "红",
     "bandG": "绿",
-    "bandB": "蓝色",
+    "bandB": "蓝",
     "colormapHeading": "单波段影像",
     "colormapHint": "影像只有一个波段时所应用的色彩映射。",
     "colormapLabel": "色彩映射",

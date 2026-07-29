@@ -4499,7 +4499,7 @@
     "rowLabel": "{{value}} değeri için etiket"
   },
   "raster": {
-    "filePickerLabel": "Raster'lar",
+    "filePickerLabel": "Rasterlar",
     "cogConvertConfirm": "\"{{name}}\", doğrudan görüntülenemeyen düz (şeritli) bir GeoTIFF'tir. Şimdi Bulut Optimizeli bir GeoTIFF'e dönüştürülüp yüklensin mi?",
     "cogConvertRemoteConfirm": "\"{{name}}\", doğrudan görüntülenemeyen düz (şeritli) bir GeoTIFF'tir. Görüntülemek, tüm dosyayı indirmeyi ve tarayıcıda Bulut Optimizeli bir GeoTIFF'e dönüştürmeyi gerektirir; bu büyük dosyalar için yavaş ve bellek yoğun olabilir. Devam edilsin mi?",
     "cogConvertLargeConfirm": "\"{{name}}\", Bulut Optimizeli bir GeoTIFF olmayan büyük bir {{width}}×{{height}} GeoTIFF'tir. Tarayıcıda dönüştürmek yavaş ve bellek yoğun olabilir. Yine de dönüştürülüp yüklensin mi?",

@@ -285,7 +285,7 @@
       },
       "ogcFeatures": {
         "label": "Aggiungi livello OGC API - Features",
-        "description": "Aggiunge gli elementi di una collection OGC API - Features come livello vettoriale, seguendo i link di paginazione del servizio finché non viene caricato il numero di elementi richiesto."
+        "description": "Aggiungi gli elementi di una collection OGC API - Features come livello vettoriale, seguendo i link di paginazione del servizio finché non viene caricato il numero di elementi richiesto."
       }
     },
     "shared": {
@@ -688,7 +688,7 @@
       "defaultName": "Livello OGC API - Features",
       "sampleLabel": "Laghi del mondo (demo pygeoapi)",
       "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "La pagina iniziale del servizio, o qualsiasi URL copiato da essa (funziona anche un URL /collections o /collections/{id}/items).",
+      "urlHint": "La pagina iniziale del servizio, o qualsiasi URL copiato da essa (funziona anche con un URL /collections o /collections/{id}/items).",
       "retrieveCollections": "Recupera collection",
       "retrieving": "Recupero in corso...",
       "retrievedCollections": "Collection recuperate",
@@ -701,7 +701,7 @@
       "maxFeatures": "Numero massimo di elementi",
       "bbox": "Rettangolo di delimitazione",
       "datetime": "Data e ora",
-      "errorCollection": "Inserisci un id di collection OGC API - Features.",
+      "errorCollection": "Inserisci l'ID della collection OGC API - Features.",
       "errorMaxFeatures": "Inserisci un numero massimo di elementi pari a 1 o superiore.",
       "errorBbox": "Inserisci il rettangolo di delimitazione come «ovest,sud,est,nord».",
       "errorNoFeatures": "Questa collection non ha restituito alcun elemento."
@@ -2680,7 +2680,7 @@
     "title": "Griglia H3",
     "controlTitle": "Impostazioni della griglia H3",
     "resolution": "Risoluzione",
-    "cellCount": "{{count}} celle nella vista",
+    "cellCount": "Celle nella vista: {{count}}",
     "tooManyCells": "Questa vista supera il limite di {{limit}} celle. Ingrandisci o riduci la risoluzione.",
     "fillColor": "Colore di riempimento",
     "fillOpacity": "Opacità di riempimento",
@@ -2791,7 +2791,7 @@
     "loadingMore": "Caricamento altri…",
     "loadMore": "Carica altri",
     "noResults": "Nessun servizio corrisponde a questa ricerca.",
-    "showing": "Visualizzati {{shown}} servizi su {{total}}.",
+    "showing": "Servizi visualizzati: {{shown}} su {{total}}.",
     "searchError": "Impossibile raggiungere Earthdata GIS: {{message}}. Riprova.",
     "limitToView": "Limita alla vista della mappa",
     "limitToViewTitle": "Restituisci solo i servizi che intersecano la vista corrente della mappa",
@@ -2991,7 +2991,7 @@
     "selectionTooLarge": "I file selezionati ammontano a {{size}}, oltre il limite di {{limit}} per un singolo caricamento. Caricali in gruppi più piccoli.",
     "openUploaded": "Apri il dataset",
     "rgbHeading": "Immagini multibanda",
-    "rgbHint": "Quali bande diventano rosso, verde e blu quando un'immagine ne ha tre o più. Numerazione da 1; il pannello Stili può comunque modificare qualsiasi livello in seguito.",
+    "rgbHint": "Quali bande vengono usate per il rosso, il verde e il blu quando un'immagine ne ha tre o più. Numerazione da 1; il pannello Stili può comunque modificare qualsiasi livello in seguito.",
     "bandR": "Rosso",
     "bandG": "Verde",
     "bandB": "Blu",
