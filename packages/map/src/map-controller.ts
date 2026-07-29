@@ -1300,9 +1300,10 @@ export class MapController {
       });
       return;
     }
-    // The globe camera zooms *in* on extents wider than roughly a third of the
-    // planet, framing the data behind the horizon; cap the fit at the flat-map
-    // zoom so a world-spanning layer settles on a whole-globe view instead.
+    // An extent wider than the hemisphere a globe can show has no camera that
+    // contains it, and MapLibre's globe fit answers one of those by zooming *in*,
+    // leaving the data behind the horizon. Cap those at the flat-map zoom so they
+    // settle on a whole-globe view instead; narrower fits are untouched.
     const maxZoom = globeSafeMaxZoom(bounds, this.getViewportSize(), FIT_BOUNDS_PADDING);
     this.map.fitBounds(
       [

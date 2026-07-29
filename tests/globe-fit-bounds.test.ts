@@ -64,17 +64,54 @@ describe("mercatorFitZoom", () => {
   it("returns null for a non-finite extent", () => {
     assert.equal(mercatorFitZoom([Number.NaN, 0, 10, 10], VIEWPORT, 40), null);
   });
+
+  it("takes the short way round the antimeridian", () => {
+    // [170 … -170] spans 20°, not the 340° complement, so it must fit as
+    // tightly as the equivalent box that does not wrap.
+    const wrapped = mercatorFitZoom([170, -10, -170, 10], VIEWPORT, 40);
+    const plain = mercatorFitZoom([-10, -10, 10, 10], VIEWPORT, 40);
+    assert.ok(wrapped !== null && plain !== null);
+    assert.ok(close(wrapped, plain), `${wrapped} should match the unwrapped ${plain}`);
+  });
+
+  it("still reads a full-world extent as 360 degrees", () => {
+    const world = mercatorFitZoom([-180, -10, 180, 10], VIEWPORT, 40);
+    assert.ok(world !== null && world < 0.1, `expected a whole-world fit, got ${world}`);
+  });
 });
 
 describe("globeSafeMaxZoom", () => {
-  it("caps a wide extent at the flat-map fit", () => {
+  it("caps an extent wider than a hemisphere at the flat-map fit", () => {
     const maxZoom = globeSafeMaxZoom(WIDE_BOUNDS, VIEWPORT, 40);
     assert.ok(close(maxZoom, 0.4255), `expected ~0.4255, got ${maxZoom}`);
   });
 
-  it("keeps the caller's ceiling when it is the tighter of the two", () => {
-    // A tiny extent fits well past zoom 16, so the caller's ceiling wins.
-    assert.equal(globeSafeMaxZoom([-0.001, -0.001, 0.001, 0.001], VIEWPORT, 40, 16), 16);
+  it("leaves a continent-scale fit to MapLibre", () => {
+    // Measured on this viewport, the globe camera frames a 90°-wide box with
+    // its whole outline inside the padding, so capping it would only pull the
+    // camera back for nothing.
+    assert.equal(globeSafeMaxZoom([-140, 20, -50, 60], VIEWPORT, 40), null);
+    assert.equal(globeSafeMaxZoom([-140, 20, -50, 60], VIEWPORT, 40, 16), 16);
+  });
+
+  it("caps a whole-world extent", () => {
+    const maxZoom = globeSafeMaxZoom([-180, -85, 180, 85], VIEWPORT, 40);
+    assert.ok(maxZoom !== null && maxZoom < 1, `expected a whole-globe fit, got ${maxZoom}`);
+  });
+
+  it("reads an antimeridian-crossing extent as the span it covers", () => {
+    // [170 … -170] covers 20°, not the 340° complement, so it is nowhere near
+    // wide enough to need the cap.
+    assert.equal(globeSafeMaxZoom([170, -10, -170, 10], VIEWPORT, 40), null);
+  });
+
+  it("returns whichever of the two ceilings is tighter", () => {
+    // A whole-world extent needs a zoom below 0, so a caller's zoom-16 ceiling
+    // cannot loosen it; a sub-hemisphere extent keeps the caller's ceiling
+    // untouched (see the continent-scale case above).
+    const capped = globeSafeMaxZoom([-180, -85, 180, 85], VIEWPORT, 40, 16);
+    const uncapped = globeSafeMaxZoom([-180, -85, 180, 85], VIEWPORT, 40);
+    assert.equal(capped, uncapped);
   });
 
   it("falls back to the caller's ceiling when the viewport is unmeasurable", () => {

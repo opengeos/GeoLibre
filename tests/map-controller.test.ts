@@ -663,21 +663,17 @@ describe("MapController camera and query helpers", () => {
     );
   });
 
-  it("leaves a small extent's fit uncapped by the viewport", () => {
+  it("leaves an extent the globe can frame uncapped", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    // A city-sized box fits far past any zoom the globe would misjudge, so the
-    // ceiling must not drag the camera back out.
+    // A city-sized box is nowhere near the hemisphere MapLibre's globe fit
+    // mishandles, so no ceiling is imposed and the camera is left as it was.
     controller.fitBounds([-83.93, 35.94, -83.9, 35.97]);
 
     const fit = fake.calls.find((c) => c.method === "fitBounds");
     assert.ok(fit);
-    const { maxZoom } = fit.args[1] as { maxZoom?: number };
-    assert.ok(
-      typeof maxZoom === "number" && maxZoom > 12,
-      `expected a loose ceiling, got ${maxZoom}`,
-    );
+    assert.ok(!("maxZoom" in (fit.args[1] as object)));
   });
 
   it("omits the fit ceiling when the canvas has not been laid out", () => {
