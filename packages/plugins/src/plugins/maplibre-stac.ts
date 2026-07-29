@@ -291,8 +291,10 @@ function buildPanel(container: HTMLElement): () => void {
   const collectionSelect = el("select");
   collectionSelect.multiple = true;
   collectionSelect.size = 3;
-  collectionSelect.style.cssText = style.input;
-  collectionSelect.title = "Hold Ctrl/Cmd to select multiple collections";
+  // Catalogs can advertise hundreds of collections, so let the list be dragged taller.
+  collectionSelect.style.cssText = `${style.input}resize:vertical;overflow:auto;min-height:58px;`;
+  collectionSelect.title =
+    "Hold Ctrl/Cmd to select multiple collections; drag the bottom edge to resize";
   const extentRow = el("label");
   extentRow.style.cssText = style.row;
   const useExtent = el("input");
@@ -379,7 +381,7 @@ function buildPanel(container: HTMLElement): () => void {
       const subtitle = el("div", [item.collection, date.slice(0, 10)].filter(Boolean).join(" · "));
       subtitle.style.cssText = style.label;
       const actions = el("div");
-      actions.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+      actions.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;align-items:center;";
       const bbox = itemBbox(item);
       if (bbox) {
         const zoom = el("button", "Zoom");
@@ -388,33 +390,58 @@ function buildPanel(container: HTMLElement): () => void {
         zoom.addEventListener("click", () => appRef?.fitBounds?.(bbox));
         actions.append(zoom);
       }
-      for (const [key, asset] of Object.entries(item.assets ?? {})) {
-        if (!asset?.href) continue;
-        if (isVisualizableAsset(asset)) {
-          const add = el("button", `Add ${assetLabel(key, asset)}`);
-          add.type = "button";
-          add.style.cssText = style.button;
-          add.title = asset.href;
-          add.addEventListener("click", async () => {
-            add.disabled = true;
-            setStatus(`Adding ${assetLabel(key, asset)}…`);
-            try {
-              await visualizeAsset(item, key, asset, controller.signal);
-              setStatus(`Added ${assetLabel(key, asset)} to the map.`);
-            } catch (error) {
-              setStatus(error instanceof Error ? error.message : "Could not add asset", true);
-            } finally {
-              add.disabled = false;
-            }
-          });
-          actions.append(add);
+      const assets = Object.entries(item.assets ?? {}).filter(([, asset]) => asset?.href);
+      if (assets.length) {
+        const assetSelect = el("select");
+        assetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
+        for (const [key, asset] of assets) {
+          const option = el("option", assetLabel(key, asset));
+          option.value = key;
+          assetSelect.append(option);
         }
-        const download = el("button", `Download ${assetLabel(key, asset)}`);
+        // Preselect something the user can actually add; assets often lead with metadata.
+        const firstAddable = assets.find(([, asset]) => isVisualizableAsset(asset));
+        if (firstAddable) assetSelect.value = firstAddable[0];
+        const selected = (): [string, StacAsset] =>
+          assets.find(([key]) => key === assetSelect.value) ?? assets[0];
+        const add = el("button", "Add");
+        add.type = "button";
+        add.style.cssText = style.button;
+        const download = el("button", "Download");
         download.type = "button";
         download.style.cssText = style.button;
-        download.title = asset.href;
-        download.addEventListener("click", () => appRef?.openExternalUrl?.(asset.href));
-        actions.append(download);
+        let adding = false;
+
+        const syncAsset = (): void => {
+          const [, asset] = selected();
+          const addable = isVisualizableAsset(asset);
+          assetSelect.title = asset.href;
+          download.title = asset.href;
+          add.disabled = adding || !addable;
+          add.title = addable
+            ? asset.href
+            : "Only GeoTIFF/COG and GeoJSON assets can be added to the map";
+        };
+
+        assetSelect.addEventListener("change", syncAsset);
+        add.addEventListener("click", async () => {
+          const [key, asset] = selected();
+          adding = true;
+          syncAsset();
+          setStatus(`Adding ${assetLabel(key, asset)}…`);
+          try {
+            await visualizeAsset(item, key, asset, controller.signal);
+            setStatus(`Added ${assetLabel(key, asset)} to the map.`);
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : "Could not add asset", true);
+          } finally {
+            adding = false;
+            syncAsset();
+          }
+        });
+        download.addEventListener("click", () => appRef?.openExternalUrl?.(selected()[1].href));
+        syncAsset();
+        actions.append(assetSelect, add, download);
       }
       card.append(title, subtitle, actions);
       results.append(card);
