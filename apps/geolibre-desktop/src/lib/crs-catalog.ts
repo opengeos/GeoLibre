@@ -209,6 +209,13 @@ const NAMED_PROJECTED_CRS: CrsEntry[] = (
  * Every CRS the picker offers: geographic systems, then named projected
  * systems, then the zone families. Ordered by how often each is reached for, so
  * the list is useful before anything is typed.
+ *
+ * Each family's zone span is the span EPSG actually registers, not a tidy round
+ * number, and the spans differ between families for real reasons: ETRS89 stops
+ * at zone 37 because 25838 (zone 38N) is deprecated, and GDA2020 covers zones
+ * 46-59 where GDA94 covers only 48-58, because the 2020 realization added the
+ * outer zones. Every code and name below was cross-checked against PROJ's EPSG
+ * database; keep it that way when adding entries, and leave deprecated codes out.
  */
 export const CRS_CATALOG: readonly CrsEntry[] = [
   ...GEOGRAPHIC_CRS,
@@ -216,7 +223,7 @@ export const CRS_CATALOG: readonly CrsEntry[] = [
   ...utmZones("WGS 84", 32600, "N", range(1, 60)),
   ...utmZones("WGS 84", 32700, "S", range(1, 60)),
   ...utmZones("NAD83", 26900, "N", range(1, 23)),
-  ...utmZones("ETRS89", 25800, "N", range(28, 38)),
+  ...utmZones("ETRS89", 25800, "N", range(28, 37)),
   ...mgaZones("GDA94", 28300, range(48, 58)),
   ...mgaZones("GDA2020", 7800, range(46, 59)),
   ...japanPlaneZones(),

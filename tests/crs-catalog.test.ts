@@ -20,6 +20,7 @@ describe("CRS_CATALOG", () => {
       [32760, "WGS 84 / UTM zone 60S"],
       [26917, "NAD83 / UTM zone 17N"],
       [25832, "ETRS89 / UTM zone 32N"],
+      [25837, "ETRS89 / UTM zone 37N"],
       [28355, "GDA94 / MGA zone 55"],
       [7855, "GDA2020 / MGA zone 55"],
       [6669, "JGD2011 / Japan Plane Rectangular CS I"],
@@ -30,6 +31,21 @@ describe("CRS_CATALOG", () => {
     for (const [code, name] of expected) {
       assert.equal(crsEntryForCode(code)?.name, name, `EPSG:${code}`);
     }
+  });
+
+  it("stops each zone family where EPSG does", () => {
+    // Each family's span is what EPSG registers, not a round number, so an
+    // off-by-one would offer a code no tool accepts. ETRS89 stops at zone 37
+    // because 25838 (zone 38N) is deprecated; GDA2020 carries the outer zones
+    // 46/47/59 that GDA94 never had.
+    // No 7845 below the GDA2020 family: that code is GDA2020 / GA LCC, a
+    // curated entry, which is also why the family's own zone 45 is not
+    // generated.
+    for (const code of [25838, 25827, 28347, 28359, 7860, 26924, 4502]) {
+      assert.equal(crsEntryForCode(code)?.name, undefined, `EPSG:${code}`);
+    }
+    assert.equal(crsEntryForCode(7846)?.name, "GDA2020 / MGA zone 46");
+    assert.equal(crsEntryForCode(7859)?.name, "GDA2020 / MGA zone 59");
   });
 
   it("holds no duplicate codes", () => {
@@ -85,7 +101,7 @@ describe("searchCrsCatalog", () => {
     // drop whole zone families off the end of the picker's default list, and
     // they only reappear once the user types something specific.
     assert.equal(results.length, CRS_CATALOG.length);
-    for (const code of [32760, 26923, 25838, 28358, 7859, 6687, 4501]) {
+    for (const code of [32760, 26923, 25837, 28358, 7859, 6687, 4501]) {
       assert.ok(
         results.some((entry) => entry.code === code),
         `EPSG:${code} missing from the blank-query list`,

@@ -99,15 +99,19 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
                 role="option"
                 aria-selected={position === activeIndex}
                 id={`${listId}-option-${position}`}
+                // Out of the tab order: with `aria-activedescendant` on the
+                // search box, DOM focus stays there and the arrow keys move a
+                // virtual highlight. Leaving 300 rows as tab stops would also
+                // bury the rest of the form behind them.
+                tabIndex={-1}
                 className={cn(
                   "flex w-full items-baseline justify-between gap-2 px-2 py-1 text-start text-xs hover:bg-accent",
                   position === activeIndex && "bg-accent",
                 )}
                 onMouseEnter={() => setActiveIndex(position)}
-                // click, not mousedown: these are real buttons, so a keyboard
-                // user who tabs onto a row can activate it with Enter/Space,
-                // which fires click and not mousedown. Nothing closes the panel
-                // on pointerdown inside it, so the click still lands.
+                // click, not mousedown: nothing closes the panel on pointerdown
+                // inside it, so the click lands, and a click is what a row
+                // reached by any means fires.
                 onClick={() => choose(entry)}
                 onFocus={() => setActiveIndex(position)}
               >
@@ -121,8 +125,22 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
     );
 
   return (
-    <div className="relative grid gap-1" ref={containerRef}>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+    <div
+      className="grid gap-1"
+      ref={containerRef}
+      // Tabbing (or clicking) out of the control entirely dismisses the panel.
+      // The rows are not tab stops, so without this a keyboard user who tabs
+      // past the search box would leave an open panel behind with no way to
+      // close it. onBlur is React's focusout, so it fires for focus leaving any
+      // descendant; a relatedTarget still inside the control is not a departure.
+      onBlur={(event) => {
+        if (open && !containerRef.current?.contains(event.relatedTarget as Node | null)) close();
+      }}
+    >
+      {/* The panel's positioning context is this row alone, not the outer
+          container: `top-full` against the container would resolve past the
+          selected-CRS label below, detaching the panel from the button. */}
+      <div className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Input
           id={id}
           type="text"
@@ -141,73 +159,73 @@ export function CrsPickerInput({ id, value, onChange }: CrsPickerInputProps): Re
           <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
           {t("processing.whitebox.crs.browse")}
         </Button>
-      </div>
 
-      {open ? (
-        <div
-          ref={panelRef}
-          className="absolute top-full z-30 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
-          // On the panel rather than the search box, so Escape dismisses it from
-          // anywhere inside, including a row a keyboard user has tabbed onto.
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              close();
-            }
-          }}
-        >
-          <div className="relative border-b p-1.5">
-            <Search
-              className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              ref={searchRef}
-              type="text"
-              role="combobox"
-              aria-expanded
-              // Only while the list is actually rendered: with no matches the
-              // <ul> is replaced by the "no results" message, and pointing at an
-              // id that is not in the DOM tells a screen reader nothing.
-              aria-controls={ordered.length > 0 ? listId : undefined}
-              aria-activedescendant={
-                ordered.length > 0 ? `${listId}-option-${activeIndex}` : undefined
+        {open ? (
+          <div
+            ref={panelRef}
+            className="absolute top-full z-30 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+            // On the panel rather than the search box, so Escape dismisses it
+            // from anywhere inside it.
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                close();
               }
-              aria-label={t("processing.whitebox.crs.searchLabel")}
-              placeholder={t("processing.whitebox.crs.searchPlaceholder")}
-              className="h-8 ps-7 text-xs"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setActiveIndex(0);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setActiveIndex((index) => Math.min(index + 1, ordered.length - 1));
-                } else if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setActiveIndex((index) => Math.max(index - 1, 0));
-                } else if (event.key === "Enter") {
-                  event.preventDefault();
-                  const entry = ordered[activeIndex];
-                  if (entry) choose(entry);
+            }}
+          >
+            <div className="relative border-b p-1.5">
+              <Search
+                className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                ref={searchRef}
+                type="text"
+                role="combobox"
+                aria-expanded
+                // Only while the list is actually rendered: with no matches the
+                // <ul> is replaced by the "no results" message, and pointing at an
+                // id that is not in the DOM tells a screen reader nothing.
+                aria-controls={ordered.length > 0 ? listId : undefined}
+                aria-activedescendant={
+                  ordered.length > 0 ? `${listId}-option-${activeIndex}` : undefined
                 }
-              }}
-            />
+                aria-label={t("processing.whitebox.crs.searchLabel")}
+                placeholder={t("processing.whitebox.crs.searchPlaceholder")}
+                className="h-8 ps-7 text-xs"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setActiveIndex(0);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveIndex((index) => Math.min(index + 1, ordered.length - 1));
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveIndex((index) => Math.max(index - 1, 0));
+                  } else if (event.key === "Enter") {
+                    event.preventDefault();
+                    const entry = ordered[activeIndex];
+                    if (entry) choose(entry);
+                  }
+                }}
+              />
+            </div>
+            {ordered.length === 0 ? (
+              <p className="px-2 py-2 text-xs text-muted-foreground">
+                {t("processing.whitebox.crs.noResults")}
+              </p>
+            ) : (
+              <ul id={listId} role="listbox" className="max-h-64 overflow-y-auto py-1">
+                {renderGroup(t("processing.whitebox.crs.geographic"), geographic, 0)}
+                {renderGroup(t("processing.whitebox.crs.projected"), projected, geographic.length)}
+              </ul>
+            )}
           </div>
-          {ordered.length === 0 ? (
-            <p className="px-2 py-2 text-xs text-muted-foreground">
-              {t("processing.whitebox.crs.noResults")}
-            </p>
-          ) : (
-            <ul id={listId} role="listbox" className="max-h-64 overflow-y-auto py-1">
-              {renderGroup(t("processing.whitebox.crs.geographic"), geographic, 0)}
-              {renderGroup(t("processing.whitebox.crs.projected"), projected, geographic.length)}
-            </ul>
-          )}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {selected ? (
         <p className="text-xs text-muted-foreground">{formatCrsLabel(selected)}</p>
