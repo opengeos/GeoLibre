@@ -5,19 +5,25 @@ v2 mobile** — no separate app. The webview UI (WKWebView) is bundled in the ap
 so the shell works offline; map tiles and the heavier engines are fetched on
 demand (same as the desktop and Android builds).
 
-> **Status: builds and signs locally; not yet shipped.** The full pipeline has
-> been run through on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` →
-> unsigned archive → `xcodebuild -exportArchive` produces a **submittable**
-> `.ipa` — bundle id `org.geolibre.app`, signed by *Apple Distribution*,
+> **Status: builds and signs, locally and in CI; not yet shipped.** The pipeline
+> has been run end to end both ways and produces a **submittable** `.ipa` —
+> bundle id `org.geolibre.app`, signed by *Apple Distribution*,
 > `get-task-allow=false`, an embedded App Store provisioning profile, the merged
-> location usage string, and the web assets embedded in the binary. The
-> manual-signing recipe CI uses has also been exercised locally against a
-> portal-issued certificate and profile.
+> location usage string, and the web assets embedded in the binary.
 >
-> What has **not** happened: a run of the signed **CI** job on a GitHub runner,
-> and any App Store Connect upload or review submission. Uploading additionally
-> needs an App Store Connect app record for the bundle id. Everything below still
-> has to be run on a Mac (iOS cannot be cross-compiled from Linux).
+> - **Locally** on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` → unsigned
+>   archive → `xcodebuild -exportArchive`.
+> - **In CI**, the signed job has run green on a `macos-15` runner (Xcode 26.3):
+>   it imported the certificate and profile from the `APPLE_IOS_*` secrets,
+>   archived, exported under manual signing, verified the signature, and
+>   published the `geolibre-ios-ipa` artifact.
+>
+> What has **not** happened: any App Store Connect upload or review submission.
+> Uploading additionally needs an App Store Connect app record for the bundle id,
+> and a `CFBundleVersion` that increases on every upload — it is currently the
+> `tauri.conf.json` version, so a second upload of the same version is rejected
+> (pass `tauri ios build --build-number ...`). Everything below still has to be
+> run on a Mac (iOS cannot be cross-compiled from Linux).
 
 ## What works on iOS vs desktop
 
@@ -223,16 +229,21 @@ they're created under the **same paid Apple Developer account** at no extra cost
 add an Apple Distribution certificate and an App Store provisioning profile for
 `org.geolibre.app` in the Developer portal, and reuse the existing `APPLE_TEAM_ID`.
 
-> **The signed CI job has not yet run on a GitHub runner.** The job archives with
+> **Why the job archives and exports as two steps.** It archives with
 > `npx tauri ios build --no-sign` and then signs in a separate
 > `xcodebuild -exportArchive` step using **manual** signing, for the reason given
 > under *Build*: `tauri ios build --export-method` cannot sign this project,
 > because the generated project bakes in `CODE_SIGN_IDENTITY = "iPhone
 > Developer"` and automatic signing therefore hunts for a development profile no
-> matter what the export method says. That sequence has been reproduced locally
-> against a portal-issued certificate and profile and produces a valid signed
-> `.ipa`, but the workflow itself is still unexercised end to end — treat the
-> first release-triggered run as a bring-up.
+> matter what the export method says.
+>
+> This has been verified on a runner — a `workflow_dispatch` run with
+> `export_method: app-store-connect` completed green, reporting
+> `IPA ... bundle id org.geolibre.app, signed by Apple Distribution` and
+> publishing the `geolibre-ios-ipa` artifact. What remains unexercised is the
+> **release-triggered** entry point (the job has only been started manually) and
+> everything downstream of the artifact: no build has been uploaded to App Store
+> Connect.
 
 > **The runner's Xcode sets a hard floor.** `tauri ios init` generates an Xcode
 > project in **object format 77**, which only **Xcode 16+** can open. On
