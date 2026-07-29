@@ -137,24 +137,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
           # Keep well under the model's context; a diff larger than this is
           # truncated and Claude is told so, rather than silently cut off.
           MAX_DIFF_BYTES: "1500000"
         run: |
           set -euo pipefail
+          # `rm -rf` unlinks a symlink rather than following it, so a PR that
+          # ships its own `pr-context` cannot redirect these writes.
           rm -rf pr-context
           mkdir -p pr-context
 
-          gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" \
+          gh pr view "$PR_NUMBER" --repo "$REPO" \
             --json number,title,body,author,baseRefName,headRefName,additions,deletions,changedFiles \
             > pr-context/metadata.json
 
-          gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" \
+          gh pr view "$PR_NUMBER" --repo "$REPO" \
             --json files \
             --jq '.files[] | "\(.path) (+\(.additions)/-\(.deletions))"' \
             > pr-context/changed-files.txt
 
-          gh pr diff "$PR_NUMBER" --repo "${{ github.repository }}" > pr-context/diff.patch
+          gh pr diff "$PR_NUMBER" --repo "$REPO" > pr-context/diff.patch
 
           size="$(wc -c < pr-context/diff.patch)"
           if [ "$size" -gt "$MAX_DIFF_BYTES" ]; then
@@ -169,7 +172,16 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        # Pinned to a full commit SHA, not the mutable `v1` tag. This workflow's
+        # behaviour depends on action internals that `v1` has silently changed
+        # under us before — the env scrub that broke review for nine days
+        # arrived that way, with no commit here to point at. A SHA turns the
+        # next such change into a reviewable Dependabot PR. Dependabot covers
+        # the github-actions ecosystem weekly and bumps pinned SHAs, so this
+        # does not strand us on an old version. When it bumps, re-read the
+        # action's release notes for changes to the scrub, MCP wiring, or the
+        # `execution_file` contract that the summary step below parses.
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1 (Claude Code 2.1.220)
         with:
           # Use the workflow's GITHUB_TOKEN for GitHub API calls instead of the
           # default OIDC -> Claude GitHub App token exchange. That exchange
@@ -235,6 +247,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
           EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
         run: |
           set -euo pipefail
@@ -244,24 +257,31 @@ jobs:
             exit 0
           fi
 
+          # Write under RUNNER_TEMP, never into the workspace: the checkout is
+          # the untrusted PR head, and a PR that ships `summary.md` as a symlink
+          # would have these redirections follow it and clobber whatever it
+          # points at.
+          summary_file="$(mktemp "${RUNNER_TEMP}/claude-review-summary.XXXXXX")"
+
           jq -r '[.[] | select(.type == "result" and (.is_error | not)) | .result // empty] | last // ""' \
-            "$EXECUTION_FILE" > summary.md
+            "$EXECUTION_FILE" > "$summary_file"
 
           # A run that errored, hit a permission wall, or produced only
           # boilerplate should stay silent rather than post an empty comment.
-          if [ "$(wc -c < summary.md)" -lt 40 ]; then
+          if [ "$(wc -c < "$summary_file")" -lt 40 ]; then
             echo "::warning::Claude produced no usable review summary; skipping the comment"
             echo "--- begin captured summary ---"
-            cat summary.md
+            cat "$summary_file"
             echo "--- end captured summary ---"
             exit 0
           fi
 
           # GitHub rejects comment bodies over 65536 characters.
-          if [ "$(wc -c < summary.md)" -gt 65000 ]; then
-            head -c 65000 summary.md > summary.trimmed
-            printf '\n\n_[summary truncated]_\n' >> summary.trimmed
-            mv summary.trimmed summary.md
+          if [ "$(wc -c < "$summary_file")" -gt 65000 ]; then
+            trimmed_file="$(mktemp "${RUNNER_TEMP}/claude-review-summary.XXXXXX")"
+            head -c 65000 "$summary_file" > "$trimmed_file"
+            printf '\n\n_[summary truncated]_\n' >> "$trimmed_file"
+            mv "$trimmed_file" "$summary_file"
           fi
 
-          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body-file summary.md
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$summary_file"
