@@ -4,6 +4,12 @@ import type {
   GeoLibreLayer,
   LayerStyle,
 } from "@geolibre/core";
+import type {
+  QueryGeometry as ZarrQueryGeometry,
+  QueryOptions as ZarrQueryOptions,
+  QueryResult as ZarrQueryResult,
+  Selector as ZarrSelector,
+} from "@carbonplan/zarr-layer";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { OvertureTheme } from "maplibre-gl-overture-maps";
@@ -235,6 +241,27 @@ export interface GeoLibreZarrLayerOptions {
   beforeLayerId?: string;
 }
 
+// The query surface of `GeoLibreAppAPI.queryZarrLayer`, aliased from the
+// renderer's own types so a plugin can annotate its calls without adding
+// @carbonplan/zarr-layer as a dependency of its own — and so a change to the
+// renderer's contract fails the host build rather than drifting silently.
+
+/** A WGS84 `Point` (click-to-value) or `Polygon`/`MultiPolygon` (region stats). */
+export type GeoLibreZarrQueryGeometry = ZarrQueryGeometry;
+/**
+ * Dimensions to read instead of the layer's current selector. Accepts a list per
+ * dimension (e.g. `{ month: [1, 7] }`), which nests the returned values by that
+ * dimension's values.
+ */
+export type GeoLibreZarrQuerySelector = ZarrSelector;
+/** `signal` to cancel the read; `includeSpatialCoordinates` (default true). */
+export type GeoLibreZarrQueryOptions = ZarrQueryOptions;
+/**
+ * `{ [variable]: values, dimensions, coordinates }`, where `coordinates` are in
+ * the store's **source** CRS, not WGS84.
+ */
+export type GeoLibreZarrQueryResult = ZarrQueryResult;
+
 /**
  * Describes the file-type filter shown by the host's save/open dialog so
  * plugins can label exports/imports (e.g. JSON, GeoJSON, CSV) without knowing
@@ -374,6 +401,34 @@ export interface GeoLibreAppAPI {
     layerId: string,
     selector: Record<string, number | string>,
   ) => Promise<boolean>;
+  /**
+   * Read the values of a layer added by {@link addZarrLayer} under a GeoJSON
+   * geometry: a `Point` for click-to-value (Identify), a `Polygon` /
+   * `MultiPolygon` for region statistics. The read counterpart of
+   * {@link setZarrLayerSelector}.
+   *
+   * The host's renderer already holds the store's grid, so it does the CRS
+   * reprojection and fill-value masking: pass a WGS84 `[lng, lat]` straight from
+   * a map click rather than reading the store again with your own zarrita
+   * point-read. Note the returned `coordinates` are in the store's **source**
+   * CRS, not WGS84.
+   *
+   * Pass `selector` to read a slice other than the one on screen (e.g. another
+   * `time`) — the layer keeps rendering the slice it is on, so a readout does not
+   * disturb the map — and `options.signal` to cancel a query the user has moved
+   * past. Values come back empty — not an error — for a geometry outside the
+   * store's grid, or for a layer whose first chunks have not loaded yet; an
+   * aborted query rejects. Resolves to null when there is no live Zarr layer
+   * with that id.
+   *
+   * Typed optional for forward-compatibility, so call it with optional chaining.
+   */
+  queryZarrLayer?: (
+    layerId: string,
+    geometry: GeoLibreZarrQueryGeometry,
+    selector?: GeoLibreZarrQuerySelector,
+    options?: GeoLibreZarrQueryOptions,
+  ) => Promise<GeoLibreZarrQueryResult | null>;
   /**
    * Declare that a layer's time is an **internal dimension** the Time Slider can
    * drive, by registering a {@link TemporalLayerAdapter} for it. This is the

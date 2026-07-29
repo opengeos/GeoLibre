@@ -6,6 +6,13 @@ import {
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
+import type {
+  QueryGeometry,
+  QueryOptions,
+  QueryResult,
+  Selector,
+  ZarrLayer,
+} from "@carbonplan/zarr-layer";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
@@ -2497,6 +2504,50 @@ export async function setZarrLayerSelector(
     });
   }
   return true;
+}
+
+/**
+ * Read the data values of a live Zarr layer under a GeoJSON geometry: a `Point`
+ * for click-to-value, a `Polygon`/`MultiPolygon` for region statistics.
+ *
+ * The read side of {@link setZarrLayerSelector}, and the reason a plugin does
+ * not need its own zarrita point reader: the renderer already holds the store's
+ * grid, so it does the CRS reprojection and fill-value masking itself. Pass a
+ * WGS84 `[lng, lat]` straight from a map click; the returned `coordinates` are
+ * in the store's **source** CRS (Web Mercator meters for EPSG:3857, degrees for
+ * EPSG:4326, source units for a custom proj4 dataset).
+ *
+ * The renderer answers with empty value arrays rather than an error when the
+ * geometry falls outside the store's grid, or when the layer has not finished
+ * loading its first chunks — so a query fired immediately after the add can
+ * come back empty even though the id is live. An aborted query rejects.
+ *
+ * `selector` scopes the read only: the layer keeps rendering the slice it is on,
+ * so an Identify readout for another time leaves the map alone. Moving the
+ * display is {@link setZarrLayerSelector}'s job.
+ *
+ * @param layerId A layer id returned by {@link addZarrRasterLayer} (or a layer
+ *   the Zarr panel added).
+ * @param geometry The query geometry, in WGS84.
+ * @param selector Dimensions to read instead of the layer's current selector,
+ *   e.g. `{ time: 12 }`. Omit to read the slice on screen.
+ * @param options `signal` to cancel the read, `includeSpatialCoordinates` to
+ *   drop the per-pixel coordinate arrays (default: included).
+ * @returns The renderer's result, or null when there is no live Zarr layer with
+ *   that id (the counterpart of {@link setZarrLayerSelector} returning false).
+ */
+export async function queryZarrLayer(
+  layerId: string,
+  geometry: QueryGeometry,
+  selector?: Selector,
+  options?: QueryOptions,
+): Promise<QueryResult | null> {
+  const instance = zarrControl?.getLayersMap().get(layerId) as
+    | Pick<ZarrLayer, "queryData">
+    | undefined;
+  if (!instance || typeof instance.queryData !== "function") return null;
+
+  return instance.queryData(geometry, selector, options);
 }
 // ----- Zarr time axis --------------------------------------------------------
 // A Zarr cube's time is an internal dimension, so the Time Slider drives it

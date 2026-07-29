@@ -7,6 +7,7 @@ import {
   addRasterToMap,
   addZarrRasterLayer,
   buildSelectorTimeBinding,
+  queryZarrLayer,
   registerTemporalLayer,
   unregisterTemporalLayer,
   isTimeSliderIdle,
@@ -85,6 +86,9 @@ import type {
   GeoLibreTileLayerOptions,
   GeoLibreWmsLayerOptions,
   GeoLibreZarrLayerOptions,
+  GeoLibreZarrQueryGeometry,
+  GeoLibreZarrQueryOptions,
+  GeoLibreZarrQuerySelector,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -940,6 +944,15 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       }),
     setZarrLayerSelector: (layerId: string, selector: Record<string, number | string>) =>
       setZarrLayerSelector(layerId, selector),
+    // Click-to-value and region statistics on a natively rendered cube: the
+    // renderer owns the grid, so it reprojects the WGS84 geometry and masks fill
+    // values itself instead of every plugin re-reading the store (#1555).
+    queryZarrLayer: (
+      layerId: string,
+      geometry: GeoLibreZarrQueryGeometry,
+      selector?: GeoLibreZarrQuerySelector,
+      options?: GeoLibreZarrQueryOptions,
+    ) => queryZarrLayer(layerId, geometry, selector, options),
     // A layer whose time is an internal dimension joins the Time Slider through
     // an adapter rather than a filter or a source swap. Registering only makes
     // it bindable; `bind` writes the binding and opens the dock, which is what a
