@@ -699,16 +699,19 @@ export function BrowserPanel({
         readText: true,
       });
       if (!picked || picked.text === undefined) return;
-      const entries = parseLayerLibrary(picked.text);
+      const imported = parseLayerLibrary(picked.text);
       // Read the library fresh from the store: the file picker above can block
       // while another surface saves a layer.
-      const next = [...useAppStore.getState().layerLibrary];
-      for (const entry of entries) {
-        const index = next.findIndex((e) => e.id === entry.id);
-        if (index >= 0) next[index] = entry;
-        else next.push(entry);
-      }
-      useAppStore.getState().setLayerLibrary(next);
+      const current = useAppStore.getState().layerLibrary;
+      const byId = new Map(imported.map((e) => [e.id, e]));
+      // Genuinely new entries lead the list and the rest keep their places, so
+      // an import reads like a save (most recent first, per saveLayerLibraryEntry)
+      // instead of burying the freshly shared layers under the whole library.
+      // An id already present is an in-place update, not a reorder.
+      const updated = current.map((e) => byId.get(e.id) ?? e);
+      const currentIds = new Set(current.map((e) => e.id));
+      const added = imported.filter((e) => !currentIds.has(e.id));
+      useAppStore.getState().setLayerLibrary([...added, ...updated]);
     } catch (err) {
       // parseLayerLibrary's messages name the specific problem (bad JSON,
       // unsupported version, no usable entries), so surface them directly.

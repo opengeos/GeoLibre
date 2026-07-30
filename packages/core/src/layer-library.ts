@@ -688,6 +688,10 @@ const EXPORT_REDACTED_URL_PARAMS = new Set([
   "token",
   "subscription-key",
   "subscriptionkey",
+  "password",
+  "pwd",
+  "client_secret",
+  "clientsecret",
   "signature",
   "sig",
   "se",
@@ -798,20 +802,58 @@ function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
   return changed ? { ...entry, source, metadata } : entry;
 }
 
+/** Depth limit for the export sweep, so a pathological source cannot recurse far. */
+const MAX_REDACT_DEPTH = 6;
+
 /**
- * Redact a single `source` value: a string is treated as a possible URL, an
- * array as a list of them (tile templates), and anything else — an inline
- * FeatureCollection, a number, a nested object — is returned as-is. Returns the
- * original reference when nothing changed, so callers can detect that by
- * identity.
+ * Whether a value is GeoJSON data rather than source configuration. The sweep
+ * stops at these: `source.data` can hold an inline FeatureCollection, and
+ * descending into it would both walk every feature and *rewrite* any feature
+ * property that happens to look like a URL with a `key=` parameter — corrupting
+ * the user's data in the name of protecting it. Credentials live in
+ * configuration, not in features.
  */
-function redactSourceValue(value: unknown): unknown {
-  if (typeof value === "string") return redactUrlCredentials(value);
-  if (!Array.isArray(value)) return value;
-  const redacted = value.map((item) =>
-    typeof item === "string" ? redactUrlCredentials(item) : item,
+function isGeoJsonPayload(value: Record<string, unknown>): boolean {
+  return (
+    value.type === "FeatureCollection" ||
+    value.type === "Feature" ||
+    value.type === "GeometryCollection"
   );
-  return redacted.some((item, index) => item !== value[index]) ? redacted : value;
+}
+
+/**
+ * Redact a `source` value of any shape: strings are treated as possible URLs,
+ * arrays as lists of them (tile templates), and nested objects are swept
+ * recursively — a layer type that groups its endpoint and credentials as
+ * `{ store: { url, headers } }` must not slip a token past the export just
+ * because it is one level deeper. Nested `requestHeaders`-style keys are dropped
+ * the same way the top level drops them.
+ *
+ * GeoJSON payloads are left alone (see {@link isGeoJsonPayload}) and recursion is
+ * depth-capped. Returns the original reference when nothing changed, so callers
+ * can detect that by identity.
+ */
+function redactSourceValue(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") return redactUrlCredentials(value);
+  if (depth >= MAX_REDACT_DEPTH) return value;
+  if (Array.isArray(value)) {
+    const redacted = value.map((item) => redactSourceValue(item, depth + 1));
+    return redacted.some((item, index) => item !== value[index]) ? redacted : value;
+  }
+  const object = plainObject(value);
+  if (!object || isGeoJsonPayload(object)) return value;
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(object)) {
+    if (EXPORT_REDACTED_SOURCE_KEYS.includes(key as (typeof EXPORT_REDACTED_SOURCE_KEYS)[number])) {
+      changed = true;
+      continue;
+    }
+    const redacted = redactSourceValue(nested, depth + 1);
+    if (redacted !== nested) changed = true;
+    out[key] = redacted;
+  }
+  return changed ? out : value;
 }
 
 /**

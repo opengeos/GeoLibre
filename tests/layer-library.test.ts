@@ -1005,6 +1005,58 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.equal(reimported.source.type, "geojson");
   });
 
+  it("sweeps credentials out of a nested source object", () => {
+    // A layer type that groups its endpoint and auth one level down must not slip
+    // a token past export just because it is not a top-level string.
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-nested",
+        name: "Nested config",
+        addedAt: "",
+        layerType: "zarr",
+        source: {
+          url: "https://example.com/store.zarr",
+          store: {
+            endpoint: "https://example.com/store.zarr?api_key=SECRET_NESTED",
+            requestHeaders: { Authorization: "Bearer SECRET_HEADER" },
+            options: { mirrors: ["https://mirror.example.com/a?token=SECRET_DEEP"] },
+          },
+        },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    const exported = serializeLayerLibrary([entry]);
+    for (const secret of ["SECRET_NESTED", "SECRET_HEADER", "SECRET_DEEP"]) {
+      assert.equal(exported.includes(secret), false, secret);
+    }
+    const [reimported] = parseLayerLibrary(exported);
+    const store = reimported.source.store as Record<string, unknown>;
+    assert.equal(store.endpoint, "https://example.com/store.zarr");
+    assert.equal("requestHeaders" in store, false);
+    assert.deepEqual((store.options as { mirrors: string[] }).mirrors, [
+      "https://mirror.example.com/a",
+    ]);
+  });
+
+  it("redacts password-style query parameters", () => {
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-pw",
+        name: "Basic auth service",
+        addedAt: "",
+        layerType: "wms",
+        source: { url: "https://wms.example.com/s?user=bob&password=SECRET_PW&LAYERS=a" },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    const exported = serializeLayerLibrary([entry]);
+    assert.equal(exported.includes("SECRET_PW"), false);
+    const [reimported] = parseLayerLibrary(exported);
+    assert.equal(reimported.source.url, "https://wms.example.com/s?user=bob&LAYERS=a");
+  });
+
   it("leaves an inline GeoJSON source untouched on export", () => {
     // `source.data` can also be the features themselves; the sweep must not
     // mangle a FeatureCollection while looking for URLs.
