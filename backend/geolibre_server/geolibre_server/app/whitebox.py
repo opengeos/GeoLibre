@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import conversion
+from geolibre_server.vector_ops import MAX_FEATURES as MAX_LAYER_FEATURES
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -88,6 +89,10 @@ _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
 _RUNTIME_SETUP_LOCK = threading.Lock()
 MAX_RETAINED_JOBS = 100
+# Concurrent pending/running Whitebox jobs. Finished jobs are retained up to
+# MAX_RETAINED_JOBS; in-flight work is refused with HTTP 429 once this cap is
+# hit so a burst of /run calls cannot spawn unbounded tool sessions.
+MAX_IN_FLIGHT_JOBS = 8
 
 
 def _check_python_import(python_executable: str) -> None:
@@ -701,10 +706,19 @@ def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[
 
     Returns:
         Path to the materialized input file.
+
+    Raises:
+        ValueError: When the layer payload is not GeoJSON, or exceeds the
+            shared feature cap used by vector/PostGIS/Sedona paths.
     """
     geojson = layer.get("geojson")
     if not isinstance(geojson, dict):
         raise ValueError(f"Layer input for {param_name} does not contain GeoJSON.")
+    features = geojson.get("features") or []
+    if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
+        raise ValueError(
+            f"Layer input for {param_name} exceeds the {MAX_LAYER_FEATURES}-feature limit"
+        )
     folder = Path(tempfile.mkdtemp(prefix="geolibre-whitebox-input-"))
     temp_paths.append(folder)
     path = folder / f"{_safe_output_stem('input', param_name)}.geojson"
@@ -1041,15 +1055,41 @@ def _evict_finished_jobs_locked() -> None:
         _JOBS.pop(job_id, None)
 
 
+def _count_in_flight_jobs_locked() -> int:
+    """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
+    return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
+
+
 @router.post("/run")
 def whitebox_run(request: WhiteboxRunRequest):
     """Start a background Whitebox tool run."""
     tool_id = request.tool_id.strip()
     if not tool_id:
         raise HTTPException(status_code=400, detail="tool_id is required")
+    # Reject oversized embedded layers before enqueueing work, matching the
+    # 413 vector/PostGIS/Sedona feature cap (defense-in-depth also lives in
+    # ``_write_layer_input``).
+    for name, layer in request.layer_inputs.items():
+        geojson = layer.get("geojson") if isinstance(layer, dict) else None
+        if not isinstance(geojson, dict):
+            continue
+        features = geojson.get("features") or []
+        if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Layer input for {name} exceeds the "
+                    f"{MAX_LAYER_FEATURES}-feature limit"
+                ),
+            )
     job_id = str(uuid.uuid4())
     now = _utc_now()
     with _JOBS_LOCK:
+        if _count_in_flight_jobs_locked() >= MAX_IN_FLIGHT_JOBS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many Whitebox jobs in progress; try again shortly.",
+            )
         _JOBS[job_id] = JobState(
             id=job_id,
             status="pending",

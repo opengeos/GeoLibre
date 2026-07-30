@@ -141,6 +141,10 @@ _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
 _RUNTIME_SETUP_LOCK = threading.Lock()
 MAX_RETAINED_JOBS = 100
+# Concurrent pending/running conversion (and raster) jobs. Finished jobs are
+# retained up to MAX_RETAINED_JOBS; in-flight work is refused with HTTP 429 once
+# this cap is hit so a burst of /run calls cannot spawn unbounded subprocesses.
+MAX_IN_FLIGHT_JOBS = 8
 
 
 class VectorToVectorRequest(BaseModel):
@@ -1033,6 +1037,11 @@ def _append_job_message(job_id: str, message: str) -> None:
         )
 
 
+def _count_in_flight_jobs_locked() -> int:
+    """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
+    return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
+
+
 def _evict_finished_jobs_locked() -> None:
     """Drop the oldest finished jobs once the retention cap is exceeded.
 
@@ -1122,7 +1131,15 @@ def _run_conversion_job(
             outputs={output_name: {"path": output_path}} if output_path else {},
         )
     except Exception as exc:
-        _job_update(job_id, status="failed", error=str(exc))
+        # Mirror Whitebox: log the raw failure server-side and surface only a
+        # generic message. DuckDB/GDAL stderr often embeds absolute paths that
+        # must not reach the browser-proxied /jobs/{id} response.
+        logger.warning("Conversion job %s failed: %s", job_id, exc, exc_info=True)
+        _job_update(
+            job_id,
+            status="failed",
+            error="Conversion failed. See the sidecar logs for details.",
+        )
         # Remove a partial output so a retry starts clean and stale bytes do not
         # confuse downstream tools.
         output_path = params.get("output_path")
@@ -1148,6 +1165,11 @@ def _start_job(
     job_id = str(uuid.uuid4())
     now = _utc_now()
     with _JOBS_LOCK:
+        if _count_in_flight_jobs_locked() >= MAX_IN_FLIGHT_JOBS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many conversion jobs in progress; try again shortly.",
+            )
         _JOBS[job_id] = JobState(
             id=job_id,
             status="pending",

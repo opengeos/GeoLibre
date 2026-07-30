@@ -929,6 +929,7 @@ print("{marker}" + json.dumps({"output_path": output_path}))
 
 
 _RASTER_CALC_SCRIPT = """
+import ast
 import json, re, sys
 
 import numpy as np
@@ -1024,6 +1025,33 @@ safe_funcs = {
     "e": np.e,
 }
 namespace.update(safe_funcs)
+# Band arrays are full ndarrays, so attribute access (``A.tofile(...)``,
+# ``A.dump(...)``) would still write files even with an empty ``__builtins__``
+# and no bare ``np``. Parse the expression and reject attribute access plus any
+# call that is not one of the curated safe functions before ``eval``.
+try:
+    tree = ast.parse(expression, mode="eval")
+except SyntaxError as exc:
+    raise SystemExit(f"Failed to evaluate expression: {exc}") from exc
+allowed_calls = set(safe_funcs)
+for node in ast.walk(tree):
+    if isinstance(node, ast.Attribute):
+        raise SystemExit(
+            "Expression may not access attributes "
+            "(band math only allows curated functions and operators)"
+        )
+    if isinstance(node, ast.Call):
+        # ``np.where(...)`` / ``A.tofile(...)`` parse as Attribute-backed calls;
+        # reject them the same way as bare attribute access so ndarray file I/O
+        # and the withheld ``np`` module stay unreachable.
+        if isinstance(node.func, ast.Attribute):
+            raise SystemExit(
+                "Expression may not access attributes "
+                "(band math only allows curated functions and operators)"
+            )
+        if not isinstance(node.func, ast.Name) or node.func.id not in allowed_calls:
+            name = node.func.id if isinstance(node.func, ast.Name) else type(node.func).__name__
+            raise SystemExit(f"Call to '{name}' is not allowed in band math")
 try:
     with np.errstate(all="ignore"):
         result = eval(expression, {"__builtins__": {}}, namespace)

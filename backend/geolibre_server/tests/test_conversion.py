@@ -459,3 +459,54 @@ def test_evict_finished_jobs_never_drops_running(monkeypatch) -> None:
     _evict_finished_jobs_locked()
     # Excess is 2, but only the one finished job is eligible for eviction.
     assert set(jobs) == {"old_running", "pending"}
+
+
+def test_start_job_rejects_when_in_flight_cap_reached(monkeypatch) -> None:
+    """A new conversion job is refused with 429 once in-flight work is at the cap."""
+    monkeypatch.setattr(conversion, "MAX_IN_FLIGHT_JOBS", 1)
+    monkeypatch.setattr(
+        conversion,
+        "_JOBS",
+        {"busy": _job("busy", "running", "2026-01-01T00:00:00+00:00")},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        conversion._start_job("vector-to-geoparquet", "pass", {}, "output")
+    assert exc.value.status_code == 429
+    assert "Too many conversion jobs" in str(exc.value.detail)
+
+
+def test_conversion_job_does_not_leak_error(monkeypatch, tmp_path: Path) -> None:
+    """Failed conversion jobs store a generic error, never the raw exception text."""
+    job_id = "test-conversion-leak"
+    now = conversion._utc_now()
+    out = tmp_path / "out.parquet"
+    with conversion._JOBS_LOCK:
+        conversion._JOBS[job_id] = conversion.JobState(
+            id=job_id,
+            status="pending",
+            tool_id="vector-to-geoparquet",
+            created_at=now,
+            updated_at=now,
+        )
+
+    secret = "/secret/path/to/duckdb: boom traceback leak"
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(conversion, "_runtime_python", _boom)
+    try:
+        conversion._run_conversion_job(
+            job_id,
+            "pass",
+            {"output_path": str(out)},
+            "output",
+        )
+        job = conversion._JOBS[job_id]
+        assert job.status == "failed"
+        assert job.error == "Conversion failed. See the sidecar logs for details."
+        assert secret not in (job.error or "")
+    finally:
+        with conversion._JOBS_LOCK:
+            conversion._JOBS.pop(job_id, None)

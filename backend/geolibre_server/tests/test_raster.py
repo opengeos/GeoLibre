@@ -634,7 +634,12 @@ def test_raster_calculator_blocks_numpy_io(tmp_path: Path) -> None:
         text=True,
     )
     assert completed.returncode != 0
-    assert "Failed to evaluate expression" in (completed.stdout + completed.stderr)
+    combined = completed.stdout + completed.stderr
+    assert (
+        "Failed to evaluate expression" in combined
+        or "may not access attributes" in combined
+        or "not allowed in band math" in combined
+    )
     assert not out.exists()
 
 
@@ -1024,3 +1029,33 @@ def test_focal_std_zero_on_flat_input(tmp_path: Path) -> None:
     with rasterio.open(out) as ds:
         got = ds.read(1)
     assert np.allclose(got, 0.0, atol=1e-4)
+
+
+@requires_rasterio
+def test_raster_calculator_blocks_ndarray_tofile(tmp_path: Path) -> None:
+    """Ndarray file I/O via attribute access must not bypass the path allowlist."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    evil = tmp_path / "evil.bin"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "expression": f"(A.tofile({str(evil)!r}), A)[1]",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    combined = completed.stdout + completed.stderr
+    assert "may not access attributes" in combined
+    assert not evil.exists()
+    assert not out.exists()
