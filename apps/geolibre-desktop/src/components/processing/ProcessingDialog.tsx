@@ -100,6 +100,9 @@ interface ProcessingDialogProps {
 type ParameterValues = Record<string, unknown>;
 
 const LAYER_TOKEN_PREFIX = "layer:";
+
+/** A layer's `[west, south, east, north]` extent, or null when it has none. */
+type LayerBounds = [number, number, number, number] | null;
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
 // Smallest the floating panel can be resized to, so the two-column tool browser
@@ -764,13 +767,19 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     [selectedTool, values],
   );
 
+  // Measured extents, keyed on the FeatureCollection itself so the scan below is
+  // repeated only when a layer's data actually changes. The `layers` array is
+  // replaced on any layer mutation in the app — a visibility toggle, a restyle,
+  // an unrelated layer being added — and re-scanning a large collection on each
+  // of those, on the React commit path, is exactly the cost this avoids.
+  const layerBoundsCache = useRef(new WeakMap<FeatureCollection, LayerBounds>());
+
   // The latitude a distance parameter's metric entry converts at: the middle of
   // the combined extent of the layers the tool reads. With several inputs that is
   // the area the operation actually spans, where averaging each layer's own
   // centre would weight a city-sized input the same as a country-sized one and
-  // land between the two. Measuring an extent is a whole-collection pass, so this
-  // only touches the one or two layers the tool reads, not every GeoJSON layer in
-  // the project.
+  // land between the two. Only the one or two layers the tool reads are measured,
+  // never every GeoJSON layer in the project.
   const distanceLatitude = useMemo(() => {
     if (!open || distanceLayerKey === null) return null;
     let south = Number.POSITIVE_INFINITY;
@@ -780,7 +789,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       // No in-memory GeoJSON is fatal: the layer is passed as a path, in its own
       // CRS, so the tool's units stop being knowable.
       if (!layer?.geojson) return null;
-      const bounds = getLayerBounds(layer);
+      const cache = layerBoundsCache.current;
+      let bounds = cache.get(layer.geojson);
+      if (bounds === undefined) {
+        bounds = getLayerBounds(layer);
+        cache.set(layer.geojson, bounds);
+      }
       // A layer with no finite extent (an attribute table, whose features all
       // carry a null geometry) contributes no coordinates to the operation, so
       // skip it rather than disqualifying inputs that do have one.
