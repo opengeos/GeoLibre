@@ -32,6 +32,7 @@ describe("viewer upstream allowlist", () => {
     assert.equal(isAllowedUpstreamUrl("https://geolibre.app/"), false);
     assert.equal(isAllowedUpstreamUrl("https://evil.example/demo"), false);
     assert.equal(isAllowedUpstreamUrl("http://geolibre.app/demo"), false);
+    assert.equal(isAllowedUpstreamUrl("https://geolibre.app:8443/demo/assets/a.js"), false);
   });
 });
 
@@ -176,5 +177,20 @@ describe("tiles allowlisted fetch", () => {
       /Too many upstream redirects/,
     );
     assert.equal(hops, TILES_MAX_REDIRECT_HOPS + 1);
+  });
+
+  it("passes through 304 Not Modified with its ETag", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(null, {
+        status: 304,
+        headers: { etag: '"tile-abc"' },
+      });
+    const response = await fetchAllowlistedUpstream(
+      "https://api.openaerialmap.org/meta",
+      { headers: { "if-none-match": '"tile-abc"' } },
+      fetchImpl,
+    );
+    assert.equal(response.status, 304);
+    assert.equal(response.headers.get("etag"), '"tile-abc"');
   });
 });

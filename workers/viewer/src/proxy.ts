@@ -46,6 +46,9 @@ export function isAllowedUpstreamUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
+    // Default HTTPS only — non-empty ports (e.g. :8443) are ignored or
+    // remapped by Workers outbound fetch and must not pass the allowlist.
+    if (parsed.port !== "") return false;
     if (!ALLOWED_UPSTREAM_HOSTS.has(parsed.hostname)) return false;
     // Keep redirects under the demo prefix so a 302 to https://geolibre.app/
     // (the marketing site) cannot be served under the viewer hostname.
