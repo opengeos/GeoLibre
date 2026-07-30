@@ -95,6 +95,42 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={projectFiles.qgisImportWarnings !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.setQgisImportWarnings(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.qgisImportComplete")}</DialogTitle>
+            <DialogDescription>
+              {projectFiles.qgisImportWarnings?.length
+                ? t("toolbar.item.qgisImportWarnings", {
+                    count: projectFiles.qgisImportWarnings.length,
+                  })
+                : t("toolbar.item.qgisImportSuccess")}
+            </DialogDescription>
+          </DialogHeader>
+          {projectFiles.qgisImportWarnings?.length ? (
+            <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+              {projectFiles.qgisImportWarnings.map((warning, index) => (
+                <li key={`${warning.layerName}-${index}`}>
+                  <strong>{warning.layerName}:</strong>{" "}
+                  {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
+                    provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
+                  })}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="flex justify-end">
+            <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
+              {t("common.ok")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={projectFiles.saveNamePrompt !== null}
         onOpenChange={(open: boolean) => {
           if (!open) projectFiles.cancelSaveNamePrompt();

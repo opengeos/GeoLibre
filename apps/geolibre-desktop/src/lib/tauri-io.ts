@@ -2116,6 +2116,20 @@ export async function openProjectFile(): Promise<{
   return { project, path: selected };
 }
 
+/** Pick a QGIS project and return its raw bytes for the import converter. */
+export async function openQgisProjectFile(): Promise<{
+  data: ArrayBuffer;
+  path: string;
+} | null> {
+  const result = await openLocalDataFileWithFallback({
+    filters: [{ name: "QGIS Project", extensions: ["qgz", "qgs"] }],
+    accept: ".qgz,.qgs",
+    readBinary: true,
+  });
+  if (!result?.data) return null;
+  return { data: result.data, path: result.path };
+}
+
 /**
  * Thrown when a recent project is permanently gone (HTTP 404/410 or a local
  * file that no longer exists), signalling the caller that the entry can be

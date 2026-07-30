@@ -1825,6 +1825,7 @@
   "toolbar": {
     "menu": {
       "project": "Project",
+      "import": "Import",
       "edit": "Edit",
       "view": "View",
       "addData": "Add Data",
@@ -2396,6 +2397,19 @@
       "webServices": "Web Services",
       "commandPalette": "Command Palette",
       "openProjectFromUrl": "Open project from URL",
+      "importQgisProjectEllipsis": "Import QGIS Project…",
+      "qgisImportComplete": "QGIS project imported",
+      "qgisImportSuccess": "All supported project content was imported.",
+      "qgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
+      "qgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
+      "qgisUnknownProvider": "unknown",
+      "qgisImportReason": {
+        "non-vector": "Only file-based vector layers are supported in this first version.",
+        "provider": "The {{provider}} data provider is not supported.",
+        "missing-source": "The layer has no readable data source.",
+        "format": "The layer's file format is not supported.",
+        "browser-local-file": "The local file is referenced, but browsers cannot reopen QGIS data paths. Use GeoLibre Desktop to load it."
+      },
       "openProjectFromUrlDesc": "Load a `.geolibre.json` project and add it to recent projects.",
       "projectUrl": "Project URL",
       "opening": "Opening...",
@@ -2505,6 +2519,7 @@
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",
+      "couldNotImportQgisProject": "Could not import QGIS project.",
       "invalidProjectUrl": "Enter a valid HTTP or HTTPS project URL.",
       "couldNotOpenProjectUrl": "Could not open project URL.",
       "couldNotOpenRecentProject": "Could not open the recent project.",

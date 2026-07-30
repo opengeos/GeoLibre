@@ -18,6 +18,7 @@ import {
   isHttpUrl,
   isTauri,
   openProjectFile,
+  openQgisProjectFile,
   openRecentProjectFile,
   RecentProjectGoneError,
   saveProjectFile,
@@ -33,6 +34,7 @@ import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import { importQgisProject, type QgisProjectImportWarning } from "../lib/qgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /** A pending "strip env vars before saving?" prompt. */
@@ -116,6 +118,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const markSaved = useAppStore((s) => s.markSaved);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
+    null,
+  );
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
@@ -149,6 +154,32 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
         );
       }
+    }
+  };
+
+  const handleImportQgisProject = async () => {
+    const result = await openQgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = importQgisProject(result.data, result.path);
+      if (!isTauri()) {
+        for (const layer of imported.project.layers) {
+          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            imported.warnings.push({
+              layerName: layer.name,
+              reason: "browser-local-file",
+            });
+          }
+        }
+      }
+      loadProject(imported.project, null);
+      useAppStore.setState({ isDirty: true });
+      setQgisImportWarnings(imported.warnings);
+    } catch (error) {
+      console.error("Failed to import QGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
+      );
     }
   };
 
@@ -703,6 +734,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   return {
     actionError,
     setActionError,
+    qgisImportWarnings,
+    setQgisImportWarnings,
     projectUrlDialogOpen,
     setProjectUrlDialogOpen,
     handleProjectUrlDialogOpenChange,
@@ -725,6 +758,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     submitSaveNamePrompt,
     cancelSaveNamePrompt,
     handleOpenFromFile,
+    handleImportQgisProject,
     handleOpenFromUrl,
     openProjectFromShareUrl,
     handleOpenRecent,
