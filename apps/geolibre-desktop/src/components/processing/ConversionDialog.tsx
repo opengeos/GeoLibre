@@ -47,7 +47,6 @@ import {
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
-import { KmlCoordinateError } from "../../lib/vector-export-errors";
 import i18n from "../../i18n";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
@@ -863,17 +862,7 @@ export function ConversionDialog() {
       );
     } catch (err) {
       const detail =
-        err instanceof KmlCoordinateError
-          ? err.featureId == null
-            ? i18n.t("vectorExport.invalidKmlCoordinatesAtIndex", {
-                index: err.featureIndex,
-              })
-            : i18n.t("vectorExport.invalidKmlCoordinatesById", {
-                id: err.featureId,
-              })
-          : err instanceof Error
-            ? err.message
-            : i18n.t("toolbar.conversion.convertFailed");
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };

@@ -4373,7 +4373,7 @@
     }
   },
   "vectorExport": {
-    "invalidKmlCoordinatesAtIndex": "KML export could not write feature at index {{index}} because it has invalid coordinates.",
+    "invalidKmlCoordinatesByPosition": "KML export could not write feature {{position}} because it has invalid coordinates.",
     "invalidKmlCoordinatesById": "KML export could not write feature ID {{id}} because it has invalid coordinates."
   },
   "layers": {

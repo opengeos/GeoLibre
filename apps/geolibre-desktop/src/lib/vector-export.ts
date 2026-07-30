@@ -5,7 +5,7 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
 import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
 
-export { KmlCoordinateError } from "./vector-export-errors";
+export { KmlCoordinateError, kmlExportErrorMessage } from "./vector-export-errors";
 
 type TextVectorExportFormat = "geojson" | "csv" | "kml";
 

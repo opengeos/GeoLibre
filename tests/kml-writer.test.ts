@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import { strFromU8, unzipSync } from "fflate";
+import type { TFunction } from "i18next";
 import { writeKml } from "../apps/geolibre-desktop/src/lib/kml-writer";
-import { KmlCoordinateError } from "../apps/geolibre-desktop/src/lib/vector-export-errors";
+import {
+  KmlCoordinateError,
+  kmlExportErrorMessage,
+} from "../apps/geolibre-desktop/src/lib/vector-export-errors";
 import { exportBinaryVectorLayer } from "../apps/geolibre-desktop/src/lib/vector-exporter";
 
 const SAMPLE: FeatureCollection = {
@@ -271,6 +275,23 @@ describe("KMZ export", () => {
     assert.equal(strFromU8(files["doc.kml"]), writeKml(SAMPLE, "Cities & towns"));
     assert.equal(result.extension, "kmz");
     assert.equal(result.mimeType, "application/vnd.google-earth.kmz");
+  });
+});
+
+describe("KML export errors", () => {
+  it("localizes feature IDs and one-based feature positions", () => {
+    const t = ((key: string, values: Record<string, unknown>) =>
+      `${key}:${String(values.id ?? values.position)}`) as TFunction;
+
+    assert.equal(
+      kmlExportErrorMessage(new KmlCoordinateError(0, undefined), t),
+      "vectorExport.invalidKmlCoordinatesByPosition:1",
+    );
+    assert.equal(
+      kmlExportErrorMessage(new KmlCoordinateError(4, "city-5"), t),
+      "vectorExport.invalidKmlCoordinatesById:city-5",
+    );
+    assert.equal(kmlExportErrorMessage(new Error("other"), t), null);
   });
 });
 
