@@ -35,6 +35,7 @@ import {
   accuracyCircle,
   fixFromPosition,
   fixMeetsAccuracy,
+  formatAccuracy,
   formatDistance,
   formatDuration,
   formatSpeedKmh,
@@ -248,6 +249,7 @@ export function GpsTrackingDialog({
         lng: fix.lng,
         lat: fix.lat,
         accuracy: fix.accuracy,
+        satellites: fix.satellites,
         speed: fix.speed,
         timestamp: fix.timestamp,
       });
@@ -757,7 +759,10 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
       <span>
         {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)}
       </span>
-      <span>±{Math.round(fix.accuracy)} m</span>
+      <span>±{formatAccuracy(fix.accuracy)}</span>
+      <span>
+        {t("gps.satellites")}: {fix.satellites ?? t("gps.notAvailable")}
+      </span>
       {fix.altitude != null && <span>{Math.round(fix.altitude)} m ASL</span>}
       {fix.speed != null && <span>{formatSpeedKmh(fix.speed)} km/h</span>}
       {fix.heading != null && <span>{Math.round(fix.heading)}°</span>}
@@ -826,7 +831,9 @@ function FloatingPanel({
         <LocateFixed className="h-4 w-4 shrink-0 text-primary" />
         {fix ? (
           <span>
-            {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)} ±{Math.round(fix.accuracy)} m
+            {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)} ±{formatAccuracy(fix.accuracy)}
+            {" · "}
+            {t("gps.satellitesShort")}: {fix.satellites ?? t("gps.notAvailable")}
           </span>
         ) : (
           <span className="text-muted-foreground">{t("gps.waitingForFix")}</span>

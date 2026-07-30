@@ -8,6 +8,7 @@ import {
   DEFAULT_GPS_SETTINGS,
   fixFromPosition,
   fixMeetsAccuracy,
+  formatAccuracy,
   formatDistance,
   formatDuration,
   formatSpeedKmh,
@@ -29,6 +30,7 @@ function fix(overrides: Partial<GpsFix> = {}): GpsFix {
     lng: -123.09,
     lat: 44.05,
     accuracy: 5,
+    satellites: null,
     altitude: null,
     heading: null,
     speed: null,
@@ -286,7 +288,7 @@ describe("gps-tracking GPX export", () => {
 });
 
 describe("gps-tracking misc", () => {
-  it("fixFromPosition flattens coords and nulls NaN heading/speed", () => {
+  it("fixFromPosition flattens coords and reads provider satellite metadata", () => {
     const f = fixFromPosition({
       coords: {
         longitude: 1,
@@ -296,6 +298,7 @@ describe("gps-tracking misc", () => {
         altitudeAccuracy: null,
         heading: Number.NaN,
         speed: null,
+        satellitesUsed: 14,
       },
       timestamp: 99,
     } as GeolocationPosition);
@@ -303,11 +306,19 @@ describe("gps-tracking misc", () => {
       lng: 1,
       lat: 2,
       accuracy: 3,
+      satellites: 14,
       altitude: null,
       heading: null,
       speed: null,
       timestamp: 99,
     });
+  });
+
+  it("formatAccuracy preserves RTK precision and scales ordinary fixes", () => {
+    assert.equal(formatAccuracy(0.012), "1.2 cm");
+    assert.equal(formatAccuracy(0.45), "45 cm");
+    assert.equal(formatAccuracy(3.25), "3.3 m");
+    assert.equal(formatAccuracy(12.6), "13 m");
   });
 
   it("isGpsCaptureLayer requires geojson type and the metadata flag", () => {

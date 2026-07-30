@@ -28,6 +28,8 @@ export interface GpsFix {
   lat: number;
   /** Horizontal accuracy radius in meters (95% confidence). */
   accuracy: number;
+  /** Satellites used for the fix, when the location provider reports it. */
+  satellites: number | null;
   /** Meters above the WGS84 ellipsoid, when the device reports it. */
   altitude: number | null;
   /** Degrees clockwise from true north, when moving and reported. */
@@ -86,16 +88,40 @@ export function normalizeGpsSettings(raw: unknown): GpsTrackingSettings {
 /** Flatten a `GeolocationPosition` into a plain, serializable {@link GpsFix}. */
 export function fixFromPosition(pos: GeolocationPosition): GpsFix {
   const c = pos.coords;
+  // Satellite count is not part of the browser Geolocation API, but native
+  // GNSS and external-receiver bridges commonly expose one of these names.
+  const extended = c as GeolocationCoordinates & {
+    satellites?: unknown;
+    satellitesUsed?: unknown;
+    satelliteCount?: unknown;
+  };
+  const satelliteValue = extended.satellites ?? extended.satellitesUsed ?? extended.satelliteCount;
+  const satellites =
+    typeof satelliteValue === "number" && Number.isFinite(satelliteValue) && satelliteValue >= 0
+      ? Math.floor(satelliteValue)
+      : null;
   return {
     lng: c.longitude,
     lat: c.latitude,
     accuracy: c.accuracy,
+    satellites,
     altitude: c.altitude ?? null,
     // A NaN heading (some browsers report it while stationary) is "unknown".
     heading: c.heading != null && Number.isFinite(c.heading) ? c.heading : null,
     speed: c.speed != null && Number.isFinite(c.speed) ? c.speed : null,
     timestamp: pos.timestamp,
   };
+}
+
+/** Format horizontal accuracy without discarding centimeter-level fixes. */
+export function formatAccuracy(accuracyM: number): string {
+  if (!Number.isFinite(accuracyM) || accuracyM < 0) return "—";
+  if (accuracyM < 1) {
+    const centimeters = accuracyM * 100;
+    return `${centimeters < 10 ? centimeters.toFixed(1) : Math.round(centimeters)} cm`;
+  }
+  if (accuracyM < 10) return `${accuracyM.toFixed(1)} m`;
+  return `${Math.round(accuracyM)} m`;
 }
 
 const EARTH_RADIUS_M = 6_371_008.8;

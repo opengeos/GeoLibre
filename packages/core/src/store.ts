@@ -167,6 +167,8 @@ export interface GpsStatusFix {
   lat: number;
   /** Horizontal accuracy radius in meters. */
   accuracy: number;
+  /** Satellites used for the fix, or null when the provider does not report it. */
+  satellites: number | null;
   /** Ground speed in m/s, or null when the device doesn't report one. */
   speed: number | null;
   /** Fix time in epoch milliseconds. */
