@@ -4,12 +4,18 @@ import { useAppStore, DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import {
   maplibreAnnotationsPlugin,
   ANNOTATIONS_SOURCE_KIND,
+  pinFeature,
+  stickyNoteFeature,
+  placedImageFeature,
+  updateElementProps,
+  deleteElementById,
 } from "../packages/plugins/src/plugins/maplibre-annotations";
 import {
   registerRightPanel,
   getRightPanel,
   __resetRightPanelRegistryForTests,
 } from "../packages/plugins/src/right-panel-registry";
+import { LngLat } from "maplibre-gl";
 
 describe("Elements Panel & Map Elements", () => {
   beforeEach(() => {
@@ -81,42 +87,31 @@ describe("Elements Panel & Map Elements", () => {
   });
 
   it("builds correct feature objects using pinFeature, stickyNoteFeature, placedImageFeature", () => {
-    // Import dynamically or from the file
-    const {
-      pinFeature,
-      stickyNoteFeature,
-      placedImageFeature,
-    } = require("../packages/plugins/src/plugins/maplibre-annotations");
-    const { LngLat } = require("maplibre-gl");
-
     const pos = new LngLat(-122, 37);
     const pin = pinFeature(pos, "My Pin", "Pin description", "#ff0000");
     assert.equal(pin.geometry.type, "Point");
-    assert.equal(pin.properties.__annotation, "pin");
-    assert.equal(pin.properties.title, "My Pin");
-    assert.equal(pin.properties.description, "Pin description");
-    assert.equal(pin.properties.pinColor, "#ff0000");
-    assert.equal(pin.properties.text, "");
+    assert.ok(pin.properties);
+    assert.equal(pin.properties!.__annotation, "pin");
+    assert.equal(pin.properties!.title, "My Pin");
+    assert.equal(pin.properties!.description, "Pin description");
+    assert.equal(pin.properties!.pinColor, "#ff0000");
+    assert.equal(pin.properties!.text, "");
 
     const note = stickyNoteFeature(pos, "Hello world", "Sticky note title", "#00ff00");
-    assert.equal(note.properties.__annotation, "sticky_note");
-    assert.equal(note.properties.title, "Sticky note title");
-    assert.equal(note.properties.description, "Hello world");
-    assert.equal(note.properties.fill, "#00ff00");
-    assert.equal(note.properties.text, "");
+    assert.equal(note.properties!.__annotation, "sticky_note");
+    assert.equal(note.properties!.title, "Sticky note title");
+    assert.equal(note.properties!.description, "Hello world");
+    assert.equal(note.properties!.fill, "#00ff00");
+    assert.equal(note.properties!.text, "");
 
     const img = placedImageFeature(pos, "https://example.com/img.png", "My Image");
-    assert.equal(img.properties.__annotation, "placed_image");
-    assert.equal(img.properties.imageUrl, "https://example.com/img.png");
-    assert.equal(img.properties.title, "My Image");
-    assert.equal(img.properties.text, "");
+    assert.equal(img.properties!.__annotation, "placed_image");
+    assert.equal(img.properties!.imageUrl, "https://example.com/img.png");
+    assert.equal(img.properties!.title, "My Image");
+    assert.equal(img.properties!.text, "");
   });
 
   it("cascades visibility updates and deletion to image overlay layer in the store", () => {
-    const {
-      updateElementProps,
-      deleteElementById,
-    } = require("../packages/plugins/src/plugins/maplibre-annotations");
     const store = useAppStore.getState();
 
     // 1. Add annotation tracking layer with a pinned extent image tracking feature.

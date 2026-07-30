@@ -200,12 +200,16 @@ export function TopToolbar({
     setAnnotationLabels({
       toolbar: t("annotations.toolbar"),
       layerName: t("annotations.layerName"),
+      elementsPanelTitle: t("annotations.elementsPanelTitle"),
       tools: {
         text: t("annotations.tools.text"),
         arrow: t("annotations.tools.arrow"),
         rectangle: t("annotations.tools.rectangle"),
         ellipse: t("annotations.tools.ellipse"),
         freehand: t("annotations.tools.freehand"),
+        pin: t("annotations.tools.pin"),
+        sticky_note: t("annotations.tools.sticky_note"),
+        placed_image: t("annotations.tools.placed_image"),
       },
       color: t("annotations.color"),
       width: t("annotations.width"),
@@ -217,6 +221,14 @@ export function TopToolbar({
       deleteLast: t("annotations.deleteLast"),
       clearAll: t("annotations.clearAll"),
       textPlaceholder: t("annotations.textPlaceholder"),
+      pinTitlePrompt: t("annotations.pinTitlePrompt"),
+      pinDescPrompt: t("annotations.pinDescPrompt"),
+      stickyNotePrompt: t("annotations.stickyNotePrompt"),
+      imageUrlPrompt: t("annotations.imageUrlPrompt"),
+      cancel: t("annotations.cancel"),
+      saveElement: t("annotations.saveElement"),
+      atPoint: t("annotations.atPoint"),
+      pinnedToExtent: t("annotations.pinnedToExtent"),
     });
     setMapillaryLabels({
       title: t("mapillary.title"),

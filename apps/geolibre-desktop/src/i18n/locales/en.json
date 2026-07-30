@@ -3130,12 +3130,16 @@
   "annotations": {
     "toolbar": "Annotation tools",
     "layerName": "Annotations",
+    "elementsPanelTitle": "Elements",
     "tools": {
       "text": "Text",
       "arrow": "Arrow",
       "rectangle": "Rectangle highlight",
       "ellipse": "Ellipse highlight",
-      "freehand": "Freehand highlight"
+      "freehand": "Freehand highlight",
+      "pin": "Pin marker",
+      "sticky_note": "Sticky note",
+      "placed_image": "Placed image"
     },
     "color": "Annotation color",
     "width": "Line width",
@@ -3146,7 +3150,15 @@
     },
     "deleteLast": "Delete last annotation",
     "clearAll": "Clear all annotations",
-    "textPlaceholder": "Type label, Enter to place"
+    "textPlaceholder": "Type label, Enter to place",
+    "pinTitlePrompt": "Title",
+    "pinDescPrompt": "Description",
+    "stickyNotePrompt": "Note Content",
+    "imageUrlPrompt": "Image URL",
+    "cancel": "Cancel",
+    "saveElement": "Save Element",
+    "atPoint": "At Point",
+    "pinnedToExtent": "Pinned to Extent"
   },
   "pythonConsole": {
     "title": "Python Console",
