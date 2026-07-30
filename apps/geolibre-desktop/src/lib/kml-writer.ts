@@ -20,11 +20,31 @@ function indentXml(xml: string, spaces: number): string {
     .join("\n");
 }
 
+function decimalText(value: number): string {
+  const text = String(value);
+  const match = /^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i.exec(text);
+  if (!match) return text;
+
+  const [, sign, integer, fraction = "", rawExponent] = match;
+  const digits = `${integer}${fraction}`;
+  const decimalIndex = integer.length + Number(rawExponent);
+  if (decimalIndex <= 0) {
+    return `${sign}0.${"0".repeat(-decimalIndex)}${digits}`;
+  }
+  if (decimalIndex >= digits.length) {
+    return `${sign}${digits}${"0".repeat(decimalIndex - digits.length)}`;
+  }
+  return `${sign}${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+}
+
 function positionText(position: Position): string {
   if (position.length < 2 || position.slice(0, 3).some((value) => !Number.isFinite(value))) {
     throw new Error("KML export requires finite longitude and latitude coordinates.");
   }
-  return position.slice(0, 3).join(",");
+  return position
+    .slice(0, 3)
+    .map((value) => decimalText(value))
+    .join(",");
 }
 
 function coordinatesText(positions: Position[]): string {
@@ -122,9 +142,22 @@ function propertyElement(properties: GeoJsonProperties, key: string): string | n
 }
 
 function extendedDataKml(feature: Feature): string | null {
-  const entries = Object.entries(feature.properties ?? {});
-  if (feature.id != null && !Object.hasOwn(feature.properties ?? {}, "feature_id")) {
-    entries.unshift(["feature_id", feature.id]);
+  const properties = feature.properties ?? {};
+  const entries = Object.entries(properties).filter(
+    ([key, value]) =>
+      !((key === "name" || key === "description") && value != null && typeof value !== "object"),
+  );
+  if (feature.id != null) {
+    let idKey = "feature_id";
+    if (Object.hasOwn(properties, idKey)) {
+      idKey = "geojson_feature_id";
+      let suffix = 2;
+      while (Object.hasOwn(properties, idKey)) {
+        idKey = `geojson_feature_id_${suffix}`;
+        suffix += 1;
+      }
+    }
+    entries.unshift([idKey, feature.id]);
   }
   if (entries.length === 0) return null;
   const data = entries.map(
@@ -204,9 +237,10 @@ function featureKml(feature: Feature): string {
 /**
  * Convert a GeoJSON FeatureCollection to a KML 2.2 document.
  *
- * All feature properties are retained in ExtendedData. Common `name`,
- * `description`, and simplestyle properties are also promoted to their native
- * KML elements for display in Google Earth and other KML clients.
+ * Feature properties are retained in ExtendedData, except primitive `name` and
+ * `description` values that are represented by their native KML elements.
+ * Simplestyle properties are also promoted to native KML styles for display in
+ * Google Earth and other KML clients.
  */
 export function writeKml(geojson: FeatureCollection, documentName: string): string {
   const placemarks = geojson.features.map((feature, index) => {

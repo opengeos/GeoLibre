@@ -212,7 +212,7 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
 async function textExportContent(
   format: TextVectorExportFormat,
   geojson: FeatureCollection,
-  baseName: string,
+  documentName: string,
 ): Promise<string> {
   switch (format) {
     case "geojson":
@@ -220,7 +220,7 @@ async function textExportContent(
     case "csv":
       return geojsonToCsv(geojson);
     case "kml":
-      return (await import("./kml-writer")).writeKml(geojson, baseName);
+      return (await import("./kml-writer")).writeKml(geojson, documentName);
   }
 }
 
@@ -228,8 +228,9 @@ async function exportTextLayer(
   format: TextVectorExportFormat,
   geojson: FeatureCollection,
   baseName: string,
+  documentName: string,
 ): Promise<string | null> {
-  const content = await textExportContent(format, geojson, baseName);
+  const content = await textExportContent(format, geojson, documentName);
   const { extension, filterExtensions, label, mimeType } = TEXT_EXPORT_FORMATS[format];
   return saveTextFileWithFallback(content, {
     defaultName: `${baseName}.${extension}`,
@@ -250,8 +251,9 @@ async function exportBinaryLayer(
   format: BinaryVectorExportFormat,
   geojson: FeatureCollection,
   baseName: string,
+  documentName: string,
 ): Promise<string | null> {
-  const result = await exportBinaryVectorLayer(geojson, format, baseName);
+  const result = await exportBinaryVectorLayer(geojson, format, baseName, documentName);
   const label = exportFormatLabel(format);
   const extension = exportFileExtension(format);
   return saveBinaryFileWithFallback(result.data, {
@@ -271,16 +273,19 @@ async function exportBinaryLayer(
  * Save a vector layer's features to disk in the requested format, prompting
  * with the native (Tauri) or browser file-save dialog. Returns the saved path
  * (a name in the browser), or null when the user cancels the save dialog.
+ * The optional document name preserves the human-readable layer title inside
+ * KML and KMZ while the base name remains safe for the filesystem.
  */
 export async function exportVectorLayer(
   geojson: FeatureCollection,
   format: VectorExportFormat,
   baseName: string,
+  documentName = baseName,
 ): Promise<string | null> {
   if (format === "geojson" || format === "csv" || format === "kml") {
-    return exportTextLayer(format, geojson, baseName);
+    return exportTextLayer(format, geojson, baseName, documentName);
   }
-  return exportBinaryLayer(format, geojson, baseName);
+  return exportBinaryLayer(format, geojson, baseName, documentName);
 }
 
 /**

@@ -1217,6 +1217,7 @@ export function LayerPanel({
           geojson,
           format,
           sanitizeExportFileName(layer.name),
+          layer.name,
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {

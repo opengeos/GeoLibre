@@ -44,6 +44,7 @@ describe("writeKml", () => {
       kml,
       /<Data name="details"><value>\{&quot;state&quot;:&quot;Nevada&quot;\}<\/value><\/Data>/,
     );
+    assert.doesNotMatch(kml, /<Data name="(?:name|description)">/);
     assert.match(kml, /<Data name="feature_id"><value>city-1<\/value><\/Data>/);
     assert.match(
       kml,
@@ -160,6 +161,49 @@ describe("writeKml", () => {
     assert.equal((kml.match(/<altitudeMode>absolute<\/altitudeMode>/g) ?? []).length, 2);
   });
 
+  it("writes small coordinates as plain decimals", () => {
+    const kml = writeKml(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [5e-7, -5e-7] },
+          },
+        ],
+      },
+      "Small coordinates",
+    );
+
+    assert.match(kml, /<coordinates>0\.0000005,-0\.0000005<\/coordinates>/);
+    assert.doesNotMatch(kml, /<coordinates>[^<]*e[+-]?\d+/i);
+  });
+
+  it("preserves GeoJSON feature IDs when attribute names collide", () => {
+    const kml = writeKml(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "source-id",
+            properties: {
+              feature_id: "attribute-id",
+              geojson_feature_id: "another-attribute",
+            },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+      "ID collision",
+    );
+
+    assert.match(kml, /<Data name="feature_id"><value>attribute-id<\/value><\/Data>/);
+    assert.match(kml, /<Data name="geojson_feature_id"><value>another-attribute<\/value><\/Data>/);
+    assert.match(kml, /<Data name="geojson_feature_id_2"><value>source-id<\/value><\/Data>/);
+  });
+
   it("rejects invalid coordinates instead of creating a corrupt KML file", () => {
     assert.throws(
       () =>
@@ -178,16 +222,34 @@ describe("writeKml", () => {
         ),
       /feature at index 0: KML export requires finite longitude and latitude/,
     );
+    assert.throws(
+      () =>
+        writeKml(
+          {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                id: "invalid-feature",
+                properties: {},
+                geometry: { type: "Point", coordinates: [Number.NaN, 20] },
+              },
+            ],
+          },
+          "Invalid",
+        ),
+      /feature with id invalid-feature: KML export requires finite longitude and latitude/,
+    );
   });
 });
 
 describe("KMZ export", () => {
   it("packages the generated document as doc.kml with the registered MIME type", async () => {
-    const result = await exportBinaryVectorLayer(SAMPLE, "kmz", "Cities");
+    const result = await exportBinaryVectorLayer(SAMPLE, "kmz", "Cities", "Cities & towns");
     const files = unzipSync(result.data);
 
     assert.deepEqual(Object.keys(files), ["doc.kml"]);
-    assert.equal(strFromU8(files["doc.kml"]), writeKml(SAMPLE, "Cities"));
+    assert.equal(strFromU8(files["doc.kml"]), writeKml(SAMPLE, "Cities & towns"));
     assert.equal(result.extension, "kmz");
     assert.equal(result.mimeType, "application/vnd.google-earth.kmz");
   });
@@ -221,10 +283,10 @@ describe("KML text export", () => {
 
     try {
       const { exportVectorLayer } = await import("../apps/geolibre-desktop/src/lib/vector-export");
-      const savedName = await exportVectorLayer(SAMPLE, "kml", "Cities");
+      const savedName = await exportVectorLayer(SAMPLE, "kml", "Cities", "Cities & towns");
 
       assert.equal(savedName, "Cities.kml");
-      assert.equal(savedContent, writeKml(SAMPLE, "Cities"));
+      assert.equal(savedContent, writeKml(SAMPLE, "Cities & towns"));
       assert.deepEqual(pickerOptions, {
         suggestedName: "Cities.kml",
         types: [

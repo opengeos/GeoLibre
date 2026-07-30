@@ -63,6 +63,7 @@ export async function exportBinaryVectorLayer(
   geojson: FeatureCollection,
   format: BinaryVectorExportFormat,
   layerName: string,
+  documentName = layerName,
 ): Promise<BinaryVectorExportResult> {
   switch (format) {
     case "geoparquet":
@@ -85,7 +86,7 @@ export async function exportBinaryVectorLayer(
       };
     case "kmz":
       return {
-        data: await exportKmz(geojson, layerName),
+        data: await exportKmz(geojson, documentName),
         extension: "kmz",
         mimeType: "application/vnd.google-earth.kmz",
       };
