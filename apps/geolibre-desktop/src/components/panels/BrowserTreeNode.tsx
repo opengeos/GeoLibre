@@ -20,7 +20,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../layout/AddDataDialog";
 import { isFavoritableKind } from "../../lib/browser-favorites";
@@ -106,15 +106,23 @@ function RenameRow({
 }) {
   const { t } = useTranslation();
   const [value, setValue] = useState(node.label);
-  // Escape must not also fire the blur commit that follows the unmount.
-  const [cancelled, setCancelled] = useState(false);
+  // Enter and Escape both clear the parent's `renamingId`, which unmounts this
+  // editor — and removing the still-focused input fires a trailing blur. That
+  // blur is handled by the closure from the render before the key press, so a
+  // `useState` flag would be discarded with the unmounting component and never
+  // seen: Escape would commit the abandoned draft and Enter would commit twice.
+  // A ref is read live by that stale closure, so it actually suppresses the
+  // second commit (same guard as `handledRef` / `suppressBlurCommitRef` in
+  // LayerPanel, which exist for exactly this).
+  const handledRef = useRef(false);
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
+      handledRef.current = true;
       onCommit(value);
     } else if (event.key === "Escape") {
       event.preventDefault();
-      setCancelled(true);
+      handledRef.current = true;
       onCancel();
     }
   };
@@ -131,7 +139,8 @@ function RenameRow({
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={onKeyDown}
         onBlur={() => {
-          if (!cancelled) onCommit(value);
+          // Clicking away still commits the typed name rather than discarding it.
+          if (!handledRef.current) onCommit(value);
         }}
       />
     </div>

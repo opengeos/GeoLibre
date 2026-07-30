@@ -1,4 +1,5 @@
 import {
+  controlRendersLayer,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type ExternalNativePaintBridge,
@@ -674,8 +675,12 @@ function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+// Delegates to core's `controlRendersLayer` so the flag this dispatch branches
+// on has exactly one definition: the Layer Library's "can this be re-added and
+// rendered?" gate reads the same predicate (issue #1520), and a change to what
+// marks a custom-render layer cannot leave the two disagreeing.
 function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
-  return typeof layer.metadata.customLayerType === "string";
+  return controlRendersLayer(layer);
 }
 
 // Opt-in for control-managed layers (`customLayerType`, the ordering-only path)

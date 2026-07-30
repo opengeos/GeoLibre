@@ -467,9 +467,16 @@ export function BrowserPanel({
         // Re-add exactly like a project load does: put the layer record in the
         // store so MapController.syncLayers builds its map output, then run the
         // owning plugin's restore pass when the layer is control-painted (that
-        // pass, not the store sync, is what draws those layers).
-        addLayer(plan.layer);
-        restoreLibraryLayer(plan.layer, createAppAPI(mapControllerRef));
+        // pass, not the store sync, is what draws those layers). Held under the
+        // busy flag so the row spins through a slow re-ingest and a second click
+        // mid-restore cannot add the layer twice.
+        beginBusy(node.id);
+        try {
+          addLayer(plan.layer);
+          await restoreLibraryLayer(plan.layer, createAppAPI(mapControllerRef));
+        } finally {
+          endBusy();
+        }
         return;
       }
       // Entries whose features were too large to embed carry only a file path,

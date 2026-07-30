@@ -4,6 +4,7 @@ import type { FeatureCollection } from "geojson";
 import {
   captureLayerLibraryEntry,
   canSaveLayerToLibrary,
+  controlRendersLayer,
   createLayerLibraryEntryId,
   DEFAULT_LAYER_STYLE,
   hasRestorableLayerSource,
@@ -100,6 +101,75 @@ describe("canSaveLayerToLibrary", () => {
       canSaveLayerToLibrary(layer({ geojson: { type: "FeatureCollection", features: [] } })),
       false,
     );
+  });
+
+  it("refuses a control-painted layer the host cannot re-render", () => {
+    // Saving one anyway would produce an entry that re-adds into the Layers
+    // panel and draws nothing, so it must not be offered at all.
+    const controlPainted = layer({
+      source: { url: "https://example.com/a.tif" },
+      metadata: { externalNativeLayer: true, sourceKind: "some-deckgl-control" },
+    });
+    assert.equal(canSaveLayerToLibrary(controlPainted), false);
+    assert.equal(
+      canSaveLayerToLibrary(controlPainted, { canRestoreControlPainted: () => false }),
+      false,
+    );
+    assert.equal(
+      canSaveLayerToLibrary(controlPainted, { canRestoreControlPainted: () => true }),
+      true,
+    );
+  });
+
+  it("agrees with controlRendersLayer about which layers need the predicate", () => {
+    // `controlRendersLayer` is the flag layer-sync's dispatch branches on, and
+    // the desktop app's `canRestoreLibraryLayer` reads the same predicate: an
+    // external-native layer WITHOUT `customLayerType` is rebuilt from the record
+    // by the map sync, so it needs no restore pass to be saveable.
+    const rebuiltBySync = layer({
+      type: "pmtiles",
+      source: { url: "https://example.com/a.pmtiles" },
+      metadata: { externalNativeLayer: true, sourceKind: "pmtiles-url" },
+    });
+    assert.equal(controlRendersLayer(rebuiltBySync), false);
+    assert.equal(
+      canSaveLayerToLibrary(rebuiltBySync, {
+        canRestoreControlPainted: (candidate) => !controlRendersLayer(candidate),
+      }),
+      true,
+    );
+    const needsItsControl = layer({
+      type: "cog",
+      source: { url: "https://example.com/a.tif" },
+      metadata: {
+        externalNativeLayer: true,
+        // The real shape a Vantor/STAC COG layer carries.
+        customLayerType: "raster",
+        sourceKind: "cog-url",
+      },
+    });
+    assert.equal(controlRendersLayer(needsItsControl), true);
+    assert.equal(
+      canSaveLayerToLibrary(needsItsControl, {
+        canRestoreControlPainted: (candidate) => !controlRendersLayer(candidate),
+      }),
+      false,
+    );
+  });
+
+  it("does not consult the host predicate for a layer GeoLibre renders itself", () => {
+    let asked = false;
+    const plain = layer({ source: { url: "https://example.com/a.fgb" } });
+    assert.equal(
+      canSaveLayerToLibrary(plain, {
+        canRestoreControlPainted: () => {
+          asked = true;
+          return false;
+        },
+      }),
+      true,
+    );
+    assert.equal(asked, false);
   });
 });
 

@@ -12,7 +12,11 @@
 // is exactly what the project-load path relies on, so invoking one for a single
 // new layer is safe.
 
-import { isExternalNativeLayerRecord, type GeoLibreLayer } from "@geolibre/core";
+import {
+  controlRendersLayer,
+  isExternalNativeLayerRecord,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import {
   RASTER_SOURCE_KIND,
   restoreLidarLayers,
@@ -41,23 +45,54 @@ const RESTORE_BY_SOURCE_KIND: Record<string, (app: GeoLibreAppAPI) => void | Pro
   "lidar-url": restoreLidarLayers,
 };
 
+/** The restore pass that renders `layer`, or undefined when it needs none. */
+function restorePassFor(
+  layer: GeoLibreLayer,
+): ((app: GeoLibreAppAPI) => void | Promise<void>) | undefined {
+  const sourceKind = layer.metadata.sourceKind;
+  return typeof sourceKind === "string" ? RESTORE_BY_SOURCE_KIND[sourceKind] : undefined;
+}
+
 /**
- * Run the plugin restore pass that renders `layer`, if it is control-painted.
- * A no-op for a layer GeoLibre renders itself.
+ * Whether re-adding `layer` from the Layer Library will actually render it. The
+ * map's own sync rebuilds most external-native layers straight from the store
+ * record — PMTiles, Esri Wayback, basemap-control and web-service rasters, the
+ * generic raster-tile path, and the GeoJSON fall-through. Only a custom-render
+ * layer ({@link controlRendersLayer}) needs its control to recreate the map
+ * output, and for those we need a restore pass for that kind.
+ *
+ * This is the capability `canSaveLayerToLibrary` gates "Save to My Data" on, so
+ * a layer that would re-add blank is never offered in the first place. Adding a
+ * kind to {@link RESTORE_BY_SOURCE_KIND} therefore also makes it saveable — the
+ * two cannot drift apart.
+ *
+ * @param layer - The layer being considered for the library.
+ * @returns Whether the layer can be re-added and rendered.
+ */
+export function canRestoreLibraryLayer(layer: GeoLibreLayer): boolean {
+  if (!isExternalNativeLayerRecord(layer)) return true;
+  return !controlRendersLayer(layer) || restorePassFor(layer) !== undefined;
+}
+
+/**
+ * Run the plugin restore pass that renders `layer`, if it is control-painted and
+ * needs one. A no-op for a layer the map sync rebuilds from the record.
  *
  * @param layer - The layer just added from the Layer Library.
  * @param app - The plugin app API (from `createAppAPI`).
- * @returns Whether a restore pass was dispatched.
+ * @returns Resolves once the pass has been dispatched and settled (immediately
+ *   when none was needed). The passes log their own per-layer failures.
  */
-export function restoreLibraryLayer(layer: GeoLibreLayer, app: GeoLibreAppAPI): boolean {
-  if (!isExternalNativeLayerRecord(layer)) return false;
-  const sourceKind = layer.metadata.sourceKind;
-  const restore = typeof sourceKind === "string" ? RESTORE_BY_SOURCE_KIND[sourceKind] : undefined;
-  if (!restore) return false;
-  // The passes are fire-and-forget (they log their own failures); await nothing
-  // here so a slow re-ingest never blocks the panel's click handler.
-  void Promise.resolve(restore(app)).catch((error: unknown) => {
+export async function restoreLibraryLayer(
+  layer: GeoLibreLayer,
+  app: GeoLibreAppAPI,
+): Promise<void> {
+  if (!isExternalNativeLayerRecord(layer)) return;
+  const restore = restorePassFor(layer);
+  if (!restore) return;
+  try {
+    await restore(app);
+  } catch (error) {
     console.error("[GeoLibre] Failed to restore a layer added from My Data", error);
-  });
-  return true;
+  }
 }

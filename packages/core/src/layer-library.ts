@@ -79,25 +79,39 @@ function featureCount(geojson: FeatureCollection | undefined): number {
 
 /**
  * Whether "Save to library" applies to a layer at all — the cheap predicate the
- * layer actions menu gates on. A layer qualifies when it has a re-fetchable
- * source, a local file path, or features to embed; the only layers excluded are
- * those with none of the three, which nothing could re-add.
+ * layer actions menu gates on. Two things have to hold:
+ *
+ * 1. There is something to re-add *from*: a re-fetchable source, a local file
+ *    path, or features to embed.
+ * 2. The host can actually render it again. For a control-painted layer
+ *    ({@link isExternalNativeLayerRecord}) that means either the map's own sync
+ *    rebuilds it from the record or the owning plugin's restore pass can be
+ *    re-run, which only the host knows — so the caller supplies
+ *    `canRestoreControlPainted`. Without it, control-painted layers are refused
+ *    rather than saved into an entry that would re-add unrendered.
  *
  * A layer that qualifies here can still fail to save because its features are
- * too large to embed ({@link MAX_LAYER_LIBRARY_ENTRY_BYTES}); that outcome
- * needs the full capture, so it is reported by
- * {@link captureLayerLibraryEntry} rather than hidden behind a disabled menu
- * item.
+ * too large to embed ({@link MAX_LAYER_LIBRARY_ENTRY_BYTES}); that outcome needs
+ * the full capture, so it is reported by {@link captureLayerLibraryEntry} rather
+ * than hidden behind a disabled menu item.
  *
  * @param layer - The layer to test.
+ * @param options - `canRestoreControlPainted` answers whether the host can
+ *   re-render a control-painted layer (the desktop app passes its
+ *   `canRestoreLibraryLayer`).
  * @returns Whether the layer can be offered to the library.
  */
-export function canSaveLayerToLibrary(layer: GeoLibreLayer): boolean {
-  return (
+export function canSaveLayerToLibrary(
+  layer: GeoLibreLayer,
+  options: { canRestoreControlPainted?: (layer: GeoLibreLayer) => boolean } = {},
+): boolean {
+  const hasSomethingToReAddFrom =
     hasRestorableLayerSource(layer) ||
     layerLocalPath(layer) !== undefined ||
-    featureCount(layer.geojson) > 0
-  );
+    featureCount(layer.geojson) > 0;
+  if (!hasSomethingToReAddFrom) return false;
+  if (!isExternalNativeLayerRecord(layer)) return true;
+  return options.canRestoreControlPainted?.(layer) === true;
 }
 
 /** Why a layer could not be captured into the library. */

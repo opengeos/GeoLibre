@@ -170,6 +170,7 @@ import {
   reloadLocalFileLayer,
   setLayerWatchConfig,
 } from "../../lib/local-file-watch";
+import { canRestoreLibraryLayer } from "../../lib/restore-library-layer";
 import {
   getSqlQueryLayerConfig,
   isSqlQueryLayer,
@@ -2599,9 +2600,13 @@ export function LayerPanel({
             // layers. Shares the Style Manager's gate so the two can't drift.
             const canImportStyle = isStyleLibraryTargetLayer(layer.type);
             // Saving the whole layer (source + style + labels + filters + joins)
-            // to the Layer Library needs something re-addable to point at
-            // (issue #1520); a layer with no source and no features is excluded.
-            const canSaveToLibrary = canSaveLayerToLibrary(layer);
+            // to the Layer Library needs something re-addable to point at AND a
+            // way to render it again (issue #1520), so a layer with no source and
+            // no features is excluded — and so is a control-painted layer whose
+            // kind has no restore route, which would otherwise re-add blank.
+            const canSaveToLibrary = canSaveLayerToLibrary(layer, {
+              canRestoreControlPainted: canRestoreLibraryLayer,
+            });
             // Copy/paste symbology (issue #1339). Vector-styled layers and
             // deck.gl rasters each copy their own style family; a paste only
             // lands when the clipboard entry shares the target's family.
