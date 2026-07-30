@@ -409,18 +409,22 @@ function setActiveTool(tool: AnnotationTool | null): void {
 }
 
 let activePopupContainer: HTMLElement | null = null;
+let activePopupAnnotationId: string | null = null;
 
 function closeElementPopup(): void {
   if (activePopupContainer) {
     activePopupContainer.remove();
     activePopupContainer = null;
   }
+  activePopupAnnotationId = null;
 }
 
 function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, feature: Feature): void {
   closeElementPopup();
 
   const props = (feature.properties as Record<string, unknown>) ?? {};
+  const id = String(props.annotationId || feature.id);
+  activePopupAnnotationId = id;
   const title = String(props.title || props.text || "Element");
   const description = props.description ? String(props.description) : "";
   const imageUrl = props.imageUrl ? String(props.imageUrl) : "";
@@ -560,22 +564,29 @@ function syncPinMarkers(): void {
         activePinMarkers.get(id)!.remove();
         activePinMarkers.delete(id);
       }
+      if (activePopupAnnotationId === id) {
+        closeElementPopup();
+      }
       continue;
     }
 
+    const rawColor = String(props.pinColor || props["text-color"] || "#ef4444");
+    const pinColor = isValidColor(rawColor) ? rawColor : "#ef4444";
+
     if (!activePinMarkers.has(id)) {
-      const pinColor = String(props.pinColor || props["text-color"] || "#ef4444");
       const container = document.createElement("div");
       container.className = "geolibre-pin-marker";
       container.style.cssText =
         "display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));";
 
       const pinSvg = document.createElement("div");
+      pinSvg.className = "pin-svg-container";
       pinSvg.style.cssText = "display: flex; line-height: 0;";
       pinSvg.innerHTML = `<svg viewBox="0 0 24 36" width="28" height="42" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 22 12 22s12-13 12-22C24 5.4 18.6 0 12 0z"/><circle cx="12" cy="11" r="4.5" fill="#ffffff" opacity="0.9"/></svg>`;
       container.appendChild(pinSvg);
 
       const titleEl = document.createElement("div");
+      titleEl.className = "pin-title";
       titleEl.style.cssText =
         "background: var(--geolibre-bg, #fff); color: var(--geolibre-fg, #1f2937); font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-top: -6px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid var(--geolibre-border, #d1d5db);";
       titleEl.textContent = String(props.title || "Pin");
@@ -592,7 +603,25 @@ function syncPinMarkers(): void {
 
       activePinMarkers.set(id, marker);
     } else {
-      activePinMarkers.get(id)!.setLngLat(coords as [number, number]);
+      const marker = activePinMarkers.get(id)!;
+      marker.setLngLat(coords as [number, number]);
+      const container = marker.getElement();
+      const pinSvg = container.querySelector(".pin-svg-container");
+      if (pinSvg) {
+        pinSvg.innerHTML = `<svg viewBox="0 0 24 36" width="28" height="42" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 22 12 22s12-13 12-22C24 5.4 18.6 0 12 0z"/><circle cx="12" cy="11" r="4.5" fill="#ffffff" opacity="0.9"/></svg>`;
+      }
+      const titleEl = container.querySelector(".pin-title");
+      if (titleEl) {
+        titleEl.textContent = String(props.title || "Pin");
+      }
+      container.onclick = (e) => {
+        e.stopPropagation();
+        showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
+      };
+    }
+
+    if (activePopupAnnotationId === id) {
+      showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
     }
   }
 
@@ -600,6 +629,9 @@ function syncPinMarkers(): void {
     if (!currentIds.has(id)) {
       marker.remove();
       activePinMarkers.delete(id);
+      if (activePopupAnnotationId === id) {
+        closeElementPopup();
+      }
     }
   }
 }
@@ -634,14 +666,18 @@ function syncStickyNoteMarkers(): void {
         activeStickyMarkers.get(id)!.remove();
         activeStickyMarkers.delete(id);
       }
+      if (activePopupAnnotationId === id) {
+        closeElementPopup();
+      }
       continue;
     }
 
-    if (!activeStickyMarkers.has(id)) {
-      const bgColor = String(props.fill || "#fbbf24");
-      // Derive readable text color: dark text on light backgrounds, white on dark.
-      const textColor = isLightColor(bgColor) ? "#1f2937" : "#ffffff";
+    const rawBgColor = String(props.fill || "#fbbf24");
+    const bgColor = isValidColor(rawBgColor) ? rawBgColor : "#fbbf24";
+    // Derive readable text color: dark text on light backgrounds, white on dark.
+    const textColor = isLightColor(bgColor) ? "#1f2937" : "#ffffff";
 
+    if (!activeStickyMarkers.has(id)) {
       const container = document.createElement("div");
       container.className = "geolibre-sticky-note-marker";
       container.style.cssText = `
@@ -655,22 +691,24 @@ function syncStickyNoteMarkers(): void {
       `;
 
       const titleEl = document.createElement("div");
+      titleEl.className = "sticky-title";
       titleEl.style.cssText =
         "font-size: 12px; font-weight: 700; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
       titleEl.textContent = String(props.title || "Note");
       container.appendChild(titleEl);
 
       const bodyText = String(props.description || "");
-      if (bodyText) {
-        const bodyEl = document.createElement("div");
-        bodyEl.style.cssText =
-          "font-size: 11px; line-height: 1.35; word-break: break-word; opacity: 0.85; max-height: 60px; overflow: hidden;";
-        bodyEl.textContent = bodyText;
-        container.appendChild(bodyEl);
-      }
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "sticky-body";
+      bodyEl.style.cssText =
+        "font-size: 11px; line-height: 1.35; word-break: break-word; opacity: 0.85; max-height: 60px; overflow: hidden;";
+      bodyEl.textContent = bodyText;
+      bodyEl.style.display = bodyText ? "block" : "none";
+      container.appendChild(bodyEl);
 
       // Small anchor triangle at the bottom pointing down.
       const anchor = document.createElement("div");
+      anchor.className = "sticky-anchor";
       anchor.style.cssText = `
         position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
         width: 0; height: 0;
@@ -691,7 +729,37 @@ function syncStickyNoteMarkers(): void {
 
       activeStickyMarkers.set(id, marker);
     } else {
-      activeStickyMarkers.get(id)!.setLngLat(coords as [number, number]);
+      const marker = activeStickyMarkers.get(id)!;
+      marker.setLngLat(coords as [number, number]);
+      const container = marker.getElement();
+      container.style.background = bgColor;
+      container.style.color = textColor;
+
+      const titleEl = container.querySelector(".sticky-title");
+      if (titleEl) {
+        titleEl.textContent = String(props.title || "Note");
+      }
+
+      const bodyText = String(props.description || "");
+      const bodyEl = container.querySelector<HTMLElement>(".sticky-body");
+      if (bodyEl) {
+        bodyEl.textContent = bodyText;
+        bodyEl.style.display = bodyText ? "block" : "none";
+      }
+
+      const anchor = container.querySelector<HTMLElement>(".sticky-anchor");
+      if (anchor) {
+        anchor.style.borderTopColor = bgColor;
+      }
+
+      container.onclick = (e) => {
+        e.stopPropagation();
+        showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
+      };
+    }
+
+    if (activePopupAnnotationId === id) {
+      showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
     }
   }
 
@@ -699,6 +767,9 @@ function syncStickyNoteMarkers(): void {
     if (!currentIds.has(id)) {
       marker.remove();
       activeStickyMarkers.delete(id);
+      if (activePopupAnnotationId === id) {
+        closeElementPopup();
+      }
     }
   }
 }
@@ -712,6 +783,14 @@ function isLightColor(hex: string): boolean {
   const b = parseInt(c.slice(4, 6), 16);
   // Perceived luminance (sRGB).
   return r * 0.299 + g * 0.587 + b * 0.114 > 150;
+}
+
+function isValidColor(color: string): boolean {
+  if (!color) return false;
+  if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) return true;
+  if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*(?:\d+(?:\.\d+)?|\.\d+)\s*)?\)$/.test(color)) return true;
+  if (/^hsla?\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*(?:,\s*(?:\d+(?:\.\d+)?|\.\d+)\s*)?\)$/.test(color)) return true;
+  return /^[a-zA-Z]{3,20}$/.test(color);
 }
 
 // ---------------------------------------------------------------------------
@@ -744,6 +823,9 @@ function syncPlacedImageMarkers(): void {
         activeImageMarkers.get(id)!.remove();
         activeImageMarkers.delete(id);
       }
+      if (activePopupAnnotationId === id) {
+        closeElementPopup();
+      }
       continue;
     }
 
@@ -759,6 +841,7 @@ function syncPlacedImageMarkers(): void {
       container.appendChild(iconSpan);
 
       const titleSpan = document.createElement("span");
+      titleSpan.className = "image-title";
       titleSpan.textContent = String(props.title || "Placed Image");
       container.appendChild(titleSpan);
 
@@ -773,7 +856,21 @@ function syncPlacedImageMarkers(): void {
 
       activeImageMarkers.set(id, marker);
     } else {
-      activeImageMarkers.get(id)!.setLngLat(coords as [number, number]);
+      const marker = activeImageMarkers.get(id)!;
+      marker.setLngLat(coords as [number, number]);
+      const container = marker.getElement();
+      const titleSpan = container.querySelector(".image-title");
+      if (titleSpan) {
+        titleSpan.textContent = String(props.title || "Placed Image");
+      }
+      container.onclick = (e) => {
+        e.stopPropagation();
+        showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
+      };
+    }
+
+    if (activePopupAnnotationId === id) {
+      showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
     }
   }
 
@@ -781,6 +878,9 @@ function syncPlacedImageMarkers(): void {
     if (!currentIds.has(id)) {
       marker.remove();
       activeImageMarkers.delete(id);
+      if (activePopupAnnotationId === id) {
+        closeElementPopup();
+      }
     }
   }
 }
@@ -804,7 +904,11 @@ function bindMap(map: maplibregl.Map): void {
   map.on("mouseup", handleMouseUp);
   window.addEventListener("mouseup", handleWindowMouseUp);
   map.getCanvas().addEventListener("keydown", handleKeyDown, { capture: true });
-  elementMarkerUnsub = useAppStore.subscribe(() => syncAllElementMarkers());
+  elementMarkerUnsub = useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) {
+      syncAllElementMarkers();
+    }
+  });
   syncAllElementMarkers();
 }
 
@@ -822,6 +926,7 @@ function unbindMap(): void {
   elementMarkerUnsub = null;
   clearAllElementMarkers();
   closeElementPopup();
+  closeElementDialog();
   if (!map) return;
   map.off("click", handleClick);
   map.off("mousedown", handleMouseDown);
@@ -972,11 +1077,10 @@ function openElementDialog(
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = label;
-      btn.style.cssText = `flex: 1; padding: 5px 0; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); font-size: 11px; cursor: pointer; transition: background 0.15s; ${
-        mode === "point"
+      btn.style.cssText = `flex: 1; padding: 5px 0; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); font-size: 11px; cursor: pointer; transition: background 0.15s; ${mode === "point"
           ? "background: var(--geolibre-primary, #3b82f6); color: #fff; border-color: var(--geolibre-primary, #3b82f6);"
           : "background: transparent; color: inherit;"
-      }`;
+        }`;
       btn.onclick = (e) => {
         e.stopPropagation();
         placementMode = mode;
@@ -1807,6 +1911,34 @@ export function renderElementsPanel(container: HTMLElement): () => void {
     const layer = findAnnotationLayer(store.layers);
     const rawFeatures = (layer?.geojson?.features as Feature[]) ?? [];
 
+    let changed = false;
+    const updatedFeatures = rawFeatures.map((f) => {
+      const props = (f.properties as Record<string, unknown>) ?? {};
+      if (!props.annotationId) {
+        const generatedId = String(props.id || f.id || crypto.randomUUID());
+        changed = true;
+        return {
+          ...f,
+          properties: {
+            ...props,
+            annotationId: generatedId,
+          },
+        };
+      }
+      return f;
+    });
+
+    if (changed && layer && layer.geojson) {
+      store.updateLayer(layer.id, {
+        geojson: {
+          ...layer.geojson,
+          type: "FeatureCollection",
+          features: updatedFeatures,
+        },
+      });
+      return;
+    }
+
     const map = new Map<
       string,
       {
@@ -1821,7 +1953,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
     for (const f of rawFeatures) {
       const props = (f.properties as Record<string, unknown>) ?? {};
-      const id = String(props.annotationId || props.id || f.id || Math.random());
+      const id = String(props.annotationId);
       if (!map.has(id)) {
         const type = String(props.__annotation || props.shape || "element");
         const title = String(props.title || props.text || "Element");
@@ -1855,9 +1987,8 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
     elements.forEach((el, index) => {
       const row = document.createElement("div");
-      row.style.cssText = `display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--geolibre-bg-subtle, #f9fafb); border: 1px solid var(--geolibre-border, #e5e7eb); ${
-        !el.visible ? "opacity: 0.5;" : ""
-      }`;
+      row.style.cssText = `display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--geolibre-bg-subtle, #f9fafb); border: 1px solid var(--geolibre-border, #e5e7eb); ${!el.visible ? "opacity: 0.5;" : ""
+        }`;
 
       const icon = document.createElement("span");
       icon.style.cssText =
@@ -1878,10 +2009,11 @@ export function renderElementsPanel(container: HTMLElement): () => void {
         const commit = () => {
           const val = input.value.trim();
           if (val && val !== el.title) {
-            updateElementProps(el.id, {
-              title: val,
-              text: val,
-            });
+            const patch: Record<string, unknown> = { title: val };
+            if (el.type === "text") {
+              patch.text = val;
+            }
+            updateElementProps(el.id, patch);
           }
           editingId = null;
           update();
@@ -1971,7 +2103,11 @@ export function renderElementsPanel(container: HTMLElement): () => void {
   };
 
   update();
-  const unsub = useAppStore.subscribe(update);
+  const unsub = useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) {
+      update();
+    }
+  });
   return () => unsub();
 }
 
