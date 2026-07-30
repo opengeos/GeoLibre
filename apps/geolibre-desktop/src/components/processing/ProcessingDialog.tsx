@@ -274,12 +274,15 @@ function wgs84VectorLayerIds(tool: WhiteboxTool | null, values: ParameterValues)
   const ids: string[] = [];
   for (const param of vectorInputs) {
     const value = values[param.name];
-    if (typeof value !== "string" || !value.startsWith(LAYER_TOKEN_PREFIX)) {
-      // A required input still on "Path" (or empty) means the run may read a
-      // projected file instead; don't claim to know the units.
+    if (typeof value !== "string" || value.trim() === "") {
+      // Nothing chosen yet. A required input means there is nothing to know the
+      // units of; an empty optional one contributes no geometry either way.
       if (param.required) return null;
       continue;
     }
+    // A path, required or not, is read from disk in whatever CRS it carries, so
+    // one anywhere on the tool is enough to make the units unknowable.
+    if (!value.startsWith(LAYER_TOKEN_PREFIX)) return null;
     ids.push(value.slice(LAYER_TOKEN_PREFIX.length));
   }
   return ids.length ? ids : null;
@@ -1969,7 +1972,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               ) : (
                 selectedTool?.params?.map((param) => (
                   <ParameterField
-                    key={param.name}
+                    // Keyed by tool as well as parameter name: dozens of tools
+                    // share names like `tolerance` or `radius`, and without the
+                    // tool id React reuses the field instance across a tool
+                    // switch, carrying a distance field's unit and typed draft
+                    // over to a parameter that reset to another tool's default.
+                    key={`${selectedTool.id}:${param.name}`}
                     param={param}
                     layers={layers}
                     toolId={selectedTool.id}
@@ -2425,6 +2433,15 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
   const degrees = Number.parseFloat(value);
   const hasDegrees = Number.isFinite(degrees);
 
+  // The last value this field pushed up, so a `value` that changed for some
+  // other reason (a re-run pre-filled from Processing History, say) can be told
+  // apart from the field's own edits.
+  const lastPushed = useRef(value);
+  const push = (next: string) => {
+    lastPushed.current = next;
+    onChange(next);
+  };
+
   const changeUnit = (next: DistanceUnit) => {
     setUnit(next);
     // Carry the current distance over to the new unit rather than clearing it.
@@ -2438,19 +2455,30 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
   const changeDraft = (text: string) => {
     setDraft(text);
     const parsed = Number.parseFloat(text);
-    if (!Number.isFinite(parsed)) {
-      onChange(text.trim() === "" ? "" : text);
-      return;
-    }
-    onChange(formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8));
+    push(
+      Number.isFinite(parsed)
+        ? formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8)
+        : text.trim() === ""
+          ? ""
+          : text,
+    );
   };
 
-  // Re-convert when the input layer changes under a metric entry: the field is
-  // keyed by parameter name, so switching a tool's vector input from a layer at
-  // 44°N to one at 10°N leaves the typed distance on screen while the stored
-  // degrees still come from the old latitude. Without this the note would show
-  // the new latitude beside a value converted at the old one, and Run would send
-  // the stale degrees.
+  // Someone else rewrote the parameter: the typed draft and its unit describe a
+  // distance that is no longer stored, so fall back to showing the degrees that
+  // are.
+  useEffect(() => {
+    if (value === lastPushed.current) return;
+    lastPushed.current = value;
+    setUnit("degrees");
+    setDraft("");
+  }, [value]);
+
+  // Re-convert when the input layer changes under a metric entry: switching a
+  // tool's vector input from a layer at 44°N to one at 10°N leaves the typed
+  // distance on screen while the stored degrees still come from the old
+  // latitude. Without this the note would show the new latitude beside a value
+  // converted at the old one, and Run would send the stale degrees.
   const lastLatitude = useRef(latitude);
   useEffect(() => {
     if (lastLatitude.current === latitude) return;
@@ -2458,7 +2486,9 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     if (unit === "degrees") return;
     const parsed = Number.parseFloat(draft);
     if (!Number.isFinite(parsed)) return;
-    onChange(formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8));
+    const next = formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8);
+    lastPushed.current = next;
+    onChange(next);
   }, [draft, latitude, onChange, unit]);
 
   const latitudeLabel = t(
