@@ -50,26 +50,17 @@ describe("viewer redirect policy", () => {
       return new Response("unexpected", { status: 500 });
     };
 
-    const ok = await proxyViewerRequest(
-      new Request("https://web.geolibre.app/old"),
-      fetchImpl,
-    );
+    const ok = await proxyViewerRequest(new Request("https://web.geolibre.app/old"), fetchImpl);
     assert.equal(ok.status, 200);
     assert.equal(await ok.text(), "ok");
-    assert.deepEqual(calls, [
-      "https://geolibre.app/demo/old",
-      "https://geolibre.app/demo/new",
-    ]);
+    assert.deepEqual(calls, ["https://geolibre.app/demo/old", "https://geolibre.app/demo/new"]);
 
     const evilFetch: typeof fetch = async () =>
       new Response(null, {
         status: 302,
         headers: { location: "https://evil.example/steal" },
       });
-    const blocked = await proxyViewerRequest(
-      new Request("https://web.geolibre.app/"),
-      evilFetch,
-    );
+    const blocked = await proxyViewerRequest(new Request("https://web.geolibre.app/"), evilFetch);
     assert.equal(blocked.status, 502);
   });
 
@@ -88,10 +79,7 @@ describe("viewer redirect policy", () => {
         headers: { location: `${url}?n=${hops}` },
       });
     };
-    const capped = await proxyViewerRequest(
-      new Request("https://web.geolibre.app/loop"),
-      looping,
-    );
+    const capped = await proxyViewerRequest(new Request("https://web.geolibre.app/loop"), looping);
     assert.equal(capped.status, 502);
     assert.equal(hops, MAX_REDIRECT_HOPS + 1);
   });
