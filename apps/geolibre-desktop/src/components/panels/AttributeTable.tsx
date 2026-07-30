@@ -1661,6 +1661,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
               GeoPackage
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kml")}>KML</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kmz")}>KMZ</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
               Shapefile (zipped)
             </DropdownMenuItem>

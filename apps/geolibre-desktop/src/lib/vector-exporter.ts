@@ -1,6 +1,6 @@
 import type { FeatureCollection } from "geojson";
 
-export type BinaryVectorExportFormat = "geoparquet" | "geopackage" | "shapefile";
+export type BinaryVectorExportFormat = "geoparquet" | "geopackage" | "shapefile" | "kmz";
 
 export interface BinaryVectorExportResult {
   data: Uint8Array;
@@ -50,6 +50,15 @@ async function exportShapefileZip(
   });
 }
 
+/** Package a KML document as the conventional `doc.kml` entry in a KMZ file. */
+async function exportKmz(geojson: FeatureCollection, documentName: string): Promise<Uint8Array> {
+  const [{ writeKml }, { strToU8, zipSync }] = await Promise.all([
+    import("./kml-writer"),
+    import("fflate"),
+  ]);
+  return zipSync({ "doc.kml": strToU8(writeKml(geojson, documentName)) });
+}
+
 export async function exportBinaryVectorLayer(
   geojson: FeatureCollection,
   format: BinaryVectorExportFormat,
@@ -73,6 +82,12 @@ export async function exportBinaryVectorLayer(
         data: await exportShapefileZip(geojson, layerName),
         extension: "zip",
         mimeType: "application/zip",
+      };
+    case "kmz":
+      return {
+        data: await exportKmz(geojson, layerName),
+        extension: "kmz",
+        mimeType: "application/vnd.google-earth.kmz",
       };
   }
 }

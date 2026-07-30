@@ -3127,6 +3127,20 @@ export function LayerPanel({
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onSelect={() => {
+                                    void handleExportLayer(layer, "kml");
+                                  }}
+                                >
+                                  KML
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportLayer(layer, "kmz");
+                                  }}
+                                >
+                                  KMZ
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
                                     void handleExportLayer(layer, "shapefile");
                                   }}
                                 >
