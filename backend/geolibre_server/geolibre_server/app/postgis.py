@@ -116,14 +116,19 @@ def _allowed_postgis_targets(value: str) -> Optional[set[tuple[str, Optional[int
         The allowed ``(host, port)`` pairs, where a ``None`` port allows any
         port on that host, or ``None`` when the value is ``*`` and the
         restriction is lifted altogether.
+
+    Raises:
+        ValueError: An entry is malformed, or ``*`` is mixed with hosts.
     """
+    entries = [entry.strip() for entry in value.split(",") if entry.strip()]
+    # `*` alongside hosts reads as a narrowing but is not one, so refuse it
+    # rather than leaving an operator who meant to narrow wide open.
+    if _UNRESTRICTED in entries:
+        if len(entries) > 1:
+            raise ValueError(f"'{_UNRESTRICTED}' must be the only entry")
+        return None
     targets: set[tuple[str, Optional[int]]] = set()
-    for raw_entry in value.split(","):
-        entry = raw_entry.strip()
-        if not entry:
-            continue
-        if entry == _UNRESTRICTED:
-            return None
+    for entry in entries:
         host = entry
         port: Optional[int] = None
         if entry.startswith("["):
@@ -194,14 +199,21 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
             status_code=400,
             detail="PostgreSQL hostaddr connection strings are not supported",
         )
-    hosts = conninfo.get("host", "").split(",")
-    if not hosts or any(not host.strip() for host in hosts):
+    # Each item is stripped here, not just when comparing: the list is rejoined
+    # into the `host`/`port` overrides, and libpq would take stray whitespace
+    # from a quoted multi-host DSN (`host='a, b'`) as part of the name.
+    hosts = [host.strip() for host in conninfo.get("host", "").split(",")]
+    if not hosts or any(not host for host in hosts):
         raise HTTPException(
             status_code=400,
             detail="PostgreSQL connection must specify an allowed TCP host",
         )
     raw_ports = conninfo.get("port", "")
-    ports = raw_ports.split(",") if raw_ports else [str(_DEFAULT_POSTGRES_PORT)]
+    ports = (
+        [port.strip() for port in raw_ports.split(",")]
+        if raw_ports
+        else [str(_DEFAULT_POSTGRES_PORT)]
+    )
     if len(ports) == 1:
         ports *= len(hosts)
     if len(ports) != len(hosts):

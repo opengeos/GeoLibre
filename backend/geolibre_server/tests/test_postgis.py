@@ -108,7 +108,10 @@ def test_postgis_allowlist_parses_hosts_ips_and_ports() -> None:
 
 def test_postgis_wildcard_lifts_the_restriction(monkeypatch) -> None:
     """``*`` (what the desktop app passes its own sidecar) allows any DSN."""
-    assert _allowed_postgis_targets("db.example,*") is None
+    assert _allowed_postgis_targets("*") is None
+    # Mixing it with hosts looks like a narrowing but is not one.
+    with pytest.raises(ValueError):
+        _allowed_postgis_targets("db.example,*")
     monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")
     for conninfo in (
         {"host": "anything.internal", "port": "5432"},
@@ -151,6 +154,17 @@ def test_postgis_allowlist_validates_every_failover_host(monkeypatch) -> None:
     with pytest.raises(HTTPException) as exc:
         _validate_postgis_target({"host": "db-a.example,metadata.internal", "port": "5432"})
     assert exc.value.status_code == 403
+
+
+def test_postgis_host_list_whitespace_is_not_passed_to_libpq(monkeypatch) -> None:
+    """A quoted multi-host DSN can carry spacing libpq would read as the name."""
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db-a.example,db-b.example")
+    assert _validate_postgis_target(
+        {"host": "db-a.example, db-b.example", "port": "5432, 5433"}
+    ) == (
+        "db-a.example,db-b.example",
+        "5432,5433",
+    )
 
 
 def test_postgis_allowlist_matches_dsn_host_case_insensitively(monkeypatch) -> None:

@@ -119,7 +119,8 @@ restrict it. Every host in a libpq failover connection string must be allowed.
 Implicit local connections, Unix sockets, `service=`, and `hostaddr=`
 connection strings are rejected so they cannot bypass the allowlist.
 
-Set it to `*` to lift the restriction and accept any connection string. The
+Set it to `*` — on its own, since mixing it with hosts reads as a narrowing but
+is not one — to lift the restriction and accept any connection string. The
 **desktop app** passes `*` when it spawns its own sidecar — that one is
 loopback-bound, token-authenticated, and serves the single user who is also its
 operator. Setting the variable before launching the desktop app overrides that
