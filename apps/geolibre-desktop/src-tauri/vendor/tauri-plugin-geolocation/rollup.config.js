@@ -2,6 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
-import { createConfig } from '../../shared/rollup.config.js'
+import { createConfig } from "../../shared/rollup.config.js";
 
-export default createConfig()
+export default createConfig();

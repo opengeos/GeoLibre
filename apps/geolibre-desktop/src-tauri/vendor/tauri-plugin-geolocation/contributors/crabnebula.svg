@@ -3,7 +3,7 @@
     xml:space="preserve" xmlns:serif="http://www.serif.com/"
     style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
     <style>
-        .crabnebula-logo path, 
+        .crabnebula-logo path,
         .crabnebula-logo rect {
             fill: #001e42;
         }
@@ -12,7 +12,7 @@
                 fill: #fff;
             }
         }
-        html[data-color-mode="dark"] .crabnebula-logo path, 
+        html[data-color-mode="dark"] .crabnebula-logo path,
         html[data-color-mode="dark"] .crabnebula-logo rect {
             fill: #fff;
         }
