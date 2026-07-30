@@ -4372,6 +4372,10 @@
       "minMaxInvalid": "Min must be less than or equal to Max."
     }
   },
+  "vectorExport": {
+    "invalidKmlCoordinatesAtIndex": "KML export could not write feature at index {{index}} because it has invalid coordinates.",
+    "invalidKmlCoordinatesById": "KML export could not write feature ID {{id}} because it has invalid coordinates."
+  },
   "layers": {
     "panelCollapsedLabel": "Layers (collapsed)",
     "expand": "Expand layers",

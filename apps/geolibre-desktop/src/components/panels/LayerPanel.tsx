@@ -182,6 +182,7 @@ import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
   geojsonVectorSourceId,
+  KmlCoordinateError,
   resolveLayerGeojson,
   sanitizeExportFileName,
   shapefileFieldWarnings,
@@ -1239,7 +1240,18 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : t("layers.exportLayerError");
+        const message =
+          error instanceof KmlCoordinateError
+            ? error.featureId == null
+              ? t("vectorExport.invalidKmlCoordinatesAtIndex", {
+                  index: error.featureIndex,
+                })
+              : t("vectorExport.invalidKmlCoordinatesById", {
+                  id: error.featureId,
+                })
+            : error instanceof Error
+              ? error.message
+              : t("layers.exportLayerError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },

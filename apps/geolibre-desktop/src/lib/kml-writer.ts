@@ -1,6 +1,9 @@
 import type { Feature, FeatureCollection, GeoJsonProperties, Geometry, Position } from "geojson";
+import { KmlCoordinateError } from "./vector-export-errors";
 
 const KML_NAMESPACE = "http://www.opengis.net/kml/2.2";
+
+class InvalidCoordinateError extends Error {}
 
 function xmlSafeText(value: unknown): string {
   return String(value)
@@ -39,7 +42,7 @@ function decimalText(value: number): string {
 
 function positionText(position: Position): string {
   if (position.length < 2 || position.slice(0, 3).some((value) => !Number.isFinite(value))) {
-    throw new Error("KML export requires finite longitude and latitude coordinates.");
+    throw new InvalidCoordinateError();
   }
   return position
     .slice(0, 3)
@@ -266,9 +269,10 @@ export function writeKml(geojson: FeatureCollection, documentName: string): stri
         4,
       );
     } catch (error) {
-      const reference = feature.id == null ? `at index ${index}` : `with id ${feature.id}`;
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Unable to export KML feature ${reference}: ${message}`);
+      if (error instanceof InvalidCoordinateError) {
+        throw new KmlCoordinateError(index, feature.id);
+      }
+      throw error;
     }
   });
   const documentContents = [

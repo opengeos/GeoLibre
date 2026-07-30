@@ -119,6 +119,7 @@ import {
   exportVectorLayer,
   formatAttributeValue,
   geojsonVectorSourceId,
+  KmlCoordinateError,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
@@ -938,7 +939,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
     } catch (error) {
       console.error("Failed to export attribute table", error);
-      setExportError(error instanceof Error ? error.message : t("attributeTable.exportFailed"));
+      setExportError(
+        error instanceof KmlCoordinateError
+          ? error.featureId == null
+            ? t("vectorExport.invalidKmlCoordinatesAtIndex", {
+                index: error.featureIndex,
+              })
+            : t("vectorExport.invalidKmlCoordinatesById", {
+                id: error.featureId,
+              })
+          : error instanceof Error
+            ? error.message
+            : t("attributeTable.exportFailed"),
+      );
     }
   };
 

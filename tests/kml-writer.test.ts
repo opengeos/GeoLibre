@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import { strFromU8, unzipSync } from "fflate";
 import { writeKml } from "../apps/geolibre-desktop/src/lib/kml-writer";
+import { KmlCoordinateError } from "../apps/geolibre-desktop/src/lib/vector-export-errors";
 import { exportBinaryVectorLayer } from "../apps/geolibre-desktop/src/lib/vector-exporter";
 
 const SAMPLE: FeatureCollection = {
@@ -230,41 +231,34 @@ describe("writeKml", () => {
   });
 
   it("rejects invalid coordinates instead of creating a corrupt KML file", () => {
-    assert.throws(
-      () =>
-        writeKml(
-          {
-            type: "FeatureCollection",
-            features: [
-              {
-                type: "Feature",
-                properties: {},
-                geometry: { type: "Point", coordinates: [Number.NaN, 20] },
-              },
-            ],
-          },
-          "Invalid",
-        ),
-      /feature at index 0: KML export requires finite longitude and latitude/,
-    );
-    assert.throws(
-      () =>
-        writeKml(
-          {
-            type: "FeatureCollection",
-            features: [
-              {
-                type: "Feature",
-                id: "invalid-feature",
-                properties: {},
-                geometry: { type: "Point", coordinates: [Number.NaN, 20] },
-              },
-            ],
-          },
-          "Invalid",
-        ),
-      /feature with id invalid-feature: KML export requires finite longitude and latitude/,
-    );
+    for (const [id, expectedIndex] of [
+      [undefined, 0],
+      ["invalid-feature", 0],
+    ] as const) {
+      assert.throws(
+        () =>
+          writeKml(
+            {
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  ...(id === undefined ? {} : { id }),
+                  properties: {},
+                  geometry: { type: "Point", coordinates: [Number.NaN, 20] },
+                },
+              ],
+            },
+            "Invalid",
+          ),
+        (error) => {
+          assert.ok(error instanceof KmlCoordinateError);
+          assert.equal(error.featureId, id);
+          assert.equal(error.featureIndex, expectedIndex);
+          return true;
+        },
+      );
+    }
   });
 });
 
