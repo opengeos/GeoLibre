@@ -19,8 +19,9 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import conversion
 from geolibre_server.vector_ops import MAX_FEATURES as MAX_LAYER_FEATURES
+
+from . import conversion
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -1077,10 +1078,7 @@ def whitebox_run(request: WhiteboxRunRequest):
         if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
             raise HTTPException(
                 status_code=413,
-                detail=(
-                    f"Layer input for {name} exceeds the "
-                    f"{MAX_LAYER_FEATURES}-feature limit"
-                ),
+                detail=(f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"),
             )
     job_id = str(uuid.uuid4())
     now = _utc_now()

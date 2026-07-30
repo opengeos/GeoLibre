@@ -157,7 +157,11 @@ def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(sedona_ops, "_import_sedona", lambda: type("M", (), {"connect": staticmethod(lambda: _FakeConnection())})())
+    monkeypatch.setattr(
+        sedona_ops,
+        "_import_sedona",
+        lambda: type("M", (), {"connect": staticmethod(lambda: _FakeConnection())})(),
+    )
     with pytest.raises(HTTPException) as exc:
         sql_run(SqlRunRequest(sql="SELECT 1 AS n UNION ALL SELECT 2 AS n"))
     assert exc.value.status_code == 413

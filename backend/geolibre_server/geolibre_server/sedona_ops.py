@@ -155,9 +155,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             # Input registration already caps each layer, but a query can still
             # expand rows (cross joins, generate_series, etc.). Bound the
             # response the same way vector/PostGIS paths bound payloads.
-            raise SqlInputTooLarge(
-                f"Query result exceeds the {MAX_FEATURES}-feature limit"
-            )
+            raise SqlInputTooLarge(f"Query result exceeds the {MAX_FEATURES}-feature limit")
         columns = [str(column) for column in frame.columns]
 
         geometry_column: Optional[str] = None
