@@ -106,6 +106,13 @@ def test_postgis_allowlist_parses_hosts_ips_and_ports() -> None:
     }
 
 
+def test_postgis_allowlist_requires_brackets_for_ipv6() -> None:
+    """An unbracketed `2001:db8::1:5432` is a valid address, not host plus port."""
+    with pytest.raises(ValueError):
+        _allowed_postgis_targets("2001:db8::1:5432")
+    assert _allowed_postgis_targets("[2001:db8::1]") == {("2001:db8::1", None)}
+
+
 def test_postgis_wildcard_lifts_the_restriction(monkeypatch) -> None:
     """``*`` (what the desktop app passes its own sidecar) allows any DSN."""
     assert _allowed_postgis_targets("*") is None

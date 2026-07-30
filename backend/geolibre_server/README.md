@@ -115,7 +115,9 @@ geolibre-server
 ```
 
 An entry without a port allows that host on any port; include `:port` to
-restrict it. Every host in a libpq failover connection string must be allowed.
+restrict it. IPv6 entries must be bracketed either way (`[2001:db8::10]`),
+since an unbracketed `2001:db8::10:5432` is itself a valid address rather than
+an address and a port. Every host in a libpq failover connection string must be allowed.
 Implicit local connections, Unix sockets, `service=`, and `hostaddr=`
 connection strings are rejected so they cannot bypass the allowlist.
 

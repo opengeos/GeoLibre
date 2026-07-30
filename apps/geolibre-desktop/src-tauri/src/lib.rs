@@ -59,7 +59,8 @@ const SIDECAR_PORT: u16 = 8765;
 // names the allowed hosts — the check that stops a *shared* deployment (the
 // Docker image, where the sidecar is reachable same-origin through the nginx
 // proxy) from being pointed at arbitrary internal databases. See
-// `_validate_postgis_target` in backend/geolibre_server/app/postgis.py.
+// `_validate_postgis_target` in
+// backend/geolibre_server/geolibre_server/app/postgis.py.
 const POSTGIS_HOSTS_ENV: &str = "GEOLIBRE_POSTGIS_HOSTS";
 // Desktop is the case that restriction is not aimed at: the sidecar is
 // loopback-bound, token-authenticated, and spawned for one user who is also its

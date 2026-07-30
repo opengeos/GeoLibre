@@ -145,9 +145,11 @@ def _allowed_postgis_targets(value: str) -> Optional[set[tuple[str, Optional[int
             host, port_text = entry.rsplit(":", 1)
             port = int(port_text)
         elif entry.count(":") > 1:
-            # A bare IPv6 address is accepted; brackets are required only when
-            # an allowlist entry also specifies a port.
-            ipaddress.IPv6Address(entry)
+            # An unbracketed IPv6 address that carries a port is itself a valid
+            # address (`2001:db8::1:5432` parses cleanly), so the two spellings
+            # cannot be told apart. Requiring brackets refuses the typo instead
+            # of quietly allowing any port on an address nobody meant.
+            raise ValueError("IPv6 entries must be bracketed, e.g. [2001:db8::1]:5432")
         if port is not None and not 1 <= port <= 65535:
             raise ValueError("port must be between 1 and 65535")
         targets.add((_normalize_host(host), port))
