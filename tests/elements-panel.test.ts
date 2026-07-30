@@ -92,7 +92,10 @@ describe("Elements Panel & Map Elements", () => {
     // Assert that the first feature reflects "Renamed", and the sibling feature is unchanged
     const updatedLayer = useAppStore.getState().layers[0];
     assert.equal(updatedLayer.geojson?.features[0].properties?.title, "Renamed");
-    assert.equal(updatedLayer.geojson?.features[0].properties?.description, "First pin description");
+    assert.equal(
+      updatedLayer.geojson?.features[0].properties?.description,
+      "First pin description",
+    );
     assert.equal(updatedLayer.geojson?.features[1].properties?.title, "Note Beta");
     assert.equal(updatedLayer.geojson?.features[1].properties?.description, "Note body text");
   });
