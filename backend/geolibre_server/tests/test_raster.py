@@ -637,6 +637,7 @@ def test_raster_calculator_blocks_numpy_io(tmp_path: Path) -> None:
     combined = completed.stdout + completed.stderr
     assert (
         "Failed to evaluate expression" in combined
+        or "may not use" in combined
         or "may not access attributes" in combined
         or "not allowed in band math" in combined
     )
@@ -1056,6 +1057,39 @@ def test_raster_calculator_blocks_ndarray_tofile(tmp_path: Path) -> None:
     )
     assert completed.returncode != 0
     combined = completed.stdout + completed.stderr
-    assert "may not access attributes" in combined
+    assert "may not use" in combined or "may not access attributes" in combined
     assert not evil.exists()
     assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_rejects_unbounded_allocations(tmp_path: Path) -> None:
+    """List/bytes/tuple multiplication must not allocate before the shape check."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    for expression in (
+        "[0] * 10**9",
+        'b"x" * 10**9',
+        "(0,) * 10**9",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _RASTER_TOOL_SCRIPTS["raster-calc"],
+                json.dumps(
+                    {
+                        "input_path": str(src),
+                        "output_path": str(out),
+                        "expression": expression,
+                    }
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode != 0, expression
+        combined = completed.stdout + completed.stderr
+        assert "may not use" in combined or "numeric constants" in combined, expression
+        assert not out.exists()

@@ -127,6 +127,7 @@ def test_run_rejects_oversized_layer(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
     """Query results that expand past MAX_FEATURES are refused with 413."""
     monkeypatch.setattr(sedona_ops, "MAX_FEATURES", 1)
+    limited_to: list[int] = []
 
     class _FakeFrame:
         def __len__(self) -> int:
@@ -140,7 +141,8 @@ def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
             return [{"n": 1}, {"n": 2}]
 
     class _FakeResult:
-        def limit(self, n: int):  # noqa: ARG002
+        def limit(self, n: int) -> "_FakeResult":
+            limited_to.append(n)
             return self
 
         def to_pandas(self):
@@ -169,3 +171,4 @@ def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
         sql_run(SqlRunRequest(sql="SELECT 1 AS n UNION ALL SELECT 2 AS n"))
     assert exc.value.status_code == 413
     assert "Query result exceeds" in str(exc.value.detail)
+    assert limited_to == [sedona_ops.MAX_FEATURES + 1]
