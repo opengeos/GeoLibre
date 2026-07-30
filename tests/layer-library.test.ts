@@ -811,6 +811,55 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.equal(entry.source.url, "https://tiles.example.com/service?api_key=SECRET1&style=dark");
   });
 
+  it("redacts every URL-shaped source field, not a named list of them", () => {
+    // A URL-backed GeoJSON layer keeps its URL in `source.data`, which
+    // `hasRestorableLayerSource` already treats as re-fetchable — so it has to be
+    // swept too, along with any field a future layer type puts a URL in.
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-data",
+        name: "Remote GeoJSON",
+        addedAt: "",
+        layerType: "geojson",
+        source: {
+          type: "geojson",
+          data: "https://api.example.com/features.geojson?token=SECRET_DATA",
+          someFutureUrl: "https://api.example.com/x?api_key=SECRET_FUTURE",
+          maxzoom: 14,
+        },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    const exported = serializeLayerLibrary([entry]);
+    assert.equal(exported.includes("SECRET_DATA"), false);
+    assert.equal(exported.includes("SECRET_FUTURE"), false);
+    const [reimported] = parseLayerLibrary(exported);
+    assert.equal(reimported.source.data, "https://api.example.com/features.geojson");
+    assert.equal(reimported.source.someFutureUrl, "https://api.example.com/x");
+    // Non-string values are untouched.
+    assert.equal(reimported.source.maxzoom, 14);
+    assert.equal(reimported.source.type, "geojson");
+  });
+
+  it("leaves an inline GeoJSON source untouched on export", () => {
+    // `source.data` can also be the features themselves; the sweep must not
+    // mangle a FeatureCollection while looking for URLs.
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-inline",
+        name: "Drawn features",
+        addedAt: "",
+        layerType: "geojson",
+        source: { type: "geojson", data: POINTS },
+        opacity: 1,
+        metadata: { embeddedGeoJSON: POINTS },
+      },
+    ]);
+    const [reimported] = parseLayerLibrary(serializeLayerLibrary([entry]));
+    assert.deepEqual(reimported.source.data, POINTS);
+  });
+
   it("leaves a credential-free URL byte-identical", () => {
     const [entry] = normalizeLayerLibraryEntries([
       {

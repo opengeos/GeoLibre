@@ -651,22 +651,16 @@ function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
       changed = true;
     }
   }
-  if (typeof source.url === "string") {
-    const redacted = redactUrlCredentials(source.url);
-    if (redacted !== source.url) {
-      source.url = redacted;
-      changed = true;
-    }
-  }
-  const originalTiles: unknown[] | undefined = Array.isArray(source.tiles)
-    ? source.tiles
-    : undefined;
-  if (originalTiles) {
-    const tiles = originalTiles.map((tile) =>
-      typeof tile === "string" ? redactUrlCredentials(tile) : tile,
-    );
-    if (tiles.some((tile, index) => tile !== originalTiles[index])) {
-      source.tiles = tiles;
+  // Sweep every URL-shaped value in `source` rather than naming the fields that
+  // hold one. Different layer types put their URL in different places — `url`,
+  // `data` (a GeoJSON source pointing at a URL, which
+  // `hasRestorableLayerSource` already treats as re-fetchable), `tiles[]` — and
+  // a per-field list has to be extended for each new one, with a silent
+  // credential leak as the cost of forgetting.
+  for (const [key, value] of Object.entries(source)) {
+    const redacted = redactSourceValue(value);
+    if (redacted !== value) {
+      source[key] = redacted;
       changed = true;
     }
   }
@@ -681,6 +675,22 @@ function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
     }
   }
   return changed ? { ...entry, source, metadata } : entry;
+}
+
+/**
+ * Redact a single `source` value: a string is treated as a possible URL, an
+ * array as a list of them (tile templates), and anything else — an inline
+ * FeatureCollection, a number, a nested object — is returned as-is. Returns the
+ * original reference when nothing changed, so callers can detect that by
+ * identity.
+ */
+function redactSourceValue(value: unknown): unknown {
+  if (typeof value === "string") return redactUrlCredentials(value);
+  if (!Array.isArray(value)) return value;
+  const redacted = value.map((item) =>
+    typeof item === "string" ? redactUrlCredentials(item) : item,
+  );
+  return redacted.some((item, index) => item !== value[index]) ? redacted : value;
 }
 
 /**
