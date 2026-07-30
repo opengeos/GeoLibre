@@ -2014,8 +2014,12 @@ function ExtentParameterGroup({
   drawingMapExtent,
 }: ExtentParameterGroupProps) {
   const { t } = useTranslation();
-  const first = params[0];
-  if (!first) return null;
+  if (params.length === 0) return null;
+  // One badge stands for all four fields, so it names every kind present rather
+  // than the first field's: a tool that mixed an int boundary with double ones
+  // would otherwise have three of them labelled by the wrong kind. (Each field
+  // still takes its own stepper behavior from its own kind, below.)
+  const kindLabel = [...new Set(params.map((param) => parameterKind(param)))].sort().join(", ");
 
   return (
     // A labelled group rather than one field's label: the four boxes each carry
@@ -2027,7 +2031,7 @@ function ExtentParameterGroup({
           {t("processing.whitebox.extentLabel")}
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">
-          {parameterKind(first)}
+          {kindLabel}
           {params.some((param) => param.required) ? t("processing.whitebox.requiredSuffix") : ""}
         </span>
       </div>
@@ -2056,6 +2060,10 @@ function ExtentParameterGroup({
 
       <div className="grid grid-cols-2 gap-2">
         {params.map((param) => {
+          // EXTENT_LABEL_KEYS covers every name cornerExtentParameters can
+          // return, so the humanized fallback is only a guard for a manifest
+          // that renames a boundary: such a field keeps a readable label instead
+          // of an empty one.
           const labelKey = EXTENT_LABEL_KEYS[param.name as keyof typeof EXTENT_LABEL_KEYS];
           const value = values[param.name];
           return (
