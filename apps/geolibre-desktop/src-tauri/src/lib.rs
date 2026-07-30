@@ -55,6 +55,17 @@ const MARTIN_START_ATTEMPTS: usize = 3;
 const MARTIN_HEALTH_ATTEMPTS: usize = 30;
 const SIDECAR_HEALTH_ATTEMPTS: usize = 180;
 const SIDECAR_PORT: u16 = 8765;
+// The sidecar's PostGIS endpoints refuse every destination until this variable
+// names the allowed hosts — the check that stops a *shared* deployment (the
+// Docker image, where the sidecar is reachable same-origin through the nginx
+// proxy) from being pointed at arbitrary internal databases. See
+// `_validate_postgis_target` in backend/geolibre_server/app/postgis.py.
+const POSTGIS_HOSTS_ENV: &str = "GEOLIBRE_POSTGIS_HOSTS";
+// Desktop is the case that restriction is not aimed at: the sidecar is
+// loopback-bound, token-authenticated, and spawned for one user who is also its
+// operator, so it would only mean a user cannot reach their own database
+// without setting an environment variable for a process the app launches.
+const POSTGIS_HOSTS_DESKTOP_DEFAULT: &str = "*";
 // The desktop JupyterLab server for the Notebook panel. Loopback-bound and
 // token-gated; uses its own uv project environment so it never disturbs the
 // FastAPI sidecar's env. First start can be slow while uv syncs JupyterLab.
@@ -1673,6 +1684,12 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .app_data_dir()
         .map_err(|error| format!("Could not resolve app data directory: {error}"))?
         .join("runtime");
+    // A value already in the environment wins, so a desktop user who does want
+    // the allowlist can narrow it by launching the app with it set.
+    let postgis_hosts = env::var(POSTGIS_HOSTS_ENV)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| POSTGIS_HOSTS_DESKTOP_DEFAULT.to_string());
 
     let mut command = Command::new(&uv);
     command
@@ -1698,6 +1715,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .env("GEOLIBRE_UV", &uv)
         .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
+        .env(POSTGIS_HOSTS_ENV, &postgis_hosts)
         .env("UV_CACHE_DIR", runtime_dir.join("uv-cache"))
         .env("UV_PYTHON_INSTALL_DIR", runtime_dir.join("uv-python"))
         .env("UV_PROJECT_ENVIRONMENT", runtime_dir.join("sidecar-server"))

@@ -119,6 +119,14 @@ restrict it. Every host in a libpq failover connection string must be allowed.
 Implicit local connections, Unix sockets, and `service=` connection strings are
 rejected so they cannot bypass the allowlist.
 
+Set it to `*` to lift the restriction and accept any connection string. The
+**desktop app** passes `*` when it spawns its own sidecar — that one is
+loopback-bound, token-authenticated, and serves the single user who is also its
+operator. Setting the variable before launching the desktop app overrides that
+default, so a desktop user can still narrow it. A deployment where the sidecar
+is reachable by untrusted same-origin content (the bundled Docker image) leaves
+it unset, and PostGIS stays off until an operator lists the databases.
+
 ## Endpoints
 
 | Method | Path | Description |

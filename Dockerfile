@@ -83,6 +83,12 @@ ENV GEOLIBRE_CONVERSION_PYTHON=/usr/local/bin/python \
     GEOLIBRE_CONVERSION_ROOTS=/data
 RUN mkdir -p /data
 
+# For the same reason, the sidecar's PostGIS endpoints refuse every destination
+# until GEOLIBRE_POSTGIS_HOSTS names the allowed databases (comma-separated
+# `host` or `host:port`) — otherwise a same-origin caller could aim them at
+# hosts only this container can reach. Deliberately left unset: set it at
+# `docker run` time to enable PostGIS, or `*` to accept any connection string.
+
 # WARNING: docker/nginx.conf's CSP allows http://localhost:* / http://127.0.0.1:*
 # (and ws:// equivalents) in connect-src for local-dev data sources (PMTiles/COGs
 # from a dev server on another port). This image is intended for local/single-user

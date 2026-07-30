@@ -105,6 +105,19 @@ def test_postgis_allowlist_parses_hosts_ips_and_ports() -> None:
     }
 
 
+def test_postgis_wildcard_lifts_the_restriction(monkeypatch) -> None:
+    """``*`` (what the desktop app passes its own sidecar) allows any DSN."""
+    assert _allowed_postgis_targets("db.example,*") is None
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")
+    for conninfo in (
+        {"host": "anything.internal", "port": "5432"},
+        {"host": "/var/run/postgresql"},
+        {"service": "production"},
+        {},
+    ):
+        assert _validate_postgis_target(conninfo) is None
+
+
 def test_postgis_access_is_disabled_without_allowlist(monkeypatch) -> None:
     monkeypatch.delenv("GEOLIBRE_POSTGIS_HOSTS", raising=False)
     with pytest.raises(HTTPException) as exc:

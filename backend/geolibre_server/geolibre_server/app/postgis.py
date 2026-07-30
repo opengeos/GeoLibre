@@ -43,6 +43,12 @@ logger = logging.getLogger(__name__)
 _STATEMENT_TIMEOUT_MS = 60_000
 _POSTGIS_HOSTS_ENV = "GEOLIBRE_POSTGIS_HOSTS"
 _DEFAULT_POSTGRES_PORT = 5432
+# Allowlist entry that lifts the restriction entirely. The desktop app passes
+# it when it spawns its own sidecar: there the caller and the operator are the
+# same person, and the sidecar is loopback-bound and token-authenticated. A
+# shared deployment (Docker/nginx proxy) leaves the variable unset and stays
+# closed, so the permissive mode is only ever reached by an explicit opt-in.
+_UNRESTRICTED = "*"
 
 # Username is optional (postgresql://:pw@host relies on PGUSER), so the group
 # is zero-or-more: an empty username must not let the password through. The
@@ -101,13 +107,21 @@ def _normalize_host(host: str) -> str:
         return candidate.rstrip(".").lower()
 
 
-def _allowed_postgis_targets(value: str) -> set[tuple[str, Optional[int]]]:
-    """Parse comma-separated ``host`` or ``host:port`` allowlist entries."""
+def _allowed_postgis_targets(value: str) -> Optional[set[tuple[str, Optional[int]]]]:
+    """Parse comma-separated ``host`` or ``host:port`` allowlist entries.
+
+    Returns:
+        The allowed ``(host, port)`` pairs, where a ``None`` port allows any
+        port on that host, or ``None`` when the value is ``*`` and the
+        restriction is lifted altogether.
+    """
     targets: set[tuple[str, Optional[int]]] = set()
     for raw_entry in value.split(","):
         entry = raw_entry.strip()
         if not entry:
             continue
+        if entry == _UNRESTRICTED:
+            return None
         host = entry
         port: Optional[int] = None
         if entry.startswith("["):
@@ -133,8 +147,21 @@ def _allowed_postgis_targets(value: str) -> set[tuple[str, Optional[int]]]:
     return targets
 
 
-def _validate_postgis_target(conninfo: dict[str, str]) -> tuple[str, str]:
-    """Validate every destination and return explicit libpq host/port lists."""
+def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, str]]:
+    """Validate every destination against the allowlist.
+
+    Args:
+        conninfo: The parsed libpq connection keywords of the request's DSN.
+
+    Returns:
+        The explicit ``host``/``port`` lists to pin the connection to, or
+        ``None`` when the allowlist is unrestricted and the DSN should be used
+        as given (including Unix sockets and ``service=`` indirection).
+
+    Raises:
+        HTTPException: The allowlist is unset, malformed, or does not cover
+            every destination the connection string names.
+    """
     configured = os.environ.get(_POSTGIS_HOSTS_ENV, "")
     try:
         allowed = _allowed_postgis_targets(configured)
@@ -143,6 +170,8 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> tuple[str, str]:
             status_code=500,
             detail=f"{_POSTGIS_HOSTS_ENV} is invalid",
         ) from exc
+    if allowed is None:
+        return None
     if not allowed:
         raise HTTPException(
             status_code=403,
@@ -240,12 +269,21 @@ def _connect(connection: str) -> Any:
     psycopg = _import_psycopg()
     try:
         conninfo = psycopg.conninfo.conninfo_to_dict(connection.strip())
-        validated_hosts, validated_ports = _validate_postgis_target(conninfo)
+        validated = _validate_postgis_target(conninfo)
+        # Pin libpq to the destinations that were actually validated, so a DSN
+        # spelling the parser and libpq read differently cannot drift between
+        # the check and the connect. Unrestricted mode has nothing to pin.
+        overrides: dict[str, Any] = {}
+        if validated is not None:
+            validated_hosts, validated_ports = validated
+            overrides = {
+                "host": validated_hosts,
+                "hostaddr": "",
+                "port": validated_ports,
+            }
         return psycopg.connect(
             connection.strip(),
-            host=validated_hosts,
-            hostaddr="",
-            port=validated_ports,
+            **overrides,
             connect_timeout=10,
             options=f"-c statement_timeout={_STATEMENT_TIMEOUT_MS}",
         )
