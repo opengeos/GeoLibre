@@ -694,6 +694,12 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
   );
 }
 
+function removedLayerIdSet(layerIds: string | Iterable<string>): Set<string> {
+  if (typeof layerIds === "string") return new Set([layerIds]);
+  if (layerIds instanceof Set) return layerIds;
+  return new Set(layerIds);
+}
+
 /**
  * Strip storymap chapter enter/exit opacity rows that reference any of the
  * removed layer ids. Returns the same reference when nothing changes so
@@ -704,12 +710,7 @@ function scrubStorymapLayerRefs(
   layerIds: string | Iterable<string>,
 ): StoryMap | null {
   if (!storymap) return null;
-  const removed =
-    typeof layerIds === "string"
-      ? new Set([layerIds])
-      : layerIds instanceof Set
-        ? layerIds
-        : new Set(layerIds);
+  const removed = removedLayerIdSet(layerIds);
   if (removed.size === 0) return storymap;
   let changed = false;
   const chapters = storymap.chapters.map((chapter) => {
@@ -725,6 +726,46 @@ function scrubStorymapLayerRefs(
     return { ...chapter, onChapterEnter, onChapterExit };
   });
   return changed ? { ...storymap, chapters } : storymap;
+}
+
+/**
+ * Drop per-pane visibility overrides for removed layer ids so stale keys do
+ * not accumulate (or serialize) in secondary panes after deletion.
+ */
+function scrubSecondaryPaneLayerVisibility(
+  panes: SecondaryMapView[],
+  layerIds: string | Iterable<string>,
+): SecondaryMapView[] {
+  const removed = removedLayerIdSet(layerIds);
+  if (removed.size === 0) return panes;
+  let anyChanged = false;
+  const next = panes.map((pane) => {
+    let changed = false;
+    const layerVisibility: Record<string, boolean> = {};
+    for (const [id, visible] of Object.entries(pane.layerVisibility)) {
+      if (removed.has(id)) {
+        changed = true;
+        continue;
+      }
+      layerVisibility[id] = visible;
+    }
+    if (!changed) return pane;
+    anyChanged = true;
+    return { ...pane, layerVisibility };
+  });
+  return anyChanged ? next : panes;
+}
+
+/** Re-derive layers whose joins consumed any of the removed sources. */
+function cascadeJoinRefreshForRemoved(
+  layers: GeoLibreLayer[],
+  layerIds: string | Iterable<string>,
+): GeoLibreLayer[] {
+  let current = layers;
+  for (const id of removedLayerIdSet(layerIds)) {
+    current = cascadeLayerJoinRefresh(current, id);
+  }
+  return current;
 }
 
 /** Clamp a requested grid row/column count into the supported [1, MAX] range. */
@@ -1380,17 +1421,11 @@ export const useAppStore = create<AppState>()(
           // the source gone the join resolves to nothing, so its previously
           // materialized columns strip away instead of staying frozen (the
           // join definition itself stays, shown as missing in the Joins UI).
-          layers: cascadeLayerJoinRefresh(
+          layers: cascadeJoinRefreshForRemoved(
             s.layers.filter((l) => l.id !== id),
             id,
           ),
-          // Drop any per-pane visibility override for the removed layer so stale
-          // ids don't accumulate (and serialize) in secondary panes over time.
-          secondaryMapViews: s.secondaryMapViews.map((pane) => {
-            if (!(id in pane.layerVisibility)) return pane;
-            const { [id]: _removed, ...rest } = pane.layerVisibility;
-            return { ...pane, layerVisibility: rest };
-          }),
+          secondaryMapViews: scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, id),
           // Drop storymap chapter enter/exit opacity rows that pointed at the
           // removed layer so they do not keep a dangling id across save/reload.
           storymap: scrubStorymapLayerRefs(s.storymap, id),
@@ -1647,16 +1682,23 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           const removeChildren = options?.removeChildren ?? false;
           const removedIds = new Set(s.layers.filter((l) => l.groupId === id).map((l) => l.id));
-          const layers = removeChildren
+          let layers = removeChildren
             ? s.layers.filter((l) => l.groupId !== id)
             : s.layers.map((l) => (l.groupId === id ? { ...l, groupId: undefined } : l));
+          // Match removeLayer: refreshing joins and scrubbing secondary-pane /
+          // storymap refs for every deleted child so group delete cannot leave
+          // stale joined columns or dangling visibility overrides behind.
+          if (removeChildren && removedIds.size > 0) {
+            layers = cascadeJoinRefreshForRemoved(layers, removedIds);
+          }
           const selectionRemoved =
             removeChildren && s.selectedLayerId !== null && removedIds.has(s.selectedLayerId);
           return {
             layers,
             layerGroups: s.layerGroups.filter((g) => g.id !== id),
-            // When children are deleted with the group, drop matching storymap
-            // chapter enter/exit rows the same way removeLayer does.
+            secondaryMapViews: removeChildren
+              ? scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, removedIds)
+              : s.secondaryMapViews,
             storymap: removeChildren ? scrubStorymapLayerRefs(s.storymap, removedIds) : s.storymap,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)

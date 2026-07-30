@@ -102,4 +102,19 @@ describe("removeLayer storymap scrub", () => {
       false,
     );
   });
+
+  it("clears secondary-pane visibility overrides for deleted group children", () => {
+    const store = useAppStore.getState();
+    const groupId = store.addLayerGroup("Tour group");
+    store.addLayer({ ...geojsonLayer("child-a"), groupId });
+    store.addLayer({ ...geojsonLayer("keep"), groupId: undefined });
+    store.setMapGrid(1, 2);
+    const paneId = useAppStore.getState().secondaryMapViews[0].id;
+    store.setSecondaryLayerVisibility(paneId, "child-a", false);
+    store.setSecondaryLayerVisibility(paneId, "keep", true);
+
+    useAppStore.getState().removeLayerGroup(groupId, { removeChildren: true });
+    const pane = useAppStore.getState().secondaryMapViews.find((p) => p.id === paneId);
+    assert.deepEqual(pane?.layerVisibility, { keep: true });
+  });
 });
