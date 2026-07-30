@@ -100,6 +100,25 @@ describe("canSaveLayerToLibrary", () => {
     assert.equal(canSaveLayerToLibrary(layer({ geojson: POINTS })), true);
   });
 
+  it("accepts a locally-opened raster, whose absolute path lives in metadata", () => {
+    // The raster control records the absolute path in `metadata.localFilePath`
+    // (what restoreRasterLayers re-reads) and keeps only the basename in
+    // `sourcePath`, so requiring `localFileReloadable` alone would make a
+    // locally-opened COG unsaveable.
+    const cog = layer({
+      type: "cog",
+      source: { type: "raster" },
+      sourcePath: "dem.tif",
+      metadata: {
+        externalNativeLayer: true,
+        customLayerType: "raster",
+        sourceKind: "maplibre-gl-raster",
+        localFilePath: "/data/dem.tif",
+      },
+    });
+    assert.equal(canSaveLayerToLibrary(cog, { canRestoreControlPainted: () => true }), true);
+  });
+
   it("does not treat a browser-picked file's bare name as a re-readable path", () => {
     // A file picked in the browser has no path, but `createVectorStoreLayer`
     // still records the bare name in `sourcePath` for display, and omits
@@ -633,6 +652,52 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.equal(parsed.type, LAYER_LIBRARY_BUNDLE_TYPE);
     assert.equal(parsed.version, LAYER_LIBRARY_BUNDLE_VERSION);
     assert.deepEqual(parseLayerLibrary(json), entries);
+  });
+
+  it("redacts per-user credentials from the exported bundle only", () => {
+    // Export is a share action, so an authenticated 3D Tiles layer's bearer
+    // token must not travel with it — while the local entry keeps it so
+    // re-adding on this machine still works.
+    const [withToken] = normalizeLayerLibraryEntries([
+      {
+        id: "e-auth",
+        name: "Authenticated tileset",
+        addedAt: "",
+        layerType: "3d-tiles",
+        source: {
+          url: "https://example.com/tileset.json",
+          requestHeaders: { Authorization: "Bearer super-secret" },
+        },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    assert.deepEqual(withToken.source.requestHeaders, { Authorization: "Bearer super-secret" });
+    const exported = serializeLayerLibrary([withToken]);
+    assert.equal(exported.includes("super-secret"), false);
+    const [reimported] = parseLayerLibrary(exported);
+    assert.equal("requestHeaders" in reimported.source, false);
+    // The rest of the source survives, so the recipient only re-enters the token.
+    assert.equal(reimported.source.url, "https://example.com/tileset.json");
+  });
+
+  it("strips a stale per-session metadata key when reading entries back", () => {
+    // useLayerLibraryPersistence normalizes on every startup load, so an older
+    // record (or a hand-edited bundle) must not keep replaying a dev-server
+    // proxy rewrite.
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-stale",
+        name: "XYZ",
+        addedAt: "",
+        layerType: "xyz",
+        source: { tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"] },
+        opacity: 1,
+        metadata: { originalUrl: "https://tiles.example.com/{z}/{x}/{y}.png", resolvedUrl: "/p/x" },
+      },
+    ]);
+    assert.equal("resolvedUrl" in entry.metadata, false);
+    assert.equal(entry.metadata.originalUrl, "https://tiles.example.com/{z}/{x}/{y}.png");
   });
 
   it("accepts a hand-authored bare array", () => {

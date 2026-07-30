@@ -74,20 +74,30 @@ export function hasRestorableLayerSource(
 }
 
 /**
- * The absolute local path a layer's features can be **re-read** from, or
- * undefined.
+ * The absolute local path a layer's data can be **re-read** from, or undefined.
  *
  * A non-empty `sourcePath` is not enough on its own: a file picked in the
- * browser has no path, and `createVectorStoreLayer` still records the bare file
- * *name* there for display. `metadata.localFileReloadable` is the flag the rest
- * of the codebase uses to mark a genuinely re-readable absolute path
- * (`prepareLayerForSave`, `needsLocalFileReload`, `restoreVectorLayers`), so
- * require it — otherwise a degraded path-only entry would store a bare filename
- * no host could ever open. The path is re-validated because a hand-edited
- * project can set both fields to anything.
+ * browser has no path, and both the vector and raster controls still record the
+ * bare file *name* there for display. Each control marks a genuinely re-readable
+ * absolute path differently, so both conventions are honored:
+ *
+ * - Vector / plain local GeoJSON: `metadata.localFileReloadable` alongside an
+ *   absolute `sourcePath` (`prepareLayerForSave`, `needsLocalFileReload`,
+ *   `restoreVectorLayers`).
+ * - Raster / COG: `metadata.localFilePath` holds the absolute path outright,
+ *   and it is what `restoreRasterLayers` re-reads on restore. Without this
+ *   branch a locally-opened COG could not be saved at all, even though its
+ *   restore pass is fully able to replay it.
+ *
+ * Every candidate is re-validated, because a hand-edited project or an imported
+ * bundle can set these fields to anything.
  */
 function layerLocalPath(layer: Pick<GeoLibreLayer, "sourcePath" | "metadata">): string | undefined {
-  if ((layer.metadata ?? {}).localFileReloadable !== true) return undefined;
+  const metadata = layer.metadata ?? {};
+  if (nonEmptyString(metadata.localFilePath) && isReReadablePath(metadata.localFilePath)) {
+    return metadata.localFilePath;
+  }
+  if (metadata.localFileReloadable !== true) return undefined;
   return nonEmptyString(layer.sourcePath) && isReReadablePath(layer.sourcePath)
     ? layer.sourcePath
     : undefined;
@@ -478,7 +488,11 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
       : undefined;
     if (!id || !name || !layerType || seen.has(id)) continue;
     const source = plainObject(candidate.source) ?? {};
-    const metadata = plainObject(candidate.metadata) ?? {};
+    const metadata = { ...(plainObject(candidate.metadata) ?? {}) };
+    // Strip the same per-session keys the capture path drops, so a stale one on
+    // an older record or an imported bundle is cleaned up on load instead of
+    // replaying a dev-server proxy rewrite indefinitely.
+    for (const key of TRANSIENT_METADATA_KEYS) delete metadata[key];
     // A bundle is shareable, so its `sourcePath` is untrusted: keep it only when
     // it is an absolute, traversal-free path a host could legitimately re-read.
     // Without this a crafted entry could point `onAddFilePath` at any file on the
@@ -539,8 +553,32 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
 }
 
 /**
+ * `source` fields that can hold a per-user credential and are therefore removed
+ * on export. `requestHeaders` carries the bearer token / API key an
+ * authenticated 3D Tiles layer was added with (see
+ * `persistedThreeDTilesRequestHeaders`, which keeps non-Google auth headers when
+ * persisting into a project file).
+ *
+ * Kept in the local IndexedDB entry so re-adding on this machine still works,
+ * and dropped only from the bundle: Export is pitched as a one-click "share with
+ * your team" action, which makes it a far more direct exposure path than handing
+ * someone a whole project file. A recipient re-enters their own credentials,
+ * which is the correct outcome.
+ */
+const EXPORT_REDACTED_SOURCE_KEYS = ["requestHeaders"] as const;
+
+/** Copy of an entry with per-user credentials removed from its source. */
+function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
+  if (!EXPORT_REDACTED_SOURCE_KEYS.some((key) => key in entry.source)) return entry;
+  const source = { ...entry.source };
+  for (const key of EXPORT_REDACTED_SOURCE_KEYS) delete source[key];
+  return { ...entry, source };
+}
+
+/**
  * Serialize Layer Library entries into the shareable bundle JSON written by the
- * Export action and read back by {@link parseLayerLibrary}.
+ * Export action and read back by {@link parseLayerLibrary}. Per-user credentials
+ * are redacted first (see {@link EXPORT_REDACTED_SOURCE_KEYS}).
  *
  * @param entries - The entries to export.
  * @returns Pretty-printed bundle JSON.
@@ -550,7 +588,7 @@ export function serializeLayerLibrary(entries: LayerLibraryEntry[]): string {
     {
       type: LAYER_LIBRARY_BUNDLE_TYPE,
       version: LAYER_LIBRARY_BUNDLE_VERSION,
-      entries,
+      entries: entries.map(redactEntryForExport),
     },
     null,
     2,

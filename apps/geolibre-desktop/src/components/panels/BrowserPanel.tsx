@@ -4,6 +4,7 @@ import {
   planLayerLibraryAdd,
   serializeLayerLibrary,
   useAppStore,
+  type GeoLibreLayer,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
@@ -69,6 +70,16 @@ const DEFAULT_EXPANDED = new Set([
   "section:databases",
   "section:files",
 ]);
+
+/**
+ * Whether a layer records `path` as the file it was read from. The vector import
+ * puts the absolute path in `sourcePath`; the raster control puts it in
+ * `metadata.localFilePath` and keeps only the basename in `sourcePath`. Used to
+ * pick the layer a library re-add's file import just produced.
+ */
+function layerCameFromPath(layer: GeoLibreLayer, path: string): boolean {
+  return layer.sourcePath === path || layer.metadata.localFilePath === path;
+}
 
 /** Collects every group node id in a tree (used to expand-all while searching). */
 function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void {
@@ -489,24 +500,31 @@ export function BrowserPanel({
       try {
         // The file import builds a fresh, default-styled layer, so the entry's
         // saved configuration is applied to it afterwards — otherwise a degraded
-        // entry would silently come back unstyled. The import does not report
-        // which layer it created, so it is identified by diffing the ids around
-        // the call (a concurrent add elsewhere would leave more than one new id,
-        // in which case nothing is patched rather than the wrong layer).
+        // entry would silently come back unstyled. `onAddFilePath` reports only
+        // success or an error message (one file can yield several layers — a KML
+        // adds placemarks plus ground overlays and models), so the target is
+        // found among the newly-added ids by matching the path this add used.
+        // That stays correct if an unrelated layer lands concurrently, and
+        // patches nothing rather than the wrong layer if none matches.
         const idsBefore = new Set(useAppStore.getState().layers.map((entry) => entry.id));
         const addError = await onAddFilePath(plan.path);
         if (addError) {
           setError(addError);
         } else {
           const added = useAppStore.getState().layers.filter((entry) => !idsBefore.has(entry.id));
-          if (added.length === 1) {
+          const target =
+            added.find((entry) => layerCameFromPath(entry, plan.path)) ??
+            // Nothing recorded the path (a format that keeps neither): fall back
+            // to a lone new layer, which is unambiguous.
+            (added.length === 1 ? added[0] : undefined);
+          if (target) {
             const { joins, virtualFields, ...rest } = plan.config;
-            useAppStore.getState().updateLayer(added[0].id, rest);
+            useAppStore.getState().updateLayer(target.id, rest);
             // Joins and virtual fields must go through their own actions so the
             // derived columns are materialized rather than stored inert.
-            if (joins) useAppStore.getState().setLayerJoins(added[0].id, joins);
+            if (joins) useAppStore.getState().setLayerJoins(target.id, joins);
             if (virtualFields) {
-              useAppStore.getState().setLayerVirtualFields(added[0].id, virtualFields);
+              useAppStore.getState().setLayerVirtualFields(target.id, virtualFields);
             }
           }
         }
