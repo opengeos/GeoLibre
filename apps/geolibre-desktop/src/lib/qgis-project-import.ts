@@ -11,7 +11,14 @@ import { strFromU8, unzipSync } from "fflate";
 
 export interface QgisProjectImportWarning {
   layerName: string;
-  reason: "non-vector" | "provider" | "missing-source" | "format" | "browser-local-file";
+  reason:
+    | "non-vector"
+    | "provider"
+    | "missing-source"
+    | "format"
+    | "remote-file"
+    | "network-path"
+    | "browser-local-file";
   provider?: string;
 }
 
@@ -54,8 +61,8 @@ export function importQgisProject(
   const projectName =
     text(document.querySelector("title")) || fileStem(sourcePath) || "Imported QGIS Project";
   const project = createEmptyProject(projectName, { mapView: parseMapView(document) });
-  const groups = parseLayerGroups(document);
-  const groupByLayerId = layerGroupAssignments(document, groups);
+  const parsedGroups = parseLayerGroups(document);
+  const groupByLayerId = layerGroupAssignments(document, parsedGroups.ids);
   const visibilityByLayerId = layerVisibility(document);
   const mapLayers = Array.from(document.querySelectorAll("projectlayers > maplayer"));
   const byId = new Map(
@@ -100,7 +107,7 @@ export function importQgisProject(
   }
 
   project.layers = layers;
-  project.layerGroups = groups.filter((group) =>
+  project.layerGroups = parsedGroups.groups.filter((group) =>
     layers.some((layer) => layer.groupId === group.id),
   );
   project.metadata = {
@@ -138,9 +145,11 @@ function parseMapView(document: Document): MapViewState {
     text(document.querySelector("mapcanvas > destinationsrs authid")) ||
     text(document.querySelector("projectCrs authid"));
   if ([xmin, ymin, xmax, ymax].every(Number.isFinite)) {
-    const [west, south] = toWgs84(xmin, ymin, authId);
-    const [east, north] = toWgs84(xmax, ymax, authId);
-    if ([west, south, east, north].every(Number.isFinite)) {
+    const southwest = toWgs84(xmin, ymin, authId);
+    const northeast = toWgs84(xmax, ymax, authId);
+    if (southwest && northeast) {
+      const [west, south] = southwest;
+      const [east, north] = northeast;
       return {
         center: [(west + east) / 2, (south + north) / 2],
         zoom: zoomForBounds(west, south, east, north),
@@ -153,12 +162,16 @@ function parseMapView(document: Document): MapViewState {
   return { center: [-100, 40], zoom: 2, bearing: 0, pitch: 0 };
 }
 
-function toWgs84(x: number, y: number, authId: string): [number, number] {
-  if (authId.toUpperCase() !== "EPSG:3857") return [x, y];
-  return [
-    (x / 20037508.34) * 180,
-    (180 / Math.PI) * (2 * Math.atan(Math.exp((y / 20037508.34) * Math.PI)) - Math.PI / 2),
-  ];
+function toWgs84(x: number, y: number, authId: string): [number, number] | null {
+  const normalized = authId.toUpperCase();
+  if (normalized === "EPSG:4326" || normalized === "CRS:84") return [x, y];
+  if (normalized === "EPSG:3857") {
+    return [
+      (x / 20037508.34) * 180,
+      (180 / Math.PI) * (2 * Math.atan(Math.exp((y / 20037508.34) * Math.PI)) - Math.PI / 2),
+    ];
+  }
+  return null;
 }
 
 function zoomForBounds(west: number, south: number, east: number, north: number): number {
@@ -166,34 +179,47 @@ function zoomForBounds(west: number, south: number, east: number, north: number)
   return Math.max(0, Math.min(20, Math.log2(360 / span) - 0.75));
 }
 
-function parseLayerGroups(document: Document): LayerGroup[] {
+function parseLayerGroups(document: Document): {
+  groups: LayerGroup[];
+  ids: Map<Element, string>;
+} {
   const root = document.querySelector("layer-tree-group");
-  if (!root) return [];
-  return Array.from(root.children)
-    .filter((element) => element.tagName === "layer-tree-group")
-    .map((element, index) => ({
-      id: `qgis-group-${index}-${slug(element.getAttribute("name") ?? "group")}`,
-      name: element.getAttribute("name") || "Group",
+  if (!root) return { groups: [], ids: new Map() };
+  const ids = new Map<Element, string>();
+  const groups = Array.from(root.querySelectorAll("layer-tree-group")).map((element, index) => {
+    const name = groupDisplayName(element, root);
+    const id = `qgis-group-${index}-${slug(name)}`;
+    ids.set(element, id);
+    return {
+      id,
+      name,
       collapsed: element.getAttribute("expanded") === "0",
       visible: element.getAttribute("checked") !== "Qt::Unchecked",
       opacity: 1,
-    }));
+    };
+  });
+  return { groups, ids };
 }
 
-function layerGroupAssignments(document: Document, groups: LayerGroup[]): Map<string, string> {
+function groupDisplayName(element: Element, root: Element): string {
+  const names: string[] = [];
+  let current: Element | null = element;
+  while (current && current !== root) {
+    const name = current.getAttribute("name")?.trim();
+    if (name) names.unshift(name);
+    current = current.parentElement?.closest("layer-tree-group") ?? null;
+  }
+  return names.join(" / ") || "Group";
+}
+
+function layerGroupAssignments(document: Document, ids: Map<Element, string>): Map<string, string> {
   const assignments = new Map<string, string>();
-  const root = document.querySelector("layer-tree-group");
-  if (!root) return assignments;
-  Array.from(root.children)
-    .filter((element) => element.tagName === "layer-tree-group")
-    .forEach((element, index) => {
-      const group = groups[index];
-      if (!group) return;
-      element.querySelectorAll("layer-tree-layer[id]").forEach((layer) => {
-        const id = layer.getAttribute("id");
-        if (id) assignments.set(id, group.id);
-      });
-    });
+  document.querySelectorAll("layer-tree-layer[id]").forEach((layer) => {
+    const layerId = layer.getAttribute("id");
+    const parentGroup = layer.parentElement?.closest("layer-tree-group");
+    const groupId = parentGroup ? ids.get(parentGroup) : undefined;
+    if (layerId && groupId) assignments.set(layerId, groupId);
+  });
   return assignments;
 }
 
@@ -253,6 +279,8 @@ function isSupportedVectorLayer(element: Element, provider: string, source: stri
   return (
     element.getAttribute("type")?.toLowerCase() === "vector" &&
     (provider === "ogr" || provider === "delimitedtext") &&
+    !isHttpSource(source) &&
+    !isUncPath(source) &&
     SUPPORTED_VECTOR_EXTENSIONS.has(extension)
   );
 }
@@ -269,6 +297,8 @@ function unsupportedReason(
     return "provider";
   }
   if (!source) return "missing-source";
+  if (isHttpSource(source)) return "remote-file";
+  if (isUncPath(source)) return "network-path";
   return "format";
 }
 
@@ -345,7 +375,8 @@ function uniqueLayerId(candidate: string, layers: GeoLibreLayer[]): string {
 }
 
 function numberText(element: Element | null | undefined): number {
-  return Number(text(element));
+  const value = text(element);
+  return value === "" ? Number.NaN : Number(value);
 }
 
 function text(element: Element | null | undefined): string {
@@ -363,6 +394,14 @@ function fileStem(path: string): string {
 
 function isAbsolutePath(path: string): boolean {
   return path.startsWith("/") || path.startsWith("\\\\") || /^[A-Za-z]:[/\\]/.test(path);
+}
+
+function isHttpSource(path: string): boolean {
+  return /^https?:\/\//i.test(path);
+}
+
+function isUncPath(path: string): boolean {
+  return path.startsWith("\\\\") || path.startsWith("//");
 }
 
 function slug(value: string): string {
