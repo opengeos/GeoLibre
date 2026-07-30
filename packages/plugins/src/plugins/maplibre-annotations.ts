@@ -428,10 +428,12 @@ function closeElementPopup(): void {
   activePopupLngLat = null;
 }
 
-function repositionElementPopup(): void {
-  if (!boundMap || !activePopupContainer || !activePopupLngLat) return;
-  const point = boundMap.project(activePopupLngLat);
-  const canvasRect = boundMap.getCanvasContainer().getBoundingClientRect();
+function computePopupPosition(
+  map: maplibregl.Map,
+  lngLat: maplibregl.LngLat,
+): { left: number; top: number } {
+  const point = map.project(lngLat);
+  const canvasRect = map.getCanvasContainer().getBoundingClientRect();
 
   const boxWidth = 200;
   let left = point.x - boxWidth / 2;
@@ -440,6 +442,13 @@ function repositionElementPopup(): void {
   if (left < 10) left = 10;
   if (left + boxWidth > canvasRect.width - 10) left = canvasRect.width - boxWidth - 10;
   if (top + 180 > canvasRect.height - 10) top = Math.max(10, point.y - 190);
+
+  return { left, top };
+}
+
+function repositionElementPopup(): void {
+  if (!boundMap || !activePopupContainer || !activePopupLngLat) return;
+  const { left, top } = computePopupPosition(boundMap, activePopupLngLat);
 
   activePopupContainer.style.left = `${left}px`;
   activePopupContainer.style.top = `${top}px`;
@@ -456,16 +465,7 @@ function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, featur
   const description = props.description ? String(props.description) : "";
   const imageUrl = props.imageUrl ? String(props.imageUrl) : "";
 
-  const point = map.project(lngLat);
-  const canvasRect = map.getCanvasContainer().getBoundingClientRect();
-
-  const boxWidth = 200;
-  let left = point.x - boxWidth / 2;
-  let top = point.y + 12;
-
-  if (left < 10) left = 10;
-  if (left + boxWidth > canvasRect.width - 10) left = canvasRect.width - boxWidth - 10;
-  if (top + 180 > canvasRect.height - 10) top = Math.max(10, point.y - 190);
+  const { left, top } = computePopupPosition(map, lngLat);
 
   const container = document.createElement("div");
   container.className = "geolibre-element-popup-card";
@@ -473,7 +473,7 @@ function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, featur
     position: absolute;
     left: ${left}px;
     top: ${top}px;
-    width: ${boxWidth}px;
+    width: 200px;
     background: var(--geolibre-bg, #ffffff);
     color: var(--geolibre-fg, #111827);
     border: 1px solid var(--geolibre-border, #e5e7eb);
