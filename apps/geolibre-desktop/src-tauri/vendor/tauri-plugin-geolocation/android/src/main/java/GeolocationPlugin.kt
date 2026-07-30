@@ -8,6 +8,8 @@ import android.Manifest
 import android.app.Activity
 import android.location.Location
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebView
 import app.tauri.Logger
 import app.tauri.PermissionState
@@ -62,6 +64,7 @@ private const val ALIAS_COARSE_LOCATION: String = "coarseLocation"
 class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
     private lateinit var implementation: Geolocation
     private var watchers = hashMapOf<Long, Pair<Invoke, WatchArgs>>()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -107,12 +110,29 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
         implementation.startGnssStatusUpdates()
         val location = implementation.getLastLocation(args.maximumAge)
         if (location != null) {
-            invoke.resolve(convertLocation(location))
+            resolveCurrentPosition(invoke, location)
         } else {
             implementation.sendLocation(args.enableHighAccuracy,
-                { loc -> invoke.resolve(convertLocation(loc)) },
+                { loc -> resolveCurrentPosition(invoke, loc) },
                 { error -> invoke.reject(error) })
         }
+    }
+
+    /**
+     * A one-shot fused location can arrive just before Android's first GNSS
+     * status callback. Give that callback a short window so Field Collection
+     * receives the same satellite count as the continuous tracker. The timeout
+     * preserves the normal result on coarse-only or non-GNSS devices.
+     */
+    private fun resolveCurrentPosition(invoke: Invoke, location: Location) {
+        if (implementation.satellitesUsed != null) {
+            invoke.resolve(convertLocation(location))
+            return
+        }
+        mainHandler.postDelayed(
+            { invoke.resolve(convertLocation(location)) },
+            1500,
+        )
     }
 
     @PermissionCallback
