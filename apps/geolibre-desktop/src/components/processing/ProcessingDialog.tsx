@@ -1,5 +1,5 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { getLayerBounds, type MapController } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchWhiteboxJob,
@@ -61,6 +61,14 @@ import {
 } from "../../lib/subset-tool-url";
 import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
 import { fieldSourceInputName, isFieldParameterName } from "../../lib/whitebox-field-params";
+import {
+  DISTANCE_UNITS,
+  degreesToUnit,
+  formatDistanceValue,
+  isDistanceParameterName,
+  unitToDegrees,
+  type DistanceUnit,
+} from "../../lib/whitebox-distance-params";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
@@ -223,6 +231,66 @@ function isFieldParameter(param: WhiteboxToolParameter): boolean {
 function isCrsParameter(param: WhiteboxToolParameter): boolean {
   const kind = parameterKind(param);
   return (kind === "int" || kind === "double") && /(^|_)epsg(_code)?$/i.test(param.name);
+}
+
+// A `*_dist` / `*_radius` / `spacing` / `tolerance` (and friends) parameter is a
+// ground distance in the input's coordinate units, so the field can offer
+// metres/km/feet/miles alongside the degrees a WGS84 map layer forces on it
+// (GeoLibre#1540). The name rule lives in `whitebox-distance-params.ts`. Only
+// `double` qualifies: a metric distance almost always converts to a fractional
+// number of degrees, which an integer parameter cannot carry, and the kind check
+// also keeps a same-named enum or dataset parameter out.
+function isDistanceParameter(param: WhiteboxToolParameter): boolean {
+  return parameterKind(param) === "double" && isDistanceParameterName(param.name);
+}
+
+/**
+ * Reference latitude for converting a metric distance into degrees, or `null`
+ * when the tool's coordinates are not known to be WGS84.
+ *
+ * The unit picker is only safe when every coordinate the tool sees comes from a
+ * map layer's in-memory GeoJSON, which `runSelectedTool` hands over verbatim and
+ * RFC 7946 fixes to WGS84. A raster or LiDAR input keeps its own CRS (GeoLibre
+ * never reprojects those), and a file path is read from disk in whatever CRS it
+ * carries — so a tool with either is left alone, as is a vector input still set
+ * to a path.
+ *
+ * @param tool - The selected tool.
+ * @param values - The current form values.
+ * @param latitudeByLayer - Centre latitude per GeoJSON layer id, precomputed so
+ *   this stays cheap enough to call on every keystroke.
+ * @returns The centre latitude of the chosen vector layers, or `null`.
+ */
+function wgs84ReferenceLatitude(
+  tool: WhiteboxTool | null,
+  values: ParameterValues,
+  latitudeByLayer: Map<string, number>,
+): number | null {
+  const params = tool?.params ?? [];
+  if (!params.length) return null;
+  const kinds = params.map((param) => parameterKind(param));
+  if (kinds.some((kind) => kind === "raster_in" || kind === "lidar_in" || kind === "file_in")) {
+    return null;
+  }
+  const vectorInputs = params.filter((_, index) => kinds[index] === "vector_in");
+  if (!vectorInputs.length) return null;
+  const latitudes: number[] = [];
+  for (const param of vectorInputs) {
+    const value = values[param.name];
+    if (typeof value !== "string" || !value.startsWith(LAYER_TOKEN_PREFIX)) {
+      // A required input still on "Path" (or empty) means the run may read a
+      // projected file instead; don't claim to know the units.
+      if (param.required) return null;
+      continue;
+    }
+    const latitude = latitudeByLayer.get(value.slice(LAYER_TOKEN_PREFIX.length));
+    // Absent means the layer has no in-memory GeoJSON (it is passed as a path,
+    // in its own CRS) or has no finite extent at all.
+    if (latitude === undefined) return null;
+    latitudes.push(latitude);
+  }
+  if (!latitudes.length) return null;
+  return latitudes.reduce((sum, value) => sum + value, 0) / latitudes.length;
 }
 
 function isPathParameter(param: WhiteboxToolParameter): boolean {
@@ -720,6 +788,28 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     }
     return map;
   }, [layers, open]);
+
+  // Centre latitude per GeoJSON layer, for converting a metric distance into the
+  // degrees a WGS84 layer forces on a tool (GeoLibre#1540). Memoized on the layer
+  // set like fieldsByLayer above: the extent scan is a whole-collection pass, far
+  // too costly to redo while the user types into a distance field.
+  const latitudeByLayer = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!open) return map;
+    for (const layer of layers) {
+      if (!layer.geojson) continue;
+      const bounds = getLayerBounds(layer);
+      if (bounds) map.set(layer.id, (bounds[1] + bounds[3]) / 2);
+    }
+    return map;
+  }, [layers, open]);
+
+  // The latitude a distance parameter's metric entry converts at, or null when
+  // the tool's coordinates are not known to be WGS84 (so no unit picker).
+  const distanceLatitude = useMemo(
+    () => wgs84ReferenceLatitude(selectedTool, values, latitudeByLayer),
+    [selectedTool, values, latitudeByLayer],
+  );
 
   // Column names to offer for a `*_field` parameter (GeoLibre#1459): those of
   // the layer picked for the vector input the parameter names. With a single
@@ -1864,6 +1954,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   {t("processing.whitebox.vectorUnitsNote")}
                 </p>
               ) : null}
+              {/* The chosen layers are WGS84 and this tool takes a ground
+                  distance, so its distance fields carry a unit picker
+                  (GeoLibre#1540). Say once, up front, that the layer is
+                  geographic and what to do about it, rather than repeating the
+                  reprojection advice under every field. */}
+              {distanceLatitude !== null &&
+              (selectedTool?.params ?? []).some((param) => isDistanceParameter(param)) ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("processing.distance.geographicNote")}
+                </p>
+              ) : null}
               {(selectedTool?.params ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {t("processing.whitebox.noParameters")}
@@ -1878,6 +1979,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                     runLocal={runLocal}
                     value={values[param.name]}
                     fieldOptions={fieldOptions(param)}
+                    degreeLatitude={
+                      distanceLatitude !== null && isDistanceParameter(param)
+                        ? distanceLatitude
+                        : undefined
+                    }
                     onChange={(value) => updateValue(param.name, value)}
                     onPickFile={(fileName, bytes) =>
                       handlePickInputFile(param.name, fileName, bytes)
@@ -1988,6 +2094,12 @@ interface ParameterFieldProps {
   layers: GeoLibreLayer[];
   /** Attribute names to offer for a `*_field` parameter; empty keeps it free text. */
   fieldOptions?: string[];
+  /**
+   * Reference latitude for a distance parameter whose input is a WGS84 map
+   * layer, which turns the number box into a value + unit pair. Undefined
+   * leaves it a plain number field.
+   */
+  degreeLatitude?: number;
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
   /** When set, renders a "Use map extent" button that fills this bbox field
@@ -2010,6 +2122,7 @@ function ParameterField({
   param,
   layers,
   fieldOptions,
+  degreeLatitude,
   onChange,
   onPickFile,
   onUseMapExtent,
@@ -2205,6 +2318,16 @@ function ParameterField({
           onChange={onChange}
           onPickFile={onPickFile}
         />
+      ) : kind === "double" && degreeLatitude !== undefined ? (
+        // A ground distance whose input is a WGS84 map layer: the tool measures
+        // it in degrees, so pair the number box with a unit picker that converts
+        // metres/km/feet/miles for the user (GeoLibre#1540).
+        <DistanceInput
+          id={`whitebox-${param.name}`}
+          latitude={degreeLatitude}
+          value={valueText}
+          onChange={onChange}
+        />
       ) : kind === "int" || kind === "double" ? (
         <NumberStepperInput
           id={`whitebox-${param.name}`}
@@ -2271,6 +2394,99 @@ function NumberStepperInput({ id, integer, onChange, value }: NumberStepperInput
           <ChevronDown className="h-4 w-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+interface DistanceInputProps {
+  id: string;
+  /** Latitude the metric conversion is anchored at (the input layer's centre). */
+  latitude: number;
+  onChange: (value: unknown) => void;
+  /** The stored parameter value, always in degrees. */
+  value: string;
+}
+
+/**
+ * A distance field with a unit picker, for a tool whose coordinates come from a
+ * WGS84 map layer (GeoLibre#1540).
+ *
+ * The parameter itself is always stored in degrees, because that is what the
+ * tool will read. Choosing metres (or km/ft/mi) keeps a local draft of what the
+ * user typed and pushes the converted degrees up on every keystroke, so the
+ * round trip through the conversion cannot rewrite the digits being typed. The
+ * conversion varies with latitude and direction, so the field states the degree
+ * value it produced and points at reprojection for exact work.
+ */
+function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
+  const { t } = useTranslation();
+  const [unit, setUnit] = useState<DistanceUnit>("degrees");
+  // What the user typed, in `unit`. Only used while `unit` is not degrees; kept
+  // out of the parameter so the stored value stays in the tool's own unit.
+  const [draft, setDraft] = useState("");
+
+  const degrees = Number.parseFloat(value);
+  const hasDegrees = Number.isFinite(degrees);
+
+  const changeUnit = (next: DistanceUnit) => {
+    setUnit(next);
+    // Carry the current distance over to the new unit rather than clearing it.
+    setDraft(
+      next === "degrees" || !hasDegrees
+        ? ""
+        : formatDistanceValue(degreesToUnit(degrees, next, latitude)),
+    );
+  };
+
+  const changeDraft = (text: string) => {
+    setDraft(text);
+    const parsed = Number.parseFloat(text);
+    if (!Number.isFinite(parsed)) {
+      onChange(text.trim() === "" ? "" : text);
+      return;
+    }
+    onChange(formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8));
+  };
+
+  const latitudeLabel = t(
+    latitude >= 0 ? "processing.distance.north" : "processing.distance.south",
+    {
+      latitude: Math.abs(latitude).toFixed(1),
+    },
+  );
+
+  return (
+    <div className="grid gap-1.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(120px,160px)] gap-2">
+        {unit === "degrees" ? (
+          <NumberStepperInput id={id} integer={false} value={value} onChange={onChange} />
+        ) : (
+          <Input
+            id={id}
+            inputMode="decimal"
+            value={draft}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => changeDraft(event.target.value)}
+          />
+        )}
+        <Select
+          aria-label={t("processing.distance.unitLabel")}
+          value={unit}
+          onChange={(event) => changeUnit(event.target.value as DistanceUnit)}
+        >
+          {DISTANCE_UNITS.map((option) => (
+            <option key={option} value={option}>
+              {t(`processing.distance.units.${option}`)}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {unit !== "degrees" && (
+        <p className="text-xs text-muted-foreground">
+          {hasDegrees
+            ? t("processing.distance.converted", { degrees: value, latitude: latitudeLabel })
+            : t("processing.distance.convertedEmpty", { latitude: latitudeLabel })}
+        </p>
+      )}
     </div>
   );
 }

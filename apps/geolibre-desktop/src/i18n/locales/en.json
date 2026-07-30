@@ -3434,6 +3434,21 @@
     "refreshCatalog": "Refresh catalog",
     "increaseValue": "Increase value",
     "decreaseValue": "Decrease value",
+    "distance": {
+      "unitLabel": "Distance unit",
+      "units": {
+        "degrees": "Degrees",
+        "meters": "Meters",
+        "kilometers": "Kilometers",
+        "feet": "Feet",
+        "miles": "Miles"
+      },
+      "north": "{{latitude}}°N",
+      "south": "{{latitude}}°S",
+      "geographicNote": "The selected layers use a geographic CRS (WGS84), so distances are in degrees. Pick a unit next to a distance field to enter meters instead, or reproject to a projected CRS for exact results.",
+      "converted": "Sent to the tool as {{degrees}}°, converted at {{latitude}}. A degree varies with latitude and direction, so this is approximate.",
+      "convertedEmpty": "Converted to degrees at {{latitude}}. A degree varies with latitude and direction, so this is approximate."
+    },
     "history": {
       "title": "Processing History",
       "description": "Every processing run in this project, newest first. Re-run a tool, reopen it with the same parameters, or copy the run as JSON or Python.",
