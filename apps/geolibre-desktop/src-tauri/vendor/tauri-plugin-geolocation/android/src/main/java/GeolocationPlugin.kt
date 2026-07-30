@@ -65,6 +65,7 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
     private lateinit var implementation: Geolocation
     private var watchers = hashMapOf<Long, Pair<Invoke, WatchArgs>>()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingOneShots = 0
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -107,6 +108,7 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
     fun getCurrentPosition(invoke: Invoke) {
         val args = invoke.parseArgs(PositionOptions::class.java)
 
+        pendingOneShots += 1
         implementation.startGnssStatusUpdates()
         val location = implementation.getLastLocation(args.maximumAge)
         if (location != null) {
@@ -114,8 +116,23 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
         } else {
             implementation.sendLocation(args.enableHighAccuracy,
                 { loc -> resolveCurrentPosition(invoke, loc) },
-                { error -> invoke.reject(error) })
+                { error ->
+                    invoke.reject(error)
+                    finishOneShot()
+                })
         }
+    }
+
+    private fun finishOneShot() {
+        pendingOneShots = maxOf(0, pendingOneShots - 1)
+        if (pendingOneShots == 0 && watchers.isEmpty()) {
+            implementation.stopGnssStatusUpdates()
+        }
+    }
+
+    private fun resolveOneShot(invoke: Invoke, location: Location) {
+        invoke.resolve(convertLocation(location))
+        finishOneShot()
     }
 
     /**
@@ -126,7 +143,7 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
      */
     private fun resolveCurrentPosition(invoke: Invoke, location: Location) {
         if (implementation.satellitesUsed != null) {
-            invoke.resolve(convertLocation(location))
+            resolveOneShot(invoke, location)
             return
         }
         var resolved = false
@@ -135,14 +152,14 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
             if (!resolved) {
                 resolved = true
                 cancelSatelliteListener()
-                invoke.resolve(convertLocation(location))
+                resolveOneShot(invoke, location)
             }
         }
         cancelSatelliteListener = implementation.onSatellitesUsedAvailable {
             if (!resolved) {
                 resolved = true
                 mainHandler.removeCallbacks(timeout)
-                invoke.resolve(convertLocation(location))
+                resolveOneShot(invoke, location)
             }
         }
         if (!resolved) mainHandler.postDelayed(timeout, 1500)

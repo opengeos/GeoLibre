@@ -181,6 +181,10 @@ public class Geolocation(private val context: Context) {
             fusedLocationClient?.removeLocationUpdates(locationCallback!!)
             locationCallback = null
         }
+        stopGnssStatusUpdates()
+    }
+
+    fun stopGnssStatusUpdates() {
         gnssStatusCallback?.let {
             LocationManagerCompat.unregisterGnssStatusCallback(locationManager, it)
         }

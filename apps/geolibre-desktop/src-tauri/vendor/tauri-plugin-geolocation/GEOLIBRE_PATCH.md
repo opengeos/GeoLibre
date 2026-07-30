@@ -9,7 +9,8 @@ The GeoLibre-specific delta is intentionally limited to:
 - `android/src/main/java/Geolocation.kt`: observe `GnssStatusCompat` and notify
   one-shot callers when a satellite count becomes available.
 - `android/src/main/java/GeolocationPlugin.kt`: include `satellites` in native
-  coordinates and briefly race GNSS metadata against a timeout.
+  coordinates, briefly race GNSS metadata against a timeout, and unregister
+  one-shot GNSS monitoring after completion when no continuous watch is active.
 - `src/models.rs`: preserve the optional value through Rust deserialization.
 
 When upgrading, compare the new upstream release against this directory,

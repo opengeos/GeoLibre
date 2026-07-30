@@ -443,6 +443,7 @@ export function FieldCollectionDialog({
     // and drop the extra vertex the dblclick's second click added.
     map.doubleClickZoom.disable();
     const onClick = (e: maplibregl.MapMouseEvent) => {
+      setLastGpsFix(null);
       pushVertex(e.lngLat.lng, e.lngLat.lat);
     };
     const onDblClick = (e: maplibregl.MapMouseEvent) => {
@@ -467,6 +468,7 @@ export function FieldCollectionDialog({
   }, [drawing, getMap, pushVertex, finishDrawing, handleCancelDrawing]);
 
   const handleUndoVertex = useCallback(() => {
+    setLastGpsFix(null);
     setVerticesSynced(verticesRef.current.slice(0, -1));
   }, [setVerticesSynced]);
 

@@ -224,6 +224,11 @@ function fixPosition(fix: GpsFix): Position {
 export const GPS_TRACK_FLAG = "gpsTrack";
 export const GPS_CAPTURE_FLAG = "gpsCapture";
 
+/** Keep exported accuracy precise to a millimeter without float noise. */
+function exportAccuracy(accuracyM: number): number {
+  return Math.round(accuracyM * 1000) / 1000;
+}
+
 /** Minimal structural view of a layer — avoids coupling this module to the store. */
 export interface GpsLayerLike {
   type: string;
@@ -247,7 +252,7 @@ export function trackFeature(segments: GpsTrackSegments): Feature<LineString | M
   const stats = trackStats(kept);
   const all = kept.flat();
   const times = kept.map((seg) => seg.map((f) => new Date(f.timestamp).toISOString()));
-  const accuracies = kept.map((seg) => seg.map((f) => f.accuracy));
+  const accuracies = kept.map((seg) => seg.map((f) => exportAccuracy(f.accuracy)));
   const satellites = kept.map((seg) => seg.map((f) => f.satellites));
   const flattenForLine = <T>(values: T[][]): T[] | T[][] =>
     kept.length === 1 ? values[0] : values;
@@ -303,7 +308,7 @@ export function capturePointFeature(fix: GpsFix): Feature<Point> {
     geometry: { type: "Point", coordinates: fixPosition(fix) },
     properties: {
       time: new Date(fix.timestamp).toISOString(),
-      accuracy_m: fix.accuracy,
+      accuracy_m: exportAccuracy(fix.accuracy),
       ...(fix.satellites != null ? { satellites_used: fix.satellites } : {}),
       ...(fix.altitude != null ? { ele: fix.altitude } : {}),
       ...(fix.speed != null ? { speed_mps: fix.speed } : {}),
@@ -352,7 +357,7 @@ function gpxTrkpt(fix: GpsFix, indent: string): string {
   if (fix.satellites != null) lines.push(`${indent}  <sat>${fix.satellites}</sat>`);
   lines.push(
     `${indent}  <extensions>`,
-    `${indent}    <geolibre:accuracy_m>${fix.accuracy}</geolibre:accuracy_m>`,
+    `${indent}    <geolibre:accuracy_m>${exportAccuracy(fix.accuracy)}</geolibre:accuracy_m>`,
     `${indent}  </extensions>`,
     `${indent}</trkpt>`,
   );

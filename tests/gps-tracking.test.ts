@@ -257,6 +257,10 @@ describe("gps-tracking track shaping", () => {
     assert.equal("speed_mps" in (bare.properties ?? {}), false);
     assert.equal("heading_deg" in (bare.properties ?? {}), false);
     assert.equal("satellites_used" in (bare.properties ?? {}), false);
+    assert.equal(
+      capturePointFeature(fix({ accuracy: 4.900000000000006 })).properties?.accuracy_m,
+      4.9,
+    );
   });
 });
 
@@ -288,6 +292,15 @@ describe("gps-tracking GPX export", () => {
     // The second fix has no altitude, so exactly one <ele> is written.
     assert.equal(gpx.split("<ele>").length, 2);
     assert.equal(gpx.split("<trkseg>").length, 2);
+  });
+
+  it("rounds floating-point noise in GPX accuracy to millimeters", () => {
+    const gpx = buildTrackGpx(
+      [[fix({ accuracy: 4.900000000000006 }), fix({ lat: 44.051 })]],
+      "Clean accuracy",
+    );
+    assert.ok(gpx.includes(`<geolibre:accuracy_m>4.9</geolibre:accuracy_m>`));
+    assert.equal(gpx.includes(`4.900000000000006`), false);
   });
 
   it("writes one trkseg per segment, skipping stray 1-point segments", () => {
