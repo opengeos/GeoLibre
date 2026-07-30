@@ -82,7 +82,11 @@ describe("Elements Panel & Map Elements", () => {
 
   it("builds correct feature objects using pinFeature, stickyNoteFeature, placedImageFeature", () => {
     // Import dynamically or from the file
-    const { pinFeature, stickyNoteFeature, placedImageFeature } = require("../packages/plugins/src/plugins/maplibre-annotations");
+    const {
+      pinFeature,
+      stickyNoteFeature,
+      placedImageFeature,
+    } = require("../packages/plugins/src/plugins/maplibre-annotations");
     const { LngLat } = require("maplibre-gl");
 
     const pos = new LngLat(-122, 37);
@@ -109,7 +113,10 @@ describe("Elements Panel & Map Elements", () => {
   });
 
   it("cascades visibility updates and deletion to image overlay layer in the store", () => {
-    const { updateElementProps, deleteElementById } = require("../packages/plugins/src/plugins/maplibre-annotations");
+    const {
+      updateElementProps,
+      deleteElementById,
+    } = require("../packages/plugins/src/plugins/maplibre-annotations");
     const store = useAppStore.getState();
 
     // 1. Add annotation tracking layer with a pinned extent image tracking feature.
@@ -155,19 +162,34 @@ describe("Elements Panel & Map Elements", () => {
 
     // Verify initial state.
     assert.equal(useAppStore.getState().layers.length, 2);
-    assert.equal(useAppStore.getState().layers.find(l => l.id === "image-overlay-1")?.visible, true);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.visible,
+      true,
+    );
 
     // 3. Test visibility cascading.
     updateElementProps("extent-img-1", { visible: false });
-    assert.equal(useAppStore.getState().layers.find(l => l.id === "image-overlay-1")?.visible, false);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.visible,
+      false,
+    );
 
     updateElementProps("extent-img-1", { visible: true });
-    assert.equal(useAppStore.getState().layers.find(l => l.id === "image-overlay-1")?.visible, true);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.visible,
+      true,
+    );
 
     // 4. Test deletion cascading.
     deleteElementById("extent-img-1");
     // Verify both the overlay layer and tracking feature are removed.
-    assert.equal(useAppStore.getState().layers.find(l => l.id === "image-overlay-1"), undefined);
-    assert.equal(useAppStore.getState().layers.find(l => l.id === "annotation-layer-1"), undefined);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1"),
+      undefined,
+    );
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === "annotation-layer-1"),
+      undefined,
+    );
   });
 });
