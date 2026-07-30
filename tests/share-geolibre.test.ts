@@ -280,6 +280,44 @@ describe("fetchProjectShares", () => {
   it("rejects when no token is provided", async () => {
     await assert.rejects(() => fetchProjectShares({ token: "   " }), /token/i);
   });
+
+  it("fails closed to the view role when the server sends an unknown one", async () => {
+    const { fn } = fakeFetch(200, {
+      shares: [
+        { id: "s1", slug: "my-map" },
+        { id: "s2", slug: "other-map", role: "owner" },
+      ],
+    });
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.equal(shares.length, 2);
+    // A missing or unrecognized role must never be displayed as full edit access.
+    assert.equal(shares[0].role, "view");
+    assert.equal(shares[1].role, "view");
+  });
+
+  it("percent-encodes the project URL in the fallback viewer link", async () => {
+    const { fn } = fakeFetch(200, {
+      shares: [{ id: "s1", projectUrl: "https://example.com/p?a=1&b=2#frag" }],
+    });
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    // Without encoding, the raw `&` and `#` would truncate the viewer link.
+    assert.equal(
+      shares[0].viewerUrl,
+      "https://share.geolibre.app/viewer?url=https%3A%2F%2Fexample.com%2Fp%3Fa%3D1%26b%3D2%23frag",
+    );
+  });
 });
 
 describe("revokeShare", () => {

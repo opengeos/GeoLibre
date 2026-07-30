@@ -10,7 +10,7 @@ import {
   Select,
 } from "@geolibre/ui";
 import { Check, Copy, ExternalLink, KeyRound, Loader2, Lock, Share2, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
@@ -47,13 +47,30 @@ interface ShareProjectDialogProps {
 // and sets the username required for sharing.
 const ACCOUNT_SETTINGS_URL = `${resolveShareBaseUrl()}/settings`;
 
+// Short labels for the Active Shares metadata row, where the create tab's fully
+// spelled-out options ("Unlisted (anyone with the link)") would not fit. Keyed
+// through `t()` rather than rendered from the raw enum with `capitalize`, which
+// would leave these strings in English in every locale. `as const` keeps the
+// values literal so they still typecheck against the `en.json` key union.
+const VISIBILITY_LABEL_KEYS = {
+  unlisted: "share.visibilityUnlistedShort",
+  public: "share.visibilityPublicShort",
+  private: "share.visibilityPrivateShort",
+} as const satisfies Record<ShareVisibility, string>;
+
+const ROLE_LABEL_KEYS = {
+  view: "share.roleViewShort",
+  comment: "share.roleCommentShort",
+  edit: "share.roleEditShort",
+} as const satisfies Record<ShareRole, string>;
+
 export function ShareProjectDialog({
   open,
   onOpenChange,
   currentTitle,
   getProject,
 }: ShareProjectDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const shareToken = useDesktopSettingsStore((s) => s.desktopSettings.shareToken);
   const [tab, setTab] = useState<"create" | "manage">("create");
   const [title, setTitle] = useState("");
@@ -69,11 +86,49 @@ export function ShareProjectDialog({
 
   const [activeShares, setActiveShares] = useState<ActiveShare[]>([]);
   const [loadingShares, setLoadingShares] = useState(false);
+  const [sharesError, setSharesError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const sharesAbortRef = useRef<AbortController | null>(null);
   const copyTimeoutRef = useRef<number | null>(null);
+
+  // Load (or reload) the Manage tab's list. Each load supersedes the previous
+  // one: the dialog can be closed, reopened, or handed a freshly edited token
+  // before an in-flight request resolves, and without cancelling, the older
+  // response could land last and overwrite the newer list — or write state
+  // after the dialog is gone.
+  const loadActiveShares = useCallback(
+    async (token: string) => {
+      sharesAbortRef.current?.abort();
+      const controller = new AbortController();
+      sharesAbortRef.current = controller;
+      setLoadingShares(true);
+      setSharesError(null);
+      try {
+        const shares = await fetchProjectShares({ token, signal: controller.signal });
+        if (sharesAbortRef.current !== controller) return;
+        setActiveShares(shares);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (sharesAbortRef.current !== controller) return;
+        // An empty list and a failed fetch are not the same thing: swallowing the
+        // error would render an expired token or a dropped connection as the
+        // reassuring "no active share links" empty state.
+        setActiveShares([]);
+        setSharesError(err instanceof Error ? err.message : t("share.sharesErrorFallback"));
+      } finally {
+        // Only the load that is still current clears the spinner, so a
+        // superseded request never hides the newer one's progress.
+        if (sharesAbortRef.current === controller) {
+          sharesAbortRef.current = null;
+          setLoadingShares(false);
+        }
+      }
+    },
+    [t],
+  );
 
   // Reset transient state whenever the dialog is (re)opened so a prior result or
   // error never lingers into a new share. Seed the title from the current
@@ -93,27 +148,21 @@ export function ShareProjectDialog({
       setCopied(false);
       setTab("create");
       setRevokeError(null);
+      setSharesError(null);
+      setActiveShares([]);
+      setLoadingShares(false);
 
       if (shareToken.trim()) {
-        loadActiveShares(shareToken);
+        void loadActiveShares(shareToken);
       }
     } else {
       abortRef.current?.abort();
       abortRef.current = null;
-    }
-  }, [open, currentTitle, shareToken]);
-
-  const loadActiveShares = async (token: string) => {
-    setLoadingShares(true);
-    try {
-      const shares = await fetchProjectShares({ token });
-      setActiveShares(shares);
-    } catch {
-      setActiveShares([]);
-    } finally {
+      sharesAbortRef.current?.abort();
+      sharesAbortRef.current = null;
       setLoadingShares(false);
     }
-  };
+  }, [open, currentTitle, shareToken, loadActiveShares]);
 
   // Cancel a pending "copied" reset if the dialog unmounts mid-window.
   useEffect(
@@ -129,6 +178,8 @@ export function ShareProjectDialog({
   const titleValid = isShareableTitle(title);
 
   const handleShare = async () => {
+    // Guard re-entry synchronously: a second click before the disabled state
+    // renders would otherwise start a concurrent, non-idempotent upload.
     if (abortRef.current) return;
     setError(null);
     setErrorCode(null);
@@ -148,9 +199,11 @@ export function ShareProjectDialog({
         signal: controller.signal,
       });
       setResult(uploaded);
-      loadActiveShares(shareToken);
+      void loadActiveShares(shareToken);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      // A missing account username gets dedicated, actionable UI (a deep link to
+      // the website's settings) rather than the raw server string.
       if (err instanceof ShareUploadError && err.code === "username-required") {
         setErrorCode("username-required");
         setError(null);
@@ -159,6 +212,8 @@ export function ShareProjectDialog({
         setErrorCode(null);
       }
     } finally {
+      // Only the controller that is still current clears state, so an aborted
+      // (superseded) request never flips a newer one back to idle.
       if (abortRef.current === controller) {
         abortRef.current = null;
         setStatus("idle");
@@ -167,18 +222,25 @@ export function ShareProjectDialog({
   };
 
   const handleRevoke = async (shareId: string) => {
+    // Revoking is immediate and irreversible — the link stops working for
+    // everyone it was sent to — so a stray click on the icon-only button must
+    // not be enough to do it. `window.confirm` is blocking and matches how the
+    // rest of the app gates destructive actions.
+    if (!window.confirm(t("share.revokeConfirm"))) return;
     setRevokingId(shareId);
     setRevokeError(null);
     try {
       await revokeShare({ token: shareToken, shareId });
       setActiveShares((prev) => prev.filter((s) => s.id !== shareId));
     } catch (err) {
-      setRevokeError(err instanceof Error ? err.message : "Failed to revoke share");
+      setRevokeError(err instanceof Error ? err.message : t("share.revokeErrorFallback"));
     } finally {
       setRevokingId(null);
     }
   };
 
+  // Close this dialog and deep-link into Settings → Environment Variables with
+  // the share token field focused, so the user can paste the token right away.
   const handleConfigureToken = () => {
     onOpenChange(false);
     openSettingsSection("environment", { focus: "shareToken" });
@@ -187,6 +249,9 @@ export function ShareProjectDialog({
   const handleCopy = (url?: string) => {
     const targetUrl = url || result?.projectUrl;
     if (!targetUrl) return;
+    // Only show the "copied" checkmark if the write actually succeeds; the
+    // promise rejects when clipboard permission is denied or the page is
+    // unfocused, and swallowing it would flip the icon misleadingly.
     navigator.clipboard
       .writeText(targetUrl)
       .then(() => {
@@ -196,7 +261,9 @@ export function ShareProjectDialog({
         setCopied(true);
         copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Clipboard unavailable; leave the icon unchanged.
+      });
   };
 
   return (
@@ -433,14 +500,26 @@ export function ShareProjectDialog({
                     {revokeError}
                   </p>
                 )}
+                {sharesError && (
+                  <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 p-2 text-sm text-destructive"
+                  >
+                    {sharesError}
+                  </p>
+                )}
                 {loadingShares ? (
                   <div className="flex items-center justify-center py-6">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : activeShares.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">
-                    {t("share.noActiveShares", "No active share links found.")}
-                  </p>
+                  // Suppress the reassuring empty state when the list failed to
+                  // load; the error above already explains why it is empty.
+                  sharesError ? null : (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      {t("share.noActiveShares")}
+                    </p>
+                  )
                 ) : (
                   <div className="max-h-60 space-y-2 overflow-y-auto pe-1">
                     {activeShares.map((s) => (
@@ -451,22 +530,25 @@ export function ShareProjectDialog({
                         <div className="min-w-0 flex-1 space-y-1">
                           <p className="truncate font-medium">{s.title || s.projectSlug}</p>
                           <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                            <span className="capitalize">{s.visibility}</span>
+                            <span>{t(VISIBILITY_LABEL_KEYS[s.visibility])}</span>
                             <span>•</span>
-                            <span className="capitalize">{s.role}</span>
+                            <span>{t(ROLE_LABEL_KEYS[s.role])}</span>
                             {s.hasPassword && (
                               <>
                                 <span>•</span>
                                 <span className="flex items-center gap-1">
                                   <Lock className="h-3 w-3" />
-                                  Password
+                                  {t("share.passwordProtected")}
                                 </span>
                               </>
                             )}
                             {s.expiresAt && (
                               <>
                                 <span>•</span>
-                                <span>Expires {new Date(s.expiresAt).toLocaleDateString()}</span>
+                                <span>
+                                  {t("share.expires")}{" "}
+                                  {new Date(s.expiresAt).toLocaleDateString(i18n.language)}
+                                </span>
                               </>
                             )}
                           </div>
@@ -486,8 +568,12 @@ export function ShareProjectDialog({
                             type="button"
                             variant="destructive"
                             size="sm"
+                            aria-label={
+                              revokingId === s.id ? t("share.revoking") : t("share.revoke")
+                            }
+                            title={t("share.revoke")}
                             disabled={revokingId === s.id}
-                            onClick={() => handleRevoke(s.id)}
+                            onClick={() => void handleRevoke(s.id)}
                           >
                             {revokingId === s.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />

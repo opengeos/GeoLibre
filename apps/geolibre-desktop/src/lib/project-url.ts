@@ -1,21 +1,11 @@
 import { parseProject, type GeoLibreProject } from "@geolibre/core";
+import type { ShareRole } from "./share-geolibre";
 import { normalizeProjectUrl } from "./urls";
 import { WHITEBOX_TOOL_PARAM } from "./whitebox-tool-url";
 
 // Query parameters that carry a `.geolibre.json` project URL deep link. A bare
 // `?https://...` query (no key) is also accepted by `projectUrlFromLocation`.
 export const PROJECT_URL_PARAMS = ["url", "project", "projectUrl", "project_url"];
-
-/**
- * Reads a `.geolibre.json` project URL from the current `window.location` query
- * string, if one is present.
- *
- * Accepts any of {@link PROJECT_URL_PARAMS} or a bare `?https://...` query, and
- * normalizes the value via `normalizeProjectUrl` (absolute http/https only).
- *
- * @returns The normalized project URL, or `null` when none is present or valid.
- */
-import type { ShareRole } from "./share-geolibre";
 
 /**
  * Parses a share role string ("view", "comment", "edit") into a valid ShareRole or null.

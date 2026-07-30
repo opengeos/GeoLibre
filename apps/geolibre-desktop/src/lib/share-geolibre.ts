@@ -268,15 +268,22 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
   const payload = (await response.json().catch(() => ({}))) as { shares?: unknown[] };
   const rawShares = Array.isArray(payload.shares) ? payload.shares : [];
   return rawShares
-    .map((item: any) => {
+    .map((raw) => {
+      const item = (raw ?? {}) as Record<string, unknown>;
+      // Unparseable access-control metadata fails closed to the least
+      // privileged role, so a server that adds a role this build doesn't know
+      // never gets displayed as full edit access.
       const role: ShareRole =
         item.role === "view" || item.role === "comment" || item.role === "edit"
           ? item.role
-          : "edit";
+          : "view";
       const visibility: ShareVisibility =
         item.visibility === "public" || item.visibility === "private"
           ? item.visibility
           : "unlisted";
+      const projectUrl = String(
+        item.projectUrl || `${base}/u/${encodeURIComponent(String(item.slug ?? ""))}`,
+      );
       return {
         id: String(item.id || ""),
         projectSlug: String(item.projectSlug || item.slug || ""),
@@ -286,8 +293,11 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
         expiresAt: item.expiresAt ? String(item.expiresAt) : null,
         hasPassword: Boolean(item.hasPassword || item.passwordProtected),
         createdAt: String(item.createdAt || ""),
-        projectUrl: String(item.projectUrl || `${base}/u/${item.slug || ""}`),
-        viewerUrl: String(item.viewerUrl || `${base}/viewer?url=${item.projectUrl || ""}`),
+        projectUrl,
+        // The project URL becomes a query *value* here, so it has to be
+        // percent-encoded: a raw `&` or `#` in it would otherwise truncate the
+        // viewer link at that character.
+        viewerUrl: String(item.viewerUrl || `${base}/viewer?url=${encodeURIComponent(projectUrl)}`),
       };
     })
     .filter((s) => s.id !== "");
@@ -354,8 +364,10 @@ export async function verifySharePassword(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Share-Password": options.password,
       },
+      // The password travels in the request body only. Sending it a second time
+      // as a custom header would widen its exposure for nothing: proxy and
+      // logging layers routinely capture headers separately from bodies.
       body: JSON.stringify({ password: options.password }),
       signal,
     });
