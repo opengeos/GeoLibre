@@ -3445,6 +3445,7 @@
       },
       "north": "{{latitude}}°N",
       "south": "{{latitude}}°S",
+      "equator": "the equator",
       "geographicNote": "The selected layers use a geographic CRS (WGS84), so distances are in degrees. Pick a unit next to a distance field to enter meters instead, or reproject to a projected CRS for exact results.",
       "converted": "Sent to the tool as {{degrees}}°, converted at {{latitude}}. A degree varies with latitude and direction, so this is approximate.",
       "convertedEmpty": "Values will be converted to degrees at {{latitude}}. A degree varies with latitude and direction, so this is approximate.",

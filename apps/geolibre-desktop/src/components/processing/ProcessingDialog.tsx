@@ -2581,38 +2581,50 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     );
   };
 
-  // Someone else rewrote the parameter: the typed draft and its unit describe a
-  // distance that is no longer stored, so fall back to showing the degrees that
-  // are.
-  useEffect(() => {
-    if (value === lastPushed.current) return;
-    lastPushed.current = value;
-    setUnit("degrees");
-    setDraft("");
-  }, [value]);
-
-  // Re-convert when the input layer changes under a metric entry: switching a
-  // tool's vector input from a layer at 44°N to one at 10°N leaves the typed
-  // distance on screen while the stored degrees still come from the old
-  // latitude. Without this the note would show the new latitude beside a value
-  // converted at the old one, and Run would send the stale degrees.
+  // Reconcile the field against changes it did not make itself. Both cases live
+  // in one effect so their precedence is stated rather than left to the order
+  // two effects happen to flush in: a Processing History re-run rewrites the
+  // stored value *and* can rebind the input layer in a single `setValues`, and
+  // as separate effects the latitude branch would still see the pre-reset `unit`
+  // and `draft` from this render's closure and push a reconversion of the old
+  // draft over the value the reset was restoring.
   const lastLatitude = useRef(latitude);
   useEffect(() => {
-    if (lastLatitude.current === latitude) return;
+    const latitudeChanged = lastLatitude.current !== latitude;
     lastLatitude.current = latitude;
-    if (unit === "degrees") return;
+    if (value !== lastPushed.current) {
+      // Someone else rewrote the parameter, so the typed draft and its unit
+      // describe a distance that is no longer stored: show the degrees that are,
+      // and let that win over any re-conversion.
+      lastPushed.current = value;
+      setUnit("degrees");
+      setDraft("");
+      return;
+    }
+    // The input layer moved under a metric entry: switching a tool's vector
+    // input from a layer at 44°N to one at 10°N leaves the typed distance on
+    // screen while the stored degrees still come from the old latitude, so the
+    // note would show the new latitude beside a value converted at the old one
+    // and Run would send the stale degrees.
+    if (!latitudeChanged || unit === "degrees") return;
     const parsed = parseDistanceInput(draft);
     if (parsed === null) return;
     const next = formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8);
     lastPushed.current = next;
     onChange(next);
-  }, [draft, latitude, onChange, unit]);
+  }, [draft, latitude, onChange, unit, value]);
 
+  // A hemisphere suffix only means something away from the equator, and a
+  // worldwide layer's combined extent lands on 0.0 often enough for "0.0°N" to
+  // read as a mistake.
+  const rounded = Math.abs(latitude).toFixed(1);
   const latitudeLabel = t(
-    latitude >= 0 ? "processing.distance.north" : "processing.distance.south",
-    {
-      latitude: Math.abs(latitude).toFixed(1),
-    },
+    rounded === "0.0"
+      ? "processing.distance.equator"
+      : latitude > 0
+        ? "processing.distance.north"
+        : "processing.distance.south",
+    { latitude: rounded },
   );
 
   // Only claim a conversion when one actually happened. Text the field could not
