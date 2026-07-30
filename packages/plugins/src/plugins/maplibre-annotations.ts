@@ -2,7 +2,6 @@ import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/
 import type { Feature, FeatureCollection, Position } from "geojson";
 import maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
-import { openRightPanel } from "../right-panel-registry";
 
 /**
  * Annotation layer plugin: lightweight cartographic decoration (free text,
@@ -418,6 +417,7 @@ function setActiveTool(tool: AnnotationTool | null): void {
 
 let activePopupContainer: HTMLElement | null = null;
 let activePopupAnnotationId: string | null = null;
+let activePopupLngLat: maplibregl.LngLat | null = null;
 
 function closeElementPopup(): void {
   if (activePopupContainer) {
@@ -425,6 +425,24 @@ function closeElementPopup(): void {
     activePopupContainer = null;
   }
   activePopupAnnotationId = null;
+  activePopupLngLat = null;
+}
+
+function repositionElementPopup(): void {
+  if (!boundMap || !activePopupContainer || !activePopupLngLat) return;
+  const point = boundMap.project(activePopupLngLat);
+  const canvasRect = boundMap.getCanvasContainer().getBoundingClientRect();
+
+  const boxWidth = 200;
+  let left = point.x - boxWidth / 2;
+  let top = point.y + 12;
+
+  if (left < 10) left = 10;
+  if (left + boxWidth > canvasRect.width - 10) left = canvasRect.width - boxWidth - 10;
+  if (top + 180 > canvasRect.height - 10) top = Math.max(10, point.y - 190);
+
+  activePopupContainer.style.left = `${left}px`;
+  activePopupContainer.style.top = `${top}px`;
 }
 
 function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, feature: Feature): void {
@@ -433,6 +451,7 @@ function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, featur
   const props = (feature.properties as Record<string, unknown>) ?? {};
   const id = String(props.annotationId || feature.id);
   activePopupAnnotationId = id;
+  activePopupLngLat = lngLat;
   const title = String(props.title || props.text || "Element");
   const description = props.description ? String(props.description) : "";
   const imageUrl = props.imageUrl ? String(props.imageUrl) : "";
@@ -537,6 +556,7 @@ let elementMarkerUnsub: (() => void) | null = null;
 
 /** Sync all element HTML markers (pins, sticky notes, placed images). */
 function syncAllElementMarkers(): void {
+  ensureAnnotationIdBackfill();
   syncPinMarkers();
   syncStickyNoteMarkers();
   syncPlacedImageMarkers();
@@ -912,6 +932,7 @@ function bindMap(map: maplibregl.Map): void {
   map.on("mousedown", handleMouseDown);
   map.on("mousemove", handleMouseMove);
   map.on("mouseup", handleMouseUp);
+  map.on("move", repositionElementPopup);
   window.addEventListener("mouseup", handleWindowMouseUp);
   map.getCanvas().addEventListener("keydown", handleKeyDown, { capture: true });
   elementMarkerUnsub = useAppStore.subscribe((state, previous) => {
@@ -942,6 +963,7 @@ function unbindMap(): void {
   map.off("mousedown", handleMouseDown);
   map.off("mousemove", handleMouseMove);
   map.off("mouseup", handleMouseUp);
+  map.off("move", repositionElementPopup);
   window.removeEventListener("mouseup", handleWindowMouseUp);
   map.getCanvas().removeEventListener("keydown", handleKeyDown, {
     capture: true,
@@ -1250,7 +1272,6 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
   if (activeTool === "placed_image") {
     openElementDialog(event, "placed_image", (data) => {
       const imageUrl = data.imageUrl || "";
-      if (!imageUrl) return;
       if (data.placementMode === "extent") {
         // Corner-pinned placement: use the store's addImageOverlayLayer API.
         // Compute a rectangular extent around the click point, then let the
@@ -1838,6 +1859,43 @@ function findAnnotationLayer(layers: GeoLibreLayer[]): GeoLibreLayer | undefined
 function rediscoverAnnotationLayer(): void {
   const layer = findAnnotationLayer(useAppStore.getState().layers);
   annotationLayerId = layer?.id ?? null;
+  if (layer) {
+    ensureAnnotationIdBackfill(layer);
+  }
+}
+
+function ensureAnnotationIdBackfill(annotationLayer?: GeoLibreLayer): void {
+  const store = useAppStore.getState();
+  const layer = annotationLayer ?? findAnnotationLayer(store.layers);
+  if (!layer || !layer.geojson || !Array.isArray(layer.geojson.features)) return;
+
+  const rawFeatures = layer.geojson.features as Feature[];
+  let changed = false;
+
+  const updatedFeatures = rawFeatures.map((f) => {
+    const props = (f.properties as Record<string, unknown>) ?? {};
+    if (!props.annotationId) {
+      changed = true;
+      return {
+        ...f,
+        properties: {
+          ...props,
+          annotationId: crypto.randomUUID(),
+        },
+      };
+    }
+    return f;
+  });
+
+  if (changed) {
+    store.updateLayer(layer.id, {
+      geojson: {
+        ...layer.geojson,
+        type: "FeatureCollection",
+        features: updatedFeatures,
+      },
+    });
+  }
 }
 
 function appendAnnotationFeatures(features: Feature[]): void {
@@ -1935,34 +1993,6 @@ export function renderElementsPanel(container: HTMLElement): () => void {
     const store = useAppStore.getState();
     const layer = findAnnotationLayer(store.layers);
     const rawFeatures = (layer?.geojson?.features as Feature[]) ?? [];
-
-    let changed = false;
-    const updatedFeatures = rawFeatures.map((f) => {
-      const props = (f.properties as Record<string, unknown>) ?? {};
-      if (!props.annotationId) {
-        const generatedId = String(props.id || f.id || crypto.randomUUID());
-        changed = true;
-        return {
-          ...f,
-          properties: {
-            ...props,
-            annotationId: generatedId,
-          },
-        };
-      }
-      return f;
-    });
-
-    if (changed && layer && layer.geojson) {
-      store.updateLayer(layer.id, {
-        geojson: {
-          ...layer.geojson,
-          type: "FeatureCollection",
-          features: updatedFeatures,
-        },
-      });
-      return;
-    }
 
     const map = new Map<
       string,
@@ -2078,7 +2108,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       up.title = "Move Up";
       up.style.cssText =
         "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
-      up.disabled = index === elements.length - 1;
+      up.disabled = index === 0;
       up.addEventListener("click", (e) => {
         e.stopPropagation();
         reorderElements(el.id, "up");
@@ -2090,7 +2120,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
       down.title = "Move Down";
       down.style.cssText =
         "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
-      down.disabled = index === 0;
+      down.disabled = index === elements.length - 1;
       down.addEventListener("click", (e) => {
         e.stopPropagation();
         reorderElements(el.id, "down");
@@ -2223,7 +2253,7 @@ export function updateElementProps(annotationId: string, newProps: Record<string
   }
 }
 
-function reorderElements(annotationId: string, direction: "up" | "down"): void {
+export function reorderElements(annotationId: string, direction: "up" | "down"): void {
   const store = useAppStore.getState();
   const layer = findAnnotationLayer(store.layers);
   if (!layer || !layer.geojson) return;
@@ -2237,7 +2267,7 @@ function reorderElements(annotationId: string, direction: "up" | "down"): void {
 
   const idx = ids.indexOf(annotationId);
   if (idx === -1) return;
-  const targetIdx = direction === "up" ? idx + 1 : idx - 1;
+  const targetIdx = direction === "up" ? idx - 1 : idx + 1;
   if (targetIdx < 0 || targetIdx >= ids.length) return;
 
   const temp = ids[idx];

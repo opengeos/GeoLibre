@@ -9,6 +9,7 @@ import {
   placedImageFeature,
   updateElementProps,
   deleteElementById,
+  reorderElements,
 } from "../packages/plugins/src/plugins/maplibre-annotations";
 import {
   registerRightPanel,
@@ -200,5 +201,46 @@ describe("Elements Panel & Map Elements", () => {
       useAppStore.getState().layers.find((l) => l.id === "annotation-layer-1"),
       undefined,
     );
+  });
+
+  it("reorders elements correctly using reorderElements", () => {
+    const store = useAppStore.getState();
+    store.addLayer({
+      id: "annotation-layer-1",
+      name: "Annotations",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE, simpleStyleEnabled: true },
+      metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [10, 20] },
+            properties: { annotationId: "elem-1", title: "First" },
+          },
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [15, 25] },
+            properties: { annotationId: "elem-2", title: "Second" },
+          },
+        ],
+      },
+    });
+
+    // Move second element "up" to index 0 (top row)
+    reorderElements("elem-2", "up");
+    let features = useAppStore.getState().layers[0].geojson?.features;
+    assert.equal(features?.[0].properties?.annotationId, "elem-2");
+    assert.equal(features?.[1].properties?.annotationId, "elem-1");
+
+    // Move second element (now at index 0) "down" back to index 1
+    reorderElements("elem-2", "down");
+    features = useAppStore.getState().layers[0].geojson?.features;
+    assert.equal(features?.[0].properties?.annotationId, "elem-1");
+    assert.equal(features?.[1].properties?.annotationId, "elem-2");
   });
 });
