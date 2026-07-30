@@ -23,8 +23,10 @@ Security posture:
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import os
 import re
 from typing import Any, Optional
 
@@ -39,6 +41,8 @@ logger = logging.getLogger(__name__)
 # Statement timeout applied to every sidecar-issued session so a bad query or
 # an unresponsive server cannot pin a FastAPI worker thread indefinitely.
 _STATEMENT_TIMEOUT_MS = 60_000
+_POSTGIS_HOSTS_ENV = "GEOLIBRE_POSTGIS_HOSTS"
+_DEFAULT_POSTGRES_PORT = 5432
 
 # Username is optional (postgresql://:pw@host relies on PGUSER), so the group
 # is zero-or-more: an empty username must not let the password through. The
@@ -64,6 +68,7 @@ def psycopg_import_error() -> Optional[str]:
 
 def _import_psycopg() -> Any:
     import psycopg
+    import psycopg.conninfo  # noqa: F401 - make psycopg.conninfo reachable
     import psycopg.types.json  # noqa: F401 - make psycopg.types.json.Json reachable
 
     return psycopg
@@ -79,6 +84,115 @@ def _sanitize_error(message: str) -> str:
     """
     scrubbed = _PASSWORD_URL_RE.sub(r"\1****@", message)
     return _PASSWORD_KV_RE.sub(r"\1****", scrubbed)
+
+
+def _normalize_host(host: str) -> str:
+    """Return a stable representation for exact host allowlist comparisons."""
+    candidate = host.strip()
+    if not candidate or candidate.startswith("/"):
+        raise ValueError("PostgreSQL host must be a TCP hostname or IP address")
+    if candidate.startswith("[") and candidate.endswith("]"):
+        candidate = candidate[1:-1]
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        # DNS names are case-insensitive and a final dot only marks the DNS
+        # root; treating both spellings alike avoids surprising mismatches.
+        return candidate.rstrip(".").lower()
+
+
+def _allowed_postgis_targets(value: str) -> set[tuple[str, Optional[int]]]:
+    """Parse comma-separated ``host`` or ``host:port`` allowlist entries."""
+    targets: set[tuple[str, Optional[int]]] = set()
+    for raw_entry in value.split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        host = entry
+        port: Optional[int] = None
+        if entry.startswith("["):
+            closing = entry.find("]")
+            if closing < 0:
+                raise ValueError("invalid bracketed IPv6 address")
+            host = entry[1:closing]
+            suffix = entry[closing + 1 :]
+            if suffix:
+                if not suffix.startswith(":"):
+                    raise ValueError("invalid characters after IPv6 address")
+                port = int(suffix[1:])
+        elif entry.count(":") == 1:
+            host, port_text = entry.rsplit(":", 1)
+            port = int(port_text)
+        elif entry.count(":") > 1:
+            # A bare IPv6 address is accepted; brackets are required only when
+            # an allowlist entry also specifies a port.
+            ipaddress.IPv6Address(entry)
+        if port is not None and not 1 <= port <= 65535:
+            raise ValueError("port must be between 1 and 65535")
+        targets.add((_normalize_host(host), port))
+    return targets
+
+
+def _validate_postgis_target(conninfo: dict[str, str]) -> tuple[str, str]:
+    """Validate every destination and return explicit libpq host/port lists."""
+    configured = os.environ.get(_POSTGIS_HOSTS_ENV, "")
+    try:
+        allowed = _allowed_postgis_targets(configured)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"{_POSTGIS_HOSTS_ENV} is invalid",
+        ) from exc
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"PostGIS access is disabled; configure {_POSTGIS_HOSTS_ENV}",
+        )
+
+    # A service can load (and change) hosts from pg_service.conf after this
+    # validation. Requiring an explicit DSN host closes that indirection.
+    if conninfo.get("service"):
+        raise HTTPException(
+            status_code=400,
+            detail="PostgreSQL service connection strings are not supported",
+        )
+    # libpq connects to hostaddr while retaining host for authentication and
+    # display, which would otherwise let an allowlisted name mask any IP.
+    if conninfo.get("hostaddr"):
+        raise HTTPException(
+            status_code=400,
+            detail="PostgreSQL hostaddr connection strings are not supported",
+        )
+    hosts = conninfo.get("host", "").split(",")
+    if not hosts or any(not host.strip() for host in hosts):
+        raise HTTPException(
+            status_code=400,
+            detail="PostgreSQL connection must specify an allowed TCP host",
+        )
+    raw_ports = conninfo.get("port", "")
+    ports = raw_ports.split(",") if raw_ports else [str(_DEFAULT_POSTGRES_PORT)]
+    if len(ports) == 1:
+        ports *= len(hosts)
+    if len(ports) != len(hosts) or any(not port for port in ports):
+        raise HTTPException(status_code=400, detail="Invalid PostgreSQL host/port list")
+
+    for host, port_text in zip(hosts, ports):
+        try:
+            normalized_host = _normalize_host(host)
+            port = int(port_text)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid PostgreSQL host or port") from exc
+        if not 1 <= port <= 65535:
+            raise HTTPException(status_code=400, detail="Invalid PostgreSQL port")
+        if (normalized_host, port) not in allowed and (
+            normalized_host,
+            None,
+        ) not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="PostgreSQL host or port is not allowed",
+            )
+    return ",".join(hosts), ",".join(ports)
 
 
 class PostgisTablesRequest(BaseModel):
@@ -125,11 +239,18 @@ def _connect(connection: str) -> Any:
         raise HTTPException(status_code=400, detail="connection is required")
     psycopg = _import_psycopg()
     try:
+        conninfo = psycopg.conninfo.conninfo_to_dict(connection.strip())
+        validated_hosts, validated_ports = _validate_postgis_target(conninfo)
         return psycopg.connect(
             connection.strip(),
+            host=validated_hosts,
+            hostaddr="",
+            port=validated_ports,
             connect_timeout=10,
             options=f"-c statement_timeout={_STATEMENT_TIMEOUT_MS}",
         )
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
         raise HTTPException(
             status_code=400,

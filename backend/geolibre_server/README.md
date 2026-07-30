@@ -103,6 +103,22 @@ build of SedonaDB — so the Apache Sedona engine works with **no sidecar** too.
 returns rows (geometry as WKT) plus a GeoJSON FeatureCollection when the result
 has a geometry column.
 
+## PostGIS connections
+
+The optional PostGIS endpoints are disabled until their database destinations
+are explicitly allowed. Set `GEOLIBRE_POSTGIS_HOSTS` to a comma-separated list
+of exact hostnames or IP addresses before starting the sidecar:
+
+```bash
+GEOLIBRE_POSTGIS_HOSTS='db.internal,db.example.com:5433,[2001:db8::10]:5432'
+geolibre-server
+```
+
+An entry without a port allows that host on any port; include `:port` to
+restrict it. Every host in a libpq failover connection string must be allowed.
+Implicit local connections, Unix sockets, and `service=` connection strings are
+rejected so they cannot bypass the allowlist.
+
 ## Endpoints
 
 | Method | Path | Description |

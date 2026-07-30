@@ -5,8 +5,9 @@ Two tiers:
 - Validation and status tests that need only psycopg installed (no server).
 - Live round-trip tests against a real PostGIS database, enabled by setting
   ``GEOLIBRE_TEST_POSTGIS_DSN`` to a connection string with rights to create
-  and drop tables. Without it they skip, mirroring how the other optional
-  engines (geopandas/rasterio/sedona) gate their suites.
+  and drop tables and allowing its host with ``GEOLIBRE_POSTGIS_HOSTS``.
+  Without it they skip, mirroring how the other optional engines
+  (geopandas/rasterio/sedona) gate their suites.
 """
 
 from __future__ import annotations
@@ -20,7 +21,9 @@ from geolibre_server.app.postgis import (
     PostgisReadRequest,
     PostgisTablesRequest,
     PostgisWriteRequest,
+    _allowed_postgis_targets,
     _sanitize_error,
+    _validate_postgis_target,
     postgis_read,
     postgis_status,
     postgis_tables,
@@ -91,6 +94,59 @@ def test_sanitize_error_scrubs_passwords() -> None:
     assert "****@db.example.com" in scrubbed
 
 
+def test_postgis_allowlist_parses_hosts_ips_and_ports() -> None:
+    assert _allowed_postgis_targets(
+        "DB.EXAMPLE., db.internal:5433, 10.0.0.4, [2001:db8::1]:5432"
+    ) == {
+        ("db.example", None),
+        ("db.internal", 5433),
+        ("10.0.0.4", None),
+        ("2001:db8::1", 5432),
+    }
+
+
+def test_postgis_access_is_disabled_without_allowlist(monkeypatch) -> None:
+    monkeypatch.delenv("GEOLIBRE_POSTGIS_HOSTS", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        _validate_postgis_target({"host": "db.example"})
+    assert exc.value.status_code == 403
+
+
+def test_postgis_allowlist_rejects_unlisted_and_wrong_port(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example:5433")
+    for conninfo in (
+        {"host": "internal.example", "port": "5433"},
+        {"host": "db.example", "port": "5432"},
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _validate_postgis_target(conninfo)
+        assert exc.value.status_code == 403
+
+
+def test_postgis_allowlist_validates_every_failover_host(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db-a.example:5432,db-b.example:5433")
+    assert _validate_postgis_target({"host": "db-a.example,db-b.example", "port": "5432,5433"}) == (
+        "db-a.example,db-b.example",
+        "5432,5433",
+    )
+    with pytest.raises(HTTPException) as exc:
+        _validate_postgis_target({"host": "db-a.example,metadata.internal", "port": "5432"})
+    assert exc.value.status_code == 403
+
+
+def test_postgis_allowlist_rejects_indirect_destinations(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "localhost")
+    for conninfo in (
+        {},
+        {"host": "/var/run/postgresql"},
+        {"service": "production"},
+        {"host": "localhost", "hostaddr": "169.254.169.254"},
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _validate_postgis_target(conninfo)
+        assert exc.value.status_code == 400
+
+
 @requires_psycopg
 def test_empty_connection_rejected() -> None:
     with pytest.raises(HTTPException) as exc:
@@ -99,7 +155,8 @@ def test_empty_connection_rejected() -> None:
 
 
 @requires_psycopg
-def test_connect_failure_does_not_leak_password() -> None:
+def test_connect_failure_does_not_leak_password(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "127.0.0.1:1")
     request = PostgisReadRequest(
         connection="postgresql://alice:sekretpw@127.0.0.1:1/nope",
         table="whatever",
