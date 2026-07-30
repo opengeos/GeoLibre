@@ -20,6 +20,10 @@ const SAMPLE: FeatureCollection = {
         details: { state: "Nevada" },
         "marker-color": "#123456",
         "marker-opacity": 0.5,
+        stroke: "#00ff00",
+        "stroke-width": 3,
+        fill: "#0000ff",
+        "fill-opacity": 0.25,
       },
     },
   ],
@@ -43,6 +47,8 @@ describe("writeKml", () => {
     assert.match(kml, /<Data name="feature_id"><value>city-1<\/value><\/Data>/);
     assert.match(kml, /<Point><coordinates>-115\.14,36\.17,610<\/coordinates><\/Point>/);
     assert.match(kml, /<IconStyle><color>80563412<\/color><\/IconStyle>/);
+    assert.match(kml, /<LineStyle><color>ff00ff00<\/color><width>3<\/width><\/LineStyle>/);
+    assert.match(kml, /<PolyStyle><color>40ff0000<\/color><\/PolyStyle>/);
   });
 
   it("writes every GeoJSON geometry type and closes open polygon rings", () => {
@@ -134,5 +140,61 @@ describe("KMZ export", () => {
     assert.equal(strFromU8(files["doc.kml"]), writeKml(SAMPLE, "Cities"));
     assert.equal(result.extension, "kmz");
     assert.equal(result.mimeType, "application/vnd.google-earth.kmz");
+  });
+});
+
+describe("KML text export", () => {
+  it("writes KML through the browser save picker with matching format metadata", async () => {
+    let pickerOptions: unknown;
+    let savedContent: unknown;
+    const originalWindow = globalThis.window;
+    const mockWindow = {
+      showSaveFilePicker: async (options: unknown) => {
+        pickerOptions = options;
+        return {
+          name: "Cities.kml",
+          createWritable: async () => ({
+            write: async (content: unknown) => {
+              savedContent = content;
+            },
+            close: async () => undefined,
+          }),
+        };
+      },
+    };
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: mockWindow,
+    });
+    (globalThis as { self?: unknown }).self ??= globalThis;
+
+    try {
+      const { exportVectorLayer } = await import("../apps/geolibre-desktop/src/lib/vector-export");
+      const savedName = await exportVectorLayer(SAMPLE, "kml", "Cities");
+
+      assert.equal(savedName, "Cities.kml");
+      assert.equal(savedContent, writeKml(SAMPLE, "Cities"));
+      assert.deepEqual(pickerOptions, {
+        suggestedName: "Cities.kml",
+        types: [
+          {
+            description: "KML",
+            accept: {
+              "application/vnd.google-earth.kml+xml": [".kml"],
+            },
+          },
+        ],
+        excludeAcceptAllOption: false,
+      });
+    } finally {
+      if (originalWindow === undefined) {
+        Reflect.deleteProperty(globalThis, "window");
+      } else {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow,
+        });
+      }
+    }
   });
 });

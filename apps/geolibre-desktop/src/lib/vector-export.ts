@@ -5,7 +5,38 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
 import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
 
-export type VectorExportFormat = "geojson" | "csv" | "kml" | BinaryVectorExportFormat;
+type TextVectorExportFormat = "geojson" | "csv" | "kml";
+
+export type VectorExportFormat = TextVectorExportFormat | BinaryVectorExportFormat;
+
+const TEXT_EXPORT_FORMATS: Record<
+  TextVectorExportFormat,
+  {
+    extension: string;
+    filterExtensions: string[];
+    label: string;
+    mimeType: string;
+  }
+> = {
+  geojson: {
+    extension: "geojson",
+    filterExtensions: ["geojson", "json"],
+    label: "GeoJSON",
+    mimeType: "application/geo+json",
+  },
+  csv: {
+    extension: "csv",
+    filterExtensions: ["csv"],
+    label: "CSV",
+    mimeType: "text/csv",
+  },
+  kml: {
+    extension: "kml",
+    filterExtensions: ["kml"],
+    label: "KML",
+    mimeType: "application/vnd.google-earth.kml+xml",
+  },
+};
 
 /** Render an attribute value as the plain string used in CSV cells and inputs. */
 export function formatAttributeValue(value: unknown): string {
@@ -178,42 +209,37 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
   return warnings;
 }
 
+async function textExportContent(
+  format: TextVectorExportFormat,
+  geojson: FeatureCollection,
+  baseName: string,
+): Promise<string> {
+  switch (format) {
+    case "geojson":
+      return JSON.stringify(geojson, null, 2);
+    case "csv":
+      return geojsonToCsv(geojson);
+    case "kml":
+      return (await import("./kml-writer")).writeKml(geojson, baseName);
+  }
+}
+
 async function exportTextLayer(
-  format: "geojson" | "csv" | "kml",
+  format: TextVectorExportFormat,
   geojson: FeatureCollection,
   baseName: string,
 ): Promise<string | null> {
-  const isCsv = format === "csv";
-  const isKml = format === "kml";
-  const content = isCsv
-    ? geojsonToCsv(geojson)
-    : isKml
-      ? (await import("./kml-writer")).writeKml(geojson, baseName)
-      : JSON.stringify(geojson, null, 2);
-  const extension = isCsv ? "csv" : isKml ? "kml" : "geojson";
-  const label = isCsv ? "CSV" : isKml ? "KML" : "GeoJSON";
-  const mimeType = isCsv
-    ? "text/csv"
-    : isKml
-      ? "application/vnd.google-earth.kml+xml"
-      : "application/geo+json";
+  const content = await textExportContent(format, geojson, baseName);
+  const { extension, filterExtensions, label, mimeType } = TEXT_EXPORT_FORMATS[format];
   return saveTextFileWithFallback(content, {
     defaultName: `${baseName}.${extension}`,
-    filters: [
-      isCsv
-        ? { name: label, extensions: [extension] }
-        : isKml
-          ? { name: label, extensions: [extension] }
-          : { name: label, extensions: ["geojson", "json"] },
-    ],
+    filters: [{ name: label, extensions: filterExtensions }],
     browserTypes: [
       {
         description: label,
-        accept: isCsv
-          ? { "text/csv": [".csv"] }
-          : isKml
-            ? { "application/vnd.google-earth.kml+xml": [".kml"] }
-            : { "application/geo+json": [".geojson", ".json"] },
+        accept: {
+          [mimeType]: filterExtensions.map((candidate) => `.${candidate}`),
+        },
       },
     ],
     mimeType,
