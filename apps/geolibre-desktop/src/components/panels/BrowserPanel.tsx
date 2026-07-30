@@ -512,11 +512,17 @@ export function BrowserPanel({
           setError(addError);
         } else {
           const added = useAppStore.getState().layers.filter((entry) => !idsBefore.has(entry.id));
+          const matches = added.filter((entry) => layerCameFromPath(entry, plan.path));
           const target =
-            added.find((entry) => layerCameFromPath(entry, plan.path)) ??
-            // Nothing recorded the path (a format that keeps neither): fall back
-            // to a lone new layer, which is unambiguous.
-            (added.length === 1 ? added[0] : undefined);
+            matches.length === 1
+              ? matches[0]
+              : // Nothing recorded the path (a format that keeps neither): a lone
+                // new layer is still unambiguous. Several matches are not — one
+                // file can yield siblings that share a path (a KML's placemarks
+                // plus its ground overlays) — so patch none of them.
+                matches.length === 0 && added.length === 1
+                ? added[0]
+                : undefined;
           if (target) {
             const { joins, virtualFields, ...rest } = plan.config;
             useAppStore.getState().updateLayer(target.id, rest);
@@ -526,6 +532,11 @@ export function BrowserPanel({
             if (virtualFields) {
               useAppStore.getState().setLayerVirtualFields(target.id, virtualFields);
             }
+          } else if (added.length > 0) {
+            // The file came back but we cannot tell which layer the saved
+            // configuration belongs to. Say so, rather than leaving the user to
+            // notice their styling silently did not return.
+            setError(t("browser.libraryLayerConfigNotApplied", { name: plan.config.name }));
           }
         }
       } finally {

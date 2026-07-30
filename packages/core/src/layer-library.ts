@@ -493,6 +493,16 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
     // an older record or an imported bundle is cleaned up on load instead of
     // replaying a dev-server proxy rewrite indefinitely.
     for (const key of TRANSIENT_METADATA_KEYS) delete metadata[key];
+    // `metadata.localFilePath` is the *second* path in an entry, and the one
+    // `restoreRasterLayers` re-reads — so it needs the same validation as
+    // `sourcePath` below, not a free pass because it happens to live in
+    // metadata. Without this a shared bundle could keep a valid-looking
+    // `sourcePath` while pointing the raster restore at any file on the
+    // importing user's disk.
+    if ("localFilePath" in metadata) {
+      const path = metadata.localFilePath;
+      if (!nonEmptyString(path) || !isReReadablePath(path)) delete metadata.localFilePath;
+    }
     // A bundle is shareable, so its `sourcePath` is untrusted: keep it only when
     // it is an absolute, traversal-free path a host could legitimately re-read.
     // Without this a crafted entry could point `onAddFilePath` at any file on the
@@ -503,12 +513,14 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
         : undefined;
     const geojson = featureCollection(candidate.geojson);
     // Same "is there anything to re-add from" gate as the capture path, so a
-    // hand-edited bundle cannot introduce an entry that always fails. A
-    // control-painted entry carries its features in `metadata.embeddedGeoJSON`
-    // instead of `geojson`, so that counts too.
+    // hand-edited bundle cannot introduce an entry that always fails. Both path
+    // conventions count (a local raster's only path is `metadata.localFilePath`,
+    // already validated above), and so does a control-painted entry's
+    // `metadata.embeddedGeoJSON`, which holds its features instead of `geojson`.
     if (
       !hasRestorableLayerSource({ source, metadata }) &&
       !sourcePath &&
+      !nonEmptyString(metadata.localFilePath) &&
       featureCount(geojson) === 0 &&
       featureCount(featureCollection(metadata.embeddedGeoJSON)) === 0
     ) {

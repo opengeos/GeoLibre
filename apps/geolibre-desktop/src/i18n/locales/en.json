@@ -35,7 +35,8 @@
     "libraryImportFailed": "Could not read this layer library file.",
     "libraryExportFailed": "Could not export the layer library.",
     "libraryLayerMissing": "That saved layer no longer exists.",
-    "libraryLayerNeedsDesktop": "This saved layer reads a file from disk, so it needs GeoLibre Desktop. Add the file again to save a new entry."
+    "libraryLayerNeedsDesktop": "This saved layer reads a file from disk, so it needs GeoLibre Desktop. Add the file again to save a new entry.",
+    "libraryLayerConfigNotApplied": "Added the file for “{{name}}”, but its saved styling could not be matched to a single layer, so it was not reapplied."
   },
   "about": {
     "trigger": "About",

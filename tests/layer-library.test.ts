@@ -578,6 +578,47 @@ describe("normalizeLayerLibraryEntries", () => {
     assert.equal(kept.needsLocalFile, true);
   });
 
+  it("validates metadata.localFilePath, the second path a raster entry carries", () => {
+    // `restoreRasterLayers` re-reads this field, so a bundle must not be able to
+    // keep a clean-looking `sourcePath` while redirecting that read elsewhere.
+    const rasterEntry = {
+      ...valid,
+      layerType: "cog",
+      source: { type: "raster" },
+      sourcePath: "/safe/file.tif",
+    };
+    for (const path of ["/data/../../etc/shadow", "file.tif", "", 42]) {
+      const [entry] = normalizeLayerLibraryEntries([
+        { ...rasterEntry, metadata: { localFilePath: path } },
+      ]);
+      assert.equal(entry.metadata.localFilePath, undefined, String(path));
+      // The validated sourcePath is unaffected by dropping the bad metadata path.
+      assert.equal(entry.sourcePath, "/safe/file.tif");
+    }
+    const [kept] = normalizeLayerLibraryEntries([
+      { ...rasterEntry, metadata: { localFilePath: "/data/dem.tif" } },
+    ]);
+    assert.equal(kept.metadata.localFilePath, "/data/dem.tif");
+  });
+
+  it("keeps a local raster entry whose only path is metadata.localFilePath", () => {
+    // Its source has no URL and it has no features, so the "anything to re-add
+    // from" gate has to count that path or the entry would vanish on load.
+    const entries = normalizeLayerLibraryEntries([
+      {
+        ...valid,
+        layerType: "cog",
+        source: { type: "raster" },
+        sourcePath: "dem.tif",
+        metadata: { sourceKind: "maplibre-gl-raster", localFilePath: "/data/dem.tif" },
+      },
+    ]);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].metadata.localFilePath, "/data/dem.tif");
+    // The basename is not a re-readable path, so it is not kept as one.
+    assert.equal(entries[0].sourcePath, undefined);
+  });
+
   it("drops malformed optional blocks rather than the whole entry", () => {
     const [entry] = normalizeLayerLibraryEntries([
       { ...valid, joins: "many", virtualFields: [], attributeForm: [], geojson: { type: "Point" } },
