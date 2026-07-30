@@ -122,16 +122,20 @@ export function parseProject(json: string): GeoLibreProject {
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
+  // Secondary panes already go through normalizeMapViewState; the primary
+  // camera must too so a hand-edited project cannot store an out-of-range
+  // view that MapLibre would silently clamp, leaving saved state wrong.
+  const mapView = normalizeMapViewState(data.mapView);
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(data.mapLayout),
     normalizeSecondaryMapViews(data.secondaryMapViews),
-    { mapView: data.mapView },
+    { mapView },
   );
   const styleLibrary = normalizeStyleLibraryEntries(data.styleLibrary);
   return {
     version: data.version,
     name: data.name,
-    mapView: data.mapView,
+    mapView,
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
@@ -1325,14 +1329,15 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const basemapOpacity = project.basemapOpacity ?? 1;
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
+  const mapView = normalizeMapViewState(project.mapView);
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(project.mapLayout),
     normalizeSecondaryMapViews(project.secondaryMapViews),
-    { mapView: project.mapView },
+    { mapView },
   );
   return {
     projectName: project.name,
-    mapView: project.mapView,
+    mapView,
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,

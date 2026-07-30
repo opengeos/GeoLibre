@@ -694,6 +694,29 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
   );
 }
 
+/**
+ * Strip storymap chapter enter/exit opacity rows that reference a removed
+ * layer id. Returns the same reference when nothing changes so callers can
+ * avoid unnecessary storymap churn.
+ */
+function scrubStorymapLayerRefs(storymap: StoryMap | null, layerId: string): StoryMap | null {
+  if (!storymap) return null;
+  let changed = false;
+  const chapters = storymap.chapters.map((chapter) => {
+    const onChapterEnter = chapter.onChapterEnter.filter((change) => change.layerId !== layerId);
+    const onChapterExit = chapter.onChapterExit.filter((change) => change.layerId !== layerId);
+    if (
+      onChapterEnter.length === chapter.onChapterEnter.length &&
+      onChapterExit.length === chapter.onChapterExit.length
+    ) {
+      return chapter;
+    }
+    changed = true;
+    return { ...chapter, onChapterEnter, onChapterExit };
+  });
+  return changed ? { ...storymap, chapters } : storymap;
+}
+
 /** Clamp a requested grid row/column count into the supported [1, MAX] range. */
 function clampGridDim(value: number): number {
   if (!Number.isFinite(value)) return 1;
@@ -1358,6 +1381,9 @@ export const useAppStore = create<AppState>()(
             const { [id]: _removed, ...rest } = pane.layerVisibility;
             return { ...pane, layerVisibility: rest };
           }),
+          // Drop storymap chapter enter/exit opacity rows that pointed at the
+          // removed layer so they do not keep a dangling id across save/reload.
+          storymap: scrubStorymapLayerRefs(s.storymap, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)

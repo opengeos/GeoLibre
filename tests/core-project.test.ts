@@ -1271,3 +1271,26 @@ describe("annotation layer persistence", () => {
     assert.equal(head?.properties?.annotationId, "a1");
   });
 });
+
+describe("primary mapView normalization", () => {
+  it("clamps an out-of-range primary camera on parse", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Camera",
+        mapView: {
+          center: ["x", 200],
+          zoom: -1,
+          bearing: -90,
+          pitch: 200,
+        },
+      }),
+    );
+    assert.ok(Number.isFinite(project.mapView.center[0]));
+    assert.ok(Number.isFinite(project.mapView.center[1]));
+    assert.equal(project.mapView.center[1], 90);
+    assert.equal(project.mapView.zoom, 0);
+    assert.equal(project.mapView.pitch, 85);
+    assert.ok(project.mapView.bearing >= 0 && project.mapView.bearing < 360);
+  });
+});

@@ -3502,6 +3502,9 @@ export function removeLayerFromMap(
   layerId: string,
   layer?: GeoLibreLayer,
 ): void {
+  // Drop cached paint-bridge state so a later layer reusing this id never
+  // skips a fresh opacity/visibility apply against a new bridge.
+  appliedBridgeState.delete(layerId);
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),
