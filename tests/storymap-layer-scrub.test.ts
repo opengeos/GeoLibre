@@ -56,6 +56,9 @@ describe("removeLayer storymap scrub", () => {
     const chapter = useAppStore.getState().storymap?.chapters[0];
     assert.deepEqual(chapter?.onChapterEnter, [{ layerId: "keep", opacity: 0.5 }]);
     assert.deepEqual(chapter?.onChapterExit, []);
-    assert.equal(useAppStore.getState().layers.some((layer) => layer.id === "gone"), false);
+    assert.equal(
+      useAppStore.getState().layers.some((layer) => layer.id === "gone"),
+      false,
+    );
   });
 });
