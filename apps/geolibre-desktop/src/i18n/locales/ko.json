@@ -926,7 +926,7 @@
     "captureLayerName": "GPS 지점",
     "captured_other": "이 세션에서 지점 {{count}}개를 캡처했습니다.",
     "pointCaptured": "{{layer}}에 지점을 저장했습니다.",
-    "captureBlocked": "측위 정확도가 ±{{accuracy}} m로, {{max}} m 임계값보다 나쁩니다. 지점을 저장하지 않았습니다.",
+    "captureBlocked": "측위 정확도가 ±{{accuracy}}로, {{max}} m 임계값보다 나쁩니다. 지점을 저장하지 않았습니다.",
     "settings": "로깅 필터",
     "minDistance": "최소 거리 (m)",
     "minTime": "최소 시간 (초)",

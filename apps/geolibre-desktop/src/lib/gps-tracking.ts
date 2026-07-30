@@ -95,11 +95,12 @@ export function fixFromPosition(pos: GeolocationPosition): GpsFix {
     satellitesUsed?: unknown;
     satelliteCount?: unknown;
   };
-  const satelliteValue = extended.satellites ?? extended.satellitesUsed ?? extended.satelliteCount;
+  const toSatelliteCount = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
   const satellites =
-    typeof satelliteValue === "number" && Number.isFinite(satelliteValue) && satelliteValue >= 0
-      ? Math.floor(satelliteValue)
-      : null;
+    toSatelliteCount(extended.satellites) ??
+    toSatelliteCount(extended.satellitesUsed) ??
+    toSatelliteCount(extended.satelliteCount);
   return {
     lng: c.longitude,
     lat: c.latitude,
@@ -114,10 +115,12 @@ export function fixFromPosition(pos: GeolocationPosition): GpsFix {
 }
 
 /** Format horizontal accuracy without discarding centimeter-level fixes. */
-export function formatAccuracy(accuracyM: number): string {
-  if (!Number.isFinite(accuracyM) || accuracyM < 0) return "—";
+export function formatAccuracy(accuracyM: number, unavailable = "—"): string {
+  if (!Number.isFinite(accuracyM) || accuracyM < 0) return unavailable;
   if (accuracyM < 1) {
-    const centimeters = accuracyM * 100;
+    const centimeters =
+      Math.round(accuracyM < 0.1 ? accuracyM * 1000 : accuracyM * 100) / (accuracyM < 0.1 ? 10 : 1);
+    if (centimeters >= 100) return `${(centimeters / 100).toFixed(1)} m`;
     return `${centimeters < 10 ? centimeters.toFixed(1) : Math.round(centimeters)} cm`;
   }
   if (accuracyM < 10) return `${accuracyM.toFixed(1)} m`;

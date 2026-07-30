@@ -339,10 +339,12 @@ describe("gps-tracking misc", () => {
   it("formatAccuracy preserves RTK precision and scales ordinary fixes", () => {
     assert.equal(formatAccuracy(0.012), "1.2 cm");
     assert.equal(formatAccuracy(0.45), "45 cm");
+    assert.equal(formatAccuracy(0.996), "1.0 m");
     assert.equal(formatAccuracy(3.25), "3.3 m");
     assert.equal(formatAccuracy(12.6), "13 m");
     assert.equal(formatAccuracy(Number.NaN), "—");
     assert.equal(formatAccuracy(-1), "—");
+    assert.equal(formatAccuracy(Number.NaN, "N/A"), "N/A");
   });
 
   it("normalizes alternate and invalid satellite metadata", () => {
@@ -364,6 +366,10 @@ describe("gps-tracking misc", () => {
     assert.equal(fixFromPosition(position({ satellites: 9.8 })).satellites, 9);
     assert.equal(fixFromPosition(position({ satelliteCount: 7 })).satellites, 7);
     assert.equal(fixFromPosition(position({ satellites: -1 })).satellites, null);
+    assert.equal(
+      fixFromPosition(position({ satellites: "invalid", satelliteCount: 7 })).satellites,
+      7,
+    );
     assert.equal(
       fixFromPosition(position({ satellites: Number.POSITIVE_INFINITY })).satellites,
       null,

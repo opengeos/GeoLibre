@@ -959,7 +959,7 @@
     "captured_one": "{{count}} punto capturado en esta sesión.",
     "captured_other": "{{count}} puntos capturados en esta sesión.",
     "pointCaptured": "Punto guardado en {{layer}}.",
-    "captureBlocked": "La precisión de la señal es de ±{{accuracy}} m, peor que el umbral de {{max}} m. El punto no se guardó.",
+    "captureBlocked": "La precisión de la señal es de ±{{accuracy}}, peor que el umbral de {{max}} m. El punto no se guardó.",
     "settings": "Filtros de registro",
     "minDistance": "Distancia mín. (m)",
     "minTime": "Tiempo mín. (s)",

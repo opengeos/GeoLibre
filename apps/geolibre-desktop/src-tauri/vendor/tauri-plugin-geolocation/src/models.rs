@@ -74,6 +74,8 @@ pub struct Coordinates {
     pub speed: Option<f64>,
     /// The heading the user is facing, if available.
     pub heading: Option<f64>,
+    /// Satellites used for the fix, when the platform reports it (Android only).
+    pub satellites: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -29,6 +29,7 @@ public class Geolocation(private val context: Context) {
     private val locationManager =
         context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private var gnssStatusCallback: GnssStatusCompat.Callback? = null
+    private val satelliteListeners = mutableSetOf<(Int) -> Unit>()
     @Volatile var satellitesUsed: Int? = null
         private set
 
@@ -43,6 +44,9 @@ public class Geolocation(private val context: Context) {
                         if (status.usedInFix(index)) used += 1
                     }
                     satellitesUsed = used
+                    val listeners = satelliteListeners.toList()
+                    satelliteListeners.clear()
+                    listeners.forEach { it(used) }
                 }
 
                 override fun onStopped() {
@@ -62,6 +66,19 @@ public class Geolocation(private val context: Context) {
         } catch (_: SecurityException) {
             satellitesUsed = null
         }
+    }
+
+    /**
+     * Run once when a GNSS status update supplies a satellite count. The
+     * returned callback unregisters the listener when a caller times out.
+     */
+    fun onSatellitesUsedAvailable(callback: (Int) -> Unit): () -> Unit {
+        satellitesUsed?.let {
+            callback(it)
+            return {}
+        }
+        satelliteListeners.add(callback)
+        return { satelliteListeners.remove(callback) }
     }
 
 

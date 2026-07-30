@@ -419,6 +419,7 @@ export function FieldCollectionDialog({
 
   const handleCancelDrawing = useCallback(() => {
     setDrawing(false);
+    setLastGpsFix(null);
     setVerticesSynced([]);
     setNotice(null);
     const map = getMap();
@@ -614,6 +615,7 @@ export function FieldCollectionDialog({
       }),
     );
     setPending(null);
+    setLastGpsFix(null);
     setValues({});
     setPhoto(null);
     setVertices([]);
@@ -710,6 +712,7 @@ export function FieldCollectionDialog({
                   onChange={(e) => {
                     setLayerId(e.target.value);
                     setPending(null);
+                    setLastGpsFix(null);
                     setValues({});
                     setPhoto(null);
                     setVertices([]);
@@ -1257,10 +1260,8 @@ function GpsMetadataReadout({ fix }: { fix: GpsFix }) {
       role="status"
       className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted px-3 py-2 text-sm tabular-nums text-muted-foreground"
     >
-      <span>±{formatAccuracy(fix.accuracy)}</span>
-      <span>
-        {t("gps.satellites")}: {fix.satellites ?? t("gps.notAvailable")}
-      </span>
+      <span>±{formatAccuracy(fix.accuracy, t("gps.notAvailable"))}</span>
+      <span>{t("gps.satellitesValue", { value: fix.satellites ?? t("gps.notAvailable") })}</span>
     </div>
   );
 }

@@ -926,7 +926,7 @@
     "captureLayerName": "GPS 点",
     "captured_other": "本次会话已采集 {{count}} 个点。",
     "pointCaptured": "点已保存到 {{layer}}。",
-    "captureBlocked": "定位精度为 ±{{accuracy}} 米，差于 {{max}} 米的阈值。点未保存。",
+    "captureBlocked": "定位精度为 ±{{accuracy}}，差于 {{max}} 米的阈值。点未保存。",
     "settings": "记录过滤器",
     "minDistance": "最小距离（米）",
     "minTime": "最小时间（秒）",

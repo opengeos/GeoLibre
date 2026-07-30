@@ -42,8 +42,10 @@ export function StatusBar({
   const gpsText = gpsStatus
     ? compact
       ? gpsCoords
-      : `${gpsCoords} ±${formatAccuracy(gpsStatus.accuracy)}` +
-        ` ${t("gps.satellitesShort")}: ${gpsStatus.satellites ?? t("gps.notAvailable")}` +
+      : `${gpsCoords} ±${formatAccuracy(gpsStatus.accuracy, t("gps.notAvailable"))}` +
+        ` ${t("gps.satellitesShortValue", {
+          value: gpsStatus.satellites ?? t("gps.notAvailable"),
+        })}` +
         (gpsStatus.speed != null ? ` ${formatSpeedKmh(gpsStatus.speed)} km/h` : "") +
         (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
     : null;

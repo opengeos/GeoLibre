@@ -964,6 +964,8 @@
     "captureBlocked": "Fix accuracy is ±{{accuracy}}, worse than the {{max}} m threshold. Point not saved.",
     "satellites": "Satellites",
     "satellitesShort": "Sat",
+    "satellitesValue": "Satellites: {{value}}",
+    "satellitesShortValue": "Sat: {{value}}",
     "notAvailable": "—",
     "settings": "Logging filters",
     "minDistance": "Min distance (m)",

@@ -1091,7 +1091,7 @@
     "captured_many": "تم التقاط {{count}} نقطةً في هذه الجلسة.",
     "captured_other": "تم التقاط {{count}} نقطة في هذه الجلسة.",
     "pointCaptured": "تم حفظ النقطة في {{layer}}.",
-    "captureBlocked": "دقة التموضع ±{{accuracy}} م، أسوأ من عتبة {{max}} م. لم يتم حفظ النقطة.",
+    "captureBlocked": "دقة التموضع ±{{accuracy}}، أسوأ من عتبة {{max}} م. لم يتم حفظ النقطة.",
     "settings": "مرشحات التسجيل",
     "minDistance": "أدنى مسافة (م)",
     "minTime": "أدنى زمن (ث)",

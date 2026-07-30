@@ -959,7 +959,7 @@
     "captured_one": "{{count}} punt vastgelegd in deze sessie.",
     "captured_other": "{{count}} punten vastgelegd in deze sessie.",
     "pointCaptured": "Punt opgeslagen in {{layer}}.",
-    "captureBlocked": "Fixnauwkeurigheid is ±{{accuracy}} m, slechter dan de drempel van {{max}} m. Punt niet opgeslagen.",
+    "captureBlocked": "Fixnauwkeurigheid is ±{{accuracy}}, slechter dan de drempel van {{max}} m. Punt niet opgeslagen.",
     "settings": "Logfilters",
     "minDistance": "Min. afstand (m)",
     "minTime": "Min. tijd (s)",

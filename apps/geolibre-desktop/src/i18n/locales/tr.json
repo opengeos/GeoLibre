@@ -959,7 +959,7 @@
     "captured_one": "Bu oturumda {{count}} nokta yakalandı.",
     "captured_other": "Bu oturumda {{count}} nokta yakalandı.",
     "pointCaptured": "Nokta {{layer}} katmanına kaydedildi.",
-    "captureBlocked": "Konum doğruluğu ±{{accuracy}} m, {{max}} m eşiğinden daha kötü. Nokta kaydedilmedi.",
+    "captureBlocked": "Konum doğruluğu ±{{accuracy}}, {{max}} m eşiğinden daha kötü. Nokta kaydedilmedi.",
     "settings": "Kayıt filtreleri",
     "minDistance": "Min mesafe (m)",
     "minTime": "Min süre (sn)",

@@ -926,7 +926,7 @@
     "captureLayerName": "Titik GPS",
     "captured_other": "{{count}} titik ditangkap pada sesi ini.",
     "pointCaptured": "Titik disimpan ke {{layer}}.",
-    "captureBlocked": "Akurasi sinyal ±{{accuracy}} m, lebih buruk dari ambang {{max}} m. Titik tidak disimpan.",
+    "captureBlocked": "Akurasi sinyal ±{{accuracy}}, lebih buruk dari ambang {{max}} m. Titik tidak disimpan.",
     "settings": "Filter pencatatan",
     "minDistance": "Jarak min (m)",
     "minTime": "Waktu min (dtk)",

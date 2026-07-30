@@ -959,7 +959,7 @@
     "captured_one": "{{count}} Punkt in dieser Sitzung erfasst.",
     "captured_other": "{{count}} Punkte in dieser Sitzung erfasst.",
     "pointCaptured": "Punkt in {{layer}} gespeichert.",
-    "captureBlocked": "Die Fix-Genauigkeit beträgt ±{{accuracy}} m und ist damit schlechter als der Schwellenwert von {{max}} m. Punkt nicht gespeichert.",
+    "captureBlocked": "Die Fix-Genauigkeit beträgt ±{{accuracy}} und ist damit schlechter als der Schwellenwert von {{max}} m. Punkt nicht gespeichert.",
     "settings": "Aufzeichnungsfilter",
     "minDistance": "Min. Abstand (m)",
     "minTime": "Min. Zeit (s)",

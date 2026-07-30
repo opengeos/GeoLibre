@@ -35,7 +35,8 @@ tauri-plugin-fs = { version = "2", features = ["watch"] }
 # Native geolocation on Android/iOS: ships the location manifest permissions and
 # drives the OS permission dialog for Field Collection / GPS Tracking, which the
 # WebView's navigator.geolocation cannot do on Android. On desktop it is inert
-# (the frontend only invokes it on mobile).
+# (the frontend only invokes it on mobile). This is a patched 2.3.2 release;
+# see vendor/tauri-plugin-geolocation/GEOLIBRE_PATCH.md before upgrading.
 tauri-plugin-geolocation = { path = "vendor/tauri-plugin-geolocation" }
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"

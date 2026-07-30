@@ -926,7 +926,7 @@
     "captureLayerName": "GPSポイント",
     "captured_other": "このセッションで{{count}}ポイントを取得しました。",
     "pointCaptured": "ポイントを{{layer}}に保存しました。",
-    "captureBlocked": "測位精度が±{{accuracy}} mで、しきい値の{{max}} mを超えています。ポイントは保存されませんでした。",
+    "captureBlocked": "測位精度が±{{accuracy}}で、しきい値の{{max}} mを超えています。ポイントは保存されませんでした。",
     "settings": "記録フィルター",
     "minDistance": "最小距離（m）",
     "minTime": "最小時間（秒）",

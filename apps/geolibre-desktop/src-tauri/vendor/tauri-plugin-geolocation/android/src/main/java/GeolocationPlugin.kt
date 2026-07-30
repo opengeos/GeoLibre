@@ -129,10 +129,23 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
             invoke.resolve(convertLocation(location))
             return
         }
-        mainHandler.postDelayed(
-            { invoke.resolve(convertLocation(location)) },
-            1500,
-        )
+        var resolved = false
+        var cancelSatelliteListener: () -> Unit = {}
+        val timeout = Runnable {
+            if (!resolved) {
+                resolved = true
+                cancelSatelliteListener()
+                invoke.resolve(convertLocation(location))
+            }
+        }
+        cancelSatelliteListener = implementation.onSatellitesUsedAvailable {
+            if (!resolved) {
+                resolved = true
+                mainHandler.removeCallbacks(timeout)
+                invoke.resolve(convertLocation(location))
+            }
+        }
+        if (!resolved) mainHandler.postDelayed(timeout, 1500)
     }
 
     @PermissionCallback

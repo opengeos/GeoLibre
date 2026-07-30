@@ -959,7 +959,7 @@
     "captured_one": "{{count}} punto acquisito in questa sessione.",
     "captured_other": "{{count}} punti acquisiti in questa sessione.",
     "pointCaptured": "Punto salvato in {{layer}}.",
-    "captureBlocked": "La precisione del fix è ±{{accuracy}} m, peggiore della soglia di {{max}} m. Punto non salvato.",
+    "captureBlocked": "La precisione del fix è ±{{accuracy}}, peggiore della soglia di {{max}} m. Punto non salvato.",
     "settings": "Filtri di registrazione",
     "minDistance": "Distanza min (m)",
     "minTime": "Tempo min (s)",
