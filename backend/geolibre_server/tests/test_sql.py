@@ -140,6 +140,9 @@ def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
             return [{"n": 1}, {"n": 2}]
 
     class _FakeResult:
+        def limit(self, n: int):  # noqa: ARG002
+            return self
+
         def to_pandas(self):
             return _FakeFrame()
 

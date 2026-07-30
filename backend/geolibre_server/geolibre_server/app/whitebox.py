@@ -1097,7 +1097,14 @@ def whitebox_run(request: WhiteboxRunRequest):
         )
         _evict_finished_jobs_locked()
     thread = threading.Thread(target=_run_job, args=(job_id, request), daemon=True)
-    thread.start()
+    try:
+        thread.start()
+    except RuntimeError:
+        # Drop the reserved pending slot so a failed Thread.start does not
+        # permanently consume an in-flight capacity slot (and force 429s).
+        with _JOBS_LOCK:
+            _JOBS.pop(job_id, None)
+        raise
     with _JOBS_LOCK:
         return _JOBS[job_id]
 

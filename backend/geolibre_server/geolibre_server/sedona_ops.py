@@ -148,6 +148,10 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             connection.create_data_frame(gdf).to_view(name)
 
         result = connection.sql(sql)
+        # Cap before materializing: to_pandas() would otherwise hold an
+        # unbounded cross-join / generate_series expansion in memory. Fetch one
+        # past the limit so overflow still raises SqlInputTooLarge.
+        result = result.limit(MAX_FEATURES + 1)
         # to_pandas() returns a GeoDataFrame when the result has a geometry
         # column, otherwise a plain DataFrame.
         frame = result.to_pandas()

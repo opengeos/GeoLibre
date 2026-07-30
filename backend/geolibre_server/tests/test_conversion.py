@@ -477,7 +477,7 @@ def test_start_job_rejects_when_in_flight_cap_reached(monkeypatch) -> None:
 
 
 def test_conversion_job_does_not_leak_error(monkeypatch, tmp_path: Path) -> None:
-    """Failed conversion jobs store a generic error, never the raw exception text."""
+    """Failed conversion jobs store a generic error and scrub subprocess messages."""
     job_id = "test-conversion-leak"
     now = conversion._utc_now()
     out = tmp_path / "out.parquet"
@@ -493,6 +493,9 @@ def test_conversion_job_does_not_leak_error(monkeypatch, tmp_path: Path) -> None
     secret = "/secret/path/to/duckdb: boom traceback leak"
 
     def _boom(*_args, **_kwargs):
+        # Simulate lines already streamed into messages before the failure —
+        # the realistic GDAL/DuckDB stderr path that GET /jobs/{id} would leak.
+        conversion._append_job_message(job_id, secret)
         raise RuntimeError(secret)
 
     monkeypatch.setattr(conversion, "_runtime_python", _boom)
@@ -507,6 +510,26 @@ def test_conversion_job_does_not_leak_error(monkeypatch, tmp_path: Path) -> None
         assert job.status == "failed"
         assert job.error == "Conversion failed. See the sidecar logs for details."
         assert secret not in (job.error or "")
+        assert job.messages == []
+        assert all(secret not in message for message in job.messages)
     finally:
         with conversion._JOBS_LOCK:
             conversion._JOBS.pop(job_id, None)
+
+
+def test_start_job_rolls_back_when_thread_start_fails(monkeypatch) -> None:
+    """A failed Thread.start must not leave a permanent pending job slot."""
+    monkeypatch.setattr(conversion, "_JOBS", {})
+    monkeypatch.setattr(conversion, "MAX_IN_FLIGHT_JOBS", 8)
+
+    class _BoomThread:
+        def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            pass
+
+        def start(self) -> None:
+            raise RuntimeError("thread start failed")
+
+    monkeypatch.setattr(conversion.threading, "Thread", _BoomThread)
+    with pytest.raises(RuntimeError, match="thread start failed"):
+        conversion._start_job("vector-to-geoparquet", "pass", {}, "output")
+    assert conversion._JOBS == {}

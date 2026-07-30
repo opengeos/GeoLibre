@@ -1133,12 +1133,22 @@ def _run_conversion_job(
     except Exception as exc:
         # Mirror Whitebox: log the raw failure server-side and surface only a
         # generic message. DuckDB/GDAL stderr often embeds absolute paths that
-        # must not reach the browser-proxied /jobs/{id} response.
-        logger.warning("Conversion job %s failed: %s", job_id, exc, exc_info=True)
+        # must not reach the browser-proxied /jobs/{id} response — including
+        # via ``messages``, which accumulates every subprocess stdout line.
+        with _JOBS_LOCK:
+            leaked = list(_JOBS.get(job_id).messages) if job_id in _JOBS else []
+        logger.warning(
+            "Conversion job %s failed: %s; subprocess output=%r",
+            job_id,
+            exc,
+            leaked,
+            exc_info=True,
+        )
         _job_update(
             job_id,
             status="failed",
             error="Conversion failed. See the sidecar logs for details.",
+            messages=[],
         )
         # Remove a partial output so a retry starts clean and stale bytes do not
         # confuse downstream tools.
@@ -1183,7 +1193,14 @@ def _start_job(
         args=(job_id, script, params, output_name),
         daemon=True,
     )
-    thread.start()
+    try:
+        thread.start()
+    except RuntimeError:
+        # Drop the reserved pending slot so a failed Thread.start does not
+        # permanently consume an in-flight capacity slot (and force 429s).
+        with _JOBS_LOCK:
+            _JOBS.pop(job_id, None)
+        raise
     # The worker may have already flipped the job to "running" by the time this
     # lock is re-acquired, so callers must not assume the response is "pending".
     with _JOBS_LOCK:

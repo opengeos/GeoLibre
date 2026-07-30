@@ -1040,6 +1040,24 @@ for node in ast.walk(tree):
             "Expression may not access attributes "
             "(band math only allows curated functions and operators)"
         )
+    # Reject containers/comprehensions so expressions like ``[0] * 10**9``
+    # cannot allocate unbounded memory before the shape check runs.
+    if isinstance(
+        node,
+        (
+            ast.List,
+            ast.Dict,
+            ast.Set,
+            ast.ListComp,
+            ast.DictComp,
+            ast.SetComp,
+            ast.GeneratorExp,
+        ),
+    ):
+        raise SystemExit(
+            "Expression may not build lists, dicts, or comprehensions "
+            "(band math only allows curated functions and operators)"
+        )
     if isinstance(node, ast.Call):
         # ``np.where(...)`` / ``A.tofile(...)`` parse as Attribute-backed calls;
         # reject them the same way as bare attribute access so ndarray file I/O
