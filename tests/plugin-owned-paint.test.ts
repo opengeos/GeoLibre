@@ -10,7 +10,7 @@ import {
   supportsBridgedOpacity,
 } from "@geolibre/core";
 import type { GeoLibreExternalNativeLayerRegistration } from "@geolibre/plugins";
-import { syncLayer } from "../packages/map/src/layer-sync";
+import { removeLayerFromMap, syncLayer } from "../packages/map/src/layer-sync";
 import { createExternalNativeStoreLayer } from "../apps/geolibre-desktop/src/lib/external-native-layer";
 
 // A plugin's MapLibre CustomLayerInterface layer has no paint properties, so
@@ -81,6 +81,7 @@ const REGISTERED_BRIDGE_IDS = [
   "relisted-layer",
   "sync-bridged",
   "sync-rebridged",
+  "sync-reuse-id",
 ];
 
 afterEach(() => {
@@ -205,6 +206,28 @@ describe("layer-sync paint bridge", () => {
     syncLayer(map as never, customLayer("sync-rebridged", { opacity: 0.5 }));
 
     assert.deepEqual(reapplied, [0.5]);
+  });
+
+  it("re-applies after removeLayerFromMap when the same layer id is reused", () => {
+    // Without clearing appliedBridgeState on remove, a later layer that reuses
+    // the id with the same bridge object and opacity would skip the apply.
+    const applied: number[] = [];
+    const bridge = {
+      setOpacity: (opacity: number) => {
+        applied.push(opacity);
+      },
+    };
+    setExternalNativePaintBridge("sync-reuse-id", bridge);
+    const { map } = makeMapStub("sync-reuse-id", "custom");
+    const layer = customLayer("sync-reuse-id", { opacity: 0.5 });
+    syncLayer(map as never, layer);
+    assert.deepEqual(applied, [0.5]);
+
+    removeLayerFromMap(map as never, "sync-reuse-id", layer);
+    applied.length = 0;
+    setExternalNativePaintBridge("sync-reuse-id", bridge);
+    syncLayer(map as never, customLayer("sync-reuse-id", { opacity: 0.5 }));
+    assert.deepEqual(applied, [0.5]);
   });
 
   it("never writes MapLibre paint for a plugin-painted layer", () => {
