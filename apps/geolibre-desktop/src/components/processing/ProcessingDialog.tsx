@@ -777,14 +777,18 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     let north = Number.NEGATIVE_INFINITY;
     for (const id of distanceLayerKey.split("\n")) {
       const layer = layers.find((item) => item.id === id);
-      // No in-memory GeoJSON means the layer is passed as a path, in its own
-      // CRS; no finite extent means there is nothing to anchor a conversion to.
+      // No in-memory GeoJSON is fatal: the layer is passed as a path, in its own
+      // CRS, so the tool's units stop being knowable.
       if (!layer?.geojson) return null;
       const bounds = getLayerBounds(layer);
-      if (!bounds) return null;
+      // A layer with no finite extent (an attribute table, whose features all
+      // carry a null geometry) contributes no coordinates to the operation, so
+      // skip it rather than disqualifying inputs that do have one.
+      if (!bounds) continue;
       south = Math.min(south, bounds[1]);
       north = Math.max(north, bounds[3]);
     }
+    // Every input was extentless, so there is nothing to anchor a conversion to.
     return Number.isFinite(south) ? (south + north) / 2 : null;
   }, [distanceLayerKey, layers, open]);
 
