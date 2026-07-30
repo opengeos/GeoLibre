@@ -202,8 +202,12 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
     ports = raw_ports.split(",") if raw_ports else [str(_DEFAULT_POSTGRES_PORT)]
     if len(ports) == 1:
         ports *= len(hosts)
-    if len(ports) != len(hosts) or any(not port for port in ports):
+    if len(ports) != len(hosts):
         raise HTTPException(status_code=400, detail="Invalid PostgreSQL host/port list")
+    # libpq reads an empty item in a comma-separated port list as "the default
+    # port for this host" (`host=a,b port=,5433`), so fill those in rather than
+    # refusing a failover DSN the server would have accepted.
+    ports = [port if port else str(_DEFAULT_POSTGRES_PORT) for port in ports]
 
     for host, port_text in zip(hosts, ports):
         try:

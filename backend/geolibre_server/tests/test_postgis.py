@@ -142,9 +142,28 @@ def test_postgis_allowlist_validates_every_failover_host(monkeypatch) -> None:
         "db-a.example,db-b.example",
         "5432,5433",
     )
+    # libpq reads an empty port item as that host's default port.
+    assert _validate_postgis_target({"host": "db-a.example,db-b.example", "port": ",5433"}) == (
+        "db-a.example,db-b.example",
+        "5432,5433",
+    )
     with pytest.raises(HTTPException) as exc:
         _validate_postgis_target({"host": "db-a.example,metadata.internal", "port": "5432"})
     assert exc.value.status_code == 403
+
+
+def test_postgis_allowlist_matches_dsn_host_case_insensitively(monkeypatch) -> None:
+    """Comparison normalizes the DSN host too, not just the allowlist entry."""
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example")
+    # The host is returned as written: libpq resolves case and the DNS root dot.
+    assert _validate_postgis_target({"host": "DB.EXAMPLE."}) == ("DB.EXAMPLE.", "5432")
+
+
+def test_postgis_malformed_allowlist_is_a_server_error(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example:99999")
+    with pytest.raises(HTTPException) as exc:
+        _validate_postgis_target({"host": "db.example"})
+    assert exc.value.status_code == 500
 
 
 def test_postgis_allowlist_rejects_indirect_destinations(monkeypatch) -> None:

@@ -116,8 +116,8 @@ geolibre-server
 
 An entry without a port allows that host on any port; include `:port` to
 restrict it. Every host in a libpq failover connection string must be allowed.
-Implicit local connections, Unix sockets, and `service=` connection strings are
-rejected so they cannot bypass the allowlist.
+Implicit local connections, Unix sockets, `service=`, and `hostaddr=`
+connection strings are rejected so they cannot bypass the allowlist.
 
 Set it to `*` to lift the restriction and accept any connection string. The
 **desktop app** passes `*` when it spawns its own sidecar — that one is
