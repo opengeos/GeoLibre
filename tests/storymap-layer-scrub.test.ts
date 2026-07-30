@@ -61,4 +61,43 @@ describe("removeLayer storymap scrub", () => {
       false,
     );
   });
+
+  it("scrubs chapter refs when a group deletes its children", () => {
+    const store = useAppStore.getState();
+    const groupId = store.addLayerGroup("Tour group");
+    store.addLayer({ ...geojsonLayer("keep"), groupId: undefined });
+    store.addLayer({ ...geojsonLayer("child-a"), groupId });
+    store.addLayer({ ...geojsonLayer("child-b"), groupId });
+    store.setStorymap({
+      ...DEFAULT_STORY_MAP,
+      title: "Tour",
+      chapters: [
+        {
+          id: "ch-1",
+          title: "One",
+          description: "",
+          alignment: "left",
+          hidden: false,
+          location: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+          mapAnimation: "flyTo",
+          rotateAnimation: false,
+          onChapterEnter: [
+            { layerId: "child-a", opacity: 1 },
+            { layerId: "keep", opacity: 0.5 },
+            { layerId: "child-b", opacity: 0.2 },
+          ],
+          onChapterExit: [{ layerId: "child-a", opacity: 0 }],
+        },
+      ],
+    });
+
+    useAppStore.getState().removeLayerGroup(groupId, { removeChildren: true });
+    const chapter = useAppStore.getState().storymap?.chapters[0];
+    assert.deepEqual(chapter?.onChapterEnter, [{ layerId: "keep", opacity: 0.5 }]);
+    assert.deepEqual(chapter?.onChapterExit, []);
+    assert.equal(
+      useAppStore.getState().layers.some((layer) => layer.id === "child-a" || layer.id === "child-b"),
+      false,
+    );
+  });
 });

@@ -9,6 +9,7 @@ import {
   parseProject,
   parseStoryMapCsv,
   parseStoryMapJson,
+  applyProjectToStore,
   projectFromStore,
   serializeProject,
   serializeStoryMapCsv,
@@ -1286,11 +1287,26 @@ describe("primary mapView normalization", () => {
         },
       }),
     );
-    assert.ok(Number.isFinite(project.mapView.center[0]));
-    assert.ok(Number.isFinite(project.mapView.center[1]));
-    assert.equal(project.mapView.center[1], 90);
+    // Invalid lon falls back to the default camera longitude; lat clamps to 90.
+    assert.deepEqual(project.mapView.center, [-100, 90]);
     assert.equal(project.mapView.zoom, 0);
     assert.equal(project.mapView.pitch, 85);
-    assert.ok(project.mapView.bearing >= 0 && project.mapView.bearing < 360);
+    assert.equal(project.mapView.bearing, 270);
+  });
+
+  it("normalizes an out-of-range camera through applyProjectToStore", () => {
+    const applied = applyProjectToStore({
+      ...createEmptyProject("Camera"),
+      mapView: {
+        center: ["x", 200] as unknown as [number, number],
+        zoom: -1,
+        bearing: -90,
+        pitch: 200,
+      },
+    });
+    assert.deepEqual(applied.mapView.center, [-100, 90]);
+    assert.equal(applied.mapView.zoom, 0);
+    assert.equal(applied.mapView.pitch, 85);
+    assert.equal(applied.mapView.bearing, 270);
   });
 });

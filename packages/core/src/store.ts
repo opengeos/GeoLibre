@@ -695,16 +695,22 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
 }
 
 /**
- * Strip storymap chapter enter/exit opacity rows that reference a removed
- * layer id. Returns the same reference when nothing changes so callers can
- * avoid unnecessary storymap churn.
+ * Strip storymap chapter enter/exit opacity rows that reference any of the
+ * removed layer ids. Returns the same reference when nothing changes so
+ * callers can avoid unnecessary storymap churn.
  */
-function scrubStorymapLayerRefs(storymap: StoryMap | null, layerId: string): StoryMap | null {
+function scrubStorymapLayerRefs(
+  storymap: StoryMap | null,
+  layerIds: string | Iterable<string>,
+): StoryMap | null {
   if (!storymap) return null;
+  const removed =
+    typeof layerIds === "string" ? new Set([layerIds]) : layerIds instanceof Set ? layerIds : new Set(layerIds);
+  if (removed.size === 0) return storymap;
   let changed = false;
   const chapters = storymap.chapters.map((chapter) => {
-    const onChapterEnter = chapter.onChapterEnter.filter((change) => change.layerId !== layerId);
-    const onChapterExit = chapter.onChapterExit.filter((change) => change.layerId !== layerId);
+    const onChapterEnter = chapter.onChapterEnter.filter((change) => !removed.has(change.layerId));
+    const onChapterExit = chapter.onChapterExit.filter((change) => !removed.has(change.layerId));
     if (
       onChapterEnter.length === chapter.onChapterEnter.length &&
       onChapterExit.length === chapter.onChapterExit.length
@@ -1645,6 +1651,9 @@ export const useAppStore = create<AppState>()(
           return {
             layers,
             layerGroups: s.layerGroups.filter((g) => g.id !== id),
+            // When children are deleted with the group, drop matching storymap
+            // chapter enter/exit rows the same way removeLayer does.
+            storymap: removeChildren ? scrubStorymapLayerRefs(s.storymap, removedIds) : s.storymap,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,

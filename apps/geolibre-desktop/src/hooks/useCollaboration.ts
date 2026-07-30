@@ -22,8 +22,6 @@ import {
 } from "../lib/collab-client";
 import type { ServerMessage } from "../lib/collab-protocol";
 
-export { projectChanged } from "../lib/project-broadcast-changed";
-
 // Coalesce the burst of store writes one user action produces into a single
 // outbound snapshot — same window the embed bridge uses.
 const SNAPSHOT_DEBOUNCE_MS = 250;
