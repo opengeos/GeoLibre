@@ -71,6 +71,14 @@ import {
   wgs84VectorLayerIds,
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
+import { parameterKind } from "../../lib/whitebox-param-kind";
+import {
+  cornerExtentParameters,
+  extentFieldValues,
+  isBboxExtentParameter,
+  isCornerExtentParameter,
+  type ExtentBounds,
+} from "../../lib/whitebox-extent";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
@@ -117,37 +125,6 @@ function parameterLabel(param: WhiteboxToolParameter): string {
   return param.description || humanize(param.name);
 }
 
-function parameterKind(param: WhiteboxToolParameter): string {
-  if (param.kind) return param.kind;
-  const schema = param.schema;
-  const schemaObject =
-    schema && typeof schema === "object" ? (schema as Record<string, unknown>) : {};
-  const dataset =
-    schemaObject.dataset && typeof schemaObject.dataset === "object"
-      ? (schemaObject.dataset as Record<string, unknown>)
-      : {};
-  const dataKind = String(
-    param.data_kind ?? schemaObject.data_kind ?? dataset.kind ?? param.type ?? "",
-  ).toLowerCase();
-  const role = String(param.io_role ?? schemaObject.kind ?? "").toLowerCase();
-  if (role === "input") return datasetParameterKind(dataKind, "in");
-  if (role === "output") return datasetParameterKind(dataKind, "out");
-  if (dataKind === "bool" || schemaObject.kind === "bool") return "bool";
-  if (schemaObject.kind === "enum" || param.options?.length) return "enum";
-  if (dataKind === "number" || schemaObject.kind === "scalar") {
-    const scalar = String(schemaObject.scalar ?? "").toLowerCase();
-    return scalar.includes("int") ? "int" : "double";
-  }
-  return "string";
-}
-
-function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
-  if (["raster", "vector", "lidar", "file"].includes(dataKind)) {
-    return `${dataKind}_${suffix}`;
-  }
-  return `file_${suffix}`;
-}
-
 function isOutputParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param).endsWith("_out");
 }
@@ -188,18 +165,6 @@ function downloadBytes(bytes: Uint8Array, filename: string): void {
 
 function isDataInputParameter(param: WhiteboxToolParameter): boolean {
   return ["raster_in", "vector_in", "lidar_in", "file_in"].includes(parameterKind(param));
-}
-
-// A `bbox` string param paired with a `bbox_crs` param is the geographic extent
-// of a subset tool, so the field can offer a "Use map extent" shortcut that
-// fills both from the current map view (GeoLibre#1213). Matching on the pair
-// covers every COG/WMS/XYZ (and future) extractor without hard-coding tool ids.
-function isMapExtentParameter(tool: WhiteboxTool, param: WhiteboxToolParameter): boolean {
-  return (
-    param.name === "bbox" &&
-    parameterKind(param) === "string" &&
-    Boolean(tool.params?.some((other) => other.name === "bbox_crs"))
-  );
 }
 
 // The `url` string param of a COG/WMS/XYZ subset extractor, whose value can be
@@ -756,6 +721,21 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     [selectedTool],
   );
 
+  // A tool that asks for its extent as four separate boundary numbers renders
+  // them as one grouped control, in place of the first of the four, so the
+  // "Use map extent" / "Draw on map" shortcuts sit with the whole box instead of
+  // beside a lone longitude (GeoLibre#1541).
+  const cornerExtentParams = useMemo(
+    () => (selectedTool ? cornerExtentParameters(selectedTool) : []),
+    [selectedTool],
+  );
+  const cornerExtentAnchor = useMemo(
+    () =>
+      selectedTool?.params?.find((param) => isCornerExtentParameter(selectedTool, param))?.name ??
+      null,
+    [selectedTool],
+  );
+
   // Attribute-field names per layer, memoized on the layer set (and the dialog
   // being open) so it doesn't recompute on every keystroke. GeoJSON is
   // schemaless, so sample the first FIELD_SCAN_SAMPLE features rather than
@@ -1257,46 +1237,33 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     setError(null);
   };
 
-  // Fill a subset tool's `bbox` (and companion `bbox_crs`) from the current map
-  // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
-  // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
-  // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
-  // Validate a WGS84 box and write it into the `bbox`/`bbox_crs` fields. Shared
-  // by "Use map extent" (current view) and "Draw on map" (rubber-band). Rejects
-  // an unnormalized box - a view/box wrapping 180° yields west >= east, and at
-  // low zoom (multiple world copies) getBounds() corners can fall outside
-  // ±180°/±90° while still ordered - which the subset extractors mis-clip or
-  // reject, matching RasterSubsetPanel.parseBbox's ordering + range checks.
-  const applyBboxExtent = (bounds: [number, number, number, number] | undefined): void => {
+  // Fill the selected tool's extent fields from the current map view
+  // (GeoLibre#1213) or from a box drawn on it (GeoLibre#1541). The map reads in
+  // EPSG:4326, so the box is written as WGS84 `west,south,east,north` (into a
+  // single `bbox` string or into the four boundary numbers, whichever the tool
+  // takes) and its companion CRS is set to 4326 in the same gesture, which
+  // is what `extentFieldValues` resolves (including the box validity check that
+  // mirrors RasterSubsetPanel.parseBbox). Shared by "Use map extent" (current
+  // view) and "Draw on map" (rubber-band).
+  const applyMapExtent = (bounds: ExtentBounds | undefined): void => {
     setError(null);
-    if (!bounds) {
+    if (!bounds || !selectedTool) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
-    const [west, south, east, north] = bounds;
-    if (
-      !(west < east) ||
-      !(south < north) ||
-      west < -180 ||
-      east > 180 ||
-      south < -90 ||
-      north > 90
-    ) {
+    const fields = extentFieldValues(selectedTool, bounds);
+    if (!fields) {
       setError(t("processing.whitebox.mapExtentInvalid"));
       return;
     }
-    const fmt = (value: number) => Number(value.toFixed(6)).toString();
-    updateValue("bbox", bounds.map(fmt).join(","));
-    // Store as a string to match the file's convention that every int/double
-    // field value is a string (NumberStepperInput always emits one).
-    updateValue("bbox_crs", String(4326));
+    for (const [name, value] of Object.entries(fields)) updateValue(name, value);
   };
 
   const handleUseMapExtent = () => {
     // Cancel any in-flight draw so its late-resolving box can't overwrite the
     // extent the user just asked for from the current view.
     drawAbortRef.current?.abort();
-    applyBboxExtent(mapControllerRef.current?.readView().bbox);
+    applyMapExtent(mapControllerRef.current?.readView().bbox);
   };
 
   // Rubber-band a box on the map to fill the bbox (only workable because the
@@ -1348,7 +1315,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         },
       });
       if (controller.signal.aborted) return;
-      if (extent) applyBboxExtent(extent);
+      if (extent) applyMapExtent(extent);
     } finally {
       clearPrintExtent(map);
       setDrawPoints(null);
@@ -1961,43 +1928,62 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   {t("processing.whitebox.noParameters")}
                 </p>
               ) : (
-                selectedTool?.params?.map((param) => (
-                  <ParameterField
-                    // Keyed by tool as well as parameter name: dozens of tools
-                    // share names like `tolerance` or `radius`, and without the
-                    // tool id React reuses the field instance across a tool
-                    // switch, carrying a distance field's unit and typed draft
-                    // over to a parameter that reset to another tool's default.
-                    key={`${selectedTool.id}:${param.name}`}
-                    param={param}
-                    layers={layers}
-                    toolId={selectedTool.id}
-                    runLocal={runLocal}
-                    value={values[param.name]}
-                    fieldOptions={fieldOptions(param)}
-                    degreeLatitude={
-                      distanceLatitude !== null && isDistanceParameter(param)
-                        ? distanceLatitude
-                        : undefined
-                    }
-                    onChange={(value) => updateValue(param.name, value)}
-                    onPickFile={(fileName, bytes) =>
-                      handlePickInputFile(param.name, fileName, bytes)
-                    }
-                    onUseMapExtent={
-                      isMapExtentParameter(selectedTool, param) ? handleUseMapExtent : undefined
-                    }
-                    onDrawMapExtent={
-                      isMapExtentParameter(selectedTool, param) ? handleDrawBbox : undefined
-                    }
-                    drawingMapExtent={drawing}
-                    onPopulateFromLayer={
-                      isSubsetUrlParameter(selectedTool, param)
-                        ? handlePopulateSubsetUrl
-                        : undefined
-                    }
-                  />
-                ))
+                selectedTool?.params?.map((param) => {
+                  // The four boundary numbers are rendered together, once, at the
+                  // position of the first of them; the other three are folded
+                  // into that group rather than repeated below it.
+                  if (isCornerExtentParameter(selectedTool, param)) {
+                    if (param.name !== cornerExtentAnchor) return null;
+                    return (
+                      <ExtentParameterGroup
+                        key="extent"
+                        params={cornerExtentParams}
+                        values={values}
+                        onChange={updateValue}
+                        onUseMapExtent={handleUseMapExtent}
+                        onDrawMapExtent={handleDrawBbox}
+                        drawingMapExtent={drawing}
+                      />
+                    );
+                  }
+                  return (
+                    <ParameterField
+                      // Keyed by tool as well as parameter name: dozens of tools
+                      // share names like `tolerance` or `radius`, and without the
+                      // tool id React reuses the field instance across a tool
+                      // switch, carrying a distance field's unit and typed draft
+                      // over to a parameter that reset to another tool's default.
+                      key={`${selectedTool.id}:${param.name}`}
+                      param={param}
+                      layers={layers}
+                      toolId={selectedTool.id}
+                      runLocal={runLocal}
+                      value={values[param.name]}
+                      fieldOptions={fieldOptions(param)}
+                      degreeLatitude={
+                        distanceLatitude !== null && isDistanceParameter(param)
+                          ? distanceLatitude
+                          : undefined
+                      }
+                      onChange={(value) => updateValue(param.name, value)}
+                      onPickFile={(fileName, bytes) =>
+                        handlePickInputFile(param.name, fileName, bytes)
+                      }
+                      onUseMapExtent={
+                        isBboxExtentParameter(selectedTool, param) ? handleUseMapExtent : undefined
+                      }
+                      onDrawMapExtent={
+                        isBboxExtentParameter(selectedTool, param) ? handleDrawBbox : undefined
+                      }
+                      drawingMapExtent={drawing}
+                      onPopulateFromLayer={
+                        isSubsetUrlParameter(selectedTool, param)
+                          ? handlePopulateSubsetUrl
+                          : undefined
+                      }
+                    />
+                  );
+                })
               )}
             </div>
           </ScrollArea>
@@ -2081,6 +2067,127 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
           <div key={name}>{`${name}: ${path}`}</div>
         ))}
       </ScrollArea>
+    </div>
+  );
+}
+
+const EXTENT_GROUP_LABEL_ID = "whitebox-extent-label";
+
+// Short label per boundary field. The parameter descriptions ("West boundary
+// longitude (EPSG:4326).") are too long to sit over a half-width box, and they
+// repeat the CRS four times; the full text stays as the field's tooltip.
+const EXTENT_LABEL_KEYS = {
+  north: "processing.whitebox.extentNorth",
+  south: "processing.whitebox.extentSouth",
+  west: "processing.whitebox.extentWest",
+  east: "processing.whitebox.extentEast",
+} as const;
+
+interface ExtentParameterGroupProps {
+  /** The tool's four boundary parameters, in reading order. */
+  params: WhiteboxToolParameter[];
+  values: ParameterValues;
+  onChange: (name: string, value: unknown) => void;
+  /** Fills all four fields (and the extent CRS) from the current map view. */
+  onUseMapExtent: () => void;
+  /** Fills them by rubber-banding a box on the map. */
+  onDrawMapExtent: () => void;
+  /** Whether a draw is in progress (toggles the button's label/state). */
+  drawingMapExtent: boolean;
+}
+
+/**
+ * Area-of-interest control for a tool that takes its extent as four separate
+ * boundary numbers (`download_osm_vector`). The four fields sit in one block
+ * under a shared label, with the map shortcuts above them, so the box can be
+ * picked from the map instead of typed a coordinate at a time (GeoLibre#1541).
+ * Laid out like the Extract subset panel's bounding box, so the app's two extent
+ * controls read the same.
+ *
+ * @param props - The boundary parameters, their current values, and the change /
+ *   map-shortcut callbacks.
+ */
+function ExtentParameterGroup({
+  params,
+  values,
+  onChange,
+  onUseMapExtent,
+  onDrawMapExtent,
+  drawingMapExtent,
+}: ExtentParameterGroupProps) {
+  const { t } = useTranslation();
+  if (params.length === 0) return null;
+  // One badge stands for all four fields, so it names every kind present rather
+  // than the first field's: a tool that mixed an int boundary with double ones
+  // would otherwise have three of them labelled by the wrong kind. (Each field
+  // still takes its own stepper behavior from its own kind, below.)
+  const kindLabel = [...new Set(params.map((param) => parameterKind(param)))].sort().join(", ");
+
+  return (
+    // A labelled group rather than one field's label: the four boxes each carry
+    // their own, so pointing this one at the first of them would leave that box
+    // named "Area of interest North".
+    <div className="grid gap-1.5" role="group" aria-labelledby={EXTENT_GROUP_LABEL_ID}>
+      <div className="flex items-center justify-between gap-3">
+        <span id={EXTENT_GROUP_LABEL_ID} className="text-sm font-medium leading-none">
+          {t("processing.whitebox.extentLabel")}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {kindLabel}
+          {params.some((param) => param.required) ? t("processing.whitebox.requiredSuffix") : ""}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onUseMapExtent}>
+          <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+          {t("processing.whitebox.useMapExtent")}
+        </Button>
+        <Button
+          type="button"
+          variant={drawingMapExtent ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={drawingMapExtent}
+          onClick={onDrawMapExtent}
+        >
+          <SquareDashed className="h-3.5 w-3.5" aria-hidden="true" />
+          {drawingMapExtent
+            ? t("processing.whitebox.drawingBbox")
+            : t("processing.whitebox.drawBbox")}
+        </Button>
+      </div>
+      {drawingMapExtent ? (
+        <p className="text-xs text-muted-foreground">{t("processing.whitebox.drawBboxHint")}</p>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-2">
+        {params.map((param) => {
+          // EXTENT_LABEL_KEYS covers every name cornerExtentParameters can
+          // return, so the humanized fallback is only a guard for a manifest
+          // that renames a boundary: such a field keeps a readable label instead
+          // of an empty one.
+          const labelKey = EXTENT_LABEL_KEYS[param.name as keyof typeof EXTENT_LABEL_KEYS];
+          const value = values[param.name];
+          return (
+            <div key={param.name} className="grid gap-1">
+              <Label
+                htmlFor={`whitebox-${param.name}`}
+                className="text-xs text-muted-foreground"
+                title={param.description || undefined}
+              >
+                {labelKey ? t(labelKey) : humanize(param.name)}
+              </Label>
+              <NumberStepperInput
+                id={`whitebox-${param.name}`}
+                integer={parameterKind(param) === "int"}
+                value={value === undefined || value === null ? "" : String(value)}
+                onChange={(next) => onChange(param.name, next)}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">{t("processing.whitebox.extentHint")}</p>
     </div>
   );
 }
