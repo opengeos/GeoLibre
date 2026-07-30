@@ -115,27 +115,39 @@ export function registerGeneratedImage(id: string, factory: GeneratedImageFactor
   factories.set(id, factory);
 }
 
+const TRANSPARENT_1X1 = new Uint8Array([0, 0, 0, 0]);
+
 function addGeneratedImage(map: maplibregl.Map, id: string): void {
   if (map.hasImage(id)) return;
   const factory = factories.get(id);
-  if (!factory) return;
+  if (!factory) {
+    map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
+    return;
+  }
   let result: ReturnType<GeneratedImageFactory>;
   try {
     result = factory();
   } catch {
+    map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
     return;
   }
-  if (!result) return;
+  if (!result) {
+    map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
+    return;
+  }
   if (result instanceof Promise) {
     result
       .then((resolved) => {
         if (resolved && !map.hasImage(id)) {
           map.addImage(id, resolved.image, { pixelRatio: resolved.pixelRatio });
+        } else if (!map.hasImage(id)) {
+          map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
         }
       })
       .catch(() => {
-        // SVG that fails to load is not fatal: the layer falls back to no
-        // pattern/marker, which is acceptable.
+        if (!map.hasImage(id)) {
+          map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
+        }
       });
     return;
   }

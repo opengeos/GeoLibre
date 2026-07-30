@@ -172,6 +172,9 @@ function withFeatureFilters(
   }
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
+  if (layer.metadata?.sourceKind === "annotation") {
+    filters.push(["!=", ["get", "visible"], false]);
+  }
   if (filters.length === 0) return geometryFilter;
   return ["all", geometryFilter, ...filters] as unknown as maplibregl.FilterSpecification;
 }

@@ -40,6 +40,7 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
+import { ensureGeneratedImageHandler } from "./generated-images";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
@@ -458,6 +459,7 @@ export class MapController {
       // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
+    ensureGeneratedImageHandler(this.map);
     installGlobePopupOcclusion(maplibregl);
     // The constructor options above already apply the static constraints.
     // The transform constraint is installed by the MapCanvas effect that

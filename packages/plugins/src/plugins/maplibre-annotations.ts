@@ -1,7 +1,8 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
-import type maplibregl from "maplibre-gl";
+import maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { openRightPanel } from "../right-panel-registry";
 
 /**
  * Annotation layer plugin: lightweight cartographic decoration (free text,
@@ -40,7 +41,15 @@ const ELLIPSE_SEGMENTS = 72;
 const ARROWHEAD_LENGTH_PX = 16;
 const ARROWHEAD_HALF_WIDTH_PX = 8;
 
-type AnnotationTool = "text" | "arrow" | "rectangle" | "ellipse" | "freehand";
+type AnnotationTool =
+  | "text"
+  | "pin"
+  | "sticky_note"
+  | "placed_image"
+  | "arrow"
+  | "rectangle"
+  | "ellipse"
+  | "freehand";
 
 // State is module-scope, so this plugin is a single-instance singleton (one
 // shared toolbar/editor across the app), matching the GeoEditor plugin. That is
@@ -55,6 +64,7 @@ let activeTool: AnnotationTool | null = null;
 let strokeColor = DEFAULT_COLOR;
 let strokeWidth = DEFAULT_WIDTH;
 let annotationLayerId: string | null = null;
+let unregisterRightPanelDisposer: (() => void) | null = null;
 
 // Transient draw state.
 let boundMap: maplibregl.Map | null = null;
@@ -86,6 +96,15 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
     const map = app.getMap?.();
     if (map) bindMap(map);
     rediscoverAnnotationLayer();
+
+    if (typeof app.registerRightPanel === "function") {
+      unregisterRightPanelDisposer = app.registerRightPanel({
+        id: "geolibre-elements-panel",
+        title: () => labels.elementsPanelTitle || "Elements",
+        dock: "right-of-style",
+        render: (container) => renderElementsPanel(container),
+      });
+    }
   },
   deactivate: (app: GeoLibreAppAPI) => {
     setActiveTool(null);
@@ -95,6 +114,8 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
       app.removeMapControl(toolbarControl);
       toolbarControl = null;
     }
+    unregisterRightPanelDisposer?.();
+    unregisterRightPanelDisposer = null;
     // Drop the tracked layer id so a later activation (e.g. after opening a new
     // project) re-discovers from scratch rather than trusting a stale id.
     annotationLayerId = null;
@@ -136,6 +157,11 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
 
 const TOOL_ICONS: Record<AnnotationTool, string> = {
   text: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5h16v2"/><path d="M9 19h6"/><path d="M12 5v14"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  sticky_note:
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3z"/><path d="M15 3v6h6"/></svg>',
+  placed_image:
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
   arrow:
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="11 5 19 5 19 13"/></svg>',
   rectangle:
@@ -146,7 +172,16 @@ const TOOL_ICONS: Record<AnnotationTool, string> = {
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 6-9 9-9s2 5 4 5 2-3 5-3"/></svg>',
 };
 
-const TOOL_ORDER: AnnotationTool[] = ["text", "arrow", "rectangle", "ellipse", "freehand"];
+const TOOL_ORDER: AnnotationTool[] = [
+  "text",
+  "pin",
+  "sticky_note",
+  "placed_image",
+  "arrow",
+  "rectangle",
+  "ellipse",
+  "freehand",
+];
 
 const WIDTH_VALUES = [2, 3, 5] as const;
 
@@ -161,20 +196,29 @@ export interface AnnotationLabels {
   toolbar: string;
   /** Name of the layer the annotations are stored in (shown in the Layers panel). */
   layerName: string;
-  tools: Record<AnnotationTool, string>;
+  elementsPanelTitle: string;
+  tools: Partial<Record<AnnotationTool, string>>;
   color: string;
   width: string;
   widthOptions: { thin: string; medium: string; thick: string };
   deleteLast: string;
   clearAll: string;
   textPlaceholder: string;
+  pinTitlePrompt: string;
+  pinDescPrompt: string;
+  stickyNotePrompt: string;
+  imageUrlPrompt: string;
 }
 
 let labels: AnnotationLabels = {
   toolbar: "Annotation tools",
   layerName: ANNOTATIONS_LAYER_NAME,
+  elementsPanelTitle: "Elements",
   tools: {
     text: "Text",
+    pin: "Pin marker",
+    sticky_note: "Sticky note",
+    placed_image: "Placed image",
     arrow: "Arrow",
     rectangle: "Rectangle highlight",
     ellipse: "Ellipse highlight",
@@ -186,6 +230,10 @@ let labels: AnnotationLabels = {
   deleteLast: "Delete last annotation",
   clearAll: "Clear all annotations",
   textPlaceholder: "Type label, Enter to place",
+  pinTitlePrompt: "Pin title:",
+  pinDescPrompt: "Pin description (optional):",
+  stickyNotePrompt: "Sticky note text:",
+  imageUrlPrompt: "Image URL or Data URI:",
 };
 
 /**
@@ -231,7 +279,7 @@ class AnnotationToolbarControl implements maplibregl.IControl {
       button.addEventListener("click", () => {
         setActiveTool(activeTool === tool ? null : tool);
       });
-      this.applyLabel(button, () => labels.tools[tool]);
+      this.applyLabel(button, () => labels.tools[tool] || tool);
       this.toolButtons.set(tool, button);
       container.appendChild(button);
     }
@@ -354,6 +402,396 @@ function setActiveTool(tool: AnnotationTool | null): void {
     map.dragPan.enable();
   }
   map.getCanvas().style.cursor = tool ? "crosshair" : "";
+
+  if (tool && typeof appApi?.openRightPanel === "function") {
+    appApi.openRightPanel("geolibre-elements-panel");
+  }
+}
+
+let activePopupContainer: HTMLElement | null = null;
+
+function closeElementPopup(): void {
+  if (activePopupContainer) {
+    activePopupContainer.remove();
+    activePopupContainer = null;
+  }
+}
+
+function showElementPopup(map: maplibregl.Map, lngLat: maplibregl.LngLat, feature: Feature): void {
+  closeElementPopup();
+
+  const props = (feature.properties as Record<string, unknown>) ?? {};
+  const title = String(props.title || props.text || "Element");
+  const description = props.description ? String(props.description) : "";
+  const imageUrl = props.imageUrl ? String(props.imageUrl) : "";
+
+  const point = map.project(lngLat);
+  const canvasRect = map.getCanvasContainer().getBoundingClientRect();
+
+  const boxWidth = 200;
+  let left = point.x - boxWidth / 2;
+  let top = point.y + 12;
+
+  if (left < 10) left = 10;
+  if (left + boxWidth > canvasRect.width - 10) left = canvasRect.width - boxWidth - 10;
+  if (top + 180 > canvasRect.height - 10) top = Math.max(10, point.y - 190);
+
+  const container = document.createElement("div");
+  container.className = "geolibre-element-popup-card";
+  container.style.cssText = `
+    position: absolute;
+    left: ${left}px;
+    top: ${top}px;
+    width: ${boxWidth}px;
+    background: var(--geolibre-bg, #ffffff);
+    color: var(--geolibre-fg, #111827);
+    border: 1px solid var(--geolibre-border, #e5e7eb);
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    z-index: 60;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 12px;
+    box-sizing: border-box;
+  `;
+
+  const stopProp = (e: Event) => e.stopPropagation();
+  container.addEventListener("mousedown", stopProp);
+  container.addEventListener("mouseup", stopProp);
+  container.addEventListener("click", stopProp);
+  container.addEventListener("pointerdown", stopProp);
+
+  const header = document.createElement("div");
+  header.style.cssText =
+    "display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;";
+
+  const titleEl = document.createElement("span");
+  titleEl.style.cssText =
+    "font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;";
+  titleEl.textContent = title;
+  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  closeBtn.style.cssText =
+    "background: none; border: none; cursor: pointer; color: var(--geolibre-fg-muted, #6b7280); padding: 0;";
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    closeElementPopup();
+  };
+  header.appendChild(closeBtn);
+  container.appendChild(header);
+
+  if (imageUrl) {
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText =
+      "width: 100%; max-height: 140px; border-radius: 6px; overflow: hidden; margin-bottom: 6px; background: var(--geolibre-bg-subtle, #f3f4f6); display: flex; align-items: center; justify-content: center;";
+
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.style.cssText = "width: 100%; max-height: 140px; object-fit: contain; display: block;";
+
+    img.onerror = () => {
+      wrapper.innerHTML = `
+        <div style="padding: 12px; text-align: center; color: var(--geolibre-fg-muted, #6b7280); font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span>Image preview unavailable</span>
+        </div>
+      `;
+    };
+
+    wrapper.appendChild(img);
+    container.appendChild(wrapper);
+  }
+
+  if (description) {
+    const desc = document.createElement("div");
+    desc.style.cssText =
+      "color: var(--geolibre-fg-muted, #4b5563); font-size: 11px; line-height: 1.4; word-break: break-word;";
+    desc.textContent = description;
+    container.appendChild(desc);
+  }
+
+  map.getCanvasContainer().appendChild(container);
+  activePopupContainer = container;
+}
+
+const activeImageMarkers = new Map<string, maplibregl.Marker>();
+const activePinMarkers = new Map<string, maplibregl.Marker>();
+const activeStickyMarkers = new Map<string, maplibregl.Marker>();
+let elementMarkerUnsub: (() => void) | null = null;
+
+/** Sync all element HTML markers (pins, sticky notes, placed images). */
+function syncAllElementMarkers(): void {
+  syncPinMarkers();
+  syncStickyNoteMarkers();
+  syncPlacedImageMarkers();
+}
+
+// ---------------------------------------------------------------------------
+// Pin markers — teardrop icon with title label, click opens description popup
+// ---------------------------------------------------------------------------
+
+function syncPinMarkers(): void {
+  const map = boundMap;
+  if (!map) return;
+  const store = useAppStore.getState();
+  const layer = findAnnotationLayer(store.layers);
+  const features = (layer?.geojson?.features as Feature[]) ?? [];
+
+  const currentIds = new Set<string>();
+
+  for (const f of features) {
+    const props = (f.properties as Record<string, unknown>) ?? {};
+    if (props.__annotation !== "pin") continue;
+
+    const id = String(props.annotationId || f.id);
+    const visible = props.visible !== false;
+    const geom = f.geometry as { type: string; coordinates: [number, number] };
+    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) continue;
+    const coords = geom.coordinates;
+
+    currentIds.add(id);
+
+    if (!visible) {
+      if (activePinMarkers.has(id)) {
+        activePinMarkers.get(id)!.remove();
+        activePinMarkers.delete(id);
+      }
+      continue;
+    }
+
+    if (!activePinMarkers.has(id)) {
+      const pinColor = String(props.pinColor || props["text-color"] || "#ef4444");
+      const container = document.createElement("div");
+      container.className = "geolibre-pin-marker";
+      container.style.cssText =
+        "display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));";
+
+      const pinSvg = document.createElement("div");
+      pinSvg.style.cssText = "display: flex; line-height: 0;";
+      pinSvg.innerHTML = `<svg viewBox="0 0 24 36" width="28" height="42" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 22 12 22s12-13 12-22C24 5.4 18.6 0 12 0z"/><circle cx="12" cy="11" r="4.5" fill="#ffffff" opacity="0.9"/></svg>`;
+      container.appendChild(pinSvg);
+
+      const titleEl = document.createElement("div");
+      titleEl.style.cssText =
+        "background: var(--geolibre-bg, #fff); color: var(--geolibre-fg, #1f2937); font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-top: -6px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 4px rgba(0,0,0,0.15); border: 1px solid var(--geolibre-border, #d1d5db);";
+      titleEl.textContent = String(props.title || "Pin");
+      container.appendChild(titleEl);
+
+      container.onclick = (e) => {
+        e.stopPropagation();
+        showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
+      };
+
+      const marker = new maplibregl.Marker({ element: container, anchor: "bottom" })
+        .setLngLat(coords as [number, number])
+        .addTo(map);
+
+      activePinMarkers.set(id, marker);
+    } else {
+      activePinMarkers.get(id)!.setLngLat(coords as [number, number]);
+    }
+  }
+
+  for (const [id, marker] of activePinMarkers.entries()) {
+    if (!currentIds.has(id)) {
+      marker.remove();
+      activePinMarkers.delete(id);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sticky note markers — colored card with title + body, screen-space sized
+// ---------------------------------------------------------------------------
+
+function syncStickyNoteMarkers(): void {
+  const map = boundMap;
+  if (!map) return;
+  const store = useAppStore.getState();
+  const layer = findAnnotationLayer(store.layers);
+  const features = (layer?.geojson?.features as Feature[]) ?? [];
+
+  const currentIds = new Set<string>();
+
+  for (const f of features) {
+    const props = (f.properties as Record<string, unknown>) ?? {};
+    if (props.__annotation !== "sticky_note") continue;
+
+    const id = String(props.annotationId || f.id);
+    const visible = props.visible !== false;
+    const geom = f.geometry as { type: string; coordinates: [number, number] };
+    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) continue;
+    const coords = geom.coordinates;
+
+    currentIds.add(id);
+
+    if (!visible) {
+      if (activeStickyMarkers.has(id)) {
+        activeStickyMarkers.get(id)!.remove();
+        activeStickyMarkers.delete(id);
+      }
+      continue;
+    }
+
+    if (!activeStickyMarkers.has(id)) {
+      const bgColor = String(props.fill || "#fbbf24");
+      // Derive readable text color: dark text on light backgrounds, white on dark.
+      const textColor = isLightColor(bgColor) ? "#1f2937" : "#ffffff";
+
+      const container = document.createElement("div");
+      container.className = "geolibre-sticky-note-marker";
+      container.style.cssText = `
+        min-width: 100px; max-width: 180px; padding: 8px 10px;
+        background: ${bgColor}; color: ${textColor};
+        border-radius: 6px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2), 0 1px 3px rgba(0,0,0,0.12);
+        cursor: pointer; user-select: none;
+        font-family: system-ui, -apple-system, sans-serif;
+        border: 1px solid rgba(0,0,0,0.08);
+      `;
+
+      const titleEl = document.createElement("div");
+      titleEl.style.cssText =
+        "font-size: 12px; font-weight: 700; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
+      titleEl.textContent = String(props.title || "Note");
+      container.appendChild(titleEl);
+
+      const bodyText = String(props.description || "");
+      if (bodyText) {
+        const bodyEl = document.createElement("div");
+        bodyEl.style.cssText =
+          "font-size: 11px; line-height: 1.35; word-break: break-word; opacity: 0.85; max-height: 60px; overflow: hidden;";
+        bodyEl.textContent = bodyText;
+        container.appendChild(bodyEl);
+      }
+
+      // Small anchor triangle at the bottom pointing down.
+      const anchor = document.createElement("div");
+      anchor.style.cssText = `
+        position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+        width: 0; height: 0;
+        border-left: 6px solid transparent; border-right: 6px solid transparent;
+        border-top: 6px solid ${bgColor};
+      `;
+      container.style.position = "relative";
+      container.appendChild(anchor);
+
+      container.onclick = (e) => {
+        e.stopPropagation();
+        showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
+      };
+
+      const marker = new maplibregl.Marker({ element: container, anchor: "bottom" })
+        .setLngLat(coords as [number, number])
+        .addTo(map);
+
+      activeStickyMarkers.set(id, marker);
+    } else {
+      activeStickyMarkers.get(id)!.setLngLat(coords as [number, number]);
+    }
+  }
+
+  for (const [id, marker] of activeStickyMarkers.entries()) {
+    if (!currentIds.has(id)) {
+      marker.remove();
+      activeStickyMarkers.delete(id);
+    }
+  }
+}
+
+/** Rough light/dark heuristic for choosing readable text on a background. */
+function isLightColor(hex: string): boolean {
+  const c = hex.replace("#", "");
+  if (c.length < 6) return true;
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  // Perceived luminance (sRGB).
+  return r * 0.299 + g * 0.587 + b * 0.114 > 150;
+}
+
+// ---------------------------------------------------------------------------
+// Placed image markers — pill badge with image icon, click opens preview popup
+// ---------------------------------------------------------------------------
+
+function syncPlacedImageMarkers(): void {
+  const map = boundMap;
+  if (!map) return;
+  const store = useAppStore.getState();
+  const layer = findAnnotationLayer(store.layers);
+  const features = (layer?.geojson?.features as Feature[]) ?? [];
+
+  const currentIds = new Set<string>();
+
+  for (const f of features) {
+    const props = (f.properties as Record<string, unknown>) ?? {};
+    if (props.__annotation !== "placed_image" || !props.imageUrl) continue;
+
+    const id = String(props.annotationId || f.id);
+    const visible = props.visible !== false;
+    const geom = f.geometry as { type: string; coordinates: [number, number] };
+    if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) continue;
+    const coords = geom.coordinates;
+
+    currentIds.add(id);
+
+    if (!visible) {
+      if (activeImageMarkers.has(id)) {
+        activeImageMarkers.get(id)!.remove();
+        activeImageMarkers.delete(id);
+      }
+      continue;
+    }
+
+    if (!activeImageMarkers.has(id)) {
+      const container = document.createElement("div");
+      container.className = "geolibre-placed-image-marker";
+      container.style.cssText =
+        "display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--geolibre-bg, #ffffff); color: var(--geolibre-fg, #1f2937); border-radius: 16px; border: 1px solid var(--geolibre-border, #d1d5db); box-shadow: 0 2px 8px rgba(0,0,0,0.18); cursor: pointer; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 500; user-select: none;";
+
+      const iconSpan = document.createElement("span");
+      iconSpan.style.cssText = "display: inline-flex; align-items: center; color: #3b82f6;";
+      iconSpan.innerHTML = TOOL_ICONS.placed_image;
+      container.appendChild(iconSpan);
+
+      const titleSpan = document.createElement("span");
+      titleSpan.textContent = String(props.title || "Placed Image");
+      container.appendChild(titleSpan);
+
+      container.onclick = (e) => {
+        e.stopPropagation();
+        showElementPopup(map, new maplibregl.LngLat(coords[0], coords[1]), f);
+      };
+
+      const marker = new maplibregl.Marker({ element: container })
+        .setLngLat(coords as [number, number])
+        .addTo(map);
+
+      activeImageMarkers.set(id, marker);
+    } else {
+      activeImageMarkers.get(id)!.setLngLat(coords as [number, number]);
+    }
+  }
+
+  for (const [id, marker] of activeImageMarkers.entries()) {
+    if (!currentIds.has(id)) {
+      marker.remove();
+      activeImageMarkers.delete(id);
+    }
+  }
+}
+
+function clearAllElementMarkers(): void {
+  for (const marker of activeImageMarkers.values()) marker.remove();
+  activeImageMarkers.clear();
+  for (const marker of activePinMarkers.values()) marker.remove();
+  activePinMarkers.clear();
+  for (const marker of activeStickyMarkers.values()) marker.remove();
+  activeStickyMarkers.clear();
 }
 
 function bindMap(map: maplibregl.Map): void {
@@ -364,17 +802,12 @@ function bindMap(map: maplibregl.Map): void {
   map.on("mousedown", handleMouseDown);
   map.on("mousemove", handleMouseMove);
   map.on("mouseup", handleMouseUp);
-  // A map "mouseup" only fires over the canvas; if a drag is released outside
-  // it, this window fallback still ends the gesture so isDragging/drag-pan do
-  // not stay stuck and the preview does not linger.
   window.addEventListener("mouseup", handleWindowMouseUp);
-  // Scope Escape to the map canvas (capture, ahead of MapLibre's own handler)
-  // rather than the document, so pressing Escape in an unrelated input (layer
-  // name field, search box, attribute cell) cannot cancel an annotation tool.
   map.getCanvas().addEventListener("keydown", handleKeyDown, { capture: true });
+  elementMarkerUnsub = useAppStore.subscribe(() => syncAllElementMarkers());
+  syncAllElementMarkers();
 }
 
-/** End a drag released outside the canvas: discard the in-progress shape. */
 function handleWindowMouseUp(): void {
   if (!isDragging) return;
   isDragging = false;
@@ -385,6 +818,10 @@ function handleWindowMouseUp(): void {
 
 function unbindMap(): void {
   const map = boundMap;
+  elementMarkerUnsub?.();
+  elementMarkerUnsub = null;
+  clearAllElementMarkers();
+  closeElementPopup();
   if (!map) return;
   map.off("click", handleClick);
   map.off("mousedown", handleMouseDown);
@@ -425,10 +862,309 @@ function resetDrawState(): void {
 // Pointer handlers
 // ---------------------------------------------------------------------------
 
+let activeElementDialog: HTMLElement | null = null;
+
+function closeElementDialog(): void {
+  if (activeElementDialog) {
+    activeElementDialog.remove();
+    activeElementDialog = null;
+  }
+  setActiveTool(null);
+}
+
+interface ElementDialogData {
+  title: string;
+  description: string;
+  imageUrl?: string;
+  color?: string;
+  placementMode?: "point" | "extent";
+}
+
+function openElementDialog(
+  event: maplibregl.MapMouseEvent,
+  type: "pin" | "sticky_note" | "placed_image",
+  onSubmit: (data: ElementDialogData) => void,
+): void {
+  const map = boundMap;
+  if (!map) return;
+  closeElementDialog();
+
+  const container = document.createElement("div");
+  container.className = "geolibre-annotation-dialog";
+
+  const stopProp = (e: Event) => e.stopPropagation();
+  container.addEventListener("mousedown", stopProp);
+  container.addEventListener("mouseup", stopProp);
+  container.addEventListener("click", stopProp);
+  container.addEventListener("dblclick", stopProp);
+  container.addEventListener("pointerdown", stopProp);
+  container.addEventListener("pointerup", stopProp);
+
+  const canvasRect = map.getCanvasContainer().getBoundingClientRect();
+  const boxWidth = 260;
+  const boxHeight = type === "placed_image" ? 220 : 250;
+  let left = event.point.x + 10;
+  let top = event.point.y + 10;
+  if (left + boxWidth > canvasRect.width) left = Math.max(10, event.point.x - boxWidth - 10);
+  if (top + boxHeight > canvasRect.height) top = Math.max(10, event.point.y - boxHeight - 10);
+
+  container.style.cssText = `
+    position: absolute;
+    left: ${left}px;
+    top: ${top}px;
+    width: ${boxWidth}px;
+    background: var(--geolibre-bg, #ffffff);
+    color: var(--geolibre-fg, #111827);
+    border: 1px solid var(--geolibre-border, #e5e7eb);
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    padding: 12px;
+    z-index: 50;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+  `;
+
+  const typeTitles = {
+    pin: labels.tools.pin || "Add Pin",
+    sticky_note: labels.tools.sticky_note || "Add Sticky Note",
+    placed_image: labels.tools.placed_image || "Add Placed Image",
+  };
+
+  const header = document.createElement("div");
+  header.style.cssText =
+    "display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-weight: 600;";
+  header.textContent = typeTitles[type];
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  closeBtn.style.cssText =
+    "background: none; border: none; cursor: pointer; color: var(--geolibre-fg-muted, #6b7280); padding: 2px;";
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    closeElementDialog();
+  };
+  header.appendChild(closeBtn);
+  container.appendChild(header);
+
+  const titleLabel = document.createElement("label");
+  titleLabel.style.cssText =
+    "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
+  titleLabel.textContent = "Title";
+  container.appendChild(titleLabel);
+
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.value =
+    type === "pin" ? "Pin 1" : type === "sticky_note" ? "Sticky Note" : "Placed Image";
+  titleInput.style.cssText =
+    "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; margin-bottom: 8px;";
+  container.appendChild(titleInput);
+
+  let descInput: HTMLTextAreaElement | HTMLInputElement | null = null;
+  let placementMode: "point" | "extent" = "point";
+  if (type === "placed_image") {
+    // Placement mode toggle: point (marker) vs extent (corner-pinned overlay).
+    const modeRow = document.createElement("div");
+    modeRow.style.cssText = "display: flex; gap: 4px; margin-bottom: 8px;";
+    const makeToggle = (label: string, mode: "point" | "extent") => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      btn.style.cssText = `flex: 1; padding: 5px 0; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); font-size: 11px; cursor: pointer; transition: background 0.15s; ${
+        mode === "point"
+          ? "background: var(--geolibre-primary, #3b82f6); color: #fff; border-color: var(--geolibre-primary, #3b82f6);"
+          : "background: transparent; color: inherit;"
+      }`;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        placementMode = mode;
+        for (const child of modeRow.children) {
+          const el = child as HTMLButtonElement;
+          if (el.textContent === label) {
+            el.style.background = "var(--geolibre-primary, #3b82f6)";
+            el.style.color = "#fff";
+            el.style.borderColor = "var(--geolibre-primary, #3b82f6)";
+          } else {
+            el.style.background = "transparent";
+            el.style.color = "inherit";
+            el.style.borderColor = "var(--geolibre-border, #d1d5db)";
+          }
+        }
+      };
+      return btn;
+    };
+    modeRow.appendChild(makeToggle("At Point", "point"));
+    modeRow.appendChild(makeToggle("Pinned to Extent", "extent"));
+    container.appendChild(modeRow);
+
+    const urlLabel = document.createElement("label");
+    urlLabel.style.cssText =
+      "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
+    urlLabel.textContent = "Image URL";
+    container.appendChild(urlLabel);
+
+    descInput = document.createElement("input");
+    descInput.type = "url";
+    descInput.placeholder = "https://example.com/image.png";
+    descInput.style.cssText =
+      "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; margin-bottom: 8px;";
+    container.appendChild(descInput);
+  } else {
+    const contentLabel = document.createElement("label");
+    contentLabel.style.cssText =
+      "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
+    contentLabel.textContent = type === "pin" ? "Description" : "Note Content";
+    container.appendChild(contentLabel);
+
+    descInput = document.createElement("textarea");
+    descInput.rows = 3;
+    descInput.placeholder = type === "pin" ? "Optional description..." : "Type note details...";
+    descInput.style.cssText =
+      "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; resize: vertical; margin-bottom: 8px;";
+    container.appendChild(descInput);
+  }
+
+  let selectedColor = strokeColor;
+  const colorRow = document.createElement("div");
+  colorRow.style.cssText =
+    "display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;";
+  const colorLabel = document.createElement("span");
+  colorLabel.style.cssText =
+    "font-size: 11px; font-weight: 500; color: var(--geolibre-fg-muted, #6b7280);";
+  colorLabel.textContent = "Color";
+  colorRow.appendChild(colorLabel);
+
+  const colorInput = document.createElement("input");
+  colorInput.type = "color";
+  colorInput.value = selectedColor;
+  colorInput.style.cssText =
+    "width: 28px; height: 24px; border: none; background: none; cursor: pointer;";
+  colorInput.oninput = () => {
+    selectedColor = colorInput.value;
+  };
+  colorRow.appendChild(colorInput);
+  container.appendChild(colorRow);
+
+  const footer = document.createElement("div");
+  footer.style.cssText = "display: flex; align-items: center; justify-content: flex-end; gap: 6px;";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.style.cssText =
+    "padding: 5px 10px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: transparent; color: inherit; font-size: 12px; cursor: pointer;";
+  cancelBtn.onclick = (e) => {
+    e.stopPropagation();
+    closeElementDialog();
+  };
+  footer.appendChild(cancelBtn);
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.textContent = "Save Element";
+  saveBtn.style.cssText =
+    "padding: 5px 10px; border-radius: 6px; border: none; background: var(--geolibre-primary, #3b82f6); color: #ffffff; font-size: 12px; font-weight: 500; cursor: pointer;";
+  saveBtn.onclick = (e) => {
+    e.stopPropagation();
+    const title =
+      titleInput.value.trim() ||
+      (type === "pin" ? "Pin 1" : type === "sticky_note" ? "Sticky Note" : "Placed Image");
+    const description = descInput ? descInput.value.trim() : "";
+    onSubmit({
+      title,
+      description,
+      imageUrl: type === "placed_image" ? description : undefined,
+      color: selectedColor,
+      placementMode,
+    });
+    closeElementDialog();
+  };
+  footer.appendChild(saveBtn);
+  container.appendChild(footer);
+
+  container.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      closeElementDialog();
+    }
+  };
+
+  map.getCanvasContainer().appendChild(container);
+  activeElementDialog = container;
+  titleInput.focus();
+  titleInput.select();
+}
+
 function handleClick(event: maplibregl.MapMouseEvent): void {
   if (!pluginActive) return;
   if (activeTool === "text") {
     openTextInput(event);
+    return;
+  }
+  if (activeTool === "pin") {
+    openElementDialog(event, "pin", (data) => {
+      appendAnnotationFeatures([
+        pinFeature(event.lngLat, data.title, data.description, data.color),
+      ]);
+    });
+    return;
+  }
+  if (activeTool === "sticky_note") {
+    openElementDialog(event, "sticky_note", (data) => {
+      appendAnnotationFeatures([
+        stickyNoteFeature(event.lngLat, data.description || "Note", data.title, data.color),
+      ]);
+    });
+    return;
+  }
+  if (activeTool === "placed_image") {
+    openElementDialog(event, "placed_image", (data) => {
+      if (!data.imageUrl) return;
+      if (data.placementMode === "extent") {
+        // Corner-pinned placement: use the store's addImageOverlayLayer API.
+        // Compute a rectangular extent around the click point, then let the
+        // image overlay layer handle rendering. Also create a tracking feature
+        // in the annotation layer so the Elements panel can list/manage it.
+        const lng = event.lngLat.lng;
+        const lat = event.lngLat.lat;
+        // Default extent: ~0.01 deg each side (~1 km at equator).
+        const d = 0.01;
+        const corners: [number, number][] = [
+          [lng - d, lat + d], // top-left
+          [lng + d, lat + d], // top-right
+          [lng + d, lat - d], // bottom-right
+          [lng - d, lat - d], // bottom-left
+        ];
+        const overlayLayerId = useAppStore
+          .getState()
+          .addImageOverlayLayer(
+            data.title,
+            { url: data.imageUrl, coordinates: corners },
+            { bounds: [lng - d, lat - d, lng + d, lat + d] },
+          );
+        // Tracking feature so the Elements panel can manage this overlay.
+        const trackingFeature: Feature = {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: toPos(event.lngLat) },
+          properties: {
+            annotationId: nextAnnotationId(),
+            __annotation: "placed_image",
+            title: data.title,
+            imageUrl: data.imageUrl,
+            placementMode: "extent",
+            overlayLayerId,
+            shape: TEXT_MARKER_SHAPE,
+            text: "",
+            visible: true,
+          },
+        };
+        appendAnnotationFeatures([trackingFeature]);
+      } else {
+        appendAnnotationFeatures([placedImageFeature(event.lngLat, data.imageUrl, data.title)]);
+      }
+    });
     return;
   }
   if (activeTool === "arrow") {
@@ -639,11 +1375,89 @@ function fillProps(): Record<string, unknown> {
   };
 }
 
+export function pinFeature(
+  lngLat: maplibregl.LngLat,
+  title: string,
+  description: string = "",
+  color: string = strokeColor,
+): Feature {
+  return {
+    type: "Feature",
+    geometry: { type: "Point", coordinates: toPos(lngLat) },
+    properties: {
+      annotationId: nextAnnotationId(),
+      __annotation: "pin",
+      title,
+      description,
+      pinColor: color,
+      // Keep TEXT_MARKER_SHAPE to exclude from the circle layer; set text to
+      // empty so the text symbol layer renders nothing — the custom HTML marker
+      // (syncPinMarkers) handles all visual rendering.
+      shape: TEXT_MARKER_SHAPE,
+      text: "",
+      visible: true,
+    },
+  };
+}
+
+export function stickyNoteFeature(
+  lngLat: maplibregl.LngLat,
+  text: string,
+  title: string = "Sticky Note",
+  color: string = strokeColor,
+): Feature {
+  return {
+    type: "Feature",
+    geometry: { type: "Point", coordinates: toPos(lngLat) },
+    properties: {
+      annotationId: nextAnnotationId(),
+      __annotation: "sticky_note",
+      title,
+      description: text,
+      // Keep TEXT_MARKER_SHAPE to exclude from the circle layer; set text to
+      // empty so the text symbol layer renders nothing — the custom HTML marker
+      // (syncStickyNoteMarkers) handles all visual rendering as a card.
+      shape: TEXT_MARKER_SHAPE,
+      text: "",
+      fill: color,
+      visible: true,
+    },
+  };
+}
+
+export function placedImageFeature(
+  lngLat: maplibregl.LngLat,
+  imageUrl: string,
+  title: string = "Placed Image",
+): Feature {
+  return {
+    type: "Feature",
+    geometry: { type: "Point", coordinates: toPos(lngLat) },
+    properties: {
+      annotationId: nextAnnotationId(),
+      __annotation: "placed_image",
+      title,
+      imageUrl,
+      // Keep TEXT_MARKER_SHAPE to exclude from the circle layer; set text to
+      // empty — the HTML marker (syncPlacedImageMarkers) handles display.
+      shape: TEXT_MARKER_SHAPE,
+      text: "",
+      visible: true,
+    },
+  };
+}
+
 function lineFeature(coordinates: Position[]): Feature {
   return {
     type: "Feature",
     geometry: { type: "LineString", coordinates },
-    properties: { __annotation: "line", ...strokeProps() },
+    properties: {
+      annotationId: nextAnnotationId(),
+      __annotation: "freehand",
+      title: "Freehand stroke",
+      visible: true,
+      ...strokeProps(),
+    },
   };
 }
 
@@ -651,7 +1465,13 @@ function polygonFeature(ring: Position[]): Feature {
   return {
     type: "Feature",
     geometry: { type: "Polygon", coordinates: [ensureCcwRing(ring)] },
-    properties: { __annotation: "highlight", ...fillProps() },
+    properties: {
+      annotationId: nextAnnotationId(),
+      __annotation: "highlight",
+      title: "Highlight shape",
+      visible: true,
+      ...fillProps(),
+    },
   };
 }
 
@@ -659,13 +1479,14 @@ function textFeature(lngLat: maplibregl.LngLat, text: string): Feature {
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: toPos(lngLat) },
-    // `text-color` is read per-feature by the layer-sync text-marker layer, so
-    // each label keeps the color it was placed with (no retroactive recolor).
     properties: {
+      annotationId: nextAnnotationId(),
       __annotation: "text",
+      title: text,
       shape: TEXT_MARKER_SHAPE,
       text,
       "text-color": strokeColor,
+      visible: true,
     },
   };
 }
@@ -967,4 +1788,341 @@ function clearAllAnnotations(): void {
   if (!layer) return;
   store.removeLayer(layer.id);
   annotationLayerId = null;
+}
+
+// ---------------------------------------------------------------------------
+// Elements Panel UI & Control
+// ---------------------------------------------------------------------------
+
+export function renderElementsPanel(container: HTMLElement): () => void {
+  container.innerHTML = "";
+  container.className = "geolibre-elements-panel";
+  container.style.cssText =
+    "padding: 12px; font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--geolibre-fg, #1f2937); height: 100%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;";
+
+  let editingId: string | null = null;
+
+  const update = () => {
+    const store = useAppStore.getState();
+    const layer = findAnnotationLayer(store.layers);
+    const rawFeatures = (layer?.geojson?.features as Feature[]) ?? [];
+
+    const map = new Map<
+      string,
+      {
+        id: string;
+        type: string;
+        title: string;
+        description?: string;
+        visible: boolean;
+        features: Feature[];
+      }
+    >();
+
+    for (const f of rawFeatures) {
+      const props = (f.properties as Record<string, unknown>) ?? {};
+      const id = String(props.annotationId || props.id || f.id || Math.random());
+      if (!map.has(id)) {
+        const type = String(props.__annotation || props.shape || "element");
+        const title = String(props.title || props.text || "Element");
+        const description = props.description ? String(props.description) : undefined;
+        const visible = props.visible !== false;
+        map.set(id, { id, type, title, description, visible, features: [f] });
+      } else {
+        map.get(id)!.features.push(f);
+      }
+    }
+
+    const elements = Array.from(map.values());
+    container.innerHTML = "";
+
+    const header = document.createElement("div");
+    header.style.cssText =
+      "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--geolibre-border, #e5e7eb); padding-bottom: 6px; font-weight: 600;";
+    header.textContent = `${labels.elementsPanelTitle} (${elements.length})`;
+    container.appendChild(header);
+
+    if (elements.length === 0) {
+      const empty = document.createElement("div");
+      empty.style.cssText = "color: #9ca3af; text-align: center; padding: 24px 0;";
+      empty.textContent = "No map elements yet.";
+      container.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.style.cssText = "display: flex; flex-direction: column; gap: 6px;";
+
+    elements.forEach((el, index) => {
+      const row = document.createElement("div");
+      row.style.cssText = `display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--geolibre-bg-subtle, #f9fafb); border: 1px solid var(--geolibre-border, #e5e7eb); ${
+        !el.visible ? "opacity: 0.5;" : ""
+      }`;
+
+      const icon = document.createElement("span");
+      icon.style.cssText =
+        "display: inline-flex; align-items: center; color: var(--geolibre-fg-muted, #6b7280);";
+      icon.innerHTML = getGlyphIcon(el.type);
+      row.appendChild(icon);
+
+      const titleContainer = document.createElement("div");
+      titleContainer.style.cssText =
+        "flex: 1; min-width: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;";
+
+      if (editingId === el.id) {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = el.title;
+        input.style.cssText =
+          "width: 100%; box-sizing: border-box; font-size: 12px; padding: 2px 4px; border: 1px solid #3b82f6; border-radius: 3px;";
+        const commit = () => {
+          const val = input.value.trim();
+          if (val && val !== el.title) {
+            updateElementProps(el.id, {
+              title: val,
+              text: val,
+            });
+          }
+          editingId = null;
+          update();
+        };
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            editingId = null;
+            update();
+          }
+        });
+        titleContainer.appendChild(input);
+        setTimeout(() => input.focus(), 10);
+      } else {
+        const t = document.createElement("span");
+        t.style.fontWeight = "500";
+        t.textContent = el.title;
+        titleContainer.appendChild(t);
+        titleContainer.addEventListener("dblclick", (e) => {
+          e.stopPropagation();
+          editingId = el.id;
+          update();
+        });
+        titleContainer.addEventListener("click", () => {
+          zoomToElementFeatures(el.features);
+        });
+      }
+      row.appendChild(titleContainer);
+
+      const ctrl = document.createElement("div");
+      ctrl.style.cssText = "display: flex; align-items: center; gap: 2px;";
+
+      const up = document.createElement("button");
+      up.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
+      up.title = "Move Up";
+      up.style.cssText =
+        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      up.disabled = index === elements.length - 1;
+      up.addEventListener("click", (e) => {
+        e.stopPropagation();
+        reorderElements(el.id, "up");
+      });
+      ctrl.appendChild(up);
+
+      const down = document.createElement("button");
+      down.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+      down.title = "Move Down";
+      down.style.cssText =
+        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #6b7280; padding: 2px;";
+      down.disabled = index === 0;
+      down.addEventListener("click", (e) => {
+        e.stopPropagation();
+        reorderElements(el.id, "down");
+      });
+      ctrl.appendChild(down);
+
+      const vis = document.createElement("button");
+      vis.innerHTML = el.visible
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+      vis.title = el.visible ? "Hide" : "Show";
+      vis.style.cssText =
+        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #4b5563; padding: 2px;";
+      vis.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateElementProps(el.id, { visible: !el.visible });
+      });
+      ctrl.appendChild(vis);
+
+      const del = document.createElement("button");
+      del.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+      del.title = "Delete";
+      del.style.cssText =
+        "border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; color: #ef4444; padding: 2px;";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteElementById(el.id);
+      });
+      ctrl.appendChild(del);
+
+      row.appendChild(ctrl);
+      list.appendChild(row);
+    });
+
+    container.appendChild(list);
+  };
+
+  update();
+  const unsub = useAppStore.subscribe(update);
+  return () => unsub();
+}
+
+function getGlyphIcon(type: string): string {
+  switch (type) {
+    case "pin":
+      return TOOL_ICONS.pin;
+    case "sticky_note":
+      return TOOL_ICONS.sticky_note;
+    case "placed_image":
+      return TOOL_ICONS.placed_image;
+    case "text":
+      return TOOL_ICONS.text;
+    case "arrow":
+    case "arrowhead":
+      return TOOL_ICONS.arrow;
+    case "highlight":
+      return TOOL_ICONS.rectangle;
+    case "freehand":
+    case "line":
+      return TOOL_ICONS.freehand;
+    default:
+      return TOOL_ICONS.pin;
+  }
+}
+
+function zoomToElementFeatures(features: Feature[]): void {
+  const map = boundMap;
+  if (!map || !features.length) return;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  const processCoord = (c: Position) => {
+    minX = Math.min(minX, c[0]);
+    minY = Math.min(minY, c[1]);
+    maxX = Math.max(maxX, c[0]);
+    maxY = Math.max(maxY, c[1]);
+  };
+  for (const f of features) {
+    if (f.geometry.type === "Point") {
+      processCoord(f.geometry.coordinates);
+    } else if (f.geometry.type === "LineString") {
+      f.geometry.coordinates.forEach(processCoord);
+    } else if (f.geometry.type === "Polygon") {
+      f.geometry.coordinates.flatMap((r) => r).forEach(processCoord);
+    }
+  }
+  if (!Number.isFinite(minX)) return;
+  if (minX === maxX && minY === maxY) {
+    map.flyTo({ center: [minX, minY], zoom: 15 });
+  } else {
+    map.fitBounds(
+      [
+        [minX, minY],
+        [maxX, maxY],
+      ],
+      { padding: 40 },
+    );
+  }
+}
+
+export function updateElementProps(annotationId: string, newProps: Record<string, unknown>): void {
+  const store = useAppStore.getState();
+  const layer = findAnnotationLayer(store.layers);
+  if (!layer || !layer.geojson) return;
+  const updatedFeatures = layer.geojson.features.map((f) => {
+    const props = f.properties as Record<string, unknown>;
+    if (props && props.annotationId === annotationId) {
+      return { ...f, properties: { ...props, ...newProps } };
+    }
+    return f;
+  });
+  store.updateLayer(layer.id, {
+    geojson: { ...layer.geojson, features: updatedFeatures },
+  });
+
+  // Cascade visibility toggle to the linked overlay layer (extent-placed images).
+  if ("visible" in newProps) {
+    const feature = layer.geojson.features.find(
+      (f) => (f.properties as Record<string, unknown>)?.annotationId === annotationId,
+    );
+    const overlayId = (feature?.properties as Record<string, unknown>)?.overlayLayerId;
+    if (typeof overlayId === "string") {
+      store.setLayerVisibility(overlayId, newProps.visible !== false);
+    }
+  }
+}
+
+function reorderElements(annotationId: string, direction: "up" | "down"): void {
+  const store = useAppStore.getState();
+  const layer = findAnnotationLayer(store.layers);
+  if (!layer || !layer.geojson) return;
+
+  const features = layer.geojson.features;
+  const ids: string[] = [];
+  for (const f of features) {
+    const id = String((f.properties as Record<string, unknown>)?.annotationId || "");
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+
+  const idx = ids.indexOf(annotationId);
+  if (idx === -1) return;
+  const targetIdx = direction === "up" ? idx + 1 : idx - 1;
+  if (targetIdx < 0 || targetIdx >= ids.length) return;
+
+  const temp = ids[idx];
+  ids[idx] = ids[targetIdx];
+  ids[targetIdx] = temp;
+
+  const grouped = new Map<string, Feature[]>();
+  for (const f of features) {
+    const id = String((f.properties as Record<string, unknown>)?.annotationId || "");
+    if (!grouped.has(id)) grouped.set(id, []);
+    grouped.get(id)!.push(f);
+  }
+
+  const reorderedFeatures: Feature[] = [];
+  for (const id of ids) {
+    const list = grouped.get(id);
+    if (list) reorderedFeatures.push(...list);
+  }
+
+  store.updateLayer(layer.id, {
+    geojson: { ...layer.geojson, features: reorderedFeatures },
+  });
+}
+
+export function deleteElementById(annotationId: string): void {
+  const store = useAppStore.getState();
+  const layer = findAnnotationLayer(store.layers);
+  if (!layer || !layer.geojson) return;
+
+  // Cascade deletion to a linked overlay layer (extent-placed images).
+  const target = layer.geojson.features.find(
+    (f) => (f.properties as Record<string, unknown>)?.annotationId === annotationId,
+  );
+  const overlayId = (target?.properties as Record<string, unknown>)?.overlayLayerId;
+  if (typeof overlayId === "string") {
+    store.removeLayer(overlayId);
+  }
+
+  const remaining = layer.geojson.features.filter(
+    (f) => (f.properties as Record<string, unknown>)?.annotationId !== annotationId,
+  );
+  if (remaining.length === 0) {
+    store.removeLayer(layer.id);
+    annotationLayerId = null;
+  } else {
+    store.updateLayer(layer.id, {
+      geojson: { ...layer.geojson, features: remaining },
+    });
+  }
 }
