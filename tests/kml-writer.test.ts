@@ -148,6 +148,7 @@ describe("KML text export", () => {
     let pickerOptions: unknown;
     let savedContent: unknown;
     const originalWindow = globalThis.window;
+    const originalSelfDescriptor = Object.getOwnPropertyDescriptor(globalThis, "self");
     const mockWindow = {
       showSaveFilePicker: async (options: unknown) => {
         pickerOptions = options;
@@ -194,6 +195,11 @@ describe("KML text export", () => {
           configurable: true,
           value: originalWindow,
         });
+      }
+      if (originalSelfDescriptor === undefined) {
+        Reflect.deleteProperty(globalThis, "self");
+      } else {
+        Object.defineProperty(globalThis, "self", originalSelfDescriptor);
       }
     }
   });
