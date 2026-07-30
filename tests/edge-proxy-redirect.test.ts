@@ -7,6 +7,7 @@ import {
   sanitizeViewerPath,
 } from "../workers/viewer/src/proxy";
 import {
+  TILES_MAX_REDIRECT_HOPS,
   fetchAllowlistedUpstream,
   isAllowedTilesUpstreamUrl,
 } from "../workers/tiles/src/allowlisted-fetch";
@@ -18,6 +19,8 @@ describe("viewer proxy path sanitization", () => {
     assert.equal(sanitizeViewerPath("/../secret"), null);
     assert.equal(sanitizeViewerPath("/foo/../../etc/passwd"), null);
     assert.equal(sanitizeViewerPath("/foo%2e%2e/bar"), null);
+    assert.equal(sanitizeViewerPath("/foo%2f..%2fsecret"), null);
+    assert.equal(sanitizeViewerPath("/foo%2F..%2Fsecret"), null);
   });
 });
 
@@ -33,7 +36,7 @@ describe("viewer upstream allowlist", () => {
 });
 
 describe("viewer redirect policy", () => {
-  it("follows an in-prefix redirect and refuses a cross-origin Location", async () => {
+  it("follows an in-prefix redirect, strips cookies, and refuses cross-origin", async () => {
     const calls: string[] = [];
     const fetchImpl: typeof fetch = async (input) => {
       const url = String(input);
@@ -45,7 +48,14 @@ describe("viewer redirect policy", () => {
         });
       }
       if (url.endsWith("/demo/new")) {
-        return new Response("ok", { status: 200 });
+        return new Response("ok", {
+          status: 200,
+          headers: {
+            "set-cookie": "session=evil",
+            "set-cookie2": "also=evil",
+            "content-type": "text/plain",
+          },
+        });
       }
       return new Response("unexpected", { status: 500 });
     };
@@ -53,6 +63,8 @@ describe("viewer redirect policy", () => {
     const ok = await proxyViewerRequest(new Request("https://web.geolibre.app/old"), fetchImpl);
     assert.equal(ok.status, 200);
     assert.equal(await ok.text(), "ok");
+    assert.equal(ok.headers.get("set-cookie"), null);
+    assert.equal(ok.headers.get("set-cookie2"), null);
     assert.deepEqual(calls, ["https://geolibre.app/demo/old", "https://geolibre.app/demo/new"]);
 
     const evilFetch: typeof fetch = async () =>
@@ -62,6 +74,22 @@ describe("viewer redirect policy", () => {
       });
     const blocked = await proxyViewerRequest(new Request("https://web.geolibre.app/"), evilFetch);
     assert.equal(blocked.status, 502);
+  });
+
+  it("passes through 304 Not Modified instead of treating it as a broken redirect", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(null, {
+        status: 304,
+        headers: { etag: '"abc"' },
+      });
+    const response = await proxyViewerRequest(
+      new Request("https://web.geolibre.app/assets/app.js", {
+        headers: { "if-none-match": '"abc"' },
+      }),
+      fetchImpl,
+    );
+    assert.equal(response.status, 304);
+    assert.equal(response.headers.get("etag"), '"abc"');
   });
 
   it("rejects non-GET methods and caps redirect hops", async () => {
@@ -86,9 +114,19 @@ describe("viewer redirect policy", () => {
 });
 
 describe("tiles allowlisted fetch", () => {
-  it("refuses off-host redirects from an allowlisted origin", async () => {
+  it("refuses off-host and off-prefix S3 redirects", async () => {
     assert.equal(isAllowedTilesUpstreamUrl("https://api.openaerialmap.org/meta"), true);
     assert.equal(isAllowedTilesUpstreamUrl("https://evil.example/meta"), false);
+    assert.equal(
+      isAllowedTilesUpstreamUrl(
+        "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-color/0/0/0.png",
+      ),
+      true,
+    );
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://s3-eu-west-1.amazonaws.com/other-bucket/secret"),
+      false,
+    );
 
     const fetchImpl: typeof fetch = async () =>
       new Response(null, {
@@ -102,7 +140,7 @@ describe("tiles allowlisted fetch", () => {
     );
   });
 
-  it("follows a same-host HTTPS redirect", async () => {
+  it("follows a same-host HTTPS redirect and caps hops", async () => {
     const fetchImpl: typeof fetch = async (input) => {
       const url = String(input);
       if (url.endsWith("/meta")) {
@@ -123,5 +161,20 @@ describe("tiles allowlisted fetch", () => {
     );
     assert.equal(response.status, 200);
     assert.equal(await response.text(), '{"ok":true}');
+
+    let hops = 0;
+    const looping: typeof fetch = async (input) => {
+      hops += 1;
+      const url = String(input);
+      return new Response(null, {
+        status: 302,
+        headers: { location: `${url}?n=${hops}` },
+      });
+    };
+    await assert.rejects(
+      () => fetchAllowlistedUpstream("https://api.openaerialmap.org/meta", {}, looping),
+      /Too many upstream redirects/,
+    );
+    assert.equal(hops, TILES_MAX_REDIRECT_HOPS + 1);
   });
 });

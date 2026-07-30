@@ -13,13 +13,24 @@ export const MAX_REDIRECT_HOPS = 5;
 
 const ALLOWED_METHODS = new Set(["GET", "HEAD"]);
 
+/** HTTP statuses that carry a Location and should be followed manually. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
 /**
  * Reject pathnames that could escape `/demo` via traversal once joined with
  * the origin prefix. Returns the cleaned pathname, or null when unsafe.
  */
 export function sanitizeViewerPath(pathname: string): string | null {
   if (!pathname.startsWith("/")) return null;
-  if (pathname.includes("\\") || pathname.includes("%2e") || pathname.includes("%2E")) {
+  const lower = pathname.toLowerCase();
+  // Block backslash, encoded dots, and encoded slashes so a smuggled
+  // `/foo%2f..%2fsecret` cannot bypass the literal `..` segment check.
+  if (
+    pathname.includes("\\") ||
+    lower.includes("%2e") ||
+    lower.includes("%2f") ||
+    lower.includes("%5c")
+  ) {
     return null;
   }
   const segments = pathname.split("/");
@@ -102,7 +113,9 @@ export async function proxyViewerRequest(
         redirect: "manual",
       });
 
-      if (response.status < 300 || response.status >= 400) {
+      // Pass through non-redirect responses, including 304 Not Modified from
+      // conditional revalidation (If-None-Match / If-Modified-Since).
+      if (!REDIRECT_STATUSES.has(response.status)) {
         return sanitizeUpstreamResponse(response);
       }
 

@@ -23,13 +23,3 @@ export default {
     return proxyViewerRequest(request);
   },
 };
-
-export {
-  ALLOWED_UPSTREAM_HOSTS,
-  MAX_REDIRECT_HOPS,
-  VIEWER_ORIGIN,
-  isAllowedUpstreamUrl,
-  proxyViewerRequest,
-  sanitizeUpstreamResponse,
-  sanitizeViewerPath,
-} from "./proxy";
