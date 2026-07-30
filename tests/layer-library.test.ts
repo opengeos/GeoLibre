@@ -17,6 +17,7 @@ import {
   parseLayerLibrary,
   planLayerLibraryAdd,
   serializeLayerLibrary,
+  unresolvedLayerLibraryJoins,
   type GeoLibreLayer,
   type LayerLibraryEntry,
 } from "@geolibre/core";
@@ -348,7 +349,7 @@ describe("captureLayerLibraryEntry", () => {
       }),
       CAPTURE_OPTIONS,
     );
-    assert.deepEqual(result, { ok: false, reason: "too-large" });
+    assert.deepEqual(result, { ok: false, reason: "features-too-large" });
   });
 
   it("does not capture project-specific placement or transient metadata", () => {
@@ -485,7 +486,30 @@ describe("captureLayerLibraryEntry", () => {
       layer({ geojson: bulkyFeatures(MAX_LAYER_LIBRARY_ENTRY_BYTES + 1_000) }),
       CAPTURE_OPTIONS,
     );
-    assert.deepEqual(result, { ok: false, reason: "too-large" });
+    assert.deepEqual(result, { ok: false, reason: "features-too-large" });
+  });
+
+  it("blames the configuration, not the features, when there is a live source", () => {
+    // A layer with a re-fetchable source embeds nothing, so an over-cap entry is
+    // over because of its own style/form/joins. Reporting "features-too-large"
+    // here would send the user looking at their data instead.
+    const result = captureLayerLibraryEntry(
+      layer({
+        source: { url: "https://example.com/a.geojson" },
+        style: {
+          ...DEFAULT_LAYER_STYLE,
+          vectorRules: Array.from({ length: 20_000 }, (_unused, index) => ({
+            id: `r${index}`,
+            label: `rule ${index}`.padEnd(300, "x"),
+            filter: '["==", ["get", "kind"], "a"]',
+            color: "#ff0000",
+            isElse: false,
+          })),
+        },
+      }),
+      CAPTURE_OPTIONS,
+    );
+    assert.deepEqual(result, { ok: false, reason: "config-too-large" });
   });
 
   it("refuses an oversized browser-picked file, whose bare name cannot be re-read", () => {
@@ -498,7 +522,7 @@ describe("captureLayerLibraryEntry", () => {
       }),
       CAPTURE_OPTIONS,
     );
-    assert.deepEqual(result, { ok: false, reason: "too-large" });
+    assert.deepEqual(result, { ok: false, reason: "features-too-large" });
   });
 });
 
@@ -605,6 +629,52 @@ describe("planLayerLibraryAdd", () => {
     assert.notEqual(second.layer.style.fillColor, "#123456");
     assert.equal(second.layer.metadata.tag, "keep");
     assert.equal(entry.metadata.tag, "keep");
+  });
+});
+
+describe("unresolvedLayerLibraryJoins", () => {
+  const withJoins = (joins: LayerLibraryEntry["joins"]) => ({ joins });
+
+  it("reports a join whose source layer is not in the target project", () => {
+    assert.deepEqual(
+      unresolvedLayerLibraryJoins(
+        withJoins([
+          { id: "j1", joinLayerId: "layer-present", targetField: "id", joinField: "id" },
+          { id: "j2", joinLayerId: "layer-elsewhere", targetField: "id", joinField: "id" },
+        ]),
+        ["layer-present", "layer-other"],
+      ),
+      ["layer-elsewhere"],
+    );
+  });
+
+  it("ignores a disabled join and an entry with no joins", () => {
+    assert.deepEqual(
+      unresolvedLayerLibraryJoins(
+        withJoins([
+          {
+            id: "j1",
+            joinLayerId: "gone",
+            targetField: "id",
+            joinField: "id",
+            enabled: false,
+          },
+        ]),
+        [],
+      ),
+      [],
+    );
+    assert.deepEqual(unresolvedLayerLibraryJoins({}, ["a"]), []);
+  });
+
+  it("reports nothing when every join resolves", () => {
+    assert.deepEqual(
+      unresolvedLayerLibraryJoins(
+        withJoins([{ id: "j1", joinLayerId: "a", targetField: "id", joinField: "id" }]),
+        ["a", "b"],
+      ),
+      [],
+    );
   });
 });
 

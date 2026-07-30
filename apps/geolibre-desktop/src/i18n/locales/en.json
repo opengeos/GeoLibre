@@ -36,7 +36,9 @@
     "libraryExportFailed": "Could not export the layer library.",
     "libraryLayerMissing": "That saved layer no longer exists.",
     "libraryLayerNeedsDesktop": "This saved layer reads a file from disk, so it needs GeoLibre Desktop. Add the file again to save a new entry.",
-    "libraryLayerConfigNotApplied": "Added the file for “{{name}}”, but its saved styling could not be matched to a single layer, so it was not reapplied."
+    "libraryLayerConfigNotApplied": "Added the file for “{{name}}”, but its saved styling could not be matched to a single layer, so it was not reapplied.",
+    "libraryLayerJoinsUnresolved_one": "Added the layer, but 1 saved join could not be reapplied: the layer it joins to is not in this project.",
+    "libraryLayerJoinsUnresolved_other": "Added the layer, but {{count}} saved joins could not be reapplied: the layers they join to are not in this project."
   },
   "about": {
     "trigger": "About",
@@ -4424,6 +4426,7 @@
     "savedToLibrary": "Saved “{{name}}” to My Data.",
     "saveToLibraryNoSource": "This layer has no re-addable source, so it cannot be saved to My Data.",
     "saveToLibraryTooLarge": "This layer's features are its only copy and are too large to save to My Data.",
+    "saveToLibraryConfigTooLarge": "This layer's saved configuration is too large for My Data.",
     "bindToTimeSlider": "Bind to Time Slider…",
     "bindTimeDimensionToTimeSlider": "Bind time dimension to Time Slider",
     "bindNoTimeDimension": "This layer has no readable time dimension.",

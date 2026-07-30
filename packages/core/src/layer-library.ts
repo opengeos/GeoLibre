@@ -206,7 +206,13 @@ export type LayerLibraryCaptureFailure =
   /** Nothing to re-add from: no source URL, no local path, no features. */
   | "no-source"
   /** Its features are the only copy, and they exceed the per-entry size cap. */
-  | "too-large";
+  | "features-too-large"
+  /**
+   * The entry exceeds the cap without embedding any features — its style,
+   * attribute form, joins, or virtual fields are simply that large. Reported
+   * separately so the message does not blame the layer's data.
+   */
+  | "config-too-large";
 
 /** Outcome of {@link captureLayerLibraryEntry}. */
 export type LayerLibraryCaptureResult =
@@ -334,7 +340,11 @@ export function captureLayerLibraryEntry(
       return { ok: true, entry: pathOnly };
     }
   }
-  return { ok: false, reason: "too-large" };
+  // Blame the right thing: an entry can also exceed the cap with no embedded
+  // features at all (a rule-based style with hundreds of rules, a large
+  // attribute form), and telling that user their "features are the only copy"
+  // would send them looking in the wrong place.
+  return { ok: false, reason: embed ? "features-too-large" : "config-too-large" };
 }
 
 /**
@@ -420,6 +430,36 @@ export function layerLibraryConfigPatch(entry: LayerLibraryEntry): LayerLibraryC
     ...(entry.virtualFields ? { virtualFields: structuredClone(entry.virtualFields) } : {}),
     ...(entry.attributeForm ? { attributeForm: structuredClone(entry.attributeForm) } : {}),
   };
+}
+
+/**
+ * The saved joins whose source layer is not present in the target project.
+ *
+ * A {@link LayerJoin} points at another layer by its **project-local id**, so a
+ * join travels only as far as the project it was captured in: re-adding an entry
+ * elsewhere leaves those joins referring to layers that do not exist. The join
+ * engine degrades quietly (`applyLayerJoins` just drops an unresolved join from
+ * its active set), which is the right runtime behavior but a silent one — so the
+ * caller uses this to tell the user which joins did not come back, instead of
+ * letting them find a column missing later.
+ *
+ * The joins are still captured and reapplied rather than dropped: they resolve
+ * whenever the source layer *is* there, which covers re-adding into the project
+ * the entry came from, or into one restored from the same saved project.
+ *
+ * @param entry - The entry being re-added.
+ * @param presentLayerIds - Ids of the layers in the target project.
+ * @returns Names of the joins that cannot resolve (their `id` when unnamed).
+ */
+export function unresolvedLayerLibraryJoins(
+  entry: Pick<LayerLibraryEntry, "joins">,
+  presentLayerIds: Iterable<string>,
+): string[] {
+  if (!entry.joins?.length) return [];
+  const present = new Set(presentLayerIds);
+  return entry.joins
+    .filter((join) => join.enabled !== false && !present.has(join.joinLayerId))
+    .map((join) => join.joinLayerId);
 }
 
 /**

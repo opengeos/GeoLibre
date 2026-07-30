@@ -66,6 +66,7 @@ import {
   extractCopiedLayerStyle,
 } from "./layer-style-clipboard";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh, reapplyLayerJoins } from "./joins";
+import { MAX_LAYER_LIBRARY_ENTRIES } from "./layer-library";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -1175,14 +1176,20 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
-      setLayerLibrary: (entries) => set({ layerLibrary: entries }),
+      // The entry cap is applied on every write, not just when reading
+      // untrusted input, so ordinary use (repeated saves, importing several
+      // bundles over time) cannot grow the library past it. Mirrors
+      // `writeBrowserFavorites`, which slices to MAX_FAVORITES on each write.
+      setLayerLibrary: (entries) =>
+        set({ layerLibrary: entries.slice(0, MAX_LAYER_LIBRARY_ENTRIES) }),
       saveLayerLibraryEntry: (entry) =>
         set((s) => ({
           // App-level saves don't touch the project file, so no dirty flag
-          // (mirrors saveStyleLibraryEntry's "app" scope).
+          // (mirrors saveStyleLibraryEntry's "app" scope). A new entry goes to
+          // the front, so at the cap the oldest falls off the end.
           layerLibrary: s.layerLibrary.some((e) => e.id === entry.id)
             ? s.layerLibrary.map((e) => (e.id === entry.id ? entry : e))
-            : [entry, ...s.layerLibrary],
+            : [entry, ...s.layerLibrary].slice(0, MAX_LAYER_LIBRARY_ENTRIES),
         })),
       renameLayerLibraryEntry: (id, name) =>
         set((s) => {

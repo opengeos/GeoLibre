@@ -3,6 +3,7 @@ import {
   parseLayerLibrary,
   planLayerLibraryAdd,
   serializeLayerLibrary,
+  unresolvedLayerLibraryJoins,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -485,8 +486,19 @@ export function BrowserPanel({
         // cannot be awaited to completion.
         beginBusy(node.id);
         try {
+          // A saved join points at another layer by its project-local id, so it
+          // only resolves when that layer is present here. Checked before the add
+          // so the layer's own id cannot count as a match, and reported because
+          // the join engine drops an unresolved join silently.
+          const unresolvedJoins = unresolvedLayerLibraryJoins(
+            entry,
+            useAppStore.getState().layers.map((l) => l.id),
+          );
           addLayer(plan.layer);
           await restoreLibraryLayer(plan.layer, createAppAPI(mapControllerRef));
+          if (unresolvedJoins.length > 0) {
+            setError(t("browser.libraryLayerJoinsUnresolved", { count: unresolvedJoins.length }));
+          }
         } finally {
           endBusy();
         }

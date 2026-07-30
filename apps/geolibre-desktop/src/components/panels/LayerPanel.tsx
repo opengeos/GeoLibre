@@ -1077,9 +1077,11 @@ export function LayerPanel({
             : {
                 type: "error",
                 message:
-                  result.reason === "too-large"
+                  result.reason === "features-too-large"
                     ? t("layers.saveToLibraryTooLarge")
-                    : t("layers.saveToLibraryNoSource"),
+                    : result.reason === "config-too-large"
+                      ? t("layers.saveToLibraryConfigTooLarge")
+                      : t("layers.saveToLibraryNoSource"),
               },
         }));
         scheduleStatusClear(layer.id);
