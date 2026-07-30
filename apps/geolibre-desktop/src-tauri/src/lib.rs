@@ -1621,6 +1621,14 @@ async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerIn
         .map_err(|error| format!("Could not join sidecar startup task: {error}"))?
 }
 
+fn add_main_sidecar_extras(command: &mut Command) {
+    command
+        .arg("--extra")
+        .arg("ml")
+        .arg("--extra")
+        .arg("postgis");
+}
+
 fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
     let base_url = sidecar_base_url();
     let state = app.state::<SidecarServerState>();
@@ -1699,13 +1707,13 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         // project directory. See the same flag in start_jupyter_server_blocking.
         .arg("--frozen")
         .arg("--project")
-        .arg(&project_dir)
-        // The AI segmentation `/ml` endpoints proxy to samgeo-api from inside
-        // this main sidecar process and need `httpx`, which lives in the `ml`
-        // extra. Unlike whitebox/conversion (separate managed venvs), ml has no
-        // lazy bootstrap, so the extra must be synced into the sidecar env here.
-        .arg("--extra")
-        .arg("ml")
+        .arg(&project_dir);
+    // The main sidecar serves both the AI segmentation proxy and editable
+    // PostGIS layers. Unlike whitebox/conversion (separate managed venvs),
+    // neither feature has a lazy bootstrap, so both extras must be synced into
+    // the sidecar environment here.
+    add_main_sidecar_extras(&mut command);
+    command
         .arg("uvicorn")
         .arg("geolibre_server.app.main:app")
         .arg("--host")
@@ -3380,11 +3388,12 @@ fn configure_linux_webkit() {}
 #[cfg(test)]
 mod tests {
     use super::{
-        child_failure_message, clear_appimage_python_env, client_cert_is_pkcs12,
-        client_cert_password_without_path, ensure_fetchable_url, find_zip_manifest_path,
-        is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_safe_absolute_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
-        CapturedOutput, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
+        client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
+        find_zip_manifest_path, is_allowed_local_vector_path, is_allowed_project_path,
+        is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
+        resolve_sidecar_in_resource_dir, CapturedOutput, CAPTURED_LOG_MAX_LINES,
+        CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
     use std::env;
     use std::ffi::OsStr;
@@ -3398,6 +3407,22 @@ mod tests {
     // `std::env::set_var` is process-global, so the tests that stage an AppImage
     // environment must not run concurrently with each other.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn main_sidecar_installs_postgis_runtime() {
+        let mut command = Command::new("uv");
+        add_main_sidecar_extras(&mut command);
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            args,
+            [
+                OsStr::new("--extra"),
+                OsStr::new("ml"),
+                OsStr::new("--extra"),
+                OsStr::new("postgis"),
+            ]
+        );
+    }
 
     // A throwaway directory tree under the system temp dir that removes itself
     // on drop, so scratch dirs are cleaned up even when an assertion panics.
