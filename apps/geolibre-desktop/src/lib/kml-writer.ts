@@ -1,10 +1,4 @@
-import type {
-  Feature,
-  FeatureCollection,
-  GeoJsonProperties,
-  Geometry,
-  Position,
-} from "geojson";
+import type { Feature, FeatureCollection, GeoJsonProperties, Geometry, Position } from "geojson";
 
 const KML_NAMESPACE = "http://www.opengis.net/kml/2.2";
 
@@ -209,10 +203,9 @@ function featureKml(feature: Feature): string {
  */
 export function writeKml(geojson: FeatureCollection, documentName: string): string {
   const placemarks = geojson.features.map((feature) => indentXml(featureKml(feature), 4));
-  const documentContents = [
-    `    <name>${xmlSafeText(documentName)}</name>`,
-    ...placemarks,
-  ].join("\n");
+  const documentContents = [`    <name>${xmlSafeText(documentName)}</name>`, ...placemarks].join(
+    "\n",
+  );
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<kml xmlns="${KML_NAMESPACE}">`,

@@ -56,7 +56,13 @@ describe("writeKml", () => {
             geometry: {
               type: "GeometryCollection",
               geometries: [
-                { type: "MultiPoint", coordinates: [[1, 2], [3, 4]] },
+                {
+                  type: "MultiPoint",
+                  coordinates: [
+                    [1, 2],
+                    [3, 4],
+                  ],
+                },
                 {
                   type: "MultiLineString",
                   coordinates: [
