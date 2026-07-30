@@ -22,6 +22,7 @@ from geolibre_server.app.postgis import (
     PostgisTablesRequest,
     PostgisWriteRequest,
     _allowed_postgis_targets,
+    _normalize_host,
     _sanitize_error,
     _validate_postgis_target,
     postgis_read,
@@ -177,6 +178,32 @@ def test_postgis_allowlist_rejects_indirect_destinations(monkeypatch) -> None:
         with pytest.raises(HTTPException) as exc:
             _validate_postgis_target(conninfo)
         assert exc.value.status_code == 400
+
+
+def test_postgis_bracketed_empty_host_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        _normalize_host("[]")
+
+
+@requires_psycopg
+def test_nested_dbname_cannot_redirect_the_connection(monkeypatch) -> None:
+    """A conninfo-shaped ``dbname`` must not move the connection off its host.
+
+    libpq re-parses a ``dbname`` that looks like a connection string only on
+    its keyword/value array path (``expand_dbname``); psycopg hands the DSN to
+    ``PQconnectStart`` as a *string*, whose parser leaves the value literal. If
+    a psycopg upgrade ever switched paths, a nested ``dbname`` would become a
+    way past the allowlist, so the behavior is pinned here: the attempt must
+    still land on the validated loopback host, never on the embedded one.
+    """
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "127.0.0.1:1")
+    request = PostgisTablesRequest(
+        connection="host=127.0.0.1 port=1 dbname='host=192.0.2.9 port=5432 dbname=real'",
+    )
+    with pytest.raises(HTTPException) as exc:
+        postgis_tables(request)
+    assert exc.value.status_code == 400
+    assert "192.0.2.9" not in str(exc.value.detail)
 
 
 @requires_psycopg

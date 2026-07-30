@@ -95,10 +95,12 @@ def _sanitize_error(message: str) -> str:
 def _normalize_host(host: str) -> str:
     """Return a stable representation for exact host allowlist comparisons."""
     candidate = host.strip()
-    if not candidate or candidate.startswith("/"):
-        raise ValueError("PostgreSQL host must be a TCP hostname or IP address")
     if candidate.startswith("[") and candidate.endswith("]"):
         candidate = candidate[1:-1]
+    # After the unwrap, so a bracketed-empty "[]" is rejected rather than
+    # normalizing to the empty string.
+    if not candidate or candidate.startswith("/"):
+        raise ValueError("PostgreSQL host must be a TCP hostname or IP address")
     try:
         return str(ipaddress.ip_address(candidate))
     except ValueError:
