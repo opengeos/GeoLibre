@@ -204,6 +204,31 @@ describe("writeKml", () => {
     assert.match(kml, /<Data name="geojson_feature_id_2"><value>source-id<\/value><\/Data>/);
   });
 
+  it("shares repeated styles while keeping per-feature references", () => {
+    const kml = writeKml(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { "marker-color": "#123456" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { "marker-color": "#123456" },
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+      "Shared style",
+    );
+
+    assert.equal((kml.match(/<Style id="style-1">/g) ?? []).length, 1);
+    assert.equal((kml.match(/<styleUrl>#style-1<\/styleUrl>/g) ?? []).length, 2);
+    assert.equal((kml.match(/<IconStyle>/g) ?? []).length, 1);
+  });
+
   it("rejects invalid coordinates instead of creating a corrupt KML file", () => {
     assert.throws(
       () =>

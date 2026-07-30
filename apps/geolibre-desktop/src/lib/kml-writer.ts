@@ -220,12 +220,12 @@ function styleKml(properties: GeoJsonProperties): string | null {
   return `<Style>${sections.join("")}</Style>`;
 }
 
-function featureKml(feature: Feature): string {
+function featureKml(feature: Feature, style: string | null): string {
   const properties = feature.properties ?? {};
   const contents = [
     propertyElement(properties, "name"),
     propertyElement(properties, "description"),
-    styleKml(properties),
+    style,
     extendedDataKml(feature),
     feature.geometry ? geometryKml(feature.geometry) : null,
   ].filter((value): value is string => value !== null);
@@ -243,18 +243,39 @@ function featureKml(feature: Feature): string {
  * Google Earth and other KML clients.
  */
 export function writeKml(geojson: FeatureCollection, documentName: string): string {
+  const featureStyles = geojson.features.map((feature) => styleKml(feature.properties));
+  const styleCounts = new Map<string, number>();
+  for (const style of featureStyles) {
+    if (style) styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
+  }
+
+  const sharedStyles = new Map<string, string>();
+  for (const [style, count] of styleCounts) {
+    if (count > 1) sharedStyles.set(style, `style-${sharedStyles.size + 1}`);
+  }
+  const styleDefinitions = Array.from(sharedStyles, ([style, id]) =>
+    indentXml(style.replace("<Style>", `<Style id="${id}">`), 4),
+  );
+
   const placemarks = geojson.features.map((feature, index) => {
     try {
-      return indentXml(featureKml(feature), 4);
+      const style = featureStyles[index];
+      const sharedStyleId = style ? sharedStyles.get(style) : undefined;
+      return indentXml(
+        featureKml(feature, sharedStyleId ? `<styleUrl>#${sharedStyleId}</styleUrl>` : style),
+        4,
+      );
     } catch (error) {
       const reference = feature.id == null ? `at index ${index}` : `with id ${feature.id}`;
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Unable to export KML feature ${reference}: ${message}`);
     }
   });
-  const documentContents = [`    <name>${xmlSafeText(documentName)}</name>`, ...placemarks].join(
-    "\n",
-  );
+  const documentContents = [
+    `    <name>${xmlSafeText(documentName)}</name>`,
+    ...styleDefinitions,
+    ...placemarks,
+  ].join("\n");
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<kml xmlns="${KML_NAMESPACE}">`,
