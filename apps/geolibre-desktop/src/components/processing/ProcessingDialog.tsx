@@ -2558,9 +2558,11 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     // A stored value that is no number at all (malformed text a previous edit
     // pushed through verbatim) has no conversion to carry, so it moves across
     // as-is: blanking the box instead would leave the field looking empty while
-    // Run still submitted the old text.
+    // Run still submitted the old text. Formatted to the same digits the stored
+    // degrees were written with, so a precisely typed value survives a trip
+    // through Degrees and back rather than coming back rounded.
     setDraft(
-      degrees === null ? value : formatDistanceValue(degreesToUnit(degrees, next, latitude)),
+      degrees === null ? value : formatDistanceValue(degreesToUnit(degrees, next, latitude), 8),
     );
   };
 
