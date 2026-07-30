@@ -55,6 +55,9 @@ function coordinatesText(positions: Position[]): string {
 }
 
 function hasAltitude(position: Position): boolean {
+  // KML applies altitude mode to the entire geometry. For mixed-dimensional
+  // GeoJSON, preserve supplied altitudes and let KML interpret 2D vertices as
+  // having its implicit zero altitude.
   return position.length >= 3;
 }
 
@@ -134,7 +137,7 @@ function geometryKml(geometry: Geometry): string {
 function propertyText(value: unknown): string {
   if (value == null) return "";
   if (typeof value !== "object") return String(value);
-  return JSON.stringify(value) ?? String(value);
+  return JSON.stringify(value);
 }
 
 function propertyElement(properties: GeoJsonProperties, key: string): string | null {
