@@ -961,7 +961,7 @@
     "captured_one": "{{count}} point captured this session.",
     "captured_other": "{{count}} points captured this session.",
     "pointCaptured": "Point saved to {{layer}}.",
-    "captureBlocked": "Fix accuracy is ±{{accuracy}} m, worse than the {{max}} m threshold. Point not saved.",
+    "captureBlocked": "Fix accuracy is ±{{accuracy}}, worse than the {{max}} m threshold. Point not saved.",
     "satellites": "Satellites",
     "satellitesShort": "Sat",
     "notAvailable": "—",

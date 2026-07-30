@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
 
 interface StatusBarProps {
@@ -17,6 +18,7 @@ export function StatusBar({
   diagnosticsWarningCount,
   onOpenDiagnostics,
 }: StatusBarProps) {
+  const { t } = useTranslation();
   const pointerCoords = useAppStore((s) => s.pointerCoords);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
@@ -41,7 +43,7 @@ export function StatusBar({
     ? compact
       ? gpsCoords
       : `${gpsCoords} ±${formatAccuracy(gpsStatus.accuracy)}` +
-        ` Sat: ${gpsStatus.satellites ?? "—"}` +
+        ` ${t("gps.satellitesShort")}: ${gpsStatus.satellites ?? t("gps.notAvailable")}` +
         (gpsStatus.speed != null ? ` ${formatSpeedKmh(gpsStatus.speed)} km/h` : "") +
         (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
     : null;

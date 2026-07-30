@@ -521,7 +521,7 @@ export function GpsTrackingDialog({
     if (!fixMeetsAccuracy(fix, settingsRef.current)) {
       setNotice(
         t("gps.captureBlocked", {
-          accuracy: Math.round(fix.accuracy),
+          accuracy: formatAccuracy(fix.accuracy),
           max: settingsRef.current.maxAccuracyM,
         }),
       );

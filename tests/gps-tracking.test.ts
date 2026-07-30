@@ -319,6 +319,33 @@ describe("gps-tracking misc", () => {
     assert.equal(formatAccuracy(0.45), "45 cm");
     assert.equal(formatAccuracy(3.25), "3.3 m");
     assert.equal(formatAccuracy(12.6), "13 m");
+    assert.equal(formatAccuracy(Number.NaN), "—");
+    assert.equal(formatAccuracy(-1), "—");
+  });
+
+  it("normalizes alternate and invalid satellite metadata", () => {
+    const position = (satelliteFields: Record<string, unknown>) =>
+      ({
+        coords: {
+          longitude: 1,
+          latitude: 2,
+          accuracy: 3,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+          ...satelliteFields,
+        },
+        timestamp: 99,
+      }) as GeolocationPosition;
+
+    assert.equal(fixFromPosition(position({ satellites: 9.8 })).satellites, 9);
+    assert.equal(fixFromPosition(position({ satelliteCount: 7 })).satellites, 7);
+    assert.equal(fixFromPosition(position({ satellites: -1 })).satellites, null);
+    assert.equal(
+      fixFromPosition(position({ satellites: Number.POSITIVE_INFINITY })).satellites,
+      null,
+    );
   });
 
   it("isGpsCaptureLayer requires geojson type and the metadata flag", () => {
