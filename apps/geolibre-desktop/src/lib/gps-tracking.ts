@@ -235,15 +235,19 @@ export function isGpsCaptureLayer(layer: GpsLayerLike): boolean {
 /**
  * Build the track feature saved to a layer: a LineString for a single
  * continuous recording, a MultiLineString when pauses split it into several
- * segments. Per-vertex timestamps ride along as an ISO-string `times`
- * property (flat for a LineString, nested per segment for a MultiLineString)
- * so the recording remains GPX-exportable after a project save/load round trip.
+ * segments. Per-vertex timestamps, horizontal accuracy, and satellite counts
+ * ride along as parallel properties (flat for a LineString, nested per segment
+ * for a MultiLineString) so no recorded fix metadata is lost on save.
  */
 export function trackFeature(segments: GpsTrackSegments): Feature<LineString | MultiLineString> {
   const kept = lineSegments(segments);
   const stats = trackStats(kept);
   const all = kept.flat();
   const times = kept.map((seg) => seg.map((f) => new Date(f.timestamp).toISOString()));
+  const accuracies = kept.map((seg) => seg.map((f) => f.accuracy));
+  const satellites = kept.map((seg) => seg.map((f) => f.satellites));
+  const flattenForLine = <T>(values: T[][]): T[] | T[][] =>
+    kept.length === 1 ? values[0] : values;
   return {
     type: "Feature",
     geometry:
@@ -261,7 +265,9 @@ export function trackFeature(segments: GpsTrackSegments): Feature<LineString | M
       duration_s: Math.round(stats.durationS),
       start_time: all.length ? new Date(all[0].timestamp).toISOString() : null,
       end_time: all.length ? new Date(all[all.length - 1].timestamp).toISOString() : null,
-      times: kept.length === 1 ? times[0] : times,
+      times: flattenForLine(times),
+      accuracies_m: flattenForLine(accuracies),
+      satellites_used: flattenForLine(satellites),
     },
   };
 }
@@ -294,7 +300,8 @@ export function capturePointFeature(fix: GpsFix): Feature<Point> {
     geometry: { type: "Point", coordinates: fixPosition(fix) },
     properties: {
       time: new Date(fix.timestamp).toISOString(),
-      accuracy_m: Math.round(fix.accuracy * 10) / 10,
+      accuracy_m: fix.accuracy,
+      ...(fix.satellites != null ? { satellites_used: fix.satellites } : {}),
       ...(fix.altitude != null ? { ele: fix.altitude } : {}),
       ...(fix.speed != null ? { speed_mps: fix.speed } : {}),
       ...(fix.heading != null ? { heading_deg: fix.heading } : {}),
@@ -338,8 +345,12 @@ function escapeXml(text: string): string {
 function gpxTrkpt(fix: GpsFix, indent: string): string {
   const lines = [`${indent}<trkpt lat="${fix.lat}" lon="${fix.lng}">`];
   if (fix.altitude != null) lines.push(`${indent}  <ele>${fix.altitude}</ele>`);
+  lines.push(`${indent}  <time>${new Date(fix.timestamp).toISOString()}</time>`);
+  if (fix.satellites != null) lines.push(`${indent}  <sat>${fix.satellites}</sat>`);
   lines.push(
-    `${indent}  <time>${new Date(fix.timestamp).toISOString()}</time>`,
+    `${indent}  <extensions>`,
+    `${indent}    <geolibre:accuracy_m>${fix.accuracy}</geolibre:accuracy_m>`,
+    `${indent}  </extensions>`,
     `${indent}</trkpt>`,
   );
   return lines.join("\n");
@@ -348,8 +359,9 @@ function gpxTrkpt(fix: GpsFix, indent: string): string {
 /**
  * Serialize a recorded track to a GPX 1.1 document: one `<trk>` with a
  * `<trkseg>` per continuous segment (pause/resume boundaries), per-point
- * elevation and timestamps. The complement of the reader in `gpx.ts`, which
- * is import-only.
+ * elevation, timestamps, standard GPX satellite counts, and a GeoLibre
+ * extension for horizontal accuracy. The complement of the reader in
+ * `gpx.ts`, which is import-only.
  */
 export function buildTrackGpx(segments: GpsTrackSegments, name: string): string {
   const segs = lineSegments(segments).map((seg) =>
@@ -357,7 +369,7 @@ export function buildTrackGpx(segments: GpsTrackSegments, name: string): string 
   );
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<gpx version="1.1" creator="GeoLibre" xmlns="http://www.topografix.com/GPX/1/1">`,
+    `<gpx version="1.1" creator="GeoLibre" xmlns="http://www.topografix.com/GPX/1/1" xmlns:geolibre="https://geolibre.org/xmlschemas/GpxExtensions/v1">`,
     `  <trk>`,
     `    <name>${escapeXml(name)}</name>`,
     segs.join("\n"),
