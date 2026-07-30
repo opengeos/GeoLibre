@@ -229,6 +229,81 @@ describe("drawPrintExtent (touch)", () => {
     assert.equal(await promise, null);
   });
 
+  it("cancels the draw when a second finger lands mid-draw without moving", async () => {
+    const map = new FakeMap();
+    const promise = drawPrintExtent(map as never, { drawBox: false });
+    map.emit("touchstart", {
+      points: [{ x: 60, y: 60 }],
+      point: { x: 60, y: 60 },
+      originalEvent: {},
+    });
+    // A second finger touching down re-fires touchstart with *both* contacts
+    // (touchstart's points come from the native `touches` list). Cancel here
+    // rather than stay armed, so no later release can commit against it.
+    map.emit("touchstart", {
+      points: [
+        { x: 60, y: 60 },
+        { x: 200, y: 200 },
+      ],
+      point: { x: 130, y: 130 },
+      originalEvent: {},
+    });
+    assert.equal(await promise, null);
+  });
+
+  it("does not commit a bogus extent when a second finger lifts before the first", async () => {
+    const map = new FakeMap();
+    const promise = drawPrintExtent(map as never, { drawBox: false });
+    map.emit("touchstart", {
+      points: [{ x: 60, y: 60 }],
+      point: { x: 60, y: 60 },
+      originalEvent: {},
+    });
+    map.emit("touchmove", {
+      points: [{ x: 160, y: 160 }],
+      point: { x: 160, y: 160 },
+      originalEvent: {},
+    });
+    // Second finger down, then straight back up with no touchmove in between.
+    // touchend reports the *lifted* finger (changedTouches), so before the
+    // touchstart cancel this committed [6, 6, 46, 46] from the wrong finger
+    // while the tracked one was still mid-drag.
+    map.emit("touchstart", {
+      points: [
+        { x: 160, y: 160 },
+        { x: 460, y: 460 },
+      ],
+      point: { x: 310, y: 310 },
+      originalEvent: {},
+    });
+    map.emit("touchend", {
+      points: [{ x: 460, y: 460 }],
+      point: { x: 460, y: 460 },
+      originalEvent: { touches: [{}] },
+    });
+    assert.equal(await promise, null);
+  });
+
+  it("commits a single-finger drag even while an unrelated contact stays on the surface", async () => {
+    const map = new FakeMap();
+    const promise = drawPrintExtent(map as never, { drawBox: false });
+    map.emit("touchstart", {
+      points: [{ x: 60, y: 60 }],
+      point: { x: 60, y: 60 },
+      originalEvent: {},
+    });
+    // A contact that started off the canvas (a thumb steadying a tablet) never
+    // reaches these handlers, but it does stay in the surface-wide
+    // `originalEvent.touches`. The release must still commit rather than being
+    // swallowed, which is why touchend is not gated on that list being empty.
+    map.emit("touchend", {
+      points: [{ x: 260, y: 260 }],
+      point: { x: 260, y: 260 },
+      originalEvent: { touches: [{}] },
+    });
+    assert.deepEqual(await promise, [6, 6, 26, 26]);
+  });
+
   it("cancels on touchcancel", async () => {
     const map = new FakeMap();
     const promise = drawPrintExtent(map as never, { drawBox: false });

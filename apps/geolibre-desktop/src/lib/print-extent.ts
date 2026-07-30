@@ -349,6 +349,15 @@ export function drawPrintExtent(
     // touchmove/touchend keep arriving here even once the finger leaves the
     // canvas. No window-level touch listeners are needed.
     const onTouchStart = (e: MapTouchEvent) => {
+      // A fresh contact landing while a draw is already armed reads as an
+      // attempted pinch/rotate, so cancel — matching onTouchMove below. Merely
+      // ignoring it would leave `start` set from the first finger, and a later
+      // touchend from *either* finger would then commit against a release point
+      // that has nothing to do with the drag the user was making. `touchstart`
+      // derives its points from the native `touches` list (every active
+      // contact), so a second finger always surfaces here while the first is
+      // still down.
+      if (start) return finish(null);
       // Only a single finger starts a draw. touchZoomRotate/touchPitch are
       // disabled above, but this also guards a stray secondary contact point
       // reported alongside the first.
@@ -367,6 +376,15 @@ export function drawPrintExtent(
       queueCanvasMove({ x: e.point.x, y: e.point.y }, touchShiftKey(e));
     };
     const onTouchEnd = (e: MapTouchEvent) => {
+      // `touchend` is the one touch event whose point comes from the native
+      // `changedTouches` (the finger that just lifted) rather than the contacts
+      // still down — which is exactly the point wanted here: onTouchStart
+      // cancels as soon as a second contact reaches the canvas, so while
+      // `start` is set there is exactly one canvas-originated finger down and it
+      // is the one lifting. Deliberately *not* gated on
+      // `originalEvent.touches.length === 0`: `touches` is surface-wide, so an
+      // unrelated contact away from the canvas (a thumb steadying a tablet)
+      // would swallow a legitimate release and wedge the tool armed.
       commit({ x: e.point.x, y: e.point.y }, touchShiftKey(e));
     };
     // The OS or browser reclaiming the gesture (e.g. an incoming call, a
