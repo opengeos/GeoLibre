@@ -58,8 +58,8 @@ interface BrowserTreeNodeProps {
   onBeginRename: (id: string) => void;
   /** Commit a rename; a blank or unchanged name is a no-op for the caller. */
   onCommitRename: (node: BrowserNode, name: string) => void;
-  /** Abandon the in-progress rename (Escape). */
-  onCancelRename: () => void;
+  /** Abandon the in-progress rename (Escape), by row id. */
+  onCancelRename: (id: string) => void;
   /** Delete a saved Layer Library entry (its trash icon). */
   onDeleteLibraryLayer: (node: BrowserNode) => void;
   /** Import a Layer Library JSON bundle (the My Data section's ⬆). */
@@ -241,7 +241,7 @@ export function BrowserTreeNode({
             node={node}
             indentStart={indentStart}
             onCommit={(name) => onCommitRename(node, name)}
-            onCancel={onCancelRename}
+            onCancel={() => onCancelRename(node.id)}
           />
         ) : (
           <button

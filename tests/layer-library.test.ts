@@ -11,6 +11,7 @@ import {
   LAYER_LIBRARY_BUNDLE_TYPE,
   LAYER_LIBRARY_BUNDLE_VERSION,
   layerLibraryEntryNeedsLocalFile,
+  MAX_LAYER_LIBRARY_ENTRIES,
   MAX_LAYER_LIBRARY_ENTRY_BYTES,
   normalizeLayerLibraryEntries,
   parseLayerLibrary,
@@ -290,6 +291,64 @@ describe("captureLayerLibraryEntry", () => {
     if (!result.ok) return;
     assert.deepEqual(result.entry.geojson, POINTS);
     assert.equal(result.entry.needsLocalFile, undefined);
+  });
+
+  it("rewinds a resolved XYZ endpoint to the template it came from", () => {
+    // `prepareLayerForSave` does this for project files: an xyz layer's live
+    // source can hold a session-resolved endpoint while metadata.originalUrl keeps
+    // the template. A library entry outlives the session, so baking in the
+    // resolved host would make it replay a stale endpoint forever.
+    const result = captureLayerLibraryEntry(
+      layer({
+        type: "xyz",
+        source: { type: "raster", tiles: ["https://resolved.example.net/a/{z}/{x}/{y}.png"] },
+        metadata: {
+          originalUrl: "https://tiles.example.com/{z}/{x}/{y}.png",
+          resolvedUrl: "https://resolved.example.net/a/{z}/{x}/{y}.png",
+        },
+      }),
+      CAPTURE_OPTIONS,
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.deepEqual(result.entry.source.tiles, ["https://tiles.example.com/{z}/{x}/{y}.png"]);
+    assert.equal(result.entry.source.url, "https://tiles.example.com/{z}/{x}/{y}.png");
+    assert.equal("resolvedUrl" in result.entry.metadata, false);
+  });
+
+  it("leaves a non-xyz source alone", () => {
+    // The rewind is xyz-specific; a WMS/vector source must not have `tiles`
+    // fabricated onto it from an unrelated metadata field.
+    const result = captureLayerLibraryEntry(
+      layer({ type: "wms", source: { type: "raster", url: "https://wms.example.com/service" } }),
+      CAPTURE_OPTIONS,
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.entry.source.tiles, undefined);
+    assert.equal(result.entry.source.url, "https://wms.example.com/service");
+  });
+
+  it("measures the size cap in UTF-8 bytes, not UTF-16 units", () => {
+    // Each of these characters is one UTF-16 unit but three UTF-8 bytes, so a
+    // length-based check would pass an entry at ~3x the real cap.
+    const justUnderInUnits = "気".repeat(Math.floor(MAX_LAYER_LIBRARY_ENTRY_BYTES / 2));
+    const result = captureLayerLibraryEntry(
+      layer({
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [0, 0] },
+              properties: { name: justUnderInUnits },
+            },
+          ],
+        },
+      }),
+      CAPTURE_OPTIONS,
+    );
+    assert.deepEqual(result, { ok: false, reason: "too-large" });
   });
 
   it("does not capture project-specific placement or transient metadata", () => {
@@ -675,6 +734,40 @@ describe("normalizeLayerLibraryEntries", () => {
     assert.equal(entries[0].sourcePath, undefined);
   });
 
+  it("enforces the per-entry size cap on import, not only on capture", () => {
+    // A bundle is produced elsewhere, so without this an externally-assembled
+    // file could push tens of MB of embedded features per entry into IndexedDB.
+    const oversized = {
+      ...valid,
+      id: "e-big",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [0, 0] },
+            properties: { blob: "x".repeat(MAX_LAYER_LIBRARY_ENTRY_BYTES + 1_000) },
+          },
+        ],
+      },
+    };
+    assert.deepEqual(normalizeLayerLibraryEntries([oversized]), []);
+    // A normal entry alongside it still survives.
+    const kept = normalizeLayerLibraryEntries([oversized, valid]);
+    assert.deepEqual(
+      kept.map((entry) => entry.id),
+      ["e1"],
+    );
+  });
+
+  it("caps how many entries one pass keeps", () => {
+    const many = Array.from({ length: MAX_LAYER_LIBRARY_ENTRIES + 25 }, (_unused, index) => ({
+      ...valid,
+      id: `e${index}`,
+    }));
+    assert.equal(normalizeLayerLibraryEntries(many).length, MAX_LAYER_LIBRARY_ENTRIES);
+  });
+
   it("drops malformed optional blocks rather than the whole entry", () => {
     const [entry] = normalizeLayerLibraryEntries([
       { ...valid, joins: "many", virtualFields: [], attributeForm: [], geojson: { type: "Point" } },
@@ -858,6 +951,47 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     ]);
     const [reimported] = parseLayerLibrary(serializeLayerLibrary([entry]));
     assert.deepEqual(reimported.source.data, POINTS);
+  });
+
+  it("redacts a credential in a URL fragment or in userinfo", () => {
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-frag",
+        name: "Odd URLs",
+        addedAt: "",
+        layerType: "xyz",
+        source: {
+          // OAuth implicit flow returns the token in the fragment.
+          url: "https://tiles.example.com/a#access_token=SECRET_FRAG&token_type=bearer",
+          tiles: ["https://user:SECRET_PASS@tiles.example.com/{z}/{x}/{y}.png"],
+        },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    const exported = serializeLayerLibrary([entry]);
+    assert.equal(exported.includes("SECRET_FRAG"), false);
+    assert.equal(exported.includes("SECRET_PASS"), false);
+    const [reimported] = parseLayerLibrary(exported);
+    // The non-credential fragment parameter and the host both survive.
+    assert.equal(reimported.source.url, "https://tiles.example.com/a#token_type=bearer");
+    assert.deepEqual(reimported.source.tiles, ["https://tiles.example.com/{z}/{x}/{y}.png"]);
+  });
+
+  it("keeps a plain anchor fragment intact", () => {
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-anchor",
+        name: "Anchored",
+        addedAt: "",
+        layerType: "geojson",
+        source: { data: "https://example.com/doc.geojson#section-2" },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    const [reimported] = parseLayerLibrary(serializeLayerLibrary([entry]));
+    assert.equal(reimported.source.data, "https://example.com/doc.geojson#section-2");
   });
 
   it("leaves a credential-free URL byte-identical", () => {

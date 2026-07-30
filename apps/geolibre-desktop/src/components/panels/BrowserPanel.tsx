@@ -479,8 +479,10 @@ export function BrowserPanel({
         // store so MapController.syncLayers builds its map output, then run the
         // owning plugin's restore pass when the layer is control-painted (that
         // pass, not the store sync, is what draws those layers). Held under the
-        // busy flag so the row spins through a slow re-ingest and a second click
-        // mid-restore cannot add the layer twice.
+        // busy flag so a second click during the add cannot duplicate the layer.
+        // Note the flag only covers dispatching the restore, not the re-ingest
+        // that follows: see `restoreLibraryLayer` on why four of the five passes
+        // cannot be awaited to completion.
         beginBusy(node.id);
         try {
           addLayer(plan.layer);
@@ -506,13 +508,13 @@ export function BrowserPanel({
         // found among the newly-added ids by matching the path this add used.
         // That stays correct if an unrelated layer lands concurrently, and
         // patches nothing rather than the wrong layer if none matches.
-        const idsBefore = new Set(useAppStore.getState().layers.map((entry) => entry.id));
+        const idsBefore = new Set(useAppStore.getState().layers.map((l) => l.id));
         const addError = await onAddFilePath(plan.path);
         if (addError) {
           setError(addError);
         } else {
-          const added = useAppStore.getState().layers.filter((entry) => !idsBefore.has(entry.id));
-          const matches = added.filter((entry) => layerCameFromPath(entry, plan.path));
+          const added = useAppStore.getState().layers.filter((l) => !idsBefore.has(l.id));
+          const matches = added.filter((l) => layerCameFromPath(l, plan.path));
           const target =
             matches.length === 1
               ? matches[0]
@@ -532,10 +534,11 @@ export function BrowserPanel({
             if (virtualFields) {
               useAppStore.getState().setLayerVirtualFields(target.id, virtualFields);
             }
-          } else if (added.length > 0) {
-            // The file came back but we cannot tell which layer the saved
-            // configuration belongs to. Say so, rather than leaving the user to
-            // notice their styling silently did not return.
+          } else {
+            // Either the import produced several indistinguishable layers, or it
+            // reported success while adding none. Both leave the entry's saved
+            // configuration unapplied, so say so rather than letting the user
+            // discover their styling silently did not return.
             setError(t("browser.libraryLayerConfigNotApplied", { name: plan.config.name }));
           }
         }
@@ -650,8 +653,17 @@ export function BrowserPanel({
 
   // My Data rename/delete. The store slice drives the tree, so both changes are
   // reflected (and persisted to IndexedDB) with no refresh event to fire.
-  const commitRename = (node: BrowserNode, name: string) => {
+  // Closing the editor unmounts the focused input, which would drop a
+  // keyboard-only user's focus to <body> and lose their place in the tree, so
+  // hand focus back to the row. Deferred a frame because the row's button does
+  // not exist again until this state change has rendered.
+  const endRename = (rowId: string) => {
     setRenamingId(null);
+    requestAnimationFrame(() => focusRow(rowId));
+  };
+
+  const commitRename = (node: BrowserNode, name: string) => {
+    endRename(node.id);
     if (node.libraryLayerId) renameLayerLibraryEntry(node.libraryLayerId, name);
   };
 
@@ -771,7 +783,7 @@ export function BrowserPanel({
                 renamingId={renamingId}
                 onBeginRename={setRenamingId}
                 onCommitRename={commitRename}
-                onCancelRename={() => setRenamingId(null)}
+                onCancelRename={endRename}
                 onDeleteLibraryLayer={deleteLibraryLayer}
                 onImportLibrary={() => void importLibrary()}
                 onExportLibrary={() => void exportLibrary()}

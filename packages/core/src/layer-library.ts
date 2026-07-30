@@ -43,6 +43,15 @@ export const LAYER_LIBRARY_BUNDLE_VERSION = 1;
 export const MAX_LAYER_LIBRARY_ENTRY_BYTES = 5 * 1024 * 1024;
 
 /**
+ * Cap on how many entries a single normalization pass keeps. Enforced on the way
+ * *in* — an imported bundle or a hand-edited database is untrusted, and without
+ * a bound one file could push an unlimited number of records through this
+ * synchronous pass and into IndexedDB. Mirrors `MAX_FAVORITES`, which caps the
+ * Browser panel's other user-grown list on read as well as write.
+ */
+export const MAX_LAYER_LIBRARY_ENTRIES = 500;
+
+/**
  * Metadata keys dropped when capturing an entry. `resolvedUrl` is the dev-server
  * proxy rewrite of an XYZ template — a per-session artifact that must not be
  * baked into a saved source (the same reason `prepareLayerForSave` strips it).
@@ -168,6 +177,30 @@ export function canSaveLayerToLibrary(
   return options.canRestoreControlPainted?.(layer) === true;
 }
 
+/**
+ * The `source` to store for a layer, with a live XYZ layer's session-specific
+ * endpoint rewound to the template it was resolved from.
+ *
+ * `prepareLayerForSave` does the same thing when writing a project file: an XYZ
+ * layer's `source.tiles`/`source.url` can hold a *resolved* endpoint while
+ * `metadata.originalUrl` keeps the template, and baking the resolved value into
+ * a saved record makes it replay a stale host instead of re-resolving. A library
+ * entry outlives a session by design, so it needs the same rewind — stripping
+ * `metadata.resolvedUrl` alone would leave the resolved endpoint sitting in
+ * `source`.
+ */
+function sourceForCapture(layer: GeoLibreLayer): Record<string, unknown> {
+  const source = layer.source ?? {};
+  if (layer.type !== "xyz") return source;
+  const originalUrl = nonEmptyString((layer.metadata ?? {}).originalUrl)
+    ? layer.metadata.originalUrl
+    : nonEmptyString(source.url)
+      ? source.url
+      : null;
+  if (!originalUrl) return source;
+  return { ...source, tiles: [originalUrl], url: originalUrl };
+}
+
 /** Why a layer could not be captured into the library. */
 export type LayerLibraryCaptureFailure =
   /** Nothing to re-add from: no source URL, no local path, no features. */
@@ -181,14 +214,16 @@ export type LayerLibraryCaptureResult =
   | { ok: false; reason: LayerLibraryCaptureFailure };
 
 /**
- * Approximate serialized size of a value in bytes. `JSON.stringify().length`
- * counts UTF-16 code units, which matches bytes for the ASCII-dominated JSON a
- * library entry holds and under-counts only for non-Latin text — close enough
- * for a size ceiling, and far cheaper than encoding the string.
+ * Serialized size of a value in UTF-8 bytes — what IndexedDB and an exported
+ * bundle actually cost. Measured with {@link TextEncoder} rather than
+ * `JSON.stringify().length`, which counts UTF-16 code units: CJK, Arabic, and
+ * Cyrillic text is 1 unit but 2-3 bytes per character, so a length-based check
+ * would let an entry through at 2-3x the cap it is supposed to enforce.
  */
-function approximateJsonBytes(value: unknown): number {
+function jsonByteLength(value: unknown): number {
   try {
-    return JSON.stringify(value)?.length ?? 0;
+    const json = JSON.stringify(value);
+    return json === undefined ? 0 : new TextEncoder().encode(json).length;
   } catch {
     // A source or metadata value with a circular reference cannot be stored at
     // all, so treat it as over any cap.
@@ -270,7 +305,7 @@ export function captureLayerLibraryEntry(
     name: options.name?.trim() || layer.name,
     addedAt: options.addedAt,
     layerType: layer.type,
-    source: structuredClone(layer.source ?? {}),
+    source: structuredClone(sourceForCapture(layer)),
     style: structuredClone({ ...DEFAULT_LAYER_STYLE, ...layer.style }),
     opacity:
       typeof layer.opacity === "number" && Number.isFinite(layer.opacity) ? layer.opacity : 1,
@@ -282,7 +317,7 @@ export function captureLayerLibraryEntry(
   };
   const withFeatures = embed && !controlPainted ? { ...base, geojson: embed } : base;
 
-  if (approximateJsonBytes(withFeatures) <= MAX_LAYER_LIBRARY_ENTRY_BYTES) {
+  if (jsonByteLength(withFeatures) <= MAX_LAYER_LIBRARY_ENTRY_BYTES) {
     return { ok: true, entry: withFeatures };
   }
   if (embed && localPath) {
@@ -295,7 +330,7 @@ export function captureLayerLibraryEntry(
       needsLocalFile: true,
     };
     delete pathOnly.geojson;
-    if (approximateJsonBytes(pathOnly) <= MAX_LAYER_LIBRARY_ENTRY_BYTES) {
+    if (jsonByteLength(pathOnly) <= MAX_LAYER_LIBRARY_ENTRY_BYTES) {
       return { ok: true, entry: pathOnly };
     }
   }
@@ -537,8 +572,7 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
       candidate.opacity <= 1
         ? candidate.opacity
         : 1;
-    seen.add(id);
-    entries.push({
+    const normalized: LayerLibraryEntry = {
       id,
       name,
       addedAt: typeof candidate.addedAt === "string" ? candidate.addedAt : "",
@@ -563,7 +597,16 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
       ...(geojson ? { geojson: structuredClone(geojson) } : {}),
       // `needsLocalFile` only means anything with a path to read.
       ...(candidate.needsLocalFile === true && sourcePath ? { needsLocalFile: true } : {}),
-    });
+    };
+    // The per-entry size ceiling is enforced here too, not only on capture: an
+    // imported bundle is produced elsewhere, so without this a crafted (or just
+    // hand-assembled) file could push tens of MB of embedded features per entry
+    // into IndexedDB, exactly the "library as a data store" outcome the cap
+    // exists to prevent.
+    if (jsonByteLength(normalized) > MAX_LAYER_LIBRARY_ENTRY_BYTES) continue;
+    seen.add(id);
+    entries.push(normalized);
+    if (entries.length >= MAX_LAYER_LIBRARY_ENTRIES) break;
   }
   return entries;
 }
@@ -621,24 +664,62 @@ function isRedactedUrlParam(name: string): boolean {
   return EXPORT_REDACTED_URL_PARAMS.has(lower) || lower.startsWith("x-amz-");
 }
 
+/** Drop `user:pass@` userinfo from a URL's authority, keeping the rest. */
+function redactUrlUserInfo(base: string): string {
+  // Only look inside the authority (between `://` and the next `/`), so a `@`
+  // in a path segment is untouched.
+  const schemeEnd = base.indexOf("://");
+  if (schemeEnd === -1) return base;
+  const authorityStart = schemeEnd + 3;
+  const authorityEnd = base.indexOf("/", authorityStart);
+  const authority = base.slice(authorityStart, authorityEnd === -1 ? undefined : authorityEnd);
+  const at = authority.lastIndexOf("@");
+  if (at === -1) return base;
+  return (
+    base.slice(0, authorityStart) +
+    authority.slice(at + 1) +
+    (authorityEnd === -1 ? "" : base.slice(authorityEnd))
+  );
+}
+
+/** Remove credential parameters from an `&`-joined `name=value` string. */
+function redactParamString(params: string): string {
+  return params
+    .split("&")
+    .filter((pair) => pair !== "" && !isRedactedUrlParam(pair.split("=", 1)[0]))
+    .join("&");
+}
+
 /**
- * Strip credential-bearing query parameters from a URL, leaving everything else
- * intact. A value that is not a parseable absolute URL (an XYZ template with
- * `{z}/{x}/{y}` placeholders parses fine; a relative path or a `pmtiles://`
- * form may not) is returned unchanged rather than mangled.
+ * Strip credentials from a URL, leaving everything else intact: named query
+ * parameters, the same names in a `#`-fragment (an OAuth implicit-flow token
+ * arrives as `#access_token=…`, the same `name=value` shape), and any
+ * `user:pass@` userinfo in the authority.
+ *
+ * Parsed by hand rather than through `URL`/`URLSearchParams`, which re-encode the
+ * `{z}/{x}/{y}` placeholders a tile template depends on — and which would throw
+ * on the relative or `pmtiles://`-style values a source can also hold. Anything
+ * without a query, fragment, or userinfo is returned unchanged.
  */
 function redactUrlCredentials(value: string): string {
-  const separator = value.indexOf("?");
-  if (separator === -1) return value;
-  const [base, rawQuery] = [value.slice(0, separator), value.slice(separator + 1)];
-  // Split by hand rather than through URL/URLSearchParams: those re-encode the
-  // `{z}/{x}/{y}` placeholders a tile template depends on.
-  const [query, fragment] = rawQuery.split("#", 2);
-  const kept = query
-    .split("&")
-    .filter((pair) => pair !== "" && !isRedactedUrlParam(pair.split("=", 1)[0]));
-  const rebuiltQuery = kept.length > 0 ? `?${kept.join("&")}` : "";
-  return `${base}${rebuiltQuery}${fragment === undefined ? "" : `#${fragment}`}`;
+  const hash = value.indexOf("#");
+  const beforeHash = hash === -1 ? value : value.slice(0, hash);
+  const fragment = hash === -1 ? undefined : value.slice(hash + 1);
+  const separator = beforeHash.indexOf("?");
+  const base = separator === -1 ? beforeHash : beforeHash.slice(0, separator);
+  const query = separator === -1 ? undefined : beforeHash.slice(separator + 1);
+
+  const keptQuery = query === undefined ? undefined : redactParamString(query);
+  // A fragment is only treated as parameters when it looks like them; a plain
+  // `#section` anchor is preserved as-is.
+  const keptFragment =
+    fragment === undefined || !fragment.includes("=") ? fragment : redactParamString(fragment);
+
+  return (
+    redactUrlUserInfo(base) +
+    (keptQuery ? `?${keptQuery}` : "") +
+    (keptFragment ? `#${keptFragment}` : "")
+  );
 }
 
 /** Copy of an entry with per-user credentials removed from its source. */

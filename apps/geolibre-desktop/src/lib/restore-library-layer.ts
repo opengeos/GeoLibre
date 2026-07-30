@@ -83,10 +83,18 @@ export function canRestoreLibraryLayer(layer: GeoLibreLayer): boolean {
  * Run the plugin restore pass that renders `layer`, if it is control-painted and
  * needs one. A no-op for a layer the map sync rebuilds from the record.
  *
+ * **Does not wait for the layer to appear.** Four of the five passes are
+ * `(app) => void` and fire their real work into a floating `void (async () =>
+ * …)()` internally (see `restoreVectorLayers`), so awaiting them only spans the
+ * dispatch; only `restoreLidarLayers` returns a real promise. Making this
+ * genuinely awaitable means changing those plugins' signatures, which the
+ * project-load path shares — out of scope here, so the caller's busy flag covers
+ * the dispatch window rather than the full re-ingest.
+ *
  * @param layer - The layer just added from the Layer Library.
  * @param app - The plugin app API (from `createAppAPI`).
- * @returns Resolves once the pass has been dispatched and settled (immediately
- *   when none was needed). The passes log their own per-layer failures.
+ * @returns Resolves once the pass has been dispatched (immediately when none was
+ *   needed). The passes log their own per-layer failures.
  */
 export async function restoreLibraryLayer(
   layer: GeoLibreLayer,

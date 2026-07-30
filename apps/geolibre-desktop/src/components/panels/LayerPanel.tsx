@@ -749,6 +749,9 @@ export function LayerPanel({
   // Same stray-blur guard as suppressBlurCommitRef, for the group rename input.
   const suppressGroupBlurCommitRef = useRef(false);
   const refreshingLayerIdsRef = useRef(new Set<string>());
+  // Layer ids with a Save to My Data in flight, so a repeat click during the
+  // vector-control materialize cannot create a duplicate library entry.
+  const savingToLibraryIdsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
   // Active filesystem watchers for "watch local file" layers, keyed by layer id.
@@ -1047,33 +1050,43 @@ export function LayerPanel({
    */
   const handleSaveToLibrary = useCallback(
     async (layer: GeoLibreLayer) => {
-      const features = isEmbeddableLocalVectorLayer(layer)
-        ? (await materializeEmbeddableVectorLayers([layer])).get(layer.id)
-        : undefined;
-      // The materialize await can outlive a concurrent style/opacity/join edit,
-      // so capture from the current layer rather than the closure's snapshot
-      // (mirrors handleImportStyle / handleSaveEditsToSource).
-      const latest = useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
-      const result = captureLayerLibraryEntry(latest, {
-        id: createLayerLibraryEntryId(),
-        addedAt: new Date().toISOString(),
-        ...(features ? { features } : {}),
-      });
-      clearRefreshStatusTimer(layer.id);
-      setRefreshStatuses((current) => ({
-        ...current,
-        [layer.id]: result.ok
-          ? { type: "success", message: t("layers.savedToLibrary", { name: layer.name }) }
-          : {
-              type: "error",
-              message:
-                result.reason === "too-large"
-                  ? t("layers.saveToLibraryTooLarge")
-                  : t("layers.saveToLibraryNoSource"),
-            },
-      }));
-      scheduleStatusClear(layer.id);
-      if (result.ok) saveLayerLibraryEntry(result.entry);
+      // Guard re-entrancy across the materialize await below: a second invocation
+      // for the same layer before the first resolves would save two entries under
+      // two freshly generated ids (mirrors handleRefreshLayer's
+      // refreshingLayerIdsRef).
+      if (savingToLibraryIdsRef.current.has(layer.id)) return;
+      savingToLibraryIdsRef.current.add(layer.id);
+      try {
+        const features = isEmbeddableLocalVectorLayer(layer)
+          ? (await materializeEmbeddableVectorLayers([layer])).get(layer.id)
+          : undefined;
+        // The materialize await can outlive a concurrent style/opacity/join edit,
+        // so capture from the current layer rather than the closure's snapshot
+        // (mirrors handleImportStyle / handleSaveEditsToSource).
+        const latest = useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
+        const result = captureLayerLibraryEntry(latest, {
+          id: createLayerLibraryEntryId(),
+          addedAt: new Date().toISOString(),
+          ...(features ? { features } : {}),
+        });
+        clearRefreshStatusTimer(layer.id);
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: result.ok
+            ? { type: "success", message: t("layers.savedToLibrary", { name: layer.name }) }
+            : {
+                type: "error",
+                message:
+                  result.reason === "too-large"
+                    ? t("layers.saveToLibraryTooLarge")
+                    : t("layers.saveToLibraryNoSource"),
+              },
+        }));
+        scheduleStatusClear(layer.id);
+        if (result.ok) saveLayerLibraryEntry(result.entry);
+      } finally {
+        savingToLibraryIdsRef.current.delete(layer.id);
+      }
     },
     [saveLayerLibraryEntry, clearRefreshStatusTimer, scheduleStatusClear, t],
   );
