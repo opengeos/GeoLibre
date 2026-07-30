@@ -39,10 +39,6 @@ export interface ExternalNativePaintBridge {
 export type ExternalNativePaintMode = "geolibre" | "plugin";
 
 /**
- * True when the plugin that registered this layer paints it itself, so GeoLibre
- * must not offer (or apply) MapLibre paint properties for it.
- */
-/**
  * Whether a layer is drawn by a **custom render layer** its control created — a
  * deck.gl overlay, 3D Tiles, or Add Vector Layer's own MapLibre layers — rather
  * than by GeoLibre's layer sync. `metadata.customLayerType` is what marks one,
@@ -54,6 +50,9 @@ export type ExternalNativePaintMode = "geolibre" | "plugin";
  * reason about it — the Layer Library's "can this be re-added and rendered?"
  * gate (issue #1520) — share one definition and cannot drift.
  *
+ * Distinct from {@link pluginOwnsPaint}: that asks who applies *paint* to an
+ * existing layer, this asks who creates the layer at all.
+ *
  * @param layer - A store layer (metadata only).
  * @returns True when only the owning control can create the layer's map output.
  */
@@ -61,6 +60,10 @@ export function controlRendersLayer(layer: { metadata: Record<string, unknown> }
   return typeof layer.metadata.customLayerType === "string";
 }
 
+/**
+ * True when the plugin that registered this layer paints it itself, so GeoLibre
+ * must not offer (or apply) MapLibre paint properties for it.
+ */
 export function pluginOwnsPaint(layer: { metadata: Record<string, unknown> }): boolean {
   return layer.metadata.paintMode === "plugin";
 }
