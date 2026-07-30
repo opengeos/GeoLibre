@@ -1066,7 +1066,7 @@ function openElementDialog(
   const titleLabel = document.createElement("label");
   titleLabel.style.cssText =
     "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
-  titleLabel.textContent = "Title";
+  titleLabel.textContent = type === "pin" ? labels.pinTitlePrompt : "Title";
   container.appendChild(titleLabel);
 
   const titleInput = document.createElement("input");
@@ -1083,10 +1083,11 @@ function openElementDialog(
     // Placement mode toggle: point (marker) vs extent (corner-pinned overlay).
     const modeRow = document.createElement("div");
     modeRow.style.cssText = "display: flex; gap: 4px; margin-bottom: 8px;";
-    const makeToggle = (label: string, mode: "point" | "extent") => {
+    const makeToggle = (btnLabel: string, mode: "point" | "extent") => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = label;
+      btn.textContent = btnLabel;
+      btn.dataset.mode = mode;
       btn.style.cssText = `flex: 1; padding: 5px 0; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); font-size: 11px; cursor: pointer; transition: background 0.15s; ${
         mode === "point"
           ? "background: var(--geolibre-primary, #3b82f6); color: #fff; border-color: var(--geolibre-primary, #3b82f6);"
@@ -1097,7 +1098,7 @@ function openElementDialog(
         placementMode = mode;
         for (const child of modeRow.children) {
           const el = child as HTMLButtonElement;
-          if (el.textContent === label) {
+          if (el.dataset.mode === mode) {
             el.style.background = "var(--geolibre-primary, #3b82f6)";
             el.style.color = "#fff";
             el.style.borderColor = "var(--geolibre-primary, #3b82f6)";
@@ -1110,14 +1111,14 @@ function openElementDialog(
       };
       return btn;
     };
-    modeRow.appendChild(makeToggle("At Point", "point"));
-    modeRow.appendChild(makeToggle("Pinned to Extent", "extent"));
+    modeRow.appendChild(makeToggle(labels.atPoint, "point"));
+    modeRow.appendChild(makeToggle(labels.pinnedToExtent, "extent"));
     container.appendChild(modeRow);
 
     const urlLabel = document.createElement("label");
     urlLabel.style.cssText =
       "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
-    urlLabel.textContent = "Image URL";
+    urlLabel.textContent = labels.imageUrlPrompt;
     container.appendChild(urlLabel);
 
     descInput = document.createElement("input");
@@ -1125,12 +1126,15 @@ function openElementDialog(
     descInput.placeholder = "https://example.com/image.png";
     descInput.style.cssText =
       "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; margin-bottom: 8px;";
+    descInput.oninput = () => {
+      descInput!.style.borderColor = "";
+    };
     container.appendChild(descInput);
   } else {
     const contentLabel = document.createElement("label");
     contentLabel.style.cssText =
       "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
-    contentLabel.textContent = type === "pin" ? "Description" : "Note Content";
+    contentLabel.textContent = type === "pin" ? labels.pinDescPrompt : labels.stickyNotePrompt;
     container.appendChild(contentLabel);
 
     descInput = document.createElement("textarea");
@@ -1167,7 +1171,7 @@ function openElementDialog(
 
   const cancelBtn = document.createElement("button");
   cancelBtn.type = "button";
-  cancelBtn.textContent = "Cancel";
+  cancelBtn.textContent = labels.cancel;
   cancelBtn.style.cssText =
     "padding: 5px 10px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: transparent; color: inherit; font-size: 12px; cursor: pointer;";
   cancelBtn.onclick = (e) => {
@@ -1178,7 +1182,7 @@ function openElementDialog(
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
-  saveBtn.textContent = "Save Element";
+  saveBtn.textContent = labels.saveElement;
   saveBtn.style.cssText =
     "padding: 5px 10px; border-radius: 6px; border: none; background: var(--geolibre-primary, #3b82f6); color: #ffffff; font-size: 12px; font-weight: 500; cursor: pointer;";
   saveBtn.onclick = (e) => {
@@ -1187,6 +1191,15 @@ function openElementDialog(
       titleInput.value.trim() ||
       (type === "pin" ? "Pin 1" : type === "sticky_note" ? "Sticky Note" : "Placed Image");
     const description = descInput ? descInput.value.trim() : "";
+
+    if (type === "placed_image" && !description) {
+      if (descInput) {
+        descInput.style.borderColor = "var(--geolibre-error, #ef4444)";
+        descInput.focus();
+      }
+      return;
+    }
+
     onSubmit({
       title,
       description,
@@ -1236,7 +1249,8 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
   }
   if (activeTool === "placed_image") {
     openElementDialog(event, "placed_image", (data) => {
-      if (!data.imageUrl) return;
+      const imageUrl = data.imageUrl || "";
+      if (!imageUrl) return;
       if (data.placementMode === "extent") {
         // Corner-pinned placement: use the store's addImageOverlayLayer API.
         // Compute a rectangular extent around the click point, then let the
@@ -1256,7 +1270,7 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
           .getState()
           .addImageOverlayLayer(
             data.title,
-            { url: data.imageUrl, coordinates: corners },
+            { url: imageUrl, coordinates: corners },
             { bounds: [lng - d, lat - d, lng + d, lat + d] },
           );
         // Tracking feature so the Elements panel can manage this overlay.
@@ -1267,7 +1281,7 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
             annotationId: nextAnnotationId(),
             __annotation: "placed_image",
             title: data.title,
-            imageUrl: data.imageUrl,
+            imageUrl,
             placementMode: "extent",
             overlayLayerId,
             shape: TEXT_MARKER_SHAPE,
@@ -1277,7 +1291,7 @@ function handleClick(event: maplibregl.MapMouseEvent): void {
         };
         appendAnnotationFeatures([trackingFeature]);
       } else {
-        appendAnnotationFeatures([placedImageFeature(event.lngLat, data.imageUrl, data.title)]);
+        appendAnnotationFeatures([placedImageFeature(event.lngLat, imageUrl, data.title)]);
       }
     });
     return;

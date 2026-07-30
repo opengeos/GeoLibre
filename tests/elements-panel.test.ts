@@ -16,6 +16,7 @@ import {
   __resetRightPanelRegistryForTests,
 } from "../packages/plugins/src/right-panel-registry";
 import { LngLat } from "maplibre-gl";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 describe("Elements Panel & Map Elements", () => {
   beforeEach(() => {
@@ -24,19 +25,19 @@ describe("Elements Panel & Map Elements", () => {
   });
 
   it("registers the right panel on activate", () => {
-    const mockApp = {
+    const mockApp: Partial<GeoLibreAppAPI> = {
       registerRightPanel,
       addMapControl: () => true,
       removeMapControl: () => {},
       getMap: () => null,
     };
 
-    maplibreAnnotationsPlugin.activate(mockApp as any);
+    maplibreAnnotationsPlugin.activate(mockApp as GeoLibreAppAPI);
     const panel = getRightPanel("geolibre-elements-panel");
     assert.equal(panel !== undefined, true);
     assert.equal(panel?.title, "Elements");
 
-    maplibreAnnotationsPlugin.deactivate(mockApp as any);
+    maplibreAnnotationsPlugin.deactivate(mockApp as GeoLibreAppAPI);
     assert.equal(getRightPanel("geolibre-elements-panel"), undefined);
   });
 
@@ -84,6 +85,16 @@ describe("Elements Panel & Map Elements", () => {
     assert.equal(layer.geojson?.features.length, 2);
     assert.equal(layer.geojson?.features[0].properties?.title, "Pin Alpha");
     assert.equal(layer.geojson?.features[1].properties?.title, "Note Beta");
+
+    // Call updateElementProps to rename elem-1
+    updateElementProps("elem-1", { title: "Renamed" });
+
+    // Assert that the first feature reflects "Renamed", and the sibling feature is unchanged
+    const updatedLayer = useAppStore.getState().layers[0];
+    assert.equal(updatedLayer.geojson?.features[0].properties?.title, "Renamed");
+    assert.equal(updatedLayer.geojson?.features[0].properties?.description, "First pin description");
+    assert.equal(updatedLayer.geojson?.features[1].properties?.title, "Note Beta");
+    assert.equal(updatedLayer.geojson?.features[1].properties?.description, "Note body text");
   });
 
   it("builds correct feature objects using pinFeature, stickyNoteFeature, placedImageFeature", () => {
