@@ -792,6 +792,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     return Number.isFinite(south) ? (south + north) / 2 : null;
   }, [distanceLayerKey, layers, open]);
 
+  // Whether this tool's distance fields carry a unit picker, which decides which
+  // of the two coordinate-units notes the form shows above the parameters.
+  const showDistanceNote =
+    distanceLatitude !== null &&
+    (selectedTool?.params ?? []).some((param) => isDistanceParameter(param));
+
   // Column names to offer for a `*_field` parameter (GeoLibre#1459): those of
   // the layer picked for the vector input the parameter names. With a single
   // vector input that is unambiguous; with several, an unmatched name falls back
@@ -1911,26 +1917,27 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
           <ScrollArea className="min-h-0">
             <div className="grid gap-4 pb-2 pe-5">
+              {/* The chosen layers are WGS84 and this tool takes a ground
+                  distance, so its distance fields carry a unit picker
+                  (GeoLibre#1540). Say once, up front, that the layers are
+                  geographic and what to do about it, rather than repeating the
+                  reprojection advice under every field. This note supersedes the
+                  degrees warning below, which says the same thing without the
+                  way out, so only one of the two ever renders. */}
+              {showDistanceNote ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("processing.distance.geographicNote")}
+                </p>
+              ) : null}
               {/* Local (WASM) mode hands every vector input to the runner as
                   GeoJSON, which RFC 7946 fixes to WGS84 — so a tool's distance,
                   spacing or tolerance parameter is measured in degrees, not
                   metres. Nothing in the tool descriptions says so, which is how
                   a 0.1 "spacing" (≈ 11 km) yielded a handful of points on a
                   city-scale line (GeoLibre#1458). */}
-              {runLocal && vectorInputParams.length > 0 ? (
+              {!showDistanceNote && runLocal && vectorInputParams.length > 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {t("processing.whitebox.vectorUnitsNote")}
-                </p>
-              ) : null}
-              {/* The chosen layers are WGS84 and this tool takes a ground
-                  distance, so its distance fields carry a unit picker
-                  (GeoLibre#1540). Say once, up front, that the layer is
-                  geographic and what to do about it, rather than repeating the
-                  reprojection advice under every field. */}
-              {distanceLatitude !== null &&
-              (selectedTool?.params ?? []).some((param) => isDistanceParameter(param)) ? (
-                <p className="text-xs text-muted-foreground">
-                  {t("processing.distance.geographicNote")}
                 </p>
               ) : null}
               {(selectedTool?.params ?? []).length === 0 ? (
@@ -2422,6 +2429,20 @@ function ParameterField({
             onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
           />
         </div>
+      ) : kind === "double" && degreeLatitude !== undefined ? (
+        // A ground distance whose input is a WGS84 map layer: the tool measures
+        // it in degrees, so pair the number box with a unit picker that converts
+        // metres/km/feet/miles for the user (GeoLibre#1540). Placed ahead of
+        // isPathParameter like the CRS and map-extent pickers above: that
+        // fallback matches path/file/folder anywhere in a parameter's name or
+        // description, so a distance whose wording mentions one would otherwise
+        // render as a file browser.
+        <DistanceInput
+          id={`whitebox-${param.name}`}
+          latitude={degreeLatitude}
+          value={valueText}
+          onChange={onChange}
+        />
       ) : isPathParameter(param) ? (
         <PathPickerInput
           id={`whitebox-${param.name}`}
@@ -2430,16 +2451,6 @@ function ParameterField({
           value={valueText}
           onChange={onChange}
           onPickFile={onPickFile}
-        />
-      ) : kind === "double" && degreeLatitude !== undefined ? (
-        // A ground distance whose input is a WGS84 map layer: the tool measures
-        // it in degrees, so pair the number box with a unit picker that converts
-        // metres/km/feet/miles for the user (GeoLibre#1540).
-        <DistanceInput
-          id={`whitebox-${param.name}`}
-          latitude={degreeLatitude}
-          value={valueText}
-          onChange={onChange}
         />
       ) : kind === "int" || kind === "double" ? (
         <NumberStepperInput
