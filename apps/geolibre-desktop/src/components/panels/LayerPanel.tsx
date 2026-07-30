@@ -2608,8 +2608,13 @@ export function LayerPanel({
             // way to render it again (issue #1520), so a layer with no source and
             // no features is excluded — and so is a control-painted layer whose
             // kind has no restore route, which would otherwise re-add blank.
+            // `hasMaterializableFeatures` is the same predicate the save handler
+            // uses to read features out of the vector control, so the menu never
+            // hides a layer the capture path could in fact embed (a tiles-mode
+            // Add Vector Layer layer has no `layer.geojson` to look at).
             const canSaveToLibrary = canSaveLayerToLibrary(layer, {
               canRestoreControlPainted: canRestoreLibraryLayer,
+              hasMaterializableFeatures: isEmbeddableLocalVectorLayer,
             });
             // Copy/paste symbology (issue #1339). Vector-styled layers and
             // deck.gl rasters each copy their own style family; a paste only

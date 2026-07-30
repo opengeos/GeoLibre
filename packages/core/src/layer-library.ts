@@ -94,25 +94,27 @@ export function hasRestorableLayerSource(
  */
 function layerLocalPath(layer: Pick<GeoLibreLayer, "sourcePath" | "metadata">): string | undefined {
   const metadata = layer.metadata ?? {};
-  if (nonEmptyString(metadata.localFilePath) && isReReadablePath(metadata.localFilePath)) {
-    return metadata.localFilePath;
-  }
+  if (isReReadablePath(metadata.localFilePath)) return metadata.localFilePath;
   if (metadata.localFileReloadable !== true) return undefined;
-  return nonEmptyString(layer.sourcePath) && isReReadablePath(layer.sourcePath)
-    ? layer.sourcePath
-    : undefined;
+  return isReReadablePath(layer.sourcePath) ? layer.sourcePath : undefined;
 }
 
 /**
- * Whether a persisted path is safe to hand to a host file read: absolute, with
- * no `..` traversal. Applied to captured *and* imported entries, because a
- * shared bundle is untrusted input — a crafted `needsLocalFile` entry could
- * otherwise point at any file on the importing user's disk, and clicking it in
- * My Data would read that file. Mirrors the client-side re-validation the
- * project-restore paths already do before calling into Tauri.
+ * Whether a value is a path safe to hand to a host file read: a non-empty
+ * string, absolute, with no `..` traversal. Takes `unknown` and does the
+ * non-empty check itself so every path-like field — `sourcePath`,
+ * `metadata.localFilePath`, and any added later — goes through one predicate;
+ * splitting the two halves is what let those two fields drift apart in the
+ * first place.
+ *
+ * Applied to captured *and* imported entries, because a shared bundle is
+ * untrusted input: a crafted `needsLocalFile` entry could otherwise point at any
+ * file on the importing user's disk, and clicking it in My Data would read that
+ * file. Mirrors the client-side re-validation the project-restore paths already
+ * do before calling into Tauri.
  */
-function isReReadablePath(path: string): boolean {
-  return isAbsoluteFilesystemPath(path) && !hasPathTraversal(path);
+function isReReadablePath(value: unknown): value is string {
+  return nonEmptyString(value) && isAbsoluteFilesystemPath(value) && !hasPathTraversal(value);
 }
 
 function featureCount(geojson: FeatureCollection | undefined): number {
@@ -124,7 +126,11 @@ function featureCount(geojson: FeatureCollection | undefined): number {
  * layer actions menu gates on. Two things have to hold:
  *
  * 1. There is something to re-add *from*: a re-fetchable source, a local file
- *    path, or features to embed.
+ *    path, or features to embed. A control-painted layer's features live in its
+ *    control rather than the store record — a tiles-mode Add Vector Layer layer
+ *    has no `layer.geojson` at all — so the caller can answer for that case with
+ *    `hasMaterializableFeatures`, keeping this gate consistent with the capture
+ *    path, which reads those features through `options.features`.
  * 2. The host can actually render it again. For a control-painted layer
  *    ({@link isExternalNativeLayerRecord}) that means either the map's own sync
  *    rebuilds it from the record or the owning plugin's restore pass can be
@@ -140,17 +146,23 @@ function featureCount(geojson: FeatureCollection | undefined): number {
  * @param layer - The layer to test.
  * @param options - `canRestoreControlPainted` answers whether the host can
  *   re-render a control-painted layer (the desktop app passes its
- *   `canRestoreLibraryLayer`).
+ *   `canRestoreLibraryLayer`); `hasMaterializableFeatures` answers whether it can
+ *   read the layer's features out of its control (the app passes
+ *   `isEmbeddableLocalVectorLayer`, the same predicate its save handler uses).
  * @returns Whether the layer can be offered to the library.
  */
 export function canSaveLayerToLibrary(
   layer: GeoLibreLayer,
-  options: { canRestoreControlPainted?: (layer: GeoLibreLayer) => boolean } = {},
+  options: {
+    canRestoreControlPainted?: (layer: GeoLibreLayer) => boolean;
+    hasMaterializableFeatures?: (layer: GeoLibreLayer) => boolean;
+  } = {},
 ): boolean {
   const hasSomethingToReAddFrom =
     hasRestorableLayerSource(layer) ||
     layerLocalPath(layer) !== undefined ||
-    featureCount(layer.geojson) > 0;
+    featureCount(layer.geojson) > 0 ||
+    options.hasMaterializableFeatures?.(layer) === true;
   if (!hasSomethingToReAddFrom) return false;
   if (!isExternalNativeLayerRecord(layer)) return true;
   return options.canRestoreControlPainted?.(layer) === true;
@@ -384,11 +396,7 @@ export function layerLibraryConfigPatch(entry: LayerLibraryEntry): LayerLibraryC
  * @returns True when only a filesystem-capable host can add it.
  */
 export function layerLibraryEntryNeedsLocalFile(entry: LayerLibraryEntry): boolean {
-  return (
-    entry.needsLocalFile === true &&
-    nonEmptyString(entry.sourcePath) &&
-    isReReadablePath(entry.sourcePath)
-  );
+  return entry.needsLocalFile === true && isReReadablePath(entry.sourcePath);
 }
 
 /** A plain JSON object (not an array, not null), or undefined. */
@@ -499,18 +507,14 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
     // metadata. Without this a shared bundle could keep a valid-looking
     // `sourcePath` while pointing the raster restore at any file on the
     // importing user's disk.
-    if ("localFilePath" in metadata) {
-      const path = metadata.localFilePath;
-      if (!nonEmptyString(path) || !isReReadablePath(path)) delete metadata.localFilePath;
+    if ("localFilePath" in metadata && !isReReadablePath(metadata.localFilePath)) {
+      delete metadata.localFilePath;
     }
     // A bundle is shareable, so its `sourcePath` is untrusted: keep it only when
     // it is an absolute, traversal-free path a host could legitimately re-read.
     // Without this a crafted entry could point `onAddFilePath` at any file on the
     // importing user's disk.
-    const sourcePath =
-      nonEmptyString(candidate.sourcePath) && isReReadablePath(candidate.sourcePath)
-        ? candidate.sourcePath
-        : undefined;
+    const sourcePath = isReReadablePath(candidate.sourcePath) ? candidate.sourcePath : undefined;
     const geojson = featureCollection(candidate.geojson);
     // Same "is there anything to re-add from" gate as the capture path, so a
     // hand-edited bundle cannot introduce an entry that always fails. Both path

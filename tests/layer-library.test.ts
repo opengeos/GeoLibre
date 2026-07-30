@@ -139,6 +139,38 @@ describe("canSaveLayerToLibrary", () => {
     );
   });
 
+  it("accepts a control-painted layer whose features live only in its control", () => {
+    // A tiles-mode Add Vector Layer layer has no `layer.geojson`, no re-fetchable
+    // source, and no path — but the save handler can read its features out of the
+    // control, so the gate must not hide what the capture path can embed.
+    const tilesMode = layer({
+      type: "vector-tiles",
+      source: { type: "vector" },
+      sourcePath: "cities.geojson",
+      metadata: {
+        externalNativeLayer: true,
+        customLayerType: "vector-fill",
+        sourceKind: "maplibre-gl-vector",
+      },
+    });
+    assert.equal(canSaveLayerToLibrary(tilesMode, { canRestoreControlPainted: () => true }), false);
+    assert.equal(
+      canSaveLayerToLibrary(tilesMode, {
+        canRestoreControlPainted: () => true,
+        hasMaterializableFeatures: () => true,
+      }),
+      true,
+    );
+    // Still refused when it cannot be re-rendered, whatever the features say.
+    assert.equal(
+      canSaveLayerToLibrary(tilesMode, {
+        canRestoreControlPainted: () => false,
+        hasMaterializableFeatures: () => true,
+      }),
+      false,
+    );
+  });
+
   it("rejects a layer with nothing to re-add from", () => {
     assert.equal(canSaveLayerToLibrary(layer()), false);
     assert.equal(
@@ -336,6 +368,30 @@ describe("captureLayerLibraryEntry", () => {
     assert.equal(result.entry.geojson, undefined);
     assert.deepEqual(result.entry.metadata.embeddedGeoJSON, POINTS);
     assert.equal("localFileReloadable" in result.entry.metadata, false);
+  });
+
+  it("captures a control-painted layer that has no path and no store features", () => {
+    // The true no-path case: a browser-picked or tiles-mode Add Vector Layer
+    // layer. Everything the entry needs comes from the caller's materialized
+    // features, so the capture must not depend on `sourcePath` or `layer.geojson`.
+    const result = captureLayerLibraryEntry(
+      layer({
+        type: "vector-tiles",
+        source: { type: "vector" },
+        sourcePath: "cities.geojson",
+        metadata: {
+          externalNativeLayer: true,
+          customLayerType: "vector-fill",
+          sourceKind: "maplibre-gl-vector",
+        },
+      }),
+      { ...CAPTURE_OPTIONS, features: POINTS },
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.deepEqual(result.entry.metadata.embeddedGeoJSON, POINTS);
+    assert.equal(result.entry.sourcePath, undefined);
+    assert.equal(result.entry.needsLocalFile, undefined);
   });
 
   it("prefers caller-supplied features over the layer's attribute-table copy", () => {
