@@ -449,7 +449,8 @@ export function layerLibraryConfigPatch(entry: LayerLibraryEntry): LayerLibraryC
  *
  * @param entry - The entry being re-added.
  * @param presentLayerIds - Ids of the layers in the target project.
- * @returns Names of the joins that cannot resolve (their `id` when unnamed).
+ * @returns Ids of the join-target layers that cannot resolve ({@link LayerJoin}
+ *   has no display name).
  */
 export function unresolvedLayerLibraryJoins(
   entry: Pick<LayerLibraryEntry, "joins">,

@@ -121,6 +121,13 @@ export function BrowserPanel({
   const [error, setError] = useState<string | null>(null);
   // Id of the My Data row whose name is being edited in place, or null.
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  // Ref mirror of renamingId, so the deferred focus restore in endRename can see
+  // whether another editor opened in the meantime (state would still be stale).
+  const renamingIdRef = useRef<string | null>(null);
+  const setRenaming = (id: string | null) => {
+    renamingIdRef.current = id;
+    setRenamingId(id);
+  };
   // Ref mirror of busyId for the re-entrancy guard: two clicks dispatched
   // back-to-back (before React commits the state update and the button's
   // disabled prop) would both read a stale `busyId === null`, so the guard
@@ -670,8 +677,14 @@ export function BrowserPanel({
   // hand focus back to the row. Deferred a frame because the row's button does
   // not exist again until this state change has rendered.
   const endRename = (rowId: string) => {
-    setRenamingId(null);
-    requestAnimationFrame(() => focusRow(rowId));
+    setRenaming(null);
+    requestAnimationFrame(() => {
+      // Clicking a second row's pencil commits this one by blur, and that row's
+      // editor has already mounted and taken focus by the time this frame runs —
+      // so only reclaim focus if no editor is open, or the deferred call would
+      // yank it out of the input the user just asked for.
+      if (renamingIdRef.current === null) focusRow(rowId);
+    });
   };
 
   const commitRename = (node: BrowserNode, name: string) => {
@@ -683,8 +696,13 @@ export function BrowserPanel({
     setError(null);
     if (!node.libraryLayerId) return;
     // Leave no rename editor open on a row that no longer exists.
-    if (renamingId === node.id) setRenamingId(null);
+    if (renamingId === node.id) setRenaming(null);
+    // The trash button being removed held focus, so send it to the section header
+    // — the nearest row that survives the delete — rather than letting it fall to
+    // <body> and lose the user's place (same reason as endRename above).
+    const fallbackRowId = visibleRows.find((row) => row.id === node.id)?.parentId ?? undefined;
     deleteLayerLibraryEntry(node.libraryLayerId);
+    if (fallbackRowId) requestAnimationFrame(() => focusRow(fallbackRowId));
   };
 
   // Import/export the whole library as a JSON bundle, matching how the Style
@@ -796,7 +814,7 @@ export function BrowserPanel({
                 favoriteIds={favoriteIds}
                 onToggleFavorite={toggleFavorite}
                 renamingId={renamingId}
-                onBeginRename={setRenamingId}
+                onBeginRename={setRenaming}
                 onCommitRename={commitRename}
                 onCancelRename={endRename}
                 onDeleteLibraryLayer={deleteLibraryLayer}

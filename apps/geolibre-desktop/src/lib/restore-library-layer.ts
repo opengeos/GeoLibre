@@ -50,6 +50,23 @@ const RESTORE_BY_SOURCE_KIND: Record<string, (app: GeoLibreAppAPI) => void | Pro
   [LIDAR_SOURCE_KIND]: restoreLidarLayers,
 };
 
+/**
+ * Kinds whose layers are created by their control but do **not** set
+ * `metadata.customLayerType`, so {@link controlRendersLayer} cannot recognize
+ * them. Planetary Computer is one: its store layer carries only
+ * `externalNativeLayer` / `sourceKind` / `nativeLayerIds`.
+ *
+ * Without this list, `canRestoreLibraryLayer` would return true for such a layer
+ * through the "the map sync rebuilds it" branch — correct today only because the
+ * kind also happens to have a restore pass registered below. Listing it makes
+ * the gate depend on the restore entry rather than on that coincidence, so
+ * removing a kind from {@link RESTORE_BY_SOURCE_KIND} stops offering it instead
+ * of silently saving entries that re-add unrendered.
+ */
+const CONTROL_CREATED_WITHOUT_CUSTOM_LAYER_TYPE: ReadonlySet<string> = new Set([
+  PLANETARY_COMPUTER_SOURCE_KIND,
+]);
+
 /** The restore pass that renders `layer`, or undefined when it needs none. */
 function restorePassFor(
   layer: GeoLibreLayer,
@@ -76,7 +93,11 @@ function restorePassFor(
  */
 export function canRestoreLibraryLayer(layer: GeoLibreLayer): boolean {
   if (!isExternalNativeLayerRecord(layer)) return true;
-  return !controlRendersLayer(layer) || restorePassFor(layer) !== undefined;
+  const sourceKind = layer.metadata.sourceKind;
+  const controlCreated =
+    controlRendersLayer(layer) ||
+    (typeof sourceKind === "string" && CONTROL_CREATED_WITHOUT_CUSTOM_LAYER_TYPE.has(sourceKind));
+  return controlCreated ? restorePassFor(layer) !== undefined : true;
 }
 
 /**
