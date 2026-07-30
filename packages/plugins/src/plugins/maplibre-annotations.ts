@@ -1087,10 +1087,11 @@ function openElementDialog(
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = label;
-      btn.style.cssText = `flex: 1; padding: 5px 0; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); font-size: 11px; cursor: pointer; transition: background 0.15s; ${mode === "point"
+      btn.style.cssText = `flex: 1; padding: 5px 0; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); font-size: 11px; cursor: pointer; transition: background 0.15s; ${
+        mode === "point"
           ? "background: var(--geolibre-primary, #3b82f6); color: #fff; border-color: var(--geolibre-primary, #3b82f6);"
           : "background: transparent; color: inherit;"
-        }`;
+      }`;
       btn.onclick = (e) => {
         e.stopPropagation();
         placementMode = mode;
@@ -1997,8 +1998,9 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
     elements.forEach((el, index) => {
       const row = document.createElement("div");
-      row.style.cssText = `display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--geolibre-bg-subtle, #f9fafb); border: 1px solid var(--geolibre-border, #e5e7eb); ${!el.visible ? "opacity: 0.5;" : ""
-        }`;
+      row.style.cssText = `display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--geolibre-bg-subtle, #f9fafb); border: 1px solid var(--geolibre-border, #e5e7eb); ${
+        !el.visible ? "opacity: 0.5;" : ""
+      }`;
 
       const icon = document.createElement("span");
       icon.style.cssText =
