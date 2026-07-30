@@ -226,6 +226,10 @@ export async function uploadProjectToShare(
   };
 }
 
+export function normalizeShareRole(value: unknown): ShareRole {
+  return value === "view" || value === "comment" || value === "edit" ? value : "view";
+}
+
 export interface FetchSharesOptions {
   token: string;
   baseUrl?: string;
@@ -273,10 +277,7 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
       // Unparseable access-control metadata fails closed to the least
       // privileged role, so a server that adds a role this build doesn't know
       // never gets displayed as full edit access.
-      const role: ShareRole =
-        item.role === "view" || item.role === "comment" || item.role === "edit"
-          ? item.role
-          : "view";
+      const role = normalizeShareRole(item.role);
       const visibility: ShareVisibility =
         item.visibility === "public" || item.visibility === "private"
           ? item.visibility
@@ -339,7 +340,7 @@ export async function revokeShare(options: RevokeShareOptions): Promise<void> {
   if (response.status === 401 || response.status === 403) {
     throw new Error("Invalid or expired API token.");
   }
-  if (!response.ok && response.status !== 404) {
+  if (!response.ok) {
     throw new Error(`Failed to revoke share (HTTP ${response.status}).`);
   }
 }
@@ -354,7 +355,7 @@ export interface VerifySharePasswordOptions {
 export async function verifySharePassword(
   options: VerifySharePasswordOptions,
 ): Promise<{ projectContent: string; role?: ShareRole }> {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
   const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 
@@ -383,10 +384,10 @@ export async function verifySharePassword(
     throw new Error(`Password verification failed (HTTP ${response.status}).`);
   }
 
-  const data = (await response.json()) as { content?: string; role?: ShareRole };
+  const data = (await response.json()) as { content?: string; role?: unknown };
   return {
     projectContent: typeof data.content === "string" ? data.content : JSON.stringify(data),
-    role: data.role,
+    role: data.role === undefined ? undefined : normalizeShareRole(data.role),
   };
 }
 

@@ -6,6 +6,7 @@ import {
   fetchProjectShares,
   isShareableTitle,
   MAX_PROJECT_TITLE_LENGTH,
+  normalizeShareRole,
   resolveShareBaseUrl,
   revokeShare,
   ShareUploadError,
@@ -320,6 +321,20 @@ describe("fetchProjectShares", () => {
   });
 });
 
+describe("normalizeShareRole", () => {
+  it("passes through valid share roles", () => {
+    assert.equal(normalizeShareRole("view"), "view");
+    assert.equal(normalizeShareRole("comment"), "comment");
+    assert.equal(normalizeShareRole("edit"), "edit");
+  });
+
+  it("fails closed to view for unknown or missing values", () => {
+    assert.equal(normalizeShareRole("owner"), "view");
+    assert.equal(normalizeShareRole(null), "view");
+    assert.equal(normalizeShareRole(undefined), "view");
+  });
+});
+
 describe("revokeShare", () => {
   it("deletes the specified share", async () => {
     const { fn, calls } = fakeFetch(200, { ok: true });
@@ -337,6 +352,20 @@ describe("revokeShare", () => {
 
   it("rejects when no token is provided", async () => {
     await assert.rejects(() => revokeShare({ token: "", shareId: "s1" }), /token/i);
+  });
+
+  it("rejects when revocation returns 404", async () => {
+    const { fn } = fakeFetch(404, { error: "Not found" });
+    await assert.rejects(
+      () =>
+        revokeShare({
+          token: "glb_secrettoken",
+          shareId: "s1",
+          baseUrl: "https://share.geolibre.app",
+          fetchImpl: fn,
+        }),
+      /Failed to revoke share \(HTTP 404\)/i,
+    );
   });
 });
 

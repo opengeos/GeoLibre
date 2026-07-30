@@ -559,6 +559,7 @@ export function ShareProjectDialog({
                             type="button"
                             variant="secondary"
                             size="sm"
+                            aria-label={t("share.copyLink")}
                             title={t("share.copyLink")}
                             onClick={() => handleCopy(s.projectUrl)}
                           >
