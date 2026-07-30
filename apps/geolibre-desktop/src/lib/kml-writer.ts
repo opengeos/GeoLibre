@@ -170,15 +170,15 @@ function extendedDataKml(feature: Feature): string | null {
   return `<ExtendedData>\n${data.map((entry) => indentXml(entry, 2)).join("\n")}\n</ExtendedData>`;
 }
 
-function opacityByte(value: unknown): string {
-  const opacity = typeof value === "number" ? value : Number(value ?? 1);
-  const normalized = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : 1;
+function opacityByte(value: unknown, defaultOpacity = 1): string {
+  const opacity = typeof value === "number" ? value : Number(value ?? defaultOpacity);
+  const normalized = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : defaultOpacity;
   return Math.round(normalized * 255)
     .toString(16)
     .padStart(2, "0");
 }
 
-function kmlColor(color: unknown, opacity: unknown): string | null {
+function kmlColor(color: unknown, opacity: unknown, defaultOpacity = 1): string | null {
   if (typeof color !== "string") return null;
   const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
   if (!match) return null;
@@ -192,7 +192,7 @@ function kmlColor(color: unknown, opacity: unknown): string | null {
   const red = hex.slice(0, 2);
   const green = hex.slice(2, 4);
   const blue = hex.slice(4, 6);
-  return `${opacityByte(opacity)}${blue}${green}${red}`.toLowerCase();
+  return `${opacityByte(opacity, defaultOpacity)}${blue}${green}${red}`.toLowerCase();
 }
 
 function styleKml(properties: GeoJsonProperties): string | null {
@@ -214,7 +214,7 @@ function styleKml(properties: GeoJsonProperties): string | null {
     sections.push(`<LineStyle>${values.join("")}</LineStyle>`);
   }
 
-  const fillColor = kmlColor(properties.fill, properties["fill-opacity"]);
+  const fillColor = kmlColor(properties.fill, properties["fill-opacity"], 0.6);
   if (fillColor) {
     sections.push(`<PolyStyle><color>${fillColor}</color></PolyStyle>`);
   }

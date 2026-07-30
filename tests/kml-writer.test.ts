@@ -234,6 +234,34 @@ describe("writeKml", () => {
     assert.equal((kml.match(/<IconStyle>/g) ?? []).length, 1);
   });
 
+  it("uses the simplestyle default opacity for polygon fills", () => {
+    const kml = writeKml(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { fill: "#336699" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      "Default fill opacity",
+    );
+
+    assert.match(kml, /<PolyStyle><color>99996633<\/color><\/PolyStyle>/);
+  });
+
   it("rejects invalid coordinates instead of creating a corrupt KML file", () => {
     for (const [id, expectedIndex] of [
       [undefined, 0],
