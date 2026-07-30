@@ -35,6 +35,7 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
+import { fetchAllowlistedUpstream } from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
@@ -268,7 +269,7 @@ async function resolveLatestBuildDate(): Promise<string> {
     // fetches next — so a later real range read could be served this 1-byte
     // body instead of its bytes. The resolved date is memoised in `latestCache`
     // already, so no edge cache is needed here.
-    const probe = await fetch(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
+    const probe = await fetchAllowlistedUpstream(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
       headers: { range: "bytes=0-0" },
     });
     if (probe.status === 206) {
@@ -367,11 +368,11 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
   }
   let originResponse: Response;
   try {
-    originResponse = await fetch(upstream, {
+    originResponse = await fetchAllowlistedUpstream(upstream, {
       // cacheEverything is required for Cloudflare to edge-cache a URL with no
       // static file extension (cacheTtl alone does not).
       cf: { cacheEverything: true, cacheTtl: 300 },
-    });
+    } as RequestInit);
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   }
@@ -446,7 +447,7 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
     // effect on Enterprise plans (silently ignored otherwise), so we don't rely
     // on it. Without cacheEverything, Cloudflare doesn't edge-cache the 206 at
     // all; the upstream still serves range requests directly.
-    originResponse = await fetch(`${PMTILES_UPSTREAM}/${target}`, {
+    originResponse = await fetchAllowlistedUpstream(`${PMTILES_UPSTREAM}/${target}`, {
       headers: { range },
     });
   } catch {
@@ -543,12 +544,12 @@ export default {
       }
       let originResponse: Response;
       try {
-        originResponse = await fetch(upstream.toString(), {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
           headers: { accept: "application/json" },
           // cacheEverything is required for Cloudflare to edge-cache a URL with
           // no static file extension (cacheTtl alone does not).
           cf: { cacheEverything: true, cacheTtl: 120 },
-        });
+        } as RequestInit);
       } catch {
         return new Response("Bad Gateway", {
           status: 502,
@@ -610,9 +611,9 @@ export default {
     const upstream = `${base}/${z}/${x}/${y}.png`;
     let originResponse: Response;
     try {
-      originResponse = await fetch(upstream, {
+      originResponse = await fetchAllowlistedUpstream(upstream, {
         cf: { cacheEverything: true, cacheTtl: 86400 },
-      });
+      } as RequestInit);
     } catch {
       return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
     }
@@ -688,7 +689,9 @@ async function handleWmsTile(
 
   let origin: Response;
   try {
-    origin = await fetch(wmsUrl, { cf: { cacheEverything: true, cacheTtl: 86400 } });
+    origin = await fetchAllowlistedUpstream(wmsUrl, {
+      cf: { cacheEverything: true, cacheTtl: 86400 },
+    } as RequestInit);
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   }
