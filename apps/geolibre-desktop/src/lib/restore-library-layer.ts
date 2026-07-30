@@ -18,31 +18,36 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import {
+  LIDAR_SOURCE_KIND,
+  PLANETARY_COMPUTER_SOURCE_KIND,
   RASTER_SOURCE_KIND,
   restoreLidarLayers,
   restorePlanetaryComputerLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
+  THREE_D_TILES_SOURCE_KIND,
   VECTOR_SOURCE_KIND,
   type GeoLibreAppAPI,
 } from "@geolibre/plugins";
 
 /**
  * `metadata.sourceKind` values of the control-painted layer kinds whose restore
- * pass we can re-run, mapped to that pass. The string keys mirror the values
- * each plugin writes onto its store layers; the two that export a constant use
- * it. A layer whose kind is absent here is left to the store sync, which is
- * correct for every GeoLibre-rendered layer — and for a control-painted kind not
- * listed, it means the layer re-adds unrendered, which is why "Save to My Data"
- * is offered only for the kinds this map (or a plain store add) covers.
+ * pass we can re-run, mapped to that pass. Every key is the constant its own
+ * plugin writes onto the store layer — never a copy of the literal — because the
+ * failure mode of a drifted key is silent: "Save to My Data" simply stops
+ * appearing for that layer type, and an entry saved earlier re-adds unrendered.
+ *
+ * A layer whose kind is absent here is left to the store sync, which is correct
+ * for every GeoLibre-rendered layer; for a control-painted kind, being absent is
+ * what makes `canRestoreLibraryLayer` refuse to offer it in the first place.
  */
 const RESTORE_BY_SOURCE_KIND: Record<string, (app: GeoLibreAppAPI) => void | Promise<void>> = {
   [VECTOR_SOURCE_KIND]: restoreVectorLayers,
   [RASTER_SOURCE_KIND]: restoreRasterLayers,
-  "planetary-computer-raster": restorePlanetaryComputerLayers,
-  "3d-tiles-url": restoreThreeDTilesLayers,
-  "lidar-url": restoreLidarLayers,
+  [PLANETARY_COMPUTER_SOURCE_KIND]: restorePlanetaryComputerLayers,
+  [THREE_D_TILES_SOURCE_KIND]: restoreThreeDTilesLayers,
+  [LIDAR_SOURCE_KIND]: restoreLidarLayers,
 };
 
 /** The restore pass that renders `layer`, or undefined when it needs none. */

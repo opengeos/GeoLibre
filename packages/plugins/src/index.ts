@@ -92,6 +92,7 @@ export {
   openHtmlPanel,
   openLegendPanel,
   openLegendPanelWithItems,
+  LIDAR_SOURCE_KIND,
   openLidarLayerPanel,
   restoreLidarLayers,
   openMeasurePanel,
@@ -170,6 +171,7 @@ export {
 export {
   closePlanetaryComputerPanel,
   openPlanetaryComputerPanel,
+  PLANETARY_COMPUTER_SOURCE_KIND,
   restorePlanetaryComputerLayers,
 } from "./plugins/maplibre-planetary-computer";
 export {
@@ -183,6 +185,7 @@ export {
   closeThreeDTilesLayerPanel,
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
+  THREE_D_TILES_SOURCE_KIND,
 } from "./plugins/maplibre-3d-tiles";
 export {
   addRasterToMap,

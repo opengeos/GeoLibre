@@ -12,6 +12,13 @@ import type {
 } from "maplibre-gl-planetary-computer";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 
+/**
+ * `metadata.sourceKind` marking the Planetary Computer raster layers this plugin adds. Exported so the
+ * Layer Library's restore dispatch keys off the same value this plugin writes
+ * rather than a hand-typed copy (issue #1520).
+ */
+export const PLANETARY_COMPUTER_SOURCE_KIND = "planetary-computer-raster";
+
 type PlanetaryComputerControlConstructor =
   (typeof import("maplibre-gl-planetary-computer"))["PlanetaryComputerControl"];
 type STACClientConstructor = (typeof import("maplibre-gl-planetary-computer"))["STACClient"];
@@ -248,7 +255,7 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
       renderParams: activeLayer.renderParams,
       sourceId: activeLayer.sourceId,
       sourceIds: [activeLayer.sourceId],
-      sourceKind: "planetary-computer-raster",
+      sourceKind: PLANETARY_COMPUTER_SOURCE_KIND,
       stacCollectionId: collectionId,
       stacItemId: activeLayer.item?.id,
       tileType: "raster",
@@ -699,7 +706,7 @@ function showPlanetaryComputerControl(control: PlanetaryComputerControl | null):
 function isPlanetaryComputerLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "raster" &&
-    layer.metadata.sourceKind === "planetary-computer-raster" &&
+    layer.metadata.sourceKind === PLANETARY_COMPUTER_SOURCE_KIND &&
     layer.metadata.externalNativeLayer === true
   );
 }

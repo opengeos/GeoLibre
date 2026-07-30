@@ -579,12 +579,104 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
  */
 const EXPORT_REDACTED_SOURCE_KEYS = ["requestHeaders"] as const;
 
+/**
+ * Query-parameter names removed from a source URL on export. Plenty of tile and
+ * web services authenticate in the URL rather than a header — an XYZ template
+ * with `?api_key=`, a Google `key=`, a Mapbox `access_token=`, an S3 presigned
+ * link (`X-Amz-*`), an Azure SAS token (`sig`/`se`/`sp`/…) — so redacting only
+ * `requestHeaders` would still ship a credential in a shared bundle.
+ *
+ * Matched case-insensitively, plus any `x-amz-*` parameter. Erring toward
+ * redaction is deliberate for a share action: a stripped parameter leaves the
+ * recipient re-entering their own key, while a missed one leaks yours. Every
+ * other part of the URL is preserved, so the entry stays recognizable and
+ * re-usable once the recipient supplies their credential.
+ */
+const EXPORT_REDACTED_URL_PARAMS = new Set([
+  "access_token",
+  "accesstoken",
+  "api_key",
+  "apikey",
+  "key",
+  "token",
+  "subscription-key",
+  "subscriptionkey",
+  "signature",
+  "sig",
+  "se",
+  "sp",
+  "sv",
+  "sr",
+  "st",
+  "skoid",
+]);
+
+/** True when a query-parameter name is treated as a credential on export. */
+function isRedactedUrlParam(name: string): boolean {
+  const lower = name.toLowerCase();
+  return EXPORT_REDACTED_URL_PARAMS.has(lower) || lower.startsWith("x-amz-");
+}
+
+/**
+ * Strip credential-bearing query parameters from a URL, leaving everything else
+ * intact. A value that is not a parseable absolute URL (an XYZ template with
+ * `{z}/{x}/{y}` placeholders parses fine; a relative path or a `pmtiles://`
+ * form may not) is returned unchanged rather than mangled.
+ */
+function redactUrlCredentials(value: string): string {
+  const separator = value.indexOf("?");
+  if (separator === -1) return value;
+  const [base, rawQuery] = [value.slice(0, separator), value.slice(separator + 1)];
+  // Split by hand rather than through URL/URLSearchParams: those re-encode the
+  // `{z}/{x}/{y}` placeholders a tile template depends on.
+  const [query, fragment] = rawQuery.split("#", 2);
+  const kept = query
+    .split("&")
+    .filter((pair) => pair !== "" && !isRedactedUrlParam(pair.split("=", 1)[0]));
+  const rebuiltQuery = kept.length > 0 ? `?${kept.join("&")}` : "";
+  return `${base}${rebuiltQuery}${fragment === undefined ? "" : `#${fragment}`}`;
+}
+
 /** Copy of an entry with per-user credentials removed from its source. */
 function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
-  if (!EXPORT_REDACTED_SOURCE_KEYS.some((key) => key in entry.source)) return entry;
   const source = { ...entry.source };
-  for (const key of EXPORT_REDACTED_SOURCE_KEYS) delete source[key];
-  return { ...entry, source };
+  let changed = false;
+  for (const key of EXPORT_REDACTED_SOURCE_KEYS) {
+    if (key in source) {
+      delete source[key];
+      changed = true;
+    }
+  }
+  if (typeof source.url === "string") {
+    const redacted = redactUrlCredentials(source.url);
+    if (redacted !== source.url) {
+      source.url = redacted;
+      changed = true;
+    }
+  }
+  const originalTiles: unknown[] | undefined = Array.isArray(source.tiles)
+    ? source.tiles
+    : undefined;
+  if (originalTiles) {
+    const tiles = originalTiles.map((tile) =>
+      typeof tile === "string" ? redactUrlCredentials(tile) : tile,
+    );
+    if (tiles.some((tile, index) => tile !== originalTiles[index])) {
+      source.tiles = tiles;
+      changed = true;
+    }
+  }
+  // `metadata.originalUrl` is the template a tile layer restores from, so it
+  // carries the same credential as `source.tiles`.
+  let metadata = entry.metadata;
+  if (typeof metadata.originalUrl === "string") {
+    const redacted = redactUrlCredentials(metadata.originalUrl);
+    if (redacted !== metadata.originalUrl) {
+      metadata = { ...metadata, originalUrl: redacted };
+      changed = true;
+    }
+  }
+  return changed ? { ...entry, source, metadata } : entry;
 }
 
 /**

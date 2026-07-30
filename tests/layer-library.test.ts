@@ -722,6 +722,59 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.equal(reimported.source.url, "https://example.com/tileset.json");
   });
 
+  it("redacts credentials embedded in source URLs and tile templates", () => {
+    // Plenty of services authenticate in the URL rather than a header, so
+    // redacting only requestHeaders would still ship a key in a shared bundle.
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-key",
+        name: "Keyed tiles",
+        addedAt: "",
+        layerType: "xyz",
+        source: {
+          url: "https://tiles.example.com/service?api_key=SECRET1&style=dark",
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png?access_token=SECRET2&tileSize=512"],
+        },
+        opacity: 1,
+        metadata: { originalUrl: "https://tiles.example.com/{z}/{x}/{y}.png?key=SECRET3" },
+      },
+    ]);
+    const exported = serializeLayerLibrary([entry]);
+    for (const secret of ["SECRET1", "SECRET2", "SECRET3"]) {
+      assert.equal(exported.includes(secret), false, secret);
+    }
+    const [reimported] = parseLayerLibrary(exported);
+    // Everything that is not a credential survives, including the tile
+    // placeholders, so the entry stays usable once a key is supplied again.
+    assert.equal(reimported.source.url, "https://tiles.example.com/service?style=dark");
+    assert.deepEqual(reimported.source.tiles, [
+      "https://tiles.example.com/{z}/{x}/{y}.png?tileSize=512",
+    ]);
+    assert.equal(reimported.metadata.originalUrl, "https://tiles.example.com/{z}/{x}/{y}.png");
+    // The in-memory entry is untouched, so re-adding locally still works.
+    assert.equal(entry.source.url, "https://tiles.example.com/service?api_key=SECRET1&style=dark");
+  });
+
+  it("leaves a credential-free URL byte-identical", () => {
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-plain",
+        name: "Plain tiles",
+        addedAt: "",
+        layerType: "wms",
+        source: {
+          url: "https://wms.example.com/service?SERVICE=WMS&LAYERS=a,b&FORMAT=image/png",
+          tiles: ["https://t.example.com/{z}/{x}/{y}.png"],
+        },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    const [reimported] = parseLayerLibrary(serializeLayerLibrary([entry]));
+    assert.equal(reimported.source.url, entry.source.url);
+    assert.deepEqual(reimported.source.tiles, entry.source.tiles);
+  });
+
   it("strips a stale per-session metadata key when reading entries back", () => {
     // useLayerLibraryPersistence normalizes on every startup load, so an older
     // record (or a hand-edited bundle) must not keep replaying a dev-server
