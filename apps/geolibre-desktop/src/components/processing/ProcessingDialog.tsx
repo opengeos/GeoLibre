@@ -2627,7 +2627,15 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     <div className="grid gap-1.5">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(120px,160px)] gap-2">
         {unit === "degrees" ? (
-          <NumberStepperInput id={id} integer={false} value={value} onChange={onChange} />
+          // Routed through `push` like the metric box, so an edit made in
+          // degrees keeps `lastPushed` accurate and does not read as an
+          // outside rewrite to the reconcile effect below.
+          <NumberStepperInput
+            id={id}
+            integer={false}
+            value={value}
+            onChange={(next) => push(String(next ?? ""))}
+          />
         ) : (
           <Input
             id={id}
