@@ -209,7 +209,15 @@ function featureKml(feature: Feature): string {
  * KML elements for display in Google Earth and other KML clients.
  */
 export function writeKml(geojson: FeatureCollection, documentName: string): string {
-  const placemarks = geojson.features.map((feature) => indentXml(featureKml(feature), 4));
+  const placemarks = geojson.features.map((feature, index) => {
+    try {
+      return indentXml(featureKml(feature), 4);
+    } catch (error) {
+      const reference = feature.id == null ? `at index ${index}` : `with id ${feature.id}`;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Unable to export KML feature ${reference}: ${message}`);
+    }
+  });
   const documentContents = [`    <name>${xmlSafeText(documentName)}</name>`, ...placemarks].join(
     "\n",
   );

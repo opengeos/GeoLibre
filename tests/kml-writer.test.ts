@@ -176,7 +176,7 @@ describe("writeKml", () => {
           },
           "Invalid",
         ),
-      /finite longitude and latitude/,
+      /feature at index 0: KML export requires finite longitude and latitude/,
     );
   });
 });
