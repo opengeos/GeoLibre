@@ -245,27 +245,24 @@ function isDistanceParameter(param: WhiteboxToolParameter): boolean {
 }
 
 /**
- * Reference latitude for converting a metric distance into degrees, or `null`
- * when the tool's coordinates are not known to be WGS84.
+ * The map layers supplying a tool's coordinates when those coordinates are known
+ * to be WGS84, or `null` when they are not.
  *
- * The unit picker is only safe when every coordinate the tool sees comes from a
- * map layer's in-memory GeoJSON, which `runSelectedTool` hands over verbatim and
- * RFC 7946 fixes to WGS84. A raster or LiDAR input keeps its own CRS (GeoLibre
- * never reprojects those), and a file path is read from disk in whatever CRS it
+ * The distance unit picker is only safe when every dataset input is a map
+ * layer's in-memory GeoJSON, which `runSelectedTool` hands over verbatim and RFC
+ * 7946 fixes to WGS84. A raster or LiDAR input keeps its own CRS (GeoLibre never
+ * reprojects those), and a file path is read from disk in whatever CRS it
  * carries — so a tool with either is left alone, as is a vector input still set
  * to a path.
  *
+ * Returns ids rather than latitudes so the caller can measure only the one or
+ * two layers actually wired to the tool, instead of every layer in the project.
+ *
  * @param tool - The selected tool.
  * @param values - The current form values.
- * @param latitudeByLayer - Centre latitude per GeoJSON layer id, precomputed so
- *   this stays cheap enough to call on every keystroke.
- * @returns The centre latitude of the chosen vector layers, or `null`.
+ * @returns The chosen layers' ids, or `null` when the units are unknown.
  */
-function wgs84ReferenceLatitude(
-  tool: WhiteboxTool | null,
-  values: ParameterValues,
-  latitudeByLayer: Map<string, number>,
-): number | null {
+function wgs84VectorLayerIds(tool: WhiteboxTool | null, values: ParameterValues): string[] | null {
   const params = tool?.params ?? [];
   if (!params.length) return null;
   const kinds = params.map((param) => parameterKind(param));
@@ -274,7 +271,7 @@ function wgs84ReferenceLatitude(
   }
   const vectorInputs = params.filter((_, index) => kinds[index] === "vector_in");
   if (!vectorInputs.length) return null;
-  const latitudes: number[] = [];
+  const ids: string[] = [];
   for (const param of vectorInputs) {
     const value = values[param.name];
     if (typeof value !== "string" || !value.startsWith(LAYER_TOKEN_PREFIX)) {
@@ -283,14 +280,9 @@ function wgs84ReferenceLatitude(
       if (param.required) return null;
       continue;
     }
-    const latitude = latitudeByLayer.get(value.slice(LAYER_TOKEN_PREFIX.length));
-    // Absent means the layer has no in-memory GeoJSON (it is passed as a path,
-    // in its own CRS) or has no finite extent at all.
-    if (latitude === undefined) return null;
-    latitudes.push(latitude);
+    ids.push(value.slice(LAYER_TOKEN_PREFIX.length));
   }
-  if (!latitudes.length) return null;
-  return latitudes.reduce((sum, value) => sum + value, 0) / latitudes.length;
+  return ids.length ? ids : null;
 }
 
 function isPathParameter(param: WhiteboxToolParameter): boolean {
@@ -789,27 +781,32 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     return map;
   }, [layers, open]);
 
-  // Centre latitude per GeoJSON layer, for converting a metric distance into the
-  // degrees a WGS84 layer forces on a tool (GeoLibre#1540). Memoized on the layer
-  // set like fieldsByLayer above: the extent scan is a whole-collection pass, far
-  // too costly to redo while the user types into a distance field.
-  const latitudeByLayer = useMemo(() => {
-    const map = new Map<string, number>();
-    if (!open) return map;
-    for (const layer of layers) {
-      if (!layer.geojson) continue;
-      const bounds = getLayerBounds(layer);
-      if (bounds) map.set(layer.id, (bounds[1] + bounds[3]) / 2);
-    }
-    return map;
-  }, [layers, open]);
-
-  // The latitude a distance parameter's metric entry converts at, or null when
-  // the tool's coordinates are not known to be WGS84 (so no unit picker).
-  const distanceLatitude = useMemo(
-    () => wgs84ReferenceLatitude(selectedTool, values, latitudeByLayer),
-    [selectedTool, values, latitudeByLayer],
+  // The layers wired to the selected tool's vector inputs, when the tool's
+  // coordinates are known to be WGS84 (GeoLibre#1540). Joined into a string so
+  // the extent scan below keeps its memo across the keystrokes that rebuild
+  // `values`; null when the units are unknown, which hides the unit picker.
+  const distanceLayerKey = useMemo(
+    () => wgs84VectorLayerIds(selectedTool, values)?.join("\n") ?? null,
+    [selectedTool, values],
   );
+
+  // The latitude a distance parameter's metric entry converts at. Measuring an
+  // extent is a whole-collection pass, so this only touches the one or two
+  // layers the tool actually reads, not every GeoJSON layer in the project.
+  const distanceLatitude = useMemo(() => {
+    if (!open || distanceLayerKey === null) return null;
+    const latitudes: number[] = [];
+    for (const id of distanceLayerKey.split("\n")) {
+      const layer = layers.find((item) => item.id === id);
+      // No in-memory GeoJSON means the layer is passed as a path, in its own
+      // CRS; no finite extent means there is nothing to anchor a conversion to.
+      if (!layer?.geojson) return null;
+      const bounds = getLayerBounds(layer);
+      if (!bounds) return null;
+      latitudes.push((bounds[1] + bounds[3]) / 2);
+    }
+    return latitudes.reduce((sum, value) => sum + value, 0) / latitudes.length;
+  }, [distanceLayerKey, layers, open]);
 
   // Column names to offer for a `*_field` parameter (GeoLibre#1459): those of
   // the layer picked for the vector input the parameter names. With a single
@@ -2447,6 +2444,22 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     }
     onChange(formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8));
   };
+
+  // Re-convert when the input layer changes under a metric entry: the field is
+  // keyed by parameter name, so switching a tool's vector input from a layer at
+  // 44°N to one at 10°N leaves the typed distance on screen while the stored
+  // degrees still come from the old latitude. Without this the note would show
+  // the new latitude beside a value converted at the old one, and Run would send
+  // the stale degrees.
+  const lastLatitude = useRef(latitude);
+  useEffect(() => {
+    if (lastLatitude.current === latitude) return;
+    lastLatitude.current = latitude;
+    if (unit === "degrees") return;
+    const parsed = Number.parseFloat(draft);
+    if (!Number.isFinite(parsed)) return;
+    onChange(formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8));
+  }, [draft, latitude, onChange, unit]);
 
   const latitudeLabel = t(
     latitude >= 0 ? "processing.distance.north" : "processing.distance.south",
