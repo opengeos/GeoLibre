@@ -182,6 +182,7 @@ import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
   geojsonVectorSourceId,
+  kmlExportErrorMessage,
   resolveLayerGeojson,
   sanitizeExportFileName,
   shapefileFieldWarnings,
@@ -1217,6 +1218,7 @@ export function LayerPanel({
           geojson,
           format,
           sanitizeExportFileName(layer.name),
+          layer.name,
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
@@ -1238,7 +1240,9 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : t("layers.exportLayerError");
+        const message =
+          kmlExportErrorMessage(error, t) ??
+          (error instanceof Error ? error.message : t("layers.exportLayerError"));
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -3124,6 +3128,20 @@ export function LayerPanel({
                                   }}
                                 >
                                   GeoPackage
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportLayer(layer, "kml");
+                                  }}
+                                >
+                                  KML
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportLayer(layer, "kmz");
+                                  }}
+                                >
+                                  KMZ
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onSelect={() => {

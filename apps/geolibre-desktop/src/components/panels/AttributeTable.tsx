@@ -119,6 +119,7 @@ import {
   exportVectorLayer,
   formatAttributeValue,
   geojsonVectorSourceId,
+  kmlExportErrorMessage,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
@@ -928,7 +929,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       if (!exportGeojson) return;
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName);
+      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -938,7 +939,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
     } catch (error) {
       console.error("Failed to export attribute table", error);
-      setExportError(error instanceof Error ? error.message : t("attributeTable.exportFailed"));
+      setExportError(
+        kmlExportErrorMessage(error, t) ??
+          (error instanceof Error ? error.message : t("attributeTable.exportFailed")),
+      );
     }
   };
 
@@ -1661,6 +1665,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
               GeoPackage
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kml")}>KML</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kmz")}>KMZ</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
               Shapefile (zipped)
             </DropdownMenuItem>
