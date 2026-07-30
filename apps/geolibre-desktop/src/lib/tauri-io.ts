@@ -1,4 +1,9 @@
-import { hasPathTraversal, parseProject, type GeoLibreProject } from "@geolibre/core";
+import {
+  hasPathTraversal,
+  isAbsoluteFilesystemPath,
+  parseProject,
+  type GeoLibreProject,
+} from "@geolibre/core";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -1671,13 +1676,10 @@ async function tryLoadPickedNativeVectorPath(
 }
 
 export function isAbsoluteLocalPath(path: string): boolean {
-  // Match the raw path (not a trimmed copy): a whitespace-padded value would
-  // pass a trimmed check but reach `readFile` unchanged and fail there, so
-  // reject it up front instead. Accept POSIX paths and Windows drive-letter
-  // paths only. UNC paths (\\server\share) are deliberately rejected: reading
-  // one can make Windows auto-authenticate against a remote host (NTLM hash
-  // capture), and a remote share is not a supported local data source.
-  return path.startsWith("/") || /^[a-z]:[\\/]/i.test(path);
+  // Delegates to core so record normalization (which cannot import this module)
+  // validates a persisted path by exactly the same rule; see
+  // `isAbsoluteFilesystemPath` for why UNC paths are rejected.
+  return isAbsoluteFilesystemPath(path);
 }
 
 async function loadTauriVectorFile(

@@ -14,11 +14,16 @@ import type { FeatureCollection } from "geojson";
 import {
   DEFAULT_LAYER_STYLE,
   LAYER_TYPES,
+  type AttributeFormConfig,
   type GeoLibreLayer,
+  type LayerJoin,
   type LayerLibraryEntry,
+  type LayerStyle,
   type LayerType,
+  type LayerVirtualField,
 } from "./types";
 import { sanitizeLayerStylePatch } from "./style-library";
+import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
 
 /** `type` discriminator of an exported Layer Library bundle file. */
 export const LAYER_LIBRARY_BUNDLE_TYPE = "geolibre-layer-library";
@@ -68,9 +73,36 @@ export function hasRestorableLayerSource(
   return nonEmptyString((layer.metadata ?? {}).originalUrl);
 }
 
-/** The absolute local path a layer was read from, or undefined. */
-function layerLocalPath(layer: Pick<GeoLibreLayer, "sourcePath">): string | undefined {
-  return nonEmptyString(layer.sourcePath) ? layer.sourcePath : undefined;
+/**
+ * The absolute local path a layer's features can be **re-read** from, or
+ * undefined.
+ *
+ * A non-empty `sourcePath` is not enough on its own: a file picked in the
+ * browser has no path, and `createVectorStoreLayer` still records the bare file
+ * *name* there for display. `metadata.localFileReloadable` is the flag the rest
+ * of the codebase uses to mark a genuinely re-readable absolute path
+ * (`prepareLayerForSave`, `needsLocalFileReload`, `restoreVectorLayers`), so
+ * require it — otherwise a degraded path-only entry would store a bare filename
+ * no host could ever open. The path is re-validated because a hand-edited
+ * project can set both fields to anything.
+ */
+function layerLocalPath(layer: Pick<GeoLibreLayer, "sourcePath" | "metadata">): string | undefined {
+  if ((layer.metadata ?? {}).localFileReloadable !== true) return undefined;
+  return nonEmptyString(layer.sourcePath) && isReReadablePath(layer.sourcePath)
+    ? layer.sourcePath
+    : undefined;
+}
+
+/**
+ * Whether a persisted path is safe to hand to a host file read: absolute, with
+ * no `..` traversal. Applied to captured *and* imported entries, because a
+ * shared bundle is untrusted input — a crafted `needsLocalFile` entry could
+ * otherwise point at any file on the importing user's disk, and clicking it in
+ * My Data would read that file. Mirrors the client-side re-validation the
+ * project-restore paths already do before calling into Tauri.
+ */
+function isReReadablePath(path: string): boolean {
+  return isAbsoluteFilesystemPath(path) && !hasPathTraversal(path);
 }
 
 function featureCount(geojson: FeatureCollection | undefined): number {
@@ -248,16 +280,32 @@ export function captureLayerLibraryEntry(
   return { ok: false, reason: "too-large" };
 }
 
+/**
+ * The presentation state a re-added layer takes from its entry. For the
+ * `local-file` plan the host imports the file first (producing a default-styled
+ * layer) and then applies this patch, so a degraded entry still comes back
+ * "fully configured" rather than losing the styling the entry preserved.
+ */
+export interface LayerLibraryConfigPatch {
+  name: string;
+  style: LayerStyle;
+  opacity: number;
+  joins?: LayerJoin[];
+  virtualFields?: LayerVirtualField[];
+  attributeForm?: AttributeFormConfig;
+}
+
 /** How an entry should be re-added to the current project. */
 export type LayerLibraryAddPlan =
   /** Add this layer record to the store; the map sync renders it. */
   | { kind: "layer"; layer: GeoLibreLayer }
   /**
-   * The entry's features live only in a local file the host must re-read
-   * (its data was too large to embed), so the caller runs its local-file add
-   * path for `path`. Only reachable on a host with filesystem access.
+   * The entry's features live only in a local file the host must re-read (its
+   * data was too large to embed), so the caller runs its local-file add path for
+   * `path` and then applies `config` to the layer that import produced. Only
+   * reachable on a host with filesystem access.
    */
-  | { kind: "local-file"; path: string; name: string };
+  | { kind: "local-file"; path: string; config: LayerLibraryConfigPatch };
 
 /**
  * Plan how to re-add a library entry to the current project.
@@ -270,8 +318,13 @@ export function planLayerLibraryAdd(
   entry: LayerLibraryEntry,
   options: { id: string },
 ): LayerLibraryAddPlan {
-  if (entry.needsLocalFile && nonEmptyString(entry.sourcePath)) {
-    return { kind: "local-file", path: entry.sourcePath, name: entry.name };
+  if (layerLibraryEntryNeedsLocalFile(entry)) {
+    return {
+      kind: "local-file",
+      // Non-null by the guard above, which also re-validates the path.
+      path: entry.sourcePath as string,
+      config: layerLibraryConfigPatch(entry),
+    };
   }
   return {
     kind: "layer",
@@ -295,6 +348,24 @@ export function planLayerLibraryAdd(
 }
 
 /**
+ * The presentation state to apply to a layer the host imported from an entry's
+ * file, so the `local-file` plan preserves everything the entry captured.
+ *
+ * @param entry - The entry being re-added.
+ * @returns The patch to merge onto the imported layer.
+ */
+export function layerLibraryConfigPatch(entry: LayerLibraryEntry): LayerLibraryConfigPatch {
+  return {
+    name: entry.name,
+    style: structuredClone(entry.style),
+    opacity: entry.opacity,
+    ...(entry.joins ? { joins: structuredClone(entry.joins) } : {}),
+    ...(entry.virtualFields ? { virtualFields: structuredClone(entry.virtualFields) } : {}),
+    ...(entry.attributeForm ? { attributeForm: structuredClone(entry.attributeForm) } : {}),
+  };
+}
+
+/**
  * Whether re-adding an entry needs a host that can read local files — used to
  * badge the entry in the Browser panel and to explain the failure in the
  * browser build, where there is no filesystem to re-read from.
@@ -303,7 +374,11 @@ export function planLayerLibraryAdd(
  * @returns True when only a filesystem-capable host can add it.
  */
 export function layerLibraryEntryNeedsLocalFile(entry: LayerLibraryEntry): boolean {
-  return entry.needsLocalFile === true && nonEmptyString(entry.sourcePath);
+  return (
+    entry.needsLocalFile === true &&
+    nonEmptyString(entry.sourcePath) &&
+    isReReadablePath(entry.sourcePath)
+  );
 }
 
 /** A plain JSON object (not an array, not null), or undefined. */
@@ -311,6 +386,50 @@ function plainObject(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+/** Whether every listed key on an object holds a non-empty string. */
+function hasStringKeys(object: Record<string, unknown>, keys: readonly string[]): boolean {
+  return keys.every((key) => nonEmptyString(object[key]));
+}
+
+/**
+ * Keep only the {@link LayerJoin} members a hand-edited or imported bundle got
+ * right. A join missing any of its required fields resolves to nothing and would
+ * sit in the Joins UI as a permanently-broken definition, so drop it rather than
+ * the whole entry.
+ */
+function validJoins(value: unknown): LayerJoin[] | undefined {
+  const items = objectArray(value)?.filter((join) =>
+    hasStringKeys(join, ["id", "joinLayerId", "targetField", "joinField"]),
+  );
+  return items && items.length > 0 ? (structuredClone(items) as unknown as LayerJoin[]) : undefined;
+}
+
+/** Keep only {@link LayerVirtualField} members that carry an id, name, and expression. */
+function validVirtualFields(value: unknown): LayerVirtualField[] | undefined {
+  const items = objectArray(value)?.filter((field) =>
+    hasStringKeys(field, ["id", "name", "expression"]),
+  );
+  return items && items.length > 0
+    ? (structuredClone(items) as unknown as LayerVirtualField[])
+    : undefined;
+}
+
+/**
+ * Keep an {@link AttributeFormConfig} only when every field entry names the
+ * feature property it configures; a field with no `field` key would apply to
+ * nothing.
+ */
+function validAttributeForm(value: unknown): AttributeFormConfig | undefined {
+  const config = plainObject(value);
+  if (!config || !Array.isArray(config.fields)) return undefined;
+  const fields = config.fields.filter(
+    (field) =>
+      plainObject(field) !== undefined && nonEmptyString((field as { field?: unknown }).field),
+  );
+  if (fields.length === 0) return undefined;
+  return structuredClone({ ...config, fields }) as unknown as AttributeFormConfig;
 }
 
 /** An array of plain JSON objects, or undefined when nothing usable is present. */
@@ -360,7 +479,14 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
     if (!id || !name || !layerType || seen.has(id)) continue;
     const source = plainObject(candidate.source) ?? {};
     const metadata = plainObject(candidate.metadata) ?? {};
-    const sourcePath = nonEmptyString(candidate.sourcePath) ? candidate.sourcePath : undefined;
+    // A bundle is shareable, so its `sourcePath` is untrusted: keep it only when
+    // it is an absolute, traversal-free path a host could legitimately re-read.
+    // Without this a crafted entry could point `onAddFilePath` at any file on the
+    // importing user's disk.
+    const sourcePath =
+      nonEmptyString(candidate.sourcePath) && isReReadablePath(candidate.sourcePath)
+        ? candidate.sourcePath
+        : undefined;
     const geojson = featureCollection(candidate.geojson);
     // Same "is there anything to re-add from" gate as the capture path, so a
     // hand-edited bundle cannot introduce an entry that always fails. A
@@ -392,23 +518,18 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
       opacity,
       metadata: structuredClone(metadata),
       ...(sourcePath ? { sourcePath } : {}),
-      ...(objectArray(candidate.joins)
-        ? { joins: structuredClone(candidate.joins) as LayerLibraryEntry["joins"] }
-        : {}),
-      ...(objectArray(candidate.virtualFields)
-        ? {
-            virtualFields: structuredClone(
-              candidate.virtualFields,
-            ) as LayerLibraryEntry["virtualFields"],
-          }
-        : {}),
-      ...(plainObject(candidate.attributeForm)
-        ? {
-            attributeForm: structuredClone(
-              candidate.attributeForm,
-            ) as LayerLibraryEntry["attributeForm"],
-          }
-        : {}),
+      ...(() => {
+        // Each block is kept only when its members carry the fields their engine
+        // needs; a malformed member is dropped rather than the whole entry.
+        const joins = validJoins(candidate.joins);
+        const virtualFields = validVirtualFields(candidate.virtualFields);
+        const attributeForm = validAttributeForm(candidate.attributeForm);
+        return {
+          ...(joins ? { joins } : {}),
+          ...(virtualFields ? { virtualFields } : {}),
+          ...(attributeForm ? { attributeForm } : {}),
+        };
+      })(),
       ...(geojson ? { geojson: structuredClone(geojson) } : {}),
       // `needsLocalFile` only means anything with a path to read.
       ...(candidate.needsLocalFile === true && sourcePath ? { needsLocalFile: true } : {}),

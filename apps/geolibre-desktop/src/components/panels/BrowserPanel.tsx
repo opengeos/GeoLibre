@@ -487,8 +487,29 @@ export function BrowserPanel({
       }
       beginBusy(node.id);
       try {
+        // The file import builds a fresh, default-styled layer, so the entry's
+        // saved configuration is applied to it afterwards — otherwise a degraded
+        // entry would silently come back unstyled. The import does not report
+        // which layer it created, so it is identified by diffing the ids around
+        // the call (a concurrent add elsewhere would leave more than one new id,
+        // in which case nothing is patched rather than the wrong layer).
+        const idsBefore = new Set(useAppStore.getState().layers.map((entry) => entry.id));
         const addError = await onAddFilePath(plan.path);
-        if (addError) setError(addError);
+        if (addError) {
+          setError(addError);
+        } else {
+          const added = useAppStore.getState().layers.filter((entry) => !idsBefore.has(entry.id));
+          if (added.length === 1) {
+            const { joins, virtualFields, ...rest } = plan.config;
+            useAppStore.getState().updateLayer(added[0].id, rest);
+            // Joins and virtual fields must go through their own actions so the
+            // derived columns are materialized rather than stored inert.
+            if (joins) useAppStore.getState().setLayerJoins(added[0].id, joins);
+            if (virtualFields) {
+              useAppStore.getState().setLayerVirtualFields(added[0].id, virtualFields);
+            }
+          }
+        }
       } finally {
         endBusy();
       }

@@ -89,10 +89,35 @@ describe("hasRestorableLayerSource", () => {
 });
 
 describe("canSaveLayerToLibrary", () => {
-  it("accepts a layer with a source, a local path, or features", () => {
+  it("accepts a layer with a source, a re-readable local path, or features", () => {
     assert.equal(canSaveLayerToLibrary(layer({ source: { url: "https://x/a.fgb" } })), true);
-    assert.equal(canSaveLayerToLibrary(layer({ sourcePath: "/data/cities.geojson" })), true);
+    assert.equal(
+      canSaveLayerToLibrary(
+        layer({ sourcePath: "/data/cities.geojson", metadata: { localFileReloadable: true } }),
+      ),
+      true,
+    );
     assert.equal(canSaveLayerToLibrary(layer({ geojson: POINTS })), true);
+  });
+
+  it("does not treat a browser-picked file's bare name as a re-readable path", () => {
+    // A file picked in the browser has no path, but `createVectorStoreLayer`
+    // still records the bare name in `sourcePath` for display, and omits
+    // `localFileReloadable` — the flag that marks a genuinely re-readable path.
+    assert.equal(canSaveLayerToLibrary(layer({ sourcePath: "us_cities.geojson" })), false);
+    // Nor a relative or traversing path a hand-edited project could smuggle in.
+    assert.equal(
+      canSaveLayerToLibrary(
+        layer({ sourcePath: "data/cities.geojson", metadata: { localFileReloadable: true } }),
+      ),
+      false,
+    );
+    assert.equal(
+      canSaveLayerToLibrary(
+        layer({ sourcePath: "/data/../../etc/passwd", metadata: { localFileReloadable: true } }),
+      ),
+      false,
+    );
   });
 
   it("rejects a layer with nothing to re-add from", () => {
@@ -184,14 +209,14 @@ describe("captureLayerLibraryEntry", () => {
         joins: [
           {
             id: "join-1",
-            sourceLayerId: "layer-2",
+            joinLayerId: "layer-2",
             targetField: "id",
-            sourceField: "id",
+            joinField: "id",
             fields: ["pop"],
           },
         ],
         virtualFields: [{ id: "vf-1", name: "double", expression: "1 + 1" }],
-        attributeForm: { fields: { name: { field: "name", widget: "text" } } },
+        attributeForm: { fields: [{ field: "name", widget: "text" }] },
       }),
       CAPTURE_OPTIONS,
     );
@@ -308,6 +333,7 @@ describe("captureLayerLibraryEntry", () => {
     const result = captureLayerLibraryEntry(
       layer({
         sourcePath: "/data/huge.geojson",
+        metadata: { localFileReloadable: true },
         geojson: bulkyFeatures(MAX_LAYER_LIBRARY_ENTRY_BYTES + 1_000),
       }),
       CAPTURE_OPTIONS,
@@ -323,6 +349,19 @@ describe("captureLayerLibraryEntry", () => {
   it("refuses oversized in-memory features with no file to fall back to", () => {
     const result = captureLayerLibraryEntry(
       layer({ geojson: bulkyFeatures(MAX_LAYER_LIBRARY_ENTRY_BYTES + 1_000) }),
+      CAPTURE_OPTIONS,
+    );
+    assert.deepEqual(result, { ok: false, reason: "too-large" });
+  });
+
+  it("refuses an oversized browser-picked file, whose bare name cannot be re-read", () => {
+    // There is no path to degrade to, so this must fail rather than save an
+    // entry that could never be re-added.
+    const result = captureLayerLibraryEntry(
+      layer({
+        sourcePath: "huge.geojson",
+        geojson: bulkyFeatures(MAX_LAYER_LIBRARY_ENTRY_BYTES + 1_000),
+      }),
       CAPTURE_OPTIONS,
     );
     assert.deepEqual(result, { ok: false, reason: "too-large" });
@@ -359,7 +398,9 @@ describe("planLayerLibraryAdd", () => {
     assert.deepEqual(plan.layer.geojson, POINTS);
   });
 
-  it("asks the host to re-read the file for a path-only entry", () => {
+  it("asks the host to re-read the file for a path-only entry, carrying its config", () => {
+    // The host's file import builds a default-styled layer, so the entry's saved
+    // configuration has to travel with the plan or the re-add loses it.
     const plan = planLayerLibraryAdd(
       {
         id: "entry-1",
@@ -367,15 +408,47 @@ describe("planLayerLibraryAdd", () => {
         addedAt: "",
         layerType: "geojson",
         source: {},
-        style: DEFAULT_LAYER_STYLE,
-        opacity: 1,
+        style: { ...DEFAULT_LAYER_STYLE, fillColor: "#e11d48" },
+        opacity: 0.4,
         metadata: {},
         sourcePath: "/data/huge.geojson",
+        needsLocalFile: true,
+        joins: [
+          { id: "j1", joinLayerId: "layer-2", targetField: "id", joinField: "id", fields: ["pop"] },
+        ],
+        virtualFields: [{ id: "vf1", name: "double", expression: "1 + 1" }],
+      },
+      { id: "layer-new" },
+    );
+    assert.equal(plan.kind, "local-file");
+    if (plan.kind !== "local-file") return;
+    assert.equal(plan.path, "/data/huge.geojson");
+    assert.equal(plan.config.name, "Huge");
+    assert.equal(plan.config.opacity, 0.4);
+    assert.equal(plan.config.style.fillColor, "#e11d48");
+    assert.equal(plan.config.joins?.length, 1);
+    assert.equal(plan.config.virtualFields?.length, 1);
+  });
+
+  it("adds a path-only entry as a layer when its path is not re-readable", () => {
+    // A hand-edited bundle can claim needsLocalFile with a relative path; the
+    // plan must not hand that to the host's file read.
+    const plan = planLayerLibraryAdd(
+      {
+        id: "entry-1",
+        name: "Sketchy",
+        addedAt: "",
+        layerType: "geojson",
+        source: { data: "https://example.com/a.geojson" },
+        style: { ...DEFAULT_LAYER_STYLE },
+        opacity: 1,
+        metadata: {},
+        sourcePath: "../../etc/passwd",
         needsLocalFile: true,
       },
       { id: "layer-new" },
     );
-    assert.deepEqual(plan, { kind: "local-file", path: "/data/huge.geojson", name: "Huge" });
+    assert.equal(plan.kind, "layer");
   });
 
   it("does not alias the entry, so re-adding twice yields independent layers", () => {
@@ -469,6 +542,23 @@ describe("normalizeLayerLibraryEntries", () => {
     assert.equal(entry.needsLocalFile, undefined);
   });
 
+  it("drops a sourcePath an importing host must not be told to read", () => {
+    // A bundle is shareable, so a crafted entry could otherwise aim the host's
+    // file read at any path on the importing user's disk.
+    for (const path of ["cities.geojson", "data/cities.geojson", "/data/../../etc/shadow"]) {
+      const [entry] = normalizeLayerLibraryEntries([
+        { ...valid, sourcePath: path, needsLocalFile: true },
+      ]);
+      assert.equal(entry.sourcePath, undefined, path);
+      assert.equal(entry.needsLocalFile, undefined, path);
+    }
+    const [kept] = normalizeLayerLibraryEntries([
+      { ...valid, sourcePath: "/data/cities.geojson", needsLocalFile: true },
+    ]);
+    assert.equal(kept.sourcePath, "/data/cities.geojson");
+    assert.equal(kept.needsLocalFile, true);
+  });
+
   it("drops malformed optional blocks rather than the whole entry", () => {
     const [entry] = normalizeLayerLibraryEntries([
       { ...valid, joins: "many", virtualFields: [], attributeForm: [], geojson: { type: "Point" } },
@@ -477,6 +567,49 @@ describe("normalizeLayerLibraryEntries", () => {
     assert.equal(entry.virtualFields, undefined);
     assert.equal(entry.attributeForm, undefined);
     assert.equal(entry.geojson, undefined);
+  });
+
+  it("drops join, virtual-field, and form members missing the keys their engine needs", () => {
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        ...valid,
+        joins: [
+          { id: "j1", joinLayerId: "l2", targetField: "id", joinField: "id" },
+          { id: "j2", joinLayerId: "l3" },
+        ],
+        virtualFields: [
+          { id: "vf1", name: "ok", expression: "1" },
+          { id: "vf2", name: "no expression" },
+        ],
+        attributeForm: { fields: [{ field: "name", widget: "text" }, { widget: "text" }] },
+      },
+    ]);
+    assert.deepEqual(
+      entry.joins?.map((join) => join.id),
+      ["j1"],
+    );
+    assert.deepEqual(
+      entry.virtualFields?.map((field) => field.id),
+      ["vf1"],
+    );
+    assert.deepEqual(
+      entry.attributeForm?.fields.map((field) => field.field),
+      ["name"],
+    );
+  });
+
+  it("drops a block entirely when no member survives", () => {
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        ...valid,
+        joins: [{ id: "j1" }],
+        virtualFields: [{ name: "nameless" }],
+        attributeForm: { fields: [{ widget: "text" }] },
+      },
+    ]);
+    assert.equal(entry.joins, undefined);
+    assert.equal(entry.virtualFields, undefined);
+    assert.equal(entry.attributeForm, undefined);
   });
 });
 

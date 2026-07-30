@@ -28,7 +28,7 @@ import type { BrowserNode } from "../../lib/browser-tree";
 
 interface BrowserTreeNodeProps {
   node: BrowserNode;
-  /** Nesting depth, for the row's left indent. */
+  /** Nesting depth, for the row's inline-start indent. */
   depth: number;
   /** Ids of the currently expanded group nodes. */
   expanded: ReadonlySet<string>;
@@ -95,12 +95,12 @@ function nodeIcon(node: BrowserNode, isExpanded: boolean): LucideIcon {
  */
 function RenameRow({
   node,
-  paddingLeft,
+  indentStart,
   onCommit,
   onCancel,
 }: {
   node: BrowserNode;
-  paddingLeft: number;
+  indentStart: number;
   onCommit: (name: string) => void;
   onCancel: () => void;
 }) {
@@ -127,7 +127,7 @@ function RenameRow({
     }
   };
   return (
-    <div className="flex flex-1 items-center py-0.5" style={{ paddingLeft }}>
+    <div className="flex flex-1 items-center py-0.5" style={{ paddingInlineStart: indentStart }}>
       <Input
         // The pencil hands focus straight to the editor it opened; without this
         // the user would have to click the input they just asked for (same as
@@ -182,7 +182,7 @@ export function BrowserTreeNode({
       <li role="none">
         <p
           className="truncate py-1 text-xs text-muted-foreground"
-          style={{ paddingLeft: 8 + depth * 14 }}
+          style={{ paddingInlineStart: 8 + depth * 14 }}
           title={node.label}
           // Announce the loading→tables/error transition to screen readers.
           role="status"
@@ -202,7 +202,7 @@ export function BrowserTreeNode({
   // rather than being silently swallowed.
   const isDisabled = !isGroup && busyId != null;
   // Indent by depth; groups reserve room for the chevron, leaves align to it.
-  const paddingLeft = 8 + depth * 14;
+  const indentStart = 8 + depth * 14;
   // The Add Data source this node's ＋ opens (or undefined). Captured as a const
   // so its non-undefined narrowing survives into the onClick closure — a
   // property access (node.newConnectionKind) would not, forcing a cast.
@@ -239,7 +239,7 @@ export function BrowserTreeNode({
         {isRenaming ? (
           <RenameRow
             node={node}
-            paddingLeft={paddingLeft}
+            indentStart={indentStart}
             onCommit={(name) => onCommitRename(node, name)}
             onCancel={onCancelRename}
           />
@@ -253,7 +253,7 @@ export function BrowserTreeNode({
               "disabled:pointer-events-none disabled:opacity-50",
               node.kind === "section" && "font-semibold",
             )}
-            style={{ paddingLeft }}
+            style={{ paddingInlineStart: indentStart }}
             role="treeitem"
             aria-level={depth + 1}
             aria-expanded={isGroup ? isExpanded : undefined}
@@ -441,7 +441,7 @@ export function BrowserTreeNode({
           // is opened) shows a hint instead of a bare gap.
           <p
             className="truncate py-1 text-xs text-muted-foreground"
-            style={{ paddingLeft: paddingLeft + 14 }}
+            style={{ paddingInlineStart: indentStart + 14 }}
           >
             {t("browser.emptyGroup")}
           </p>

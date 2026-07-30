@@ -1050,7 +1050,11 @@ export function LayerPanel({
       const features = isEmbeddableLocalVectorLayer(layer)
         ? (await materializeEmbeddableVectorLayers([layer])).get(layer.id)
         : undefined;
-      const result = captureLayerLibraryEntry(layer, {
+      // The materialize await can outlive a concurrent style/opacity/join edit,
+      // so capture from the current layer rather than the closure's snapshot
+      // (mirrors handleImportStyle / handleSaveEditsToSource).
+      const latest = useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
+      const result = captureLayerLibraryEntry(latest, {
         id: createLayerLibraryEntryId(),
         addedAt: new Date().toISOString(),
         ...(features ? { features } : {}),
