@@ -705,7 +705,11 @@ function scrubStorymapLayerRefs(
 ): StoryMap | null {
   if (!storymap) return null;
   const removed =
-    typeof layerIds === "string" ? new Set([layerIds]) : layerIds instanceof Set ? layerIds : new Set(layerIds);
+    typeof layerIds === "string"
+      ? new Set([layerIds])
+      : layerIds instanceof Set
+        ? layerIds
+        : new Set(layerIds);
   if (removed.size === 0) return storymap;
   let changed = false;
   const chapters = storymap.chapters.map((chapter) => {

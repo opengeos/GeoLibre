@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { projectChanged } from "../apps/geolibre-desktop/src/lib/project-broadcast-changed";
 
 function geojsonLayer(id: string): GeoLibreLayer {
