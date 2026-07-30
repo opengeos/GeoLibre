@@ -45,7 +45,10 @@ describe("writeKml", () => {
       /<Data name="details"><value>\{&quot;state&quot;:&quot;Nevada&quot;\}<\/value><\/Data>/,
     );
     assert.match(kml, /<Data name="feature_id"><value>city-1<\/value><\/Data>/);
-    assert.match(kml, /<Point><coordinates>-115\.14,36\.17,610<\/coordinates><\/Point>/);
+    assert.match(
+      kml,
+      /<Point><altitudeMode>absolute<\/altitudeMode><coordinates>-115\.14,36\.17,610<\/coordinates><\/Point>/,
+    );
     assert.match(kml, /<IconStyle><color>80563412<\/color><\/IconStyle>/);
     assert.match(kml, /<LineStyle><color>ff00ff00<\/color><width>3<\/width><\/LineStyle>/);
     assert.match(kml, /<PolyStyle><color>40ff0000<\/color><\/PolyStyle>/);
@@ -108,6 +111,53 @@ describe("writeKml", () => {
     assert.equal((kml.match(/<Polygon>/g) ?? []).length, 1);
     assert.match(kml, /<coordinates>0,0 1,0 1,1 0,1 0,0<\/coordinates>/);
     assert.ok((kml.match(/<MultiGeometry>/g) ?? []).length >= 4);
+  });
+
+  it("uses absolute altitude mode for three-dimensional geometries only", () => {
+    const kml = writeKml(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "GeometryCollection",
+              geometries: [
+                {
+                  type: "LineString",
+                  coordinates: [
+                    [0, 0, 10],
+                    [1, 1, 20],
+                  ],
+                },
+                {
+                  type: "Polygon",
+                  coordinates: [
+                    [
+                      [0, 0, 10],
+                      [1, 0, 10],
+                      [1, 1, 10],
+                      [0, 0, 10],
+                    ],
+                  ],
+                },
+                { type: "Point", coordinates: [2, 2] },
+              ],
+            },
+          },
+        ],
+      },
+      "Altitude",
+    );
+
+    assert.match(
+      kml,
+      /<LineString><altitudeMode>absolute<\/altitudeMode><coordinates>0,0,10 1,1,20<\/coordinates><\/LineString>/,
+    );
+    assert.match(kml, /<Polygon>\s+<altitudeMode>absolute<\/altitudeMode>/);
+    assert.match(kml, /<Point><coordinates>2,2<\/coordinates><\/Point>/);
+    assert.equal((kml.match(/<altitudeMode>absolute<\/altitudeMode>/g) ?? []).length, 2);
   });
 
   it("rejects invalid coordinates instead of creating a corrupt KML file", () => {

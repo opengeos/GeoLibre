@@ -31,6 +31,10 @@ function coordinatesText(positions: Position[]): string {
   return positions.map(positionText).join(" ");
 }
 
+function hasAltitude(position: Position): boolean {
+  return position.length >= 3;
+}
+
 function closedRing(ring: Position[]): Position[] {
   if (ring.length === 0) return ring;
   const first = ring[0];
@@ -66,7 +70,10 @@ function polygonKml(coordinates: Position[][]): string {
     );
   }
   if (boundaries.length === 0) return "<Polygon />";
-  return `<Polygon>\n${indentXml(boundaries.join("\n"), 2)}\n</Polygon>`;
+  const contents = coordinates.some((ring) => ring.some(hasAltitude))
+    ? ["<altitudeMode>absolute</altitudeMode>", ...boundaries]
+    : boundaries;
+  return `<Polygon>\n${indentXml(contents.join("\n"), 2)}\n</Polygon>`;
 }
 
 function multiGeometryKml(geometries: Geometry[]): string {
@@ -79,13 +86,13 @@ function multiGeometryKml(geometries: Geometry[]): string {
 function geometryKml(geometry: Geometry): string {
   switch (geometry.type) {
     case "Point":
-      return `<Point><coordinates>${positionText(geometry.coordinates)}</coordinates></Point>`;
+      return `<Point>${hasAltitude(geometry.coordinates) ? "<altitudeMode>absolute</altitudeMode>" : ""}<coordinates>${positionText(geometry.coordinates)}</coordinates></Point>`;
     case "MultiPoint":
       return multiGeometryKml(
         geometry.coordinates.map((coordinates) => ({ type: "Point", coordinates })),
       );
     case "LineString":
-      return `<LineString><coordinates>${coordinatesText(geometry.coordinates)}</coordinates></LineString>`;
+      return `<LineString>${geometry.coordinates.some(hasAltitude) ? "<altitudeMode>absolute</altitudeMode>" : ""}<coordinates>${coordinatesText(geometry.coordinates)}</coordinates></LineString>`;
     case "MultiLineString":
       return multiGeometryKml(
         geometry.coordinates.map((coordinates) => ({ type: "LineString", coordinates })),
