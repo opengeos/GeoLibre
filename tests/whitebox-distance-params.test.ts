@@ -78,6 +78,14 @@ describe("isDistanceParameterName", () => {
     assert.equal(isDistanceParameterName("image_height"), false);
   });
 
+  it("excludes a matching name that measures something dimensionless", () => {
+    // corridor_mapping_intelligence's corridor_tolerance is a fraction above
+    // optimal cost in 0-1, so the `tolerance` segment must not claim it.
+    assert.equal(isDistanceParameterName("corridor_tolerance"), false);
+    // The segment still works on the neighbouring real distances.
+    assert.equal(isDistanceParameterName("snap_tolerance"), true);
+  });
+
   it("matches whole name segments rather than substrings", () => {
     assert.equal(isDistanceParameterName("distribution"), false);
     assert.equal(isDistanceParameterName("radiused"), false);

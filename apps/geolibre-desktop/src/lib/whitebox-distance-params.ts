@@ -31,13 +31,13 @@ const METERS_PER_UNIT: Record<Exclude<DistanceUnit, "degrees">, number> = {
  * the input's coordinate units: `search_radius`, `snap_tolerance`,
  * `max_edge_length`, `spacing`, `resolution`, `max_dist`, and the rest.
  *
- * The generic segments (`length`, `resolution`) would also match a measurement
- * that is not a ground distance — a photogrammetry `focal_length` in millimetres
- * is the clearest example. Nothing in the catalog hits that today, because the
- * caller only applies this rule to a tool whose every dataset input is a vector
- * layer, and those measurements live on imagery/LiDAR tools. A future tool that
- * paired a vector-only input with a non-distance `*_length` would need an
- * exclusion here.
+ * Every segment here is generic enough to also match something that is not a
+ * ground distance: a photogrammetry `focal_length` in millimetres, or a
+ * dimensionless `corridor_tolerance`. Nothing reachable hits that today, because
+ * the caller only applies this rule to a tool whose every dataset input is a
+ * vector layer, and the measurements that would collide sit on imagery/LiDAR
+ * tools. That is a coincidence rather than a guarantee, so a name that collides
+ * on a vector-only tool goes in {@link NON_DISTANCE_NAMES}.
  */
 const DISTANCE_SEGMENTS = [
   "dist",
@@ -57,6 +57,19 @@ const DISTANCE_SEGMENTS = [
  */
 const DISTANCE_NAMES = new Set(["cell_size", "width", "height"]);
 
+/**
+ * Names that match a segment above but measure something dimensionless, so
+ * offering a metric unit picker for them would convert a number that was never
+ * a length. `corridor_mapping_intelligence`'s `corridor_tolerance` is a fraction
+ * above optimal cost in 0-1, not a width.
+ *
+ * The catalog scan behind this list looked for a matching `double` whose
+ * description reads as a fraction, ratio, angle or weight; re-run it when
+ * `geolibre-wasm` adds tools, since the tool-level gate that saves these today
+ * is incidental.
+ */
+const NON_DISTANCE_NAMES = new Set(["corridor_tolerance"]);
+
 const DISTANCE_SEGMENT_PATTERN = new RegExp(`(^|_)(${DISTANCE_SEGMENTS.join("|")})(_|$)`, "i");
 
 /**
@@ -71,7 +84,9 @@ const DISTANCE_SEGMENT_PATTERN = new RegExp(`(^|_)(${DISTANCE_SEGMENTS.join("|")
  * @returns `true` when the name reads as a linear distance.
  */
 export function isDistanceParameterName(name: string): boolean {
-  return DISTANCE_NAMES.has(name.toLowerCase()) || DISTANCE_SEGMENT_PATTERN.test(name);
+  const lower = name.toLowerCase();
+  if (NON_DISTANCE_NAMES.has(lower)) return false;
+  return DISTANCE_NAMES.has(lower) || DISTANCE_SEGMENT_PATTERN.test(name);
 }
 
 /**
@@ -126,16 +141,6 @@ export function degreesToUnit(degrees: number, unit: DistanceUnit, latitudeDeg: 
 }
 
 /**
- * Round a converted value to a fixed number of significant digits and drop the
- * trailing zeros, so a conversion reads as `0.0106` rather than
- * `0.010601234567890123` (and never as exponent notation, which the tools'
- * numeric parsers do not all accept).
- *
- * @param value - The value to format.
- * @param significantDigits - Digits to keep (default 6).
- * @returns The formatted number as a plain decimal string.
- */
-/**
  * Read a number the user typed into a distance field, or `null` when the text
  * is not a complete number.
  *
@@ -186,6 +191,16 @@ export function wgs84VectorLayerIds(
   return ids.length ? ids : null;
 }
 
+/**
+ * Round a converted value to a fixed number of significant digits and drop the
+ * trailing zeros, so a conversion reads as `0.0106` rather than
+ * `0.010601234567890123` (and never as exponent notation, which the tools'
+ * numeric parsers do not all accept).
+ *
+ * @param value - The value to format.
+ * @param significantDigits - Digits to keep (default 6).
+ * @returns The formatted number as a plain decimal string.
+ */
 export function formatDistanceValue(value: number, significantDigits = 6): string {
   if (!Number.isFinite(value)) return "";
   if (value === 0) return "0";
