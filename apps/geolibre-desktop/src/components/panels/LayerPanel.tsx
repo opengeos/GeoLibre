@@ -20,6 +20,9 @@ import {
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
   isStyleLibraryTargetLayer,
+  canSaveLayerToLibrary,
+  captureLayerLibraryEntry,
+  createLayerLibraryEntryId,
   copyableLayerStyleKind,
   pluginOwnsPaint,
   supportsBridgedOpacity,
@@ -42,6 +45,8 @@ import {
   sampleTileFeatureRecords,
   BASEMAP_CONTROL_PLUGIN_ID,
   GEO_EDITOR_PLUGIN_ID,
+  isEmbeddableLocalVectorLayer,
+  materializeEmbeddableVectorLayers,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
   SKETCHES_SOURCE_KIND,
@@ -123,6 +128,7 @@ import {
   GripVertical,
   Info,
   Layers,
+  Library,
   Locate,
   Map as MapIcon,
   MoreHorizontal,
@@ -600,6 +606,7 @@ export function LayerPanel({
   const copyLayerStyle = useAppStore((s) => s.copyLayerStyle);
   const pasteLayerStyle = useAppStore((s) => s.pasteLayerStyle);
   const copiedLayerStyle = useAppStore((s) => s.copiedLayerStyle);
+  const saveLayerLibraryEntry = useAppStore((s) => s.saveLayerLibraryEntry);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setRasterAttributeTableOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
@@ -1024,6 +1031,46 @@ export function LayerPanel({
       scheduleStatusClear(layer.id);
     },
     [pasteLayerStyle, clearRefreshStatusTimer, scheduleStatusClear, t],
+  );
+
+  /**
+   * Save a fully configured layer to the app-level Layer Library (issue #1520)
+   * so it can be re-added to any later project from the Browser panel's My Data
+   * section. Reuses the per-layer status row for feedback, like the style
+   * copy/paste actions above.
+   *
+   * An Add Vector Layer layer holds its features in the control, not the store,
+   * so its current data is read from there first — the same materialization the
+   * project Embed/Share flow uses — instead of relying on the store's
+   * attribute-table copy, which a tiles-mode layer does not have.
+   */
+  const handleSaveToLibrary = useCallback(
+    async (layer: GeoLibreLayer) => {
+      const features = isEmbeddableLocalVectorLayer(layer)
+        ? (await materializeEmbeddableVectorLayers([layer])).get(layer.id)
+        : undefined;
+      const result = captureLayerLibraryEntry(layer, {
+        id: createLayerLibraryEntryId(),
+        addedAt: new Date().toISOString(),
+        ...(features ? { features } : {}),
+      });
+      clearRefreshStatusTimer(layer.id);
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: result.ok
+          ? { type: "success", message: t("layers.savedToLibrary", { name: layer.name }) }
+          : {
+              type: "error",
+              message:
+                result.reason === "too-large"
+                  ? t("layers.saveToLibraryTooLarge")
+                  : t("layers.saveToLibraryNoSource"),
+            },
+      }));
+      scheduleStatusClear(layer.id);
+      if (result.ok) saveLayerLibraryEntry(result.entry);
+    },
+    [saveLayerLibraryEntry, clearRefreshStatusTimer, scheduleStatusClear, t],
   );
 
   const handleRefreshLayer = useCallback(
@@ -2551,6 +2598,10 @@ export function LayerPanel({
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
             // layers. Shares the Style Manager's gate so the two can't drift.
             const canImportStyle = isStyleLibraryTargetLayer(layer.type);
+            // Saving the whole layer (source + style + labels + filters + joins)
+            // to the Layer Library needs something re-addable to point at
+            // (issue #1520); a layer with no source and no features is excluded.
+            const canSaveToLibrary = canSaveLayerToLibrary(layer);
             // Copy/paste symbology (issue #1339). Vector-styled layers and
             // deck.gl rasters each copy their own style family; a paste only
             // lands when the clipboard entry shares the target's family.
@@ -3208,6 +3259,23 @@ export function LayerPanel({
                                 )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
+                          )}
+                          {/* Save the whole configured layer to the Layer
+                          Library (issue #1520): its source spec plus style,
+                          labels, filters, and joins, re-addable from the Browser
+                          panel's My Data section in any later project. */}
+                          {canSaveToLibrary && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleSaveToLibrary(layer);
+                                }}
+                              >
+                                <Library className="me-2 h-3.5 w-3.5" />
+                                {t("layers.saveToLibrary")}
+                              </DropdownMenuItem>
+                            </>
                           )}
                           {/* Copy/paste symbology between layers (issue #1339),
                           for vector-styled layers and deck.gl rasters. Paste is

@@ -1,4 +1,8 @@
-import { useAppStore } from "@geolibre/core";
+import {
+  layerLibraryEntryNeedsLocalFile,
+  useAppStore,
+  type LayerLibraryEntry,
+} from "@geolibre/core";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -27,12 +31,14 @@ export interface BrowserTreeState {
   serviceById: (id: string) => ServiceLibraryEntry | undefined;
   /** Ids of currently-favorited nodes, for the star fill state. */
   favoriteIds: Set<string>;
+  /** Looks a saved Layer Library entry up by id, for the re-add path. */
+  libraryLayerById: (id: string) => LayerLibraryEntry | undefined;
 }
 
 /**
  * Assembles the Browser panel's tree from live inputs: the saved-service
- * library (built-in presets + the user's localStorage entries) and the store's
- * recent-projects list.
+ * library (built-in presets + the user's localStorage entries), the store's
+ * recent-projects list, and the store's Layer Library (My Data).
  *
  * The saved-service library is not a reactive store, so it is read when the
  * panel mounts (the panel is conditionally rendered, so it re-mounts each time
@@ -40,16 +46,22 @@ export interface BrowserTreeState {
  * for the MVP: a service saved from the Add Data dialog appears the next time
  * the panel is opened.
  *
- * @returns The tree plus a by-id service lookup for one-click add.
+ * @returns The tree plus by-id lookups (saved service, saved layer) for the
+ *   one-click add paths.
  */
 export function useBrowserTree(): BrowserTreeState {
   const { t } = useTranslation();
   const recentProjects = useAppStore((s) => s.recentProjects);
+  // The Layer Library IS a reactive store slice (unlike the localStorage-backed
+  // services/folders/favorites below), so My Data refreshes the moment a layer
+  // is saved, renamed, or deleted.
+  const layerLibrary = useAppStore((s) => s.layerLibrary);
   const servicesLabel = t("browser.services");
   const recentLabel = t("browser.recent");
   const databasesLabel = t("browser.databases");
   const filesLabel = t("browser.files");
   const favoritesLabel = t("browser.favorites");
+  const myDataLabel = t("browser.myData");
 
   // Saved connections live in localStorage (no reactive store), so re-read them
   // when one is added/removed — otherwise a connection saved from the Add Data
@@ -96,6 +108,7 @@ export function useBrowserTree(): BrowserTreeState {
         }
       : undefined;
     const favorites = readBrowserFavorites();
+    const layerLibraryById = new Map(layerLibrary.map((entry) => [entry.id, entry]));
     return {
       tree: buildBrowserTree({
         services,
@@ -103,24 +116,33 @@ export function useBrowserTree(): BrowserTreeState {
         databaseConnections,
         files,
         favorites,
+        libraryLayers: layerLibrary.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          needsLocalFile: layerLibraryEntryNeedsLocalFile(entry),
+        })),
         sectionLabels: {
           services: servicesLabel,
           recent: recentLabel,
           databases: databasesLabel,
           files: filesLabel,
           favorites: favoritesLabel,
+          myData: myDataLabel,
         },
       }),
       serviceById: (id: string) => byId.get(id),
       favoriteIds: new Set(favorites.map((fav) => fav.id)),
+      libraryLayerById: (id: string) => layerLibraryById.get(id),
     };
   }, [
     recentProjects,
+    layerLibrary,
     servicesLabel,
     recentLabel,
     databasesLabel,
     filesLabel,
     favoritesLabel,
+    myDataLabel,
     connectionsRevision,
     foldersRevision,
     favoritesRevision,

@@ -54,27 +54,35 @@ export const BLANK_BASEMAP = "";
 
 export const PROJECT_VERSION = "0.2.0";
 
-export type LayerType =
-  | "geojson"
-  | "raster"
-  | "wms"
-  | "wmts"
-  | "xyz"
-  | "vector-tiles"
-  | "arcgis"
-  | "pmtiles"
-  | "mbtiles"
-  | "zarr"
-  | "lidar"
-  | "gaussian-splat"
-  | "3d-tiles"
-  | "cog"
-  | "flatgeobuf"
-  | "geoparquet"
-  | "duckdb-query"
-  | "deckgl-viz"
-  | "video"
-  | "image";
+/**
+ * Every layer type, as a runtime list so untrusted input (an imported Layer
+ * Library bundle, a hand-edited project) can be validated against it.
+ * {@link LayerType} is derived from this array, so the two cannot drift.
+ */
+export const LAYER_TYPES = [
+  "geojson",
+  "raster",
+  "wms",
+  "wmts",
+  "xyz",
+  "vector-tiles",
+  "arcgis",
+  "pmtiles",
+  "mbtiles",
+  "zarr",
+  "lidar",
+  "gaussian-splat",
+  "3d-tiles",
+  "cog",
+  "flatgeobuf",
+  "geoparquet",
+  "duckdb-query",
+  "deckgl-viz",
+  "video",
+  "image",
+] as const;
+
+export type LayerType = (typeof LAYER_TYPES)[number];
 
 export type VectorStyleMode = "single" | "graduated" | "categorized" | "rule-based" | "expression";
 
@@ -1606,6 +1614,57 @@ export interface StyleLibraryEntry {
   style: Partial<LayerStyle>;
   /** ISO timestamp of the last save; empty for built-in presets. */
   updatedAt: string;
+}
+
+/**
+ * One saved, re-addable layer in the Layer Library (issue #1520) — the "My
+ * Data" section of the Browser panel. Stores the layer's **source
+ * specification** plus its full presentation state (style, labels, filters,
+ * joins, virtual fields, attribute form), deliberately *not* the data, so the
+ * library stays small and an entry always reflects the current contents of its
+ * source.
+ *
+ * The exception is a layer whose features exist only in memory (drawn features,
+ * processing output) or in a local file: those have no re-fetchable source, so
+ * their features are embedded in {@link geojson} behind a size cap. See
+ * `layer-library.ts` for how an entry is captured and re-added.
+ */
+export interface LayerLibraryEntry {
+  /** Stable id, used as the IndexedDB/store key; upserts overwrite by id. */
+  id: string;
+  /** Display name shown in the Browser panel's My Data section. */
+  name: string;
+  /** ISO timestamp of the last save. */
+  addedAt: string;
+  /** The layer type to recreate ({@link GeoLibreLayer.type}). */
+  layerType: LayerType;
+  /** The MapLibre/plugin source spec to recreate the layer from. */
+  source: Record<string, unknown>;
+  /** The saved layer's complete {@link LayerStyle} (labels included). */
+  style: LayerStyle;
+  /** Layer opacity in [0, 1]. */
+  opacity: number;
+  /** The layer metadata the renderers and plugin sync modules key off. */
+  metadata: Record<string, unknown>;
+  /** Absolute local path, for a layer read from a file on disk. */
+  sourcePath?: string;
+  /** Persistent attribute joins to reapply. */
+  joins?: LayerJoin[];
+  /** Expression-backed virtual fields to reapply. */
+  virtualFields?: LayerVirtualField[];
+  /** Per-field edit-widget/constraint configuration to reapply. */
+  attributeForm?: AttributeFormConfig;
+  /**
+   * Embedded features, present only for a layer whose source cannot be
+   * re-read (in-memory features) or whose local file may be unavailable.
+   */
+  geojson?: FeatureCollection;
+  /**
+   * True when the entry can only be re-added by a host that can read
+   * {@link sourcePath} — i.e. its features were too large to embed, so the
+   * desktop app must re-read the file and the browser build cannot.
+   */
+  needsLocalFile?: boolean;
 }
 
 /** One saved template in the Template Library. */
