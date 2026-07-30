@@ -3447,7 +3447,8 @@
       "south": "{{latitude}}°S",
       "geographicNote": "The selected layers use a geographic CRS (WGS84), so distances are in degrees. Pick a unit next to a distance field to enter meters instead, or reproject to a projected CRS for exact results.",
       "converted": "Sent to the tool as {{degrees}}°, converted at {{latitude}}. A degree varies with latitude and direction, so this is approximate.",
-      "convertedEmpty": "Converted to degrees at {{latitude}}. A degree varies with latitude and direction, so this is approximate."
+      "convertedEmpty": "Converted to degrees at {{latitude}}. A degree varies with latitude and direction, so this is approximate.",
+      "notANumber": "Not a number, so it is passed to the tool as typed instead of converted. Use a plain decimal such as 12000 or 1.5."
     },
     "history": {
       "title": "Processing History",

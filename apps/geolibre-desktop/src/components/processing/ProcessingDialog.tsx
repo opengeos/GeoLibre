@@ -66,7 +66,9 @@ import {
   degreesToUnit,
   formatDistanceValue,
   isDistanceParameterName,
+  parseDistanceInput,
   unitToDegrees,
+  wgs84VectorLayerIds,
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
@@ -251,9 +253,9 @@ function isDistanceParameter(param: WhiteboxToolParameter): boolean {
  * The distance unit picker is only safe when every dataset input is a map
  * layer's in-memory GeoJSON, which `runSelectedTool` hands over verbatim and RFC
  * 7946 fixes to WGS84. A raster or LiDAR input keeps its own CRS (GeoLibre never
- * reprojects those), and a file path is read from disk in whatever CRS it
- * carries — so a tool with either is left alone, as is a vector input still set
- * to a path.
+ * reprojects those), so a tool with one is left alone entirely; the per-input
+ * rule (a path leaves the units unknowable) lives in `wgs84VectorLayerIds`,
+ * where it is unit-tested.
  *
  * Returns ids rather than latitudes so the caller can measure only the one or
  * two layers actually wired to the tool, instead of every layer in the project.
@@ -262,7 +264,7 @@ function isDistanceParameter(param: WhiteboxToolParameter): boolean {
  * @param values - The current form values.
  * @returns The chosen layers' ids, or `null` when the units are unknown.
  */
-function wgs84VectorLayerIds(tool: WhiteboxTool | null, values: ParameterValues): string[] | null {
+function wgs84ToolLayerIds(tool: WhiteboxTool | null, values: ParameterValues): string[] | null {
   const params = tool?.params ?? [];
   if (!params.length) return null;
   const kinds = params.map((param) => parameterKind(param));
@@ -271,21 +273,10 @@ function wgs84VectorLayerIds(tool: WhiteboxTool | null, values: ParameterValues)
   }
   const vectorInputs = params.filter((_, index) => kinds[index] === "vector_in");
   if (!vectorInputs.length) return null;
-  const ids: string[] = [];
-  for (const param of vectorInputs) {
-    const value = values[param.name];
-    if (typeof value !== "string" || value.trim() === "") {
-      // Nothing chosen yet. A required input means there is nothing to know the
-      // units of; an empty optional one contributes no geometry either way.
-      if (param.required) return null;
-      continue;
-    }
-    // A path, required or not, is read from disk in whatever CRS it carries, so
-    // one anywhere on the tool is enough to make the units unknowable.
-    if (!value.startsWith(LAYER_TOKEN_PREFIX)) return null;
-    ids.push(value.slice(LAYER_TOKEN_PREFIX.length));
-  }
-  return ids.length ? ids : null;
+  return wgs84VectorLayerIds(
+    vectorInputs.map((param) => ({ required: param.required, value: values[param.name] })),
+    LAYER_TOKEN_PREFIX,
+  );
 }
 
 function isPathParameter(param: WhiteboxToolParameter): boolean {
@@ -789,7 +780,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // the extent scan below keeps its memo across the keystrokes that rebuild
   // `values`; null when the units are unknown, which hides the unit picker.
   const distanceLayerKey = useMemo(
-    () => wgs84VectorLayerIds(selectedTool, values)?.join("\n") ?? null,
+    () => wgs84ToolLayerIds(selectedTool, values)?.join("\n") ?? null,
     [selectedTool, values],
   );
 
@@ -2430,8 +2421,10 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
   // out of the parameter so the stored value stays in the tool's own unit.
   const [draft, setDraft] = useState("");
 
-  const degrees = Number.parseFloat(value);
-  const hasDegrees = Number.isFinite(degrees);
+  const degrees = parseDistanceInput(value);
+  // What the metric box currently holds: a number to convert, or null when it is
+  // empty or not a complete number (so nothing was converted).
+  const draftValue = parseDistanceInput(draft);
 
   // The last value this field pushed up, so a `value` that changed for some
   // other reason (a re-run pre-filled from Processing History, say) can be told
@@ -2446,7 +2439,7 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     setUnit(next);
     // Carry the current distance over to the new unit rather than clearing it.
     setDraft(
-      next === "degrees" || !hasDegrees
+      next === "degrees" || degrees === null
         ? ""
         : formatDistanceValue(degreesToUnit(degrees, next, latitude)),
     );
@@ -2454,13 +2447,16 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
 
   const changeDraft = (text: string) => {
     setDraft(text);
-    const parsed = Number.parseFloat(text);
+    const parsed = parseDistanceInput(text);
+    // Text that is not a complete number is stored verbatim rather than
+    // converted, so a half-typed or malformed value fails at the tool instead of
+    // being silently reinterpreted as a different distance.
     push(
-      Number.isFinite(parsed)
-        ? formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8)
-        : text.trim() === ""
+      parsed === null
+        ? text.trim() === ""
           ? ""
-          : text,
+          : text
+        : formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8),
     );
   };
 
@@ -2484,8 +2480,8 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     if (lastLatitude.current === latitude) return;
     lastLatitude.current = latitude;
     if (unit === "degrees") return;
-    const parsed = Number.parseFloat(draft);
-    if (!Number.isFinite(parsed)) return;
+    const parsed = parseDistanceInput(draft);
+    if (parsed === null) return;
     const next = formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8);
     lastPushed.current = next;
     onChange(next);
@@ -2497,6 +2493,16 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
       latitude: Math.abs(latitude).toFixed(1),
     },
   );
+
+  // Only claim a conversion when one actually happened. Text the field could not
+  // read went through untouched, so saying it was "converted at 44.0°N" would
+  // describe something the tool is about to reject.
+  const conversionNote =
+    draft.trim() === ""
+      ? t("processing.distance.convertedEmpty", { latitude: latitudeLabel })
+      : draftValue === null
+        ? t("processing.distance.notANumber")
+        : t("processing.distance.converted", { degrees: value, latitude: latitudeLabel });
 
   return (
     <div className="grid gap-1.5">
@@ -2523,13 +2529,7 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
           ))}
         </Select>
       </div>
-      {unit !== "degrees" && (
-        <p className="text-xs text-muted-foreground">
-          {hasDegrees
-            ? t("processing.distance.converted", { degrees: value, latitude: latitudeLabel })
-            : t("processing.distance.convertedEmpty", { latitude: latitudeLabel })}
-        </p>
-      )}
+      {unit !== "degrees" && <p className="text-xs text-muted-foreground">{conversionNote}</p>}
     </div>
   );
 }

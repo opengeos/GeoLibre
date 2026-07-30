@@ -6,7 +6,9 @@ import {
   formatDistanceValue,
   isDistanceParameterName,
   metersPerDegreeAt,
+  parseDistanceInput,
   unitToDegrees,
+  wgs84VectorLayerIds,
 } from "../apps/geolibre-desktop/src/lib/whitebox-distance-params";
 
 describe("isDistanceParameterName", () => {
@@ -154,5 +156,105 @@ describe("formatDistanceValue", () => {
   it("returns an empty string for a value that is not a number", () => {
     assert.equal(formatDistanceValue(Number.NaN), "");
     assert.equal(formatDistanceValue(Number.POSITIVE_INFINITY), "");
+  });
+});
+
+describe("parseDistanceInput", () => {
+  it("reads a plain number", () => {
+    assert.equal(parseDistanceInput("200"), 200);
+    assert.equal(parseDistanceInput("0.5"), 0.5);
+    assert.equal(parseDistanceInput(" 1.25 "), 1.25);
+    assert.equal(parseDistanceInput("-3"), -3);
+    assert.equal(parseDistanceInput("1e3"), 1000);
+  });
+
+  it("rejects text a lenient parse would silently truncate", () => {
+    // parseFloat("12,000") is 12, which would convert a distance a thousand
+    // times too small while the field still showed "12,000".
+    assert.equal(parseDistanceInput("12,000"), null);
+    assert.equal(parseDistanceInput("3,14"), null);
+    assert.equal(parseDistanceInput("12abc"), null);
+    assert.equal(parseDistanceInput("200 m"), null);
+  });
+
+  it("treats empty text as no value, not zero", () => {
+    // Number("") is 0, so an empty field would otherwise store a real distance.
+    assert.equal(parseDistanceInput(""), null);
+    assert.equal(parseDistanceInput("   "), null);
+  });
+});
+
+describe("wgs84VectorLayerIds", () => {
+  const PREFIX = "layer:";
+
+  it("collects the ids of the layers the inputs point at", () => {
+    assert.deepEqual(
+      wgs84VectorLayerIds(
+        [
+          { required: true, value: "layer:a" },
+          { required: true, value: "layer:b" },
+        ],
+        PREFIX,
+      ),
+      ["a", "b"],
+    );
+  });
+
+  it("rejects any input left on a file path, required or not", () => {
+    // The file is read from disk in whatever CRS it carries, so the tool's units
+    // are unknowable even when the path is on an optional input.
+    assert.equal(wgs84VectorLayerIds([{ required: true, value: "/data/roads.shp" }], PREFIX), null);
+    assert.equal(
+      wgs84VectorLayerIds(
+        [
+          { required: true, value: "layer:a" },
+          { required: false, value: "/data/node_costs.geojson" },
+        ],
+        PREFIX,
+      ),
+      null,
+    );
+  });
+
+  it("skips an empty optional input but fails on an empty required one", () => {
+    assert.deepEqual(
+      wgs84VectorLayerIds(
+        [
+          { required: true, value: "layer:a" },
+          { required: false, value: "" },
+        ],
+        PREFIX,
+      ),
+      ["a"],
+    );
+    assert.equal(
+      wgs84VectorLayerIds(
+        [
+          { required: true, value: "layer:a" },
+          { required: true, value: "  " },
+        ],
+        PREFIX,
+      ),
+      null,
+    );
+  });
+
+  it("returns null when nothing was chosen at all", () => {
+    assert.equal(wgs84VectorLayerIds([{ required: false, value: "" }], PREFIX), null);
+    assert.equal(wgs84VectorLayerIds([], PREFIX), null);
+  });
+
+  it("treats a non-string value as nothing chosen", () => {
+    assert.equal(wgs84VectorLayerIds([{ required: true, value: undefined }], PREFIX), null);
+    assert.deepEqual(
+      wgs84VectorLayerIds(
+        [
+          { required: true, value: "layer:a" },
+          { required: false, value: 42 },
+        ],
+        PREFIX,
+      ),
+      ["a"],
+    );
   });
 });

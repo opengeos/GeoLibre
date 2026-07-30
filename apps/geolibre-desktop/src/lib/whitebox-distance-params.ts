@@ -30,6 +30,14 @@ const METERS_PER_UNIT: Record<Exclude<DistanceUnit, "degrees">, number> = {
  * Name segments that mark a numeric parameter as a ground distance measured in
  * the input's coordinate units: `search_radius`, `snap_tolerance`,
  * `max_edge_length`, `spacing`, `resolution`, `max_dist`, and the rest.
+ *
+ * The generic segments (`length`, `resolution`) would also match a measurement
+ * that is not a ground distance — a photogrammetry `focal_length` in millimetres
+ * is the clearest example. Nothing in the catalog hits that today, because the
+ * caller only applies this rule to a tool whose every dataset input is a vector
+ * layer, and those measurements live on imagery/LiDAR tools. A future tool that
+ * paired a vector-only input with a non-distance `*_length` would need an
+ * exclusion here.
  */
 const DISTANCE_SEGMENTS = [
   "dist",
@@ -127,6 +135,57 @@ export function degreesToUnit(degrees: number, unit: DistanceUnit, latitudeDeg: 
  * @param significantDigits - Digits to keep (default 6).
  * @returns The formatted number as a plain decimal string.
  */
+/**
+ * Read a number the user typed into a distance field, or `null` when the text
+ * is not a complete number.
+ *
+ * Uses `Number` rather than `parseFloat`, which stops at the first character it
+ * cannot read: `parseFloat("12,000")` is `12`, so a thousands separator (or the
+ * comma decimal mark much of the world types) would be silently converted as a
+ * distance a thousand times too small while the field still displayed the
+ * original text. Rejecting it instead leaves the raw text to be stored, which
+ * fails loudly when the tool reads it.
+ *
+ * @param text - The raw field text.
+ * @returns The parsed number, or `null` for empty or malformed input.
+ */
+export function parseDistanceInput(text: string): number | null {
+  // Number("") and Number(" ") are 0, so empty has to be ruled out first.
+  if (text.trim() === "") return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * The map layers a tool's vector inputs resolve to, or `null` when any of them
+ * leaves the tool's coordinate units unknowable.
+ *
+ * An input pointing at a file path is read from disk in whatever CRS it carries,
+ * so one anywhere on the tool disqualifies the whole tool — required or not. An
+ * input with nothing chosen contributes no geometry, which is fatal only when it
+ * is required.
+ *
+ * @param inputs - The tool's vector inputs, with their current form values.
+ * @param layerTokenPrefix - Prefix marking a value as a layer reference.
+ * @returns The chosen layers' ids, or `null` when the units are unknown.
+ */
+export function wgs84VectorLayerIds(
+  inputs: { required?: boolean; value: unknown }[],
+  layerTokenPrefix: string,
+): string[] | null {
+  const ids: string[] = [];
+  for (const input of inputs) {
+    const value = input.value;
+    if (typeof value !== "string" || value.trim() === "") {
+      if (input.required) return null;
+      continue;
+    }
+    if (!value.startsWith(layerTokenPrefix)) return null;
+    ids.push(value.slice(layerTokenPrefix.length));
+  }
+  return ids.length ? ids : null;
+}
+
 export function formatDistanceValue(value: number, significantDigits = 6): string {
   if (!Number.isFinite(value)) return "";
   if (value === 0) return "0";
