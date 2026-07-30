@@ -764,12 +764,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     [selectedTool, values],
   );
 
-  // The latitude a distance parameter's metric entry converts at. Measuring an
-  // extent is a whole-collection pass, so this only touches the one or two
-  // layers the tool actually reads, not every GeoJSON layer in the project.
+  // The latitude a distance parameter's metric entry converts at: the middle of
+  // the combined extent of the layers the tool reads. With several inputs that is
+  // the area the operation actually spans, where averaging each layer's own
+  // centre would weight a city-sized input the same as a country-sized one and
+  // land between the two. Measuring an extent is a whole-collection pass, so this
+  // only touches the one or two layers the tool reads, not every GeoJSON layer in
+  // the project.
   const distanceLatitude = useMemo(() => {
     if (!open || distanceLayerKey === null) return null;
-    const latitudes: number[] = [];
+    let south = Number.POSITIVE_INFINITY;
+    let north = Number.NEGATIVE_INFINITY;
     for (const id of distanceLayerKey.split("\n")) {
       const layer = layers.find((item) => item.id === id);
       // No in-memory GeoJSON means the layer is passed as a path, in its own
@@ -777,9 +782,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       if (!layer?.geojson) return null;
       const bounds = getLayerBounds(layer);
       if (!bounds) return null;
-      latitudes.push((bounds[1] + bounds[3]) / 2);
+      south = Math.min(south, bounds[1]);
+      north = Math.max(north, bounds[3]);
     }
-    return latitudes.reduce((sum, value) => sum + value, 0) / latitudes.length;
+    return Number.isFinite(south) ? (south + north) / 2 : null;
   }, [distanceLayerKey, layers, open]);
 
   // Column names to offer for a `*_field` parameter (GeoLibre#1459): those of

@@ -185,6 +185,21 @@ describe("parseDistanceInput", () => {
     assert.equal(parseDistanceInput("200 m"), null);
   });
 
+  it("rejects notations that are not a plain decimal", () => {
+    // Number("0x64") is 100, which would land in the field as a distance nobody
+    // typed; the same goes for the binary/octal literals and Infinity.
+    assert.equal(parseDistanceInput("0x64"), null);
+    assert.equal(parseDistanceInput("0b101"), null);
+    assert.equal(parseDistanceInput("0o17"), null);
+    assert.equal(parseDistanceInput("Infinity"), null);
+  });
+
+  it("accepts a partly typed decimal", () => {
+    // Mid-typing states, so the field keeps converting as the user goes.
+    assert.equal(parseDistanceInput("5."), 5);
+    assert.equal(parseDistanceInput(".5"), 0.5);
+  });
+
   it("treats empty text as no value, not zero", () => {
     // Number("") is 0, so an empty field would otherwise store a real distance.
     assert.equal(parseDistanceInput(""), null);

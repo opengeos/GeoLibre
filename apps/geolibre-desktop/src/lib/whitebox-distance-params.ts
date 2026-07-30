@@ -156,9 +156,12 @@ export function degreesToUnit(degrees: number, unit: DistanceUnit, latitudeDeg: 
  * @returns The parsed number, or `null` for empty or malformed input.
  */
 export function parseDistanceInput(text: string): number | null {
-  // Number("") and Number(" ") are 0, so empty has to be ruled out first.
-  if (text.trim() === "") return null;
-  const parsed = Number(text);
+  const trimmed = text.trim();
+  // Number("") is 0, and Number also reads the `0x`/`0b`/`0o` literals plus
+  // "Infinity" — none of which is a decimal distance anyone typed on purpose.
+  // Require the plain decimal shape first, then let Number do the conversion.
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(trimmed)) return null;
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
