@@ -350,6 +350,12 @@ export async function addRasterToMap(
   if (options.defaults?.engine && control.getEngine() !== options.defaults.engine) {
     control.setEngine(options.defaults.engine);
   }
+  // A project/basemap load can replace the MapLibre style after the control's
+  // one-time mount warm-up. On Tauri/WebKitGTK that leaves the WASM backend
+  // waiting for an accelerated canvas until the user manually switches to the
+  // GPU engine and back. Repeat that inexpensive toggle at the add boundary,
+  // against the current style, before the COG source starts opening.
+  await warmTauriWasmEngine(control);
   const id = await control.addRaster(source, {
     name: options.name,
     zoomTo: options.zoomTo ?? true,
