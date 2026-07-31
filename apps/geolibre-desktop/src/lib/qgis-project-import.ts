@@ -405,11 +405,21 @@ function parseLayerGroups(document: Document): {
       id,
       name,
       collapsed: element.getAttribute("expanded") === "0",
-      visible: element.getAttribute("checked") !== "Qt::Unchecked",
+      visible: qgisGroupVisible(element, root),
       opacity: 1,
     };
   });
   return { groups, ids };
+}
+
+function qgisGroupVisible(element: Element, root: Element): boolean {
+  let current: Element | null = element;
+  while (current) {
+    if (current.getAttribute("checked") === "Qt::Unchecked") return false;
+    if (current === root) break;
+    current = current.parentElement?.closest("layer-tree-group") ?? null;
+  }
+  return true;
 }
 
 function groupDisplayName(element: Element, root: Element): string {
@@ -458,16 +468,22 @@ function qgisSourcePath(dataSource: string, projectPath: string): string {
   let source = dataSource.split("|", 1)[0]?.trim() ?? "";
   source = source.replace(/^\/vsicurl(?:_streaming)?\//i, "");
   if (/^\/?vsizip\//i.test(source)) return "";
-  if (source.startsWith("file://")) {
+  source = source.replace(/^['"]|['"]$/g, "");
+  if (/^file:\/\//i.test(source)) {
     try {
-      source = decodeURIComponent(new URL(source).pathname).replace(/^\/([A-Za-z]:)/, "$1");
+      const url = new URL(source);
+      const path = decodeURIComponent(url.pathname).replace(/^\/([A-Za-z]:)/, "$1");
+      source =
+        url.hostname && url.hostname.toLowerCase() !== "localhost"
+          ? `//${url.hostname}${path}`
+          : path;
     } catch {
-      source = source.slice("file://".length);
+      const path = source.replace(/^file:\/\//i, "");
+      source = path.startsWith("/") ? path : `//${path}`;
     }
   }
   source = source.replace(/^file:(?:\/\/)?/i, "");
-  source = source.replace(/[?#].*$/, "");
-  source = source.replace(/^['"]|['"]$/g, "");
+  if (!isHttpSource(source)) source = source.replace(/[?#].*$/, "");
   if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source)) return source;
   const directory = /[/\\]/.test(projectPath) ? projectPath.replace(/[/\\][^/\\]*$/, "") : "";
   return normalizeJoinedPath(directory, source);
