@@ -104,6 +104,7 @@ describe("convertGeoTiffToCog", () => {
   });
 
   it("normalizes every Whitebox WASM output because tiling alone does not prove COG conformance", async () => {
+    assert.equal(await isTiledGeoTiff(stripedTiff), false);
     const converted = await ensureWhiteboxRasterCog(stripedTiff);
 
     assert.equal(await isTiledGeoTiff(converted), true);

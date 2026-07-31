@@ -698,7 +698,7 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     if (entry.kind === "raster") {
       const cog = await ensureWhiteboxRasterCog(bytes);
       out[entry.name] = cog;
-      if (cog !== bytes) stdout.push(`Converted ${entry.file} to a Cloud Optimized GeoTIFF.`);
+      stdout.push(`Converted ${entry.file} to a Cloud Optimized GeoTIFF.`);
       continue;
     }
     if (entry.kind === "bytes") {

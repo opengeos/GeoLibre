@@ -197,14 +197,14 @@ def test_ensure_raster_outputs_surfaces_conversion_failure(monkeypatch, tmp_path
     monkeypatch.setattr(
         whitebox.subprocess,
         "run",
-        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "", "conversion failed"),
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 1, "", "conversion failed"),
     )
 
-    with pytest.raises(RuntimeError, match="Could not optimize.*conversion failed"):
+    with pytest.raises(RuntimeError, match=r"Could not optimize.*conversion failed"):
         whitebox._ensure_raster_outputs_are_cogs(
             {"output": str(raster)},
             {"params": [{"name": "output", "kind": "raster_out"}]},
-            lambda message: None,
+            lambda _message: None,
             [],
         )
 
@@ -229,6 +229,7 @@ def test_ensure_raster_outputs_converts_real_striped_geotiff(monkeypatch, tmp_pa
         dataset.write(numpy.zeros((1, 1024, 1024), dtype="uint8"))
 
     assert cog_validate(raster, quiet=True)[0] is False
+    original_mode = raster.stat().st_mode
     monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: sys.executable)
     messages = []
     temp_paths = []
@@ -240,5 +241,6 @@ def test_ensure_raster_outputs_converts_real_striped_geotiff(monkeypatch, tmp_pa
     )
 
     assert cog_validate(raster, quiet=True)[0] is True
+    assert raster.stat().st_mode == original_mode
     assert messages == ["Converted striped.tif to a Cloud Optimized GeoTIFF."]
     assert all(not path.exists() for path in temp_paths)

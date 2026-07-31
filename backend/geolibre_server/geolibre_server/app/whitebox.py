@@ -45,13 +45,14 @@ WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
 WHITEBOX_PYTHON_VERSION = os.environ.get("GEOLIBRE_WHITEBOX_PYTHON_VERSION", "3.12")
 
 _ENSURE_COG_SCRIPT = """
-import json, os, sys
+import json, os, stat, sys
 
 from rio_cogeo.cogeo import cog_translate, cog_validate
 from rio_cogeo.profiles import cog_profiles
 
 path = sys.argv[1]
 temporary = sys.argv[2]
+original_mode = stat.S_IMODE(os.stat(path).st_mode)
 valid, _, _ = cog_validate(path, quiet=True)
 if valid:
     print("{marker}" + json.dumps({"converted": False}))
@@ -68,6 +69,7 @@ cog_translate(
 valid, errors, _ = cog_validate(temporary, quiet=True)
 if not valid:
     raise RuntimeError("COG validation failed: " + "; ".join(errors))
+os.chmod(temporary, original_mode)
 os.replace(temporary, path)
 print("{marker}" + json.dumps({"converted": True}))
 """.replace("{marker}", conversion._RESULT_MARKER)
