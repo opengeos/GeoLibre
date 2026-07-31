@@ -123,7 +123,6 @@ import { ControlsMenu } from "./toolbar/ControlsMenu";
 import { EditMenu } from "./toolbar/EditMenu";
 import { ViewMenu } from "./toolbar/ViewMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
-import { ImportMenu } from "./toolbar/ImportMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
@@ -1425,6 +1424,7 @@ export function TopToolbar({
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
           onOpenGallery={() => setGalleryDialogOpen(true)}
+          onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
           onOpenRecent={(path) => {
             void projectFiles.handleOpenRecent(path).then((error) => {
               if (error) projectFiles.setActionError(error);
@@ -1439,12 +1439,6 @@ export function TopToolbar({
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => setPrintLayoutOpen(true)}
           onOpenOfflineBasemap={onOpenBasemapExtract}
-        />
-      )}
-      {isMenuVisible(uiProfile, "import") && (
-        <ImportMenu
-          chrome={chrome}
-          onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
         />
       )}
       {isMenuVisible(uiProfile, "edit") && (

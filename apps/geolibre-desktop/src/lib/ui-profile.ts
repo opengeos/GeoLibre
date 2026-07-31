@@ -197,7 +197,6 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
  * so the profile UI can never be locked away). */
 export type TopLevelMenuId =
   | "project"
-  | "import"
   | "edit"
   | "view"
   | "addData"
@@ -215,7 +214,6 @@ export interface TopLevelMenuEntry {
 /** Hideable top-level menus, in toolbar order. */
 export const TOP_LEVEL_MENUS: readonly TopLevelMenuEntry[] = [
   { id: "project", labelKey: "toolbar.menu.project", tier: "basic" },
-  { id: "import", labelKey: "toolbar.menu.import", tier: "basic" },
   { id: "edit", labelKey: "toolbar.menu.edit", tier: "basic" },
   { id: "view", labelKey: "toolbar.menu.view", tier: "basic" },
   { id: "addData", labelKey: "toolbar.menu.addData", tier: "basic" },
@@ -256,6 +254,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     id: "project.openRecent",
     menuId: "project",
     labelKey: "toolbar.item.openRecent",
+    tier: "basic",
+  },
+  {
+    id: "project.import",
+    menuId: "project",
+    labelKey: "toolbar.menu.import",
     tier: "basic",
   },
   { id: "project.save", menuId: "project", labelKey: "common.save", tier: "basic" },
