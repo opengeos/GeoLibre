@@ -466,6 +466,7 @@ function layerOrder(document: Document, mapLayers: Element[]): string[] {
 
 function qgisSourcePath(dataSource: string, projectPath: string): string {
   let source = dataSource.split("|", 1)[0]?.trim() ?? "";
+  let parsedFileUrl = false;
   source = source.replace(/^['"]|['"]$/g, "");
   source = source.replace(/^\/vsicurl(?:_streaming)?\//i, "");
   if (/^\/?vsizip\//i.test(source)) return "";
@@ -473,24 +474,26 @@ function qgisSourcePath(dataSource: string, projectPath: string): string {
     try {
       const url = new URL(source);
       const path = decodeURIComponent(url.pathname).replace(/^\/([A-Za-z]:)/, "$1");
+      parsedFileUrl = true;
       source =
         url.hostname && url.hostname.toLowerCase() !== "localhost"
           ? `//${url.hostname}${path}`
           : path;
     } catch {
       const path = source.replace(/^file:\/\//i, "");
-      source = path.startsWith("/") ? path : `//${path}`;
+      source = path.startsWith("/") || /^[A-Za-z]:[/\\]/.test(path) ? path : `//${path}`;
     }
   }
   source = source.replace(/^file:(?:\/\/)?/i, "");
-  if (!isHttpSource(source)) source = source.replace(/[?#].*$/, "");
+  if (!parsedFileUrl && !isHttpSource(source)) source = source.replace(/[?#].*$/, "");
   if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source)) return source;
   const directory = /[/\\]/.test(projectPath) ? projectPath.replace(/[/\\][^/\\]*$/, "") : "";
   return normalizeJoinedPath(directory, source);
 }
 
 function sourceExtension(source: string): string {
-  return source.split(/[?#]/, 1)[0]?.split(".").pop()?.toLowerCase() ?? "";
+  const path = isHttpSource(source) ? source.split(/[?#]/, 1)[0] : source;
+  return path?.split(".").pop()?.toLowerCase() ?? "";
 }
 
 function normalizeJoinedPath(directory: string, relative: string): string {

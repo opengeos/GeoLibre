@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { applyGroupEffects } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
 import { DOMParser } from "linkedom";
 import {
@@ -293,9 +294,11 @@ describe("QGIS project import", () => {
         ["Transport / Places", false],
       ],
     );
+    const rendered = applyGroupEffects(result.project.layers, result.project.layerGroups ?? []);
+    assert.equal(rendered.find((layer) => layer.name === "Cities")?.visible, false);
   });
 
-  it("normalizes Windows file URLs, query strings, and bare project names", () => {
+  it("normalizes Windows file URLs, query strings, encoded delimiters, and bare names", () => {
     const windows = importQgisProject(
       projectXml({
         dataSources: [
@@ -309,6 +312,26 @@ describe("QGIS project import", () => {
       "C:\\projects\\example.qgs",
     );
     assert.equal(windows.project.layers[0].sourcePath, "C:/data/points.csv");
+
+    const encoded = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "Encoded delimiter", source: "file:///tmp/a%23b.geojson" },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+    assert.equal(encoded.project.layers[0].sourcePath, "/tmp/a#b.geojson");
+
+    const malformed = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "Malformed escape", source: "file://C:/data%zz/roads.geojson" },
+        ],
+      }),
+      "C:\\projects\\example.qgs",
+    );
+    assert.equal(malformed.project.layers[0].sourcePath, "C:/data%zz/roads.geojson");
 
     const browser = importQgisProject(
       projectXml({
