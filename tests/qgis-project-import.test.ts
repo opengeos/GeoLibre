@@ -316,6 +316,10 @@ describe("QGIS project import", () => {
     assert.equal(result.project.layers[0].name, "Good");
     assert.equal(result.project.layers[0].geojson?.features.length, 1);
     assert.deepEqual(
+      result.project.layerGroups?.map((group) => group.name),
+      ["Transport"],
+    );
+    assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
       [["Bad", "remote-file"]],
     );
