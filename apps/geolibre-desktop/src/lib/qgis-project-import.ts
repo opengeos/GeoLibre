@@ -39,6 +39,7 @@ export interface QgisRasterImport {
   visible: boolean;
   opacity: number;
   state?: {
+    mode: "single";
     bands: number[];
     colormap: string;
     gamma: number;
@@ -230,6 +231,7 @@ function parseRasterState(element: Element): QgisRasterImport["state"] {
     numberAttribute(element.querySelector(":scope > pipe > brightnesscontrast"), "gamma") ?? 1;
 
   return {
+    mode: "single",
     bands: [band],
     colormap: type === "singlebandgray" ? "gray" : (matched?.colormap ?? "viridis"),
     gamma: gamma > 0 ? gamma : 1,

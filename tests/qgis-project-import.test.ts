@@ -166,6 +166,7 @@ describe("QGIS project import", () => {
         visible: false,
         opacity: 0.6,
         state: {
+          mode: "single",
           bands: [1],
           colormap: "turbo",
           gamma: 1.2,

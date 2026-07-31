@@ -229,6 +229,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             await addRasterToMap(app, loaded.source, {
               name: raster.name,
               localPath: raster.sourcePath,
+              // The Tauri/WebKitGTK WASM backend can stall when its first
+              // source is created immediately after a project style load.
+              // GPU renders this local COG directly and preserves the imported
+              // QGIS ramp, so use the verified backend for project imports.
+              defaults: { engine: "maplibre-gl-raster" },
               state: {
                 ...raster.state,
                 visible: raster.visible,
