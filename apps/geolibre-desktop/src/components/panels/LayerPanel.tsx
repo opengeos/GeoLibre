@@ -881,11 +881,17 @@ export function LayerPanel({
       : 0
     : null;
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
-  const allLayersVisible = basemapVisible && layers.every((layer) => layer.visible);
+  const allLayersVisible =
+    basemapVisible &&
+    layers.every((layer) => layer.visible) &&
+    layerGroups.every((group) => group.visible);
   const toggleAllLayers = () => {
     const nextVisible = !allLayersVisible;
     for (const layer of layers) {
       setLayerVisibility(layer.id, nextVisible);
+    }
+    for (const group of layerGroups) {
+      setLayerGroupVisibility(group.id, nextVisible);
     }
     setBasemapVisible(nextVisible);
   };
