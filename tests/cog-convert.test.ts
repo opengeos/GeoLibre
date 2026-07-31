@@ -10,6 +10,7 @@ import {
   isTiledGeoTiff,
   readGeoTiffInfo,
 } from "../packages/processing/src/cog-convert";
+import { ensureWhiteboxRasterCog } from "../packages/processing/src/wasm-client";
 
 // A tiny 32x32 Int16 GeoTIFF written striped (not tiled) by rasterio, the kind
 // of file desktop GIS tools export and that the raster panel cannot render
@@ -100,5 +101,13 @@ describe("convertGeoTiffToCog", () => {
       deflate.byteLength < none.byteLength,
       `deflate (${deflate.byteLength}) should be smaller than none (${none.byteLength})`,
     );
+  });
+
+  it("normalizes striped Whitebox WASM output and preserves an existing COG", async () => {
+    const converted = await ensureWhiteboxRasterCog(stripedTiff);
+
+    assert.equal(await isTiledGeoTiff(converted), true);
+    assert.notEqual(converted, stripedTiff);
+    assert.equal(await ensureWhiteboxRasterCog(converted), converted);
   });
 });
