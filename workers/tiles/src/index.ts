@@ -105,6 +105,13 @@ const SOURCE_COOP_PRODUCTS_PATH =
 // The catalog changes when products are published, so cache briefly at the edge.
 const SOURCE_COOP_CACHE_CONTROL = "public, max-age=300";
 
+// GitHub repository files are served without a usable CORS header on the
+// `github.com/<owner>/<repo>/raw/...` route. This named proxy accepts only that
+// path shape and only from GeoLibre origins, then streams the response without
+// buffering it in Worker memory.
+const GITHUB_RAW_PATH = "/github-raw";
+const GITHUB_RAW_REPOSITORY_PATH = /^\/[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}\/raw\/.+$/;
+
 // A USGS Astrogeology WMS layer to reproject. `map` and `layer` are the only
 // caller-influenced parts of the upstream request, and both come from this
 // allowlist — the Worker never forwards a client-supplied WMS parameter.
@@ -505,6 +512,7 @@ export default {
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
+          "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
         { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
       );
@@ -570,6 +578,49 @@ export default {
     // web build reads it through here (see SOURCE_COOP_PREFIX above).
     if (url.pathname.startsWith(SOURCE_COOP_PREFIX)) {
       return handleSourceCoop(request, url.pathname);
+    }
+
+    if (url.pathname === GITHUB_RAW_PATH) {
+      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+      }
+      const source = url.searchParams.get("url");
+      let upstream: URL;
+      try {
+        upstream = new URL(source ?? "");
+      } catch {
+        return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+      }
+      if (
+        upstream.protocol !== "https:" ||
+        upstream.hostname !== "github.com" ||
+        upstream.search !== "" ||
+        !GITHUB_RAW_REPOSITORY_PATH.test(upstream.pathname)
+      ) {
+        return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+      }
+      let originResponse: Response;
+      try {
+        const parts = upstream.pathname.split("/").filter(Boolean);
+        const rawUrl = new URL(
+          `https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/${parts.slice(3).join("/")}`,
+        );
+        originResponse = await fetch(rawUrl.toString(), {
+          headers: { accept: "application/octet-stream" },
+        });
+      } catch {
+        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      for (const key of ["content-type", "content-length", "content-disposition", "etag"]) {
+        const value = originResponse.headers.get(key);
+        if (value) headers.set(key, value);
+      }
+      headers.set("cache-control", originResponse.ok ? "public, max-age=300" : "no-store");
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers,
+      });
     }
 
     const pmtilesMatch = PMTILES_PATH.exec(url.pathname);
