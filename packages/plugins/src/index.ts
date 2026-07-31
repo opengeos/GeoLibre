@@ -92,6 +92,7 @@ export {
   openHtmlPanel,
   openLegendPanel,
   openLegendPanelWithItems,
+  LIDAR_SOURCE_KIND,
   openLidarLayerPanel,
   restoreLidarLayers,
   openMeasurePanel,
@@ -170,6 +171,7 @@ export {
 export {
   closePlanetaryComputerPanel,
   openPlanetaryComputerPanel,
+  PLANETARY_COMPUTER_SOURCE_KIND,
   restorePlanetaryComputerLayers,
 } from "./plugins/maplibre-planetary-computer";
 export {
@@ -183,6 +185,7 @@ export {
   closeThreeDTilesLayerPanel,
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
+  THREE_D_TILES_SOURCE_KIND,
 } from "./plugins/maplibre-3d-tiles";
 export {
   addRasterToMap,
@@ -231,9 +234,13 @@ export {
   reloadVectorControlLayer,
   restoreVectorLayers,
 } from "./plugins/maplibre-vector";
-// The raster-layer-sync and vector-layer-sync internals are not
-// re-exported: the app drives the panels through the functions above, and
-// the tests import the sync helpers from the module paths directly.
+// The rest of the raster-layer-sync / vector-layer-sync internals stay
+// unexported: the app drives the panels through the functions above, and the
+// tests import the sync helpers from the module paths directly. These two are
+// the exception — the Layer Library (issue #1520) has to recognize a
+// control-painted vector layer to read its features before saving it, and to
+// route a re-add back to restoreVectorLayers.
+export { isEmbeddableLocalVectorLayer, VECTOR_SOURCE_KIND } from "./plugins/vector-layer-sync";
 export {
   clearDirectionsWaypoints,
   type DirectionsRouteLegMetric,

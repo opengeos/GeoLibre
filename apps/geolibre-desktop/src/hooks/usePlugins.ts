@@ -1011,6 +1011,35 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     // presence to auto-discover shapefile sidecars instead of forcing the user
     // to select every component, and to capture the file's path for restore.
     pickVectorFilesWithSidecars: isTauriRuntime() ? pickVectorFilesWithSidecars : undefined,
+    fetchVectorUrl: async (url: string) => {
+      if (isTauriRuntime()) {
+        try {
+          const bytes = await fetchUrlBytes(url, { context: "Add Vector Layer" });
+          const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+          return new Blob([array as Uint8Array<ArrayBuffer>]);
+        } catch {
+          // The shared native command has a short, tile-oriented timeout.
+          // Preserve the former browser path for large CORS-enabled datasets.
+          try {
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            }
+            return response.blob();
+          } catch {
+            // GitHub's /raw route rejects browser CORS, so fall through to the
+            // same guarded proxy used by the web build.
+          }
+        }
+      }
+      const proxyUrl = githubRawVectorProxyUrl(url);
+      if (!proxyUrl) return null;
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+      return response.blob();
+    },
     readLocalVectorFile: readVectorFileWithSidecars,
     exportTextFile: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => {
       const description = options?.description ?? "GeoJSON";
@@ -1278,6 +1307,27 @@ async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
 function isTauriRuntime(): boolean {
   if (typeof window === "undefined") return false;
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
+}
+
+const GITHUB_RAW_VECTOR_PROXY = "https://tiles.geolibre.app/github-raw";
+
+function githubRawVectorProxyUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "github.com" ||
+    !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/raw\/.+$/.test(url.pathname)
+  ) {
+    return null;
+  }
+  const proxy = new URL(GITHUB_RAW_VECTOR_PROXY);
+  proxy.searchParams.set("url", url.href);
+  return proxy.href;
 }
 
 function setExternalPluginsLoaded(loaded: boolean): void {

@@ -88,6 +88,7 @@ import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
@@ -1432,7 +1433,11 @@ export function SettingsDialog({
               {t("settings.menu.updates")}
             </DropdownMenuItem>
           )}
-          {showSettingsItem("settings.managePlugins") && (
+          {/* The Mac App Store build has no plugin marketplace (external
+              plugin installs are not allowed there), so its entry point is
+              dropped; composed with the profile gate like the Store build's
+              updates check. */}
+          {!IS_MAS_BUILD && showSettingsItem("settings.managePlugins") && (
             <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
               <Puzzle className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.managePlugins")}

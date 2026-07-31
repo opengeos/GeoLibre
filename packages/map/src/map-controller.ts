@@ -31,6 +31,7 @@ import {
   highlightLineLayerId,
   highlightSourceId,
   lineLayerId,
+  markerLayerId,
   sourceId,
 } from "./geojson-loader";
 import {
@@ -40,6 +41,7 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
+import { ensureGeneratedImageHandler } from "./generated-images";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
@@ -458,6 +460,7 @@ export class MapController {
       // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
+    ensureGeneratedImageHandler(this.map);
     installGlobePopupOcclusion(maplibregl);
     // The constructor options above already apply the static constraints.
     // The transform constraint is installed by the MapCanvas effect that
@@ -2150,9 +2153,17 @@ export class MapController {
   }> {
     const nativeLayerIds = layer.metadata.nativeLayerIds;
     if (Array.isArray(nativeLayerIds) && nativeLayerIds.length > 0) {
-      return nativeLayerIds
+      const candidates = nativeLayerIds
         .filter((id): id is string => typeof id === "string")
         .map((id) => ({ id, suffix: nativeLayerSuffix(id) }));
+      // KML/KMZ icons loaded through the Vector Layer control render in a
+      // GeoLibre-owned companion symbol layer, not one of the control's native
+      // layer ids. Include it here so Background visibility/opacity does not
+      // mistake the icons for basemap symbols.
+      if (layer.metadata.sourceKind === "maplibre-gl-vector") {
+        candidates.push({ id: markerLayerId(layer.id), suffix: "Markers" });
+      }
+      return candidates;
     }
 
     if (layer.type === "geojson") {
@@ -2161,6 +2172,7 @@ export class MapController {
         { id: fillLayerId(layer.id), suffix: "Polygons" },
         { id: lineLayerId(layer.id), suffix: "Lines" },
         { id: circleLayerId(layer.id), suffix: "Points" },
+        { id: markerLayerId(layer.id), suffix: "Markers" },
       ];
     }
 

@@ -94,6 +94,8 @@ import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import {
@@ -200,12 +202,16 @@ export function TopToolbar({
     setAnnotationLabels({
       toolbar: t("annotations.toolbar"),
       layerName: t("annotations.layerName"),
+      elementsPanelTitle: t("annotations.elementsPanelTitle"),
       tools: {
         text: t("annotations.tools.text"),
         arrow: t("annotations.tools.arrow"),
         rectangle: t("annotations.tools.rectangle"),
         ellipse: t("annotations.tools.ellipse"),
         freehand: t("annotations.tools.freehand"),
+        pin: t("annotations.tools.pin"),
+        sticky_note: t("annotations.tools.sticky_note"),
+        placed_image: t("annotations.tools.placed_image"),
       },
       color: t("annotations.color"),
       width: t("annotations.width"),
@@ -217,6 +223,14 @@ export function TopToolbar({
       deleteLast: t("annotations.deleteLast"),
       clearAll: t("annotations.clearAll"),
       textPlaceholder: t("annotations.textPlaceholder"),
+      pinTitlePrompt: t("annotations.pinTitlePrompt"),
+      pinDescPrompt: t("annotations.pinDescPrompt"),
+      stickyNotePrompt: t("annotations.stickyNotePrompt"),
+      imageUrlPrompt: t("annotations.imageUrlPrompt"),
+      cancel: t("annotations.cancel"),
+      saveElement: t("annotations.saveElement"),
+      atPoint: t("annotations.atPoint"),
+      pinnedToExtent: t("annotations.pinnedToExtent"),
     });
     setMapillaryLabels({
       title: t("mapillary.title"),
@@ -754,7 +768,9 @@ export function TopToolbar({
   useEffect(() => {
     const onOpenAddData = (event: Event) => {
       const detail = (event as CustomEvent<OpenAddDataDetail>).detail;
-      if (detail?.kind) {
+      // Reject kinds the Mac App Store build hides so a stray event cannot
+      // open a dialog whose backing service is compiled out.
+      if (detail?.kind && !masHidesDataSource(detail.kind)) {
         setAddDataPostgres(detail.postgres);
         setAddDataKind(detail.kind);
       }
@@ -943,12 +959,16 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.addData"),
       run: () => osmPbf.setDialogOpen(true),
     },
-    ...ADD_DATA_KIND_COMMANDS.map(({ kind, titleKey }) => ({
-      id: `add.${kind}`,
-      title: t("toolbar.command.addLayer", { name: t(titleKey) }),
-      group: t("toolbar.commandGroup.addData"),
-      run: () => setAddDataKind(kind),
-    })),
+    // Sources the Mac App Store build hides in the Add Data menu must not be
+    // reachable through the palette either.
+    ...ADD_DATA_KIND_COMMANDS.filter(({ kind }) => !masHidesDataSource(kind)).map(
+      ({ kind, titleKey }) => ({
+        id: `add.${kind}`,
+        title: t("toolbar.command.addLayer", { name: t(titleKey) }),
+        group: t("toolbar.commandGroup.addData"),
+        run: () => setAddDataKind(kind),
+      }),
+    ),
     {
       id: "add.stac",
       title: t("toolbar.command.addStacLayer"),
@@ -1056,14 +1076,20 @@ export function TopToolbar({
       icon: Workflow,
       run: () => setModelBuilderOpen(true),
     },
-    {
-      id: "proc.segmentation",
-      title: t("toolbar.command.segmentation"),
-      group: t("toolbar.commandGroup.processing"),
-      keywords: "segmentation samgeo sam3 ai segment imagery",
-      icon: Sparkles,
-      run: () => setSegmentationOpen(true),
-    },
+    // The Mac App Store build omits AI Segmentation: it is sidecar-only (the
+    // App Sandbox forbids the sidecar) and has no client-side fallback.
+    ...(IS_MAS_BUILD
+      ? []
+      : [
+          {
+            id: "proc.segmentation",
+            title: t("toolbar.command.segmentation"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords: "segmentation samgeo sam3 ai segment imagery",
+            icon: Sparkles,
+            run: () => setSegmentationOpen(true),
+          },
+        ]),
     {
       id: "proc.objectDetection",
       title: t("toolbar.command.objectDetection"),
@@ -1356,13 +1382,20 @@ export function TopToolbar({
         run: () => toggle(plugin.id, appApi),
       })),
     // Settings
-    {
-      id: "settings.manage-plugins",
-      title: t("toolbar.command.managePlugins"),
-      group: t("toolbar.commandGroup.settings"),
-      keywords: "install external plugin marketplace",
-      run: () => setManagePluginsOpen(true),
-    },
+    // The Mac App Store build omits the plugin marketplace: installing
+    // external plugins is not allowed there, and bundled plugins need no
+    // management. Same pattern as the Store build's update command above.
+    ...(IS_MAS_BUILD
+      ? []
+      : [
+          {
+            id: "settings.manage-plugins",
+            title: t("toolbar.command.managePlugins"),
+            group: t("toolbar.commandGroup.settings"),
+            keywords: "install external plugin marketplace",
+            run: () => setManagePluginsOpen(true),
+          },
+        ]),
     {
       id: "settings.style-manager",
       title: t("toolbar.command.styleManager"),
@@ -1424,6 +1457,7 @@ export function TopToolbar({
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
           onOpenGallery={() => setGalleryDialogOpen(true)}
+          onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
           onOpenRecent={(path) => {
             void projectFiles.handleOpenRecent(path).then((error) => {
               if (error) projectFiles.setActionError(error);
@@ -1560,11 +1594,16 @@ export function TopToolbar({
         themeMode={themeMode}
         onToggleThemeMode={onToggleThemeMode}
       />
-      <ManagePluginsDialog
-        open={managePluginsOpen}
-        onOpenChange={setManagePluginsOpen}
-        mapControllerRef={mapControllerRef}
-      />
+      {/* No plugin marketplace in the Mac App Store build (all its entry
+          points are hidden too; this keeps the install surface out of the
+          bundle). */}
+      {!IS_MAS_BUILD && (
+        <ManagePluginsDialog
+          open={managePluginsOpen}
+          onOpenChange={setManagePluginsOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
       <PrintLayoutDialog
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}

@@ -6,18 +6,20 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { materializeEmbeddableVectorLayers } from "@geolibre/plugins";
+import { addRasterToMap, materializeEmbeddableVectorLayers } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getPluginManager } from "./usePlugins";
+import { createAppAPI, getPluginManager } from "./usePlugins";
 import { pluginManifestUrlsForIds } from "../lib/external-plugins";
 import {
   browserSaveFallsBackToDownload,
   isAbsoluteLocalPath,
   isHttpUrl,
   isTauri,
+  loadDroppedRasterPaths,
   openProjectFile,
+  openQgisProjectFile,
   openRecentProjectFile,
   RecentProjectGoneError,
   saveProjectFile,
@@ -33,6 +35,11 @@ import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import {
+  importQgisProject,
+  materializeQgisRemoteLayers,
+  type QgisProjectImportWarning,
+} from "../lib/qgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /** A pending "strip env vars before saving?" prompt. */
@@ -100,6 +107,33 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * Let React commit a newly loaded project before a plugin attaches native map
+ * sources. A project load can replace the MapLibre style (and always schedules
+ * a layer sync); adding a raster in the same tick can therefore attach it to
+ * the outgoing style. Its store entry survives, but the native raster source
+ * is removed by the pending style/layer update.
+ */
+function importedProjectMapReady(
+  mapControllerRef: MapControllerRef,
+  basemapWillChange: boolean,
+): Promise<void> {
+  const map = mapControllerRef.current?.getMap();
+  const styleReady =
+    map && basemapWillChange
+      ? new Promise<void>((resolve) => map.once("style.load", () => resolve()))
+      : Promise.resolve();
+
+  return (async () => {
+    // Let the project store update commit and its MapCanvas effects run first.
+    // Register the style listener above (before loadProject) so a fast inline
+    // style cannot finish between the store update and this wait.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await styleReady;
+  })();
+}
+
+/**
  * Bundles every project file action (open from file/URL/recent, save, save as)
  * along with the related dialog state (Open-from-URL, env-var strip prompt, and
  * the shared action-error dialog).
@@ -116,6 +150,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const markSaved = useAppStore((s) => s.markSaved);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
+    null,
+  );
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
@@ -149,6 +186,92 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
         );
       }
+    }
+  };
+
+  const handleImportQgisProject = async () => {
+    const result = await openQgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = await materializeQgisRemoteLayers(
+        importQgisProject(result.data, result.path),
+      );
+      if (!isTauri()) {
+        const unavailableLayerIds = new Set<string>();
+        for (const layer of imported.project.layers) {
+          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            unavailableLayerIds.add(layer.id);
+            imported.warnings.push({
+              layerName: layer.name,
+              reason: "browser-local-file",
+            });
+          }
+        }
+        imported.project.layers = imported.project.layers.filter(
+          (layer) => !unavailableLayerIds.has(layer.id),
+        );
+        const usedGroupIds = new Set(
+          imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+        );
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
+        for (const raster of imported.rasters) {
+          imported.warnings.push({
+            layerName: raster.name,
+            reason: "browser-local-raster",
+          });
+        }
+      }
+      const mapReady = importedProjectMapReady(
+        mapControllerRef,
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+      );
+      loadProject(imported.project, null);
+      if (isTauri()) {
+        await mapReady;
+        const app = createAppAPI(mapControllerRef);
+        for (const raster of imported.rasters) {
+          try {
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
+              qgisProjectPath: result.path,
+            });
+            if (!loaded) throw new Error("Unsupported raster path");
+            const rasterLayerId = await addRasterToMap(app, loaded.source, {
+              name: raster.name,
+              localPath: raster.sourcePath,
+              // The Tauri/WebKitGTK WASM backend can stall when its first
+              // source is created immediately after a project style load.
+              // GPU renders this local COG directly and preserves the imported
+              // QGIS ramp, so use the verified backend for project imports.
+              defaults: { engine: "maplibre-gl-raster" },
+              state: {
+                ...raster.state,
+                visible: raster.visible,
+                opacity: raster.opacity,
+              },
+              beforeId: raster.beforeId,
+              zoomTo: false,
+            });
+            if (raster.groupId) {
+              useAppStore.getState().moveLayerToGroup(rasterLayerId, raster.groupId);
+            }
+          } catch (error) {
+            console.error(`Failed to import QGIS raster "${raster.name}"`, error);
+            imported.warnings.push({
+              layerName: raster.name,
+              reason: "format",
+            });
+          }
+        }
+      }
+      useAppStore.setState({ isDirty: true });
+      setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+    } catch (error) {
+      console.error("Failed to import QGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
+      );
     }
   };
 
@@ -703,6 +826,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   return {
     actionError,
     setActionError,
+    qgisImportWarnings,
+    setQgisImportWarnings,
     projectUrlDialogOpen,
     setProjectUrlDialogOpen,
     handleProjectUrlDialogOpenChange,
@@ -725,6 +850,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     submitSaveNamePrompt,
     cancelSaveNamePrompt,
     handleOpenFromFile,
+    handleImportQgisProject,
     handleOpenFromUrl,
     openProjectFromShareUrl,
     handleOpenRecent,

@@ -151,6 +151,13 @@ image). Mount your files there:
 docker run --rm -p 8080:80 -v "$PWD/data:/data" ghcr.io/opengeos/geolibre:latest
 ```
 
+The sidecar's PostGIS endpoints are gated the same way: they refuse every
+destination until `GEOLIBRE_POSTGIS_HOSTS` lists the allowed databases, so that
+a caller reaching the image cannot aim them at hosts only the container can
+reach. Pass `-e GEOLIBRE_POSTGIS_HOSTS='db.internal:5432'` (or `*` to accept any
+connection string) to enable them. The desktop app is not affected: its sidecar
+is loopback-bound and started for a single user, so it defaults to unrestricted.
+
 `freestiler` and `whitebox-workflows` publish no linux/arm64 wheels, so they are
 installed on **amd64 only**; on arm64 the sidecar reports those tools
 unavailable. This does not affect the browser's own PMTiles and Whitebox
