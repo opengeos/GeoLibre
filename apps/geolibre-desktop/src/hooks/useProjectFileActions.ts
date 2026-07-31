@@ -107,6 +107,29 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * Let React commit a newly loaded project before a plugin attaches native map
+ * sources. A project load can replace the MapLibre style (and always schedules
+ * a layer sync); adding a raster in the same tick can therefore attach it to
+ * the outgoing style. Its store entry survives, but the native raster source
+ * is removed by the pending style/layer update.
+ */
+async function waitForImportedProjectMap(mapControllerRef: MapControllerRef): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const map = mapControllerRef.current?.getMap();
+  if (!map || map.isStyleLoaded()) return;
+
+  await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(resolve, 10_000);
+    map.once("style.load", () => {
+      window.clearTimeout(timeout);
+      resolve();
+    });
+  });
+}
+
+/**
  * Bundles every project file action (open from file/URL/recent, save, save as)
  * along with the related dialog state (Open-from-URL, env-var strip prompt, and
  * the shared action-error dialog).
@@ -187,6 +210,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
       loadProject(imported.project, null);
       if (isTauri()) {
+        await waitForImportedProjectMap(mapControllerRef);
         const app = createAppAPI(mapControllerRef);
         for (const raster of imported.rasters) {
           try {
