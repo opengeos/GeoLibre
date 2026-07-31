@@ -264,6 +264,7 @@ function controlVectorLayer(id: string, patch: Partial<GeoLibreLayer> = {}): Geo
 }
 
 const circleId = (id: string) => `layer-${id}-circle`;
+const markerId = (id: string) => `layer-${id}-marker`;
 const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
@@ -572,6 +573,32 @@ describe("MapController basemap controls", () => {
     const ids = controller.getBasemapStyleLayerIds();
     assert.ok(ids.includes("basemap-bg"));
     assert.ok(!ids.includes(circleId("a")), "user layers are not basemap layers");
+  });
+
+  it("keeps KML marker symbols independent from basemap visibility and opacity", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    controller.syncLayers([controlVectorLayer("kml")]);
+    fake.layers.set(markerId("kml"), {
+      id: markerId("kml"),
+      type: "symbol",
+      paint: { "icon-opacity": 1 },
+    });
+    fake.order.push(markerId("kml"));
+
+    assert.ok(!controller.getBasemapStyleLayerIds().includes(markerId("kml")));
+
+    controller.setBasemapVisible(false);
+    controller.setBasemapOpacity(0.25);
+
+    assert.ok(
+      !fake.calls.some(
+        (call) =>
+          call.args[0] === markerId("kml") &&
+          (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+      ),
+      "background controls do not update the KML marker symbol",
+    );
   });
 
   it("scales basemap opacity from the layer's original paint value", () => {

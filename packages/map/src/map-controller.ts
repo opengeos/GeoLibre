@@ -31,6 +31,7 @@ import {
   highlightLineLayerId,
   highlightSourceId,
   lineLayerId,
+  markerLayerId,
   sourceId,
 } from "./geojson-loader";
 import {
@@ -2152,9 +2153,17 @@ export class MapController {
   }> {
     const nativeLayerIds = layer.metadata.nativeLayerIds;
     if (Array.isArray(nativeLayerIds) && nativeLayerIds.length > 0) {
-      return nativeLayerIds
+      const candidates = nativeLayerIds
         .filter((id): id is string => typeof id === "string")
         .map((id) => ({ id, suffix: nativeLayerSuffix(id) }));
+      // KML/KMZ icons loaded through the Vector Layer control render in a
+      // GeoLibre-owned companion symbol layer, not one of the control's native
+      // layer ids. Include it here so Background visibility/opacity does not
+      // mistake the icons for basemap symbols.
+      if (layer.type === "geojson") {
+        candidates.push({ id: markerLayerId(layer.id), suffix: "Markers" });
+      }
+      return candidates;
     }
 
     if (layer.type === "geojson") {
@@ -2163,6 +2172,7 @@ export class MapController {
         { id: fillLayerId(layer.id), suffix: "Polygons" },
         { id: lineLayerId(layer.id), suffix: "Lines" },
         { id: circleLayerId(layer.id), suffix: "Points" },
+        { id: markerLayerId(layer.id), suffix: "Markers" },
       ];
     }
 
