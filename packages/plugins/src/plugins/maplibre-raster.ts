@@ -126,6 +126,9 @@ type RasterLayerManagerInternals = {
   /** The currently selected raster id (read to restore it after inspect). */
   selectedId?: string | null;
   _device?: unknown;
+  _cogEngine?: {
+    _sources?: Map<string, { source?: unknown }>;
+  } | null;
   _deps?: {
     createOverlay?: (map: MapControlHost, options: OverlayFactoryOptions) => OverlayLike;
     removeOverlay?: (map: MapControlHost, overlay: OverlayLike) => void;
@@ -370,6 +373,7 @@ export async function addRasterToMap(
   // can then remain pending until the user switches to the GPU engine and back.
   // Do that reset only after addRaster has created the layer, so switching back
   // rebuilds the real source rather than an empty renderer.
+  await waitForTauriWasmLayerRegistration(control, id);
   await warmTauriWasmEngine(control);
   applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
   if (options.localPath) {
@@ -958,6 +962,28 @@ async function warmTauriWasmEngine(control: RasterControl): Promise<void> {
     }
   } finally {
     control.setEngine("cog-tiler-wasm");
+  }
+}
+
+/**
+ * Wait until the lazy WASM engine has received the newly added raster.
+ *
+ * `RasterControl.addRaster()` resolves when the GeoTIFF header is available,
+ * before `cog-tiler-wasm` necessarily finishes loading and creates its source
+ * entry. Resetting engines before that point only rebuilds an empty WASM
+ * renderer; the later source can still stall until the user toggles the panel.
+ */
+async function waitForTauriWasmLayerRegistration(
+  control: RasterControl,
+  layerId: string,
+): Promise<void> {
+  if (!isTauriRuntime() || control.getEngine() !== "cog-tiler-wasm") return;
+
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  const deadline = performance.now() + 2_000;
+  while (performance.now() < deadline) {
+    if (manager?._cogEngine?._sources?.has(layerId)) return;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 16));
   }
 }
 
