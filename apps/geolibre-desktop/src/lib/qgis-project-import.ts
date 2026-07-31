@@ -1,6 +1,7 @@
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
+  VECTOR_COLOR_RAMPS,
   createEmptyProject,
   type GeoLibreLayer,
   type GeoLibreProject,
@@ -37,6 +38,13 @@ export interface QgisRasterImport {
   sourcePath: string;
   visible: boolean;
   opacity: number;
+  state?: {
+    bands: number[];
+    colormap: string;
+    gamma: number;
+    rescale: [number, number][] | null;
+    reversed: boolean;
+  };
 }
 
 /**
@@ -49,7 +57,7 @@ export interface QgisRasterImport {
  */
 export async function materializeQgisRemoteLayers(
   result: QgisProjectImportResult,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = fetch
 ): Promise<QgisProjectImportResult> {
   const failedLayerIds = new Set<string>();
   await Promise.all(
@@ -70,15 +78,19 @@ export async function materializeQgisRemoteLayers(
           reason: "remote-file",
         });
       }
-    }),
+    })
   );
   if (failedLayerIds.size > 0) {
-    result.project.layers = result.project.layers.filter((layer) => !failedLayerIds.has(layer.id));
+    result.project.layers = result.project.layers.filter(
+      (layer) => !failedLayerIds.has(layer.id)
+    );
     const usedGroupIds = new Set(
-      result.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+      result.project.layers.flatMap((layer) =>
+        layer.groupId ? [layer.groupId] : []
+      )
     );
     result.project.layerGroups = result.project.layerGroups?.filter((group) =>
-      usedGroupIds.has(group.id),
+      usedGroupIds.has(group.id)
     );
   }
   return result;
@@ -108,23 +120,35 @@ const SUPPORTED_RASTER_EXTENSIONS = new Set(["tif", "tiff"]);
 /** Convert a QGIS project into a GeoLibre project without evaluating QGIS code. */
 export function importQgisProject(
   data: ArrayBuffer | Uint8Array | string,
-  sourcePath: string,
+  sourcePath: string
 ): QgisProjectImportResult {
   const xml = qgisProjectXml(data, sourcePath);
   const document = new DOMParser().parseFromString(xml, "application/xml");
-  if (document.querySelector("parsererror") || document.documentElement.tagName !== "qgis") {
+  if (
+    document.querySelector("parsererror") ||
+    document.documentElement.tagName !== "qgis"
+  ) {
     throw new Error("This file is not a valid QGIS project.");
   }
 
   const projectName =
-    text(document.querySelector("title")) || fileStem(sourcePath) || "Imported QGIS Project";
-  const project = createEmptyProject(projectName, { mapView: parseMapView(document) });
+    text(document.querySelector("title")) ||
+    fileStem(sourcePath) ||
+    "Imported QGIS Project";
+  const project = createEmptyProject(projectName, {
+    mapView: parseMapView(document),
+  });
   const parsedGroups = parseLayerGroups(document);
   const groupByLayerId = layerGroupAssignments(document, parsedGroups.ids);
   const visibilityByLayerId = layerVisibility(document);
-  const mapLayers = Array.from(document.querySelectorAll("projectlayers > maplayer"));
+  const mapLayers = Array.from(
+    document.querySelectorAll("projectlayers > maplayer")
+  );
   const byId = new Map(
-    mapLayers.map((element) => [text(element.querySelector(":scope > id")), element]),
+    mapLayers.map((element) => [
+      text(element.querySelector(":scope > id")),
+      element,
+    ])
   );
   const warnings: QgisProjectImportWarning[] = [];
   const layers: GeoLibreLayer[] = [];
@@ -133,8 +157,11 @@ export function importQgisProject(
   for (const id of layerOrder(document, mapLayers)) {
     const element = byId.get(id);
     if (!element) continue;
-    const name = text(element.querySelector(":scope > layername")) || id || "QGIS layer";
-    const provider = text(element.querySelector(":scope > provider")).toLowerCase();
+    const name =
+      text(element.querySelector(":scope > layername")) || id || "QGIS layer";
+    const provider = text(
+      element.querySelector(":scope > provider")
+    ).toLowerCase();
     const dataSource = text(element.querySelector(":scope > datasource"));
 
     if (isOpenStreetMapBasemap(element, provider, dataSource)) {
@@ -147,12 +174,14 @@ export function importQgisProject(
     const source = qgisSourcePath(dataSource, sourcePath);
 
     if (isSupportedRasterLayer(element, provider, source)) {
+      const state = parseRasterState(element);
       rasters.push({
         id,
         name,
         sourcePath: source,
         visible: visibilityByLayerId.get(id) ?? true,
         opacity: parseOpacity(element),
+        ...(state ? { state } : {}),
       });
       continue;
     }
@@ -190,7 +219,7 @@ export function importQgisProject(
 
   project.layers = layers;
   project.layerGroups = parsedGroups.groups.filter((group) =>
-    layers.some((layer) => layer.groupId === group.id),
+    layers.some((layer) => layer.groupId === group.id)
   );
   project.metadata = {
     importedFrom: "qgis",
@@ -200,7 +229,99 @@ export function importQgisProject(
   return { project, rasters, warnings };
 }
 
-function qgisProjectXml(data: ArrayBuffer | Uint8Array | string, sourcePath: string): string {
+function parseRasterState(element: Element): QgisRasterImport["state"] {
+  const renderer = element.querySelector(":scope > pipe > rasterrenderer");
+  if (!renderer) return undefined;
+  const type = renderer.getAttribute("type")?.toLowerCase();
+  if (type !== "singlebandpseudocolor" && type !== "singlebandgray")
+    return undefined;
+
+  const band = positiveInteger(renderer.getAttribute("band")) ?? 1;
+  const shader = renderer.querySelector("rastershader > colorrampshader");
+  const minimum = numberAttribute(shader, "minimumValue");
+  const maximum = numberAttribute(shader, "maximumValue");
+  const ramp = shader?.querySelector(":scope > colorramp");
+  const first = qgisRampColor(ramp, "color1");
+  const last = qgisRampColor(ramp, "color2");
+  const matched = matchBuiltInColorRamp(first, last);
+  const gamma =
+    numberAttribute(
+      element.querySelector(":scope > pipe > brightnesscontrast"),
+      "gamma"
+    ) ?? 1;
+
+  return {
+    bands: [band],
+    colormap:
+      type === "singlebandgray" ? "gray" : matched?.colormap ?? "viridis",
+    gamma: gamma > 0 ? gamma : 1,
+    rescale:
+      Number.isFinite(minimum) && Number.isFinite(maximum) && minimum < maximum
+        ? [[minimum, maximum]]
+        : null,
+    reversed: matched?.reversed ?? false,
+  };
+}
+
+function qgisRampColor(
+  ramp: Element | null | undefined,
+  name: string
+): string | null {
+  const option = Array.from(ramp?.querySelectorAll("Option") ?? []).find(
+    (candidate) => candidate.getAttribute("name") === name
+  );
+  const channels = option?.getAttribute("value")?.split(",", 3).map(Number);
+  if (
+    !channels ||
+    channels.length !== 3 ||
+    channels.some((value) => !Number.isFinite(value))
+  ) {
+    return null;
+  }
+  return `#${channels
+    .map((value) =>
+      Math.max(0, Math.min(255, Math.round(value)))
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("")}`;
+}
+
+function matchBuiltInColorRamp(
+  first: string | null,
+  last: string | null
+): { colormap: string; reversed: boolean } | null {
+  if (!first || !last) return null;
+  for (const ramp of VECTOR_COLOR_RAMPS) {
+    const start = ramp.colors[0].toLowerCase();
+    const end = ramp.colors[ramp.colors.length - 1].toLowerCase();
+    if (first === start && last === end)
+      return { colormap: ramp.value, reversed: false };
+    if (first === end && last === start)
+      return { colormap: ramp.value, reversed: true };
+  }
+  return null;
+}
+
+function positiveInteger(value: string | null): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function numberAttribute(
+  element: Element | null | undefined,
+  name: string
+): number {
+  const raw = element?.getAttribute(name);
+  if (raw == null || raw.trim() === "") return Number.NaN;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : Number.NaN;
+}
+
+function qgisProjectXml(
+  data: ArrayBuffer | Uint8Array | string,
+  sourcePath: string
+): string {
   if (typeof data === "string") return data;
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   if (sourcePath.toLowerCase().endsWith(".qgs")) return strFromU8(bytes);
@@ -210,8 +331,11 @@ function qgisProjectXml(data: ArrayBuffer | Uint8Array | string, sourcePath: str
   } catch {
     throw new Error("Could not read the compressed QGIS project.");
   }
-  const qgsName = Object.keys(entries).find((name) => name.toLowerCase().endsWith(".qgs"));
-  if (!qgsName) throw new Error("The QGZ archive does not contain a QGS project file.");
+  const qgsName = Object.keys(entries).find((name) =>
+    name.toLowerCase().endsWith(".qgs")
+  );
+  if (!qgsName)
+    throw new Error("The QGZ archive does not contain a QGS project file.");
   return strFromU8(entries[qgsName]);
 }
 
@@ -244,20 +368,34 @@ function parseMapView(document: Document): MapViewState {
   return { center: [-100, 40], zoom: 2, bearing: 0, pitch: 0 };
 }
 
-function toWgs84(x: number, y: number, authId: string): [number, number] | null {
+function toWgs84(
+  x: number,
+  y: number,
+  authId: string
+): [number, number] | null {
   const normalized = authId.toUpperCase();
   if (normalized === "EPSG:4326" || normalized === "CRS:84") return [x, y];
   if (normalized === "EPSG:3857") {
     return [
       (x / 20037508.34) * 180,
-      (180 / Math.PI) * (2 * Math.atan(Math.exp((y / 20037508.34) * Math.PI)) - Math.PI / 2),
+      (180 / Math.PI) *
+        (2 * Math.atan(Math.exp((y / 20037508.34) * Math.PI)) - Math.PI / 2),
     ];
   }
   return null;
 }
 
-function zoomForBounds(west: number, south: number, east: number, north: number): number {
-  const span = Math.max(Math.abs(east - west), Math.abs(north - south) * 2, 0.000001);
+function zoomForBounds(
+  west: number,
+  south: number,
+  east: number,
+  north: number
+): number {
+  const span = Math.max(
+    Math.abs(east - west),
+    Math.abs(north - south) * 2,
+    0.000001
+  );
   return Math.max(0, Math.min(20, Math.log2(360 / span) - 0.75));
 }
 
@@ -268,18 +406,20 @@ function parseLayerGroups(document: Document): {
   const root = document.querySelector("layer-tree-group");
   if (!root) return { groups: [], ids: new Map() };
   const ids = new Map<Element, string>();
-  const groups = Array.from(root.querySelectorAll("layer-tree-group")).map((element, index) => {
-    const name = groupDisplayName(element, root);
-    const id = `qgis-group-${index}-${slug(name)}`;
-    ids.set(element, id);
-    return {
-      id,
-      name,
-      collapsed: element.getAttribute("expanded") === "0",
-      visible: element.getAttribute("checked") !== "Qt::Unchecked",
-      opacity: 1,
-    };
-  });
+  const groups = Array.from(root.querySelectorAll("layer-tree-group")).map(
+    (element, index) => {
+      const name = groupDisplayName(element, root);
+      const id = `qgis-group-${index}-${slug(name)}`;
+      ids.set(element, id);
+      return {
+        id,
+        name,
+        collapsed: element.getAttribute("expanded") === "0",
+        visible: element.getAttribute("checked") !== "Qt::Unchecked",
+        opacity: 1,
+      };
+    }
+  );
   return { groups, ids };
 }
 
@@ -294,7 +434,10 @@ function groupDisplayName(element: Element, root: Element): string {
   return names.join(" / ") || "Group";
 }
 
-function layerGroupAssignments(document: Document, ids: Map<Element, string>): Map<string, string> {
+function layerGroupAssignments(
+  document: Document,
+  ids: Map<Element, string>
+): Map<string, string> {
   const assignments = new Map<string, string>();
   document.querySelectorAll("layer-tree-layer[id]").forEach((layer) => {
     const layerId = layer.getAttribute("id");
@@ -336,7 +479,8 @@ function qgisSourcePath(dataSource: string, projectPath: string): string {
     }
   }
   source = source.replace(/^['"]|['"]$/g, "");
-  if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source)) return source;
+  if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source))
+    return source;
   const directory = projectPath.replace(/[/\\][^/\\]*$/, "");
   return normalizeJoinedPath(directory, source);
 }
@@ -361,7 +505,11 @@ function normalizeJoinedPath(directory: string, relative: string): string {
   return `${absolute ? "/" : ""}${normalized.join(separator)}`;
 }
 
-function isSupportedVectorLayer(element: Element, provider: string, source: string): boolean {
+function isSupportedVectorLayer(
+  element: Element,
+  provider: string,
+  source: string
+): boolean {
   return (
     element.getAttribute("type")?.toLowerCase() === "vector" &&
     (provider === "ogr" || provider === "delimitedtext") &&
@@ -370,7 +518,11 @@ function isSupportedVectorLayer(element: Element, provider: string, source: stri
   );
 }
 
-function isSupportedRasterLayer(element: Element, provider: string, source: string): boolean {
+function isSupportedRasterLayer(
+  element: Element,
+  provider: string,
+  source: string
+): boolean {
   return (
     element.getAttribute("type")?.toLowerCase() === "raster" &&
     provider === "gdal" &&
@@ -380,8 +532,15 @@ function isSupportedRasterLayer(element: Element, provider: string, source: stri
   );
 }
 
-function isOpenStreetMapBasemap(element: Element, provider: string, dataSource: string): boolean {
-  if (element.getAttribute("type")?.toLowerCase() !== "raster" || provider !== "wms") {
+function isOpenStreetMapBasemap(
+  element: Element,
+  provider: string,
+  dataSource: string
+): boolean {
+  if (
+    element.getAttribute("type")?.toLowerCase() !== "raster" ||
+    provider !== "wms"
+  ) {
     return false;
   }
   const params = new URLSearchParams(dataSource);
@@ -390,7 +549,10 @@ function isOpenStreetMapBasemap(element: Element, provider: string, dataSource: 
   if (!tileUrl) return false;
   try {
     const host = new URL(tileUrl).hostname.toLowerCase();
-    return host === "tile.openstreetmap.org" || /^[abc]\.tile\.openstreetmap\.org$/.test(host);
+    return (
+      host === "tile.openstreetmap.org" ||
+      /^[abc]\.tile\.openstreetmap\.org$/.test(host)
+    );
   } catch {
     return false;
   }
@@ -399,7 +561,7 @@ function isOpenStreetMapBasemap(element: Element, provider: string, dataSource: 
 function unsupportedReason(
   element: Element,
   provider: string,
-  source: string,
+  source: string
 ): QgisProjectImportWarning["reason"] {
   if (element.getAttribute("type")?.toLowerCase() !== "vector") {
     return "non-vector";
@@ -417,10 +579,15 @@ function parseLayerStyle(element: Element): LayerStyle {
   const symbolLayer = element.querySelector("renderer-v2 symbols symbol layer");
   const options = new Map<string, string>();
   symbolLayer?.querySelectorAll("Option[name]").forEach((option) => {
-    options.set(option.getAttribute("name") ?? "", option.getAttribute("value") ?? "");
+    options.set(
+      option.getAttribute("name") ?? "",
+      option.getAttribute("value") ?? ""
+    );
   });
   const fill = qgisColor(options.get("color"));
-  const stroke = qgisColor(options.get("outline_color") ?? options.get("line_color"));
+  const stroke = qgisColor(
+    options.get("outline_color") ?? options.get("line_color")
+  );
   if (fill) {
     style.fillColor = fill.color;
     style.fillOpacity = fill.opacity;
@@ -429,36 +596,48 @@ function parseLayerStyle(element: Element): LayerStyle {
   if (stroke) {
     style.strokeColor = stroke.color;
   }
-  const width = optionalNumber(options.get("outline_width") ?? options.get("line_width"));
+  const width = optionalNumber(
+    options.get("outline_width") ?? options.get("line_width")
+  );
   if (width !== null) style.strokeWidth = Math.max(0, width * 3.78);
   const size = optionalNumber(options.get("size"));
   if (symbolLayer?.getAttribute("class") === "SimpleMarker" && size !== null) {
     style.circleRadius = Math.max(1, (size * 3.78) / 2);
   }
-  const textStyle = element.querySelector("labeling[type='simple'] settings text-style");
+  const textStyle = element.querySelector(
+    "labeling[type='simple'] settings text-style"
+  );
   const field = textStyle?.getAttribute("fieldName")?.trim();
   if (field) {
     style.labels.enabled = true;
     style.labels.field = field;
     const color = qgisColor(textStyle?.getAttribute("textColor") ?? undefined);
     if (color) style.labels.color = color.color;
-    const sizeValue = optionalNumber(textStyle?.getAttribute("fontSize") ?? undefined);
+    const sizeValue = optionalNumber(
+      textStyle?.getAttribute("fontSize") ?? undefined
+    );
     if (sizeValue !== null) style.labels.size = sizeValue;
   }
   return style;
 }
 
-function qgisColor(value: string | undefined): { color: string; opacity: number } | null {
+function qgisColor(
+  value: string | undefined
+): { color: string; opacity: number } | null {
   if (!value) return null;
   const parts = value.split(",").map(Number);
-  if (parts.length < 3 || parts.slice(0, 3).some((part) => !Number.isFinite(part))) return null;
+  if (
+    parts.length < 3 ||
+    parts.slice(0, 3).some((part) => !Number.isFinite(part))
+  )
+    return null;
   const [red, green, blue, alpha = 255] = parts;
   return {
     color: `#${[red, green, blue]
       .map((part) =>
         Math.max(0, Math.min(255, Math.round(part)))
           .toString(16)
-          .padStart(2, "0"),
+          .padStart(2, "0")
       )
       .join("")}`,
     opacity: Math.max(0, Math.min(1, alpha / 255)),
@@ -466,7 +645,9 @@ function qgisColor(value: string | undefined): { color: string; opacity: number 
 }
 
 function parseOpacity(element: Element): number {
-  const value = optionalNumber(text(element.querySelector(":scope > layerOpacity")));
+  const value = optionalNumber(
+    text(element.querySelector(":scope > layerOpacity"))
+  );
   return value !== null ? Math.max(0, Math.min(1, value)) : 1;
 }
 
@@ -503,7 +684,11 @@ function fileStem(path: string): string {
 }
 
 function isAbsolutePath(path: string): boolean {
-  return path.startsWith("/") || path.startsWith("\\\\") || /^[A-Za-z]:[/\\]/.test(path);
+  return (
+    path.startsWith("/") ||
+    path.startsWith("\\\\") ||
+    /^[A-Za-z]:[/\\]/.test(path)
+  );
 }
 
 function isHttpSource(path: string): boolean {
