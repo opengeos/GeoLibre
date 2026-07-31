@@ -115,7 +115,7 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
  */
 function importedProjectMapReady(
   mapControllerRef: MapControllerRef,
-  basemapWillChange: boolean
+  basemapWillChange: boolean,
 ): Promise<void> {
   const map = mapControllerRef.current?.getMap();
   const styleReady =
@@ -214,7 +214,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
       const mapReady = importedProjectMapReady(
         mapControllerRef,
-        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
       );
       loadProject(imported.project, null);
       if (isTauri()) {
