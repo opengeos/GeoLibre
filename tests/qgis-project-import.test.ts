@@ -244,7 +244,7 @@ describe("QGIS project import", () => {
             id: "roads",
             name: "Remote",
             source:
-              "/vsicurl/https://example.com/roads.geojson?token=secret&amp;version=2|layername=roads",
+              '"/vsicurl/https://example.com/roads.geojson?token=secret&amp;version=2"|layername=roads',
           },
         ],
       }),
@@ -272,6 +272,7 @@ describe("QGIS project import", () => {
       }),
       "C:\\projects\\example.qgs",
     );
+    assert.deepEqual(unc.project.layers, []);
     assert.deepEqual(
       unc.warnings.map((warning) => [warning.layerName, warning.reason]),
       [["Network file URL", "network-path"]],

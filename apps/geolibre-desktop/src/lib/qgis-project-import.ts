@@ -466,9 +466,9 @@ function layerOrder(document: Document, mapLayers: Element[]): string[] {
 
 function qgisSourcePath(dataSource: string, projectPath: string): string {
   let source = dataSource.split("|", 1)[0]?.trim() ?? "";
+  source = source.replace(/^['"]|['"]$/g, "");
   source = source.replace(/^\/vsicurl(?:_streaming)?\//i, "");
   if (/^\/?vsizip\//i.test(source)) return "";
-  source = source.replace(/^['"]|['"]$/g, "");
   if (/^file:\/\//i.test(source)) {
     try {
       const url = new URL(source);
