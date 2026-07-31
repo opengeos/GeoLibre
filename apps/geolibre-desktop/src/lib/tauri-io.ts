@@ -1,4 +1,9 @@
-import { hasPathTraversal, parseProject, type GeoLibreProject } from "@geolibre/core";
+import {
+  hasPathTraversal,
+  isAbsoluteFilesystemPath,
+  parseProject,
+  type GeoLibreProject,
+} from "@geolibre/core";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -21,6 +26,7 @@ import {
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
+import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
   confirmLargeDataset,
@@ -32,6 +38,7 @@ import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./
 import { projectedGeoJsonCrs } from "./crs-utils";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
+import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
 import {
   parseKmlGroundOverlays,
   parseKmlModels,
@@ -219,11 +226,18 @@ export async function listDirectory(path: string): Promise<LocalDirectoryEntry[]
 
 // Built at call time so the filter-group label shown in the native file dialog
 // is translated (a module-level constant would freeze the English string).
+// The MAS build adds the shapefile companion extensions: the App Sandbox
+// denies the automatic sibling read, so companions must be selectable in the
+// dialog for `readShapefileCompanionFiles` to forward them. Deliberately NOT
+// added to VECTOR_FILE_DIALOG_EXTENSIONS, which doubles as the restore
+// whitelist SYNCed with the Rust guard.
 function vectorFileDialogFilters(): FileDialogFilter[] {
   return [
     {
       name: i18next.t("toolbar.item.vectorDataFilter"),
-      extensions: VECTOR_FILE_DIALOG_EXTENSIONS,
+      extensions: IS_MAS_BUILD
+        ? [...VECTOR_FILE_DIALOG_EXTENSIONS, ...SHAPEFILE_COMPANION_EXTENSIONS]
+        : VECTOR_FILE_DIALOG_EXTENSIONS,
     },
   ];
 }
@@ -1192,13 +1206,17 @@ async function modelsFromKml(text: string, path: string): Promise<LoadedModel[]>
 // loaded.
 async function kmzVectorFeatures(
   kmlFiles: DuckDbVectorFile[],
+  entries: Record<string, Uint8Array>,
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
   let cancellation: unknown;
   const settled = await Promise.all(
     kmlFiles.map((file) =>
       loadKmlFile(file, options).then(
-        (collection): FeatureCollection | null => collection,
+        async (collection): Promise<FeatureCollection | null> => {
+          await resolveKmzFeatureIcons(collection, entries, file.name);
+          return collection;
+        },
         (error): null => {
           if (isVectorLoadCancelled(error)) {
             cancellation = error;
@@ -1218,6 +1236,60 @@ async function kmzVectorFeatures(
   );
   if (collections.length === 0 && cancellation) throw cancellation;
   return mergeFeatureCollections(collections);
+}
+
+const KML_ICON_HREF_PROPERTY = "__geolibre_kml_icon_href";
+const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
+
+/** Replace archive-relative KML icon hrefs with persistent inline raster URLs. */
+async function resolveKmzFeatureIcons(
+  collection: FeatureCollection,
+  entries: Record<string, Uint8Array>,
+  kmlEntryName: string,
+): Promise<void> {
+  const resolved = new Map<string, Promise<string | null>>();
+  const iconUrl = (href: string): Promise<string | null> => {
+    const cached = resolved.get(href);
+    if (cached) return cached;
+    const promise = (async () => {
+      const key = findArchiveEntryKey(entries, resolveArchiveRelativeHref(kmlEntryName, href));
+      if (!key) {
+        console.warn(`Could not resolve embedded KMZ icon: ${href}`);
+        return null;
+      }
+      const mime = imageMimeFromName(key);
+      if (!mime.startsWith("image/") || mime === "image/svg+xml") return null;
+      if (entries[key].byteLength > MAX_OVERLAY_IMAGE_BYTES) {
+        console.warn(`Skipping oversized embedded KMZ icon: ${key}`);
+        return null;
+      }
+      return bytesToDataUrl(entries[key], mime);
+    })();
+    resolved.set(href, promise);
+    return promise;
+  };
+
+  await Promise.all(
+    collection.features.map(async (feature) => {
+      const properties = feature.properties;
+      const href = properties?.[KML_ICON_HREF_PROPERTY];
+      if (!properties || typeof href !== "string") return;
+      const url = await iconUrl(href);
+      delete properties[KML_ICON_HREF_PROPERTY];
+      if (url) properties[KML_ICON_URL_PROPERTY] = url;
+    }),
+  );
+}
+
+function resolveArchiveRelativeHref(owner: string, href: string): string {
+  if (/^[a-z][a-z\d+.-]*:/i.test(href) || href.startsWith("//")) return href;
+  const parts = href.startsWith("/") ? [] : owner.replaceAll("\\", "/").split("/").slice(0, -1);
+  for (const part of href.replaceAll("\\", "/").split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/");
 }
 
 /**
@@ -1262,7 +1334,7 @@ async function loadKmzLayers(
   // purely-declined file rather than surfacing a generic error).
   let cancellation: unknown;
   try {
-    const features = await kmzVectorFeatures(kmlFiles, options);
+    const features = await kmzVectorFeatures(kmlFiles, entries, options);
     if (features.features.length > 0) layers.push({ data: features, path });
   } catch (error) {
     if (!isVectorLoadCancelled(error)) throw error;
@@ -1562,9 +1634,10 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
     multiple: true,
   });
   if (!selected) return [];
+  const selectedPaths = Array.isArray(selected) ? selected : [selected];
   // `isVectorFileName` drops rasters, project files, and shapefile sidecars, so
   // a sidecar picked on its own never becomes its own (unreadable) layer.
-  const paths = (Array.isArray(selected) ? selected : [selected]).filter(isVectorFileName);
+  const paths = selectedPaths.filter(isVectorFileName);
   const picked: PickedVectorFile[] = [];
   for (const path of paths) {
     // Read each pick independently so one unreadable file (e.g. moved between
@@ -1572,11 +1645,7 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
     try {
       const file = new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path));
       const companionFiles =
-        fileExtension(path) === "shp"
-          ? (await readShapefileSiblings(path)).map(
-              (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
-            )
-          : [];
+        fileExtension(path) === "shp" ? await readShapefileCompanionFiles(path, selectedPaths) : [];
       picked.push({
         file,
         companionFiles,
@@ -1671,13 +1740,10 @@ async function tryLoadPickedNativeVectorPath(
 }
 
 export function isAbsoluteLocalPath(path: string): boolean {
-  // Match the raw path (not a trimmed copy): a whitespace-padded value would
-  // pass a trimmed check but reach `readFile` unchanged and fail there, so
-  // reject it up front instead. Accept POSIX paths and Windows drive-letter
-  // paths only. UNC paths (\\server\share) are deliberately rejected: reading
-  // one can make Windows auto-authenticate against a remote host (NTLM hash
-  // capture), and a remote share is not a supported local data source.
-  return path.startsWith("/") || /^[a-z]:[\\/]/i.test(path);
+  // Delegates to core so record normalization (which cannot import this module)
+  // validates a persisted path by exactly the same rule; see
+  // `isAbsoluteFilesystemPath` for why UNC paths are rejected.
+  return isAbsoluteFilesystemPath(path);
 }
 
 async function loadTauriVectorFile(
@@ -1801,6 +1867,38 @@ async function readShapefileSiblings(path: string): Promise<DuckDbVectorFile[]> 
     extension: fileExtension(sibling.name),
     data: new Uint8Array(sibling.data),
   }));
+}
+
+/**
+ * Reads a picked `.shp`'s companion files as browser `File`s: the automatic
+ * sibling read first, then (Mac App Store build only) any companions the user
+ * multi-selected in the same dialog. Under the App Sandbox the sibling read is
+ * denied for files the user did not pick, so the selection is the only way a
+ * loose shapefile keeps its attributes there; picked paths are readable because
+ * the dialog's powerbox grant covers them. Deduplicated by lowercased name with
+ * the sibling read winning, so non-MAS behavior is unchanged.
+ *
+ * @param path - The absolute path of the picked `.shp`.
+ * @param selectedPaths - Every path in the same dialog selection.
+ * @returns The companion `File`s to pass alongside the `.shp`.
+ */
+async function readShapefileCompanionFiles(path: string, selectedPaths: string[]): Promise<File[]> {
+  const files = (await readShapefileSiblings(path)).map(
+    (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
+  );
+  if (!IS_MAS_BUILD) return files;
+  const seen = new Set(files.map((file) => file.name.toLowerCase()));
+  for (const companionPath of shapefileCompanionPathsFromSelection(path, selectedPaths)) {
+    const name = browserSafeFileName(companionPath);
+    if (seen.has(name.toLowerCase())) continue;
+    try {
+      files.push(new File([toArrayBuffer(await readFile(companionPath))], name));
+      seen.add(name.toLowerCase());
+    } catch (error) {
+      console.warn(`Could not read the selected shapefile companion "${companionPath}".`, error);
+    }
+  }
+  return files;
 }
 
 async function openProjectFileBrowser(): Promise<{
@@ -2114,6 +2212,20 @@ export async function openProjectFile(): Promise<{
   const text = await readTextFile(selected);
   const project = parseProject(text);
   return { project, path: selected };
+}
+
+/** Pick a QGIS project and return its raw bytes for the import converter. */
+export async function openQgisProjectFile(): Promise<{
+  data: ArrayBuffer;
+  path: string;
+} | null> {
+  const result = await openLocalDataFileWithFallback({
+    filters: [{ name: "QGIS Project", extensions: ["qgz", "qgs"] }],
+    accept: ".qgz,.qgs",
+    readBinary: true,
+  });
+  if (!result?.data) return null;
+  return { data: result.data, path: result.path };
 }
 
 /**
@@ -2436,9 +2548,19 @@ export function loadDroppedRasterFiles(droppedFiles: FileList | File[]): Dropped
  * these with byte-range support, so a COG opens lazily instead of copying the
  * entire file over IPC and then copying it again into a browser File.
  */
-export async function loadDroppedRasterPaths(paths: string[]): Promise<DroppedRaster[]> {
+export async function loadDroppedRasterPaths(
+  paths: string[],
+  options?: { qgisProjectPath?: string },
+): Promise<DroppedRaster[]> {
   const rasterPaths = paths.filter(isRasterFileName);
-  await Promise.all(rasterPaths.map((path) => invoke("allow_raster_asset", { path })));
+  await Promise.all(
+    rasterPaths.map((path) =>
+      invoke("allow_raster_asset", {
+        path,
+        ...(options?.qgisProjectPath ? { qgisProjectPath: options.qgisProjectPath } : {}),
+      }),
+    ),
+  );
   return rasterPaths.map((path) => ({
     name: fileBaseName(path),
     source: convertFileSrc(path),

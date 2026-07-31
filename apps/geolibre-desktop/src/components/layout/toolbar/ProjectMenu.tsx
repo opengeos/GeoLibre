@@ -16,6 +16,7 @@ import {
   Bookmark,
   Copy,
   FileCode2,
+  FileInput,
   FilePen,
   FilePlus2,
   FileText,
@@ -23,6 +24,7 @@ import {
   FolderOpen,
   HardDriveDownload,
   History,
+  Import,
   LayoutGrid,
   Link2,
   Printer,
@@ -43,6 +45,7 @@ interface ProjectMenuProps {
   onOpenFromFile: () => void;
   onOpenFromUrl: () => void;
   onOpenGallery: () => void;
+  onImportQgisProject: () => void;
   onOpenRecent: (path: string) => void;
   onSave: () => void;
   onSaveAs: () => void;
@@ -63,6 +66,7 @@ export function ProjectMenu({
   onOpenFromFile,
   onOpenFromUrl,
   onOpenGallery,
+  onImportQgisProject,
   onOpenRecent,
   onSave,
   onSaveAs,
@@ -195,6 +199,20 @@ export function ProjectMenu({
                 onSelect={clearRecentProjects}
               >
                 {t("toolbar.item.clearRecentProjects")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {show("project.import") && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Import className="h-3.5 w-3.5" />
+              {t("toolbar.menu.import")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onSelect={onImportQgisProject}>
+                <FileInput className="me-2 h-3.5 w-3.5" />
+                {t("toolbar.item.importQgisProjectEllipsis")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

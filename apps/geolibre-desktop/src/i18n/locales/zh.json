@@ -1822,8 +1822,8 @@
       "saveVideoMp4": "保存为 MP4",
       "saveVideoWebm": "保存为 WebM",
       "estimatedLength": "≈ {{seconds}} 秒",
-      "recordingStatus": "录制中… {{percent}}%",
-      "savingVideo": "保存视频…",
+      "recordingStatus": "正在录制… {{percent}}%",
+      "savingVideo": "正在保存视频…",
       "stop": "停止",
       "videoSaved": "已保存 {{name}}",
       "videoError": "无法录制动画。请重试。",
@@ -2141,8 +2141,8 @@
       "inputPoints": "输入点（GeoJSON）",
       "engine": "引擎",
       "engineClient": "客户端（浏览器）",
-      "engineSidecar": "边车（rasterio/GDAL）",
-      "clientHint": "在您的浏览器中计算并将结果添加到地图。对于大型栅格或地理坐标系地形，建议使用边车服务。",
+      "engineSidecar": "Sidecar（rasterio/GDAL）",
+      "clientHint": "在您的浏览器中计算并将结果添加到地图。对于大型栅格或地理坐标系地形，建议使用 Sidecar。",
       "switchToClientHint": "或将引擎切换为客户端以在浏览器中运行此工具。",
       "chooseGeoTiff": "选择一个 GeoTIFF",
       "downloadGeoTiff": "下载 GeoTIFF",
@@ -2470,7 +2470,7 @@
       "description": {
         "postgis": "对已加载的图层运行 PostGIS SQL。已加载 PostGIS 扩展，因此可以使用 ST_* 函数。首次运行会加载约 19 MB 的数据库引擎。",
         "duckdb": "对已加载的图层、文件和 URL 运行 DuckDB SQL。已加载 spatial 扩展，因此可以使用 ST_* 函数。支持云 URL（s3://、gs://、az://）访问公开数据。",
-        "sedona": "对已加载的图层运行 Apache Sedona 空间 SQL。在浏览器中通过 CereusDB（SedonaDB 的 WebAssembly 构建版本）运行；在桌面版中，如果安装了可选的 sedona 扩展，则使用 SedonaDB 边车服务。可以使用 ST_* 函数。"
+        "sedona": "对已加载的图层运行 Apache Sedona 空间 SQL。在浏览器中通过 CereusDB（SedonaDB 的 WebAssembly 构建版本）运行；在桌面版中，如果安装了可选的 sedona 扩展，则使用 SedonaDB Sidecar。可以使用 ST_* 函数。"
       },
       "title": "SQL 工作区",
       "engine": "SQL 引擎",
@@ -2558,7 +2558,7 @@
     "summary": "已选择 {{selected}}/{{total}} 个要素（匹配 {{matched}} 个）。",
     "evaluationErrors": "{{count}} 个要素无法求值，未被匹配。",
     "unevaluableDisjoint": "{{count}} 个要素因几何无法求值而被排除。",
-    "tooManyPairs": "此比较需要 {{pairs}} 次要素对测试（上限 {{limit}}）。请改用“处理 → GeoLibre → 矢量 → 按位置选择”并选择边车引擎。",
+    "tooManyPairs": "此比较需要 {{pairs}} 次要素对测试（上限 {{limit}}）。请改用“处理 → GeoLibre → 矢量 → 按位置选择”并选择 Sidecar 引擎。",
     "exportedLayerName": "{{name}}（选择集）"
   },
   "loadEditorFeatures": {
@@ -2720,7 +2720,7 @@
     "search": "搜索此视图",
     "loadMore": "加载更多",
     "searching": "搜索中…",
-    "loadingMore": "加载更多…",
+    "loadingMore": "正在加载更多…",
     "noResults": "此区域未找到影像。",
     "showing": "显示 {{shown}} / {{total}} 张图像。",
     "searchError": "无法访问 OpenAerialMap：{{message}}。请重试。",
@@ -3337,14 +3337,14 @@
       "run": "运行",
       "running": "正在运行…",
       "runLocal": "本地运行 (WASM)",
-      "runLocalHint": "在 WebAssembly 中本地运行（无需 Python 边车服务）",
-      "runningLocally": "正在使用 WebAssembly 本地运行。无需边车服务。",
+      "runLocalHint": "在 WebAssembly 中本地运行（无需 Python Sidecar）",
+      "runningLocally": "正在使用 WebAssembly 本地运行。无需 Sidecar。",
       "copyLink": "复制链接",
       "copyLinkCopied": "已复制！",
       "copyLinkHint": "复制可分享的链接，用当前设置打开此工具",
       "copyLinkFailed": "无法将链接复制到剪贴板。",
       "catalogSnapshotError": "无法加载 Whitebox 工具目录快照。",
-      "localRunnerError": "无法加载本地（WASM）工具运行器。请刷新后重试，或在边车服务可用时改用它。",
+      "localRunnerError": "无法加载本地（WASM）工具运行器。请刷新后重试，或在 Sidecar 可用时改用它。",
       "output": {
         "geojson": "GeoJSON（添加到地图）",
         "geoparquet": "GeoParquet（下载，保留坐标系）",
@@ -3446,7 +3446,7 @@
     "error": {
       "chooseImage": "请选择要分割的图像 (GeoTIFF)。",
       "enterPrompt": "请输入文本提示，例如“树木”或“建筑物”。",
-      "startServer": "无法启动 GeoLibre 边车服务。",
+      "startServer": "无法启动 GeoLibre Sidecar。",
       "failed": "分割失败。"
     },
     "noObjects": "未找到任何对象。",

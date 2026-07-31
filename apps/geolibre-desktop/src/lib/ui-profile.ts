@@ -256,6 +256,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     labelKey: "toolbar.item.openRecent",
     tier: "basic",
   },
+  {
+    id: "project.import",
+    menuId: "project",
+    labelKey: "toolbar.menu.import",
+    tier: "basic",
+  },
   { id: "project.save", menuId: "project", labelKey: "common.save", tier: "basic" },
   {
     id: "project.saveAs",

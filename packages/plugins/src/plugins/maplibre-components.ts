@@ -94,6 +94,13 @@ import {
   type ZarrDirectoryReader,
 } from "./zarr-directory-store";
 
+/**
+ * `metadata.sourceKind` marking the LiDAR point-cloud layers this plugin adds. Exported so the Layer Library's
+ * restore dispatch keys off the same value this plugin writes rather than a
+ * hand-typed copy (issue #1520).
+ */
+export const LIDAR_SOURCE_KIND = "lidar-url";
+
 type ControlGridConstructor = (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor = (typeof import("maplibre-gl-components"))["AddVectorControl"];
 type BookmarkControlConstructor = (typeof import("maplibre-gl-components"))["BookmarkControl"];
@@ -5433,7 +5440,7 @@ function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
       identifiable: false,
       pointCount: pointCloud.pointCount,
       sourceId: pointCloud.id,
-      sourceKind: "lidar-url",
+      sourceKind: LIDAR_SOURCE_KIND,
       wkt: pointCloud.wkt,
     },
     sourcePath: pointCloud.source,
@@ -5522,7 +5529,7 @@ function isStacSearchControlLayer(layer: GeoLibreLayer): boolean {
 function isLidarControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "lidar" &&
-    layer.metadata.sourceKind === "lidar-url" &&
+    layer.metadata.sourceKind === LIDAR_SOURCE_KIND &&
     layer.metadata.externalNativeLayer === true
   );
 }

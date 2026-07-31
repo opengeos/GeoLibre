@@ -530,6 +530,12 @@ export interface GeoLibreAppAPI {
    * dialog is cancelled.
    */
   pickVectorFilesWithSidecars?: () => Promise<GeoLibrePickedVectorFile[]>;
+
+  /**
+   * Desktop-native downloader for Add Vector Layer URL sources. The web app
+   * leaves this unset so the control uses ordinary browser networking.
+   */
+  fetchVectorUrl?: (url: string) => Promise<Blob | null>;
   /**
    * Read a local vector file back into a File (with any shapefile sidecars) from
    * the absolute path persisted on a layer's `sourcePath`, so the Add Vector
