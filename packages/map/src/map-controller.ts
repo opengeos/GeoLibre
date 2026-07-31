@@ -2160,7 +2160,7 @@ export class MapController {
       // GeoLibre-owned companion symbol layer, not one of the control's native
       // layer ids. Include it here so Background visibility/opacity does not
       // mistake the icons for basemap symbols.
-      if (layer.type === "geojson") {
+      if (layer.metadata.sourceKind === "maplibre-gl-vector") {
         candidates.push({ id: markerLayerId(layer.id), suffix: "Markers" });
       }
       return candidates;

@@ -576,29 +576,31 @@ describe("MapController basemap controls", () => {
   });
 
   it("keeps KML marker symbols independent from basemap visibility and opacity", () => {
-    const { map, fake } = makeFakeMap();
-    const controller = controllerWith(map);
-    controller.syncLayers([controlVectorLayer("kml")]);
-    fake.layers.set(markerId("kml"), {
-      id: markerId("kml"),
-      type: "symbol",
-      paint: { "icon-opacity": 1 },
-    });
-    fake.order.push(markerId("kml"));
+    for (const type of ["geojson", "vector-tiles"] as const) {
+      const { map, fake } = makeFakeMap();
+      const controller = controllerWith(map);
+      controller.syncLayers([controlVectorLayer("kml", { type })]);
+      fake.layers.set(markerId("kml"), {
+        id: markerId("kml"),
+        type: "symbol",
+        paint: { "icon-opacity": 1 },
+      });
+      fake.order.push(markerId("kml"));
 
-    assert.ok(!controller.getBasemapStyleLayerIds().includes(markerId("kml")));
+      assert.ok(!controller.getBasemapStyleLayerIds().includes(markerId("kml")));
 
-    controller.setBasemapVisible(false);
-    controller.setBasemapOpacity(0.25);
+      controller.setBasemapVisible(false);
+      controller.setBasemapOpacity(0.25);
 
-    assert.ok(
-      !fake.calls.some(
-        (call) =>
-          call.args[0] === markerId("kml") &&
-          (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
-      ),
-      "background controls do not update the KML marker symbol",
-    );
+      assert.ok(
+        !fake.calls.some(
+          (call) =>
+            call.args[0] === markerId("kml") &&
+            (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+        ),
+        `background controls do not update the ${type} KML marker symbol`,
+      );
+    }
   });
 
   it("scales basemap opacity from the layer's original paint value", () => {
