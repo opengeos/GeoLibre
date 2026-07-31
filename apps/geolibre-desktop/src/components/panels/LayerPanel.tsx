@@ -2538,8 +2538,11 @@ export function LayerPanel({
           </Button>
         </div>
       </div>
-      <ScrollArea className="flex-1">
-        <div className="space-y-1 p-2">
+      <ScrollArea
+        className="flex-1"
+        viewportClassName="[&>div]:!block [&>div]:!w-full [&>div]:!min-w-0"
+      >
+        <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
             <p className="px-2 py-4 text-xs text-muted-foreground">
               {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
@@ -2690,7 +2693,7 @@ export function LayerPanel({
                     data-layer-card=""
                     data-testid="layer-row"
                     data-layer-name={layer.name}
-                    className={`relative rounded-md border p-2 transition-colors ${
+                    className={`relative w-full min-w-0 max-w-full overflow-hidden rounded-md border p-2 transition-colors ${
                       selectedLayerId === layer.id
                         ? "border-primary bg-primary/5"
                         : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
@@ -2713,7 +2716,7 @@ export function LayerPanel({
                       draggedDisplayIndex < displayIndex && (
                         <div className="pointer-events-none absolute -bottom-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
                       )}
-                    <div className="flex items-center gap-1">
+                    <div className="flex min-w-0 items-center gap-1">
                       <span
                         role="button"
                         tabIndex={0}
@@ -2769,7 +2772,7 @@ export function LayerPanel({
                         />
                       ) : (
                         <span
-                          className={`flex-1 truncate text-sm font-medium ${
+                          className={`min-w-0 flex-1 truncate text-sm font-medium ${
                             groupHidden ? "text-muted-foreground" : ""
                           }`}
                           title={
@@ -2785,7 +2788,7 @@ export function LayerPanel({
                           {layer.name}
                         </span>
                       )}
-                      <span className="text-[10px] uppercase text-muted-foreground">
+                      <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
                         {layerTypeLabel(layer, t)}
                       </span>
                     </div>

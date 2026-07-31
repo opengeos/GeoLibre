@@ -48,3 +48,35 @@ test("reorders layers and removes one through the confirm dialog", async ({ page
   await expect(layerRow(page, "aaa")).toHaveCount(0);
   await expect(layerRow(page, "bbb")).toBeVisible();
 });
+
+test("long layer names truncate without widening the layer panel", async ({ page }) => {
+  await waitForMap(page);
+  await dropGeoJson(page, "short-name", FIXTURE_TEXT);
+
+  const row = layerRow(page, "short-name");
+  await row.getByTitle("Double-click to rename").dblclick();
+  const renameInput = page.getByRole("textbox", { name: "Rename short-name" });
+  await renameInput.fill(
+    "This is an exceptionally long vector layer name that should truncate cleanly",
+  );
+  await renameInput.press("Enter");
+
+  const renamedRow = layerRow(
+    page,
+    "This is an exceptionally long vector layer name that should truncate cleanly",
+  );
+  const panel = page.getByRole("complementary", { name: "Layers" });
+  const name = renamedRow.getByTitle("Double-click to rename");
+
+  await expect(renamedRow).toBeVisible();
+  await expect(name).toHaveCSS("text-overflow", "ellipsis");
+  await expect
+    .poll(async () => {
+      const [rowBox, panelBox] = await Promise.all([renamedRow.boundingBox(), panel.boundingBox()]);
+      return Boolean(rowBox && panelBox && rowBox.x + rowBox.width <= panelBox.x + panelBox.width);
+    })
+    .toBe(true);
+  await expect
+    .poll(() => name.evaluate((element) => element.scrollWidth > element.clientWidth))
+    .toBe(true);
+});

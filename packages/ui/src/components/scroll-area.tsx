@@ -10,18 +10,22 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPr
    * ref would not give them a stable element to read).
    */
   viewportRef?: React.RefObject<HTMLDivElement | null>;
+  viewportClassName?: string;
 };
 
 export const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   ScrollAreaProps
->(({ className, children, viewportRef, ...props }, ref) => (
+>(({ className, children, viewportRef, viewportClassName, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     ref={ref}
     className={cn("relative overflow-hidden", className)}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport ref={viewportRef} className="h-full w-full rounded-[inherit]">
+    <ScrollAreaPrimitive.Viewport
+      ref={viewportRef}
+      className={cn("h-full w-full rounded-[inherit]", viewportClassName)}
+    >
       {children}
     </ScrollAreaPrimitive.Viewport>
     <ScrollBar />
