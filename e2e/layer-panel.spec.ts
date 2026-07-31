@@ -54,6 +54,9 @@ test("long layer names truncate without widening the layer panel", async ({ page
   await dropGeoJson(page, "short-name", FIXTURE_TEXT);
 
   const row = layerRow(page, "short-name");
+  const panel = page.getByRole("complementary", { name: "Layers" });
+  const panelBoxBefore = await panel.boundingBox();
+  expect(panelBoxBefore).not.toBeNull();
   await row.getByTitle("Double-click to rename").dblclick();
   const renameInput = page.getByRole("textbox", { name: "Rename short-name" });
   await renameInput.fill(
@@ -65,15 +68,28 @@ test("long layer names truncate without widening the layer panel", async ({ page
     page,
     "This is an exceptionally long vector layer name that should truncate cleanly",
   );
-  const panel = page.getByRole("complementary", { name: "Layers" });
   const name = renamedRow.getByTitle("Double-click to rename");
 
   await expect(renamedRow).toBeVisible();
   await expect(name).toHaveCSS("text-overflow", "ellipsis");
   await expect
     .poll(async () => {
-      const [rowBox, panelBox] = await Promise.all([renamedRow.boundingBox(), panel.boundingBox()]);
-      return Boolean(rowBox && panelBox && rowBox.x + rowBox.width <= panelBox.x + panelBox.width);
+      const [rowBox, panelBox, viewportWidth] = await Promise.all([
+        renamedRow.boundingBox(),
+        panel.boundingBox(),
+        page.evaluate(() => window.innerWidth),
+      ]);
+      return Boolean(
+        rowBox &&
+        panelBox &&
+        panelBoxBefore &&
+        panelBox.x === panelBoxBefore.x &&
+        panelBox.width === panelBoxBefore.width &&
+        panelBox.x >= 0 &&
+        panelBox.x + panelBox.width <= viewportWidth &&
+        rowBox.x >= panelBox.x &&
+        rowBox.x + rowBox.width <= panelBox.x + panelBox.width,
+      );
     })
     .toBe(true);
   await expect

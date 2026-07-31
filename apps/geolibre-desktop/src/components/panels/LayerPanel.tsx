@@ -2543,7 +2543,7 @@ export function LayerPanel({
         // Radix measures scroll content with an injected display:table
         // wrapper. Opt this viewport into block sizing so long layer names
         // cannot establish a wider min-content table.
-        viewportClassName="[&>div]:!block [&>div]:!w-full [&>div]:!min-w-0"
+        viewportClassName="[&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
       >
         <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
@@ -2696,11 +2696,13 @@ export function LayerPanel({
                     data-layer-card=""
                     data-testid="layer-row"
                     data-layer-name={layer.name}
-                    className={`relative w-full min-w-0 max-w-full rounded-md border p-2 transition-colors ${
+                    className={`relative min-w-0 max-w-full rounded-md border p-2 transition-colors ${
                       selectedLayerId === layer.id
                         ? "border-primary bg-primary/5"
                         : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
-                    } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${group ? "ms-4" : ""}`}
+                    } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
+                      group ? "ms-4" : "w-full"
+                    }`}
                     onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                     onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                     onDragEnd={resetDragState}
