@@ -1192,13 +1192,17 @@ async function modelsFromKml(text: string, path: string): Promise<LoadedModel[]>
 // loaded.
 async function kmzVectorFeatures(
   kmlFiles: DuckDbVectorFile[],
+  entries: Record<string, Uint8Array>,
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
   let cancellation: unknown;
   const settled = await Promise.all(
     kmlFiles.map((file) =>
       loadKmlFile(file, options).then(
-        (collection): FeatureCollection | null => collection,
+        async (collection): Promise<FeatureCollection | null> => {
+          await resolveKmzFeatureIcons(collection, entries);
+          return collection;
+        },
         (error): null => {
           if (isVectorLoadCancelled(error)) {
             cancellation = error;
@@ -1218,6 +1222,41 @@ async function kmzVectorFeatures(
   );
   if (collections.length === 0 && cancellation) throw cancellation;
   return mergeFeatureCollections(collections);
+}
+
+const KML_ICON_HREF_PROPERTY = "__geolibre_kml_icon_href";
+const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
+
+/** Replace archive-relative KML icon hrefs with persistent inline raster URLs. */
+async function resolveKmzFeatureIcons(
+  collection: FeatureCollection,
+  entries: Record<string, Uint8Array>,
+): Promise<void> {
+  const resolved = new Map<string, Promise<string | null>>();
+  const iconUrl = (href: string): Promise<string | null> => {
+    const cached = resolved.get(href);
+    if (cached) return cached;
+    const promise = (async () => {
+      const key = findArchiveEntryKey(entries, href);
+      if (!key) return null;
+      const mime = imageMimeFromName(key);
+      if (!mime.startsWith("image/") || mime === "image/svg+xml") return null;
+      return bytesToDataUrl(entries[key], mime);
+    })();
+    resolved.set(href, promise);
+    return promise;
+  };
+
+  await Promise.all(
+    collection.features.map(async (feature) => {
+      const properties = feature.properties;
+      const href = properties?.[KML_ICON_HREF_PROPERTY];
+      if (!properties || typeof href !== "string") return;
+      const url = await iconUrl(href);
+      delete properties[KML_ICON_HREF_PROPERTY];
+      if (url) properties[KML_ICON_URL_PROPERTY] = url;
+    }),
+  );
 }
 
 /**
@@ -1262,7 +1301,7 @@ async function loadKmzLayers(
   // purely-declined file rather than surfacing a generic error).
   let cancellation: unknown;
   try {
-    const features = await kmzVectorFeatures(kmlFiles, options);
+    const features = await kmzVectorFeatures(kmlFiles, entries, options);
     if (features.features.length > 0) layers.push({ data: features, path });
   } catch (error) {
     if (!isVectorLoadCancelled(error)) throw error;

@@ -1925,6 +1925,28 @@ body,
   scrollbar-width: thin;
 }
 
+.geolibre-kml-description table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.geolibre-kml-description td,
+.geolibre-kml-description th {
+  border-top: 1px solid hsl(var(--border));
+  padding: 0.25rem 0.375rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.geolibre-kml-description tr:nth-child(even) {
+  background: hsl(var(--muted) / 0.55);
+}
+
+.geolibre-kml-description a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
 .geolibre-identify-popup .maplibregl-popup-close-button {
   color: hsl(var(--muted-foreground));
 }

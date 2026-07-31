@@ -27,6 +27,10 @@ interface KmlStyle {
   // that the spec has no key for, so it is round-tripped here and wired into
   // circle-opacity by the map package.
   "marker-opacity"?: number;
+  /** Archive-relative/remote KML icon reference, resolved by the KMZ loader. */
+  __geolibre_kml_icon_href?: string;
+  /** KML IconStyle scale multiplier. */
+  __geolibre_kml_icon_scale?: number;
 }
 
 /**
@@ -498,6 +502,11 @@ function styleFromElement(element: Element): KmlStyle {
       style["marker-color"] = color.color;
       style["marker-opacity"] = color.opacity;
     }
+    const icon = directChild(iconStyle, "Icon");
+    const href = icon ? childText(icon, "href") : undefined;
+    if (href) style.__geolibre_kml_icon_href = href;
+    const scale = Number(childText(iconStyle, "scale"));
+    if (Number.isFinite(scale) && scale > 0) style.__geolibre_kml_icon_scale = scale;
   }
 
   return style;

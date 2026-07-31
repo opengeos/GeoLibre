@@ -56,7 +56,12 @@ import {
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
 import { prepareLineDecoration } from "./line-decorations";
-import { markerIconSizeValue, prepareMarker } from "./markers";
+import {
+  KML_ICON_URL_PROPERTY,
+  markerIconSizeValue,
+  prepareKmlFeatureIcons,
+  prepareMarker,
+} from "./markers";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -1859,6 +1864,7 @@ function applyVectorDataRenderLayers(
   ensureGeneratedImageHandler(map);
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
+  const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!);
   // Derived companion symbology (inverted mask, geometry generator, dedup
   // labels) is built from the raw features, so no MapLibre filter applies to
   // it. While a Time Slider window or a rule-based visibility filter is
@@ -2149,7 +2155,7 @@ function applyVectorDataRenderLayers(
       layer,
       hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
     );
-    if (markerImageId) {
+    if (markerImageId || kmlIconImage) {
       removeIfExists(map, circleLayerId(layer.id));
       ensureLayer(
         map,
@@ -2161,10 +2167,12 @@ function applyVectorDataRenderLayers(
           ...styleLayerZoomRange(layer.style),
           filter: pointFilter,
           layout: {
-            "icon-image": markerImageId,
+            "icon-image": (kmlIconImage ?? markerImageId) as string,
             // The sprite is baked at its display size, so icon-size stays 1
             // unless proportional sizing scales it per feature.
-            "icon-size": markerIconSizeValue(layer.style) as PropertyValueSpecification<number>,
+            "icon-size": (kmlIconImage
+              ? 1
+              : markerIconSizeValue(layer.style)) as PropertyValueSpecification<number>,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             visibility,
@@ -2173,6 +2181,27 @@ function applyVectorDataRenderLayers(
         },
         beforeId,
       );
+      if (kmlIconImage && !markerImageId) {
+        // Features without a KML icon still use the ordinary circle renderer.
+        ensureLayer(
+          map,
+          circleLayerId(layer.id),
+          {
+            id: circleLayerId(layer.id),
+            type: "circle",
+            ...sourceSpec,
+            ...styleLayerZoomRange(layer.style),
+            filter: withFeatureFilters(layer, [
+              "all",
+              hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
+              ["!", ["has", KML_ICON_URL_PROPERTY]],
+            ] as maplibregl.FilterSpecification),
+            paint: circlePaint(layer.style, opacity),
+            layout: { visibility },
+          },
+          beforeId,
+        );
+      }
     } else {
       removeIfExists(map, markerLayerId(layer.id));
       ensureLayer(
