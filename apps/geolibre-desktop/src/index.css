@@ -1934,7 +1934,7 @@ body,
 .geolibre-kml-description th {
   border-top: 1px solid hsl(var(--border));
   padding: 0.25rem 0.375rem;
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 

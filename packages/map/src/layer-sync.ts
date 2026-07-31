@@ -1864,7 +1864,7 @@ function applyVectorDataRenderLayers(
   ensureGeneratedImageHandler(map);
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
-  const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!);
+  const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!, markerImageId ?? "");
   // Derived companion symbology (inverted mask, geometry generator, dedup
   // labels) is built from the raw features, so no MapLibre filter applies to
   // it. While a Time Slider window or a rule-based visibility filter is
@@ -2171,7 +2171,7 @@ function applyVectorDataRenderLayers(
             // The sprite is baked at its display size, so icon-size stays 1
             // unless proportional sizing scales it per feature.
             "icon-size": (kmlIconImage
-              ? 1
+              ? ["case", ["has", KML_ICON_URL_PROPERTY], 1, markerIconSizeValue(layer.style)]
               : markerIconSizeValue(layer.style)) as PropertyValueSpecification<number>,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,

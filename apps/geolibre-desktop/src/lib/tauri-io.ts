@@ -1200,7 +1200,7 @@ async function kmzVectorFeatures(
     kmlFiles.map((file) =>
       loadKmlFile(file, options).then(
         async (collection): Promise<FeatureCollection | null> => {
-          await resolveKmzFeatureIcons(collection, entries);
+          await resolveKmzFeatureIcons(collection, entries, file.name);
           return collection;
         },
         (error): null => {
@@ -1231,16 +1231,24 @@ const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
 async function resolveKmzFeatureIcons(
   collection: FeatureCollection,
   entries: Record<string, Uint8Array>,
+  kmlEntryName: string,
 ): Promise<void> {
   const resolved = new Map<string, Promise<string | null>>();
   const iconUrl = (href: string): Promise<string | null> => {
     const cached = resolved.get(href);
     if (cached) return cached;
     const promise = (async () => {
-      const key = findArchiveEntryKey(entries, href);
-      if (!key) return null;
+      const key = findArchiveEntryKey(entries, resolveArchiveRelativeHref(kmlEntryName, href));
+      if (!key) {
+        console.warn(`Could not resolve embedded KMZ icon: ${href}`);
+        return null;
+      }
       const mime = imageMimeFromName(key);
       if (!mime.startsWith("image/") || mime === "image/svg+xml") return null;
+      if (entries[key].byteLength > MAX_OVERLAY_IMAGE_BYTES) {
+        console.warn(`Skipping oversized embedded KMZ icon: ${key}`);
+        return null;
+      }
       return bytesToDataUrl(entries[key], mime);
     })();
     resolved.set(href, promise);
@@ -1257,6 +1265,17 @@ async function resolveKmzFeatureIcons(
       if (url) properties[KML_ICON_URL_PROPERTY] = url;
     }),
   );
+}
+
+function resolveArchiveRelativeHref(owner: string, href: string): string {
+  if (/^[a-z][a-z\d+.-]*:/i.test(href) || href.startsWith("//")) return href;
+  const parts = href.startsWith("/") ? [] : owner.replaceAll("\\", "/").split("/").slice(0, -1);
+  for (const part of href.replaceAll("\\", "/").split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/");
 }
 
 /**

@@ -125,12 +125,18 @@ function createIdentifyPopupElement(
 
     const valueCell = document.createElement("div");
     valueCell.className = "break-words text-foreground";
-    // Render inline image data URLs (e.g. a geotagged-photo or field-collection
-    // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
-    // Match base64 raster images only, excluding SVG (which can carry scripts)
-    // so an untrusted GeoJSON value can't smuggle one in.
-    if (key === "description" && typeof value === "string" && /<[^>]+>/.test(value)) {
+    // Render known KML description structures as sanitized markup. Requiring a
+    // supported tag keeps ordinary text such as "Elevation <500m>" intact.
+    if (
+      key === "description" &&
+      typeof value === "string" &&
+      /<(?:a|b|br|div|em|i|p|span|strong|table|tbody|td|th|thead|tr)\b/i.test(value)
+    ) {
       appendSanitizedKmlDescription(valueCell, value);
+      // Render inline image data URLs (e.g. a geotagged-photo or field-collection
+      // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
+      // Match base64 raster images only, excluding SVG (which can carry scripts)
+      // so an untrusted GeoJSON value can't smuggle one in.
     } else if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
       const image = document.createElement("img");
       image.src = value;
