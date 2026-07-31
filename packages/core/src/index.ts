@@ -17,6 +17,8 @@ export * from "./selection";
 export * from "./scale-units";
 export * from "./project";
 export * from "./style-library";
+export * from "./layer-library";
+export * from "./layer-defaults";
 export * from "./layer-style-clipboard";
 export * from "./layer-groups";
 export { createSampleStoryMap } from "./storymap-sample";

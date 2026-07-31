@@ -144,6 +144,12 @@ const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 // and the Jupyter embed) leaves it unset, so their update checker is untouched.
 const IS_STORE_BUILD = process.env.GEOLIBRE_STORE_BUILD === "1";
 
+// Mac App Store build. The App Sandbox forbids spawning the Python sidecar,
+// the JupyterLab server, and the martin helper processes, so the UI compiles
+// those surfaces out (client/WASM engines keep working in the webview). Set
+// ONLY by the dedicated MAS build path; every other build leaves it unset.
+const IS_MAS_BUILD = process.env.GEOLIBRE_MAS_BUILD === "1";
+
 const pgliteCdnRequire = createRequire(import.meta.url);
 // The ESM entry of a package's manifest. Prefer the `module` field and the
 // `import` condition of `exports` (both point at the ESM build); never fall back
@@ -575,6 +581,10 @@ function removeJupyterLiteFromTauriDistPlugin(): Plugin {
     apply: "build",
     closeBundle() {
       if (!IS_TAURI_BUILD) return;
+      // The MAS build keeps JupyterLite: the Jupyter server is compiled out
+      // there and the Notebook panel falls back to the JupyterLite site
+      // (Pyodide runs inside WebKit, which App Review permits).
+      if (IS_MAS_BUILD) return;
       rmSync(path.resolve(__dirname, "dist/jupyterlite"), {
         recursive: true,
         force: true,
@@ -882,6 +892,7 @@ export default defineConfig({
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
     __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
+    __GEOLIBRE_MAS_BUILD__: JSON.stringify(IS_MAS_BUILD),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),

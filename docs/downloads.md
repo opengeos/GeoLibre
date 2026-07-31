@@ -13,6 +13,7 @@ Release builds are produced for:
 - Windows x64: unsigned desktop binary
 - macOS Apple Silicon: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
 - macOS Intel: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
+- Android: signed APKs, one per ABI (`geolibre-android-arm64.apk` and friends)
 
 The Windows GitHub Release build is unsigned and may require a platform-specific
 trust prompt; the [Microsoft Store](#windows-installation) build is signed and
@@ -189,6 +190,40 @@ appimageupdatetool GeoLibre.Desktop_<version>_amd64.AppImage
 
 Check what an AppImage points at with
 `./GeoLibre.Desktop_<version>_amd64.AppImage --appimage-updateinfo`.
+
+## Android installation
+
+### Google Play (recommended)
+
+GeoLibre is on
+[Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app) as
+a native Android app, built from the same codebase as the desktop and web builds.
+The Play build is signed and updates automatically:
+
+[Get GeoLibre on Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app){ .md-button .md-button--primary }
+
+### Sideload an APK
+
+Each [release](https://github.com/opengeos/GeoLibre/releases) also attaches
+signed, per-ABI APKs. Download the one matching your device
+(`geolibre-android-arm64.apk` for nearly every modern phone), allow installs
+from unknown sources, and tap it — or install it over ADB:
+
+```bash
+adb install -r geolibre-android-arm64.apk
+```
+
+Sideloaded builds do not update themselves, so download a newer APK to upgrade.
+
+!!! note
+
+    The Play build and the sideloaded APKs are signed with different keys, so
+    Android will not upgrade one into the other. Uninstall the existing copy
+    (`adb uninstall org.geolibre.app`) before switching between them.
+
+Tools that need a local desktop process — the Whitebox, Raster, Conversion, and
+AI Segmentation toolboxes, and the PostgreSQL data source — are hidden on
+Android. See [Android](android.md) for the full list and for build instructions.
 
 ## Build from source
 

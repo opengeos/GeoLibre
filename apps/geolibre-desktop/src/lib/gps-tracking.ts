@@ -28,6 +28,8 @@ export interface GpsFix {
   lat: number;
   /** Horizontal accuracy radius in meters (95% confidence). */
   accuracy: number;
+  /** Satellites used for the fix, when the location provider reports it. */
+  satellites: number | null;
   /** Meters above the WGS84 ellipsoid, when the device reports it. */
   altitude: number | null;
   /** Degrees clockwise from true north, when moving and reported. */
@@ -86,16 +88,43 @@ export function normalizeGpsSettings(raw: unknown): GpsTrackingSettings {
 /** Flatten a `GeolocationPosition` into a plain, serializable {@link GpsFix}. */
 export function fixFromPosition(pos: GeolocationPosition): GpsFix {
   const c = pos.coords;
+  // Satellite count is not part of the browser Geolocation API, but native
+  // GNSS and external-receiver bridges commonly expose one of these names.
+  const extended = c as GeolocationCoordinates & {
+    satellites?: unknown;
+    satellitesUsed?: unknown;
+    satelliteCount?: unknown;
+  };
+  const toSatelliteCount = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+  const satellites =
+    toSatelliteCount(extended.satellites) ??
+    toSatelliteCount(extended.satellitesUsed) ??
+    toSatelliteCount(extended.satelliteCount);
   return {
     lng: c.longitude,
     lat: c.latitude,
     accuracy: c.accuracy,
+    satellites,
     altitude: c.altitude ?? null,
     // A NaN heading (some browsers report it while stationary) is "unknown".
     heading: c.heading != null && Number.isFinite(c.heading) ? c.heading : null,
     speed: c.speed != null && Number.isFinite(c.speed) ? c.speed : null,
     timestamp: pos.timestamp,
   };
+}
+
+/** Format horizontal accuracy without discarding centimeter-level fixes. */
+export function formatAccuracy(accuracyM: number, unavailable = "—"): string {
+  if (!Number.isFinite(accuracyM) || accuracyM < 0) return unavailable;
+  if (accuracyM < 1) {
+    const centimeters =
+      Math.round(accuracyM < 0.1 ? accuracyM * 1000 : accuracyM * 100) / (accuracyM < 0.1 ? 10 : 1);
+    if (centimeters >= 100) return `${(centimeters / 100).toFixed(1)} m`;
+    return `${centimeters < 10 ? centimeters.toFixed(1) : Math.round(centimeters)} cm`;
+  }
+  if (accuracyM < 10) return `${accuracyM.toFixed(1)} m`;
+  return `${Math.round(accuracyM)} m`;
 }
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -195,6 +224,11 @@ function fixPosition(fix: GpsFix): Position {
 export const GPS_TRACK_FLAG = "gpsTrack";
 export const GPS_CAPTURE_FLAG = "gpsCapture";
 
+/** Keep exported accuracy precise to a millimeter without float noise. */
+function exportAccuracy(accuracyM: number): number {
+  return Math.round(accuracyM * 1000) / 1000;
+}
+
 /** Minimal structural view of a layer — avoids coupling this module to the store. */
 export interface GpsLayerLike {
   type: string;
@@ -209,15 +243,19 @@ export function isGpsCaptureLayer(layer: GpsLayerLike): boolean {
 /**
  * Build the track feature saved to a layer: a LineString for a single
  * continuous recording, a MultiLineString when pauses split it into several
- * segments. Per-vertex timestamps ride along as an ISO-string `times`
- * property (flat for a LineString, nested per segment for a MultiLineString)
- * so the recording remains GPX-exportable after a project save/load round trip.
+ * segments. Per-vertex timestamps, horizontal accuracy, and satellite counts
+ * ride along as parallel properties (flat for a LineString, nested per segment
+ * for a MultiLineString) so no recorded fix metadata is lost on save.
  */
 export function trackFeature(segments: GpsTrackSegments): Feature<LineString | MultiLineString> {
   const kept = lineSegments(segments);
   const stats = trackStats(kept);
   const all = kept.flat();
   const times = kept.map((seg) => seg.map((f) => new Date(f.timestamp).toISOString()));
+  const accuracies = kept.map((seg) => seg.map((f) => exportAccuracy(f.accuracy)));
+  const satellites = kept.map((seg) => seg.map((f) => f.satellites));
+  const flattenForLine = <T>(values: T[][]): T[] | T[][] =>
+    kept.length === 1 ? values[0] : values;
   return {
     type: "Feature",
     geometry:
@@ -235,7 +273,9 @@ export function trackFeature(segments: GpsTrackSegments): Feature<LineString | M
       duration_s: Math.round(stats.durationS),
       start_time: all.length ? new Date(all[0].timestamp).toISOString() : null,
       end_time: all.length ? new Date(all[all.length - 1].timestamp).toISOString() : null,
-      times: kept.length === 1 ? times[0] : times,
+      times: flattenForLine(times),
+      accuracies_m: flattenForLine(accuracies),
+      satellites_used: flattenForLine(satellites),
     },
   };
 }
@@ -268,7 +308,8 @@ export function capturePointFeature(fix: GpsFix): Feature<Point> {
     geometry: { type: "Point", coordinates: fixPosition(fix) },
     properties: {
       time: new Date(fix.timestamp).toISOString(),
-      accuracy_m: Math.round(fix.accuracy * 10) / 10,
+      accuracy_m: exportAccuracy(fix.accuracy),
+      ...(fix.satellites != null ? { satellites_used: fix.satellites } : {}),
       ...(fix.altitude != null ? { ele: fix.altitude } : {}),
       ...(fix.speed != null ? { speed_mps: fix.speed } : {}),
       ...(fix.heading != null ? { heading_deg: fix.heading } : {}),
@@ -312,8 +353,12 @@ function escapeXml(text: string): string {
 function gpxTrkpt(fix: GpsFix, indent: string): string {
   const lines = [`${indent}<trkpt lat="${fix.lat}" lon="${fix.lng}">`];
   if (fix.altitude != null) lines.push(`${indent}  <ele>${fix.altitude}</ele>`);
+  lines.push(`${indent}  <time>${new Date(fix.timestamp).toISOString()}</time>`);
+  if (fix.satellites != null) lines.push(`${indent}  <sat>${fix.satellites}</sat>`);
   lines.push(
-    `${indent}  <time>${new Date(fix.timestamp).toISOString()}</time>`,
+    `${indent}  <extensions>`,
+    `${indent}    <geolibre:accuracy_m>${exportAccuracy(fix.accuracy)}</geolibre:accuracy_m>`,
+    `${indent}  </extensions>`,
     `${indent}</trkpt>`,
   );
   return lines.join("\n");
@@ -322,8 +367,9 @@ function gpxTrkpt(fix: GpsFix, indent: string): string {
 /**
  * Serialize a recorded track to a GPX 1.1 document: one `<trk>` with a
  * `<trkseg>` per continuous segment (pause/resume boundaries), per-point
- * elevation and timestamps. The complement of the reader in `gpx.ts`, which
- * is import-only.
+ * elevation, timestamps, standard GPX satellite counts, and a GeoLibre
+ * extension for horizontal accuracy. The complement of the reader in
+ * `gpx.ts`, which is import-only.
  */
 export function buildTrackGpx(segments: GpsTrackSegments, name: string): string {
   const segs = lineSegments(segments).map((seg) =>
@@ -331,7 +377,7 @@ export function buildTrackGpx(segments: GpsTrackSegments, name: string): string 
   );
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<gpx version="1.1" creator="GeoLibre" xmlns="http://www.topografix.com/GPX/1/1">`,
+    `<gpx version="1.1" creator="GeoLibre" xmlns="http://www.topografix.com/GPX/1/1" xmlns:geolibre="https://geolibre.org/xmlschemas/GpxExtensions/v1">`,
     `  <trk>`,
     `    <name>${escapeXml(name)}</name>`,
     segs.join("\n"),

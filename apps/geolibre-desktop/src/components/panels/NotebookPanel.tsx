@@ -22,6 +22,7 @@ import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useNotebookBridge } from "../../hooks/useNotebookBridge";
 import { useNotebookThemeSync } from "../../hooks/useNotebookThemeSync";
 import type { ThemeMode } from "../../hooks/useThemeMode";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
 import { type JupyterServerInfo, startJupyterServer } from "../../lib/jupyter";
 
@@ -37,7 +38,10 @@ import { type JupyterServerInfo, startJupyterServer } from "../../lib/jupyter";
  *   where there is no server an external client could attach to).
  */
 async function resolveNotebook(): Promise<{ src: string; server: JupyterServerInfo | null }> {
-  if (isTauri()) {
+  // The Mac App Store build cannot spawn the JupyterLab server (App Sandbox),
+  // so it embeds the JupyterLite site like the web build; its dist keeps the
+  // jupyterlite assets for exactly this (see vite.config.ts).
+  if (isTauri() && !IS_MAS_BUILD) {
     const info = await startJupyterServer();
     return {
       src: `${info.url}/lab?token=${encodeURIComponent(info.token)}`,

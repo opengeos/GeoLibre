@@ -5,7 +5,40 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
 import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
 
-export type VectorExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
+export { KmlCoordinateError, kmlExportErrorMessage } from "./vector-export-errors";
+
+type TextVectorExportFormat = "geojson" | "csv" | "kml";
+
+export type VectorExportFormat = TextVectorExportFormat | BinaryVectorExportFormat;
+
+const TEXT_EXPORT_FORMATS: Record<
+  TextVectorExportFormat,
+  {
+    extension: string;
+    filterExtensions: string[];
+    label: string;
+    mimeType: string;
+  }
+> = {
+  geojson: {
+    extension: "geojson",
+    filterExtensions: ["geojson", "json"],
+    label: "GeoJSON",
+    mimeType: "application/geo+json",
+  },
+  csv: {
+    extension: "csv",
+    filterExtensions: ["csv"],
+    label: "CSV",
+    mimeType: "text/csv",
+  },
+  kml: {
+    extension: "kml",
+    filterExtensions: ["kml"],
+    label: "KML",
+    mimeType: "application/vnd.google-earth.kml+xml",
+  },
+};
 
 /** Render an attribute value as the plain string used in CSV cells and inputs. */
 export function formatAttributeValue(value: unknown): string {
@@ -57,6 +90,8 @@ function exportFormatLabel(format: BinaryVectorExportFormat): string {
       return "GeoPackage";
     case "shapefile":
       return "Shapefile (zipped)";
+    case "kmz":
+      return "KMZ";
   }
 }
 
@@ -68,6 +103,8 @@ function exportFileExtension(format: BinaryVectorExportFormat): string {
       return "gpkg";
     case "shapefile":
       return "zip";
+    case "kmz":
+      return "kmz";
   }
 }
 
@@ -79,6 +116,8 @@ function exportMimeType(format: BinaryVectorExportFormat): string {
       return "application/geopackage+sqlite3";
     case "shapefile":
       return "application/zip";
+    case "kmz":
+      return "application/vnd.google-earth.kmz";
   }
 }
 
@@ -172,29 +211,41 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
   return warnings;
 }
 
+async function textExportContent(
+  format: TextVectorExportFormat,
+  geojson: FeatureCollection,
+  documentName: string,
+): Promise<string> {
+  switch (format) {
+    case "geojson":
+      return JSON.stringify(geojson, null, 2);
+    case "csv":
+      return geojsonToCsv(geojson);
+    case "kml":
+      return (await import("./kml-writer")).writeKml(geojson, documentName);
+  }
+}
+
 async function exportTextLayer(
-  format: "geojson" | "csv",
+  format: TextVectorExportFormat,
   geojson: FeatureCollection,
   baseName: string,
+  documentName: string,
 ): Promise<string | null> {
-  const isCsv = format === "csv";
-  const content = isCsv ? geojsonToCsv(geojson) : JSON.stringify(geojson, null, 2);
+  const content = await textExportContent(format, geojson, documentName);
+  const { extension, filterExtensions, label, mimeType } = TEXT_EXPORT_FORMATS[format];
   return saveTextFileWithFallback(content, {
-    defaultName: `${baseName}.${isCsv ? "csv" : "geojson"}`,
-    filters: [
-      isCsv
-        ? { name: "CSV", extensions: ["csv"] }
-        : { name: "GeoJSON", extensions: ["geojson", "json"] },
-    ],
+    defaultName: `${baseName}.${extension}`,
+    filters: [{ name: label, extensions: filterExtensions }],
     browserTypes: [
       {
-        description: isCsv ? "CSV" : "GeoJSON",
-        accept: isCsv
-          ? { "text/csv": [".csv"] }
-          : { "application/geo+json": [".geojson", ".json"] },
+        description: label,
+        accept: {
+          [mimeType]: filterExtensions.map((candidate) => `.${candidate}`),
+        },
       },
     ],
-    mimeType: isCsv ? "text/csv" : "application/geo+json",
+    mimeType,
   });
 }
 
@@ -202,8 +253,9 @@ async function exportBinaryLayer(
   format: BinaryVectorExportFormat,
   geojson: FeatureCollection,
   baseName: string,
+  documentName: string,
 ): Promise<string | null> {
-  const result = await exportBinaryVectorLayer(geojson, format, baseName);
+  const result = await exportBinaryVectorLayer(geojson, format, baseName, documentName);
   const label = exportFormatLabel(format);
   const extension = exportFileExtension(format);
   return saveBinaryFileWithFallback(result.data, {
@@ -223,16 +275,19 @@ async function exportBinaryLayer(
  * Save a vector layer's features to disk in the requested format, prompting
  * with the native (Tauri) or browser file-save dialog. Returns the saved path
  * (a name in the browser), or null when the user cancels the save dialog.
+ * The optional document name preserves the human-readable layer title inside
+ * KML and KMZ while the base name remains safe for the filesystem.
  */
 export async function exportVectorLayer(
   geojson: FeatureCollection,
   format: VectorExportFormat,
   baseName: string,
+  documentName = baseName,
 ): Promise<string | null> {
-  if (format === "geojson" || format === "csv") {
-    return exportTextLayer(format, geojson, baseName);
+  if (format === "geojson" || format === "csv" || format === "kml") {
+    return exportTextLayer(format, geojson, baseName, documentName);
   }
-  return exportBinaryLayer(format, geojson, baseName);
+  return exportBinaryLayer(format, geojson, baseName, documentName);
 }
 
 /**

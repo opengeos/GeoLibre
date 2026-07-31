@@ -1,6 +1,6 @@
 [package]
 name = "geolibre-desktop"
-version = "2.3.0"
+version = "2.4.0"
 description = "GeoLibre Desktop — lightweight cloud-native desktop GIS"
 authors = ["GeoLibre Contributors"]
 edition = "2021"
@@ -12,6 +12,11 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [features]
 default = []
 native-duckdb = ["dep:duckdb"]
+# Mac App Store build: compiles out every command that downloads or spawns
+# external code (sidecar, Jupyter, Martin, uv, external plugin installs), which
+# the App Sandbox and App Store guideline 2.5.2 forbid. Mutually exclusive with
+# native-duckdb (see the compile_error! in src/lib.rs).
+mas = []
 
 # Optimize the release binary for size. The frontend assets dominate the binary,
 # but these still trim the Rust code: LTO + a single codegen unit let the linker
@@ -35,8 +40,9 @@ tauri-plugin-fs = { version = "2", features = ["watch"] }
 # Native geolocation on Android/iOS: ships the location manifest permissions and
 # drives the OS permission dialog for Field Collection / GPS Tracking, which the
 # WebView's navigator.geolocation cannot do on Android. On desktop it is inert
-# (the frontend only invokes it on mobile).
-tauri-plugin-geolocation = "2"
+# (the frontend only invokes it on mobile). This is a patched 2.3.2 release;
+# see vendor/tauri-plugin-geolocation/GEOLIBRE_PATCH.md before upgrading.
+tauri-plugin-geolocation = { path = "vendor/tauri-plugin-geolocation" }
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 # Persists the fs scope the folder picker grants, so Browser-panel pinned

@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   DropdownMenu,
@@ -5,14 +6,39 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import type maplibregl from "maplibre-gl";
-import { BookOpen, Braces, Crosshair, Earth, MapIcon, MapPin, ZoomIn } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  BookOpen,
+  Braces,
+  Circle,
+  Crosshair,
+  Earth,
+  MapIcon,
+  MapPin,
+  Route,
+  Sparkles,
+  ZoomIn,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
 import { openExternalLink } from "../../lib/open-external";
+import {
+  bufferPresetsFor,
+  clickedPointLayer,
+  formatBufferDistance,
+  QUICK_TRAVEL_CONTOURS,
+  QUICK_TRAVEL_CONTOURS_LABEL,
+  runQuickAnalysis,
+  type QuickBufferPreset,
+} from "../../lib/quick-analysis";
+import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
+import { RoutingConsentDialog } from "./RoutingConsentDialog";
 
 interface ContextMenuState {
   /** Monotonic id so each right-click remounts the menu at the new anchor. */
@@ -81,7 +107,7 @@ export function MapContextMenu({
   /** Open a Wikipedia knowledge card for the clicked coordinate. */
   onExplorePlace?: (lat: number, lng: number) => void;
 }) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   // `menu` keeps the last anchor/coordinate even while closing, so the exit
   // animation plays from the right spot; `open` drives visibility separately.
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
@@ -164,65 +190,196 @@ export function MapContextMenu({
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 
+  // Quick analysis (#1523): run an existing Processing tool against the clicked
+  // point with defaults filled in. The buffer ladder follows the scale bar's
+  // unit system so the menu speaks in the units the map is already labelled in.
+  const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
+  const bufferPresets = useMemo(() => bufferPresetsFor(scaleUnit), [scaleUnit]);
+  const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
+
+  const formatDistance = useCallback(
+    (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
+    [i18n.language, t],
+  );
+
+  const bufferHere = useCallback(
+    (preset: QuickBufferPreset) => {
+      if (!menu) return;
+      const point = clickedPointLayer(menu.lng, menu.lat);
+      void runQuickAnalysis({
+        toolId: "buffer",
+        parameters: { layer: point.id, distance: preset.distance, units: preset.units },
+        extraLayers: [point],
+        resultName: t("quickAnalysis.bufferLayerName", { distance: formatDistance(preset) }),
+        mapControllerRef,
+      });
+    },
+    [menu, t, formatDistance, mapControllerRef],
+  );
+
+  // Travel time sends the clicked coordinate to a public Valhalla server, so it
+  // is gated on the same one-time privacy notice as the Network tools — that
+  // consent flag is documented as covering every activation path, and a menu
+  // item that skipped it would send coordinates without the notice.
+  const [pendingTravelMode, setPendingTravelMode] = useState<"auto" | "pedestrian" | null>(null);
+  // The coordinate is captured when the notice opens: `menu` is cleared by the
+  // next right-click, and the run must use the point the user actually chose.
+  const pendingTravelPoint = useRef<{ lng: number; lat: number } | null>(null);
+
+  const runTravelTime = useCallback(
+    (mode: "auto" | "pedestrian", lng: number, lat: number) => {
+      const point = clickedPointLayer(lng, lat);
+      void runQuickAnalysis({
+        toolId: "isochrone",
+        parameters: {
+          layer: point.id,
+          mode,
+          metric: "time",
+          contours: QUICK_TRAVEL_CONTOURS,
+          // Left empty so the tool resolves the configured routing server
+          // rather than baking one in here.
+          endpoint: "",
+        },
+        extraLayers: [point],
+        resultName:
+          mode === "auto"
+            ? t("quickAnalysis.driveTimeLayerName")
+            : t("quickAnalysis.walkTimeLayerName"),
+        mapControllerRef,
+      });
+    },
+    [t, mapControllerRef],
+  );
+
+  const travelTimeHere = useCallback(
+    (mode: "auto" | "pedestrian") => {
+      if (!menu) return;
+      if (hasRoutingConsent()) {
+        runTravelTime(mode, menu.lng, menu.lat);
+        return;
+      }
+      pendingTravelPoint.current = { lng: menu.lng, lat: menu.lat };
+      setPendingTravelMode(mode);
+    },
+    [menu, runTravelTime],
+  );
+
+  const confirmTravelTime = useCallback(() => {
+    const point = pendingTravelPoint.current;
+    const mode = pendingTravelMode;
+    recordRoutingConsent();
+    setPendingTravelMode(null);
+    pendingTravelPoint.current = null;
+    if (mode && point) runTravelTime(mode, point.lng, point.lat);
+  }, [pendingTravelMode, runTravelTime]);
+
+  const cancelTravelTime = useCallback(() => {
+    setPendingTravelMode(null);
+    pendingTravelPoint.current = null;
+  }, []);
+
   return (
-    // Keyed by the right-click id so each new right-click remounts the menu with
-    // a fresh anchor at the cursor. The key is tied to `menu` (not `open`), so a
-    // normal close leaves the key stable and Radix can play its exit animation;
-    // only the next right-click forces the remount that repositions the popup.
-    <DropdownMenu key={menu?.id ?? "init"} open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <span
-          aria-hidden
-          style={{
-            position: "fixed",
-            left: menu?.x ?? 0,
-            top: menu?.y ?? 0,
-            width: 0,
-            height: 0,
-          }}
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="bottom" className="w-64">
-        <DropdownMenuItem
-          onSelect={copyCoords}
-          className="gap-2 font-mono text-xs"
-          title={t("mapContextMenu.copyCoordinatesHint")}
-        >
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">{menu ? formatCoords(menu.lat, menu.lng) : ""}</span>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
-          {t("mapContextMenu.quickActions")}
-        </DropdownMenuLabel>
-        {onExplorePlace ? (
-          <DropdownMenuItem onSelect={explorePlace} className="gap-2">
-            <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-            {t("mapContextMenu.whatsHere")}
+    <>
+      <RoutingConsentDialog
+        open={pendingTravelMode !== null}
+        onCancel={cancelTravelTime}
+        onConfirm={confirmTravelTime}
+      />
+      {/* Keyed by the right-click id so each new right-click remounts the menu
+          with a fresh anchor at the cursor. The key is tied to `menu` (not
+          `open`), so a normal close leaves the key stable and Radix can play
+          its exit animation; only the next right-click forces the remount that
+          repositions the popup. */}
+      <DropdownMenu key={menu?.id ?? "init"} open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <span
+            aria-hidden
+            style={{
+              position: "fixed",
+              left: menu?.x ?? 0,
+              top: menu?.y ?? 0,
+              width: 0,
+              height: 0,
+            }}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="bottom" className="w-64">
+          <DropdownMenuItem
+            onSelect={copyCoords}
+            className="gap-2 font-mono text-xs"
+            title={t("mapContextMenu.copyCoordinatesHint")}
+          >
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate">{menu ? formatCoords(menu.lat, menu.lng) : ""}</span>
           </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuItem onSelect={copyGeoJson} className="gap-2">
-          <Braces className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {t("mapContextMenu.copyGeoJson")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={centerHere} className="gap-2">
-          <Crosshair className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {t("mapContextMenu.centerHere")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={zoomInHere} className="gap-2">
-          <ZoomIn className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {t("mapContextMenu.zoomInHere")}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={viewInGoogleMaps} className="gap-2">
-          <MapIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {t("mapContextMenu.viewInGoogleMaps")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={viewInGoogleEarth} className="gap-2">
-          <Earth className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {t("mapContextMenu.viewInGoogleEarth")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            {t("mapContextMenu.quickActions")}
+          </DropdownMenuLabel>
+          {onExplorePlace ? (
+            <DropdownMenuItem onSelect={explorePlace} className="gap-2">
+              <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {t("mapContextMenu.whatsHere")}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem onSelect={copyGeoJson} className="gap-2">
+            <Braces className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {t("mapContextMenu.copyGeoJson")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={centerHere} className="gap-2">
+            <Crosshair className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {t("mapContextMenu.centerHere")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={zoomInHere} className="gap-2">
+            <ZoomIn className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {t("mapContextMenu.zoomInHere")}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {t("quickAnalysis.menu")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-60">
+              {bufferPresets.map((preset) => (
+                <DropdownMenuItem
+                  key={`${preset.distance}-${preset.units}`}
+                  onSelect={() => bufferHere(preset)}
+                  className="gap-2"
+                >
+                  <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.bufferHere", { distance: formatDistance(preset) })}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => travelTimeHere("auto")} className="gap-2">
+                <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("quickAnalysis.driveTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => travelTimeHere("pedestrian")} className="gap-2">
+                <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("quickAnalysis.walkTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL })}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* Escape hatch when the presets aren't what was wanted: the full
+                dialog, preselected on the same tool. */}
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("buffer")} className="gap-2">
+                <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("quickAnalysis.openInProcessing")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={viewInGoogleMaps} className="gap-2">
+            <MapIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {t("mapContextMenu.viewInGoogleMaps")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={viewInGoogleEarth} className="gap-2">
+            <Earth className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {t("mapContextMenu.viewInGoogleEarth")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }

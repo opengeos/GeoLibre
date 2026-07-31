@@ -8,7 +8,9 @@ import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
+import { useLayerLibraryPersistence } from "./hooks/useLayerLibraryPersistence";
 import { useStyleLibraryPersistence } from "./hooks/useStyleLibraryPersistence";
+import { useTemplateLibraryPersistence } from "./hooks/useTemplateLibraryPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useStartupUpdateCheck } from "./hooks/useStartupUpdateCheck";
 import { useThemeMode } from "./hooks/useThemeMode";
@@ -32,6 +34,8 @@ export default function App() {
   useThemeScheme();
   useRecentProjectsPersistence();
   useStyleLibraryPersistence();
+  useLayerLibraryPersistence();
+  useTemplateLibraryPersistence();
   useRuntimeEnvironmentVariables();
   useUndoRedoShortcuts();
   useBeforeUnloadGuard();

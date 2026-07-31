@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-clear-watch"
+description = "Enables the clear_watch command without any pre-configured scope."
+commands.allow = ["clear_watch"]
+
+[[permission]]
+identifier = "deny-clear-watch"
+description = "Denies the clear_watch command without any pre-configured scope."
+commands.deny = ["clear_watch"]

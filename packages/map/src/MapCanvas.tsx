@@ -125,11 +125,19 @@ function createIdentifyPopupElement(
 
     const valueCell = document.createElement("div");
     valueCell.className = "break-words text-foreground";
-    // Render inline image data URLs (e.g. a geotagged-photo or field-collection
-    // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
-    // Match base64 raster images only, excluding SVG (which can carry scripts)
-    // so an untrusted GeoJSON value can't smuggle one in.
-    if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
+    // Render known KML description structures as sanitized markup. Requiring a
+    // supported tag keeps ordinary text such as "Elevation <500m>" intact.
+    if (
+      key === "description" &&
+      typeof value === "string" &&
+      /<(?:a|b|br|div|em|i|p|span|strong|table|tbody|td|th|thead|tr)\b/i.test(value)
+    ) {
+      appendSanitizedKmlDescription(valueCell, value);
+      // Render inline image data URLs (e.g. a geotagged-photo or field-collection
+      // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
+      // Match base64 raster images only, excluding SVG (which can carry scripts)
+      // so an untrusted GeoJSON value can't smuggle one in.
+    } else if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
       const image = document.createElement("img");
       image.src = value;
       image.alt = key;
@@ -151,7 +159,9 @@ function createIdentifyPopupElement(
   // show a second copy of the same photo in the same small box. Filter before
   // the empty-state check so a feature whose only property is `photo_full` still
   // reports "No attributes" rather than rendering an empty panel.
-  const entries = Object.entries(properties).filter(([key]) => key !== PHOTO_FULL_KEY);
+  const entries = Object.entries(properties).filter(
+    ([key]) => key !== PHOTO_FULL_KEY && !key.startsWith("__geolibre_"),
+  );
   if (entries.length === 0 && featureId == null) {
     const empty = document.createElement("div");
     empty.className = "text-muted-foreground";
@@ -162,6 +172,57 @@ function createIdentifyPopupElement(
   }
 
   return root;
+}
+
+const KML_DESCRIPTION_TAGS = new Set([
+  "a",
+  "b",
+  "br",
+  "div",
+  "em",
+  "i",
+  "p",
+  "span",
+  "strong",
+  "table",
+  "tbody",
+  "td",
+  "th",
+  "thead",
+  "tr",
+]);
+
+/** Render useful KML description markup while dropping scripts and attributes. */
+function appendSanitizedKmlDescription(target: HTMLElement, html: string): void {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const copy = (node: Node, parent: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parent.appendChild(document.createTextNode(node.textContent ?? ""));
+      return;
+    }
+    if (!(node instanceof Element)) return;
+    const tag = node.localName.toLowerCase();
+    if (tag === "script" || tag === "style" || tag === "head" || tag === "meta") return;
+    if (!KML_DESCRIPTION_TAGS.has(tag)) {
+      for (const child of node.childNodes) copy(child, parent);
+      return;
+    }
+    const element = document.createElement(tag);
+    if (tag === "a") {
+      const href = node.getAttribute("href")?.trim();
+      if (href && /^(https?:|mailto:)/i.test(href)) {
+        element.setAttribute("href", href);
+        element.setAttribute("target", "_blank");
+        element.setAttribute("rel", "noopener noreferrer");
+      }
+    }
+    for (const child of node.childNodes) copy(child, element);
+    parent.appendChild(element);
+  };
+  const content = document.createElement("div");
+  content.className = "geolibre-kml-description";
+  for (const child of parsed.body.childNodes) copy(child, content);
+  target.appendChild(content);
 }
 
 function createIdentifyMessagePopupElement(layerName: string, message: string): HTMLElement {
@@ -526,6 +587,7 @@ function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
     ...nativeIdentifyLayerIds(layer),
     ...nativeIdentifyLayerIds(layer).map(externalExtrusionLayerId),
     ...mbtilesStyleLayerIds(layer),
+    markerLayerId(layer.id),
     circleLayerId(layer.id),
     lineLayerId(layer.id),
     fillExtrusionLayerId(layer.id),

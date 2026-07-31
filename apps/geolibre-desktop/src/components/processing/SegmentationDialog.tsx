@@ -25,6 +25,7 @@ import {
 import type { FeatureCollection } from "geojson";
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
@@ -78,6 +79,14 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
     const gen = ++checkGenRef.current;
     setChecking(true);
     setStatus(null);
+    // The Mac App Store build has no sidecar to probe or start. The dialog is
+    // already hidden from the menus there; this is the defensive fallback in
+    // case it mounts some other way, mirroring the web-unavailable path.
+    if (IS_MAS_BUILD) {
+      setStatus({ available: false, message: t("masBuild.unavailable") });
+      setChecking(false);
+      return;
+    }
     try {
       const next = await fetchMlStatus();
       if (gen === checkGenRef.current) setStatus(next);
@@ -201,6 +210,12 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
   // proxied sidecar is reachable, the rare web case where segmentation works.
   const webUnavailable = !isTauri() && !available;
 
+  // The Mac App Store build can never reach `available` (the sidecar is
+  // compiled out), so its form is permanently disabled too. Kept separate from
+  // `webUnavailable`, which also drives the desktop-download CTA that would be
+  // nonsense on a build that already IS the desktop app.
+  const formUnavailable = webUnavailable || (IS_MAS_BUILD && !available);
+
   // Browser users cannot run segmentation here, so point them at the desktop
   // download instead of the unusable "Start server" action (issue #777). This
   // is rendered both in the resolved "unavailable" banner and while the status
@@ -260,25 +275,26 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
               </p>
               {/* Launching the sidecar is a desktop-only (Tauri) capability;
                   in the browser build it cannot work, so offer the desktop
-                  download instead. */}
-              {isTauri() ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void startServer()}
-                  disabled={startingServer}
-                  className="gap-2"
-                >
-                  {startingServer ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Server className="h-4 w-4" />
-                  )}
-                  {t("segmentation.startServer")}
-                </Button>
-              ) : (
-                downloadDesktopButton
-              )}
+                  download instead. The Mac App Store build cannot spawn it
+                  either, so it gets neither action. */}
+              {isTauri()
+                ? !IS_MAS_BUILD && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void startServer()}
+                      disabled={startingServer}
+                      className="gap-2"
+                    >
+                      {startingServer ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Server className="h-4 w-4" />
+                      )}
+                      {t("segmentation.startServer")}
+                    </Button>
+                  )
+                : downloadDesktopButton}
             </div>
           )}
 
@@ -296,7 +312,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
               <Input
                 id="seg-image"
                 readOnly
-                disabled={webUnavailable}
+                disabled={formUnavailable}
                 value={imageName}
                 placeholder={t("segmentation.imagePlaceholder")}
               />
@@ -306,7 +322,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
                 size="icon"
                 title={t("segmentation.chooseImage")}
                 onClick={() => void pickImage()}
-                disabled={webUnavailable}
+                disabled={formUnavailable}
               >
                 <FolderOpen className="h-4 w-4" />
               </Button>
@@ -321,7 +337,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
             <Select
               id="seg-mode"
               value={mode}
-              disabled={webUnavailable}
+              disabled={formUnavailable}
               onChange={(e) => setMode(e.target.value as "text" | "automatic")}
             >
               <option value="text">{t("segmentation.modeText")}</option>
@@ -339,7 +355,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
                 <Input
                   id="seg-prompt"
                   value={prompt}
-                  disabled={webUnavailable}
+                  disabled={formUnavailable}
                   placeholder={t("segmentation.promptPlaceholder")}
                   onChange={(e) => setPrompt(e.target.value)}
                 />
@@ -354,7 +370,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
                   min={0}
                   max={1}
                   step={0.05}
-                  disabled={webUnavailable}
+                  disabled={formUnavailable}
                   value={String(confidence)}
                   onChange={(e) => {
                     if (e.target.value === "") {

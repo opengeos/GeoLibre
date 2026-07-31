@@ -20,6 +20,9 @@ import {
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
   isStyleLibraryTargetLayer,
+  canSaveLayerToLibrary,
+  captureLayerLibraryEntry,
+  createLayerLibraryEntryId,
   copyableLayerStyleKind,
   pluginOwnsPaint,
   supportsBridgedOpacity,
@@ -42,6 +45,8 @@ import {
   sampleTileFeatureRecords,
   BASEMAP_CONTROL_PLUGIN_ID,
   GEO_EDITOR_PLUGIN_ID,
+  isEmbeddableLocalVectorLayer,
+  materializeEmbeddableVectorLayers,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
   SKETCHES_SOURCE_KIND,
@@ -65,7 +70,12 @@ import {
   placeholderMessage,
 } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
-import { bindTemporalLayer, createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import {
+  activateTimeSliderForBinding,
+  bindTemporalLayer,
+  createAppAPI,
+  usePluginRegistry,
+} from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
   clearFeatureSelection,
@@ -118,6 +128,7 @@ import {
   GripVertical,
   Info,
   Layers,
+  Library,
   Locate,
   Map as MapIcon,
   MoreHorizontal,
@@ -132,6 +143,7 @@ import {
   RefreshCw,
   Save,
   Shuffle,
+  Sparkles,
   SquareDashed,
   SquareFunction,
   SquarePen,
@@ -158,11 +170,18 @@ import {
   reloadLocalFileLayer,
   setLayerWatchConfig,
 } from "../../lib/local-file-watch";
+import { canRestoreLibraryLayer } from "../../lib/restore-library-layer";
 import {
   getSqlQueryLayerConfig,
   isSqlQueryLayer,
   refreshSqlQueryLayer,
 } from "../../lib/sql-query-layer";
+import {
+  bufferPresetsFor,
+  formatBufferDistance,
+  runQuickAnalysis,
+  type QuickBufferPreset,
+} from "../../lib/quick-analysis";
 import { requestSqlWorkspaceQuery } from "../../lib/sql-workspace-prefill";
 import { canExportRasterLayer, exportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { readRasterInfo, type RasterInfo } from "../../lib/raster-info";
@@ -170,6 +189,7 @@ import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
   geojsonVectorSourceId,
+  kmlExportErrorMessage,
   resolveLayerGeojson,
   sanitizeExportFileName,
   shapefileFieldWarnings,
@@ -184,6 +204,7 @@ import {
   resolvePostgisConnection,
   unregisterPostgisConnection,
 } from "../../lib/postgis-connections";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
@@ -318,6 +339,10 @@ function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
  */
 function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   if (!isTauri() || layer.type !== "geojson") return false;
+  // Both write-back paths (PostGIS tables and local files) run through the
+  // Python sidecar, which the Mac App Store build compiles out, so edits are
+  // export-only there, as on the web build.
+  if (IS_MAS_BUILD) return false;
   if (isPostgisEditableLayer(layer)) return true;
   const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!path) return false;
@@ -530,7 +555,7 @@ export function LayerPanel({
   onCollapsedChange,
   hideOwnRail = false,
 }: LayerPanelProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const isBeginnerProfile = useDesktopSettingsStore(
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
@@ -543,6 +568,7 @@ export function LayerPanel({
   const setLayerGroupOpacity = useAppStore((s) => s.setLayerGroupOpacity);
   const toggleLayerGroupCollapsed = useAppStore((s) => s.toggleLayerGroupCollapsed);
   const moveLayerToGroup = useAppStore((s) => s.moveLayerToGroup);
+  const moveLayerGroupToGroup = useAppStore((s) => s.moveLayerGroupToGroup);
   const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectLayer = useAppStore((s) => s.selectLayer);
@@ -588,6 +614,7 @@ export function LayerPanel({
   const copyLayerStyle = useAppStore((s) => s.copyLayerStyle);
   const pasteLayerStyle = useAppStore((s) => s.pasteLayerStyle);
   const copiedLayerStyle = useAppStore((s) => s.copiedLayerStyle);
+  const saveLayerLibraryEntry = useAppStore((s) => s.saveLayerLibraryEntry);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setRasterAttributeTableOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
@@ -597,6 +624,7 @@ export function LayerPanel({
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  const [metadataCopied, setMetadataCopied] = useState(false);
   // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
   // metadata dialog is open. The store layer does not carry them, so they are
   // read from the file on open (#1420): "loading" while the header is being
@@ -658,6 +686,31 @@ export function LayerPanel({
   // owner applies so every existing call site keeps working.
   const isControlled = controlledCollapsed !== undefined;
   const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
+  // Quick analysis (#1523): run an existing vector tool over a whole layer from
+  // its actions menu, with defaults filled in. No new algorithms — each entry
+  // dispatches the same tool the Processing dialog would, so the run shows up in
+  // the Processing History panel and can be re-run or copied as Python there.
+  const quickScaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
+  const quickBufferPresets = useMemo(() => bufferPresetsFor(quickScaleUnit), [quickScaleUnit]);
+  const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
+
+  const formatQuickDistance = useCallback(
+    (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
+    [i18n.language, t],
+  );
+
+  const runLayerQuickTool = useCallback(
+    (layer: GeoLibreLayer, toolId: string, parameters: Record<string, unknown>, name: string) => {
+      void runQuickAnalysis({
+        toolId,
+        parameters: { layer: layer.id, ...parameters },
+        resultName: name,
+        mapControllerRef,
+      });
+    },
+    [mapControllerRef],
+  );
+
   const setIsCollapsed = useCallback(
     (value: boolean) => {
       if (isControlled) onCollapsedChange?.(value);
@@ -703,6 +756,9 @@ export function LayerPanel({
   // Same stray-blur guard as suppressBlurCommitRef, for the group rename input.
   const suppressGroupBlurCommitRef = useRef(false);
   const refreshingLayerIdsRef = useRef(new Set<string>());
+  // Layer ids with a Save to My Data in flight, so a repeat click during the
+  // vector-control materialize cannot create a duplicate library entry.
+  const savingToLibraryIdsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
   // Active filesystem watchers for "watch local file" layers, keyed by layer id.
@@ -719,6 +775,52 @@ export function LayerPanel({
     () => new Map(layerGroups.map((g) => [g.id, g] as const)),
     [layerGroups],
   );
+  const groupDepth = useCallback(
+    (group: LayerGroup) => {
+      let depth = 0;
+      let parentId = group.parentId;
+      const visited = new Set([group.id]);
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        const parent = groupById.get(parentId);
+        if (!parent) break;
+        depth += 1;
+        parentId = parent.parentId;
+      }
+      return depth;
+    },
+    [groupById],
+  );
+  const hasCollapsedAncestor = useCallback(
+    (group: LayerGroup) => {
+      let parentId = group.parentId;
+      const visited = new Set([group.id]);
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        const parent = groupById.get(parentId);
+        if (!parent) return false;
+        if (parent.collapsed) return true;
+        parentId = parent.parentId;
+      }
+      return false;
+    },
+    [groupById],
+  );
+  const groupMoveTargets = useCallback(
+    (group: LayerGroup) =>
+      layerGroups.filter((candidate) => {
+        if (candidate.id === group.id) return false;
+        let parentId: string | undefined = candidate.parentId;
+        const visited = new Set<string>();
+        while (parentId && !visited.has(parentId)) {
+          if (parentId === group.id) return false;
+          visited.add(parentId);
+          parentId = groupById.get(parentId)?.parentId;
+        }
+        return true;
+      }),
+    [groupById, layerGroups],
+  );
   const firstMemberIdByGroup = useMemo(() => {
     const map = new Map<string, string>();
     for (const layer of visibleLayers) {
@@ -728,11 +830,50 @@ export function LayerPanel({
     }
     return map;
   }, [visibleLayers]);
+  const descendantLayerAnchorByGroup = useMemo(() => {
+    const result = new Map<string, string>();
+    const displayGroupIds = visibleLayers
+      .map((layer) => layer.groupId)
+      .filter((id): id is string => Boolean(id && groupById.has(id)));
+    for (const group of layerGroups) {
+      if (firstMemberIdByGroup.has(group.id)) continue;
+      const anchor = displayGroupIds.find((candidateId) => {
+        let parentId = groupById.get(candidateId)?.parentId;
+        const visited = new Set<string>();
+        while (parentId && !visited.has(parentId)) {
+          if (parentId === group.id) return true;
+          visited.add(parentId);
+          parentId = groupById.get(parentId)?.parentId;
+        }
+        return false;
+      });
+      if (anchor) result.set(group.id, anchor);
+    }
+    return result;
+  }, [firstMemberIdByGroup, groupById, layerGroups, visibleLayers]);
+  const organizerHeadersByAnchor = useMemo(() => {
+    const result = new Map<string, LayerGroup[]>();
+    for (const group of layerGroups) {
+      const anchor = descendantLayerAnchorByGroup.get(group.id);
+      if (!anchor) continue;
+      const headers = result.get(anchor) ?? [];
+      headers.push(group);
+      result.set(anchor, headers);
+    }
+    for (const headers of result.values()) {
+      headers.sort((a, b) => groupDepth(a) - groupDepth(b));
+    }
+    return result;
+  }, [descendantLayerAnchorByGroup, groupDepth, layerGroups]);
   // Empty folders have no member to anchor them, so they render pinned at the
   // top of the panel where they are easy to drop layers into.
   const emptyGroups = useMemo(
-    () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
-    [layerGroups, firstMemberIdByGroup],
+    () =>
+      layerGroups.filter(
+        (group) =>
+          !firstMemberIdByGroup.has(group.id) && !descendantLayerAnchorByGroup.has(group.id),
+      ),
+    [descendantLayerAnchorByGroup, firstMemberIdByGroup, layerGroups],
   );
   // Resize the metadata dialog from its bottom-end grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
@@ -794,6 +935,23 @@ export function LayerPanel({
   // under the new layer's name.
   const metadataRasterInfo =
     rasterInfoState && rasterInfoState.layerId === metadataLayer?.id ? rasterInfoState : null;
+  const metadataJson = metadataLayer
+    ? JSON.stringify(
+        layerMetadataPayload(
+          metadataLayer,
+          metadataRasterInfo?.status === "ready" ? metadataRasterInfo.info : null,
+        ),
+        null,
+        2,
+      )
+    : "";
+  const copyMetadata = useCallback(() => {
+    if (!metadataJson) return;
+    void navigator.clipboard
+      ?.writeText(metadataJson)
+      .then(() => setMetadataCopied(true))
+      .catch(() => setMetadataCopied(false));
+  }, [metadataJson]);
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
     : null;
@@ -809,11 +967,17 @@ export function LayerPanel({
       : 0
     : null;
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
-  const allLayersVisible = basemapVisible && layers.every((layer) => layer.visible);
+  const allLayersVisible =
+    basemapVisible &&
+    layers.every((layer) => layer.visible) &&
+    layerGroups.every((group) => group.visible);
   const toggleAllLayers = () => {
     const nextVisible = !allLayersVisible;
     for (const layer of layers) {
       setLayerVisibility(layer.id, nextVisible);
+    }
+    for (const group of layerGroups) {
+      setLayerGroupVisibility(group.id, nextVisible);
     }
     setBasemapVisible(nextVisible);
   };
@@ -946,7 +1110,10 @@ export function LayerPanel({
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
-        [layer.id]: { type: "success", message: t("layers.styleCopied", { name: layer.name }) },
+        [layer.id]: {
+          type: "success",
+          message: t("layers.styleCopied", { name: layer.name }),
+        },
       }));
       scheduleStatusClear(layer.id);
     },
@@ -964,11 +1131,73 @@ export function LayerPanel({
       clearRefreshStatusTimer(layer.id);
       setRefreshStatuses((current) => ({
         ...current,
-        [layer.id]: { type: "success", message: t("layers.stylePasted", { name: sourceName }) },
+        [layer.id]: {
+          type: "success",
+          message: t("layers.stylePasted", { name: sourceName }),
+        },
       }));
       scheduleStatusClear(layer.id);
     },
     [pasteLayerStyle, clearRefreshStatusTimer, scheduleStatusClear, t],
+  );
+
+  /**
+   * Save a fully configured layer to the app-level Layer Library (issue #1520)
+   * so it can be re-added to any later project from the Browser panel's My Data
+   * section. Reuses the per-layer status row for feedback, like the style
+   * copy/paste actions above.
+   *
+   * An Add Vector Layer layer holds its features in the control, not the store,
+   * so its current data is read from there first — the same materialization the
+   * project Embed/Share flow uses — instead of relying on the store's
+   * attribute-table copy, which a tiles-mode layer does not have.
+   */
+  const handleSaveToLibrary = useCallback(
+    async (layer: GeoLibreLayer) => {
+      // Guard re-entrancy across the materialize await below: a second invocation
+      // for the same layer before the first resolves would save two entries under
+      // two freshly generated ids (mirrors handleRefreshLayer's
+      // refreshingLayerIdsRef).
+      if (savingToLibraryIdsRef.current.has(layer.id)) return;
+      savingToLibraryIdsRef.current.add(layer.id);
+      try {
+        const features = isEmbeddableLocalVectorLayer(layer)
+          ? (await materializeEmbeddableVectorLayers([layer])).get(layer.id)
+          : undefined;
+        // The materialize await can outlive a concurrent style/opacity/join edit,
+        // so capture from the current layer rather than the closure's snapshot
+        // (mirrors handleImportStyle / handleSaveEditsToSource).
+        const latest = useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
+        const result = captureLayerLibraryEntry(latest, {
+          id: createLayerLibraryEntryId(),
+          addedAt: new Date().toISOString(),
+          ...(features ? { features } : {}),
+        });
+        clearRefreshStatusTimer(layer.id);
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: result.ok
+            ? {
+                type: "success",
+                message: t("layers.savedToLibrary", { name: layer.name }),
+              }
+            : {
+                type: "error",
+                message:
+                  result.reason === "features-too-large"
+                    ? t("layers.saveToLibraryTooLarge")
+                    : result.reason === "config-too-large"
+                      ? t("layers.saveToLibraryConfigTooLarge")
+                      : t("layers.saveToLibraryNoSource"),
+              },
+        }));
+        scheduleStatusClear(layer.id);
+        if (result.ok) saveLayerLibraryEntry(result.entry);
+      } finally {
+        savingToLibraryIdsRef.current.delete(layer.id);
+      }
+    },
+    [saveLayerLibraryEntry, clearRefreshStatusTimer, scheduleStatusClear, t],
   );
 
   const handleRefreshLayer = useCallback(
@@ -1162,6 +1391,7 @@ export function LayerPanel({
           geojson,
           format,
           sanitizeExportFileName(layer.name),
+          layer.name,
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
@@ -1183,7 +1413,9 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : t("layers.exportLayerError");
+        const message =
+          kmlExportErrorMessage(error, t) ??
+          (error instanceof Error ? error.message : t("layers.exportLayerError"));
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -1209,7 +1441,10 @@ export function LayerPanel({
       fileMeta: {
         defaultName: string;
         filters: { name: string; extensions: string[] }[];
-        browserTypes: { description: string; accept: Record<string, string[]> }[];
+        browserTypes: {
+          description: string;
+          accept: Record<string, string[]>;
+        }[];
         mimeType: string;
       },
     ) => {
@@ -1333,7 +1568,12 @@ export function LayerPanel({
         {
           defaultName: `${sanitizeExportFileName(layer.name)}.qml`,
           filters: [{ name: "QGIS QML", extensions: ["qml"] }],
-          browserTypes: [{ description: "QGIS QML", accept: { "application/xml": [".qml"] } }],
+          browserTypes: [
+            {
+              description: "QGIS QML",
+              accept: { "application/xml": [".qml"] },
+            },
+          ],
           mimeType: "application/xml",
         },
       ),
@@ -1672,7 +1912,9 @@ export function LayerPanel({
       }
       extent = { min, max };
     }
-    const binding = buildTimeBindingFromRecords(bindRecords, bindProperty, { extent });
+    const binding = buildTimeBindingFromRecords(bindRecords, bindProperty, {
+      extent,
+    });
     if (!binding) {
       // Keep the dialog open and explain why, rather than closing silently.
       setBindError(t("layers.bindNoTimestamps"));
@@ -1703,9 +1945,7 @@ export function LayerPanel({
       },
       timeFilter: undefined,
     });
-    if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
-      togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
-    }
+    activateTimeSliderForBinding(mapControllerRef);
     closeBindTimeSliderDialog();
   }, [
     bindTimeSliderLayer,
@@ -1717,8 +1957,6 @@ export function LayerPanel({
     bindWindowMode,
     mapControllerRef,
     updateLayer,
-    isPluginActive,
-    togglePlugin,
     closeBindTimeSliderDialog,
     t,
   ]);
@@ -2107,24 +2345,29 @@ export function LayerPanel({
   };
 
   const renderGroupHeader = (group: LayerGroup) => {
+    if (hasCollapsedAncestor(group)) return null;
     const isDropTarget = dropTargetGroupId === group.id;
-    // Empty folders have no members in the flat `layers` array, so
-    // reorderLayerGroup cannot move them; disable the reorder actions for them.
-    const canReorderGroup = firstMemberIdByGroup.has(group.id);
+    const canReorderGroup =
+      firstMemberIdByGroup.has(group.id) || descendantLayerAnchorByGroup.has(group.id);
+    const moveTargets = groupMoveTargets(group);
     return (
       <div
         data-group-header=""
         data-testid="layer-group-header"
         data-group-name={group.name}
-        className={`rounded-md border p-2 transition-colors ${
+        className={`w-full min-w-0 max-w-full rounded-md border p-2 transition-colors ${
           isDropTarget
             ? "border-primary bg-primary/10"
             : "border-border bg-muted/30 hover:border-muted-foreground/40"
         }`}
+        style={{
+          marginInlineStart: `${groupDepth(group)}rem`,
+          width: `calc(100% - ${groupDepth(group)}rem)`,
+        }}
         onDragOver={(e) => handleGroupHeaderDragOver(e, group.id)}
         onDrop={(e) => handleGroupHeaderDrop(e, group.id)}
       >
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
           <button
             type="button"
             className="rounded p-0.5 text-muted-foreground hover:bg-muted"
@@ -2187,7 +2430,7 @@ export function LayerPanel({
             />
           ) : (
             <span
-              className="flex-1 truncate text-sm font-semibold"
+              className="min-w-0 flex-1 truncate text-sm font-semibold"
               title={t("layers.doubleClickToRename")}
               onDoubleClick={(e: ReactMouseEvent) => {
                 e.stopPropagation();
@@ -2220,6 +2463,31 @@ export function LayerPanel({
                 <Pencil className="me-2 h-3.5 w-3.5" />
                 {t("layers.renameGroup")}
               </DropdownMenuItem>
+              {moveTargets.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Folder className="h-3.5 w-3.5" />
+                    {t("layers.moveToGroup")}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {moveTargets.map((target) => (
+                      <DropdownMenuItem
+                        key={target.id}
+                        disabled={group.parentId === target.id}
+                        onSelect={() => moveLayerGroupToGroup(group.id, target.id)}
+                      >
+                        {target.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {group.parentId && (
+                <DropdownMenuItem onSelect={() => moveLayerGroupToGroup(group.id, null)}>
+                  <FolderMinus className="me-2 h-3.5 w-3.5" />
+                  {t("layers.removeFromGroup")}
+                </DropdownMenuItem>
+              )}
               {/* Action items below omit preventDefault so Radix dismisses the
                   menu on select; only the rename item above keeps it, so the
                   menu's close does not race its input autofocus. */}
@@ -2411,8 +2679,13 @@ export function LayerPanel({
           </Button>
         </div>
       </div>
-      <ScrollArea className="flex-1">
-        <div className="space-y-1 p-2">
+      <ScrollArea
+        className="flex-1 [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
+        // Radix measures scroll content with an injected display:table
+        // wrapper. Opt this viewport into block sizing so long layer names
+        // cannot establish a wider min-content table.
+      >
+        <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
             <p className="px-2 py-4 text-xs text-muted-foreground">
               {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
@@ -2425,6 +2698,7 @@ export function LayerPanel({
             const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
             const isFirstOfGroup = group ? firstMemberIdByGroup.get(group.id) === layer.id : false;
             const groupCollapsed = group?.collapsed ?? false;
+            const groupAncestorCollapsed = group ? hasCollapsedAncestor(group) : false;
             // When the parent group is hidden, a layer whose own visibility
             // toggle is still on is not rendered — a surprising state. Grey its
             // name out as a cue that the group-level setting is what's hiding
@@ -2500,6 +2774,19 @@ export function LayerPanel({
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
             // layers. Shares the Style Manager's gate so the two can't drift.
             const canImportStyle = isStyleLibraryTargetLayer(layer.type);
+            // Saving the whole layer (source + style + labels + filters + joins)
+            // to the Layer Library needs something re-addable to point at AND a
+            // way to render it again (issue #1520), so a layer with no source and
+            // no features is excluded — and so is a control-painted layer whose
+            // kind has no restore route, which would otherwise re-add blank.
+            // `hasMaterializableFeatures` is the same predicate the save handler
+            // uses to read features out of the vector control, so the menu never
+            // hides a layer the capture path could in fact embed (a tiles-mode
+            // Add Vector Layer layer has no `layer.geojson` to look at).
+            const canSaveToLibrary = canSaveLayerToLibrary(layer, {
+              canRestoreControlPainted: canRestoreLibraryLayer,
+              hasMaterializableFeatures: isEmbeddableLocalVectorLayer,
+            });
             // Copy/paste symbology (issue #1339). Vector-styled layers and
             // deck.gl rasters each copy their own style family; a paste only
             // lands when the clipboard entry shares the target's family.
@@ -2544,17 +2831,36 @@ export function LayerPanel({
             const isRefreshing = refreshStatus?.type === "refreshing";
             return (
               <Fragment key={layer.id}>
+                {isFirstOfGroup &&
+                  group &&
+                  organizerHeadersByAnchor
+                    .get(group.id)
+                    ?.map((organizer) => (
+                      <Fragment key={organizer.id}>{renderGroupHeader(organizer)}</Fragment>
+                    ))}
                 {isFirstOfGroup && group && renderGroupHeader(group)}
-                {!groupCollapsed && (
+                {!groupCollapsed && !groupAncestorCollapsed && (
                   <div
                     data-layer-card=""
                     data-testid="layer-row"
                     data-layer-name={layer.name}
-                    className={`relative rounded-md border p-2 transition-colors ${
+                    className={`relative min-w-0 max-w-full rounded-md border p-2 transition-colors ${
                       selectedLayerId === layer.id
                         ? "border-primary bg-primary/5"
                         : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
-                    } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${group ? "ms-4" : ""}`}
+                    } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
+                      // Nested rows get a calculated inline width below so
+                      // their indentation cannot overflow the panel.
+                      group ? "" : "w-full"
+                    }`}
+                    style={
+                      group
+                        ? {
+                            marginInlineStart: `${groupDepth(group) + 1}rem`,
+                            width: `calc(100% - ${groupDepth(group) + 1}rem)`,
+                          }
+                        : undefined
+                    }
                     onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                     onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                     onDragEnd={resetDragState}
@@ -2573,7 +2879,7 @@ export function LayerPanel({
                       draggedDisplayIndex < displayIndex && (
                         <div className="pointer-events-none absolute -bottom-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
                       )}
-                    <div className="flex items-center gap-1">
+                    <div className="flex min-w-0 items-center gap-1">
                       <span
                         role="button"
                         tabIndex={0}
@@ -2611,7 +2917,9 @@ export function LayerPanel({
                           type="text"
                           className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
                           value={editingName}
-                          aria-label={t("layers.renameNamed", { name: layer.name })}
+                          aria-label={t("layers.renameNamed", {
+                            name: layer.name,
+                          })}
                           onChange={(e) => setEditingName(e.target.value)}
                           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                           onFocus={(e) => e.currentTarget.select()}
@@ -2629,7 +2937,7 @@ export function LayerPanel({
                         />
                       ) : (
                         <span
-                          className={`flex-1 truncate text-sm font-medium ${
+                          className={`min-w-0 flex-1 truncate text-sm font-medium ${
                             groupHidden ? "text-muted-foreground" : ""
                           }`}
                           title={
@@ -2645,7 +2953,7 @@ export function LayerPanel({
                           {layer.name}
                         </span>
                       )}
-                      <span className="text-[10px] uppercase text-muted-foreground">
+                      <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
                         {layerTypeLabel(layer, t)}
                       </span>
                     </div>
@@ -2900,6 +3208,91 @@ export function LayerPanel({
                             </DropdownMenuItem>
                           )}
                           {canSelectFeatures && (
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <Sparkles className="h-3.5 w-3.5" />
+                                {t("quickAnalysis.menu")}
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                {quickBufferPresets.map((preset) => (
+                                  <DropdownMenuItem
+                                    key={`${preset.distance}-${preset.units}`}
+                                    onSelect={() =>
+                                      runLayerQuickTool(
+                                        layer,
+                                        "buffer",
+                                        {
+                                          distance: preset.distance,
+                                          units: preset.units,
+                                        },
+                                        t("quickAnalysis.bufferOfLayerName", {
+                                          name: layer.name,
+                                          distance: formatQuickDistance(preset),
+                                        }),
+                                      )
+                                    }
+                                  >
+                                    {t("quickAnalysis.bufferFeatures", {
+                                      distance: formatQuickDistance(preset),
+                                    })}
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    runLayerQuickTool(
+                                      layer,
+                                      "centroids",
+                                      {},
+                                      t("quickAnalysis.centroidsLayerName", {
+                                        name: layer.name,
+                                      }),
+                                    )
+                                  }
+                                >
+                                  {t("quickAnalysis.centroids")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    runLayerQuickTool(
+                                      layer,
+                                      "convex-hull",
+                                      {},
+                                      t("quickAnalysis.convexHullLayerName", {
+                                        name: layer.name,
+                                      }),
+                                    )
+                                  }
+                                >
+                                  {t("quickAnalysis.convexHull")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    runLayerQuickTool(
+                                      layer,
+                                      "bounding-box",
+                                      {},
+                                      t("quickAnalysis.boundingBoxLayerName", {
+                                        name: layer.name,
+                                      }),
+                                    )
+                                  }
+                                >
+                                  {t("quickAnalysis.boundingBox")}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    selectLayer(layer.id);
+                                    setVectorToolOpen("buffer");
+                                  }}
+                                >
+                                  {t("quickAnalysis.openInProcessing")}
+                                </DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                          )}
+                          {canSelectFeatures && (
                             <>
                               {/* Not selectLayer() + open: that would clear the
                               live selection the dialogs' add/remove/intersect
@@ -3000,6 +3393,20 @@ export function LayerPanel({
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onSelect={() => {
+                                    void handleExportLayer(layer, "kml");
+                                  }}
+                                >
+                                  KML
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportLayer(layer, "kmz");
+                                  }}
+                                >
+                                  KMZ
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
                                     void handleExportLayer(layer, "shapefile");
                                   }}
                                 >
@@ -3081,6 +3488,23 @@ export function LayerPanel({
                                 )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
+                          )}
+                          {/* Save the whole configured layer to the Layer
+                          Library (issue #1520): its source spec plus style,
+                          labels, filters, and joins, re-addable from the Browser
+                          panel's My Data section in any later project. */}
+                          {canSaveToLibrary && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleSaveToLibrary(layer);
+                                }}
+                              >
+                                <Library className="me-2 h-3.5 w-3.5" />
+                                {t("layers.saveToLibrary")}
+                              </DropdownMenuItem>
+                            </>
                           )}
                           {/* Copy/paste symbology between layers (issue #1339),
                           for vector-styled layers and deck.gl rasters. Paste is
@@ -3554,7 +3978,10 @@ export function LayerPanel({
       <Dialog
         open={!!metadataLayer}
         onOpenChange={(open: boolean) => {
-          if (!open) setMetadataLayer(null);
+          if (!open) {
+            setMetadataLayer(null);
+            setMetadataCopied(false);
+          }
         }}
       >
         <DialogContent
@@ -3602,6 +4029,12 @@ export function LayerPanel({
             </DialogTitle>
             <DialogDescription>{t("layers.metadataDialogDescription")}</DialogDescription>
           </DialogHeader>
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={copyMetadata}>
+              <Copy className="h-4 w-4" />
+              {metadataCopied ? t("attributeStats.copiedToClipboard") : t("attributeStats.copy")}
+            </Button>
+          </div>
           {metadataRasterInfo && metadataRasterInfo.status !== "ready" && (
             <p className="text-xs text-muted-foreground">
               {metadataRasterInfo.status === "loading"
@@ -3609,20 +4042,14 @@ export function LayerPanel({
                 : t("layers.metadataRasterError")}
             </p>
           )}
-          {/* Capped at a readable height until the user resizes the dialog,
-              after which the payload fills whatever height they chose. */}
-          <ScrollArea className={cn("min-h-0", metadataDialogSize ? "flex-1" : "max-h-80")}>
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              {metadataLayer &&
-                JSON.stringify(
-                  layerMetadataPayload(
-                    metadataLayer,
-                    metadataRasterInfo?.status === "ready" ? metadataRasterInfo.info : null,
-                  ),
-                  null,
-                  2,
-                )}
-            </pre>
+          {/* A definite initial height lets Radix measure overflow on first
+              layout; max-height alone left its viewport unconstrained until
+              the resize handle caused a second measurement. */}
+          <ScrollArea
+            type="auto"
+            className={cn("min-h-0", metadataDialogSize ? "flex-1" : "h-80 shrink-0")}
+          >
+            <pre className="whitespace-pre-wrap break-all text-xs">{metadataJson}</pre>
           </ScrollArea>
         </DialogContent>
       </Dialog>

@@ -1,0 +1,154 @@
+name: Build Mac App Store package
+
+# Manually builds the sandboxed Mac App Store variant and uploads the signed
+# .pkg as a workflow artifact for submission via Transporter or
+# `xcrun altool --upload-app`. Like msix-store.yml, this never touches a GitHub
+# release; it exists so a Store-ready package can be produced on demand.
+#
+# The MAS variant differs from the Developer ID builds in release.yml:
+#   - `mas` cargo feature: the Python sidecar, Jupyter, martin, and external
+#     plugin installation are compiled out (App Sandbox forbids spawning
+#     downloaded executables; guideline 2.5.2 forbids downloading executable
+#     code). Client-side engines (DuckDB-WASM, Whitebox WASM, Turf, Pyodide)
+#     keep working because WebKit executes them.
+#   - App Sandbox entitlements + embedded provisioning profile
+#     (tauri.mas.conf.json), signed with "Apple Distribution" instead of
+#     "Developer ID Application"; no notarization (not applicable to MAS).
+#   - GEOLIBRE_STORE_BUILD=1 strips the in-app update flow (set by
+#     scripts/tauri-build.mjs --mas), matching Apple guideline 2.4.5(vii).
+#
+# Required secrets (see docs/mac-app-store.md for how to create them):
+#   APPLE_MAS_CERTIFICATE            base64 .p12 holding BOTH the
+#                                    "Apple Distribution" and the
+#                                    "3rd Party Mac Developer Installer"
+#                                    certificates with their private keys
+#   APPLE_MAS_CERTIFICATE_PASSWORD   password of that .p12
+#   APPLE_MAS_SIGNING_IDENTITY       e.g. "Apple Distribution: Name (TEAMID)"
+#   APPLE_MAS_INSTALLER_IDENTITY     e.g. "3rd Party Mac Developer Installer: Name (TEAMID)"
+#   APPLE_MAS_PROVISIONING_PROFILE   base64 Mac App Store .provisionprofile
+#                                    for org.geolibre.desktop
+#   APPLE_TEAM_ID                    already configured for release.yml
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build MAS pkg
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # npm ci runs third-party lifecycle scripts; keep the checkout token
+          # out of the local git config they could read.
+          persist-credentials: false
+
+      - name: Verify signing secrets are configured
+        env:
+          APPLE_MAS_CERTIFICATE: ${{ secrets.APPLE_MAS_CERTIFICATE }}
+          APPLE_MAS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_MAS_CERTIFICATE_PASSWORD }}
+          APPLE_MAS_PROVISIONING_PROFILE: ${{ secrets.APPLE_MAS_PROVISIONING_PROFILE }}
+          APPLE_MAS_SIGNING_IDENTITY: ${{ secrets.APPLE_MAS_SIGNING_IDENTITY }}
+          APPLE_MAS_INSTALLER_IDENTITY: ${{ secrets.APPLE_MAS_INSTALLER_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in APPLE_MAS_CERTIFICATE APPLE_MAS_CERTIFICATE_PASSWORD \
+            APPLE_MAS_PROVISIONING_PROFILE APPLE_MAS_SIGNING_IDENTITY \
+            APPLE_MAS_INSTALLER_IDENTITY APPLE_TEAM_ID; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing secrets for the Mac App Store build: ${missing[*]}. See docs/mac-app-store.md."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        # Pinned to a commit SHA (not the moving `stable` branch) because this
+        # job later holds the App Store signing certificates in its keychain.
+        # Update deliberately when bumping the toolchain action.
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install universal-build Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Import signing certificates into a temporary keychain
+        env:
+          APPLE_MAS_CERTIFICATE: ${{ secrets.APPLE_MAS_CERTIFICATE }}
+          APPLE_MAS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_MAS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/mas-signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$APPLE_MAS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/mas.p12"
+          security import "$RUNNER_TEMP/mas.p12" -k "$keychain" \
+            -P "$APPLE_MAS_CERTIFICATE_PASSWORD" -f pkcs12 -A \
+            -T /usr/bin/codesign -T /usr/bin/productbuild
+          rm "$RUNNER_TEMP/mas.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          echo "MAS_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Install the provisioning profile and render entitlements
+        env:
+          APPLE_MAS_PROVISIONING_PROFILE: ${{ secrets.APPLE_MAS_PROVISIONING_PROFILE }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          printf '%s' "$APPLE_MAS_PROVISIONING_PROFILE" | base64 --decode \
+            > apps/geolibre-desktop/src-tauri/mas/embedded.provisionprofile
+          scripts/render-mas-entitlements.sh
+
+      - name: Build the sandboxed universal app
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_MAS_SIGNING_IDENTITY }}
+        run: npm run tauri:build:mas -- --target universal-apple-darwin
+
+      - name: Build the signed installer package
+        id: build_pkg
+        env:
+          APPLE_MAS_INSTALLER_IDENTITY: ${{ secrets.APPLE_MAS_INSTALLER_IDENTITY }}
+        run: |
+          app="apps/geolibre-desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/GeoLibre Desktop.app"
+          [[ -d "$app" ]] || { echo "::error::No app bundle at $app"; exit 1; }
+          # Confirm the sandbox entitlement made it into the signature before
+          # packaging; an unsandboxed binary is an automatic App Review reject.
+          codesign -d --entitlements - --xml "$app" | grep -q "com.apple.security.app-sandbox" \
+            || { echo "::error::App bundle is missing the app-sandbox entitlement"; exit 1; }
+          version="$(node -p "require('./apps/geolibre-desktop/src-tauri/tauri.conf.json').version")"
+          pkg="GeoLibre.Desktop_${version}_universal_mas.pkg"
+          xcrun productbuild --sign "$APPLE_MAS_INSTALLER_IDENTITY" \
+            --component "$app" /Applications "$pkg"
+          echo "pkg_path=$pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MAS package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: geolibre-mas-pkg
+          path: ${{ steps.build_pkg.outputs.pkg_path }}
+          if-no-files-found: error
+
+      - name: Remove the temporary keychain
+        if: always()
+        run: |
+          if [[ -n "${MAS_KEYCHAIN:-}" && -f "$MAS_KEYCHAIN" ]]; then
+            security delete-keychain "$MAS_KEYCHAIN"
+          fi

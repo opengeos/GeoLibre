@@ -156,6 +156,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     getBearing: () => 0,
     getPitch: () => 0,
     getProjection: () => ({ type: "mercator" }),
+    // A laid-out viewport, so the camera helpers that scale with the canvas
+    // (the globe-safe fit ceiling) have a real size to work from.
+    getCanvas: () => ({ clientWidth: 576, clientHeight: 648 }),
     flyTo: record("flyTo"),
     fitBounds: record("fitBounds"),
     cameraForBounds: (...args: unknown[]) => {
@@ -261,6 +264,7 @@ function controlVectorLayer(id: string, patch: Partial<GeoLibreLayer> = {}): Geo
 }
 
 const circleId = (id: string) => `layer-${id}-circle`;
+const markerId = (id: string) => `layer-${id}-marker`;
 const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
@@ -571,6 +575,34 @@ describe("MapController basemap controls", () => {
     assert.ok(!ids.includes(circleId("a")), "user layers are not basemap layers");
   });
 
+  it("keeps KML marker symbols independent from basemap visibility and opacity", () => {
+    for (const type of ["geojson", "vector-tiles"] as const) {
+      const { map, fake } = makeFakeMap();
+      const controller = controllerWith(map);
+      controller.syncLayers([controlVectorLayer("kml", { type })]);
+      fake.layers.set(markerId("kml"), {
+        id: markerId("kml"),
+        type: "symbol",
+        paint: { "icon-opacity": 1 },
+      });
+      fake.order.push(markerId("kml"));
+
+      assert.ok(!controller.getBasemapStyleLayerIds().includes(markerId("kml")));
+
+      controller.setBasemapVisible(false);
+      controller.setBasemapOpacity(0.25);
+
+      assert.ok(
+        !fake.calls.some(
+          (call) =>
+            call.args[0] === markerId("kml") &&
+            (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+        ),
+        `background controls do not update the ${type} KML marker symbol`,
+      );
+    }
+  });
+
   it("scales basemap opacity from the layer's original paint value", () => {
     const { map, fake } = makeFakeMap();
     fake.layers.set("basemap-bg", {
@@ -639,6 +671,96 @@ describe("MapController camera and query helpers", () => {
     controller.fitBounds([0, 0, Number.NaN, 1]);
 
     assert.equal(fake.calls.length, 0);
+  });
+
+  it("caps a world-spanning fit at the flat-map zoom so the data stays in frame", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    // A mostly-US point layer with a few records in Europe and Asia: the
+    // globe camera would answer this 259°-wide box with zoom ~2, hiding every
+    // feature behind the horizon.
+    controller.fitBounds([-124.16, 16.53, 135.51, 51.58]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit, "fits the bounds");
+    const options = fit.args[1] as { maxZoom?: number };
+    assert.ok(typeof options.maxZoom === "number");
+    assert.ok(
+      Math.abs(options.maxZoom - 0.4255) < 0.001,
+      `expected the flat-map fit (~0.4255), got ${options.maxZoom}`,
+    );
+  });
+
+  it("leaves an extent the globe can frame uncapped", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    // A city-sized box is nowhere near the hemisphere MapLibre's globe fit
+    // mishandles, so no ceiling is imposed and the camera is left as it was.
+    controller.fitBounds([-83.93, 35.94, -83.9, 35.97]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit);
+    assert.ok(!("maxZoom" in (fit.args[1] as object)));
+  });
+
+  it("omits the fit ceiling when the canvas has not been laid out", () => {
+    const { map, fake } = makeFakeMap();
+    (map as { getCanvas: () => unknown }).getCanvas = () => ({
+      clientWidth: 0,
+      clientHeight: 0,
+    });
+    const controller = controllerWith(map);
+
+    controller.fitBounds([-124.16, 16.53, 135.51, 51.58]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit);
+    assert.ok(!("maxZoom" in (fit.args[1] as object)));
+  });
+
+  it("applies the fit ceiling before comparing against a layer's min render zoom", () => {
+    const { map, fake } = makeFakeMap();
+    // `cameraForBounds` shares the globe over-zoom, so the fake reports a
+    // camera above the tile source's minzoom for a world-scale extent. Capped
+    // at the flat-map fit the extent is well below it, and the layer must fly
+    // to its minimum render zoom rather than fit to an empty viewport.
+    (map as { cameraForBounds: unknown }).cameraForBounds = () => ({
+      center: { lng: 0, lat: 0 },
+      zoom: 2.36,
+    });
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("global-tiles", {
+        type: "vector-tile",
+        source: { type: "vector-tile", minzoom: 2 },
+        geojson: undefined,
+        metadata: { bounds: [-180, -85, 180, 85] },
+      }),
+    );
+
+    const flyTo = fake.calls.find((c) => c.method === "flyTo");
+    assert.ok(flyTo, "flies to the layer's minimum render zoom");
+    assert.equal((flyTo.args[0] as { zoom: number }).zoom, 2);
+    assert.ok(!fake.calls.some((c) => c.method === "fitBounds"));
+  });
+
+  it("routes a layer fit through the globe-safe path", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("wide", {
+        geojson: undefined,
+        metadata: { bounds: [-124.16, 16.53, 135.51, 51.58] },
+      }),
+    );
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit, "zoom-to-layer fits the bounds");
+    assert.ok(typeof (fit.args[1] as { maxZoom?: number }).maxZoom === "number");
   });
 
   it("frames a scenegraph model layer at a tilt so it is not edge-on", () => {

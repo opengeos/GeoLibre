@@ -84,6 +84,7 @@ export function PhotosSource() {
           withoutThumbnail: result.withoutThumbnail,
           total: result.total,
         },
+        { geojson: result.featureCollection },
       ),
       geojson: result.featureCollection,
     };
@@ -111,6 +112,7 @@ export function PhotosSource() {
           total: result.total,
           manualPlacement: true,
         },
+        { geojson: result.featureCollection },
       ),
       geojson: result.featureCollection,
     };

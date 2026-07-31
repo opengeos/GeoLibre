@@ -93,10 +93,17 @@ export function applyGroupEffects(layers: GeoLibreLayer[], groups: LayerGroup[])
   const groupById = new Map(groups.map((g) => [g.id, g]));
   return layers.map((layer) => {
     if (!layer.groupId) return layer;
-    const group = groupById.get(layer.groupId);
+    let group = groupById.get(layer.groupId);
     if (!group) return layer;
-    const visible = layer.visible && group.visible;
-    const opacity = layer.opacity * group.opacity;
+    let visible = layer.visible;
+    let opacity = layer.opacity;
+    const visited = new Set<string>();
+    while (group && !visited.has(group.id)) {
+      visited.add(group.id);
+      visible = visible && group.visible;
+      opacity *= group.opacity;
+      group = group.parentId ? groupById.get(group.parentId) : undefined;
+    }
     if (visible === layer.visible && opacity === layer.opacity) return layer;
     return { ...layer, visible, opacity };
   });

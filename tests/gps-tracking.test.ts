@@ -8,6 +8,7 @@ import {
   DEFAULT_GPS_SETTINGS,
   fixFromPosition,
   fixMeetsAccuracy,
+  formatAccuracy,
   formatDistance,
   formatDuration,
   formatSpeedKmh,
@@ -29,6 +30,7 @@ function fix(overrides: Partial<GpsFix> = {}): GpsFix {
     lng: -123.09,
     lat: 44.05,
     accuracy: 5,
+    satellites: null,
     altitude: null,
     heading: null,
     speed: null,
@@ -176,7 +178,7 @@ describe("gps-tracking track shaping", () => {
     assert.equal(trackPointCount(segments), 4);
   });
 
-  it("trackFeature (single segment) is a LineString with altitude, flat times, and summary props", () => {
+  it("trackFeature preserves flat per-fix metadata on a LineString", () => {
     const feature = trackFeature([fixes]);
     const line = feature.geometry as LineString;
     assert.equal(line.type, "LineString");
@@ -194,6 +196,8 @@ describe("gps-tracking track shaping", () => {
       "2023-11-14T22:13:50.000Z",
       "2023-11-14T22:14:20.000Z",
     ]);
+    assert.deepEqual(feature.properties?.accuracies_m, [5, 5, 5]);
+    assert.deepEqual(feature.properties?.satellites_used, [null, null, null]);
   });
 
   it("trackFeature (multiple segments) is a MultiLineString with nested times", () => {
@@ -213,6 +217,14 @@ describe("gps-tracking track shaping", () => {
     assert.equal(times.length, 2);
     assert.equal(times[0].length, 3);
     assert.equal(times[1].length, 2);
+    assert.deepEqual(feature.properties?.accuracies_m, [
+      [5, 5, 5],
+      [5, 5],
+    ]);
+    assert.deepEqual(feature.properties?.satellites_used, [
+      [null, null, null],
+      [null, null],
+    ]);
   });
 
   it("trackFeatureCollection wraps the single track feature", () => {
@@ -230,10 +242,13 @@ describe("gps-tracking track shaping", () => {
     }
   });
 
-  it("capturePointFeature records time, accuracy, and optional motion props", () => {
-    const f = capturePointFeature(fix({ accuracy: 7.25, speed: 1.5, heading: 90, altitude: 12 }));
+  it("capturePointFeature records fix metadata without losing precision", () => {
+    const f = capturePointFeature(
+      fix({ accuracy: 0.012, satellites: 14, speed: 1.5, heading: 90, altitude: 12 }),
+    );
     assert.deepEqual(f.geometry.coordinates, [-123.09, 44.05, 12]);
-    assert.equal(f.properties?.accuracy_m, 7.3);
+    assert.equal(f.properties?.accuracy_m, 0.012);
+    assert.equal(f.properties?.satellites_used, 14);
     assert.equal(f.properties?.speed_mps, 1.5);
     assert.equal(f.properties?.heading_deg, 90);
     assert.equal(f.properties?.ele, 12);
@@ -241,15 +256,25 @@ describe("gps-tracking track shaping", () => {
     const bare = capturePointFeature(fix());
     assert.equal("speed_mps" in (bare.properties ?? {}), false);
     assert.equal("heading_deg" in (bare.properties ?? {}), false);
+    assert.equal("satellites_used" in (bare.properties ?? {}), false);
+    assert.equal(
+      capturePointFeature(fix({ accuracy: 4.900000000000006 })).properties?.accuracy_m,
+      4.9,
+    );
   });
 });
 
 describe("gps-tracking GPX export", () => {
-  it("serializes trackpoints with elevation and time", () => {
+  it("serializes trackpoints with elevation, time, accuracy, and satellites", () => {
     const gpx = buildTrackGpx(
       [
         [
-          fix({ altitude: 120, timestamp: 1_700_000_000_000 }),
+          fix({
+            altitude: 120,
+            accuracy: 0.012,
+            satellites: 14,
+            timestamp: 1_700_000_000_000,
+          }),
           fix({ lat: 44.051, timestamp: 1_700_000_030_000 }),
         ],
       ],
@@ -261,9 +286,21 @@ describe("gps-tracking GPX export", () => {
     assert.ok(gpx.includes(`<trkpt lat="44.05" lon="-123.09">`));
     assert.ok(gpx.includes(`<ele>120</ele>`));
     assert.ok(gpx.includes(`<time>2023-11-14T22:13:20.000Z</time>`));
+    assert.ok(gpx.includes(`<sat>14</sat>`));
+    assert.ok(gpx.includes(`<geolibre:accuracy_m>0.012</geolibre:accuracy_m>`));
+    assert.ok(gpx.includes(`xmlns:geolibre="https://geolibre.org/xmlschemas/GpxExtensions/v1"`));
     // The second fix has no altitude, so exactly one <ele> is written.
     assert.equal(gpx.split("<ele>").length, 2);
     assert.equal(gpx.split("<trkseg>").length, 2);
+  });
+
+  it("rounds floating-point noise in GPX accuracy to millimeters", () => {
+    const gpx = buildTrackGpx(
+      [[fix({ accuracy: 4.900000000000006 }), fix({ lat: 44.051 })]],
+      "Clean accuracy",
+    );
+    assert.ok(gpx.includes(`<geolibre:accuracy_m>4.9</geolibre:accuracy_m>`));
+    assert.equal(gpx.includes(`4.900000000000006`), false);
   });
 
   it("writes one trkseg per segment, skipping stray 1-point segments", () => {
@@ -286,7 +323,7 @@ describe("gps-tracking GPX export", () => {
 });
 
 describe("gps-tracking misc", () => {
-  it("fixFromPosition flattens coords and nulls NaN heading/speed", () => {
+  it("fixFromPosition flattens coords and reads provider satellite metadata", () => {
     const f = fixFromPosition({
       coords: {
         longitude: 1,
@@ -296,6 +333,7 @@ describe("gps-tracking misc", () => {
         altitudeAccuracy: null,
         heading: Number.NaN,
         speed: null,
+        satellitesUsed: 14,
       },
       timestamp: 99,
     } as GeolocationPosition);
@@ -303,11 +341,52 @@ describe("gps-tracking misc", () => {
       lng: 1,
       lat: 2,
       accuracy: 3,
+      satellites: 14,
       altitude: null,
       heading: null,
       speed: null,
       timestamp: 99,
     });
+  });
+
+  it("formatAccuracy preserves RTK precision and scales ordinary fixes", () => {
+    assert.equal(formatAccuracy(0.012), "1.2 cm");
+    assert.equal(formatAccuracy(0.45), "45 cm");
+    assert.equal(formatAccuracy(0.996), "1.0 m");
+    assert.equal(formatAccuracy(3.25), "3.3 m");
+    assert.equal(formatAccuracy(12.6), "13 m");
+    assert.equal(formatAccuracy(Number.NaN), "—");
+    assert.equal(formatAccuracy(-1), "—");
+    assert.equal(formatAccuracy(Number.NaN, "N/A"), "N/A");
+  });
+
+  it("normalizes alternate and invalid satellite metadata", () => {
+    const position = (satelliteFields: Record<string, unknown>) =>
+      ({
+        coords: {
+          longitude: 1,
+          latitude: 2,
+          accuracy: 3,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+          ...satelliteFields,
+        },
+        timestamp: 99,
+      }) as GeolocationPosition;
+
+    assert.equal(fixFromPosition(position({ satellites: 9.8 })).satellites, 9);
+    assert.equal(fixFromPosition(position({ satelliteCount: 7 })).satellites, 7);
+    assert.equal(fixFromPosition(position({ satellites: -1 })).satellites, null);
+    assert.equal(
+      fixFromPosition(position({ satellites: "invalid", satelliteCount: 7 })).satellites,
+      7,
+    );
+    assert.equal(
+      fixFromPosition(position({ satellites: Number.POSITIVE_INFINITY })).satellites,
+      null,
+    );
   });
 
   it("isGpsCaptureLayer requires geojson type and the metadata flag", () => {

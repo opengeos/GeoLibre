@@ -82,6 +82,24 @@ function radiusCalls(calls: MapCall[], layerId: string): MapCall[] {
 }
 
 describe("vector-control point symbology overlay (#1311)", () => {
+  it("applies effective visibility to a control-rendered vector layer", () => {
+    const { map, calls } = makeVectorControlMapStub("vech");
+    const layer = vectorControlLayer("vech", { visible: false });
+
+    syncLayer(map as never, layer);
+
+    assert.ok(
+      calls.some(
+        (c) =>
+          c.method === "setLayoutProperty" &&
+          c.args[0] === "vech-circle" &&
+          c.args[1] === "visibility" &&
+          c.args[2] === "none",
+      ),
+      "expected effective group visibility to hide the control's native layer",
+    );
+  });
+
   it("renders a GeoLibre marker symbol layer and hides the control's circle", () => {
     const { map, calls } = makeVectorControlMapStub("vecm");
     const layer = vectorControlLayer("vecm", {

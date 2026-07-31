@@ -63,7 +63,7 @@ describe("lineWidthValue (shared by map + geo-editor plugin)", () => {
   it("returns the per-feature simplestyle override when enabled (pixels)", () => {
     assert.deepEqual(lineWidthValue(style({ strokeWidth: 3, simpleStyleEnabled: true })), [
       "to-number",
-      ["get", "stroke-width"],
+      ["coalesce", ["get", "stroke-width"], 3],
       3,
     ]);
   });

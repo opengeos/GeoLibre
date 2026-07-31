@@ -75,6 +75,7 @@ nav:
       - Architecture: architecture.md
       - Android: android.md
       - iOS: ios.md
+      - Mac App Store: mac-app-store.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
       - UI Profiles: ui-profiles.md

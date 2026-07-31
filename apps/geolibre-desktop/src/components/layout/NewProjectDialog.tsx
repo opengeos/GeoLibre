@@ -1,6 +1,7 @@
 import {
   BLANK_BASEMAP,
   createDefaultMapView,
+  detachProjectCopy,
   OPENFREEMAP_BASEMAPS,
   PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
@@ -96,6 +97,9 @@ export function NewProjectDialog({
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
+  const loadProject = useAppStore((s) => s.loadProject);
+  const templateLibrary = useAppStore((s) => s.templateLibrary);
+  const deleteTemplateEntry = useAppStore((s) => s.deleteTemplateEntry);
   const [selectedBasemapId, setSelectedBasemapId] = useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
   const [customUrl, setCustomUrl] = useState("");
@@ -222,6 +226,21 @@ export function NewProjectDialog({
       setIsSaving(false);
     }
   };
+  const handleSelectTemplate = (
+    templateProject: Parameters<typeof detachProjectCopy>[0],
+    templateName: string,
+  ) => {
+    const copy = detachProjectCopy(templateProject, { nameSuffix: "" });
+    const finalName =
+      projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""
+        ? projectName.trim()
+        : templateName;
+    loadProject({ ...copy, name: finalName }, null);
+    useAppStore.setState({ isDirty: true });
+    onProjectCreated?.();
+    onOpenChange(false);
+    resetForm();
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -249,8 +268,12 @@ export function NewProjectDialog({
               >
                 {t("newProject.doNotSave")}
               </Button>
-              <Button type="button" disabled={isSaving} onClick={handleSaveThenContinue}>
-                {isSaving ? t("newProject.saving") : t("common.save")}
+              <Button
+                type="button"
+                disabled={isSaving}
+                onClick={() => void handleSaveThenContinue()}
+              >
+                {t("common.save")}
               </Button>
             </div>
           </>
@@ -258,13 +281,10 @@ export function NewProjectDialog({
           <>
             <DialogHeader>
               <DialogTitle>{t("newProject.title")}</DialogTitle>
-              <DialogDescription>
-                {protomapsPresets.length > 0
-                  ? t("newProject.basemapDescription")
-                  : t("newProject.basemapDescriptionNoProtomaps")}
-              </DialogDescription>
+              <DialogDescription>{t("newProject.basemapDescription")}</DialogDescription>
             </DialogHeader>
-            <form className="space-y-5" onSubmit={handleCreate}>
+
+            <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="new-project-name">{t("newProject.projectName")}</Label>
                 <Input
@@ -274,6 +294,44 @@ export function NewProjectDialog({
                   onChange={(event) => setProjectName(event.target.value)}
                 />
               </div>
+
+              {templateLibrary.length > 0 ? (
+                <div className="space-y-2">
+                  <Label>{t("newProject.savedTemplates")}</Label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {templateLibrary.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center justify-between gap-2 rounded-md border p-2.5 text-start transition-colors hover:bg-accent"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTemplate(template.project, template.name)}
+                          className="flex-1 text-start"
+                        >
+                          <p className="text-sm font-medium">{template.name}</p>
+                          {template.description ? (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {template.description}
+                            </p>
+                          ) : null}
+                        </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteTemplateEntry(template.id)}
+                          title={t("newProject.deleteTemplate")}
+                          aria-label={t("newProject.deleteTemplate")}
+                        >
+                          &times;
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="space-y-4">
                 <Label>{t("newProject.basemapLabel")}</Label>
