@@ -2230,6 +2230,7 @@
       "outputFile": "Output file",
       "noOutput": "No output yet.",
       "errorConnect": "Could not connect to sidecar.",
+      "needsDesktopSidecar": "Raster tools need the GeoLibre desktop app with a running sidecar.",
       "errorPoll": "Could not poll job.",
       "errorStartSidecar": "Could not start GeoLibre sidecar.",
       "errorStartTool": "Could not start raster tool."

@@ -181,9 +181,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // the client engine works there.
       setRuntimeAvailable(false);
       setRuntimeMessage(
-        IS_MAS_BUILD
-          ? t("masBuild.unavailable")
-          : "Raster tools need the GeoLibre desktop app with a running sidecar.",
+        IS_MAS_BUILD ? t("masBuild.unavailable") : t("toolbar.rasterTool.needsDesktopSidecar"),
       );
       return;
     }

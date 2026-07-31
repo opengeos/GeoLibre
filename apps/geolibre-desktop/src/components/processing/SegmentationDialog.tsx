@@ -210,6 +210,12 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
   // proxied sidecar is reachable, the rare web case where segmentation works.
   const webUnavailable = !isTauri() && !available;
 
+  // The Mac App Store build can never reach `available` (the sidecar is
+  // compiled out), so its form is permanently disabled too. Kept separate from
+  // `webUnavailable`, which also drives the desktop-download CTA that would be
+  // nonsense on a build that already IS the desktop app.
+  const formUnavailable = webUnavailable || (IS_MAS_BUILD && !available);
+
   // Browser users cannot run segmentation here, so point them at the desktop
   // download instead of the unusable "Start server" action (issue #777). This
   // is rendered both in the resolved "unavailable" banner and while the status
@@ -306,7 +312,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
               <Input
                 id="seg-image"
                 readOnly
-                disabled={webUnavailable}
+                disabled={formUnavailable}
                 value={imageName}
                 placeholder={t("segmentation.imagePlaceholder")}
               />
@@ -316,7 +322,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
                 size="icon"
                 title={t("segmentation.chooseImage")}
                 onClick={() => void pickImage()}
-                disabled={webUnavailable}
+                disabled={formUnavailable}
               >
                 <FolderOpen className="h-4 w-4" />
               </Button>
@@ -331,7 +337,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
             <Select
               id="seg-mode"
               value={mode}
-              disabled={webUnavailable}
+              disabled={formUnavailable}
               onChange={(e) => setMode(e.target.value as "text" | "automatic")}
             >
               <option value="text">{t("segmentation.modeText")}</option>
@@ -349,7 +355,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
                 <Input
                   id="seg-prompt"
                   value={prompt}
-                  disabled={webUnavailable}
+                  disabled={formUnavailable}
                   placeholder={t("segmentation.promptPlaceholder")}
                   onChange={(e) => setPrompt(e.target.value)}
                 />
@@ -364,7 +370,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
                   min={0}
                   max={1}
                   step={0.05}
-                  disabled={webUnavailable}
+                  disabled={formUnavailable}
                   value={String(confidence)}
                   onChange={(e) => {
                     if (e.target.value === "") {

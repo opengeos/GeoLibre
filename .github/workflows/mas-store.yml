@@ -42,18 +42,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # npm ci runs third-party lifecycle scripts; keep the checkout token
+          # out of the local git config they could read.
+          persist-credentials: false
 
       - name: Verify signing secrets are configured
         env:
           APPLE_MAS_CERTIFICATE: ${{ secrets.APPLE_MAS_CERTIFICATE }}
+          APPLE_MAS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_MAS_CERTIFICATE_PASSWORD }}
           APPLE_MAS_PROVISIONING_PROFILE: ${{ secrets.APPLE_MAS_PROVISIONING_PROFILE }}
           APPLE_MAS_SIGNING_IDENTITY: ${{ secrets.APPLE_MAS_SIGNING_IDENTITY }}
           APPLE_MAS_INSTALLER_IDENTITY: ${{ secrets.APPLE_MAS_INSTALLER_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           missing=()
-          for name in APPLE_MAS_CERTIFICATE APPLE_MAS_PROVISIONING_PROFILE \
-            APPLE_MAS_SIGNING_IDENTITY APPLE_MAS_INSTALLER_IDENTITY APPLE_TEAM_ID; do
+          for name in APPLE_MAS_CERTIFICATE APPLE_MAS_CERTIFICATE_PASSWORD \
+            APPLE_MAS_PROVISIONING_PROFILE APPLE_MAS_SIGNING_IDENTITY \
+            APPLE_MAS_INSTALLER_IDENTITY APPLE_TEAM_ID; do
             [[ -n "${!name}" ]] || missing+=("$name")
           done
           if (( ${#missing[@]} )); then
@@ -69,7 +75,10 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        # Pinned to a commit SHA (not the moving `stable` branch) because this
+        # job later holds the App Store signing certificates in its keychain.
+        # Update deliberately when bumping the toolchain action.
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Install universal-build Rust targets
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin

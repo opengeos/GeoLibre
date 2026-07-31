@@ -10,12 +10,20 @@ if [[ -z "${APPLE_TEAM_ID:-}" ]]; then
   exit 1
 fi
 
+# Team IDs are 10 alphanumerics. Validating keeps the sed substitution below
+# trivially safe (no metacharacters) and catches a mispasted secret early.
+if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+  echo "APPLE_TEAM_ID must be a 10-character Apple Developer team ID, got \"$APPLE_TEAM_ID\"." >&2
+  exit 1
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mas_dir="$repo_root/apps/geolibre-desktop/src-tauri/mas"
 template="$mas_dir/Entitlements.mas.plist.template"
 rendered="$mas_dir/Entitlements.mas.plist"
 
-# Only ${APPLE_TEAM_ID} is substituted; everything else passes through verbatim.
-APPLE_TEAM_ID="$APPLE_TEAM_ID" envsubst '${APPLE_TEAM_ID}' < "$template" > "$rendered"
+# sed instead of envsubst: gettext is not preinstalled on macOS (including the
+# GitHub Actions runners), and only this one placeholder needs substituting.
+sed "s/\${APPLE_TEAM_ID}/$APPLE_TEAM_ID/g" "$template" > "$rendered"
 plutil -lint "$rendered" >/dev/null
 echo "Rendered $rendered for team $APPLE_TEAM_ID"

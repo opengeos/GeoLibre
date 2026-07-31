@@ -29,8 +29,32 @@ export function masHidesMenuItem(id: string, mas: boolean = IS_MAS_BUILD): boole
 }
 
 // Extensions of the shapefile parts that ride along with a `.shp`, mirroring
-// SHAPEFILE_SIDECAR_EXTENSIONS in tauri-io.ts and the Rust command.
-const SHAPEFILE_COMPANION_EXTENSIONS: ReadonlySet<string> = new Set(["dbf", "shx", "prj", "cpg"]);
+// the full SHAPEFILE_SIDECAR_EXTENSIONS list of the Rust read_shapefile_siblings
+// command (src-tauri/src/lib.rs), not the 4-extension subset in tauri-io.ts:
+// the selection is the only companion source under the sandbox, so it must not
+// forward less than the sibling read would. Exported so the MAS file dialog can
+// make these extensions selectable in the first place.
+export const SHAPEFILE_COMPANION_EXTENSIONS: readonly string[] = [
+  "shx",
+  "dbf",
+  "prj",
+  "cpg",
+  "sbn",
+  "sbx",
+  "qix",
+  "qpj",
+  "cst",
+  "aih",
+  "ain",
+  "atx",
+  "ixs",
+  "mxs",
+  "fbn",
+  "fbx",
+];
+const SHAPEFILE_COMPANION_EXTENSION_SET: ReadonlySet<string> = new Set(
+  SHAPEFILE_COMPANION_EXTENSIONS,
+);
 
 function splitPath(path: string): { dir: string; name: string } {
   const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
@@ -38,7 +62,8 @@ function splitPath(path: string): { dir: string; name: string } {
 }
 
 /**
- * The shapefile companion files (`.dbf`, `.shx`, `.prj`, `.cpg`) for a picked
+ * The shapefile companion files (`.dbf`, `.shx`, `.prj`, `.cpg`, spatial
+ * indexes, ...) for a picked
  * `.shp`, taken from the same file-dialog selection.
  *
  * Under the App Sandbox the Mac App Store build cannot read the `.shp`'s
@@ -66,7 +91,7 @@ export function shapefileCompanionPathsFromSelection(
     if (dot <= 0) return false;
     const extension = part.name.slice(dot + 1).toLowerCase();
     return (
-      SHAPEFILE_COMPANION_EXTENSIONS.has(extension) &&
+      SHAPEFILE_COMPANION_EXTENSION_SET.has(extension) &&
       part.name.slice(0, dot).toLowerCase() === base
     );
   });

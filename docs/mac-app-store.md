@@ -57,6 +57,12 @@ onnxruntime-web detection/segment-everything, geocoding, and collaboration.
 - **Environment variables**: the "read API keys from the shell environment"
   convenience returns nothing, because a sandboxed app does not inherit a
   login shell environment. Enter keys in Settings instead.
+- **Reopening projects that reference local files**: the sandbox grant for a
+  picked file ends with the process unless the app stores a security-scoped
+  bookmark, which GeoLibre does not do yet. After a relaunch, a project layer
+  backed by a local path outside the container fails to restore its data;
+  re-add the file to reload it. Adopting security-scoped bookmarks (e.g. via
+  `tauri-plugin-persisted-scope`'s macOS bookmark support) is the planned fix.
 
 ## Building locally
 

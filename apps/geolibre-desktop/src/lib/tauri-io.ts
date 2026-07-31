@@ -33,7 +33,7 @@ import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./
 import { projectedGeoJsonCrs } from "./crs-utils";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
-import { shapefileCompanionPathsFromSelection } from "./mas-build";
+import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
 import {
   parseKmlGroundOverlays,
   parseKmlModels,
@@ -221,11 +221,18 @@ export async function listDirectory(path: string): Promise<LocalDirectoryEntry[]
 
 // Built at call time so the filter-group label shown in the native file dialog
 // is translated (a module-level constant would freeze the English string).
+// The MAS build adds the shapefile companion extensions: the App Sandbox
+// denies the automatic sibling read, so companions must be selectable in the
+// dialog for `readShapefileCompanionFiles` to forward them. Deliberately NOT
+// added to VECTOR_FILE_DIALOG_EXTENSIONS, which doubles as the restore
+// whitelist SYNCed with the Rust guard.
 function vectorFileDialogFilters(): FileDialogFilter[] {
   return [
     {
       name: i18next.t("toolbar.item.vectorDataFilter"),
-      extensions: VECTOR_FILE_DIALOG_EXTENSIONS,
+      extensions: IS_MAS_BUILD
+        ? [...VECTOR_FILE_DIALOG_EXTENSIONS, ...SHAPEFILE_COMPANION_EXTENSIONS]
+        : VECTOR_FILE_DIALOG_EXTENSIONS,
     },
   ];
 }
