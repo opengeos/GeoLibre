@@ -3587,14 +3587,22 @@ fn nvidia_is_primary_gpu(drm_root: &Path) -> bool {
             .is_ok_and(|vendor| vendor.trim().eq_ignore_ascii_case("0x10de"))
             && fs::read_to_string(device.join("boot_vga"))
                 .is_ok_and(|boot_vga| boot_vga.trim() == "1")
+            && fs::read_link(device.join("driver")).is_ok_and(|driver| {
+                driver
+                    .file_name()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("nvidia"))
+            })
     })
 }
 
 #[cfg(target_os = "linux")]
-fn linux_uses_nvidia_renderer(drm_root: &Path) -> bool {
-    std::env::var_os("__NV_PRIME_RENDER_OFFLOAD").is_some_and(|value| value != "0")
-        || std::env::var_os("__GLX_VENDOR_LIBRARY_NAME")
-            .is_some_and(|value| value.eq_ignore_ascii_case("nvidia"))
+fn linux_uses_nvidia_renderer(
+    drm_root: &Path,
+    prime_offload: Option<&std::ffi::OsStr>,
+    glx_vendor: Option<&std::ffi::OsStr>,
+) -> bool {
+    prime_offload.is_some_and(|value| value != "0")
+        || glx_vendor.is_some_and(|value| value.eq_ignore_ascii_case("nvidia"))
         || nvidia_is_primary_gpu(drm_root)
 }
 
@@ -3617,7 +3625,15 @@ fn configure_linux_webkit() {
                 webkit2gtk_sys::webkit_get_minor_version(),
             )
         };
-        if webkit_version < (2, 48) || linux_uses_nvidia_renderer(Path::new("/sys/class/drm")) {
+        let prime_offload = std::env::var_os("__NV_PRIME_RENDER_OFFLOAD");
+        let glx_vendor = std::env::var_os("__GLX_VENDOR_LIBRARY_NAME");
+        if webkit_version < (2, 48)
+            || linux_uses_nvidia_renderer(
+                Path::new("/sys/class/drm"),
+                prime_offload.as_deref(),
+                glx_vendor.as_deref(),
+            )
+        {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
@@ -3633,13 +3649,13 @@ fn configure_linux_webkit() {}
 
 #[cfg(test)]
 mod tests {
-    #[cfg(target_os = "linux")]
-    use super::nvidia_is_primary_gpu;
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
         is_safe_absolute_path,
     };
+    #[cfg(target_os = "linux")]
+    use super::{linux_uses_nvidia_renderer, nvidia_is_primary_gpu};
     // Everything these imports feed is compiled out of the `mas` build, so the
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
@@ -3722,6 +3738,7 @@ mod tests {
         std::fs::create_dir_all(&device).unwrap();
         std::fs::write(device.join("vendor"), "0x10de\n").unwrap();
         std::fs::write(device.join("boot_vga"), "1\n").unwrap();
+        std::os::unix::fs::symlink("/sys/bus/pci/drivers/nvidia", device.join("driver")).unwrap();
 
         assert!(nvidia_is_primary_gpu(root.path()));
     }
@@ -3734,8 +3751,44 @@ mod tests {
         std::fs::create_dir_all(&device).unwrap();
         std::fs::write(device.join("vendor"), "0x10de\n").unwrap();
         std::fs::write(device.join("boot_vga"), "0\n").unwrap();
+        std::os::unix::fs::symlink("/sys/bus/pci/drivers/nvidia", device.join("driver")).unwrap();
 
         assert!(!nvidia_is_primary_gpu(root.path()));
+    }
+
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn ignores_primary_nvidia_gpu_using_nouveau() {
+        let root = ScratchDir::new("nouveau-primary");
+        let device = root.path().join("card0/device");
+        std::fs::create_dir_all(&device).unwrap();
+        std::fs::write(device.join("vendor"), "0x10de\n").unwrap();
+        std::fs::write(device.join("boot_vga"), "1\n").unwrap();
+        std::os::unix::fs::symlink("/sys/bus/pci/drivers/nouveau", device.join("driver")).unwrap();
+
+        assert!(!nvidia_is_primary_gpu(root.path()));
+    }
+
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn detects_explicit_nvidia_renderer_environment() {
+        let root = ScratchDir::new("nvidia-renderer-env");
+
+        assert!(linux_uses_nvidia_renderer(
+            root.path(),
+            Some(OsStr::new("1")),
+            None,
+        ));
+        assert!(linux_uses_nvidia_renderer(
+            root.path(),
+            None,
+            Some(OsStr::new("NVIDIA")),
+        ));
+        assert!(!linux_uses_nvidia_renderer(
+            root.path(),
+            Some(OsStr::new("0")),
+            Some(OsStr::new("mesa")),
+        ));
     }
 
     // Regression for issue #1223: installed builds place the bundled sidecar at
