@@ -190,6 +190,25 @@ def test_ensure_raster_outputs_does_not_announce_existing_cog(monkeypatch, tmp_p
     assert messages == []
 
 
+def test_ensure_raster_outputs_surfaces_conversion_failure(monkeypatch, tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"striped")
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
+    monkeypatch.setattr(
+        whitebox.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "", "conversion failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="Could not optimize.*conversion failed"):
+        whitebox._ensure_raster_outputs_are_cogs(
+            {"output": str(raster)},
+            {"params": [{"name": "output", "kind": "raster_out"}]},
+            lambda message: None,
+            [],
+        )
+
+
 def test_ensure_raster_outputs_converts_real_striped_geotiff(monkeypatch, tmp_path):
     numpy = pytest.importorskip("numpy")
     rasterio = pytest.importorskip("rasterio")

@@ -6,7 +6,7 @@
 // algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
-import { convertGeoTiffToCog, isTiledGeoTiff } from "./cog-convert";
+import { convertGeoTiffToCog } from "./cog-convert";
 import { normalizeVectorOutputFormat } from "./sidecar-client";
 import type {
   RunWhiteboxToolRequest,
@@ -548,10 +548,12 @@ const SUBSET_OUTPUT_TOOL_IDS = new Set([
 /**
  * Ensure a browser-run Whitebox raster can be streamed by GeoLibre's raster
  * renderer. Whitebox tools may emit striped GeoTIFFs just like the Python
- * runtime, so normalize only those outputs and preserve existing tiled COGs.
+ * runtime. The browser converter does not expose full COG validation, and a
+ * tiled GeoTIFF is not necessarily cloud optimized, so re-encode every declared
+ * raster output instead of treating tile layout alone as proof of conformance.
  */
 export async function ensureWhiteboxRasterCog(bytes: Uint8Array): Promise<Uint8Array> {
-  return (await isTiledGeoTiff(bytes)) ? bytes : convertGeoTiffToCog(bytes);
+  return convertGeoTiffToCog(bytes);
 }
 
 /**

@@ -975,7 +975,6 @@ def _ensure_raster_outputs_are_cogs(
         )
         os.close(descriptor)
         temporary_path = Path(temporary)
-        temporary_path.unlink()
         temp_paths.append(temporary_path)
         completed = subprocess.run(
             [python, "-c", _ENSURE_COG_SCRIPT, path, temporary],
