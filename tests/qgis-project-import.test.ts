@@ -78,6 +78,23 @@ function rasterProjectXml(source = "../data/dem.tif"): string {
   </qgis>`;
 }
 
+function osmBasemapProjectXml(): string {
+  return `<qgis version="3.44.0">
+    <layer-tree-group>
+      <layer-tree-layer id="osm" checked="Qt::Unchecked"/>
+    </layer-tree-group>
+    <projectlayers>
+      <maplayer type="raster">
+        <id>osm</id>
+        <layername>OpenStreetMap</layername>
+        <datasource>crs=EPSG:3857&amp;type=xyz&amp;url=https://tile.openstreetmap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png&amp;zmax=19</datasource>
+        <provider>wms</provider>
+        <layerOpacity>0.7</layerOpacity>
+      </maplayer>
+    </projectlayers>
+  </qgis>`;
+}
+
 describe("QGIS project import", () => {
   it("imports vector layers, styles, visibility, nested groups, extent, and relative paths", () => {
     const result = importQgisProject(projectXml(), "/work/projects/example.qgs");
@@ -128,6 +145,17 @@ describe("QGIS project import", () => {
         opacity: 0.6,
       },
     ]);
+    assert.deepEqual(result.warnings, []);
+  });
+
+  it("maps QGIS OpenStreetMap XYZ layers to the built-in basemap", () => {
+    const result = importQgisProject(osmBasemapProjectXml(), "/work/example.qgs");
+
+    assert.equal(result.project.basemapStyleUrl, "https://tiles.openfreemap.org/styles/liberty");
+    assert.equal(result.project.basemapVisible, false);
+    assert.equal(result.project.basemapOpacity, 0.7);
+    assert.deepEqual(result.project.layers, []);
+    assert.deepEqual(result.rasters, []);
     assert.deepEqual(result.warnings, []);
   });
 

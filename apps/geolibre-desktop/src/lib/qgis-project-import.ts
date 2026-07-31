@@ -1,4 +1,5 @@
 import {
+  DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   createEmptyProject,
   type GeoLibreLayer,
@@ -134,7 +135,16 @@ export function importQgisProject(
     if (!element) continue;
     const name = text(element.querySelector(":scope > layername")) || id || "QGIS layer";
     const provider = text(element.querySelector(":scope > provider")).toLowerCase();
-    const source = qgisSourcePath(text(element.querySelector(":scope > datasource")), sourcePath);
+    const dataSource = text(element.querySelector(":scope > datasource"));
+
+    if (isOpenStreetMapBasemap(element, provider, dataSource)) {
+      project.basemapStyleUrl = DEFAULT_BASEMAP;
+      project.basemapVisible = visibilityByLayerId.get(id) ?? true;
+      project.basemapOpacity = parseOpacity(element);
+      continue;
+    }
+
+    const source = qgisSourcePath(dataSource, sourcePath);
 
     if (isSupportedRasterLayer(element, provider, source)) {
       rasters.push({
@@ -368,6 +378,22 @@ function isSupportedRasterLayer(element: Element, provider: string, source: stri
     !isUncPath(source) &&
     SUPPORTED_RASTER_EXTENSIONS.has(sourceExtension(source))
   );
+}
+
+function isOpenStreetMapBasemap(element: Element, provider: string, dataSource: string): boolean {
+  if (element.getAttribute("type")?.toLowerCase() !== "raster" || provider !== "wms") {
+    return false;
+  }
+  const params = new URLSearchParams(dataSource);
+  if (params.get("type")?.toLowerCase() !== "xyz") return false;
+  const tileUrl = params.get("url");
+  if (!tileUrl) return false;
+  try {
+    const host = new URL(tileUrl).hostname.toLowerCase();
+    return host === "tile.openstreetmap.org" || /^[abc]\.tile\.openstreetmap\.org$/.test(host);
+  } catch {
+    return false;
+  }
 }
 
 function unsupportedReason(
