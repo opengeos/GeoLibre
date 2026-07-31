@@ -830,11 +830,50 @@ export function LayerPanel({
     }
     return map;
   }, [visibleLayers]);
+  const descendantLayerAnchorByGroup = useMemo(() => {
+    const result = new Map<string, string>();
+    const displayGroupIds = visibleLayers
+      .map((layer) => layer.groupId)
+      .filter((id): id is string => Boolean(id && groupById.has(id)));
+    for (const group of layerGroups) {
+      if (firstMemberIdByGroup.has(group.id)) continue;
+      const anchor = displayGroupIds.find((candidateId) => {
+        let parentId = groupById.get(candidateId)?.parentId;
+        const visited = new Set<string>();
+        while (parentId && !visited.has(parentId)) {
+          if (parentId === group.id) return true;
+          visited.add(parentId);
+          parentId = groupById.get(parentId)?.parentId;
+        }
+        return false;
+      });
+      if (anchor) result.set(group.id, anchor);
+    }
+    return result;
+  }, [firstMemberIdByGroup, groupById, layerGroups, visibleLayers]);
+  const organizerHeadersByAnchor = useMemo(() => {
+    const result = new Map<string, LayerGroup[]>();
+    for (const group of layerGroups) {
+      const anchor = descendantLayerAnchorByGroup.get(group.id);
+      if (!anchor) continue;
+      const headers = result.get(anchor) ?? [];
+      headers.push(group);
+      result.set(anchor, headers);
+    }
+    for (const headers of result.values()) {
+      headers.sort((a, b) => groupDepth(a) - groupDepth(b));
+    }
+    return result;
+  }, [descendantLayerAnchorByGroup, groupDepth, layerGroups]);
   // Empty folders have no member to anchor them, so they render pinned at the
   // top of the panel where they are easy to drop layers into.
   const emptyGroups = useMemo(
-    () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
-    [layerGroups, firstMemberIdByGroup],
+    () =>
+      layerGroups.filter(
+        (group) =>
+          !firstMemberIdByGroup.has(group.id) && !descendantLayerAnchorByGroup.has(group.id),
+      ),
+    [descendantLayerAnchorByGroup, firstMemberIdByGroup, layerGroups],
   );
   // Resize the metadata dialog from its bottom-end grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
@@ -2308,9 +2347,9 @@ export function LayerPanel({
   const renderGroupHeader = (group: LayerGroup) => {
     if (hasCollapsedAncestor(group)) return null;
     const isDropTarget = dropTargetGroupId === group.id;
-    // Empty folders have no members in the flat `layers` array, so
-    // reorderLayerGroup cannot move them; disable the reorder actions for them.
-    const canReorderGroup = firstMemberIdByGroup.has(group.id);
+    const canReorderGroup =
+      firstMemberIdByGroup.has(group.id) || descendantLayerAnchorByGroup.has(group.id);
+    const moveTargets = groupMoveTargets(group);
     return (
       <div
         data-group-header=""
@@ -2421,14 +2460,14 @@ export function LayerPanel({
                 <Pencil className="me-2 h-3.5 w-3.5" />
                 {t("layers.renameGroup")}
               </DropdownMenuItem>
-              {groupMoveTargets(group).length > 0 && (
+              {moveTargets.length > 0 && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
                     <Folder className="h-3.5 w-3.5" />
                     {t("layers.moveToGroup")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
-                    {groupMoveTargets(group).map((target) => (
+                    {moveTargets.map((target) => (
                       <DropdownMenuItem
                         key={target.id}
                         disabled={group.parentId === target.id}
@@ -2784,6 +2823,13 @@ export function LayerPanel({
             const isRefreshing = refreshStatus?.type === "refreshing";
             return (
               <Fragment key={layer.id}>
+                {isFirstOfGroup &&
+                  group &&
+                  organizerHeadersByAnchor
+                    .get(group.id)
+                    ?.map((organizer) => (
+                      <Fragment key={organizer.id}>{renderGroupHeader(organizer)}</Fragment>
+                    ))}
                 {isFirstOfGroup && group && renderGroupHeader(group)}
                 {!groupCollapsed && !groupAncestorCollapsed && (
                   <div

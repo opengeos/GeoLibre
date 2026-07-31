@@ -253,6 +253,20 @@ describe("layer group store actions", () => {
     );
   });
 
+  it("reorders an organizer group using its descendant layer blocks", () => {
+    const childLayer = useAppStore.getState().addGeoJsonLayer("Child", emptyFC);
+    const neighbor = useAppStore.getState().addGeoJsonLayer("Neighbor", emptyFC);
+    const parent = useAppStore.getState().addLayerGroup("Parent");
+    const child = useAppStore.getState().addLayerGroup("Child group", [childLayer]);
+    useAppStore.getState().moveLayerGroupToGroup(child, parent);
+
+    useAppStore.getState().reorderLayerGroup(parent, "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((candidate) => candidate.id),
+      [neighbor, childLayer],
+    );
+  });
+
   it("ungroups children by default but can delete them", () => {
     const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
     const gid = useAppStore.getState().addLayerGroup("G", [a]);

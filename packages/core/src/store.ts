@@ -1817,9 +1817,21 @@ export const useAppStore = create<AppState>()(
 
       reorderLayerGroup: (id, direction) =>
         set((s) => {
+          const groupIds = new Set([id]);
+          let foundDescendant = true;
+          while (foundDescendant) {
+            foundDescendant = false;
+            for (const group of s.layerGroups) {
+              if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
+                groupIds.add(group.id);
+                foundDescendant = true;
+              }
+            }
+          }
           // Build the top-level units in store (render) order: each ungrouped
           // layer is its own unit, and a group's contiguous members form one
-          // unit. Reordering swaps the whole group block past its neighbor.
+          // unit. A nested organizer group may have no direct layers, so its
+          // block includes every unit belonging to a descendant group.
           const units: { key: string; layers: GeoLibreLayer[] }[] = [];
           for (const layer of s.layers) {
             const key = layer.groupId ?? `layer:${layer.id}`;
@@ -1827,13 +1839,21 @@ export const useAppStore = create<AppState>()(
             if (last && last.key === key) last.layers.push(layer);
             else units.push({ key, layers: [layer] });
           }
-          const unitIndex = units.findIndex((u) => u.key === id);
-          if (unitIndex < 0) return s; // empty group: nothing to move
-          const target = direction === "up" ? unitIndex + 1 : unitIndex - 1;
-          if (target < 0 || target >= units.length) return s;
-          const [unit] = units.splice(unitIndex, 1);
-          units.splice(target, 0, unit);
-          return { layers: units.flatMap((u) => u.layers), isDirty: true };
+          const matching = units
+            .map((unit, index) => (groupIds.has(unit.key) ? index : -1))
+            .filter((index) => index >= 0);
+          if (matching.length === 0) return s;
+          const first = matching[0];
+          const last = matching[matching.length - 1];
+          const neighbor = direction === "up" ? last + 1 : first - 1;
+          if (neighbor < 0 || neighbor >= units.length) return s;
+          const block = units.filter((unit) => groupIds.has(unit.key));
+          const remaining = units.filter((unit) => !groupIds.has(unit.key));
+          const neighborKey = units[neighbor].key;
+          const neighborIndex = remaining.findIndex((unit) => unit.key === neighborKey);
+          const insertAt = direction === "up" ? neighborIndex + 1 : neighborIndex;
+          remaining.splice(insertAt, 0, ...block);
+          return { layers: remaining.flatMap((u) => u.layers), isDirty: true };
         }),
 
       newProject: (options = {}) => {

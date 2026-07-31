@@ -403,14 +403,12 @@ function parseLayerGroups(document: Document): {
     const name = groupDisplayName(element, root);
     const id = `qgis-group-${index}-${slug(name)}`;
     ids.set(element, id);
+    const parentGroupElement = element.parentElement?.closest("layer-tree-group");
     return {
       id,
       name,
-      ...(element.parentElement?.closest("layer-tree-group") &&
-      element.parentElement.closest("layer-tree-group") !== root
-        ? {
-            parentId: ids.get(element.parentElement.closest("layer-tree-group")!),
-          }
+      ...(parentGroupElement && parentGroupElement !== root
+        ? { parentId: ids.get(parentGroupElement) }
         : {}),
       collapsed: element.getAttribute("expanded") === "0",
       visible: element.getAttribute("checked") !== "Qt::Unchecked",
