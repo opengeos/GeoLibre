@@ -2700,6 +2700,8 @@ export function LayerPanel({
                         ? "border-primary bg-primary/5"
                         : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
                     } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
+                      // width:auto lets the browser subtract the group margin;
+                      // combining ms-4 with w-full would overflow the panel.
                       group ? "ms-4" : "w-full"
                     }`}
                     onDragOver={(e) => handleLayerDragOver(e, layer.id)}

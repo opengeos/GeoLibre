@@ -69,26 +69,38 @@ test("long layer names truncate without widening the layer panel", async ({ page
     "This is an exceptionally long vector layer name that should truncate cleanly",
   );
   const name = renamedRow.getByTitle("Double-click to rename");
+  const typeBadge = renamedRow.getByText("vector", { exact: true });
+  const opacitySlider = renamedRow.getByRole("slider");
 
   await expect(renamedRow).toBeVisible();
   await expect(name).toHaveCSS("text-overflow", "ellipsis");
+  await expect(typeBadge).toBeVisible();
+  await expect(opacitySlider).toBeVisible();
   await expect
     .poll(async () => {
-      const [rowBox, panelBox, viewportWidth] = await Promise.all([
+      const [rowBox, panelBox, typeBadgeBox, opacitySliderBox, viewportWidth] = await Promise.all([
         renamedRow.boundingBox(),
         panel.boundingBox(),
+        typeBadge.boundingBox(),
+        opacitySlider.boundingBox(),
         page.evaluate(() => window.innerWidth),
       ]);
       return Boolean(
         rowBox &&
         panelBox &&
+        typeBadgeBox &&
+        opacitySliderBox &&
         panelBoxBefore &&
         panelBox.x === panelBoxBefore.x &&
         panelBox.width === panelBoxBefore.width &&
         panelBox.x >= 0 &&
         panelBox.x + panelBox.width <= viewportWidth &&
         rowBox.x >= panelBox.x &&
-        rowBox.x + rowBox.width <= panelBox.x + panelBox.width,
+        rowBox.x + rowBox.width <= panelBox.x + panelBox.width &&
+        typeBadgeBox.x >= rowBox.x &&
+        typeBadgeBox.x + typeBadgeBox.width <= rowBox.x + rowBox.width &&
+        opacitySliderBox.x >= rowBox.x &&
+        opacitySliderBox.x + opacitySliderBox.width <= rowBox.x + rowBox.width,
       );
     })
     .toBe(true);
