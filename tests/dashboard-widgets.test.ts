@@ -205,6 +205,65 @@ describe("normalizeWidgets", () => {
     assert.equal("multiple" in normalized, false);
   });
 
+  // normalizeWidgets also runs on the save path, so a list widget whose
+  // columns/sort/limit were dropped here went blank the moment its project was
+  // saved — the renderer falls back to "no data" without listFields.
+  it("keeps a list widget's columns, sort, and row limit", () => {
+    const result = normalizeWidgets([
+      {
+        id: "l1",
+        layerId: "l",
+        type: "list",
+        listFields: ["NAME", "POP"],
+        sortBy: "POP",
+        sortDir: "asc",
+        limit: 50,
+      },
+    ] as never);
+    const normalized = result?.[0];
+    assert.ok(normalized, "the list widget should survive normalization");
+    assert.deepEqual(normalized.listFields, ["NAME", "POP"]);
+    assert.equal(normalized.sortBy, "POP");
+    assert.equal(normalized.sortDir, "asc");
+    assert.equal(normalized.limit, 50);
+  });
+
+  it("drops unusable list columns, sort directions, and row limits", () => {
+    const result = normalizeWidgets([
+      {
+        id: "l1",
+        layerId: "l",
+        type: "list",
+        listFields: ["NAME", "", 7, "  "],
+        sortBy: "   ",
+        sortDir: "sideways",
+        limit: 0,
+      },
+      { id: "l2", layerId: "l", type: "list", listFields: [], limit: 10_000 },
+    ] as never);
+    const first = result?.find((w) => w.id === "l1");
+    assert.ok(first, "l1 should survive normalization");
+    assert.deepEqual(first.listFields, ["NAME"]);
+    assert.equal("sortBy" in first, false);
+    assert.equal("sortDir" in first, false);
+    assert.equal("limit" in first, false);
+    const second = result?.find((w) => w.id === "l2");
+    assert.ok(second, "l2 should survive normalization");
+    assert.equal("listFields" in second, false);
+    // Clamped to the editor's maximum rather than round-tripped.
+    assert.equal(second.limit, 500);
+  });
+
+  it("drops list fields from a non-list widget", () => {
+    const result = normalizeWidgets([
+      { id: "p", layerId: "l", type: "pie", category: "kind", listFields: ["NAME"], limit: 5 },
+    ] as never);
+    const normalized = result?.[0];
+    assert.ok(normalized, "the pie widget should survive normalization");
+    assert.equal("listFields" in normalized, false);
+    assert.equal("limit" in normalized, false);
+  });
+
   it("returns null for a non-array or an all-invalid list", () => {
     assert.equal(normalizeWidgets(undefined), null);
     assert.equal(normalizeWidgets("nope"), null);
@@ -361,7 +420,7 @@ describe("cross-filtering by selector values", () => {
   });
 });
 
-describe("selector widgets in the project file", () => {
+describe("selector and list widgets in the project file", () => {
   it("round-trips a selector widget through serialize/parse", () => {
     const widgets: DashboardWidget[] = [
       {
@@ -375,6 +434,35 @@ describe("selector widgets in the project file", () => {
     ];
     const project = projectFromStore({
       projectName: "Selector",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      widgets,
+      metadata: {},
+    });
+    assert.deepEqual(project.widgets, widgets);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.widgets, widgets);
+  });
+
+  it("round-trips a list widget through serialize/parse", () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: "list-1",
+        layerId: "layer-a",
+        type: "list",
+        listFields: ["NAME", "POP_EST"],
+        sortBy: "POP_EST",
+        sortDir: "asc",
+        limit: 25,
+        title: "Top countries",
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "List",
       mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
       basemapStyleUrl: DEFAULT_BASEMAP,
       basemapVisible: true,

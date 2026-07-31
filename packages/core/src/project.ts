@@ -753,6 +753,10 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
 const MAX_PERSISTED_BINS = 50;
 
+/** Upper bound for a persisted list-widget row limit, mirroring the widget
+ * editor's row-count input (`max={500}` in `WidgetEditorDialog`). */
+const MAX_PERSISTED_LIST_ROWS = 500;
+
 // Spelled as a Record so adding a member to DashboardWidgetType fails to
 // compile until it is listed here. A plain array accepted a short list
 // silently, and a type missing from it makes normalizeWidgets drop every widget
@@ -856,6 +860,29 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
     // false is the default, so persist it only when it is on.
     if (type === "selector" && candidate.multiple === true) {
       widget.multiple = true;
+    }
+    // List widget fields (issue #1381). normalizeWidgets also runs on the save
+    // path (projectFromStore), so dropping these would blank a list widget the
+    // moment its project is saved — the renderer falls back to "no data"
+    // without listFields.
+    if (type === "list") {
+      if (Array.isArray(candidate.listFields)) {
+        const listFields = candidate.listFields
+          .map((entry) => normalizeString(entry).trim())
+          .filter((entry) => entry !== "");
+        if (listFields.length > 0) widget.listFields = listFields;
+      }
+      const sortBy = normalizeString(candidate.sortBy).trim();
+      if (sortBy) widget.sortBy = sortBy;
+      if (candidate.sortDir === "asc" || candidate.sortDir === "desc") {
+        widget.sortDir = candidate.sortDir;
+      }
+      if (typeof candidate.limit === "number" && Number.isFinite(candidate.limit)) {
+        // Clamp to the editor's range so a hand-edited 0 or 10_000 cannot reach
+        // the renderer.
+        const limit = Math.trunc(candidate.limit);
+        if (limit >= 1) widget.limit = Math.min(MAX_PERSISTED_LIST_ROWS, limit);
+      }
     }
     widgets.push(widget);
   }

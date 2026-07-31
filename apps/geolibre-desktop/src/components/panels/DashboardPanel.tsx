@@ -462,6 +462,27 @@ function WidgetCard({
         : computeChart(rows, widgetToSpec(widget, widget.type)),
     [rows, widget],
   );
+  // A selector's chip values and its "N of total" counts. Memoized because the
+  // render branch below is an IIFE: without this, every re-render of the card
+  // (including ones driven by unrelated dashboard state) repeats a full scan of
+  // the layer's rows.
+  const selectorData = useMemo(() => {
+    if (widget.type !== "selector" || !widget.category) return null;
+    const category = widget.category;
+    // Both counts are measured against the same baseline — the rows left by the
+    // *other* selectors on this layer — so "N of total" never reads as a
+    // fraction of the whole layer while another selector has already narrowed
+    // it.
+    const narrowed = filterRowsBySelections(rows, selections);
+    return {
+      values: distinctCategoryValues(rows, category),
+      total: narrowed.length,
+      matched:
+        selected.length > 0
+          ? filterRowsBySelections(narrowed, [{ field: category, values: selected }]).length
+          : null,
+    };
+  }, [rows, selections, selected, widget.type, widget.category]);
   // A readable title from the widget's chart type and fields when untitled.
   const defaultWidgetTitle = (): string => {
     switch (widget.type) {
@@ -491,8 +512,14 @@ function WidgetCard({
       }
       case "selector":
         return `${t("dashboard.chartType.selector")} · ${widget.category ?? ""}`;
-      case "list":
-        return `${t("dashboard.chartType.list")} · ${widget.layerId}`;
+      case "list": {
+        // The layer name is already the subtitle, so fall back to the chosen
+        // columns rather than repeating it (or showing the internal layer id).
+        const columns = widget.listFields?.join(", ") ?? "";
+        return columns
+          ? `${t("dashboard.chartType.list")} · ${columns}`
+          : t("dashboard.chartType.list");
+      }
     }
   };
   const title = widget.title?.trim() || defaultWidgetTitle();
@@ -585,39 +612,24 @@ function WidgetCard({
       ) : widget.type === "selector" ? (
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto">
           {(() => {
-            if (!widget.category || !data.hasData) {
-              return (
-                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
-              );
-            }
-            // Extract distinct values from the category field, sorted.
-            const cat = widget.category!;
-            const values = distinctCategoryValues(rows, cat);
-
-            if (values.length === 0) {
+            if (!data.hasData || !selectorData || selectorData.values.length === 0) {
               return (
                 <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
               );
             }
 
-            // How many features the dashboard is left looking at, including
-            // this selector's own choice. Shown so a selection reads as having
-            // done something even on a dashboard with no other widget to
-            // filter — otherwise the chip highlight is the only feedback.
-            const matched =
-              selected.length > 0
-                ? filterRowsBySelections(rows, [...selections, { field: cat, values: selected }])
-                    .length
-                : null;
-
+            // `matched` is how many features the dashboard is left looking at,
+            // including this selector's own choice. Shown so a selection reads
+            // as having done something even on a dashboard with no other widget
+            // to filter — otherwise the chip highlight is the only feedback.
             return (
               <SelectorValues
-                values={values}
+                values={selectorData.values}
                 multiple={widget.multiple ?? false}
                 selected={selected}
                 onChange={onSelect}
-                matched={matched}
-                total={rows.length}
+                matched={selectorData.matched}
+                total={selectorData.total}
                 matchLabel={(count, total) => t("dashboard.selectorMatches", { count, total })}
                 onClear={() => onSelect(EMPTY_SELECTION)}
                 clearLabel={t("dashboard.selectorClear")}
@@ -633,7 +645,8 @@ function WidgetCard({
                 <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
               );
             }
-            const rows = data.rows;
+            // `rows` is the outer memo: already narrowed by the selectors on
+            // this layer, so a list cross-filters like every other widget.
             const sortBy = widget.sortBy;
             const sortDir = widget.sortDir ?? "desc";
             const limit = widget.limit ?? 20;
