@@ -19,13 +19,23 @@ export interface QgisProjectImportWarning {
     | "format"
     | "remote-file"
     | "network-path"
-    | "browser-local-file";
+    | "browser-local-file"
+    | "browser-local-raster";
   provider?: string;
 }
 
 export interface QgisProjectImportResult {
   project: GeoLibreProject;
+  rasters: QgisRasterImport[];
   warnings: QgisProjectImportWarning[];
+}
+
+export interface QgisRasterImport {
+  id: string;
+  name: string;
+  sourcePath: string;
+  visible: boolean;
+  opacity: number;
 }
 
 /**
@@ -92,6 +102,7 @@ const SUPPORTED_VECTOR_EXTENSIONS = new Set([
   "tsv",
   "zip",
 ]);
+const SUPPORTED_RASTER_EXTENSIONS = new Set(["tif", "tiff"]);
 
 /** Convert a QGIS project into a GeoLibre project without evaluating QGIS code. */
 export function importQgisProject(
@@ -116,13 +127,25 @@ export function importQgisProject(
   );
   const warnings: QgisProjectImportWarning[] = [];
   const layers: GeoLibreLayer[] = [];
+  const rasters: QgisRasterImport[] = [];
 
   for (const id of layerOrder(document, mapLayers)) {
     const element = byId.get(id);
     if (!element) continue;
     const name = text(element.querySelector(":scope > layername")) || id || "QGIS layer";
     const provider = text(element.querySelector(":scope > provider")).toLowerCase();
-    const source = qgisVectorSource(text(element.querySelector(":scope > datasource")), sourcePath);
+    const source = qgisSourcePath(text(element.querySelector(":scope > datasource")), sourcePath);
+
+    if (isSupportedRasterLayer(element, provider, source)) {
+      rasters.push({
+        id,
+        name,
+        sourcePath: source,
+        visible: visibilityByLayerId.get(id) ?? true,
+        opacity: parseOpacity(element),
+      });
+      continue;
+    }
 
     if (!isSupportedVectorLayer(element, provider, source)) {
       warnings.push({
@@ -164,7 +187,7 @@ export function importQgisProject(
     qgisProjectPath: sourcePath,
     qgisVersion: document.documentElement.getAttribute("version") ?? "",
   };
-  return { project, warnings };
+  return { project, rasters, warnings };
 }
 
 function qgisProjectXml(data: ArrayBuffer | Uint8Array | string, sourcePath: string): string {
@@ -292,7 +315,7 @@ function layerOrder(document: Document, mapLayers: Element[]): string[] {
     .reverse();
 }
 
-function qgisVectorSource(dataSource: string, projectPath: string): string {
+function qgisSourcePath(dataSource: string, projectPath: string): string {
   let source = dataSource.split("|", 1)[0]?.trim() ?? "";
   source = source.replace(/^\/vsicurl(?:_streaming)?\//i, "");
   if (source.startsWith("file://")) {
@@ -306,6 +329,10 @@ function qgisVectorSource(dataSource: string, projectPath: string): string {
   if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source)) return source;
   const directory = projectPath.replace(/[/\\][^/\\]*$/, "");
   return normalizeJoinedPath(directory, source);
+}
+
+function sourceExtension(source: string): string {
+  return source.split(/[?#]/, 1)[0]?.split(".").pop()?.toLowerCase() ?? "";
 }
 
 function normalizeJoinedPath(directory: string, relative: string): string {
@@ -325,12 +352,21 @@ function normalizeJoinedPath(directory: string, relative: string): string {
 }
 
 function isSupportedVectorLayer(element: Element, provider: string, source: string): boolean {
-  const extension = source.split(/[?#]/, 1)[0]?.split(".").pop()?.toLowerCase() ?? "";
   return (
     element.getAttribute("type")?.toLowerCase() === "vector" &&
     (provider === "ogr" || provider === "delimitedtext") &&
     !isUncPath(source) &&
-    SUPPORTED_VECTOR_EXTENSIONS.has(extension)
+    SUPPORTED_VECTOR_EXTENSIONS.has(sourceExtension(source))
+  );
+}
+
+function isSupportedRasterLayer(element: Element, provider: string, source: string): boolean {
+  return (
+    element.getAttribute("type")?.toLowerCase() === "raster" &&
+    provider === "gdal" &&
+    !isHttpSource(source) &&
+    !isUncPath(source) &&
+    SUPPORTED_RASTER_EXTENSIONS.has(sourceExtension(source))
   );
 }
 

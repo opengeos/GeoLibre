@@ -2410,7 +2410,8 @@
         "format": "The layer's file format is not supported.",
         "remote-file": "Remote QGIS file sources are not supported yet.",
         "network-path": "Network share paths are not loaded for security reasons.",
-        "browser-local-file": "The local file is referenced, but browsers cannot reopen QGIS data paths. Use GeoLibre Desktop to load it."
+        "browser-local-file": "The local file is referenced, but browsers cannot reopen QGIS data paths. Use GeoLibre Desktop to load it.",
+        "browser-local-raster": "The raster is referenced by a local path. Use GeoLibre Desktop to load it."
       },
       "openProjectFromUrlDesc": "Load a `.geolibre.json` project and add it to recent projects.",
       "projectUrl": "Project URL",

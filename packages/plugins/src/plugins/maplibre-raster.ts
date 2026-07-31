@@ -333,6 +333,8 @@ export async function addRasterToMap(
     state?: Partial<RasterLayerState>;
     /** Existing map style layer beneath which the raster is inserted. */
     beforeId?: string;
+    /** Whether to fit the map to the raster after loading. Defaults to true. */
+    zoomTo?: boolean;
   } = {},
 ): Promise<string> {
   const control = await ensureRasterControl(app);
@@ -350,7 +352,7 @@ export async function addRasterToMap(
   }
   const id = await control.addRaster(source, {
     name: options.name,
-    zoomTo: true,
+    zoomTo: options.zoomTo ?? true,
     // Safe to pass before the band count is known: the renderer applies a
     // colormap only in single-band mode and ignores it otherwise.
     ...(options.state || options.defaults?.colormap

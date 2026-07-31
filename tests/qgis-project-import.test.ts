@@ -61,6 +61,23 @@ function projectXml(
   </qgis>`;
 }
 
+function rasterProjectXml(source = "../data/dem.tif"): string {
+  return `<qgis version="3.44.0">
+    <layer-tree-group>
+      <layer-tree-layer id="dem" checked="Qt::Unchecked"/>
+    </layer-tree-group>
+    <projectlayers>
+      <maplayer type="raster">
+        <id>dem</id>
+        <layername>Elevation</layername>
+        <datasource>${source}</datasource>
+        <provider>gdal</provider>
+        <layerOpacity>0.6</layerOpacity>
+      </maplayer>
+    </projectlayers>
+  </qgis>`;
+}
+
 describe("QGIS project import", () => {
   it("imports vector layers, styles, visibility, nested groups, extent, and relative paths", () => {
     const result = importQgisProject(projectXml(), "/work/projects/example.qgs");
@@ -95,6 +112,23 @@ describe("QGIS project import", () => {
     const result = importQgisProject(qgz, "/work/projects/example.qgz");
     assert.equal(result.project.name, "Imported map");
     assert.equal(result.project.layers.length, 2);
+    assert.deepEqual(result.rasters, []);
+  });
+
+  it("collects local GDAL GeoTIFFs for the desktop raster loader", () => {
+    const result = importQgisProject(rasterProjectXml(), "/work/projects/example.qgz");
+
+    assert.deepEqual(result.project.layers, []);
+    assert.deepEqual(result.rasters, [
+      {
+        id: "dem",
+        name: "Elevation",
+        sourcePath: "/work/data/dem.tif",
+        visible: false,
+        opacity: 0.6,
+      },
+    ]);
+    assert.deepEqual(result.warnings, []);
   });
 
   it("falls back to the default view for a missing or unsupported-CRS extent", () => {

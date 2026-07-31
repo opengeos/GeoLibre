@@ -6,17 +6,18 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { materializeEmbeddableVectorLayers } from "@geolibre/plugins";
+import { addRasterToMap, materializeEmbeddableVectorLayers } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getPluginManager } from "./usePlugins";
+import { createAppAPI, getPluginManager } from "./usePlugins";
 import { pluginManifestUrlsForIds } from "../lib/external-plugins";
 import {
   browserSaveFallsBackToDownload,
   isAbsoluteLocalPath,
   isHttpUrl,
   isTauri,
+  loadDroppedRasterPaths,
   openProjectFile,
   openQgisProjectFile,
   openRecentProjectFile,
@@ -177,8 +178,38 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             });
           }
         }
+        for (const raster of imported.rasters) {
+          imported.warnings.push({
+            layerName: raster.name,
+            reason: "browser-local-raster",
+          });
+        }
       }
       loadProject(imported.project, null);
+      if (isTauri()) {
+        const app = createAppAPI(mapControllerRef);
+        for (const raster of imported.rasters) {
+          try {
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath]);
+            if (!loaded) throw new Error("Unsupported raster path");
+            await addRasterToMap(app, loaded.source, {
+              name: raster.name,
+              localPath: raster.sourcePath,
+              state: {
+                visible: raster.visible,
+                opacity: raster.opacity,
+              },
+              zoomTo: false,
+            });
+          } catch (error) {
+            console.error(`Failed to import QGIS raster "${raster.name}"`, error);
+            imported.warnings.push({
+              layerName: raster.name,
+              reason: "format",
+            });
+          }
+        }
+      }
       useAppStore.setState({ isDirty: true });
       setQgisImportWarnings(imported.warnings);
     } catch (error) {
