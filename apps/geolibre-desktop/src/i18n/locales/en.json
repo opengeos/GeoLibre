@@ -2399,7 +2399,6 @@
       "openProjectFromUrl": "Open project from URL",
       "importQgisProjectEllipsis": "Import QGIS Project…",
       "qgisImportComplete": "QGIS project imported",
-      "qgisImportSuccess": "All supported project content was imported.",
       "qgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "qgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "qgisUnknownProvider": "unknown",

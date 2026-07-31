@@ -2450,9 +2450,19 @@ export function loadDroppedRasterFiles(droppedFiles: FileList | File[]): Dropped
  * these with byte-range support, so a COG opens lazily instead of copying the
  * entire file over IPC and then copying it again into a browser File.
  */
-export async function loadDroppedRasterPaths(paths: string[]): Promise<DroppedRaster[]> {
+export async function loadDroppedRasterPaths(
+  paths: string[],
+  options?: { qgisProjectPath?: string },
+): Promise<DroppedRaster[]> {
   const rasterPaths = paths.filter(isRasterFileName);
-  await Promise.all(rasterPaths.map((path) => invoke("allow_raster_asset", { path })));
+  await Promise.all(
+    rasterPaths.map((path) =>
+      invoke("allow_raster_asset", {
+        path,
+        ...(options?.qgisProjectPath ? { qgisProjectPath: options.qgisProjectPath } : {}),
+      }),
+    ),
+  );
   return rasterPaths.map((path) => ({
     name: fileBaseName(path),
     source: convertFileSrc(path),

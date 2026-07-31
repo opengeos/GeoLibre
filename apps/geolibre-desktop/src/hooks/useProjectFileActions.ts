@@ -190,7 +190,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         const app = createAppAPI(mapControllerRef);
         for (const raster of imported.rasters) {
           try {
-            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath]);
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
+              qgisProjectPath: result.path,
+            });
             if (!loaded) throw new Error("Unsupported raster path");
             await addRasterToMap(app, loaded.source, {
               name: raster.name,
@@ -211,7 +213,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         }
       }
       useAppStore.setState({ isDirty: true });
-      setQgisImportWarnings(imported.warnings);
+      setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
     } catch (error) {
       console.error("Failed to import QGIS project", error);
       setActionError(

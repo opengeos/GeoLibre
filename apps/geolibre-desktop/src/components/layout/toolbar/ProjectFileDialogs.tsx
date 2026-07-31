@@ -104,25 +104,21 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.qgisImportComplete")}</DialogTitle>
             <DialogDescription>
-              {projectFiles.qgisImportWarnings?.length
-                ? t("toolbar.item.qgisImportWarnings", {
-                    count: projectFiles.qgisImportWarnings.length,
-                  })
-                : t("toolbar.item.qgisImportSuccess")}
+              {t("toolbar.item.qgisImportWarnings", {
+                count: projectFiles.qgisImportWarnings?.length ?? 0,
+              })}
             </DialogDescription>
           </DialogHeader>
-          {projectFiles.qgisImportWarnings?.length ? (
-            <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-              {projectFiles.qgisImportWarnings.map((warning, index) => (
-                <li key={`${warning.layerName}-${index}`}>
-                  <strong>{warning.layerName}:</strong>{" "}
-                  {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
-                    provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
-                  })}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            {projectFiles.qgisImportWarnings?.map((warning, index) => (
+              <li key={`${warning.layerName}-${index}`}>
+                <strong>{warning.layerName}:</strong>{" "}
+                {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
+                  provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
+                })}
+              </li>
+            ))}
+          </ul>
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
               {t("common.ok")}

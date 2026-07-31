@@ -397,20 +397,32 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|error| format!("Could not read local file: {error}"))
 }
 
-/// Add one user-selected GeoTIFF to the asset-protocol scope. The filesystem
-/// and asset scopes are separate in Tauri; dialogs and native drops grant the
-/// former, but maplibre-gl-raster fetches through the latter for range reads.
+/// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
+/// are separate in Tauri; dialogs and native drops grant the former, but
+/// maplibre-gl-raster fetches through the latter for range reads. A GeoTIFF
+/// referenced by an imported QGIS project is also accepted when that project
+/// file itself was explicitly selected by the user.
 #[tauri::command]
-fn allow_raster_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+fn allow_raster_asset(
+    app: tauri::AppHandle,
+    path: String,
+    qgis_project_path: Option<String>,
+) -> Result<(), String> {
     let lower = path.to_ascii_lowercase();
     if !is_safe_absolute_path(&path) || !(lower.ends_with(".tif") || lower.ends_with(".tiff")) {
         return Err(format!(
             "Refusing to expose \"{path}\": not an absolute GeoTIFF path"
         ));
     }
-    if !app.fs_scope().is_allowed(&path) {
+    let selected_qgis_project = qgis_project_path.is_some_and(|project_path| {
+        let lower = project_path.to_ascii_lowercase();
+        is_safe_absolute_path(&project_path)
+            && (lower.ends_with(".qgs") || lower.ends_with(".qgz"))
+            && app.fs_scope().is_allowed(&project_path)
+    });
+    if !app.fs_scope().is_allowed(&path) && !selected_qgis_project {
         return Err(format!(
-            "Refusing to expose \"{path}\": the file was not selected or dropped by the user"
+            "Refusing to expose \"{path}\": neither the file nor its QGIS project was selected by the user"
         ));
     }
     app.asset_protocol_scope()
