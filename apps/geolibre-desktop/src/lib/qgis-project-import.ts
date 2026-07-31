@@ -38,6 +38,8 @@ export interface QgisRasterImport {
   sourcePath: string;
   visible: boolean;
   opacity: number;
+  groupId?: string;
+  beforeId?: string;
   state?: {
     mode: "single";
     bands: number[];
@@ -47,6 +49,10 @@ export interface QgisRasterImport {
     reversed: boolean;
   };
 }
+
+const MAX_QGS_BYTES = 25 * 1024 * 1024;
+const REMOTE_FETCH_CONCURRENCY = 4;
+const REMOTE_FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Fetch remote GeoJSON sources referenced by a parsed QGIS project.
@@ -61,12 +67,19 @@ export async function materializeQgisRemoteLayers(
   fetcher: typeof fetch = fetch,
 ): Promise<QgisProjectImportResult> {
   const failedLayerIds = new Set<string>();
-  await Promise.all(
-    result.project.layers.map(async (layer) => {
+  const remoteLayers = result.project.layers.filter(
+    (layer) => layer.sourcePath && isHttpSource(layer.sourcePath),
+  );
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < remoteLayers.length) {
+      const layer = remoteLayers[nextIndex++];
       const sourcePath = layer.sourcePath;
-      if (!sourcePath || !isHttpSource(sourcePath)) return;
+      if (!sourcePath) continue;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
       try {
-        const response = await fetcher(sourcePath);
+        const response = await fetcher(sourcePath, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = (await response.json()) as unknown;
         if (!isFeatureCollection(data))
@@ -78,8 +91,13 @@ export async function materializeQgisRemoteLayers(
           layerName: layer.name,
           reason: "remote-file",
         });
+      } finally {
+        clearTimeout(timeout);
       }
-    }),
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(REMOTE_FETCH_CONCURRENCY, remoteLayers.length) }, () => worker()),
   );
   if (failedLayerIds.size > 0) {
     result.project.layers = result.project.layers.filter((layer) => !failedLayerIds.has(layer.id));
@@ -93,6 +111,8 @@ export async function materializeQgisRemoteLayers(
   return result;
 }
 
+// SYNC: VECTOR_FILE_DIALOG_EXTENSIONS in tauri-io.ts and
+// RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs.
 const SUPPORTED_VECTOR_EXTENSIONS = new Set([
   "csv",
   "dxf",
@@ -148,7 +168,11 @@ export function importQgisProject(
     const provider = text(element.querySelector(":scope > provider")).toLowerCase();
     const dataSource = text(element.querySelector(":scope > datasource"));
 
-    if (isOpenStreetMapBasemap(element, provider, dataSource)) {
+    if (
+      isOpenStreetMapBasemap(element, provider, dataSource) &&
+      !groupByLayerId.has(id) &&
+      id === layerOrder(document, mapLayers)[0]
+    ) {
       project.basemapStyleUrl = DEFAULT_BASEMAP;
       project.basemapVisible = visibilityByLayerId.get(id) ?? true;
       project.basemapOpacity = parseOpacity(element);
@@ -165,6 +189,10 @@ export function importQgisProject(
         sourcePath: source,
         visible: visibilityByLayerId.get(id) ?? true,
         opacity: parseOpacity(element),
+        ...(groupByLayerId.get(id) ? { groupId: groupByLayerId.get(id) } : {}),
+        ...(nextLayerId(id, layerOrder(document, mapLayers))
+          ? { beforeId: nextLayerId(id, layerOrder(document, mapLayers)) }
+          : {}),
         ...(state ? { state } : {}),
       });
       continue;
@@ -202,8 +230,10 @@ export function importQgisProject(
   }
 
   project.layers = layers;
-  project.layerGroups = parsedGroups.groups.filter((group) =>
-    layers.some((layer) => layer.groupId === group.id),
+  project.layerGroups = parsedGroups.groups.filter(
+    (group) =>
+      layers.some((layer) => layer.groupId === group.id) ||
+      rasters.some((raster) => raster.groupId === group.id),
   );
   project.metadata = {
     importedFrom: "qgis",
@@ -287,13 +317,26 @@ function numberAttribute(element: Element | null | undefined, name: string): num
 }
 
 function qgisProjectXml(data: ArrayBuffer | Uint8Array | string, sourcePath: string): string {
-  if (typeof data === "string") return data;
+  if (typeof data === "string") {
+    if (new TextEncoder().encode(data).byteLength > MAX_QGS_BYTES) {
+      throw new Error("The QGIS project is too large to import safely.");
+    }
+    return data;
+  }
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   if (sourcePath.toLowerCase().endsWith(".qgs")) return strFromU8(bytes);
   let entries: Record<string, Uint8Array>;
   try {
-    entries = unzipSync(bytes);
-  } catch {
+    entries = unzipSync(bytes, {
+      filter: (entry) => {
+        if (entry.originalSize > MAX_QGS_BYTES) {
+          throw new Error("The QGIS project is too large to import safely.");
+        }
+        return entry.name.toLowerCase().endsWith(".qgs");
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("too large to import safely")) throw error;
     throw new Error("Could not read the compressed QGIS project.");
   }
   const qgsName = Object.keys(entries).find((name) => name.toLowerCase().endsWith(".qgs"));
@@ -414,16 +457,21 @@ function layerOrder(document: Document, mapLayers: Element[]): string[] {
 function qgisSourcePath(dataSource: string, projectPath: string): string {
   let source = dataSource.split("|", 1)[0]?.trim() ?? "";
   source = source.replace(/^\/vsicurl(?:_streaming)?\//i, "");
+  if (/^\/?vsizip\//i.test(source)) return "";
   if (source.startsWith("file://")) {
     try {
-      source = decodeURIComponent(new URL(source).pathname);
+      source = decodeURIComponent(new URL(source).pathname).replace(/^\/([A-Za-z]:)/, "$1");
     } catch {
       source = source.slice("file://".length);
     }
   }
+  source = source.replace(/^file:(?:\/\/)?/i, "");
+  source = source.replace(/[?#].*$/, "");
   source = source.replace(/^['"]|['"]$/g, "");
   if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source)) return source;
-  const directory = projectPath.replace(/[/\\][^/\\]*$/, "");
+  const directory = /[/\\]/.test(projectPath)
+    ? projectPath.replace(/[/\\][^/\\]*$/, "")
+    : "";
   return normalizeJoinedPath(directory, source);
 }
 
@@ -487,6 +535,10 @@ function unsupportedReason(
   provider: string,
   source: string,
 ): QgisProjectImportWarning["reason"] {
+  if (element.getAttribute("type")?.toLowerCase() === "raster") {
+    if (isHttpSource(source)) return "remote-file";
+    return "format";
+  }
   if (element.getAttribute("type")?.toLowerCase() !== "vector") {
     return "non-vector";
   }
@@ -500,7 +552,9 @@ function unsupportedReason(
 
 function parseLayerStyle(element: Element): LayerStyle {
   const style: LayerStyle = structuredClone(DEFAULT_LAYER_STYLE);
-  const symbolLayer = element.querySelector("renderer-v2 symbols symbol layer");
+  const renderer = element.querySelector(":scope > renderer-v2");
+  if (renderer?.getAttribute("type") !== "singleSymbol") return style;
+  const symbolLayer = renderer.querySelector("symbols symbol layer");
   const options = new Map<string, string>();
   symbolLayer?.querySelectorAll("Option[name]").forEach((option) => {
     options.set(option.getAttribute("name") ?? "", option.getAttribute("value") ?? "");
@@ -516,10 +570,18 @@ function parseLayerStyle(element: Element): LayerStyle {
     style.strokeColor = stroke.color;
   }
   const width = optionalNumber(options.get("outline_width") ?? options.get("line_width"));
-  if (width !== null) style.strokeWidth = Math.max(0, width * 3.78);
+  const widthUnit = options.get("outline_width_unit") ?? options.get("line_width_unit") ?? "MM";
+  if (width !== null && (widthUnit === "MM" || widthUnit === "Pixel")) {
+    style.strokeWidth = Math.max(0, width * (widthUnit === "MM" ? 3.78 : 1));
+  }
   const size = optionalNumber(options.get("size"));
-  if (symbolLayer?.getAttribute("class") === "SimpleMarker" && size !== null) {
-    style.circleRadius = Math.max(1, (size * 3.78) / 2);
+  const sizeUnit = options.get("size_unit") ?? "MM";
+  if (
+    symbolLayer?.getAttribute("class") === "SimpleMarker" &&
+    size !== null &&
+    (sizeUnit === "MM" || sizeUnit === "Pixel")
+  ) {
+    style.circleRadius = Math.max(1, (size * (sizeUnit === "MM" ? 3.78 : 1)) / 2);
   }
   const textStyle = element.querySelector("labeling[type='simple'] settings text-style");
   const field = textStyle?.getAttribute("fieldName")?.trim();
@@ -537,7 +599,7 @@ function parseLayerStyle(element: Element): LayerStyle {
 function qgisColor(value: string | undefined): { color: string; opacity: number } | null {
   if (!value) return null;
   const parts = value.split(",").map(Number);
-  if (parts.length < 3 || parts.slice(0, 3).some((part) => !Number.isFinite(part))) return null;
+  if (parts.length < 3 || parts.slice(0, 4).some((part) => !Number.isFinite(part))) return null;
   const [red, green, blue, alpha = 255] = parts;
   return {
     color: `#${[red, green, blue]
@@ -568,6 +630,11 @@ function uniqueLayerId(candidate: string, layers: GeoLibreLayer[]): string {
   let suffix = 2;
   while (layers.some((layer) => layer.id === id)) id = `${base}-${suffix++}`;
   return id;
+}
+
+function nextLayerId(id: string, orderedIds: string[]): string | undefined {
+  const index = orderedIds.indexOf(id);
+  return index >= 0 ? orderedIds[index + 1] : undefined;
 }
 
 function numberText(element: Element | null | undefined): number {

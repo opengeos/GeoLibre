@@ -236,6 +236,54 @@ describe("QGIS project import", () => {
     );
   });
 
+  it("normalizes Windows file URLs, query strings, and bare project names", () => {
+    const windows = importQgisProject(
+      projectXml({
+        dataSources: [
+          {
+            id: "roads",
+            name: "CSV",
+            source: "file:///C:/data/points.csv?delimiter=%2C",
+          },
+        ],
+      }),
+      "C:\\projects\\example.qgs",
+    );
+    assert.equal(windows.project.layers[0].sourcePath, "C:/data/points.csv");
+
+    const browser = importQgisProject(
+      projectXml({
+        dataSources: [{ id: "roads", name: "Roads", source: "data/roads.geojson" }],
+      }),
+      "example.qgs",
+    );
+    assert.equal(browser.project.layers[0].sourcePath, "data/roads.geojson");
+  });
+
+  it("does not silently flatten categorized styling or mis-scale pixel units", () => {
+    const xml = projectXml().replaceAll(
+      '<renderer-v2 type="singleSymbol">',
+      '<renderer-v2 type="categorizedSymbol">',
+    );
+    const categorized = importQgisProject(xml, "/work/example.qgs");
+    assert.notEqual(categorized.project.layers[0].style.fillColor, "#ff0000");
+
+    const pixelXml = projectXml().replaceAll(
+      '<Option name="size" value="4"/>',
+      '<Option name="size" value="4"/><Option name="size_unit" value="Pixel"/>',
+    );
+    const pixel = importQgisProject(pixelXml, "/work/example.qgs");
+    assert.equal(pixel.project.layers[0].style.circleRadius, 2);
+  });
+
+  it("rejects oversized QGS members before decompressing them", () => {
+    const oversized = zipSync({ "project.qgs": new Uint8Array(25 * 1024 * 1024 + 1) });
+    assert.throws(
+      () => importQgisProject(oversized, "/work/example.qgz"),
+      /too large to import safely/,
+    );
+  });
+
   it("materializes remote GeoJSON and warns when a remote response cannot be loaded", async () => {
     const result = importQgisProject(
       projectXml({

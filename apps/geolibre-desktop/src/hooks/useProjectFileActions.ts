@@ -197,14 +197,25 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         importQgisProject(result.data, result.path),
       );
       if (!isTauri()) {
+        const unavailableLayerIds = new Set<string>();
         for (const layer of imported.project.layers) {
           if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            unavailableLayerIds.add(layer.id);
             imported.warnings.push({
               layerName: layer.name,
               reason: "browser-local-file",
             });
           }
         }
+        imported.project.layers = imported.project.layers.filter(
+          (layer) => !unavailableLayerIds.has(layer.id),
+        );
+        const usedGroupIds = new Set(
+          imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+        );
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
         for (const raster of imported.rasters) {
           imported.warnings.push({
             layerName: raster.name,
@@ -226,7 +237,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
               qgisProjectPath: result.path,
             });
             if (!loaded) throw new Error("Unsupported raster path");
-            await addRasterToMap(app, loaded.source, {
+            const rasterLayerId = await addRasterToMap(app, loaded.source, {
               name: raster.name,
               localPath: raster.sourcePath,
               // The Tauri/WebKitGTK WASM backend can stall when its first
@@ -239,8 +250,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                 visible: raster.visible,
                 opacity: raster.opacity,
               },
+              beforeId: raster.beforeId,
               zoomTo: false,
             });
+            if (raster.groupId) {
+              useAppStore.getState().moveLayerToGroup(rasterLayerId, raster.groupId);
+            }
           } catch (error) {
             console.error(`Failed to import QGIS raster "${raster.name}"`, error);
             imported.warnings.push({
