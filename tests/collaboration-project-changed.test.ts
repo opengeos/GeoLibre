@@ -1,44 +1,34 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { projectChanged } from "../apps/geolibre-desktop/src/lib/project-broadcast-changed";
-
-function geojsonLayer(id: string): GeoLibreLayer {
-  return {
-    id,
-    name: id,
-    type: "geojson",
-    source: { type: "geojson" },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {},
-    geojson: { type: "FeatureCollection", features: [] },
-  };
-}
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("collaboration projectChanged", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Collab" });
   });
 
-  it("detects map-grid and model-only edits that must broadcast", () => {
+  // One field per test: a failure in any single broadcast field must not hide
+  // regressions in the others.
+  it("detects map-grid edits", () => {
     const before = useAppStore.getState();
     useAppStore.getState().setMapGrid(1, 2);
     assert.equal(projectChanged(before, useAppStore.getState()), true);
+  });
 
-    useAppStore.getState().newProject({ name: "Collab" });
-    const beforeModels = useAppStore.getState();
+  it("detects model-only edits", () => {
+    const before = useAppStore.getState();
     useAppStore.getState().saveModel({
       id: "model-1",
       name: "Pipeline",
       steps: [],
     });
-    assert.equal(projectChanged(beforeModels, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
   });
 
-  it("detects processing history, widgets, style library, metadata, layers, and plugins", () => {
-    const beforeHistory = useAppStore.getState();
+  it("detects processing-history edits", () => {
+    const before = useAppStore.getState();
     useAppStore.getState().addProcessingRun({
       id: "run-1",
       kind: "vector",
@@ -50,10 +40,11 @@ describe("collaboration projectChanged", () => {
       durationMs: 1,
       status: "success",
     });
-    assert.equal(projectChanged(beforeHistory, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
+  });
 
-    useAppStore.getState().newProject({ name: "Collab" });
-    const beforeWidgets = useAppStore.getState();
+  it("detects widget edits", () => {
+    const before = useAppStore.getState();
     useAppStore.getState().addWidget({
       id: "w1",
       type: "indicator",
@@ -61,10 +52,11 @@ describe("collaboration projectChanged", () => {
       layerId: "layer-a",
       indicatorAggregation: "count",
     });
-    assert.equal(projectChanged(beforeWidgets, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
+  });
 
-    useAppStore.getState().newProject({ name: "Collab" });
-    const beforeStyle = useAppStore.getState();
+  it("detects style-library edits", () => {
+    const before = useAppStore.getState();
     useAppStore.getState().saveStyleLibraryEntry(
       {
         id: "style-1",
@@ -76,25 +68,28 @@ describe("collaboration projectChanged", () => {
       },
       "project",
     );
-    assert.equal(projectChanged(beforeStyle, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
+  });
 
-    useAppStore.getState().newProject({ name: "Collab" });
-    const beforeMeta = useAppStore.getState();
+  it("detects metadata edits", () => {
+    const before = useAppStore.getState();
     useAppStore.setState({ metadata: { author: "test" }, isDirty: true });
-    assert.equal(projectChanged(beforeMeta, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
+  });
 
-    useAppStore.getState().newProject({ name: "Collab" });
-    const beforeLayers = useAppStore.getState();
-    useAppStore.getState().addLayer(geojsonLayer("layer-a"));
-    assert.equal(projectChanged(beforeLayers, useAppStore.getState()), true);
+  it("detects layer edits", () => {
+    const before = useAppStore.getState();
+    useAppStore.getState().addLayer(geojsonLayer({ id: "layer-a", name: "layer-a" }));
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
+  });
 
-    useAppStore.getState().newProject({ name: "Collab" });
-    const beforePlugins = useAppStore.getState();
+  it("detects project-plugin edits", () => {
+    const before = useAppStore.getState();
     useAppStore.setState({
       projectPlugins: { manifestUrls: ["https://example.com/plugin.json"] },
       isDirty: true,
     });
-    assert.equal(projectChanged(beforePlugins, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), true);
   });
 
   it("ignores camera-only and UI-only churn", () => {

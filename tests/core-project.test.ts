@@ -15,23 +15,8 @@ import {
   serializeStoryMapCsv,
   serializeStoryMapJson,
   useAppStore,
-  type GeoLibreLayer,
 } from "@geolibre/core";
-
-function geojsonLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
-  return {
-    id: "layer-a",
-    name: "Layer A",
-    type: "geojson",
-    source: { type: "geojson" },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {},
-    geojson: { type: "FeatureCollection", features: [] },
-    ...patch,
-  };
-}
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
   it("preserves a valid selected layer and drops a dangling selection", () => {

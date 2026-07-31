@@ -211,10 +211,15 @@ describe("layer-sync paint bridge", () => {
   it("re-applies after removeLayerFromMap when the same layer id is reused", () => {
     // Without clearing appliedBridgeState on remove, a later layer that reuses
     // the id with the same bridge object and opacity would skip the apply.
+    // The cache is shared by both setters, so assert visibility too.
     const applied: number[] = [];
+    const visibilities: boolean[] = [];
     const bridge = {
       setOpacity: (opacity: number) => {
         applied.push(opacity);
+      },
+      setVisibility: (visible: boolean) => {
+        visibilities.push(visible);
       },
     };
     setExternalNativePaintBridge("sync-reuse-id", bridge);
@@ -222,12 +227,15 @@ describe("layer-sync paint bridge", () => {
     const layer = customLayer("sync-reuse-id", { opacity: 0.5 });
     syncLayer(map as never, layer);
     assert.deepEqual(applied, [0.5]);
+    assert.deepEqual(visibilities, [true]);
 
     removeLayerFromMap(map as never, "sync-reuse-id", layer);
     applied.length = 0;
+    visibilities.length = 0;
     setExternalNativePaintBridge("sync-reuse-id", bridge);
     syncLayer(map as never, customLayer("sync-reuse-id", { opacity: 0.5 }));
     assert.deepEqual(applied, [0.5]);
+    assert.deepEqual(visibilities, [true]);
   });
 
   it("never writes MapLibre paint for a plugin-painted layer", () => {

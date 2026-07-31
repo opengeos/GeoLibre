@@ -1,25 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  DEFAULT_LAYER_STYLE,
-  DEFAULT_STORY_MAP,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
-
-function geojsonLayer(id: string): GeoLibreLayer {
-  return {
-    id,
-    name: id,
-    type: "geojson",
-    source: { type: "geojson" },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {},
-    geojson: { type: "FeatureCollection", features: [] },
-  };
-}
+import { DEFAULT_STORY_MAP, useAppStore } from "@geolibre/core";
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("removeLayer storymap scrub", () => {
   beforeEach(() => {
@@ -28,8 +10,8 @@ describe("removeLayer storymap scrub", () => {
 
   it("drops chapter enter/exit rows that pointed at the removed layer", () => {
     const store = useAppStore.getState();
-    store.addLayer(geojsonLayer("keep"));
-    store.addLayer(geojsonLayer("gone"));
+    store.addLayer(geojsonLayer({ id: "keep", name: "keep" }));
+    store.addLayer(geojsonLayer({ id: "gone", name: "gone" }));
     store.setStorymap({
       ...DEFAULT_STORY_MAP,
       title: "Tour",
@@ -65,9 +47,9 @@ describe("removeLayer storymap scrub", () => {
   it("scrubs chapter refs when a group deletes its children", () => {
     const store = useAppStore.getState();
     const groupId = store.addLayerGroup("Tour group");
-    store.addLayer({ ...geojsonLayer("keep"), groupId: undefined });
-    store.addLayer({ ...geojsonLayer("child-a"), groupId });
-    store.addLayer({ ...geojsonLayer("child-b"), groupId });
+    store.addLayer({ ...geojsonLayer({ id: "keep", name: "keep" }), groupId: undefined });
+    store.addLayer({ ...geojsonLayer({ id: "child-a", name: "child-a" }), groupId });
+    store.addLayer({ ...geojsonLayer({ id: "child-b", name: "child-b" }), groupId });
     store.setStorymap({
       ...DEFAULT_STORY_MAP,
       title: "Tour",
@@ -106,8 +88,8 @@ describe("removeLayer storymap scrub", () => {
   it("clears secondary-pane visibility overrides for deleted group children", () => {
     const store = useAppStore.getState();
     const groupId = store.addLayerGroup("Tour group");
-    store.addLayer({ ...geojsonLayer("child-a"), groupId });
-    store.addLayer({ ...geojsonLayer("keep"), groupId: undefined });
+    store.addLayer({ ...geojsonLayer({ id: "child-a", name: "child-a" }), groupId });
+    store.addLayer({ ...geojsonLayer({ id: "keep", name: "keep" }), groupId: undefined });
     store.setMapGrid(1, 2);
     const paneId = useAppStore.getState().secondaryMapViews[0].id;
     store.setSecondaryLayerVisibility(paneId, "child-a", false);
