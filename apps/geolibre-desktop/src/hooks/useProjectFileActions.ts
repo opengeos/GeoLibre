@@ -34,7 +34,11 @@ import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
-import { importQgisProject, type QgisProjectImportWarning } from "../lib/qgis-project-import";
+import {
+  importQgisProject,
+  materializeQgisRemoteLayers,
+  type QgisProjectImportWarning,
+} from "../lib/qgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /** A pending "strip env vars before saving?" prompt. */
@@ -161,7 +165,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const result = await openQgisProjectFile();
     if (!result) return;
     try {
-      const imported = importQgisProject(result.data, result.path);
+      const imported = await materializeQgisRemoteLayers(
+        importQgisProject(result.data, result.path),
+      );
       if (!isTauri()) {
         for (const layer of imported.project.layers) {
           if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {

@@ -8,6 +8,7 @@ import {
   type MapViewState,
 } from "@geolibre/core";
 import { strFromU8, unzipSync } from "fflate";
+import type { FeatureCollection } from "geojson";
 
 export interface QgisProjectImportWarning {
   layerName: string;
@@ -25,6 +26,51 @@ export interface QgisProjectImportWarning {
 export interface QgisProjectImportResult {
   project: GeoLibreProject;
   warnings: QgisProjectImportWarning[];
+}
+
+/**
+ * Fetch remote GeoJSON sources referenced by a parsed QGIS project.
+ *
+ * QGIS commonly stores HTTP-backed OGR layers behind GDAL's `/vsicurl/`
+ * prefix. The synchronous parser normalizes that prefix to an HTTP URL; this
+ * step materializes those features before the project enters the store because
+ * GeoLibre's GeoJSON renderer consumes an in-memory FeatureCollection.
+ */
+export async function materializeQgisRemoteLayers(
+  result: QgisProjectImportResult,
+  fetcher: typeof fetch = fetch,
+): Promise<QgisProjectImportResult> {
+  const failedLayerIds = new Set<string>();
+  await Promise.all(
+    result.project.layers.map(async (layer) => {
+      const sourcePath = layer.sourcePath;
+      if (!sourcePath || !isHttpSource(sourcePath)) return;
+      try {
+        const response = await fetcher(sourcePath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = (await response.json()) as unknown;
+        if (!isFeatureCollection(data))
+          throw new Error("Response is not a GeoJSON FeatureCollection");
+        layer.geojson = data;
+      } catch {
+        failedLayerIds.add(layer.id);
+        result.warnings.push({
+          layerName: layer.name,
+          reason: "remote-file",
+        });
+      }
+    }),
+  );
+  if (failedLayerIds.size > 0) {
+    result.project.layers = result.project.layers.filter((layer) => !failedLayerIds.has(layer.id));
+    const usedGroupIds = new Set(
+      result.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+    );
+    result.project.layerGroups = result.project.layerGroups?.filter((group) =>
+      usedGroupIds.has(group.id),
+    );
+  }
+  return result;
 }
 
 const SUPPORTED_VECTOR_EXTENSIONS = new Set([
@@ -91,12 +137,15 @@ export function importQgisProject(
       id: uniqueLayerId(id, layers),
       name,
       type: "geojson",
-      source: { type: "geojson" },
+      source: {
+        type: "geojson",
+        ...(isHttpSource(source) ? { url: source } : {}),
+      },
       visible: visibilityByLayerId.get(id) ?? true,
       opacity: parseOpacity(element),
       style: parseLayerStyle(element),
       metadata: {
-        localFileReloadable: true,
+        ...(!isHttpSource(source) ? { localFileReloadable: true } : {}),
         importedFrom: "qgis",
         qgisLayerId: id,
         qgisProvider: provider,
@@ -245,6 +294,7 @@ function layerOrder(document: Document, mapLayers: Element[]): string[] {
 
 function qgisVectorSource(dataSource: string, projectPath: string): string {
   let source = dataSource.split("|", 1)[0]?.trim() ?? "";
+  source = source.replace(/^\/vsicurl(?:_streaming)?\//i, "");
   if (source.startsWith("file://")) {
     try {
       source = decodeURIComponent(new URL(source).pathname);
@@ -279,7 +329,6 @@ function isSupportedVectorLayer(element: Element, provider: string, source: stri
   return (
     element.getAttribute("type")?.toLowerCase() === "vector" &&
     (provider === "ogr" || provider === "delimitedtext") &&
-    !isHttpSource(source) &&
     !isUncPath(source) &&
     SUPPORTED_VECTOR_EXTENSIONS.has(extension)
   );
@@ -297,7 +346,6 @@ function unsupportedReason(
     return "provider";
   }
   if (!source) return "missing-source";
-  if (isHttpSource(source)) return "remote-file";
   if (isUncPath(source)) return "network-path";
   return "format";
 }
@@ -398,6 +446,15 @@ function isAbsolutePath(path: string): boolean {
 
 function isHttpSource(path: string): boolean {
   return /^https?:\/\//i.test(path);
+}
+
+function isFeatureCollection(value: unknown): value is FeatureCollection {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { type?: unknown }).type === "FeatureCollection" &&
+    Array.isArray((value as { features?: unknown }).features)
+  );
 }
 
 function isUncPath(path: string): boolean {

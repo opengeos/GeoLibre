@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { strToU8, zipSync } from "fflate";
 import { DOMParser } from "linkedom";
-import { importQgisProject } from "../apps/geolibre-desktop/src/lib/qgis-project-import";
+import {
+  importQgisProject,
+  materializeQgisRemoteLayers,
+} from "../apps/geolibre-desktop/src/lib/qgis-project-import";
 
 globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
 
@@ -112,24 +115,57 @@ describe("QGIS project import", () => {
     });
   });
 
-  it("warns and omits remote and UNC file sources that cannot be restored", () => {
+  it("normalizes GDAL VSI URLs and still rejects UNC file sources", () => {
     const result = importQgisProject(
       projectXml({
         dataSources: [
-          { id: "roads", name: "Remote", source: "https://example.com/roads.geojson" },
+          {
+            id: "roads",
+            name: "Remote",
+            source: "/vsicurl/https://example.com/roads.geojson|layername=roads",
+          },
           { id: "cities", name: "Network", source: "\\\\server\\share\\cities.gpkg" },
         ],
       }),
       "C:\\projects\\example.qgs",
     );
 
-    assert.deepEqual(result.project.layers, []);
+    assert.equal(result.project.layers.length, 1);
+    assert.equal(result.project.layers[0].sourcePath, "https://example.com/roads.geojson");
+    assert.equal(result.project.layers[0].source.url, "https://example.com/roads.geojson");
+    assert.equal(result.project.layers[0].metadata.localFileReloadable, undefined);
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
-      [
-        ["Network", "network-path"],
-        ["Remote", "remote-file"],
-      ],
+      [["Network", "network-path"]],
+    );
+  });
+
+  it("materializes remote GeoJSON and warns when a remote response cannot be loaded", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "Good", source: "https://example.com/good.geojson" },
+          { id: "cities", name: "Bad", source: "https://example.com/bad.geojson" },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+
+    await materializeQgisRemoteLayers(result, async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bad.geojson")) return new Response("no", { status: 404 });
+      return Response.json({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: null, properties: { name: "Test" } }],
+      });
+    });
+
+    assert.equal(result.project.layers.length, 1);
+    assert.equal(result.project.layers[0].name, "Good");
+    assert.equal(result.project.layers[0].geojson?.features.length, 1);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Bad", "remote-file"]],
     );
   });
 });
