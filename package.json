@@ -28,6 +28,7 @@
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
     "tauri:build:native-duckdb": "node scripts/tauri-build.mjs --native-duckdb",
+    "tauri:build:mas": "node scripts/tauri-build.mjs --mas",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },

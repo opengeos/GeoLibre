@@ -1,0 +1,135 @@
+# Mac App Store
+
+GeoLibre Desktop ships on macOS two ways:
+
+- **Developer ID** (the default): the notarized `.dmg` published by
+  `release.yml` on every GitHub release and distributed through the website,
+  Homebrew, and winget-style channels. Full feature set, hardened runtime, no
+  App Sandbox.
+- **Mac App Store (MAS)**: a sandboxed variant built by the
+  `mas-store.yml` workflow (or `npm run tauri:build:mas` locally). This page
+  documents that variant.
+
+The App Store imposes two hard rules the default build cannot satisfy:
+
+1. **App Sandbox is mandatory.** The app is confined to its container plus
+   files the user explicitly picks in an open dialog. Spawning downloaded,
+   unsigned executables is impossible.
+2. **Guideline 2.5.2**: the app may not download or execute code that changes
+   its features. The default build bootstraps `uv`, a Python environment, and
+   the martin tile server at runtime, all of which are downloads of executable
+   code.
+
+So the MAS build compiles those services out instead of shipping them broken.
+
+## What the MAS build removes
+
+The `mas` cargo feature (`apps/geolibre-desktop/src-tauri`) replaces these
+Tauri commands with stubs, and `GEOLIBRE_MAS_BUILD=1` hides the matching UI:
+
+- **Python sidecar** (Whitebox server engine, Conversion/Raster sidecar
+  engines, PostGIS endpoints, SamGeo segmentation, SedonaDB SQL).
+- **Jupyter server** (the Notebook panel falls back to the bundled
+  JupyterLite, which the web build already uses; Pyodide executes inside
+  WebKit, which App Review permits).
+- **martin tile server** and its GitHub binary download (Add Data →
+  PostgreSQL is hidden).
+- **External plugin installation** (zip archives and registry installs).
+  Built-in and bundled drop-in plugins keep working.
+- **In-app update checks** (`GEOLIBRE_STORE_BUILD=1`, same as the Microsoft
+  Store MSIX build): a Store app updates only through the Store.
+
+Everything client-side is unchanged and fully functional: MapLibre/deck.gl
+rendering, Add Data for local and remote files, DuckDB-WASM vector reading,
+Whitebox WASM tools, Turf/Pyodide vector tools, browser-engine conversions,
+client raster tools, the SQL Workspace on CereusDB/PGlite, the Python console,
+onnxruntime-web detection/segment-everything, geocoding, and collaboration.
+
+### Known limitations under the sandbox
+
+- **Loose shapefiles**: the sandbox only grants access to the files the user
+  picked, so the automatic read of `.dbf`/`.prj`/`.shx` siblings next to a
+  picked `.shp` is denied. The MAS build compensates by matching companions
+  out of the same dialog selection, so **multi-select every shapefile part**
+  (`.shp`, `.dbf`, `.prj`, ...) or load a **zipped shapefile**. A `.shp`
+  picked alone loads without attributes or CRS. This also applies when a saved
+  project restores a loose `.shp` layer: re-add it or use a zip.
+- **Environment variables**: the "read API keys from the shell environment"
+  convenience returns nothing, because a sandboxed app does not inherit a
+  login shell environment. Enter keys in Settings instead.
+
+## Building locally
+
+```bash
+# One-time: render the entitlements with your team id.
+APPLE_TEAM_ID=XXXXXXXXXX scripts/render-mas-entitlements.sh
+
+# Put a Mac App Store provisioning profile for org.geolibre.desktop at
+# apps/geolibre-desktop/src-tauri/mas/embedded.provisionprofile
+# (App Store Connect → Profiles → macOS App Development/Distribution).
+
+APPLE_SIGNING_IDENTITY="Apple Distribution: Your Name (XXXXXXXXXX)" \
+  npm run tauri:build:mas -- --target universal-apple-darwin
+
+# Wrap the .app into a Store-submittable installer package.
+xcrun productbuild \
+  --sign "3rd Party Mac Developer Installer: Your Name (XXXXXXXXXX)" \
+  --component "apps/geolibre-desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/GeoLibre Desktop.app" \
+  /Applications GeoLibre-Desktop-mas.pkg
+```
+
+`npm run tauri:build:mas` wires everything else: the `mas` cargo feature, the
+`tauri.mas.conf.json` overlay (App Sandbox entitlements, embedded provisioning
+profile, no bundled sidecar resources, hardened runtime off), and the
+`GEOLIBRE_MAS_BUILD`/`GEOLIBRE_STORE_BUILD` frontend flags. It refuses to run
+with `--native-duckdb` (native DuckDB loads its spatial extension as unsigned
+native code at runtime).
+
+The sandboxed app can be smoke-tested by running the built
+`GeoLibre Desktop.app` directly; `codesign -d --entitlements - --xml` on the
+bundle should show `com.apple.security.app-sandbox`.
+
+## CI: the `mas-store.yml` workflow
+
+`workflow_dispatch` only, mirroring `msix-store.yml`: it builds the universal
+sandboxed app, signs it, verifies the sandbox entitlement, produces the signed
+`.pkg`, and uploads it as the `geolibre-mas-pkg` artifact. It does not touch
+GitHub releases and does not upload to App Store Connect.
+
+Required repository secrets:
+
+| Secret | Contents |
+| --- | --- |
+| `APPLE_MAS_CERTIFICATE` | base64 `.p12` containing **both** the "Apple Distribution" and "3rd Party Mac Developer Installer" certificates with private keys |
+| `APPLE_MAS_CERTIFICATE_PASSWORD` | password of that `.p12` |
+| `APPLE_MAS_SIGNING_IDENTITY` | `Apple Distribution: Name (TEAMID)` |
+| `APPLE_MAS_INSTALLER_IDENTITY` | `3rd Party Mac Developer Installer: Name (TEAMID)` |
+| `APPLE_MAS_PROVISIONING_PROFILE` | base64 Mac App Store `.provisionprofile` for `org.geolibre.desktop` |
+| `APPLE_TEAM_ID` | already configured for `release.yml` |
+
+Creating the inputs (Apple Developer account required):
+
+1. In the developer portal, create an **App ID** for `org.geolibre.desktop`
+   (macOS, no extra capabilities).
+2. Create the two certificates ("Apple Distribution" and "3rd Party Mac
+   Developer Installer") via Keychain Access CSRs, then export both together
+   from Keychain Access as one `.p12`: `base64 -i certs.p12 | pbcopy`.
+3. Create a **Mac App Store Connect** provisioning profile for that App ID and
+   the distribution certificate: `base64 -i profile.provisionprofile | pbcopy`.
+
+## Submitting
+
+1. Create the app record in App Store Connect for `org.geolibre.desktop`
+   (the same team as the iOS `org.geolibre.app` record; the two are separate
+   apps).
+2. Download the `geolibre-mas-pkg` artifact and upload the `.pkg` with the
+   **Transporter** app (or `xcrun altool --upload-app -f <pkg> -t macos`).
+3. Fill in screenshots, description, and the privacy questionnaire
+   (see `docs/privacy.md`; the app makes no tracking calls).
+4. In the review notes, mention that processing engines run client-side as
+   WebAssembly inside the webview and that the app downloads only data (map
+   tiles, user-requested datasets), never code.
+
+Version numbers come from `tauri.conf.json` (`CFBundleShortVersionString`);
+every upload needs a version or build number higher than the last one in App
+Store Connect.

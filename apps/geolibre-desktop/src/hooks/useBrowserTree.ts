@@ -17,6 +17,7 @@ import {
   readPinnedFolders,
 } from "../lib/browser-folders";
 import { FAVORITES_CHANGED_EVENT, readBrowserFavorites } from "../lib/browser-favorites";
+import { IS_MAS_BUILD } from "../lib/build-flags";
 import { isTauri } from "../lib/tauri-io";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
@@ -79,10 +80,14 @@ export function useBrowserTree(): BrowserTreeState {
     // reports when it needs GeoLibre Desktop (Martin has no mobile build).
     // Kept in the saved list's order (most-recently-used first), deliberately
     // unlike the alphabetized Services list — this mirrors the Recent section.
-    const databaseConnections = readSavedPostgresConnections().map((connectionString) => ({
-      connectionString,
-      label: savedPostgresConnectionLabel(connectionString),
-    }));
+    // The Mac App Store build cannot run the sidecar/martin at all, so the
+    // whole Databases section is omitted there (undefined hides it).
+    const databaseConnections = IS_MAS_BUILD
+      ? undefined
+      : readSavedPostgresConnections().map((connectionString) => ({
+          connectionString,
+          label: savedPostgresConnectionLabel(connectionString),
+        }));
     // The Files section is desktop-only: directory reading uses the fs plugin's
     // readDir, which only works within the scope the OS folder dialog grants, so
     // the section lists the user's pinned folders (localStorage, MRU-first) that

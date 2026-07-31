@@ -79,6 +79,9 @@
       "settingsHint": "You can change update checks in Settings → Updates."
     }
   },
+  "masBuild": {
+    "unavailable": "This feature is not available in the Mac App Store version of GeoLibre Desktop."
+  },
   "bookmark": {
     "captureStateLabel": "Include complete layer state (active, inactive, and layer order)",
     "captureStateTooltip": "Applies to the bookmark you save next, not as a global setting. Leave it on to restore exactly this layer arrangement later.",

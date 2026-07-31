@@ -56,6 +56,7 @@ import {
   pickSavePathWithFallback,
   saveBinaryFileWithFallback,
 } from "../../lib/tauri-io";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
@@ -123,6 +124,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   const open = openTool !== null;
   const desktop = isTauri();
+  // Whether this build can run the sidecar engine: desktop, except the Mac App
+  // Store build, whose App Sandbox forbids the sidecar process. The client
+  // (in-browser) engine keeps working either way.
+  const desktopServer = desktop && !IS_MAS_BUILD;
   const [selectedId, setSelectedId] = useState<string>(openTool ?? RASTER_TOOLS[0].id);
   const [inputPath, setInputPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
@@ -147,7 +152,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
-  const [engine, setEngine] = useState<RasterEngine>(desktop ? "sidecar" : "client");
+  const [engine, setEngine] = useState<RasterEngine>(desktopServer ? "sidecar" : "client");
   const [clientInput, setClientInput] = useState<{
     name: string;
     bytes: ArrayBuffer;
@@ -170,11 +175,16 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   }, [openTool]);
 
   const checkRuntime = useCallback(async () => {
-    if (!desktop) {
-      // Raster tools are sidecar-only and the file pickers cannot resolve real
-      // paths in a browser, so a pure web build cannot run them.
+    if (!desktopServer) {
+      // Raster tools' sidecar engine cannot run in a pure web build (no real
+      // file paths) or in the Mac App Store build (no sidecar process); only
+      // the client engine works there.
       setRuntimeAvailable(false);
-      setRuntimeMessage("Raster tools need the GeoLibre desktop app with a running sidecar.");
+      setRuntimeMessage(
+        IS_MAS_BUILD
+          ? t("masBuild.unavailable")
+          : "Raster tools need the GeoLibre desktop app with a running sidecar.",
+      );
       return;
     }
     setRuntimeAvailable(null);
@@ -187,7 +197,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setRuntimeAvailable(false);
       setRuntimeMessage(err instanceof Error ? err.message : t("toolbar.rasterTool.errorConnect"));
     }
-  }, [desktop]);
+  }, [desktopServer, t]);
 
   // Reset per-tool state whenever the dialog opens or the selected tool changes.
   // Also reset the engine here (not only on tool change) so reopening the dialog
@@ -203,8 +213,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setClientInput(null);
     setClientLog([]);
     setClientResult(null);
-    setEngine(tool.supportsClient && !desktop ? "client" : "sidecar");
-  }, [open, tool, desktop]);
+    setEngine(tool.supportsClient && !desktopServer ? "client" : "sidecar");
+  }, [open, tool, desktopServer]);
 
   // Pre-fill from a pending History re-run once the requested tool is selected.
   // Declared after the reset effect above so the recorded parameters win over
@@ -667,9 +677,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 </Label>
                 <Select value={engine} onChange={(e) => setEngine(e.target.value as RasterEngine)}>
                   <option value="client">{t("toolbar.rasterTool.engineClient")}</option>
-                  <option value="sidecar" disabled={!desktop}>
-                    {t("toolbar.rasterTool.engineSidecar")}
-                  </option>
+                  {/* The Mac App Store build has no sidecar at all, so the
+                      option is dropped rather than shown disabled. */}
+                  {!IS_MAS_BUILD && (
+                    <option value="sidecar" disabled={!desktop}>
+                      {t("toolbar.rasterTool.engineSidecar")}
+                    </option>
+                  )}
                 </Select>
                 {engine === "client" && (
                   <p className="text-xs text-muted-foreground">
@@ -685,7 +699,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   {runtimeMessage}
                 </p>
-                {desktop && (
+                {desktopServer && (
                   <Button
                     type="button"
                     variant="outline"

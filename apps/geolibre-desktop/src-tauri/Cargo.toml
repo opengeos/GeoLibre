@@ -12,6 +12,11 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [features]
 default = []
 native-duckdb = ["dep:duckdb"]
+# Mac App Store build: compiles out every command that downloads or spawns
+# external code (sidecar, Jupyter, Martin, uv, external plugin installs), which
+# the App Sandbox and App Store guideline 2.5.2 forbid. Mutually exclusive with
+# native-duckdb (see the compile_error! in src/lib.rs).
+mas = []
 
 # Optimize the release binary for size. The frontend assets dominate the binary,
 # but these still trim the Rust code: LTO + a single codegen unit let the linker

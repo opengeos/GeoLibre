@@ -80,6 +80,7 @@ import {
   type ExtentBounds,
 } from "../../lib/whitebox-extent";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
@@ -463,10 +464,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // Cache the desktop check once, matching the sibling processing dialogs
   // (ConversionDialog, RasterToolsDialog).
   const desktop = isTauri();
+  // Whether this build can spawn/stop the sidecar server: desktop, except the
+  // Mac App Store build, whose App Sandbox forbids the sidecar process. All
+  // server UI gates use this; the WASM runner keeps working either way.
+  const desktopServer = desktop && !IS_MAS_BUILD;
   // Run tools locally in WebAssembly (no Python sidecar). Default on in the
   // browser, where there is no sidecar; off under Tauri, where the sidecar is
   // available and can read native file paths that the WASM runner cannot fetch.
-  const [runLocal, setRunLocal] = useState(!desktop);
+  const [runLocal, setRunLocal] = useState(!desktopServer);
   const [error, setError] = useState<string | null>(null);
   const [startingServer, setStartingServer] = useState(false);
   const [stoppingServer, setStoppingServer] = useState(false);
@@ -1767,7 +1772,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               desktop app can spawn or stop. In the browser these buttons
               would always fail, and a same-origin sidecar (when deployed) is
               auto-detected without them, so gate both on the desktop build. */}
-          {desktop && runtimeAvailable !== true && (
+          {desktopServer && runtimeAvailable !== true && (
             <Button type="button" variant="outline" onClick={startServer} disabled={serverBusy}>
               {startingServer ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1778,7 +1783,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             </Button>
           )}
 
-          {desktop && runtimeAvailable === true && (
+          {desktopServer && runtimeAvailable === true && (
             <Button
               type="button"
               variant="outline"
@@ -1875,18 +1880,22 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   {selectedTool?.license_tier ? ` | ${selectedTool.license_tier}` : ""}
                 </p>
               </div>
-              <label
-                className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                title={t("processing.whitebox.runLocalHint")}
-              >
-                <input
-                  type="checkbox"
-                  data-testid="whitebox-run-local"
-                  checked={runLocal}
-                  onChange={(e) => handleRunLocalChange(e.target.checked)}
-                />
-                {t("processing.whitebox.runLocal")}
-              </label>
+              {/* The Mac App Store build has no sidecar to switch to, so the
+                  local/server toggle is dropped (WASM is the only runtime). */}
+              {!IS_MAS_BUILD && (
+                <label
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  title={t("processing.whitebox.runLocalHint")}
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="whitebox-run-local"
+                    checked={runLocal}
+                    onChange={(e) => handleRunLocalChange(e.target.checked)}
+                  />
+                  {t("processing.whitebox.runLocal")}
+                </label>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -2024,7 +2033,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                 troubleshooting with a one-click switch to the WASM runner.
                 Otherwise fall back to a plain error line (e.g. a parameter or
                 tool-run error that has nothing to do with the sidecar). */}
-            {!runLocal && runtimeAvailable === false ? (
+            {!IS_MAS_BUILD && !runLocal && runtimeAvailable === false ? (
               <SidecarHelpBanner
                 isDesktop={desktop}
                 error={error}

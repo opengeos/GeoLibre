@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "node ../../scripts/tauri-build.mjs",
-    "tauri:build:native-duckdb": "node ../../scripts/tauri-build.mjs --native-duckdb"
+    "tauri:build:native-duckdb": "node ../../scripts/tauri-build.mjs --native-duckdb",
+    "tauri:build:mas": "node ../../scripts/tauri-build.mjs --mas"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

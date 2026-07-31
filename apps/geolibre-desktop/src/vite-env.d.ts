@@ -8,6 +8,11 @@ declare const __GEOLIBRE_VERSION__: string;
 // (Microsoft policy 10.2.5). false in every other build. See vite.config.ts.
 declare const __GEOLIBRE_STORE_BUILD__: boolean;
 
+// True only in the Mac App Store build (GEOLIBRE_MAS_BUILD=1), where the App
+// Sandbox forbids the Python sidecar/Jupyter/martin helper processes, so the
+// UI compiles them out. false in every other build. See vite.config.ts.
+declare const __GEOLIBRE_MAS_BUILD__: boolean;
+
 // jsDelivr URLs for the PGlite engine and its PostGIS extension, injected by
 // vite.config.ts. Only the embed (Jupyter wheel) build reads them, from
 // pglite-loader.cdn.ts; web/desktop builds bundle PGlite and never reference

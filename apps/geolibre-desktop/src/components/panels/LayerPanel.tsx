@@ -197,6 +197,7 @@ import {
   resolvePostgisConnection,
   unregisterPostgisConnection,
 } from "../../lib/postgis-connections";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
@@ -331,6 +332,10 @@ function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
  */
 function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   if (!isTauri() || layer.type !== "geojson") return false;
+  // Both write-back paths (PostGIS tables and local files) run through the
+  // Python sidecar, which the Mac App Store build compiles out, so edits are
+  // export-only there, as on the web build.
+  if (IS_MAS_BUILD) return false;
   if (isPostgisEditableLayer(layer)) return true;
   const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!path) return false;

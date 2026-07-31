@@ -25,6 +25,7 @@ import {
 import type { FeatureCollection } from "geojson";
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
@@ -78,6 +79,14 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
     const gen = ++checkGenRef.current;
     setChecking(true);
     setStatus(null);
+    // The Mac App Store build has no sidecar to probe or start. The dialog is
+    // already hidden from the menus there; this is the defensive fallback in
+    // case it mounts some other way, mirroring the web-unavailable path.
+    if (IS_MAS_BUILD) {
+      setStatus({ available: false, message: t("masBuild.unavailable") });
+      setChecking(false);
+      return;
+    }
     try {
       const next = await fetchMlStatus();
       if (gen === checkGenRef.current) setStatus(next);
@@ -260,25 +269,26 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
               </p>
               {/* Launching the sidecar is a desktop-only (Tauri) capability;
                   in the browser build it cannot work, so offer the desktop
-                  download instead. */}
-              {isTauri() ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void startServer()}
-                  disabled={startingServer}
-                  className="gap-2"
-                >
-                  {startingServer ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Server className="h-4 w-4" />
-                  )}
-                  {t("segmentation.startServer")}
-                </Button>
-              ) : (
-                downloadDesktopButton
-              )}
+                  download instead. The Mac App Store build cannot spawn it
+                  either, so it gets neither action. */}
+              {isTauri()
+                ? !IS_MAS_BUILD && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void startServer()}
+                      disabled={startingServer}
+                      className="gap-2"
+                    >
+                      {startingServer ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Server className="h-4 w-4" />
+                      )}
+                      {t("segmentation.startServer")}
+                    </Button>
+                  )
+                : downloadDesktopButton}
             </div>
           )}
 

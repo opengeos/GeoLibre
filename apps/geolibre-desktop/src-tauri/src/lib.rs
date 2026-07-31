@@ -21,6 +21,13 @@ mod native_duckdb {
     }
 }
 
+// The `mas` (Mac App Store) feature builds for the App Sandbox, where the app
+// may neither download executable code (guideline 2.5.2) nor spawn it. DuckDB
+// loads its spatial extension as unsigned native code at runtime, so the two
+// features can never be combined.
+#[cfg(all(feature = "mas", feature = "native-duckdb"))]
+compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`: DuckDB loads its spatial extension as unsigned native code at runtime, which App Sandbox and App Store guideline 2.5.2 forbid.");
+
 use earth_engine_oauth::{
     poll_earth_engine_oauth, start_earth_engine_oauth, EarthEngineOAuthState,
 };
@@ -28,16 +35,28 @@ use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+#[cfg(not(feature = "mas"))]
 use std::collections::{HashSet, VecDeque};
 use std::env;
+#[cfg(not(feature = "mas"))]
 use std::ffi::OsStr;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::fs;
+#[cfg(not(feature = "mas"))]
+use std::fs::File;
+use std::io::Read;
+#[cfg(not(feature = "mas"))]
+use std::io::{BufRead, BufReader, Cursor, Write};
+#[cfg(not(feature = "mas"))]
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+#[cfg(not(feature = "mas"))]
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+#[cfg(not(feature = "mas"))]
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(not(feature = "mas"))]
 use std::sync::{Arc, Mutex};
+#[cfg(not(feature = "mas"))]
 use std::thread;
 use std::time::Duration;
 use tauri::Manager;
@@ -49,11 +68,17 @@ use tauri_plugin_fs::FsExt;
 #[cfg(desktop)]
 static POPUP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(not(feature = "mas"))]
 const MARTIN_VERSION: &str = "martin-v1.10.1";
+#[cfg(not(feature = "mas"))]
 const MARTIN_RELEASE_BASE_URL: &str = "https://github.com/maplibre/martin/releases/download";
+#[cfg(not(feature = "mas"))]
 const MARTIN_START_ATTEMPTS: usize = 3;
+#[cfg(not(feature = "mas"))]
 const MARTIN_HEALTH_ATTEMPTS: usize = 30;
+#[cfg(not(feature = "mas"))]
 const SIDECAR_HEALTH_ATTEMPTS: usize = 180;
+#[cfg(not(feature = "mas"))]
 const SIDECAR_PORT: u16 = 8765;
 // The sidecar's PostGIS endpoints refuse every destination until this variable
 // names the allowed hosts — the check that stops a *shared* deployment (the
@@ -61,38 +86,45 @@ const SIDECAR_PORT: u16 = 8765;
 // proxy) from being pointed at arbitrary internal databases. See
 // `_validate_postgis_target` in
 // backend/geolibre_server/geolibre_server/app/postgis.py.
+#[cfg(not(feature = "mas"))]
 const POSTGIS_HOSTS_ENV: &str = "GEOLIBRE_POSTGIS_HOSTS";
 // Desktop is the case that restriction is not aimed at: the sidecar is
 // loopback-bound, token-authenticated, and spawned for one user who is also its
 // operator, so it would only mean a user cannot reach their own database
 // without setting an environment variable for a process the app launches.
+#[cfg(not(feature = "mas"))]
 const POSTGIS_HOSTS_DESKTOP_DEFAULT: &str = "*";
 // The desktop JupyterLab server for the Notebook panel. Loopback-bound and
 // token-gated; uses its own uv project environment so it never disturbs the
 // FastAPI sidecar's env. First start can be slow while uv syncs JupyterLab.
+#[cfg(not(feature = "mas"))]
 const JUPYTER_PORT: u16 = 8766;
 // Polled once per second, so up to ~4 minutes — generous headroom for the
 // first-run `uv sync` of JupyterLab on a cold cache.
+#[cfg(not(feature = "mas"))]
 const JUPYTER_HEALTH_ATTEMPTS: usize = 240;
+#[cfg(not(feature = "mas"))]
 const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
 const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 const SIGTERM: i32 = 15;
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 const SIGKILL: i32 = 9;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 unsafe extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
 }
 
+#[cfg(not(feature = "mas"))]
 struct MartinServerState {
     process: Mutex<Option<MartinProcess>>,
 }
 
+#[cfg(not(feature = "mas"))]
 struct SidecarServerState {
     process: Mutex<Option<SidecarProcess>>,
     // Serialize start/stop across every UI surface that can request the shared
@@ -101,6 +133,7 @@ struct SidecarServerState {
     lifecycle: Mutex<()>,
 }
 
+#[cfg(not(feature = "mas"))]
 struct JupyterServerState {
     process: Mutex<Option<JupyterProcess>>,
     // Token of the currently running server, so a reuse path can hand the same
@@ -111,14 +144,17 @@ struct JupyterServerState {
     startup: Mutex<()>,
 }
 
+#[cfg(not(feature = "mas"))]
 struct MartinProcess {
     child: Child,
 }
 
+#[cfg(not(feature = "mas"))]
 struct SidecarProcess {
     child: Child,
 }
 
+#[cfg(not(feature = "mas"))]
 struct JupyterProcess {
     child: Child,
 }
@@ -160,12 +196,14 @@ struct ExternalPluginBundleLoadResult {
     errors: Vec<ExternalPluginBundleError>,
 }
 
+#[cfg(not(feature = "mas"))]
 impl SidecarProcess {
     fn terminate(&mut self) {
         terminate_sidecar_child(&mut self.child);
     }
 }
 
+#[cfg(not(feature = "mas"))]
 impl Drop for MartinProcess {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -173,12 +211,14 @@ impl Drop for MartinProcess {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 impl Drop for SidecarProcess {
     fn drop(&mut self) {
         self.terminate();
     }
 }
 
+#[cfg(not(feature = "mas"))]
 impl JupyterProcess {
     fn terminate(&mut self) {
         // Same process-group teardown as the sidecar (the child is spawned with
@@ -187,6 +227,7 @@ impl JupyterProcess {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 impl Drop for JupyterProcess {
     fn drop(&mut self) {
         self.terminate();
@@ -197,7 +238,7 @@ impl Drop for JupyterProcess {
 pub fn run() {
     configure_linux_webkit();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Must init after the fs plugin: it restores previously-granted fs
@@ -215,7 +256,12 @@ pub fn run() {
         .plugin(tauri_plugin_geolocation::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(EarthEngineOAuthState::default())
+        .manage(EarthEngineOAuthState::default());
+
+    // The Martin/sidecar/Jupyter process managers exist only where the commands
+    // that spawn those processes do; the MAS build compiles both out together.
+    #[cfg(not(feature = "mas"))]
+    let builder = builder
         .manage(MartinServerState {
             process: Mutex::new(None),
         })
@@ -227,7 +273,9 @@ pub fn run() {
             process: Mutex::new(None),
             token: Mutex::new(None),
             startup: Mutex::new(()),
-        })
+        });
+
+    builder
         .invoke_handler(tauri::generate_handler![
             close_oauth_popups,
             native_duckdb::count_native_vector_file_features,
@@ -972,6 +1020,7 @@ fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
 /// `plugin.json`, enforcing the manifest rules, and confirming the entry and
 /// optional style are present and within the size limit), so only a loadable
 /// plugin lands in the plugins directory. Returns the installed plugin id.
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn install_external_plugin_archive(
     app: tauri::AppHandle,
@@ -984,6 +1033,7 @@ async fn install_external_plugin_archive(
     .map_err(|error| format!("Plugin install task failed: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn install_external_plugin_archive_blocking(
     app: &tauri::AppHandle,
     source_path: String,
@@ -1033,6 +1083,7 @@ fn install_external_plugin_archive_blocking(
 /// `_` and leading dots are stripped to keep the name from escaping the plugins
 /// directory or producing a hidden file. Using the id as the file name gives a
 /// reinstall natural overwrite semantics.
+#[cfg(not(feature = "mas"))]
 fn plugin_archive_file_name(id: &str) -> String {
     let sanitized: String = id
         .chars()
@@ -1057,6 +1108,7 @@ fn plugin_archive_file_name(id: &str) -> String {
     format!("{safe}.zip")
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn load_external_plugin_bundles(
     app: tauri::AppHandle,
@@ -1069,6 +1121,7 @@ async fn load_external_plugin_bundles(
     .map_err(|error| format!("External plugin scan task failed: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn load_external_plugin_bundles_blocking(
     app: &tauri::AppHandle,
     additional_plugin_directories: Vec<String>,
@@ -1115,6 +1168,7 @@ fn load_external_plugin_bundles_blocking(
     })
 }
 
+#[cfg(not(feature = "mas"))]
 fn normalize_path_key(path: &Path) -> String {
     // Canonicalize so symlinks and case differences on case-insensitive file
     // systems (Windows, macOS) dedupe to one key; fall back to the raw path
@@ -1123,6 +1177,7 @@ fn normalize_path_key(path: &Path) -> String {
     canonical.to_string_lossy().replace('\\', "/")
 }
 
+#[cfg(not(feature = "mas"))]
 fn scan_external_plugin_directory(
     plugin_dir: &Path,
     bundles: &mut Vec<ExternalPluginBundle>,
@@ -1196,12 +1251,14 @@ fn scan_external_plugin_directory(
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn is_zip_path(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
 }
 
+#[cfg(not(feature = "mas"))]
 fn load_external_plugin_archive(
     path: &Path,
     archive_name: &str,
@@ -1249,6 +1306,7 @@ fn load_external_plugin_archive(
 /// root `plugin.json`, otherwise returns the shallowest `*/plugin.json`, ignoring
 /// the `__MACOSX/` metadata folder macOS adds to archives. Returns the manifest's
 /// full path within the archive, or None when no plugin.json is present.
+#[cfg(not(feature = "mas"))]
 fn find_zip_manifest_path<R: Read + std::io::Seek>(archive: &zip::ZipArchive<R>) -> Option<String> {
     let names: Vec<&str> = archive.file_names().collect();
     if names.contains(&"plugin.json") {
@@ -1269,6 +1327,7 @@ fn find_zip_manifest_path<R: Read + std::io::Seek>(archive: &zip::ZipArchive<R>)
     best.map(str::to_string)
 }
 
+#[cfg(not(feature = "mas"))]
 fn load_external_plugin_directory(
     path: &Path,
     archive_name: &str,
@@ -1292,6 +1351,7 @@ fn load_external_plugin_directory(
     })
 }
 
+#[cfg(not(feature = "mas"))]
 fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<String, String> {
     let entry_path = root.join(entry_name);
     if !entry_path.is_file() {
@@ -1315,8 +1375,10 @@ fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<Stri
     Ok(text)
 }
 
+#[cfg(not(feature = "mas"))]
 const MAX_PLUGIN_ENTRY_BYTES: u64 = 50 * 1024 * 1024;
 
+#[cfg(not(feature = "mas"))]
 fn read_zip_text_entry<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
     entry_name: &str,
@@ -1345,6 +1407,7 @@ fn read_zip_text_entry<R: Read + std::io::Seek>(
     Ok(text)
 }
 
+#[cfg(not(feature = "mas"))]
 fn validate_external_plugin_manifest(manifest: &ExternalPluginManifest) -> Result<(), String> {
     validate_required_manifest_string("id", &manifest.id)?;
     validate_required_manifest_string("name", &manifest.name)?;
@@ -1369,6 +1432,7 @@ fn validate_external_plugin_manifest(manifest: &ExternalPluginManifest) -> Resul
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 fn validate_required_manifest_string(field: &str, value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         return Err(format!("{field} must not be empty"));
@@ -1381,6 +1445,7 @@ fn validate_required_manifest_string(field: &str, value: &str) -> Result<(), Str
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 fn validate_optional_manifest_string(field: &str, value: &str) -> Result<(), String> {
     if value.trim() != value {
         return Err(format!(
@@ -1390,6 +1455,7 @@ fn validate_optional_manifest_string(field: &str, value: &str) -> Result<(), Str
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 fn validate_external_plugin_path(field: &str, value: &str) -> Result<(), String> {
     if value.starts_with('/') {
         return Err(format!("{field} must be a relative path"));
@@ -1527,11 +1593,94 @@ struct JupyterServerInfo {
     token: String,
 }
 
+// Mac App Store stubs. The App Sandbox forbids spawning downloaded executables
+// and guideline 2.5.2 forbids downloading executable code, so the `mas` feature
+// compiles out everything that does either: the Python sidecar, the Jupyter
+// server, the Martin tile server, the managed uv install, and external plugin
+// installation. Each stub keeps the real command's name, signature, and Ok type
+// so the generate_handler! list and the frontend's invoke calls are unchanged;
+// they fail with a clear message instead. DuckDB-WASM processing and the
+// plugins bundled into the app are unaffected.
+#[cfg(feature = "mas")]
+#[tauri::command]
+fn ensure_martin_binary(_app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
+    Err("The Martin tile server is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn start_martin_server(
+    _app: tauri::AppHandle,
+    _connection_string: String,
+    _default_srid: Option<String>,
+) -> Result<MartinServerInfo, String> {
+    Err("The Martin tile server is not available in the Mac App Store build.".to_string())
+}
+
+// The real command borrows tauri::State<MartinServerState>, but that state is
+// neither defined nor managed in this build, so the stub takes no argument (the
+// frontend passes none; state is injected server-side).
+#[cfg(feature = "mas")]
+#[tauri::command]
+fn stop_martin_server() -> Result<(), String> {
+    Err("The Martin tile server is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn start_geolibre_sidecar(_app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
+    Err("The GeoLibre processing server is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn stop_geolibre_sidecar(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("The GeoLibre processing server is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn start_jupyter_server(_app: tauri::AppHandle) -> Result<JupyterServerInfo, String> {
+    Err("The Jupyter notebook server is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn stop_jupyter_server(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("The Jupyter notebook server is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn install_external_plugin_archive(
+    _app: tauri::AppHandle,
+    _source_path: String,
+) -> Result<String, String> {
+    Err("External plugin installation is not available in the Mac App Store build.".to_string())
+}
+
+// Succeeds with an empty scan rather than erroring, so the startup plugin load
+// degrades silently instead of surfacing a failure on every launch.
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn load_external_plugin_bundles(
+    _app: tauri::AppHandle,
+    _additional_plugin_directories: Vec<String>,
+) -> Result<ExternalPluginBundleLoadResult, String> {
+    Ok(ExternalPluginBundleLoadResult {
+        plugins_directories: Vec::new(),
+        bundles: Vec::new(),
+        errors: Vec::new(),
+    })
+}
+
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 fn ensure_martin_binary(app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
     ensure_martin_binary_path(&app)
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn start_martin_server(
     app: tauri::AppHandle,
@@ -1545,6 +1694,7 @@ async fn start_martin_server(
     .map_err(|error| format!("Could not join Martin startup task: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn start_martin_server_blocking(
     app: tauri::AppHandle,
     connection_string: String,
@@ -1604,6 +1754,7 @@ fn start_martin_server_blocking(
     Err(last_error)
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 fn stop_martin_server(state: tauri::State<MartinServerState>) -> Result<(), String> {
     let mut process = state
@@ -1614,6 +1765,7 @@ fn stop_martin_server(state: tauri::State<MartinServerState>) -> Result<(), Stri
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
     tauri::async_runtime::spawn_blocking(move || start_geolibre_sidecar_blocking(app))
@@ -1621,6 +1773,7 @@ async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerIn
         .map_err(|error| format!("Could not join sidecar startup task: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn add_main_sidecar_extras(command: &mut Command) {
     command
         .arg("--extra")
@@ -1629,6 +1782,7 @@ fn add_main_sidecar_extras(command: &mut Command) {
         .arg("postgis");
 }
 
+#[cfg(not(feature = "mas"))]
 fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
     let base_url = sidecar_base_url();
     let state = app.state::<SidecarServerState>();
@@ -1766,6 +1920,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     })
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn stop_geolibre_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || stop_geolibre_sidecar_blocking(app))
@@ -1773,6 +1928,7 @@ async fn stop_geolibre_sidecar(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|error| format!("Could not join sidecar stop task: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<SidecarServerState>();
     let _lifecycle = state
@@ -1809,6 +1965,7 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn start_jupyter_server(app: tauri::AppHandle) -> Result<JupyterServerInfo, String> {
     tauri::async_runtime::spawn_blocking(move || start_jupyter_server_blocking(app))
@@ -1816,6 +1973,7 @@ async fn start_jupyter_server(app: tauri::AppHandle) -> Result<JupyterServerInfo
         .map_err(|error| format!("Could not join Jupyter startup task: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerInfo, String> {
     let state = app.state::<JupyterServerState>();
     // Serialize the whole startup. Concurrent calls (e.g. React StrictMode
@@ -1981,6 +2139,7 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
     })
 }
 
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn stop_jupyter_server(app: tauri::AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || stop_jupyter_server_blocking(app))
@@ -1988,6 +2147,7 @@ async fn stop_jupyter_server(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|error| format!("Could not join Jupyter stop task: {error}"))?
 }
 
+#[cfg(not(feature = "mas"))]
 fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<JupyterServerState>();
     {
@@ -2010,6 +2170,7 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 fn jupyter_base_url() -> String {
     format!("http://127.0.0.1:{JUPYTER_PORT}")
 }
@@ -2019,6 +2180,7 @@ fn jupyter_base_url() -> String {
 // enough to avoid a `--port-retries=0` bind failure right after killing an orphan.
 // Returns whether the port actually came free within the timeout, so a caller
 // that can report a better error than the failed spawn is able to bail out.
+#[cfg(not(feature = "mas"))]
 fn wait_for_port_free(port: u16) -> bool {
     for _ in 0..20 {
         if TcpListener::bind(("127.0.0.1", port)).is_ok() {
@@ -2033,6 +2195,7 @@ fn wait_for_port_free(port: u16) -> bool {
 // existing value is preserved rather than clobbered. The inherited value is
 // taken *after* AppImage sanitation, so the AppDir entry AppRun injects is not
 // carried into the child (see appdir_free_path_var).
+#[cfg(not(feature = "mas"))]
 fn prepend_pythonpath(dir: &Path) -> String {
     let dir = dir.display().to_string();
     match appdir_free_path_var("PYTHONPATH") {
@@ -2044,6 +2207,7 @@ fn prepend_pythonpath(dir: &Path) -> String {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn jupyter_health_is_ready(
     client: &reqwest::blocking::Client,
     base_url: &str,
@@ -2057,6 +2221,7 @@ fn jupyter_health_is_ready(
         .unwrap_or(false)
 }
 
+#[cfg(not(feature = "mas"))]
 fn wait_for_jupyter_health(
     base_url: &str,
     token: &str,
@@ -2099,6 +2264,7 @@ fn wait_for_jupyter_health(
 // there is no terminal to read it from, so it has to travel with the error.
 // Shared by the Jupyter and sidecar waiters, and by both of their failure paths
 // (early exit and timeout), so no path can quietly drop the one useful detail.
+#[cfg(not(feature = "mas"))]
 fn child_failure_message(summary: &str, output: &CapturedOutput) -> String {
     // The child may have only just exited, with its last lines still in flight.
     output.settle();
@@ -2114,6 +2280,7 @@ fn child_failure_message(summary: &str, output: &CapturedOutput) -> String {
 // only barrier once the XSRF check is disabled for the embedded iframe (see
 // jupyter_server_config.py), so use the OS CSPRNG (128 random bits) rather than
 // anything derived from the clock/pid.
+#[cfg(not(feature = "mas"))]
 fn generate_jupyter_token() -> String {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
@@ -2125,6 +2292,7 @@ fn generate_jupyter_token() -> String {
     token
 }
 
+#[cfg(not(feature = "mas"))]
 fn sidecar_base_url() -> String {
     format!("http://127.0.0.1:{SIDECAR_PORT}")
 }
@@ -2139,11 +2307,13 @@ fn sidecar_base_url() -> String {
 /// via `GEOLIBRE_SIDECAR_TOKEN` at spawn time. A sidecar started outside this
 /// process (e.g. a `python -m` dev run) leaves the env var unset and simply does
 /// not enforce the token, so those flows keep working.
+#[cfg(not(feature = "mas"))]
 fn sidecar_token() -> &'static str {
     static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     TOKEN.get_or_init(generate_jupyter_token)
 }
 
+#[cfg(not(feature = "mas"))]
 fn sidecar_health_is_ready(base_url: &str) -> bool {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
@@ -2167,6 +2337,7 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
 /// than silently 401ing every later request. A tokenless dev sidecar
 /// (`GEOLIBRE_SIDECAR_TOKEN` unset) accepts any header and returns 200, so it is
 /// still reused.
+#[cfg(not(feature = "mas"))]
 fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
     let Ok(client) = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
@@ -2182,6 +2353,7 @@ fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(feature = "mas"))]
 fn request_sidecar_shutdown(base_url: &str) {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
@@ -2198,6 +2370,7 @@ fn request_sidecar_shutdown(base_url: &str) {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn wait_for_sidecar_stop(base_url: &str) {
     for _ in 0..20 {
         if !sidecar_health_is_ready(base_url) {
@@ -2207,6 +2380,7 @@ fn wait_for_sidecar_stop(base_url: &str) {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn wait_for_sidecar_health(
     base_url: &str,
     child: &mut Child,
@@ -2240,7 +2414,9 @@ fn wait_for_sidecar_health(
 // failure message quotes. The log is a ring buffer so a chatty child (uv sync +
 // JupyterLab startup write hundreds of lines) can never grow without bound, and
 // the tail is what matters: the error that killed the process is at the end.
+#[cfg(not(feature = "mas"))]
 const CAPTURED_LOG_MAX_LINES: usize = 200;
+#[cfg(not(feature = "mas"))]
 const CAPTURED_LOG_REPORTED_LINES: usize = 20;
 // How long a failure report waits for the reader threads to reach EOF before
 // quoting what they have. `try_wait` reports the exit as soon as the process is
@@ -2250,7 +2426,9 @@ const CAPTURED_LOG_REPORTED_LINES: usize = 20;
 // inherit these same pipe handles, so a grandchild outliving the child keeps the
 // write end open and EOF never arrives. An unbounded join would hang the Tauri
 // command forever, which is worse than a truncated tail.
+#[cfg(not(feature = "mas"))]
 const CAPTURED_LOG_SETTLE: Duration = Duration::from_millis(500);
+#[cfg(not(feature = "mas"))]
 const CAPTURED_LOG_SETTLE_POLL: Duration = Duration::from_millis(10);
 
 /// The trailing output of a spawned child, drained on background threads.
@@ -2261,6 +2439,7 @@ const CAPTURED_LOG_SETTLE_POLL: Duration = Duration::from_millis(10);
 /// streams continuously, keep the last `CAPTURED_LOG_MAX_LINES` in memory, and
 /// echo each line to the parent's own stdio so a dev terminal still shows the
 /// live log.
+#[cfg(not(feature = "mas"))]
 #[derive(Clone)]
 struct CapturedOutput {
     lines: Arc<Mutex<VecDeque<String>>>,
@@ -2268,6 +2447,7 @@ struct CapturedOutput {
     draining: Arc<AtomicUsize>,
 }
 
+#[cfg(not(feature = "mas"))]
 impl CapturedOutput {
     fn new() -> Self {
         Self {
@@ -2360,6 +2540,7 @@ impl CapturedOutput {
 
 /// The AppImage mount root, when running from an AppImage. `APPDIR` is exported
 /// by AppRun and is the prefix of everything it injects.
+#[cfg(not(feature = "mas"))]
 fn appimage_dir() -> Option<String> {
     env::var("APPDIR").ok().filter(|dir| !dir.is_empty())
 }
@@ -2368,6 +2549,7 @@ fn appimage_dir() -> Option<String> {
 /// mount removed. Returns `None` when the variable is unset or every entry was
 /// an AppDir entry (so the caller unsets it rather than passing an empty value).
 /// Outside an AppImage the value is returned untouched.
+#[cfg(not(feature = "mas"))]
 fn appdir_free_path_var(name: &str) -> Option<String> {
     let value = env::var(name).ok()?;
     let Some(appdir) = appimage_dir() else {
@@ -2407,6 +2589,7 @@ fn appdir_free_path_var(name: &str) -> Option<String> {
 /// the project environment we point it at, so drop it unconditionally rather
 /// than only under an AppImage. The two search paths keep any entries the user
 /// legitimately set and lose only the AppDir ones.
+#[cfg(not(feature = "mas"))]
 fn clear_appimage_python_env(command: &mut Command) {
     command.env_remove("PYTHONHOME");
     for name in ["LD_LIBRARY_PATH", "PYTHONPATH"] {
@@ -2426,29 +2609,31 @@ fn clear_appimage_python_env(command: &mut Command) {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn configure_sidecar_process(command: &mut Command) {
     // Both callers (the sidecar and Jupyter launches) run Python through uv.
     clear_appimage_python_env(command);
     configure_sidecar_process_impl(command);
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 fn configure_sidecar_process_impl(command: &mut Command) {
     use std::os::unix::process::CommandExt;
 
     command.process_group(0);
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(feature = "mas")))]
 fn configure_sidecar_process_impl(_command: &mut Command) {}
 
+#[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
     terminate_sidecar_process_group(child);
     let _ = child.kill();
     let _ = child.wait();
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 fn terminate_sidecar_process_group(child: &mut Child) {
     // Guard the negation: a PID that wrapped to a non-positive i32 would make
     // `kill` target process group 0 (the caller's own group, including the
@@ -2465,10 +2650,10 @@ fn terminate_sidecar_process_group(child: &mut Child) {
     let _ = unsafe { kill(process_group, SIGKILL) };
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(feature = "mas")))]
 fn terminate_sidecar_process_group(_child: &mut Child) {}
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn terminate_sidecar_listeners_on_port(port: u16) -> Result<(), String> {
     terminate_listeners_on_port(port, is_geolibre_sidecar_process)
 }
@@ -2476,7 +2661,7 @@ fn terminate_sidecar_listeners_on_port(port: u16) -> Result<(), String> {
 // Reap a stale Jupyter server that still holds the port (e.g. orphaned by a
 // non-graceful exit of a previous app session). Recognized by its cmdline so we
 // never touch an unrelated jupyter (the user's own JupyterHub, etc.).
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn terminate_jupyter_listeners_on_port(port: u16) -> Result<(), String> {
     terminate_listeners_on_port(port, is_geolibre_jupyter_process)
 }
@@ -2487,7 +2672,7 @@ fn terminate_jupyter_listeners_on_port(port: u16) -> Result<(), String> {
 // keep holding the port there, in which case the next launch fails to bind and
 // surfaces "exited before it was ready". A cross-platform port-owner lookup
 // (e.g. lsof on macOS) would be needed to close this.
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(feature = "mas")))]
 fn terminate_jupyter_listeners_on_port(_port: u16) -> Result<(), String> {
     Ok(())
 }
@@ -2495,7 +2680,7 @@ fn terminate_jupyter_listeners_on_port(_port: u16) -> Result<(), String> {
 // Kill the processes listening on `port` that `is_ours` recognizes (SIGTERM then
 // SIGKILL). The `is_ours` guard prevents killing an unrelated process that
 // happens to hold the port.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn terminate_listeners_on_port(port: u16, is_ours: fn(i32) -> bool) -> Result<(), String> {
     let inodes = listening_tcp_inodes(port)?;
     if inodes.is_empty() {
@@ -2527,12 +2712,12 @@ fn terminate_listeners_on_port(port: u16, is_ours: fn(i32) -> bool) -> Result<()
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(feature = "mas")))]
 fn terminate_sidecar_listeners_on_port(_port: u16) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn listening_tcp_inodes(port: u16) -> Result<HashSet<String>, String> {
     let mut inodes = HashSet::new();
     collect_listening_tcp_inodes("/proc/net/tcp", port, &mut inodes)?;
@@ -2540,7 +2725,7 @@ fn listening_tcp_inodes(port: u16) -> Result<HashSet<String>, String> {
     Ok(inodes)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn collect_listening_tcp_inodes(
     path: &str,
     port: u16,
@@ -2564,7 +2749,7 @@ fn collect_listening_tcp_inodes(
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn process_has_socket(pid: i32, inodes: &HashSet<String>) -> Result<bool, String> {
     let fd_dir = format!("/proc/{pid}/fd");
     let Ok(entries) = fs::read_dir(&fd_dir) else {
@@ -2590,7 +2775,7 @@ fn process_has_socket(pid: i32, inodes: &HashSet<String>) -> Result<bool, String
     Ok(false)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn is_geolibre_sidecar_process(pid: i32) -> bool {
     let path = format!("/proc/{pid}/cmdline");
     let Ok(command_line) = fs::read(path) else {
@@ -2604,7 +2789,7 @@ fn is_geolibre_sidecar_process(pid: i32) -> bool {
 // Recognize OUR Jupyter server (started by start_jupyter_server) by the bundled
 // config path on its command line — specific enough not to match the user's own
 // jupyter/JupyterHub processes.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn is_geolibre_jupyter_process(pid: i32) -> bool {
     let path = format!("/proc/{pid}/cmdline");
     let Ok(command_line) = fs::read(path) else {
@@ -2614,11 +2799,12 @@ fn is_geolibre_jupyter_process(pid: i32) -> bool {
     command_line.contains("jupyter_server_config.py") && command_line.contains("geolibre_server")
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 fn terminate_pid(pid: i32, signal: i32) {
     let _ = unsafe { kill(pid, signal) };
 }
 
+#[cfg(not(feature = "mas"))]
 fn sidecar_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = env::var("GEOLIBRE_SIDECAR_PROJECT_DIR") {
         return validate_sidecar_project_dir(PathBuf::from(path));
@@ -2649,6 +2835,7 @@ fn sidecar_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// under the resource dir (issue #1223). We probe the plain locations first,
 /// then a few `_up_` depths so the lookup keeps working if the number of `..`
 /// segments in the resource path ever changes.
+#[cfg(not(feature = "mas"))]
 fn resolve_sidecar_in_resource_dir(resource_dir: &std::path::Path) -> Option<PathBuf> {
     // Plain resource root plus a few `_up_` levels of margin over the observed
     // 3-level bundle depth, so the lookup survives a change in Tauri's bundling.
@@ -2668,6 +2855,7 @@ fn resolve_sidecar_in_resource_dir(resource_dir: &std::path::Path) -> Option<Pat
     None
 }
 
+#[cfg(not(feature = "mas"))]
 fn validate_sidecar_project_dir(path: PathBuf) -> Result<PathBuf, String> {
     let path = path
         .canonicalize()
@@ -2682,6 +2870,7 @@ fn validate_sidecar_project_dir(path: PathBuf) -> Result<PathBuf, String> {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn ensure_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = env::var("GEOLIBRE_UV") {
         let path = PathBuf::from(path);
@@ -2697,6 +2886,7 @@ fn ensure_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     install_managed_uv(app)
 }
 
+#[cfg(not(feature = "mas"))]
 fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let uv_dir = app
         .path()
@@ -2745,6 +2935,7 @@ fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(uv)
 }
 
+#[cfg(not(feature = "mas"))]
 fn download_uv_installer(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let url = if cfg!(target_os = "windows") {
         format!("{UV_INSTALL_BASE_URL}/install.ps1")
@@ -2785,6 +2976,7 @@ fn download_uv_installer(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(script)
 }
 
+#[cfg(not(feature = "mas"))]
 fn uv_executable_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "uv.exe"
@@ -2793,6 +2985,7 @@ fn uv_executable_name() -> &'static str {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn find_executable_on_path(name: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
     env::split_paths(&path)
@@ -2800,7 +2993,7 @@ fn find_executable_on_path(name: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file() && is_executable(candidate))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 fn is_executable(path: &std::path::Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     path.metadata()
@@ -2808,11 +3001,12 @@ fn is_executable(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(feature = "mas")))]
 fn is_executable(_path: &std::path::Path) -> bool {
     true
 }
 
+#[cfg(not(feature = "mas"))]
 fn ensure_martin_binary_path(app: &tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
     let asset_name = martin_asset_name()?;
     let executable_name = martin_executable_name();
@@ -2858,6 +3052,7 @@ fn ensure_martin_binary_path(app: &tauri::AppHandle) -> Result<MartinBinaryInfo,
     })
 }
 
+#[cfg(not(feature = "mas"))]
 fn martin_asset_name() -> Result<&'static str, String> {
     if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
         return Ok("martin-x86_64-unknown-linux-musl.tar.gz");
@@ -2878,6 +3073,7 @@ fn martin_asset_name() -> Result<&'static str, String> {
     Err("No Martin binary release is available for this platform.".to_string())
 }
 
+#[cfg(not(feature = "mas"))]
 fn martin_executable_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "martin.exe"
@@ -2886,6 +3082,7 @@ fn martin_executable_name() -> &'static str {
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn download_martin_asset(asset_name: &str) -> Result<Vec<u8>, String> {
     let url = format!("{MARTIN_RELEASE_BASE_URL}/{MARTIN_VERSION}/{asset_name}");
     let response = reqwest::blocking::Client::builder()
@@ -2906,6 +3103,7 @@ fn download_martin_asset(asset_name: &str) -> Result<Vec<u8>, String> {
         .map_err(|error| format!("Could not read Martin download: {error}"))
 }
 
+#[cfg(not(feature = "mas"))]
 fn extract_martin_binary(
     archive: &[u8],
     asset_name: &str,
@@ -2918,6 +3116,7 @@ fn extract_martin_binary(
     }
 }
 
+#[cfg(not(feature = "mas"))]
 fn extract_martin_binary_from_tar_gz(archive: &[u8], binary_path: &Path) -> Result<(), String> {
     let decoder = GzDecoder::new(Cursor::new(archive));
     let mut archive = tar::Archive::new(decoder);
@@ -2942,6 +3141,7 @@ fn extract_martin_binary_from_tar_gz(archive: &[u8], binary_path: &Path) -> Resu
     Err("Martin archive did not contain the expected executable.".to_string())
 }
 
+#[cfg(not(feature = "mas"))]
 fn extract_martin_binary_from_zip(archive: &[u8], binary_path: &Path) -> Result<(), String> {
     let reader = Cursor::new(archive);
     let mut archive = zip::ZipArchive::new(reader)
@@ -2964,6 +3164,7 @@ fn extract_martin_binary_from_zip(archive: &[u8], binary_path: &Path) -> Result<
     Err("Martin zip did not contain the expected executable.".to_string())
 }
 
+#[cfg(not(feature = "mas"))]
 fn copy_archive_entry_to_path<R: Read>(reader: &mut R, path: &Path) -> Result<(), String> {
     let mut output =
         File::create(path).map_err(|error| format!("Could not create Martin binary: {error}"))?;
@@ -2974,7 +3175,7 @@ fn copy_archive_entry_to_path<R: Read>(reader: &mut R, path: &Path) -> Result<()
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "mas")))]
 fn make_executable(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
@@ -2986,17 +3187,19 @@ fn make_executable(path: &Path) -> Result<(), String> {
         .map_err(|error| format!("Could not mark Martin executable: {error}"))
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(feature = "mas")))]
 fn make_executable(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "mas"))]
 struct SpawnedMartinServer {
     base_url: String,
     port: u16,
     process: MartinProcess,
 }
 
+#[cfg(not(feature = "mas"))]
 fn spawn_martin_server(
     binary_path: &str,
     connection_string: &str,
@@ -3047,6 +3250,7 @@ fn spawn_martin_server(
     })
 }
 
+#[cfg(not(feature = "mas"))]
 fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), String> {
     let health_url = format!("{base_url}/health");
     let client = reqwest::blocking::Client::builder()
@@ -3082,6 +3286,7 @@ fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), Strin
     Err("Martin did not become ready in time.".to_string())
 }
 
+#[cfg(not(feature = "mas"))]
 fn read_child_output(child: &mut Child) -> String {
     let mut output = String::new();
     if let Some(mut stdout) = child.stdout.take() {
@@ -3388,26 +3593,40 @@ fn configure_linux_webkit() {}
 #[cfg(test)]
 mod tests {
     use super::{
-        add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
-        find_zip_manifest_path, is_allowed_local_vector_path, is_allowed_project_path,
-        is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
-        resolve_sidecar_in_resource_dir, CapturedOutput, CAPTURED_LOG_MAX_LINES,
-        CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
+        is_safe_absolute_path,
     };
+    // Everything these imports feed is compiled out of the `mas` build, so the
+    // tests that exercise it (and their scaffolding) are gated with it.
+    #[cfg(not(feature = "mas"))]
+    use super::{
+        add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
+        find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
+        CapturedOutput, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+    };
+    #[cfg(not(feature = "mas"))]
     use std::env;
+    #[cfg(not(feature = "mas"))]
     use std::ffi::OsStr;
+    #[cfg(not(feature = "mas"))]
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
+    #[cfg(not(feature = "mas"))]
     use std::path::PathBuf;
+    #[cfg(not(feature = "mas"))]
     use std::process::Command;
+    #[cfg(not(feature = "mas"))]
     use std::sync::Mutex;
+    #[cfg(not(feature = "mas"))]
     use std::time::Duration;
 
     // `std::env::set_var` is process-global, so the tests that stage an AppImage
     // environment must not run concurrently with each other.
+    #[cfg(not(feature = "mas"))]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn main_sidecar_installs_postgis_runtime() {
         let mut command = Command::new("uv");
@@ -3428,8 +3647,10 @@ mod tests {
     // on drop, so scratch dirs are cleaned up even when an assertion panics.
     // Uses the process id (no rand dependency) and clears any leftover from a
     // prior run at construction.
+    #[cfg(not(feature = "mas"))]
     struct ScratchDir(PathBuf);
 
+    #[cfg(not(feature = "mas"))]
     impl ScratchDir {
         fn new(name: &str) -> Self {
             let dir = std::env::temp_dir().join(format!("geolibre-{name}-{}", std::process::id()));
@@ -3443,6 +3664,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "mas"))]
     impl Drop for ScratchDir {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
@@ -3452,6 +3674,7 @@ mod tests {
     // Regression for issue #1223: installed builds place the bundled sidecar at
     // `<resource_dir>/_up_/_up_/_up_/backend/geolibre_server`, so the resolver
     // must follow the `_up_` chain rather than only checking the resource root.
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn resolves_bundled_sidecar_under_up_prefix() {
         let root = ScratchDir::new("sidecar-up");
@@ -3621,6 +3844,7 @@ mod tests {
         assert!(!is_allowed_local_vector_path("/home/user/file."));
     }
 
+    #[cfg(not(feature = "mas"))]
     fn zip_with_names(names: &[&str]) -> Vec<u8> {
         let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default()
@@ -3632,12 +3856,14 @@ mod tests {
         writer.finish().unwrap().into_inner()
     }
 
+    #[cfg(not(feature = "mas"))]
     fn manifest_path(names: &[&str]) -> Option<String> {
         let bytes = zip_with_names(names);
         let archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         find_zip_manifest_path(&archive)
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn finds_root_manifest() {
         assert_eq!(
@@ -3646,6 +3872,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn finds_manifest_inside_a_wrapping_folder() {
         assert_eq!(
@@ -3654,6 +3881,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn prefers_root_and_ignores_macosx_metadata() {
         // A root manifest wins over a deeper one.
@@ -3668,17 +3896,20 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn returns_none_without_a_manifest() {
         assert_eq!(manifest_path(&["dist/plugin.js"]), None);
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn keeps_safe_plugin_ids() {
         assert_eq!(plugin_archive_file_name("maplibre-foo"), "maplibre-foo.zip");
         assert_eq!(plugin_archive_file_name("foo.bar_2"), "foo.bar_2.zip");
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn sanitizes_unsafe_characters_and_traversal() {
         // Path separators and other characters cannot escape the plugins dir;
@@ -3716,6 +3947,7 @@ mod tests {
         assert!(!is_safe_absolute_path("C:")); // drive letter without a separator
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn captured_output_keeps_only_the_trailing_lines() {
         let captured = CapturedOutput::new();
@@ -3735,6 +3967,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn captured_output_drops_blank_lines_from_the_tail() {
         let captured = CapturedOutput::new();
@@ -3748,6 +3981,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn child_failure_message_quotes_the_child_output() {
         let captured = CapturedOutput::new();
@@ -3759,6 +3993,7 @@ mod tests {
         assert!(message.contains("error: Extra `notebook` is not defined"));
     }
 
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn child_failure_message_says_so_when_there_was_no_output() {
         let message = child_failure_message("Jupyter server exited.", &CapturedOutput::new());
@@ -3770,7 +4005,7 @@ mod tests {
     // while those lines are still in the pipe, so the report has to wait for the
     // readers to drain. Uses a real child so the race is real: a spawn that
     // writes and exits immediately, reported the way the health waiters do.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(feature = "mas")))]
     #[test]
     fn child_failure_message_waits_for_output_still_in_the_pipe() {
         use std::process::{Command, Stdio};
@@ -3800,6 +4035,7 @@ mod tests {
     // failure mode the capture exists to prevent. (The real-child test above
     // exercises the same path end to end, but its timing is not guaranteed:
     // on a fast machine the reader usually wins on its own.)
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn child_failure_message_waits_for_output_still_in_flight() {
         struct SlowThenEof {
@@ -3829,6 +4065,7 @@ mod tests {
     // aborts with "Failed to import encodings module" before running any code,
     // which is how the Notebook panel and the sidecar died in AppImage builds.
     // Serialized with the other env-mutating test: these share process env.
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn appimage_python_env_is_stripped_from_children() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -3870,6 +4107,7 @@ mod tests {
 
     // Outside an AppImage nothing is filtered: a user who deliberately set these
     // for their own Python must keep them.
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn python_env_is_untouched_outside_an_appimage() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -3890,6 +4128,7 @@ mod tests {
     // The Jupyter launch sets PYTHONPATH itself (notebook-lib, so `import
     // geolibre` works) before the sanitizer runs; the sanitizer must not
     // overwrite it.
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn a_pythonpath_the_caller_already_set_is_preserved() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -3913,6 +4152,7 @@ mod tests {
     // `jupyter`, which spawns kernels holding these same pipe handles, so a
     // grandchild outliving the child keeps the write end open forever. `settle`
     // is bounded for exactly this case.
+    #[cfg(not(feature = "mas"))]
     #[test]
     fn settle_gives_up_on_a_reader_that_never_reaches_eof() {
         struct NeverEnds;
