@@ -350,12 +350,6 @@ export async function addRasterToMap(
   if (options.defaults?.engine && control.getEngine() !== options.defaults.engine) {
     control.setEngine(options.defaults.engine);
   }
-  // A project/basemap load can replace the MapLibre style after the control's
-  // one-time mount warm-up. On Tauri/WebKitGTK that leaves the WASM backend
-  // waiting for an accelerated canvas until the user manually switches to the
-  // GPU engine and back. Repeat that inexpensive toggle at the add boundary,
-  // against the current style, before the COG source starts opening.
-  await warmTauriWasmEngine(control);
   const id = await control.addRaster(source, {
     name: options.name,
     zoomTo: options.zoomTo ?? true,
@@ -371,6 +365,12 @@ export async function addRasterToMap(
       : {}),
     ...(options.beforeId ? { beforeId: options.beforeId } : {}),
   });
+  // A project/basemap load can replace the MapLibre style after the control's
+  // one-time mount warm-up. On Tauri/WebKitGTK the newly registered WASM source
+  // can then remain pending until the user switches to the GPU engine and back.
+  // Do that reset only after addRaster has created the layer, so switching back
+  // rebuilds the real source rather than an empty renderer.
+  await warmTauriWasmEngine(control);
   applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
   if (options.localPath) {
     // The id only exists once addRaster resolves, which is after the rasteradd
@@ -946,6 +946,12 @@ async function warmTauriWasmEngine(control: RasterControl): Promise<void> {
 
   try {
     control.setEngine("maplibre-gl-raster");
+    // `_device` may still point at the canvas created for the outgoing style.
+    // Give the GPU engine a paint against the current style even when that
+    // field is already populated; switching back in the same task is too early
+    // to reproduce the user-visible engine toggle that releases WebKitGTK.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const deadline = performance.now() + 2_000;
     while (!manager._device && performance.now() < deadline) {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 16));
