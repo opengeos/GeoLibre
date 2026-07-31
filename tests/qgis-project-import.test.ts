@@ -14,7 +14,7 @@ function projectXml(
     authId?: string;
     extent?: string;
     dataSources?: Array<{ id: string; name: string; source: string }>;
-  } = {}
+  } = {},
 ): string {
   const dataSources = options.dataSources ?? [
     { id: "roads", name: "Roads", source: "../data/roads.geojson" },
@@ -43,7 +43,7 @@ function projectXml(
           <labeling type="simple">
             <settings><text-style fieldName="name" fontSize="12"/></settings>
           </labeling>
-        </maplayer>`
+        </maplayer>`,
     )
     .join("");
 
@@ -119,20 +119,17 @@ function osmBasemapProjectXml(): string {
 
 describe("QGIS project import", () => {
   it("imports vector layers, styles, visibility, nested groups, extent, and relative paths", () => {
-    const result = importQgisProject(
-      projectXml(),
-      "/work/projects/example.qgs"
-    );
+    const result = importQgisProject(projectXml(), "/work/projects/example.qgs");
 
     assert.equal(result.project.name, "Imported map");
     assert.deepEqual(result.project.mapView.center, [-95.5, 37]);
     assert.deepEqual(
       result.project.layerGroups?.map((group) => group.name),
-      ["Transport", "Transport / Places"]
+      ["Transport", "Transport / Places"],
     );
     assert.deepEqual(
       result.project.layers.map((layer) => layer.name),
-      ["Cities", "Roads"]
+      ["Cities", "Roads"],
     );
 
     const cities = result.project.layers[0];
@@ -158,10 +155,7 @@ describe("QGIS project import", () => {
   });
 
   it("collects local GDAL GeoTIFFs for the desktop raster loader", () => {
-    const result = importQgisProject(
-      rasterProjectXml(),
-      "/work/projects/example.qgz"
-    );
+    const result = importQgisProject(rasterProjectXml(), "/work/projects/example.qgz");
 
     assert.deepEqual(result.project.layers, []);
     assert.deepEqual(result.rasters, [
@@ -184,15 +178,9 @@ describe("QGIS project import", () => {
   });
 
   it("maps QGIS OpenStreetMap XYZ layers to the built-in basemap", () => {
-    const result = importQgisProject(
-      osmBasemapProjectXml(),
-      "/work/example.qgs"
-    );
+    const result = importQgisProject(osmBasemapProjectXml(), "/work/example.qgs");
 
-    assert.equal(
-      result.project.basemapStyleUrl,
-      "https://tiles.openfreemap.org/styles/liberty"
-    );
+    assert.equal(result.project.basemapStyleUrl, "https://tiles.openfreemap.org/styles/liberty");
     assert.equal(result.project.basemapVisible, false);
     assert.equal(result.project.basemapOpacity, 0.7);
     assert.deepEqual(result.project.layers, []);
@@ -201,10 +189,7 @@ describe("QGIS project import", () => {
   });
 
   it("falls back to the default view for a missing or unsupported-CRS extent", () => {
-    const missing = importQgisProject(
-      projectXml({ extent: "" }),
-      "/work/example.qgs"
-    );
+    const missing = importQgisProject(projectXml({ extent: "" }), "/work/example.qgs");
     assert.deepEqual(missing.project.mapView, {
       center: [-100, 40],
       zoom: 2,
@@ -212,10 +197,7 @@ describe("QGIS project import", () => {
       pitch: 0,
     });
 
-    const projected = importQgisProject(
-      projectXml({ authId: "EPSG:32618" }),
-      "/work/example.qgs"
-    );
+    const projected = importQgisProject(projectXml({ authId: "EPSG:32618" }), "/work/example.qgs");
     assert.deepEqual(projected.project.mapView, {
       center: [-100, 40],
       zoom: 2,
@@ -231,8 +213,7 @@ describe("QGIS project import", () => {
           {
             id: "roads",
             name: "Remote",
-            source:
-              "/vsicurl/https://example.com/roads.geojson|layername=roads",
+            source: "/vsicurl/https://example.com/roads.geojson|layername=roads",
           },
           {
             id: "cities",
@@ -241,25 +222,16 @@ describe("QGIS project import", () => {
           },
         ],
       }),
-      "C:\\projects\\example.qgs"
+      "C:\\projects\\example.qgs",
     );
 
     assert.equal(result.project.layers.length, 1);
-    assert.equal(
-      result.project.layers[0].sourcePath,
-      "https://example.com/roads.geojson"
-    );
-    assert.equal(
-      result.project.layers[0].source.url,
-      "https://example.com/roads.geojson"
-    );
-    assert.equal(
-      result.project.layers[0].metadata.localFileReloadable,
-      undefined
-    );
+    assert.equal(result.project.layers[0].sourcePath, "https://example.com/roads.geojson");
+    assert.equal(result.project.layers[0].source.url, "https://example.com/roads.geojson");
+    assert.equal(result.project.layers[0].metadata.localFileReloadable, undefined);
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
-      [["Network", "network-path"]]
+      [["Network", "network-path"]],
     );
   });
 
@@ -279,18 +251,15 @@ describe("QGIS project import", () => {
           },
         ],
       }),
-      "/work/example.qgs"
+      "/work/example.qgs",
     );
 
     await materializeQgisRemoteLayers(result, async (input) => {
       const url = String(input);
-      if (url.endsWith("/bad.geojson"))
-        return new Response("no", { status: 404 });
+      if (url.endsWith("/bad.geojson")) return new Response("no", { status: 404 });
       return Response.json({
         type: "FeatureCollection",
-        features: [
-          { type: "Feature", geometry: null, properties: { name: "Test" } },
-        ],
+        features: [{ type: "Feature", geometry: null, properties: { name: "Test" } }],
       });
     });
 
@@ -299,7 +268,7 @@ describe("QGIS project import", () => {
     assert.equal(result.project.layers[0].geojson?.features.length, 1);
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
-      [["Bad", "remote-file"]]
+      [["Bad", "remote-file"]],
     );
   });
 });
