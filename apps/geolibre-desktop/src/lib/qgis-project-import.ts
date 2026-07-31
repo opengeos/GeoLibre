@@ -469,9 +469,7 @@ function qgisSourcePath(dataSource: string, projectPath: string): string {
   source = source.replace(/[?#].*$/, "");
   source = source.replace(/^['"]|['"]$/g, "");
   if (!source || isAbsolutePath(source) || /^[a-z]+:\/\//i.test(source)) return source;
-  const directory = /[/\\]/.test(projectPath)
-    ? projectPath.replace(/[/\\][^/\\]*$/, "")
-    : "";
+  const directory = /[/\\]/.test(projectPath) ? projectPath.replace(/[/\\][^/\\]*$/, "") : "";
   return normalizeJoinedPath(directory, source);
 }
 
