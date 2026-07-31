@@ -635,12 +635,11 @@ def test_raster_calculator_blocks_numpy_io(tmp_path: Path) -> None:
     )
     assert completed.returncode != 0
     combined = completed.stdout + completed.stderr
-    assert (
-        "Failed to evaluate expression" in combined
-        or "may not use" in combined
-        or "may not access attributes" in combined
-        or "not allowed in band math" in combined
-    )
+    # ``np.where`` parses as an Attribute-backed Call, and ast.walk reaches the
+    # Call before the Attribute, so the Name-only call allowlist is what rejects
+    # it. Assert the exact message: a looser match would still pass if the check
+    # moved to an unrelated node type.
+    assert "Call to 'Attribute' is not allowed in band math" in combined
     assert not out.exists()
 
 
@@ -1057,7 +1056,35 @@ def test_raster_calculator_blocks_ndarray_tofile(tmp_path: Path) -> None:
     )
     assert completed.returncode != 0
     combined = completed.stdout + completed.stderr
-    assert "may not use" in combined or "may not access attributes" in combined
+    # The tuple-subscript wrapper is rejected first, so name the node the check
+    # actually reports rather than matching any "may not use" message.
+    assert "Expression may not use Subscript" in combined
+    assert not evil.exists()
+    assert not out.exists()
+
+    # Without the wrapper the call itself is what must be refused, otherwise the
+    # assertion above would still hold if attribute access stopped being blocked.
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "expression": f"A.tofile({str(evil)!r})",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "Call to 'Attribute' is not allowed in band math" in (
+        completed.stdout + completed.stderr
+    )
     assert not evil.exists()
     assert not out.exists()
 

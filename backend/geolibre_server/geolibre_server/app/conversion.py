@@ -95,6 +95,32 @@ COG_COMPRESSIONS = {"deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"}
 DEFAULT_COG_COMPRESSION = "deflate"
 
 _RESULT_MARKER = "__GEOLIBRE_CONVERSION_RESULT__"
+_ERROR_MARKER = "__GEOLIBRE_CONVERSION_ERROR__"
+
+# Conversion and raster scripts report input mistakes the user can act on with
+# ``raise SystemExit("...")`` — curated text such as "Expression may not use
+# Attribute ...", "Exponent may not exceed 64 ...", or "Raster B must match the
+# dimensions of raster A". Every other failure surfaces as a traceback whose
+# frames embed absolute interpreter and data paths that must not reach the
+# browser-proxied /jobs/{id} response. Running each script through this driver
+# keeps the two apart: a curated message is re-emitted on a marker line and can
+# be shown verbatim, while anything else stays a generic failure. ``sys.argv``
+# is untouched, so scripts still read their params from ``sys.argv[1]``.
+_SCRIPT_DRIVER = """
+import sys
+
+try:
+    exec(compile({source}, "<geolibre-conversion>", "exec"), {"__name__": "__main__"})
+except SystemExit as exc:
+    message = exc.code if isinstance(exc.code, str) else ""
+    if not message:
+        raise
+    # Collapse to one line: the runner reads stdout line by line, and a
+    # multi-line message would strand every line after the first as untagged
+    # output that the failure handler then scrubs.
+    print("{marker}" + " ".join(message.split()), flush=True)
+    raise SystemExit(1) from None
+""".replace("{marker}", _ERROR_MARKER)
 
 # Single source of truth for the Shapefile field-warning helper. Each conversion
 # script is a self-contained subprocess source string and cannot import from the
@@ -1073,11 +1099,14 @@ def _run_conversion_job(
     """Run a conversion script in the managed runtime and record the result."""
     process: subprocess.Popen[str] | None = None
     timed_out = threading.Event()
+    # Set from a marker line when the script rejects the user's input; see
+    # _SCRIPT_DRIVER. Anything else stays a generic failure.
+    validation_error: str | None = None
     try:
         _job_update(job_id, status="running")
         python = _runtime_python()
         process = subprocess.Popen(
-            [python, "-c", script, json.dumps(params)],
+            [python, "-c", _SCRIPT_DRIVER.replace("{source}", repr(script)), json.dumps(params)],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -1111,6 +1140,8 @@ def _run_conversion_job(
                         result = json.loads(line[len(_RESULT_MARKER) :])
                     except json.JSONDecodeError:
                         result = line[len(_RESULT_MARKER) :]
+                elif line.startswith(_ERROR_MARKER):
+                    validation_error = line[len(_ERROR_MARKER) :]
                 else:
                     _append_job_message(job_id, line)
             returncode = process.wait()
@@ -1119,6 +1150,8 @@ def _run_conversion_job(
         if timed_out.is_set():
             raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
         if returncode != 0:
+            if validation_error:
+                raise RuntimeError(validation_error)
             with _JOBS_LOCK:
                 messages = list(_JOBS[job_id].messages)
             raise RuntimeError(messages[-1] if messages else f"Conversion exited with {returncode}")
@@ -1134,7 +1167,12 @@ def _run_conversion_job(
         # Mirror Whitebox: log the raw failure server-side and surface only a
         # generic message. DuckDB/GDAL stderr often embeds absolute paths that
         # must not reach the browser-proxied /jobs/{id} response — including
-        # via ``messages``, which accumulates every subprocess stdout line.
+        # via ``messages``, which accumulates every subprocess stdout line. The
+        # exception is a curated validation message (see _SCRIPT_DRIVER): the
+        # dialogs render ``error`` as the only failure feedback, so scrubbing
+        # those too would leave a user who mistyped a band-math expression or
+        # picked mismatched rasters with nothing actionable and no way to read
+        # the sidecar log (desktop and Docker builds both hide it).
         with _JOBS_LOCK:
             leaked = list(_JOBS.get(job_id).messages) if job_id in _JOBS else []
         logger.warning(
@@ -1147,7 +1185,7 @@ def _run_conversion_job(
         _job_update(
             job_id,
             status="failed",
-            error="Conversion failed. See the sidecar logs for details.",
+            error=validation_error or "Conversion failed. See the sidecar logs for details.",
             messages=[],
         )
         # Remove a partial output so a retry starts clean and stale bytes do not
