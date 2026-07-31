@@ -456,6 +456,13 @@ function syncExternalNativeLayer(
 
     for (const nativeLayerId of nativeLayerIds) {
       moveLayer(map, nativeLayerId, beforeId);
+      // The owning control mirrors direct per-layer visibility changes from
+      // the store, but effective state such as a hidden parent group never
+      // mutates the child's stored `visible` flag. Apply the effective value
+      // to ordinary native MapLibre layers here so group visibility reaches
+      // control-rendered vectors too. MapLibre custom layers also accept the
+      // standard layout visibility property.
+      setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
       // Control-painted vector layers (e.g. Add Vector Layer's circle/fill/line
       // layers) still honor a Time Slider window and the rule-based
       // hide-unmatched filter: filtering is independent of the paint the
