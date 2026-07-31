@@ -461,7 +461,7 @@ function readEmbeddedVectorGeoJSON(value: unknown): FeatureCollection | null {
 async function ensureVectorControl(app: GeoLibreAppAPI): Promise<VectorControl | null> {
   const VectorControlClass = await getVectorControlClass();
 
-  vectorControl ??= createVectorControl(VectorControlClass);
+  vectorControl ??= createVectorControl(VectorControlClass, app);
 
   if (!vectorControlMounted) {
     const added = app.addMapControl(vectorControl, vectorControlPosition);
@@ -530,7 +530,10 @@ function getVectorControlClass(): Promise<VectorControlConstructor> {
   return vectorControlClassPromise;
 }
 
-function createVectorControl(VectorControlClass: VectorControlConstructor): VectorControl {
+function createVectorControl(
+  VectorControlClass: VectorControlConstructor,
+  app: GeoLibreAppAPI,
+): VectorControl {
   const control = new VectorControlClass({
     className: "geolibre-vector-control",
     collapsed: true,
@@ -545,6 +548,9 @@ function createVectorControl(VectorControlClass: VectorControlConstructor): Vect
     // The panel doubles as the Add Vector Layer dialog, so it stays open
     // until the user closes it; clicking the map must not collapse it.
     closeOnOutsideClick: false,
+    // Desktop routes arbitrary remote datasets through its guarded native
+    // downloader, bypassing WebView CORS. The browser build leaves this unset.
+    ...(app.fetchVectorUrl ? { urlLoader: app.fetchVectorUrl } : {}),
     // Skip the remote spatial-extension install in offline/sandboxed
     // environments when a local extension path is configured.
     spatialExtensionPath: getSpatialExtensionPath(),

@@ -1011,6 +1011,12 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     // presence to auto-discover shapefile sidecars instead of forcing the user
     // to select every component, and to capture the file's path for restore.
     pickVectorFilesWithSidecars: isTauriRuntime() ? pickVectorFilesWithSidecars : undefined,
+    fetchVectorUrl: isTauriRuntime()
+      ? async (url: string) => {
+          const bytes = await fetchUrlBytes(url, { context: "Add Vector Layer" });
+          return new Blob([new Uint8Array(bytes)]);
+        }
+      : undefined,
     readLocalVectorFile: readVectorFileWithSidecars,
     exportTextFile: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => {
       const description = options?.description ?? "GeoJSON";
