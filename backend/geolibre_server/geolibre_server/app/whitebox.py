@@ -44,6 +44,38 @@ WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
 )
 WHITEBOX_PYTHON_VERSION = os.environ.get("GEOLIBRE_WHITEBOX_PYTHON_VERSION", "3.12")
 
+_ENSURE_COG_SCRIPT = """
+import json, os, sys
+
+from rio_cogeo.cogeo import cog_translate, cog_validate
+from rio_cogeo.profiles import cog_profiles
+
+path = sys.argv[1]
+valid, _, _ = cog_validate(path, quiet=True)
+if valid:
+    print(json.dumps({"converted": False}))
+    raise SystemExit(0)
+
+temporary = path + ".geolibre-cog.tmp"
+try:
+    cog_translate(
+        path,
+        temporary,
+        cog_profiles.get("deflate"),
+        in_memory=False,
+        quiet=True,
+        use_cog_driver=False,
+    )
+    valid, errors, _ = cog_validate(temporary, quiet=True)
+    if not valid:
+        raise RuntimeError("COG validation failed: " + "; ".join(errors))
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+print(json.dumps({"converted": True}))
+"""
+
 
 def _whitebox_run_timeout_secs() -> int:
     """Return the wall-clock timeout for a single Whitebox tool run.
@@ -915,6 +947,51 @@ def _extract_outputs(
     return outputs
 
 
+def _raster_output_paths(args: dict[str, Any], tool: dict[str, Any] | None) -> list[str]:
+    """Return existing filesystem paths declared as raster outputs."""
+    paths: list[str] = []
+    for param in (tool or {}).get("params", []):
+        if not isinstance(param, dict) or str(param.get("kind") or "") != "raster_out":
+            continue
+        value = args.get(str(param.get("name") or ""))
+        if isinstance(value, str) and value.strip() and Path(value).is_file():
+            paths.append(value)
+    return paths
+
+
+def _ensure_raster_outputs_are_cogs(
+    args: dict[str, Any],
+    tool: dict[str, Any] | None,
+    on_message: Callable[[str], None],
+) -> None:
+    """Convert striped Whitebox raster outputs to valid COGs in place."""
+    paths = _raster_output_paths(args, tool)
+    if not paths:
+        return
+    python = conversion._runtime_python()
+    for path in paths:
+        completed = subprocess.run(
+            [python, "-c", _ENSURE_COG_SCRIPT, path],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_clean_env(),
+            timeout=conversion.CONVERSION_RUN_TIMEOUT_SECS,
+            **_subprocess_startup_kwargs(),
+        )
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(f"Could not optimize Whitebox raster output: {detail}")
+        try:
+            converted = bool(json.loads(completed.stdout.strip()).get("converted"))
+        except (json.JSONDecodeError, AttributeError):
+            converted = True
+        if converted:
+            on_message(f"Converted {Path(path).name} to a Cloud Optimized GeoTIFF.")
+
+
 def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory Whitebox job."""
     with _JOBS_LOCK:
@@ -955,6 +1032,11 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             working_directory=working_directory,
         )
         result = _parse_json_maybe(raw_result)
+        _ensure_raster_outputs_are_cogs(
+            args,
+            request.tool,
+            lambda message: _append_job_message(job_id, message),
+        )
         _job_update(
             job_id,
             status="succeeded",

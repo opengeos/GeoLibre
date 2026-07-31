@@ -7,6 +7,9 @@ back to the client, mirroring conversion.py/raster.py.
 
 from __future__ import annotations
 
+import json
+import subprocess
+
 import pytest
 from fastapi import HTTPException
 
@@ -111,3 +114,62 @@ def test_run_job_does_not_leak_error(monkeypatch):
     finally:
         with whitebox._JOBS_LOCK:
             whitebox._JOBS.pop(job_id, None)
+
+
+def test_raster_output_paths_only_returns_declared_existing_rasters(tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"tiff")
+    vector = tmp_path / "result.geojson"
+    vector.write_text("{}", encoding="utf-8")
+    args = {"raster": str(raster), "vector": str(vector), "missing": str(tmp_path / "x.tif")}
+    tool = {
+        "params": [
+            {"name": "raster", "kind": "raster_out"},
+            {"name": "vector", "kind": "vector_out"},
+            {"name": "missing", "kind": "raster_out"},
+        ]
+    }
+
+    assert whitebox._raster_output_paths(args, tool) == [str(raster)]
+
+
+def test_ensure_raster_outputs_converts_striped_tiff(monkeypatch, tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"striped")
+    messages = []
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
+
+    def _run(command, **kwargs):
+        assert command[-1] == str(raster)
+        return subprocess.CompletedProcess(command, 0, json.dumps({"converted": True}), "")
+
+    monkeypatch.setattr(whitebox.subprocess, "run", _run)
+    whitebox._ensure_raster_outputs_are_cogs(
+        {"output": str(raster)},
+        {"params": [{"name": "output", "kind": "raster_out"}]},
+        messages.append,
+    )
+
+    assert messages == ["Converted result.tif to a Cloud Optimized GeoTIFF."]
+
+
+def test_ensure_raster_outputs_does_not_announce_existing_cog(monkeypatch, tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"cog")
+    messages = []
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
+    monkeypatch.setattr(
+        whitebox.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, json.dumps({"converted": False}), ""
+        ),
+    )
+
+    whitebox._ensure_raster_outputs_are_cogs(
+        {"output": str(raster)},
+        {"params": [{"name": "output", "kind": "raster_out"}]},
+        messages.append,
+    )
+
+    assert messages == []
