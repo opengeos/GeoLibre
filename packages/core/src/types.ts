@@ -939,7 +939,8 @@ export interface AddTileLayerOptions {
 
 /**
  * A named, collapsible folder in the layer panel that organizes a contiguous
- * run of layers (single-level nesting; groups never contain other groups).
+ * run of layers. Groups may be nested by referencing another group as their
+ * parent; the root groups omit `parentId`.
  *
  * The group's `visible` flag and `opacity` multiplier are folded into each
  * child layer's effective render state by `applyGroupEffects` before the map
@@ -948,6 +949,8 @@ export interface AddTileLayerOptions {
 export interface LayerGroup {
   id: string;
   name: string;
+  /** Parent folder id, or undefined when this folder is at the panel root. */
+  parentId?: string;
   /** When true, the group's children are hidden in the panel (not on the map). */
   collapsed: boolean;
   /** Group-level visibility; ANDed with each child layer's own visibility. */

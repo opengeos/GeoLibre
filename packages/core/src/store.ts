@@ -614,6 +614,7 @@ export interface AppState {
     groupId: string | null,
     beforeLayerId?: string | null,
   ) => void;
+  moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
 }
 
@@ -739,7 +740,12 @@ function clampGridDim(value: number): number {
  */
 function fitGrid(total: number, preferredCols: number): { rows: number; cols: number } {
   if (total <= 1) return { rows: 1, cols: 1 };
-  let best: { rows: number; cols: number; empty: number; score: number } | null = null;
+  let best: {
+    rows: number;
+    cols: number;
+    empty: number;
+    score: number;
+  } | null = null;
   for (let rows = 1; rows <= MAX_MAP_GRID_DIM; rows++) {
     for (let cols = 1; cols <= MAX_MAP_GRID_DIM; cols++) {
       const capacity = rows * cols;
@@ -1051,7 +1057,11 @@ export const useAppStore = create<AppState>()(
           isDirty: shouldMarkDirty || s.isDirty,
         })),
       selectLayer: (id) =>
-        set({ selectedLayerId: id, selectedFeatureId: null, selectedFeatureIds: [] }),
+        set({
+          selectedLayerId: id,
+          selectedFeatureId: null,
+          selectedFeatureIds: [],
+        }),
       selectFeature: (id) => set({ selectedFeatureId: id, selectedFeatureIds: id ? [id] : [] }),
       selectFeatures: (ids, anchorId) =>
         set({
@@ -1557,7 +1567,9 @@ export const useAppStore = create<AppState>()(
           style: initialLayerStyle({
             geojson,
             layers: get().layers,
-            overrides: { simpleStyleEnabled: hasSimpleStyleProperties(geojson) },
+            overrides: {
+              simpleStyleEnabled: hasSimpleStyleProperties(geojson),
+            },
           }),
           metadata: {},
           geojson,
@@ -1573,7 +1585,11 @@ export const useAppStore = create<AppState>()(
           id,
           name,
           type: "image",
-          source: { type: "image", url: source.url, coordinates: source.coordinates },
+          source: {
+            type: "image",
+            url: source.url,
+            coordinates: source.coordinates,
+          },
           visible: options?.visible ?? true,
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
@@ -1669,15 +1685,34 @@ export const useAppStore = create<AppState>()(
       removeLayerGroup: (id, options) =>
         set((s) => {
           const removeChildren = options?.removeChildren ?? false;
-          const removedIds = new Set(s.layers.filter((l) => l.groupId === id).map((l) => l.id));
+          const removedGroup = s.layerGroups.find((g) => g.id === id);
+          if (!removedGroup) return s;
+          const groupIds = new Set([id]);
+          if (removeChildren) {
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const group of s.layerGroups) {
+                if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
+                  groupIds.add(group.id);
+                  changed = true;
+                }
+              }
+            }
+          }
+          const removedIds = new Set(
+            s.layers.filter((l) => l.groupId && groupIds.has(l.groupId)).map((l) => l.id),
+          );
           const layers = removeChildren
-            ? s.layers.filter((l) => l.groupId !== id)
+            ? s.layers.filter((l) => !l.groupId || !groupIds.has(l.groupId))
             : s.layers.map((l) => (l.groupId === id ? { ...l, groupId: undefined } : l));
           const selectionRemoved =
             removeChildren && s.selectedLayerId !== null && removedIds.has(s.selectedLayerId);
           return {
             layers,
-            layerGroups: s.layerGroups.filter((g) => g.id !== id),
+            layerGroups: s.layerGroups
+              .filter((g) => !groupIds.has(g.id))
+              .map((g) => (g.parentId === id ? { ...g, parentId: removedGroup.parentId } : g)),
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,
@@ -1752,6 +1787,32 @@ export const useAppStore = create<AppState>()(
           );
           if (unchanged) return s;
           return { layers: normalized, isDirty: true };
+        }),
+
+      moveLayerGroupToGroup: (id, parentId) =>
+        set((s) => {
+          if (parentId === id) return s;
+          const group = s.layerGroups.find((g) => g.id === id);
+          if (!group) return s;
+          if (parentId && !s.layerGroups.some((g) => g.id === parentId)) return s;
+          // Walking upward from the proposed parent must never reach the group
+          // being moved, otherwise the assignment would create a cycle.
+          const byId = new Map(s.layerGroups.map((g) => [g.id, g]));
+          let ancestorId = parentId ?? undefined;
+          const visited = new Set<string>();
+          while (ancestorId && !visited.has(ancestorId)) {
+            if (ancestorId === id) return s;
+            visited.add(ancestorId);
+            ancestorId = byId.get(ancestorId)?.parentId;
+          }
+          const nextParentId = parentId ?? undefined;
+          if (group.parentId === nextParentId) return s;
+          return {
+            layerGroups: s.layerGroups.map((g) =>
+              g.id === id ? { ...g, parentId: nextParentId } : g,
+            ),
+            isDirty: true,
+          };
         }),
 
       reorderLayerGroup: (id, direction) =>

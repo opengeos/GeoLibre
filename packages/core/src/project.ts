@@ -190,12 +190,29 @@ function normalizeLayerGroups(value: unknown): LayerGroup[] {
     groups.push({
       id,
       name: typeof candidate.name === "string" ? candidate.name : id,
+      ...(typeof candidate.parentId === "string" && candidate.parentId.trim()
+        ? { parentId: candidate.parentId.trim() }
+        : {}),
       collapsed: candidate.collapsed === true,
       visible: candidate.visible !== false,
       opacity,
     });
   }
-  return groups;
+  const ids = new Set(groups.map((group) => group.id));
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  return groups.map((group) => {
+    if (!group.parentId || !ids.has(group.parentId) || group.parentId === group.id) {
+      return group.parentId ? { ...group, parentId: undefined } : group;
+    }
+    let id: string | undefined = group.parentId;
+    const seen = new Set([group.id]);
+    while (id) {
+      if (seen.has(id)) return { ...group, parentId: undefined };
+      seen.add(id);
+      id = byId.get(id)?.parentId;
+    }
+    return group;
+  });
 }
 
 /**
@@ -1340,7 +1357,9 @@ export function applyProjectToStore(project: GeoLibreProject): {
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
-    legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
+    legend: normalizeLegendConfig(project.legend) ?? {
+      ...DEFAULT_LEGEND_CONFIG,
+    },
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],

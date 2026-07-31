@@ -79,7 +79,9 @@ export async function materializeQgisRemoteLayers(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
       try {
-        const response = await fetcher(sourcePath, { signal: controller.signal });
+        const response = await fetcher(sourcePath, {
+          signal: controller.signal,
+        });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = (await response.json()) as unknown;
         if (!isFeatureCollection(data))
@@ -404,6 +406,12 @@ function parseLayerGroups(document: Document): {
     return {
       id,
       name,
+      ...(element.parentElement?.closest("layer-tree-group") &&
+      element.parentElement.closest("layer-tree-group") !== root
+        ? {
+            parentId: ids.get(element.parentElement.closest("layer-tree-group")!),
+          }
+        : {}),
       collapsed: element.getAttribute("expanded") === "0",
       visible: element.getAttribute("checked") !== "Qt::Unchecked",
       opacity: 1,
@@ -413,14 +421,8 @@ function parseLayerGroups(document: Document): {
 }
 
 function groupDisplayName(element: Element, root: Element): string {
-  const names: string[] = [];
-  let current: Element | null = element;
-  while (current && current !== root) {
-    const name = current.getAttribute("name")?.trim();
-    if (name) names.unshift(name);
-    current = current.parentElement?.closest("layer-tree-group") ?? null;
-  }
-  return names.join(" / ") || "Group";
+  if (element === root) return "Group";
+  return element.getAttribute("name")?.trim() || "Group";
 }
 
 function layerGroupAssignments(document: Document, ids: Map<Element, string>): Map<string, string> {

@@ -125,8 +125,9 @@ describe("QGIS project import", () => {
     assert.deepEqual(result.project.mapView.center, [-95.5, 37]);
     assert.deepEqual(
       result.project.layerGroups?.map((group) => group.name),
-      ["Transport", "Transport / Places"],
+      ["Transport", "Places"],
     );
+    assert.equal(result.project.layerGroups?.[1].parentId, result.project.layerGroups?.[0].id);
     assert.deepEqual(
       result.project.layers.map((layer) => layer.name),
       ["Cities", "Roads"],
@@ -277,7 +278,9 @@ describe("QGIS project import", () => {
   });
 
   it("rejects oversized QGS members before decompressing them", () => {
-    const oversized = zipSync({ "project.qgs": new Uint8Array(25 * 1024 * 1024 + 1) });
+    const oversized = zipSync({
+      "project.qgs": new Uint8Array(25 * 1024 * 1024 + 1),
+    });
     assert.throws(
       () => importQgisProject(oversized, "/work/example.qgz"),
       /too large to import safely/,
