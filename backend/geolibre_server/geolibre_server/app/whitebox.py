@@ -51,28 +51,24 @@ from rio_cogeo.cogeo import cog_translate, cog_validate
 from rio_cogeo.profiles import cog_profiles
 
 path = sys.argv[1]
+temporary = sys.argv[2]
 valid, _, _ = cog_validate(path, quiet=True)
 if valid:
     print(json.dumps({"converted": False}))
     raise SystemExit(0)
 
-temporary = path + ".geolibre-cog.tmp"
-try:
-    cog_translate(
-        path,
-        temporary,
-        cog_profiles.get("deflate"),
-        in_memory=False,
-        quiet=True,
-        use_cog_driver=False,
-    )
-    valid, errors, _ = cog_validate(temporary, quiet=True)
-    if not valid:
-        raise RuntimeError("COG validation failed: " + "; ".join(errors))
-    os.replace(temporary, path)
-finally:
-    if os.path.exists(temporary):
-        os.unlink(temporary)
+cog_translate(
+    path,
+    temporary,
+    cog_profiles.get("deflate"),
+    in_memory=False,
+    quiet=True,
+    use_cog_driver=False,
+)
+valid, errors, _ = cog_validate(temporary, quiet=True)
+if not valid:
+    raise RuntimeError("COG validation failed: " + "; ".join(errors))
+os.replace(temporary, path)
 print(json.dumps({"converted": True}))
 """
 
@@ -963,6 +959,7 @@ def _ensure_raster_outputs_are_cogs(
     args: dict[str, Any],
     tool: dict[str, Any] | None,
     on_message: Callable[[str], None],
+    temp_paths: list[Path],
 ) -> None:
     """Convert striped Whitebox raster outputs to valid COGs in place."""
     paths = _raster_output_paths(args, tool)
@@ -970,8 +967,18 @@ def _ensure_raster_outputs_are_cogs(
         return
     python = conversion._runtime_python()
     for path in paths:
+        output_path = Path(path)
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f".{output_path.name}.",
+            suffix=".geolibre-cog.tmp",
+            dir=output_path.parent,
+        )
+        os.close(descriptor)
+        temporary_path = Path(temporary)
+        temporary_path.unlink()
+        temp_paths.append(temporary_path)
         completed = subprocess.run(
-            [python, "-c", _ENSURE_COG_SCRIPT, path],
+            [python, "-c", _ENSURE_COG_SCRIPT, path, temporary],
             check=False,
             capture_output=True,
             text=True,
@@ -985,9 +992,9 @@ def _ensure_raster_outputs_are_cogs(
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise RuntimeError(f"Could not optimize Whitebox raster output: {detail}")
         try:
-            converted = bool(json.loads(completed.stdout.strip()).get("converted"))
+            converted = bool(json.loads(completed.stdout.splitlines()[-1]).get("converted"))
         except (json.JSONDecodeError, AttributeError):
-            converted = True
+            converted = False
         if converted:
             on_message(f"Converted {Path(path).name} to a Cloud Optimized GeoTIFF.")
 
@@ -1036,6 +1043,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             args,
             request.tool,
             lambda message: _append_job_message(job_id, message),
+            temp_paths,
         )
         _job_update(
             job_id,

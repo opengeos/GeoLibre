@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 
 import pytest
 from fastapi import HTTPException
@@ -140,17 +141,22 @@ def test_ensure_raster_outputs_converts_striped_tiff(monkeypatch, tmp_path):
     monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
 
     def _run(command, **kwargs):
-        assert command[-1] == str(raster)
+        assert command[-2] == str(raster)
         return subprocess.CompletedProcess(command, 0, json.dumps({"converted": True}), "")
 
     monkeypatch.setattr(whitebox.subprocess, "run", _run)
+    temp_paths = []
     whitebox._ensure_raster_outputs_are_cogs(
         {"output": str(raster)},
         {"params": [{"name": "output", "kind": "raster_out"}]},
         messages.append,
+        temp_paths,
     )
 
     assert messages == ["Converted result.tif to a Cloud Optimized GeoTIFF."]
+    assert len(temp_paths) == 1
+    assert temp_paths[0].parent == tmp_path
+    assert temp_paths[0].name != "result.tif.geolibre-cog.tmp"
 
 
 def test_ensure_raster_outputs_does_not_announce_existing_cog(monkeypatch, tmp_path):
@@ -170,6 +176,42 @@ def test_ensure_raster_outputs_does_not_announce_existing_cog(monkeypatch, tmp_p
         {"output": str(raster)},
         {"params": [{"name": "output", "kind": "raster_out"}]},
         messages.append,
+        [],
     )
 
     assert messages == []
+
+
+def test_ensure_raster_outputs_converts_real_striped_geotiff(monkeypatch, tmp_path):
+    numpy = pytest.importorskip("numpy")
+    rasterio = pytest.importorskip("rasterio")
+    pytest.importorskip("rio_cogeo")
+    from rio_cogeo.cogeo import cog_validate
+
+    raster = tmp_path / "striped.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=1024,
+        height=1024,
+        count=1,
+        dtype="uint8",
+        transform=rasterio.transform.from_origin(0, 32, 1, 1),
+    ) as dataset:
+        dataset.write(numpy.zeros((1, 1024, 1024), dtype="uint8"))
+
+    assert cog_validate(raster, quiet=True)[0] is False
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: sys.executable)
+    messages = []
+    temp_paths = []
+    whitebox._ensure_raster_outputs_are_cogs(
+        {"output": str(raster)},
+        {"params": [{"name": "output", "kind": "raster_out"}]},
+        messages.append,
+        temp_paths,
+    )
+
+    assert cog_validate(raster, quiet=True)[0] is True
+    assert messages == ["Converted striped.tif to a Cloud Optimized GeoTIFF."]
+    assert all(not path.exists() for path in temp_paths)
