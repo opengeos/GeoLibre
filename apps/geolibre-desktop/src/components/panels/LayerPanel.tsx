@@ -2243,7 +2243,7 @@ export function LayerPanel({
         data-group-header=""
         data-testid="layer-group-header"
         data-group-name={group.name}
-        className={`rounded-md border p-2 transition-colors ${
+        className={`w-full min-w-0 max-w-full rounded-md border p-2 transition-colors ${
           isDropTarget
             ? "border-primary bg-primary/10"
             : "border-border bg-muted/30 hover:border-muted-foreground/40"
@@ -2251,7 +2251,7 @@ export function LayerPanel({
         onDragOver={(e) => handleGroupHeaderDragOver(e, group.id)}
         onDrop={(e) => handleGroupHeaderDrop(e, group.id)}
       >
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
           <button
             type="button"
             className="rounded p-0.5 text-muted-foreground hover:bg-muted"
@@ -2314,7 +2314,7 @@ export function LayerPanel({
             />
           ) : (
             <span
-              className="flex-1 truncate text-sm font-semibold"
+              className="min-w-0 flex-1 truncate text-sm font-semibold"
               title={t("layers.doubleClickToRename")}
               onDoubleClick={(e: ReactMouseEvent) => {
                 e.stopPropagation();
@@ -2539,11 +2539,10 @@ export function LayerPanel({
         </div>
       </div>
       <ScrollArea
-        className="flex-1"
+        className="flex-1 [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
         // Radix measures scroll content with an injected display:table
         // wrapper. Opt this viewport into block sizing so long layer names
         // cannot establish a wider min-content table.
-        viewportClassName="[&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
       >
         <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
