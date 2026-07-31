@@ -113,9 +113,24 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
  * the outgoing style. Its store entry survives, but the native raster source
  * is removed by the pending style/layer update.
  */
-async function waitForImportedProjectMap(): Promise<void> {
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+function importedProjectMapReady(
+  mapControllerRef: MapControllerRef,
+  basemapWillChange: boolean
+): Promise<void> {
+  const map = mapControllerRef.current?.getMap();
+  const styleReady =
+    map && basemapWillChange
+      ? new Promise<void>((resolve) => map.once("style.load", () => resolve()))
+      : Promise.resolve();
+
+  return (async () => {
+    // Let the project store update commit and its MapCanvas effects run first.
+    // Register the style listener above (before loadProject) so a fast inline
+    // style cannot finish between the store update and this wait.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await styleReady;
+  })();
 }
 
 /**
@@ -197,9 +212,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           });
         }
       }
+      const mapReady = importedProjectMapReady(
+        mapControllerRef,
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl
+      );
       loadProject(imported.project, null);
       if (isTauri()) {
-        await waitForImportedProjectMap();
+        await mapReady;
         const app = createAppAPI(mapControllerRef);
         for (const raster of imported.rasters) {
           try {
