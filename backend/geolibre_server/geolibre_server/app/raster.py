@@ -1066,6 +1066,13 @@ _allowed_nodes = (
     ast.GtE,
     ast.keyword,
 )
+# ``**`` on two plain integers stays exact, so ``9**9**6`` builds a
+# half-million-digit result and pins a core for tens of seconds before the shape
+# check can reject it. Require the exponent to be a small numeric literal unless
+# it derives from a band or a curated call, whose element-wise float power is
+# bounded by the raster's shape. 64 is far past anything band math needs
+# (squares, gamma, roots).
+MAX_POW_EXPONENT = 64
 for node in ast.walk(tree):
     if not isinstance(node, _allowed_nodes):
         raise SystemExit(
@@ -1077,6 +1084,24 @@ for node in ast.walk(tree):
             "Expression may only use numeric constants "
             "(band math only allows curated functions and operators)"
         )
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+        exponent = node.right
+        while isinstance(exponent, ast.UnaryOp):
+            exponent = exponent.operand
+        band_backed = any(
+            isinstance(inner, (ast.Name, ast.Call)) for inner in ast.walk(exponent)
+        )
+        if not band_backed:
+            if not isinstance(exponent, ast.Constant):
+                raise SystemExit(
+                    "Exponent must be a plain number or derive from a band "
+                    f"(band math caps '**' at {MAX_POW_EXPONENT})"
+                )
+            if abs(exponent.value) > MAX_POW_EXPONENT:
+                raise SystemExit(
+                    f"Exponent may not exceed {MAX_POW_EXPONENT} "
+                    "(band math caps '**' to keep evaluation bounded)"
+                )
     if isinstance(node, ast.Call):
         # ``np.where(...)`` / ``A.tofile(...)`` parse as Attribute-backed calls;
         # Attribute is already rejected above, but keep an explicit Name check.

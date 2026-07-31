@@ -1093,3 +1093,61 @@ def test_raster_calculator_rejects_unbounded_allocations(tmp_path: Path) -> None
         combined = completed.stdout + completed.stderr
         assert "may not use" in combined or "numeric constants" in combined, expression
         assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_rejects_runaway_exponents(tmp_path: Path) -> None:
+    """Chained or oversized ``**`` must be refused before eval computes a bignum."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    for expression in (
+        "A + 9**9**6",
+        "A + 9**999999",
+        "A + 9 ** (500 * 500)",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _RASTER_TOOL_SCRIPTS["raster-calc"],
+                json.dumps(
+                    {
+                        "input_path": str(src),
+                        "output_path": str(out),
+                        "expression": expression,
+                    }
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert completed.returncode != 0, expression
+        combined = completed.stdout + completed.stderr
+        assert "Exponent" in combined, expression
+        assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_allows_ordinary_exponents(tmp_path: Path) -> None:
+    """The ``**`` cap must not disturb the small powers band math actually uses."""
+    import numpy as np
+    import rasterio
+
+    src = _write_dem(tmp_path / "dem.tif")  # band 1 = x + y
+    out = tmp_path / "calc.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["raster-calc"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            # A negative literal exponent must survive the unary-sign strip.
+            "expression": "(A ** 2) ** 0.5 * 2 ** -2",
+        },
+    )
+    with rasterio.open(src) as ds:
+        a = ds.read(1).astype("float64")
+    with rasterio.open(out) as ds:
+        result = ds.read(1).astype("float64")
+    assert np.allclose(result, (a**2) ** 0.5 * 0.25, atol=1e-4)
