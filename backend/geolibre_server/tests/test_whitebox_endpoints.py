@@ -142,7 +142,12 @@ def test_ensure_raster_outputs_converts_striped_tiff(monkeypatch, tmp_path):
 
     def _run(command, **kwargs):
         assert command[-2] == str(raster)
-        return subprocess.CompletedProcess(command, 0, json.dumps({"converted": True}), "")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            whitebox.conversion._RESULT_MARKER + json.dumps({"converted": True}),
+            "",
+        )
 
     monkeypatch.setattr(whitebox.subprocess, "run", _run)
     temp_paths = []
@@ -168,7 +173,10 @@ def test_ensure_raster_outputs_does_not_announce_existing_cog(monkeypatch, tmp_p
         whitebox.subprocess,
         "run",
         lambda command, **kwargs: subprocess.CompletedProcess(
-            command, 0, json.dumps({"converted": False}), ""
+            command,
+            0,
+            whitebox.conversion._RESULT_MARKER + json.dumps({"converted": False}),
+            "",
         ),
     )
 

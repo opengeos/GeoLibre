@@ -54,7 +54,7 @@ path = sys.argv[1]
 temporary = sys.argv[2]
 valid, _, _ = cog_validate(path, quiet=True)
 if valid:
-    print(json.dumps({"converted": False}))
+    print("{marker}" + json.dumps({"converted": False}))
     raise SystemExit(0)
 
 cog_translate(
@@ -69,8 +69,8 @@ valid, errors, _ = cog_validate(temporary, quiet=True)
 if not valid:
     raise RuntimeError("COG validation failed: " + "; ".join(errors))
 os.replace(temporary, path)
-print(json.dumps({"converted": True}))
-"""
+print("{marker}" + json.dumps({"converted": True}))
+""".replace("{marker}", conversion._RESULT_MARKER)
 
 
 def _whitebox_run_timeout_secs() -> int:
@@ -991,10 +991,16 @@ def _ensure_raster_outputs_are_cogs(
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise RuntimeError(f"Could not optimize Whitebox raster output: {detail}")
-        try:
-            converted = bool(json.loads(completed.stdout.splitlines()[-1]).get("converted"))
-        except (json.JSONDecodeError, AttributeError):
-            converted = False
+        converted = False
+        for line in completed.stdout.splitlines():
+            if not line.startswith(conversion._RESULT_MARKER):
+                continue
+            try:
+                converted = bool(
+                    json.loads(line[len(conversion._RESULT_MARKER) :]).get("converted")
+                )
+            except (json.JSONDecodeError, AttributeError):
+                pass
         if converted:
             on_message(f"Converted {Path(path).name} to a Cloud Optimized GeoTIFF.")
 
