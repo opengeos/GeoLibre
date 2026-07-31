@@ -322,6 +322,7 @@ function isAllowedOamOrigin(origin: string | null): boolean {
   } catch {
     return false;
   }
+  if (protocol === "tauri:" && hostname === "localhost") return true;
   if (protocol === "https:") {
     if (hostname === "geolibre.app" || hostname.endsWith(".geolibre.app")) {
       return true;
