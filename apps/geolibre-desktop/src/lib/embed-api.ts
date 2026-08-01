@@ -361,7 +361,19 @@ function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
 const BLOCKED_SOURCE_URL_SCHEME = /^\s*(?:javascript|vbscript|data|file|blob):/i;
 
 /**
- * The first blocked URL on an `addLayer` spec, or null.
+ * A URL as a browser would read its scheme. Tab, newline, and carriage return
+ * are stripped from anywhere in a URL by the URL parser, so `java\tscript:` and
+ * `javascript:` name the same scheme; comparing the raw string would miss the
+ * first. Today's consumers are `fetch` and MapLibre source loading, neither of
+ * which executes script, so this is depth rather than a live bypass — but the
+ * check should not depend on which sink reads the field later.
+ */
+function normalizedUrl(value: string): string {
+  return value.replace(/[\t\n\r]/g, "");
+}
+
+/**
+ * The first blocked URL on an `addLayer` spec, normalized, or null.
  *
  * The fields checked are exactly the ones {@link hasRenderableEmbedSource}
  * counts as making the layer renderable, so anything a renderer will actually
@@ -377,9 +389,11 @@ function blockedSpecUrl(spec: Record<string, unknown>): string | null {
     ...(Array.isArray(source.tiles) ? source.tiles : []),
   ];
   for (const candidate of candidates) {
-    if (typeof candidate === "string" && BLOCKED_SOURCE_URL_SCHEME.test(candidate)) {
-      return candidate;
-    }
+    if (typeof candidate !== "string") continue;
+    const normalized = normalizedUrl(candidate);
+    // The normalized form is returned, not the raw one, so the scheme the error
+    // names is the scheme that was blocked.
+    if (BLOCKED_SOURCE_URL_SCHEME.test(normalized)) return normalized;
   }
   return null;
 }

@@ -324,11 +324,24 @@ describe("parseEmbedRequest: addLayer", () => {
       ["source.data", addLayerSpec({ type: "geojson", source: { data: "data:text/html,x" } })],
       ["metadata.originalUrl", addLayerSpec({ metadata: { originalUrl: "file:///etc/passwd" } })],
       ["blob", addLayerSpec({ source: { url: "blob:https://host/abc" } })],
+      // A browser strips tab/newline/carriage return from anywhere in a URL,
+      // so these name the blocked schemes too.
+      ["split scheme", addLayerSpec({ source: { url: "java\tscript:alert(1)" } })],
+      ["newline in scheme", addLayerSpec({ type: "geojson", source: { data: "da\nta:x" } })],
+      ["carriage return", addLayerSpec({ source: { tiles: ["file\r:///etc/passwd"] } })],
     ] as const) {
       const parsed = parseEmbedRequest(message("addLayer", { spec }));
       assert.ok(parsed && "error" in parsed, `expected ${field} to be rejected`);
       assert.match(parsed.error, /^addLayer: unsupported URL scheme/);
     }
+  });
+
+  it("names the normalized scheme in the error, not the split-up raw one", () => {
+    const parsed = parseEmbedRequest(
+      message("addLayer", { spec: addLayerSpec({ source: { url: "java\tscript:alert(1)" } }) }),
+    );
+    assert.ok(parsed && "error" in parsed);
+    assert.equal(parsed.error, 'addLayer: unsupported URL scheme in "javascript:"');
   });
 });
 

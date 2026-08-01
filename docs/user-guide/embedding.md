@@ -81,10 +81,12 @@ and all, so group names carry over. The Controls menu is part of the viewer
 chrome, minus the two entries that write to the project (Field Collection and
 GPS Tracking); Record Tour and Record Video only read the map, so they stay.
 Read-only covers the keyboard too: the
-global shortcuts (Ctrl/Cmd+N, +O, +S) and the command palette (Ctrl/Cmd+K) are
-switched off with the menus they belong to, and dropping a file onto the map
-imports nothing, so an embed cannot be steered into authoring by a key press or
-a drag. Use `layout=compact` for the complete authoring
+project shortcuts (Ctrl/Cmd+N, +O, +S) and the command palette (Ctrl/Cmd+K) go
+with the menus they belong to, while the View shortcuts (`[`, `]`, `n`, `u`,
+`r`) keep working since the View menu stays. Dropping a file onto the map
+imports nothing, and the geometry editor cannot be active, even if the loaded
+project saved it that way — so an embed cannot be steered into authoring by a
+key press, a drag, or a project file. Use `layout=compact` for the complete authoring
 toolbar in a smaller space, or `maponly` for a pure map.
 
 ## Talking to the map at runtime
@@ -172,8 +174,8 @@ storing it, and `addLayer` requires a source the map can actually read: a `url`
 or a non-empty `tiles`, or — for the two layer types drawn from inline features,
 `geojson` and `deckgl-viz` — an inline `geojson`. Both report the problem in the
 `ack` rather than reporting success and rendering nothing. `addLayer` also
-refuses `javascript:`, `data:`, `file:`, and `blob:` URLs on a source; a custom
-map protocol such as `pmtiles://` is fine.
+refuses `javascript:`, `vbscript:`, `data:`, `file:`, and `blob:` URLs on a
+source; a custom map protocol such as `pmtiles://` is fine.
 
 Add a `requestId` to any message and the app answers with an `ack` (below)
 reporting whether it worked.

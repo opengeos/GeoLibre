@@ -175,6 +175,13 @@ import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
  */
 const LARGE_RASTER_SAMPLE_LIMIT = 40_000_000;
 
+/**
+ * The geometry-editing plugin. It is the one plugin the read-only viewer preset
+ * must keep deactivated, because it paints drawing and editing handles onto the
+ * map itself rather than into chrome the preset can hide.
+ */
+const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
+
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
     i18n.t("toolbar.item.largeVectorDesc", {
@@ -689,13 +696,25 @@ export function DesktopShell({
   });
   const activePanelId = useRightPanelState().activeId;
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
-  useEffect(() => {
+  // The geo-editor paints drawing and editing handles onto the map, so it can
+  // never be active under the read-only viewer preset. This has to run more
+  // than once: `restoreProjectState` activates whatever a loaded project lists
+  // in `projectPlugins.activePluginIds` with no viewer awareness, so every
+  // project load — the initial `?url=` one and any later `loadProject` embed
+  // command — can put it back. It is a callback rather than an effect of its
+  // own so the restore effect below can re-assert it *after* restoring, which
+  // effect ordering alone would not guarantee.
+  const enforceViewerPlugins = useCallback(() => {
     if (!layoutOptions.viewer) return;
     const manager = getPluginManager();
-    if (manager.isActive("maplibre-gl-geo-editor")) {
-      manager.deactivate("maplibre-gl-geo-editor", createAppAPI(mapControllerRef));
+    if (manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
+      manager.deactivate(GEO_EDITOR_PLUGIN_ID, createAppAPI(mapControllerRef));
     }
   }, [layoutOptions.viewer, mapControllerRef]);
+
+  useEffect(() => {
+    enforceViewerPlugins();
+  }, [enforceViewerPlugins]);
   // The dock slots adopt whichever host owns the active panel's content: the
   // Browser's dedicated portal host, or the shared imperative plugin host.
   const dockContentEl = activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
@@ -885,9 +904,9 @@ export function DesktopShell({
         // `geojson`.)
         await ensureLayerGeojsonFromSource(layerId);
         const manager = getPluginManager();
-        if (!manager.isActive("maplibre-gl-geo-editor")) {
-          manager.activate("maplibre-gl-geo-editor", appAPI);
-          if (!manager.isActive("maplibre-gl-geo-editor")) {
+        if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
+          manager.activate(GEO_EDITOR_PLUGIN_ID, appAPI);
+          if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
             setDropError(
               "Could not activate the geometry editor. Try again once the map has fully loaded.",
             );
@@ -1073,6 +1092,9 @@ export function DesktopShell({
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
     pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
+    // Immediately after the restore, so a project that persisted the geo-editor
+    // as active cannot re-arm editing inside a read-only viewer embed.
+    enforceViewerPlugins();
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restorePlanetaryComputerLayers(appAPI);
@@ -1132,7 +1154,7 @@ export function DesktopShell({
     void pluginManager
       .handleUrlParameters(new URLSearchParams(search), appAPI, `${projectGeneration}:${search}`)
       .catch(console.error);
-  }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
+  }, [enforceViewerPlugins, externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {
     return () => {

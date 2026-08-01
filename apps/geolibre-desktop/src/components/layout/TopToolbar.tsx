@@ -1454,18 +1454,27 @@ export function TopToolbar({
     },
   ];
 
-  // The viewer preset hides every authoring menu, so the two surfaces that
-  // reach the same commands without a menu — the global shortcuts (Ctrl/Cmd+N,
-  // +O, +S) and the command palette (Ctrl/Cmd+K) — are switched off with them.
-  // Otherwise a `layout=viewer` embed still answers Ctrl+N with "New Project"
-  // or overwrites the host's project on Ctrl+S, which is exactly what the
-  // read-only chrome promises it cannot do. The Help menu drops its palette and
-  // shortcut entries to match (see `viewer` on HelpMenu).
+  // The viewer preset hides every authoring menu, so the surfaces that reach
+  // those commands without a menu go with them: the command palette
+  // (Ctrl/Cmd+K) and the cheat sheet (?) are not mounted, and the Help menu
+  // drops its entries for them (see `viewer` on HelpMenu). Otherwise a
+  // `layout=viewer` embed would still answer Ctrl+N with "New Project", or
+  // overwrite the host's project on Ctrl+S — exactly what the read-only chrome
+  // promises it cannot do.
+  //
+  // The shortcut layer is narrowed rather than switched off, because the View
+  // menu *does* stay visible in this mode: `view.*` is camera and theme work
+  // only, so dropping its keys would leave those items clickable but silently
+  // keyless. Every command carrying a `shortcut` is either `view.*` or
+  // `project.*`, so this is the whole authoring keyboard surface.
+  const shortcutCommands = useMemo(
+    () => (viewer ? commands.filter((command) => command.id.startsWith("view.")) : commands),
+    [commands, viewer],
+  );
   useGlobalShortcuts({
-    commands,
-    onOpenPalette: () => setCommandPaletteOpen(true),
-    onOpenShortcuts: () => setShortcutsOpen(true),
-    enabled: !viewer,
+    commands: shortcutCommands,
+    onOpenPalette: viewer ? undefined : () => setCommandPaletteOpen(true),
+    onOpenShortcuts: viewer ? undefined : () => setShortcutsOpen(true),
   });
 
   const toolbarButtonSize = compact ? "icon" : "sm";
