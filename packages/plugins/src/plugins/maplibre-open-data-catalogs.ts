@@ -304,14 +304,21 @@ function createCatalogPlugin(options: {
             form.addEventListener("submit", onSubmit);
             more.addEventListener("click", () => void run(true));
             input.focus();
-            dispose = () => {
+            const cleanup = () => {
               active = false;
               controller?.abort();
               downloads.forEach((download) => download.abort());
               downloads.clear();
               container.replaceChildren();
             };
-            return dispose;
+            dispose = cleanup;
+            // The shell holds its own reference to this cleanup and runs it when
+            // the panel unmounts, which deactivate() triggers via closeRightPanel.
+            // Null the module-level handle first so deactivate() cannot run it twice.
+            return () => {
+              dispose = null;
+              cleanup();
+            };
           },
         }) ?? null;
       app.openRightPanel?.(options.id);

@@ -187,6 +187,29 @@ milliseconds:
 
 Manual refresh uses the same saved source URL without requiring this metadata.
 
+Reloadable layers also persist a top-level `connection` record, which is the
+primary source of truth for the refresh cadence and carries the durable
+synchronization status shown in the Layers panel. `metadata.refresh` is kept as
+a legacy fallback for projects saved before `connection` existed:
+
+```json
+{
+  "connection": {
+    "layerId": "layer-1",
+    "interval": 60,
+    "lastSyncedAt": "2026-08-01T14:20:00.000Z",
+    "lastError": null,
+    "onFailure": "keep-last"
+  }
+}
+```
+
+`interval` is the automatic refresh cadence in **seconds**, or `null` for
+manual synchronization only. `lastSyncedAt` records the most recent successful
+synchronization and `lastError` the most recent failure (cleared on the next
+success). `onFailure` decides whether a failed synchronization retains the last
+good data (`"keep-last"`, the default) or discards it (`"clear"`).
+
 For local-file vector layers on the desktop app, `metadata.watch` can persist a
 "watch this file for changes" toggle. When enabled, the desktop app registers a
 filesystem watcher that reloads the layer's features from `sourcePath` whenever
