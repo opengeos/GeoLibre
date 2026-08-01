@@ -1342,8 +1342,12 @@ async function loadKmzLayers(
   // *vector* regionated KML is built, so the pyramid is only claimed once its
   // raster tiles actually resolve; anything else falls through to the normal
   // overlay/vector parse below rather than failing the whole import.
+  // The pyramid's tiles are the overlays inside its `<Region>` nodes; an overlay
+  // anywhere else (a legend, an inset, a full-extent image) is not part of it
+  // and must not be given a pyramid level or folded into its bounds.
+  const regionDocs = kmlDocs.filter((doc) => KML_REGION.test(doc.text));
   const superOverlayTiles = looksLikeSuperOverlay(kmlDocs)
-    ? superOverlayTilesFromKmz(entries, kmlDocs)
+    ? superOverlayTilesFromKmz(entries, regionDocs)
     : [];
   if (superOverlayTiles.length > 0) {
     const source = await registerKmlSuperOverlay(superOverlayTiles, {
@@ -1352,8 +1356,10 @@ async function loadKmzLayers(
       // browser File has no re-readable path and gets a session-only key.
       ...(isAbsoluteLocalPath(path) ? { key: path } : {}),
     });
-    // A composite export can carry placemarks or models alongside its raster
-    // pyramid; returning only the tile layer would silently drop them.
+    // A composite export can carry standalone overlays, placemarks, or models
+    // alongside its raster pyramid; returning only the tile layer would
+    // silently drop them. The standalone overlays draw above the imagery.
+    const plainDocs = kmlDocs.filter((doc) => !KML_REGION.test(doc.text));
     const layers: LoadedLayer[] = [
       {
         kind: "kml-super-overlay",
@@ -1361,6 +1367,7 @@ async function loadKmzLayers(
         path,
         ...source,
       },
+      ...(plainDocs.length > 0 ? await groundOverlaysFromKmz(entries, plainDocs, path) : []),
       ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
     ];
     const placemarkEntries = placemarkKmlEntries(entries, kmlDocs);
@@ -1419,6 +1426,12 @@ interface KmlDoc {
   text: string;
 }
 
+// `(?:\w+:)?` so a namespace-prefixed `<kml:Region>` (valid but rare) still
+// matches, mirroring the model filter in `modelsFromKmz`.
+const KML_REGION = /<(?:\w+:)?Region(?:\s|>)/i;
+const KML_NETWORK_LINK = /<(?:\w+:)?NetworkLink(?:\s|>)/i;
+const KML_PLACEMARK = /<(?:\w+:)?Placemark(?:\s|>)/i;
+
 function readKmlDocs(entries: Record<string, Uint8Array>): KmlDoc[] {
   return Object.entries(entries)
     .filter(([name]) => name.toLowerCase().endsWith(".kml"))
@@ -1434,11 +1447,7 @@ function readKmlDocs(entries: Record<string, Uint8Array>): KmlDoc[] {
 function looksLikeSuperOverlay(kmlDocs: KmlDoc[]): boolean {
   return (
     kmlDocs.length > 1 &&
-    kmlDocs.some(
-      (doc) =>
-        /<(?:\w+:)?Region(?:\s|>)/i.test(doc.text) &&
-        /<(?:\w+:)?NetworkLink(?:\s|>)/i.test(doc.text),
-    )
+    kmlDocs.some((doc) => KML_REGION.test(doc.text) && KML_NETWORK_LINK.test(doc.text))
   );
 }
 
@@ -1469,7 +1478,7 @@ function placemarkKmlEntries(
   kmlDocs: KmlDoc[],
 ): Record<string, Uint8Array> | null {
   const withPlacemarks = new Set(
-    kmlDocs.filter((doc) => /<(?:\w+:)?Placemark(?:\s|>)/i.test(doc.text)).map((doc) => doc.name),
+    kmlDocs.filter((doc) => KML_PLACEMARK.test(doc.text)).map((doc) => doc.name),
   );
   if (withPlacemarks.size === 0) return null;
   const kept = { ...entries };

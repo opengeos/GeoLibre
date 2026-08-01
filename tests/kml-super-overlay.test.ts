@@ -137,10 +137,21 @@ describe("pruneKmlSuperOverlays", () => {
       key: "/data/dropped.kmz",
     });
 
+    pruneKmlSuperOverlays([tileLayer(kept.url), tileLayer(dropped.url)]);
     pruneKmlSuperOverlays([tileLayer(kept.url)]);
 
     assert.equal(unregisterKmlSuperOverlay(dropped.url), false);
     assert.equal(unregisterKmlSuperOverlay(kept.url), true);
+  });
+
+  it("leaves a freshly registered archive alone until its layer appears", async () => {
+    // The importer registers the archive, then adds the tile layer; a store
+    // change in between must not free a pyramid that has no path to re-read.
+    const source = await registerKmlSuperOverlay([tile([-10, -10, 10, 10], 2)]);
+
+    pruneKmlSuperOverlays([]);
+
+    assert.equal(unregisterKmlSuperOverlay(source.url), true);
   });
 });
 
@@ -158,24 +169,48 @@ describe("the tile protocol", () => {
       return [tile([170, 80, 180, 85], 1)];
     });
 
-    const [first, second] = await Promise.all([
-      protocolHandler()({ url }),
-      protocolHandler()({ url }),
-    ]);
+    try {
+      const [first, second] = await Promise.all([
+        protocolHandler()({ url }),
+        protocolHandler()({ url }),
+      ]);
 
-    assert.equal(first.data.byteLength, 0);
-    assert.equal(second.data.byteLength, 0);
-    assert.equal(reads, 1, "concurrent tile requests should share one read");
-    assert.equal(unregisterKmlSuperOverlay(url), true);
-    setKmlSuperOverlayResolver(null);
+      assert.equal(first.data.byteLength, 0);
+      assert.equal(second.data.byteLength, 0);
+      assert.equal(reads, 1, "concurrent tile requests should share one read");
+      assert.equal(unregisterKmlSuperOverlay(url), true);
+    } finally {
+      unregisterKmlSuperOverlay(url);
+      setKmlSuperOverlayResolver(null);
+    }
+  });
+
+  it("re-reads a missing archive once, not on every tile request", async () => {
+    let reads = 0;
+    setKmlSuperOverlayResolver(async () => {
+      reads += 1;
+      throw new Error("the KMZ moved");
+    });
+
+    try {
+      const url = `${PROTOCOL}://${encodeURIComponent("/data/moved.kmz")}/1/0/0`;
+      assert.equal((await protocolHandler()({ url })).data.byteLength, 0);
+      assert.equal((await protocolHandler()({ url })).data.byteLength, 0);
+      assert.equal(reads, 1, "a failed re-read should not repeat for every tile");
+    } finally {
+      setKmlSuperOverlayResolver(null);
+    }
   });
 
   it("answers with an empty tile when the archive cannot be re-read", async () => {
     setKmlSuperOverlayResolver(async () => null);
 
-    const result = await protocolHandler()({ url: `${PROTOCOL}://missing/1/0/0` });
+    try {
+      const result = await protocolHandler()({ url: `${PROTOCOL}://missing/1/0/0` });
 
-    assert.equal(result.data.byteLength, 0);
-    setKmlSuperOverlayResolver(null);
+      assert.equal(result.data.byteLength, 0);
+    } finally {
+      setKmlSuperOverlayResolver(null);
+    }
   });
 });

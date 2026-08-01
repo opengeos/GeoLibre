@@ -4,6 +4,8 @@ import type { KmlGroundOverlay } from "./kml";
 const PROTOCOL = "geolibre-kml-super-overlay";
 const TILE_SIZE = 256;
 const LATITUDE_STRIPS = 16;
+/** Decoded source tiles kept per archive (~256 KB each); see {@link bitmapFor}. */
+const MAX_CACHED_BITMAPS = 256;
 
 interface SuperOverlayTile extends KmlGroundOverlay {
   bytes: Uint8Array;
@@ -50,6 +52,14 @@ export type KmlSuperOverlayResolver = (key: string) => Promise<KmlSuperOverlayTi
 
 let resolveArchiveTiles: KmlSuperOverlayResolver | null = null;
 const pendingResolutions = new Map<string, Promise<SuperOverlayArchive | null>>();
+// Ids whose re-read already failed (the KMZ moved, or is unreadable). MapLibre
+// asks for many tiles per frame, so without this every one of them would redo
+// the whole read-and-unzip and log the same warning again.
+const failedResolutions = new Set<string>();
+// Ids registered but not yet seen on a live layer. An archive is registered
+// before its loader returns and the caller adds the tile layer, so a store
+// change in that window must not prune it away.
+const unclaimedArchives = new Set<string>();
 
 /** Install (or clear) the resolver used to re-read an archive after a reload. */
 export function setKmlSuperOverlayResolver(resolver: KmlSuperOverlayResolver | null): void {
@@ -99,15 +109,18 @@ function storeArchive(id: string, tiles: KmlSuperOverlayTile[]): SuperOverlayArc
   const zooms = zoomsForTiles(tiles);
   const tilesByZoom = new Map<number, SuperOverlayTile[]>();
   tiles.forEach((tile, index) => {
-    const zoom = zooms[index];
-    tilesByZoom.set(zoom, [
-      ...(tilesByZoom.get(zoom) ?? []),
-      { ...tile.overlay, bytes: tile.bytes },
-    ]);
+    // Push into the level's existing array: rebuilding it per tile would copy
+    // O(N²) elements across a level holding thousands of tiles.
+    const entry = { ...tile.overlay, bytes: tile.bytes };
+    const bucket = tilesByZoom.get(zooms[index]);
+    if (bucket) bucket.push(entry);
+    else tilesByZoom.set(zooms[index], [entry]);
   });
   const archive: SuperOverlayArchive = { tilesByZoom, bitmapCache: new Map() };
   freeArchive(id);
   archives.set(id, archive);
+  failedResolutions.delete(id);
+  unclaimedArchives.add(id);
   ensurePruneSubscription();
   return archive;
 }
@@ -159,19 +172,21 @@ async function archiveFor(id: string): Promise<SuperOverlayArchive | null> {
   const registered = archives.get(id);
   if (registered) return registered;
   const resolver = resolveArchiveTiles;
-  if (!resolver) return null;
+  if (!resolver || failedResolutions.has(id)) return null;
   let pending = pendingResolutions.get(id);
   if (!pending) {
     pending = (async () => {
       try {
         const tiles = await resolver(id);
-        return tiles && tiles.length > 0 ? storeArchive(id, tiles) : null;
+        if (tiles && tiles.length > 0) return storeArchive(id, tiles);
       } catch (error) {
         console.warn(`[GeoLibre] Could not re-read the KML Super-Overlay from "${id}".`, error);
-        return null;
       } finally {
         pendingResolutions.delete(id);
       }
+      // Re-attempted only if the same key is registered again, which clears it.
+      failedResolutions.add(id);
+      return null;
     })();
     pendingResolutions.set(id, pending);
   }
@@ -205,6 +220,7 @@ function freeArchive(id: string): boolean {
     );
   }
   archive.bitmapCache.clear();
+  unclaimedArchives.delete(id);
   return archives.delete(id);
 }
 
@@ -221,7 +237,12 @@ function ensurePruneSubscription(): void {
   });
 }
 
-/** Free every registered archive no live layer still points a tile URL at. */
+/**
+ * Free every registered archive no live layer still points a tile URL at. An
+ * archive registered since the last live sighting is left alone: the importer
+ * registers it before it can add the tile layer, and pruning that window would
+ * drop a browser-`File` pyramid that has no path to be re-read from.
+ */
 export function pruneKmlSuperOverlays(layers: readonly GeoLibreLayer[]): void {
   const live = new Set<string>();
   for (const layer of layers) {
@@ -232,8 +253,9 @@ export function pruneKmlSuperOverlays(layers: readonly GeoLibreLayer[]): void {
       if (id !== null) live.add(id);
     }
   }
+  for (const id of live) unclaimedArchives.delete(id);
   for (const id of [...archives.keys()]) {
-    if (!live.has(id)) freeArchive(id);
+    if (!live.has(id) && !unclaimedArchives.has(id)) freeArchive(id);
   }
 }
 
@@ -273,13 +295,27 @@ export function parseTileUrl(url: string): { id: string; z: number; x: number; y
 }
 
 function bitmapFor(archive: SuperOverlayArchive, tile: SuperOverlayTile): Promise<ImageBitmap> {
-  let bitmap = archive.bitmapCache.get(tile);
-  if (!bitmap) {
-    bitmap = createImageBitmap(new Blob([tile.bytes as BlobPart]));
-    // Never cache a failed decode: a corrupt tile would otherwise keep
-    // re-throwing the same rejection for the rest of the session.
-    void bitmap.catch(() => archive.bitmapCache.delete(tile));
-    archive.bitmapCache.set(tile, bitmap);
+  const cached = archive.bitmapCache.get(tile);
+  if (cached) {
+    // A Map iterates in insertion order, so re-inserting a hit moves it to the
+    // end and makes the eviction below least-recently-used.
+    archive.bitmapCache.delete(tile);
+    archive.bitmapCache.set(tile, cached);
+    return cached;
+  }
+  const bitmap = createImageBitmap(new Blob([tile.bytes as BlobPart]));
+  // Never cache a failed decode: a corrupt tile would otherwise keep
+  // re-throwing the same rejection for the rest of the session.
+  void bitmap.catch(() => archive.bitmapCache.delete(tile));
+  archive.bitmapCache.set(tile, bitmap);
+  // A decoded 256x256 tile costs ~256 KB, so a pyramid with thousands of tiles
+  // would pin gigabytes over a long browsing session. Evicted tiles are simply
+  // dropped, not closed: a request may still be compositing one, and the bytes
+  // stay in the archive so re-visiting the tile just decodes it again.
+  while (archive.bitmapCache.size > MAX_CACHED_BITMAPS) {
+    const oldest = archive.bitmapCache.keys().next();
+    if (oldest.done) break;
+    archive.bitmapCache.delete(oldest.value);
   }
   return bitmap;
 }
@@ -319,12 +355,13 @@ async function handleTileRequest(
   if (!context) return { data: new ArrayBuffer(0) };
   const scale = 2 ** z * TILE_SIZE;
 
-  // Start every decode up front so the tiles compositing one output tile decode
-  // concurrently; they are still drawn in order below.
-  const decoded = candidates.map((tile) => bitmapFor(archive, tile));
+  // Decode every contributing tile concurrently, then composite them in order.
+  // Drawing only after they have all resolved also keeps the whole composite
+  // synchronous, so a concurrent request cannot evict one of these mid-draw.
+  const decoded = await Promise.all(candidates.map((tile) => bitmapFor(archive, tile)));
+  if (abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
   for (const [index, tile] of candidates.entries()) {
-    if (abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
-    const bitmap = await decoded[index];
+    const bitmap = decoded[index];
     const [tileWest, tileSouth, tileEast, tileNorth] = tile.bounds;
     const dx = ((tileWest + 180) / 360) * scale - x * TILE_SIZE;
     const dw = ((tileEast - tileWest) / 360) * scale;

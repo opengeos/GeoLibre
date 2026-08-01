@@ -159,28 +159,34 @@ describe("routeKmlFileSelection", () => {
       { file: new File(["x"], "notes.KML"), sourcePath: "/data/notes.KML" },
     ];
 
-    assert.equal(await routeKmlFileSelection(files), true);
-    assert.deepEqual(
-      seen[0].map((entry) => entry.sourcePath),
-      ["/data/pyramid.kmz", "/data/notes.KML"],
-    );
-    setKmlFileImportHandler(null);
+    try {
+      assert.equal(await routeKmlFileSelection(files), true);
+      assert.deepEqual(
+        seen[0].map((entry) => entry.sourcePath),
+        ["/data/pyramid.kmz", "/data/notes.KML"],
+      );
+    } finally {
+      setKmlFileImportHandler(null);
+    }
   });
 
   it("leaves a mixed or non-KML selection to the vector control", async () => {
     const seen = record();
 
-    assert.equal(
-      await routeKmlFileSelection([
-        { file: new File(["x"], "a.kml") },
-        { file: new File(["x"], "b.geojson") },
-      ]),
-      false,
-    );
-    assert.equal(await routeKmlFileSelection([{ file: new File(["x"], "b.geojson") }]), false);
-    assert.equal(await routeKmlFileSelection([]), false);
-    assert.equal(seen.length, 0);
-    setKmlFileImportHandler(null);
+    try {
+      assert.equal(
+        await routeKmlFileSelection([
+          { file: new File(["x"], "a.kml") },
+          { file: new File(["x"], "b.geojson") },
+        ]),
+        false,
+      );
+      assert.equal(await routeKmlFileSelection([{ file: new File(["x"], "b.geojson") }]), false);
+      assert.equal(await routeKmlFileSelection([]), false);
+      assert.equal(seen.length, 0);
+    } finally {
+      setKmlFileImportHandler(null);
+    }
   });
 
   it("is a no-op when no host importer is registered", async () => {
