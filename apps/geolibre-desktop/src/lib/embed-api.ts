@@ -304,30 +304,30 @@ function filterExpressionProblem(expression: unknown[]): string | null {
 }
 
 /**
- * Layer types whose renderers read a fetched tile or tileset and nothing else.
- * `layer-sync`'s raster path bails when `getRenderableRasterTiles` finds no
- * `tiles`/`url`, and the vector-tile, MBTiles, and PMTiles paths have the same
- * shape — none of them looks at inline features, however well-formed. So an
- * inline `geojson` (or a `data` object on the source) does not make one of
- * these renderable, and accepting it would reintroduce the silent failure
- * {@link hasRenderableEmbedSource} exists to prevent.
+ * The only layer types a renderer draws from inline features rather than from a
+ * fetched source. Every other type is URL- or tile-backed and ignores an inline
+ * blob however well-formed it is: `layer-sync`'s raster path bails when
+ * `getRenderableRasterTiles` finds no `tiles`/`url`, `syncImageLayer` needs
+ * `source.url` plus `coordinates`, `syncVideoLayer` needs `source.urls`, and
+ * the control-painted types (`cog`, `zarr`, `3d-tiles`, `arcgis`, `lidar`, …)
+ * are handed their own URL by the control that registered them.
+ *
+ * An allowlist rather than a blocklist on purpose: a new layer type is
+ * URL-backed far more often than not, so the safe default for one nobody
+ * remembered to classify is "needs a real source".
+ *
+ * - `geojson`: `layer-sync` renders it from `layer.geojson`.
+ * - `deckgl-viz`: `createDeckVizStoreLayer` keeps its features in `geojson`
+ *   with a source holding only `{type, data: rows}`.
  */
-const TILE_ONLY_LAYER_TYPES = [
-  "raster",
-  "wms",
-  "wmts",
-  "xyz",
-  "vector-tiles",
-  "mbtiles",
-  "pmtiles",
-];
+const INLINE_FEATURE_LAYER_TYPES = ["geojson", "deckgl-viz"];
 
 /**
- * Whether an `addLayer` spec carries anything the map could actually render:
- * a re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
- * same predicate the Layer Library uses), or, for a type that is not
- * {@link TILE_ONLY_LAYER_TYPES}, inline features on the spec or as a `data`
- * object on the source.
+ * Whether an `addLayer` spec carries anything the map could actually render: a
+ * re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
+ * same predicate the Layer Library uses), or, for an
+ * {@link INLINE_FEATURE_LAYER_TYPES} type, inline features on the spec or as a
+ * `data` object on the source.
  *
  * Without this a spec whose `source` does not match its `type` (say `xyz` with
  * no `tiles`) would be acked as a success, pushed into the store, listed by
@@ -342,10 +342,46 @@ function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
   ) {
     return true;
   }
-  if (typeof spec.type === "string" && TILE_ONLY_LAYER_TYPES.includes(spec.type)) return false;
+  if (typeof spec.type !== "string" || !INLINE_FEATURE_LAYER_TYPES.includes(spec.type)) {
+    return false;
+  }
   // Inline GeoJSON is an object, on the spec's `geojson` or on `source.data`;
   // the `hasRestorableLayerSource` check above only counts a string there.
   return isRecord(spec.geojson) || isRecord(source.data);
+}
+
+/**
+ * Schemes never valid on a host-supplied layer source. This cannot be
+ * `loadProject`'s http(s) allowlist ({@link isFetchableUrl}): a layer source
+ * legitimately carries a custom map protocol — `pmtiles://<remote url>`,
+ * `mbtiles://` — so an allowlist would refuse layer types the API documents.
+ * It blocks the script-capable and local schemes instead, the ones a URL field
+ * has no business holding whoever the (allowlisted) host is.
+ */
+const BLOCKED_SOURCE_URL_SCHEME = /^\s*(?:javascript|vbscript|data|file|blob):/i;
+
+/**
+ * The first blocked URL on an `addLayer` spec, or null.
+ *
+ * The fields checked are exactly the ones {@link hasRenderableEmbedSource}
+ * counts as making the layer renderable, so anything a renderer will actually
+ * fetch has been through here.
+ */
+function blockedSpecUrl(spec: Record<string, unknown>): string | null {
+  const source = isRecord(spec.source) ? spec.source : {};
+  const metadata = isRecord(spec.metadata) ? spec.metadata : {};
+  const candidates = [
+    source.url,
+    source.data,
+    metadata.originalUrl,
+    ...(Array.isArray(source.tiles) ? source.tiles : []),
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && BLOCKED_SOURCE_URL_SCHEME.test(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /**
@@ -451,10 +487,16 @@ export function parseEmbedRequest(
       ) {
         return fail("addLayer: invalid project layer specification");
       }
+      const blocked = blockedSpecUrl(spec);
+      if (blocked) {
+        return fail(`addLayer: unsupported URL scheme in "${blocked.trim().split(":")[0]}:"`);
+      }
       if (!hasRenderableEmbedSource(spec)) {
         return fail(
           `addLayer: a "${spec.type}" layer needs a source with a url` +
-            (TILE_ONLY_LAYER_TYPES.includes(spec.type) ? " or tiles" : ", tiles, or inline data"),
+            (INLINE_FEATURE_LAYER_TYPES.includes(spec.type)
+              ? ", tiles, or inline features"
+              : " or tiles"),
         );
       }
       return {

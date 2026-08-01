@@ -168,9 +168,12 @@ layers GeoLibre holds as GeoJSON, not to ones whose features live only in a tile
 source.
 
 `setFilter` compiles the expression through the MapLibre style spec before
-storing it, and `addLayer` requires a source the map can actually read (a `url`,
-a non-empty `tiles`, or inline features). Both report the problem in the `ack`
-rather than reporting success and rendering nothing.
+storing it, and `addLayer` requires a source the map can actually read: a `url`
+or a non-empty `tiles`, or — for the two layer types drawn from inline features,
+`geojson` and `deckgl-viz` — an inline `geojson`. Both report the problem in the
+`ack` rather than reporting success and rendering nothing. `addLayer` also
+refuses `javascript:`, `data:`, `file:`, and `blob:` URLs on a source; a custom
+map protocol such as `pmtiles://` is fine.
 
 Add a `requestId` to any message and the app answers with an `ack` (below)
 reporting whether it worked.

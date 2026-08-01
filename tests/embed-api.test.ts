@@ -280,16 +280,19 @@ describe("parseEmbedRequest: addLayer", () => {
     }
   });
 
-  it("does not let inline features stand in for a tile-backed layer's tiles", () => {
-    // layer-sync's raster/vector-tile/MBTiles paths read `tiles`/`url` and
-    // never look at inline features, so accepting these would be the same
-    // silent no-op with a different shape.
+  it("does not let inline features stand in for a URL- or tile-backed source", () => {
+    // Only `geojson` and `deckgl-viz` render from inline features; every other
+    // renderer reads a URL or tiles and ignores the blob, so accepting these
+    // would be the same silent no-op in a different shape.
     const empty = { type: "FeatureCollection", features: [] };
     for (const spec of [
       addLayerSpec({ geojson: empty, source: {} }),
       addLayerSpec({ source: { data: empty } }),
       addLayerSpec({ type: "vector-tiles", source: { data: empty } }),
       addLayerSpec({ type: "pmtiles", geojson: empty, source: {} }),
+      addLayerSpec({ type: "image", geojson: empty, source: { coordinates: [] } }),
+      addLayerSpec({ type: "video", geojson: empty, source: {} }),
+      addLayerSpec({ type: "cog", source: { data: empty } }),
     ]) {
       const parsed = parseEmbedRequest(message("addLayer", { spec }));
       assert.ok(parsed && "error" in parsed, `expected ${spec.type} to be rejected`);
@@ -306,9 +309,25 @@ describe("parseEmbedRequest: addLayer", () => {
       addLayerSpec({ type: "cog", source: { url: "https://x/y.tif" } }),
       // A string `data` is a URL, which counts for a tile-backed type too.
       addLayerSpec({ source: { data: "https://x/features.json" } }),
+      // A custom map protocol is a legitimate layer source, unlike loadProject.
+      addLayerSpec({ type: "pmtiles", source: { url: "pmtiles://https://x/y.pmtiles" } }),
     ]) {
       const parsed = parseEmbedRequest(message("addLayer", { spec }));
       assert.ok(parsed && !("error" in parsed), `expected ${spec.type} to parse`);
+    }
+  });
+
+  it("refuses a script-capable or local URL scheme on any source field", () => {
+    for (const [field, spec] of [
+      ["source.url", addLayerSpec({ source: { url: "javascript:alert(1)" } })],
+      ["source.tiles", addLayerSpec({ source: { tiles: [" JavaScript:alert(1)"] } })],
+      ["source.data", addLayerSpec({ type: "geojson", source: { data: "data:text/html,x" } })],
+      ["metadata.originalUrl", addLayerSpec({ metadata: { originalUrl: "file:///etc/passwd" } })],
+      ["blob", addLayerSpec({ source: { url: "blob:https://host/abc" } })],
+    ] as const) {
+      const parsed = parseEmbedRequest(message("addLayer", { spec }));
+      assert.ok(parsed && "error" in parsed, `expected ${field} to be rejected`);
+      assert.match(parsed.error, /^addLayer: unsupported URL scheme/);
     }
   });
 });
