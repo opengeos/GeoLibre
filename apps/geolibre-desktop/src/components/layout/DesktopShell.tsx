@@ -137,7 +137,11 @@ import { FloatingPanels } from "../panels/FloatingPanels";
 import { SunPanel } from "../panels/SunPanel";
 import { RouteAnimationPanel } from "../panels/RouteAnimationPanel";
 import { FlightSimulatorPanel } from "../panels/FlightSimulatorPanel";
-import { PluginRightPanel, PLUGIN_PANEL_DEFAULT_WIDTH, clampPluginPanelWidth } from "../panels/PluginRightPanel";
+import {
+  PluginRightPanel,
+  PLUGIN_PANEL_DEFAULT_WIDTH,
+  clampPluginPanelWidth,
+} from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { SharedSidebar } from "../panels/SharedSidebar";
 import { Layers, SlidersHorizontal } from "lucide-react";
@@ -186,7 +190,8 @@ const ProcessingDialog = lazy(() =>
       // throw during render and unmount the whole shell. Fall back to a
       // no-op component so the rest of the app stays interactive.
       console.error("Failed to load ProcessingDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/ProcessingDialog").ProcessingDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ProcessingDialog").ProcessingDialog;
       return { default: Fallback };
     }),
 );
@@ -199,7 +204,8 @@ const ConversionDialog = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load ConversionDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/ConversionDialog").ConversionDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ConversionDialog").ConversionDialog;
       return { default: Fallback };
     }),
 );
@@ -212,7 +218,8 @@ const StyleManagerPanel = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load StyleManagerPanel", error);
-      const Fallback = (() => null) as unknown as typeof import("../panels/StyleManagerPanel").StyleManagerPanel;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/StyleManagerPanel").StyleManagerPanel;
       return { default: Fallback };
     }),
 );
@@ -225,7 +232,8 @@ const VectorToolsDialog = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load VectorToolsDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/VectorToolsDialog").VectorToolsDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/VectorToolsDialog").VectorToolsDialog;
       return { default: Fallback };
     }),
 );
@@ -238,7 +246,8 @@ const ModelBuilderDialog = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load ModelBuilderDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/ModelBuilderDialog").ModelBuilderDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ModelBuilderDialog").ModelBuilderDialog;
       return { default: Fallback };
     }),
 );
@@ -251,7 +260,8 @@ const NetworkToolsDialog = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load NetworkToolsDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/NetworkToolsDialog").NetworkToolsDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/NetworkToolsDialog").NetworkToolsDialog;
       return { default: Fallback };
     }),
 );
@@ -320,7 +330,8 @@ const GeocodeDialog = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load GeocodeDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/GeocodeDialog").GeocodeDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/GeocodeDialog").GeocodeDialog;
       return { default: Fallback };
     }),
 );
@@ -333,7 +344,8 @@ const RasterToolsDialog = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load RasterToolsDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/RasterToolsDialog").RasterToolsDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/RasterToolsDialog").RasterToolsDialog;
       return { default: Fallback };
     }),
 );
@@ -345,7 +357,8 @@ const SegmentationDialog = lazy(() =>
     }))
     .catch((error) => {
       console.error("Failed to load SegmentationDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/SegmentationDialog").SegmentationDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/SegmentationDialog").SegmentationDialog;
       return { default: Fallback };
     }),
 );
@@ -384,7 +397,8 @@ const SqlWorkspacePanel = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
       console.error("Failed to load SqlWorkspacePanel", error);
-      const Fallback = (() => null) as unknown as typeof import("../panels/SqlWorkspacePanel").SqlWorkspacePanel;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/SqlWorkspacePanel").SqlWorkspacePanel;
       return { default: Fallback };
     }),
 );
@@ -397,7 +411,8 @@ const NotebookPanel = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as the dialogs above.
       console.error("Failed to load NotebookPanel", error);
-      const Fallback = (() => null) as unknown as typeof import("../panels/NotebookPanel").NotebookPanel;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/NotebookPanel").NotebookPanel;
       return { default: Fallback };
     }),
 );
@@ -410,7 +425,8 @@ const AssistantPanel = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as the dialogs above.
       console.error("Failed to load AssistantPanel", error);
-      const Fallback = (() => null) as unknown as typeof import("../panels/AssistantPanel").AssistantPanel;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/AssistantPanel").AssistantPanel;
       return { default: Fallback };
     }),
 );
@@ -423,7 +439,8 @@ const DashboardPanel = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as the dialogs above.
       console.error("Failed to load DashboardPanel", error);
-      const Fallback = (() => null) as unknown as typeof import("../panels/DashboardPanel").DashboardPanel;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/DashboardPanel").DashboardPanel;
       return { default: Fallback };
     }),
 );
@@ -436,7 +453,8 @@ const PythonConsolePanel = lazy(() =>
     .catch((error) => {
       // Same chunk-load fallback rationale as the dialogs above.
       console.error("Failed to load PythonConsolePanel", error);
-      const Fallback = (() => null) as unknown as typeof import("../panels/PythonConsolePanel").PythonConsolePanel;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/PythonConsolePanel").PythonConsolePanel;
       return { default: Fallback };
     }),
 );
@@ -494,7 +512,12 @@ function initialSidePanelWidth(): number {
 type ShellStyle = CSSProperties &
   Record<"--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width", string>;
 
-export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, onToggleThemeMode }: DesktopShellProps) {
+export function DesktopShell({
+  layoutOptions,
+  projectUrlLoadState,
+  themeMode,
+  onToggleThemeMode,
+}: DesktopShellProps) {
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
@@ -538,7 +561,8 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
     const sync = () => {
       const fsEl =
         document.fullscreenElement ??
-        (document as Document & { webkitFullscreenElement?: Element | null }).webkitFullscreenElement ??
+        (document as Document & { webkitFullscreenElement?: Element | null })
+          .webkitFullscreenElement ??
         null;
       shell.toggleAttribute("data-map-fullscreen", !!fsEl && shell.contains(fsEl));
     };
@@ -700,7 +724,10 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
   }, [activePanelId]);
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
-  const geometryEditLayerId = useSyncExternalStore(subscribeGeometryEdit, getGeometryEditTargetLayerId);
+  const geometryEditLayerId = useSyncExternalStore(
+    subscribeGeometryEdit,
+    getGeometryEditTargetLayerId,
+  );
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
@@ -772,7 +799,12 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
     // and manual-resize paths cannot diverge (an ultrawide shell would otherwise
     // initialize past MAX, a width the user could never drag back to).
     setNotebookPanelWidth(clamp(half, MIN_NOTEBOOK_PANEL_WIDTH, MAX_NOTEBOOK_PANEL_WIDTH));
-  }, [notebookOpen, layoutOptions.layerPanelVisible, layoutOptions.stylePanelVisible, layerPanelWidth]);
+  }, [
+    notebookOpen,
+    layoutOptions.layerPanelVisible,
+    layoutOptions.stylePanelVisible,
+    layerPanelWidth,
+  ]);
   const deferPanelResize = isTauri();
   const shellStyle: ShellStyle = {
     "--layer-panel-width": `${layerPanelWidth}px`,
@@ -803,7 +835,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
     if (!source || typeof source.getData !== "function") return;
     try {
       const data = await source.getData();
-      if (data && typeof data === "object" && (data as { type?: string }).type === "FeatureCollection") {
+      if (
+        data &&
+        typeof data === "object" &&
+        (data as { type?: string }).type === "FeatureCollection"
+      ) {
         useAppStore.getState().updateLayer(layerId, { geojson: data as FeatureCollection });
       }
     } catch {
@@ -835,14 +871,18 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
         if (!manager.isActive("maplibre-gl-geo-editor")) {
           manager.activate("maplibre-gl-geo-editor", appAPI);
           if (!manager.isActive("maplibre-gl-geo-editor")) {
-            setDropError("Could not activate the geometry editor. Try again once the map has fully loaded.");
+            setDropError(
+              "Could not activate the geometry editor. Try again once the map has fully loaded.",
+            );
             clearDropMessageLater();
             return;
           }
         }
         const started = await startLayerGeometryEdit(appAPI, layerId);
         if (!started) {
-          setDropError("Could not start geometry editing for this layer. Its data may still be loading.");
+          setDropError(
+            "Could not start geometry editing for this layer. Its data may still be loading.",
+          );
           clearDropMessageLater();
         }
       } finally {
@@ -957,7 +997,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
         } catch (error) {
           console.error("[GeoLibre] Failed to read raster for conversion", error);
           window.alert(
-            bytesAreRemote ? t("raster.rasterDownloadFailed", { name }) : t("raster.cogConvertFailed", { name }),
+            bytesAreRemote
+              ? t("raster.rasterDownloadFailed", { name })
+              : t("raster.cogConvertFailed", { name }),
           );
           return;
         }
@@ -1173,7 +1215,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
         }
         // `||` (not `??`) so an empty-string name falls back to the path, and
         // matches the name shown in the drop confirmation toast.
-        lastLayerId = addGeoJsonLayer(layer.name || layerNameFromPath(layer.path), layer.data, layer.path);
+        lastLayerId = addGeoJsonLayer(
+          layer.name || layerNameFromPath(layer.path),
+          layer.data,
+          layer.path,
+        );
       }
 
       // Gather each time-animated overlay's frames into one collapsible group so
@@ -1182,7 +1228,10 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
       sequences.forEach((ids, index) => {
         // Suffix when a single drop yields more than one sequence so the groups
         // are distinguishable in the panel (e.g. two independent radar loops).
-        const name = sequences.length > 1 ? `${t("kml.timeOverlayGroup")} ${index + 1}` : t("kml.timeOverlayGroup");
+        const name =
+          sequences.length > 1
+            ? `${t("kml.timeOverlayGroup")} ${index + 1}`
+            : t("kml.timeOverlayGroup");
         addLayerGroup(name, ids);
       });
       const hasTimeAnimation = sequences.length > 0;
@@ -1213,7 +1262,16 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
         }
       }
     },
-    [addGeoJsonLayer, addImageOverlayLayer, addTileLayer, addLayer, addLayerGroup, isPluginActive, togglePlugin, t],
+    [
+      addGeoJsonLayer,
+      addImageOverlayLayer,
+      addTileLayer,
+      addLayer,
+      addLayerGroup,
+      isPluginActive,
+      togglePlugin,
+      t,
+    ],
   );
 
   useEffect(() => {
@@ -1254,7 +1312,8 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
       const summary = t("addData.photos.addedSummary", {
         count: result.located,
       });
-      const skippedNote = result.skipped > 0 ? ` ${t("addData.photos.skippedNote", { count: result.skipped })}` : "";
+      const skippedNote =
+        result.skipped > 0 ? ` ${t("addData.photos.skippedNote", { count: result.skipped })}` : "";
       setDropMessage(summary + skippedNote);
       return result.located;
     },
@@ -1347,10 +1406,10 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               }),
             })
           : importedLayers.length
-          ? t("toolbar.fileDrop.addedVectorLayers", {
-              count: importedLayers.length,
-            })
-          : t("toolbar.fileDrop.addedRasterLayers", { count: rasterCount }),
+            ? t("toolbar.fileDrop.addedVectorLayers", {
+                count: importedLayers.length,
+              })
+            : t("toolbar.fileDrop.addedRasterLayers", { count: rasterCount }),
       );
     },
     [addImportedVectorLayers, t],
@@ -1411,7 +1470,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
                     // few webview builds may suppress JS dialogs, in which case
                     // it returns false and the file is skipped.
                     if (
-                      !window.confirm(`${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`)
+                      !window.confirm(
+                        `${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
+                      )
                     ) {
                       continue;
                     }
@@ -1423,9 +1484,17 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
                   const buffer =
                     bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
                       ? (bytes.buffer as ArrayBuffer)
-                      : (bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+                      : (bytes.buffer.slice(
+                          bytes.byteOffset,
+                          bytes.byteOffset + bytes.byteLength,
+                        ) as ArrayBuffer);
                   const layers = await loadOsmPbf(buffer);
-                  const added = addOsmPbfLayers(addGeoJsonLayer, osmPbfBaseName(name), path, layers);
+                  const added = addOsmPbfLayers(
+                    addGeoJsonLayer,
+                    osmPbfBaseName(name),
+                    path,
+                    layers,
+                  );
                   if (added > 0 && layers.bounds) {
                     mapControllerRef.current?.fitBounds(layers.bounds);
                   }
@@ -1468,7 +1537,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               // when PBF or photo files were present (even if rejected/failed).
               // See the browser handler: suppress the empty-input error when
               // photos were present so it can't clobber the GPS error above.
-              if (importedLayers.length > 0 || rasterCount > 0 || (pbfPaths.length === 0 && photoResult === null)) {
+              if (
+                importedLayers.length > 0 ||
+                rasterCount > 0 ||
+                (pbfPaths.length === 0 && photoResult === null)
+              ) {
                 finishDrop(importedLayers, rasterCount);
               }
             }
@@ -1541,7 +1614,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
           // extract can exhaust memory even off the main thread).
           if (file.size >= OSM_PBF_SIZE_WARN_BYTES) {
             const sizeMb = Math.round(file.size / (1024 * 1024));
-            if (!window.confirm(`${file.name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`)) {
+            if (
+              !window.confirm(
+                `${file.name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
+              )
+            ) {
               continue;
             }
           }
@@ -1560,7 +1637,12 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
             );
             continue;
           }
-          const added = addOsmPbfLayers(addGeoJsonLayer, osmPbfBaseName(file.name), file.name, layers);
+          const added = addOsmPbfLayers(
+            addGeoJsonLayer,
+            osmPbfBaseName(file.name),
+            file.name,
+            layers,
+          );
           if (added > 0 && layers.bounds) {
             mapControllerRef.current?.fitBounds(layers.bounds);
           }
@@ -1597,7 +1679,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
           // Suppress finishDrop's empty-input error whenever photos were
           // present (photoResult !== null) — even if all lacked GPS — so its
           // generic message can't clobber the specific GPS error set above.
-          if (importedLayers.length > 0 || rasterCount > 0 || (pbfFiles.length === 0 && photoResult === null)) {
+          if (
+            importedLayers.length > 0 ||
+            rasterCount > 0 ||
+            (pbfFiles.length === 0 && photoResult === null)
+          ) {
             finishDrop(importedLayers, rasterCount);
           }
         }
@@ -1868,7 +1954,10 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
           // the Layers sidebar surface, so a single rail lists both the workbench
           // and Layers instead of the two positional plugin slots flanking it.
-          <SectionErrorBoundary label="Shared left sidebar" displayName={t("shell.section.sharedLeftSidebar")}>
+          <SectionErrorBoundary
+            label="Shared left sidebar"
+            displayName={t("shell.section.sharedLeftSidebar")}
+          >
             <SharedSidebar
               key={replaceLayersPanelId}
               side="layers"
@@ -1883,7 +1972,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               // start with Layers expanded and Browser a collapsed rail entry.
               // On a phone-width viewport both start collapsed (panels overlay
               // there), matching the mobile "panels default collapsed" behavior.
-              initialBuiltinExpanded={replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()}
+              initialBuiltinExpanded={
+                replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
+              }
               // The story-map presentation is the only standalone Layers
               // autoCollapse trigger (the notebook collapses Style, not Layers).
               forceBuiltinCollapsed={storymapPresenting}
@@ -1895,7 +1986,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
                   onToggleGeometryEdit={handleToggleGeometryEdit}
                   onCancelGeometryEdit={handleCancelGeometryEdit}
                   onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
-                  onOpenRasterStylePanel={() => openRasterLayerPanel(createAppAPI(mapControllerRef))}
+                  onOpenRasterStylePanel={() =>
+                    openRasterLayerPanel(createAppAPI(mapControllerRef))
+                  }
                   onOpenRasterSubset={setRasterSubsetLayer}
                   collapsed={collapsed}
                   onCollapsedChange={onCollapsedChange}
@@ -1926,7 +2019,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
                   onToggleGeometryEdit={handleToggleGeometryEdit}
                   onCancelGeometryEdit={handleCancelGeometryEdit}
                   onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
-                  onOpenRasterStylePanel={() => openRasterLayerPanel(createAppAPI(mapControllerRef))}
+                  onOpenRasterStylePanel={() =>
+                    openRasterLayerPanel(createAppAPI(mapControllerRef))
+                  }
                   onOpenRasterSubset={setRasterSubsetLayer}
                   autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
                 />
@@ -1957,7 +2052,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               chrome-free visual layout. Placed inside the main landmark so it
               is not flagged as content outside a landmark. */}
           <h1 className="sr-only">{t("shell.workspaceTitle")}</h1>
-          <SectionErrorBoundary label="Map" displayName={t("shell.section.map")} fallbackClassName="h-full w-full">
+          <SectionErrorBoundary
+            label="Map"
+            displayName={t("shell.section.map")}
+            fallbackClassName="h-full w-full"
+          >
             <MapGrid>
               <MapCanvas
                 controllerRef={mapControllerRef}
@@ -1986,7 +2085,10 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
-              <MapLegendPanel mapControllerRef={mapControllerRef} mapReadyGeneration={mapReadyGeneration} />
+              <MapLegendPanel
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <RasterSubsetPanel
                 layer={rasterSubsetLayer}
                 onClose={() => setRasterSubsetLayer(null)}
@@ -2010,13 +2112,19 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Plugin floating panels" displayName={t("shell.section.pluginFloatingPanels")}>
+          <SectionErrorBoundary
+            label="Plugin floating panels"
+            displayName={t("shell.section.pluginFloatingPanels")}
+          >
             <FloatingPanels />
           </SectionErrorBoundary>
           {/* Mounted here (inside the map area, like FloatingPanels) so the
               selection panels anchor to the map canvas's top-left corner and
               drag-clamp to the map, not the whole window (#1314). */}
-          <SectionErrorBoundary label="Selection panels" displayName={t("shell.section.selectionPanels")}>
+          <SectionErrorBoundary
+            label="Selection panels"
+            displayName={t("shell.section.selectionPanels")}
+          >
             <Suspense fallback={null}>
               <SelectByExpressionDialog />
             </Suspense>
@@ -2024,13 +2132,22 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
               <SelectByLocationDialog />
             </Suspense>
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Sun simulation panel" displayName={t("shell.section.sunSimulationPanel")}>
+          <SectionErrorBoundary
+            label="Sun simulation panel"
+            displayName={t("shell.section.sunSimulationPanel")}
+          >
             <SunPanel />
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Route animation panel" displayName={t("shell.section.routeAnimationPanel")}>
+          <SectionErrorBoundary
+            label="Route animation panel"
+            displayName={t("shell.section.routeAnimationPanel")}
+          >
             <RouteAnimationPanel mapControllerRef={mapControllerRef} />
           </SectionErrorBoundary>
-          <SectionErrorBoundary label="Flight simulator panel" displayName={t("shell.section.flightSimulatorPanel")}>
+          <SectionErrorBoundary
+            label="Flight simulator panel"
+            displayName={t("shell.section.flightSimulatorPanel")}
+          >
             <FlightSimulatorPanel />
           </SectionErrorBoundary>
           <KnowledgeCardConsentDialog
@@ -2060,7 +2177,10 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
           // Shared-rail mode (issue #765): the plugin panel shares the Style
           // sidebar surface, so a single rail lists both the workbench and Style
           // instead of the two positional plugin slots flanking the Style panel.
-          <SectionErrorBoundary label="Shared right sidebar" displayName={t("shell.section.sharedRightSidebar")}>
+          <SectionErrorBoundary
+            label="Shared right sidebar"
+            displayName={t("shell.section.sharedRightSidebar")}
+          >
             <SharedSidebar
               // Key by the active panel id so switching between two replace-style
               // plugins remounts the sidebar, resetting its per-panel local state
@@ -2112,7 +2232,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
                 <StylePanel
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
-                  autoCollapse={notebookOpen || storymapPresenting || autoCollapsedPanel === "style"}
+                  autoCollapse={
+                    notebookOpen || storymapPresenting || autoCollapsedPanel === "style"
+                  }
                 />
               </SectionErrorBoundary>
             ) : null}
@@ -2142,12 +2264,18 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
         ) : null}
       </div>
       {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary label="Attribute table" displayName={t("shell.section.attributeTable")}>
+        <SectionErrorBoundary
+          label="Attribute table"
+          displayName={t("shell.section.attributeTable")}
+        >
           <AttributeTable mapControllerRef={mapControllerRef} />
         </SectionErrorBoundary>
       ) : null}
       {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary label="Raster attribute table" displayName={t("shell.section.rasterAttributeTable")}>
+        <SectionErrorBoundary
+          label="Raster attribute table"
+          displayName={t("shell.section.rasterAttributeTable")}
+        >
           <RasterAttributeTable />
         </SectionErrorBoundary>
       ) : null}
@@ -2197,7 +2325,11 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
           />
         </SectionErrorBoundary>
       ) : null}
-      <DiagnosticsDialog diagnostics={diagnostics} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} />
+      <DiagnosticsDialog
+        diagnostics={diagnostics}
+        open={diagnosticsOpen}
+        onOpenChange={setDiagnosticsOpen}
+      />
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}
       <FileNamePromptDialog />
@@ -2259,7 +2391,9 @@ export function DesktopShell({ layoutOptions, projectUrlLoadState, themeMode, on
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="max-w-sm rounded-md border bg-background px-4 py-3 text-center shadow-lg">
             <p className="text-sm font-medium">{t("toolbar.fileDrop.overlayTitle")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{t("toolbar.fileDrop.overlaySubtext")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("toolbar.fileDrop.overlaySubtext")}
+            </p>
           </div>
         </div>
       ) : null}

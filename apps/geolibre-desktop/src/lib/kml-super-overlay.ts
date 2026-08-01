@@ -364,16 +364,23 @@ async function handleTileRequest(
   // A 512 px source tile at canonical z covers the same screen area and native
   // resolution as four 256 px KML tiles at z + 1.
   const requestedSourceZoom = z + SOURCE_ZOOM_OFFSET;
-  const sourceZoom = zooms.reduce((best, candidate) => {
-    if (candidate <= requestedSourceZoom && candidate > best) return candidate;
-    return best;
-  }, Math.min(...zooms));
+  const sourceZoom = zooms.reduce(
+    (best, candidate) => {
+      if (candidate <= requestedSourceZoom && candidate > best) return candidate;
+      return best;
+    },
+    Math.min(...zooms),
+  );
   const west = longitudeAtTileX(z, x);
   const east = longitudeAtTileX(z, x + 1);
   const north = latitudeAtTileY(z, y);
   const south = latitudeAtTileY(z, y + 1);
   const candidates = (archive.tilesByZoom.get(sourceZoom) ?? []).filter(
-    (tile) => tile.bounds[2] > west && tile.bounds[0] < east && tile.bounds[3] > south && tile.bounds[1] < north,
+    (tile) =>
+      tile.bounds[2] > west &&
+      tile.bounds[0] < east &&
+      tile.bounds[3] > south &&
+      tile.bounds[1] < north,
   );
   if (!candidates.length) return { data: new ArrayBuffer(0) };
 

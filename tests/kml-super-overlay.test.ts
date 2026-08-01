@@ -15,12 +15,14 @@ import {
 
 const PROTOCOL = "geolibre-kml-super-overlay";
 
-type ProtocolHandler = (params: { url: string }, abort?: AbortController) => Promise<{ data: ArrayBuffer }>;
+type ProtocolHandler = (
+  params: { url: string },
+  abort?: AbortController,
+) => Promise<{ data: ArrayBuffer }>;
 
 function protocolHandler(): ProtocolHandler {
-  const handler = (config as { REGISTERED_PROTOCOLS?: Record<string, ProtocolHandler> }).REGISTERED_PROTOCOLS?.[
-    PROTOCOL
-  ];
+  const handler = (config as { REGISTERED_PROTOCOLS?: Record<string, ProtocolHandler> })
+    .REGISTERED_PROTOCOLS?.[PROTOCOL];
   assert.ok(handler, "the Super-Overlay protocol should be registered");
   return handler;
 }
@@ -234,7 +236,10 @@ describe("the tile protocol", () => {
     });
 
     try {
-      const [first, second] = await Promise.all([protocolHandler()({ url }), protocolHandler()({ url })]);
+      const [first, second] = await Promise.all([
+        protocolHandler()({ url }),
+        protocolHandler()({ url }),
+      ]);
 
       assert.equal(first.data.byteLength, 0);
       assert.equal(second.data.byteLength, 0);

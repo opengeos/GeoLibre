@@ -1,7 +1,19 @@
-import { hasPathTraversal, isAbsoluteFilesystemPath, parseProject, type GeoLibreProject } from "@geolibre/core";
+import {
+  hasPathTraversal,
+  isAbsoluteFilesystemPath,
+  parseProject,
+  type GeoLibreProject,
+} from "@geolibre/core";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile, readTextFile, readTextFileLines, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  readDir,
+  readFile,
+  readTextFile,
+  readTextFileLines,
+  writeFile,
+  writeTextFile,
+} from "@tauri-apps/plugin-fs";
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
@@ -16,21 +28,36 @@ import {
 } from "./delimited-text";
 import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
-import { confirmLargeDataset, type DuckDbVectorLoadOptions, type LargeVectorDataset } from "./duckdb-vector-guard";
+import {
+  confirmLargeDataset,
+  type DuckDbVectorLoadOptions,
+  type LargeVectorDataset,
+} from "./duckdb-vector-guard";
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./geotagged-photos";
 import { projectedGeoJsonCrs } from "./crs-utils";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
-import { parseKmlGroundOverlays, parseKmlModels, parseKmlText, type KmlGroundOverlay, type KmlModel } from "./kml";
+import {
+  parseKmlGroundOverlays,
+  parseKmlModels,
+  parseKmlText,
+  type KmlGroundOverlay,
+  type KmlModel,
+} from "./kml";
 import {
   registerKmlSuperOverlay,
   setKmlSuperOverlayResolver,
   unregisterKmlSuperOverlay,
   type KmlSuperOverlayTile,
 } from "./kml-super-overlay";
-import { findArchiveEntry, findArchiveEntryKey, imageMimeFromName, normalizeArchivePath } from "./kml-overlays";
+import {
+  findArchiveEntry,
+  findArchiveEntryKey,
+  imageMimeFromName,
+  normalizeArchivePath,
+} from "./kml-overlays";
 
 // Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
 // working; the implementation lives in the lightweight ./is-tauri module.
@@ -305,7 +332,11 @@ export interface LoadedModel {
  * a 3D model. A KMZ/KML file can yield a mix (placemarks plus ground overlays
  * plus models), mirroring how a GPX file yields several vector layers.
  */
-export type LoadedLayer = LoadedVectorLayer | LoadedImageOverlay | LoadedKmlSuperOverlay | LoadedModel;
+export type LoadedLayer =
+  | LoadedVectorLayer
+  | LoadedImageOverlay
+  | LoadedKmlSuperOverlay
+  | LoadedModel;
 
 /** Narrow a {@link LoadedLayer} to its image-overlay variant. */
 export function isLoadedImageOverlay(layer: LoadedLayer): layer is LoadedImageOverlay {
@@ -621,9 +652,13 @@ export interface UnzippedShapefile {
  * mis-reads those as points, so they must be loaded through DuckDB, which
  * decodes the TIN surfaces (issue #1121).
  */
-export async function readShapefileZipForDuckDb(data: ArrayBuffer | Uint8Array): Promise<UnzippedShapefile | null> {
+export async function readShapefileZipForDuckDb(
+  data: ArrayBuffer | Uint8Array,
+): Promise<UnzippedShapefile | null> {
   const entries = await unzipArchive(data);
-  const shpEntry = Object.keys(entries).find((name) => /\.shp$/i.test(name) && !isMacOsMetadataEntry(name));
+  const shpEntry = Object.keys(entries).find(
+    (name) => /\.shp$/i.test(name) && !isMacOsMetadataEntry(name),
+  );
   if (!shpEntry) return null;
   const baseName = browserSafeFileName(shpEntry) || "layer.shp";
   const stem = baseName.replace(/\.shp$/i, "");
@@ -760,7 +795,11 @@ function bytesToDataUrl(bytes: Uint8Array, mime: string): Promise<string> {
   });
 }
 
-function imageOverlayLayer(overlay: KmlGroundOverlay, url: string, path: string): LoadedImageOverlay {
+function imageOverlayLayer(
+  overlay: KmlGroundOverlay,
+  url: string,
+  path: string,
+): LoadedImageOverlay {
   return {
     kind: "image-overlay",
     // Strip the file extension for the fallback name (e.g. "tour.kmz" ->
@@ -888,9 +927,12 @@ async function groundOverlaysFromKmz(
     // Try the href relative to its KML's directory first (a KMZ nesting
     // `folder/doc.kml` referencing `images/x.png` means `folder/images/x.png`),
     // then fall back to the global archive lookup.
-    const data = findArchiveEntry(entries, baseDir + overlay.href) ?? findArchiveEntry(entries, overlay.href);
+    const data =
+      findArchiveEntry(entries, baseDir + overlay.href) ?? findArchiveEntry(entries, overlay.href);
     if (!data) {
-      console.warn(`Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`);
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`,
+      );
       continue;
     }
     if (data.length > MAX_OVERLAY_IMAGE_BYTES) {
@@ -1024,7 +1066,9 @@ async function daeToGlbDataUrl(
     ? (url: string): string | undefined => {
         const bytes = resolveTexture(url);
         if (!bytes) return undefined;
-        const blob = URL.createObjectURL(new Blob([bytes as BlobPart], { type: imageMimeFromName(url) }));
+        const blob = URL.createObjectURL(
+          new Blob([bytes as BlobPart], { type: imageMimeFromName(url) }),
+        );
         blobUrls.push(blob);
         return blob;
       }
@@ -1082,9 +1126,13 @@ async function modelsFromKmz(
       if (converted) models.push(kmlModelLayer(model, converted, path, index, total));
       continue;
     }
-    const daeKey = findArchiveEntryKey(entries, baseDir + model.href) ?? findArchiveEntryKey(entries, model.href);
+    const daeKey =
+      findArchiveEntryKey(entries, baseDir + model.href) ??
+      findArchiveEntryKey(entries, model.href);
     if (daeKey === undefined) {
-      console.warn(`Skipping a KML model: its mesh "${model.href}" was not found in the KMZ archive.`);
+      console.warn(
+        `Skipping a KML model: its mesh "${model.href}" was not found in the KMZ archive.`,
+      );
       continue;
     }
     const data = entries[daeKey];
@@ -1102,7 +1150,8 @@ async function modelsFromKmz(
     // bare basename for textures stored elsewhere in the archive.
     const daeDir = archiveDirname(normalizeArchivePath(daeKey));
     const resolveTexture = (texturePath: string): Uint8Array | undefined => {
-      const bytes = findArchiveEntry(entries, daeDir + texturePath) ?? findArchiveEntry(entries, texturePath);
+      const bytes =
+        findArchiveEntry(entries, daeDir + texturePath) ?? findArchiveEntry(entries, texturePath);
       // Cap a single packaged texture (same limit as ground-overlay images) so
       // an oversized bundled image can't blow up the decode/GPU upload before
       // the GLB-size cap ever measures the result; skip it (untextured) instead.
@@ -1116,7 +1165,11 @@ async function modelsFromKmz(
       }
       return bytes;
     };
-    const converted = await daeToGlbDataUrl(new TextDecoder("utf-8").decode(data), model.href, resolveTexture);
+    const converted = await daeToGlbDataUrl(
+      new TextDecoder("utf-8").decode(data),
+      model.href,
+      resolveTexture,
+    );
     if (converted) models.push(kmlModelLayer(model, converted, path, index, total));
   }
   return models;
@@ -1216,13 +1269,18 @@ async function kmzVectorFeatures(
             cancellation = error;
             return null;
           }
-          console.warn("Could not read vector features from a KML entry in the KMZ archive.", error);
+          console.warn(
+            "Could not read vector features from a KML entry in the KMZ archive.",
+            error,
+          );
           return null;
         },
       ),
     ),
   );
-  const collections = settled.filter((collection): collection is FeatureCollection => collection !== null);
+  const collections = settled.filter(
+    (collection): collection is FeatureCollection => collection !== null,
+  );
   if (collections.length === 0 && cancellation) throw cancellation;
   return mergeFeatureCollections(collections);
 }
@@ -1348,7 +1406,11 @@ async function loadKmzLayers(
       const placemarkEntries = placemarkKmlEntries(entries, kmlDocs);
       if (placemarkEntries) {
         try {
-          const features = await kmzVectorFeatures(readKmlEntries(placemarkEntries), entries, options);
+          const features = await kmzVectorFeatures(
+            readKmlEntries(placemarkEntries),
+            entries,
+            options,
+          );
           if (features.features.length > 0) layers.push({ data: features, path });
         } catch (error) {
           // Declining the oversized-vector prompt must not throw away the
@@ -1393,7 +1455,9 @@ async function loadKmzLayers(
 
   if (layers.length === 0) {
     if (cancellation) throw cancellation;
-    throw new Error("The KMZ archive did not contain readable placemarks, ground overlays, or 3D models.");
+    throw new Error(
+      "The KMZ archive did not contain readable placemarks, ground overlays, or 3D models.",
+    );
   }
   return layers;
 }
@@ -1425,7 +1489,10 @@ function readKmlDocs(entries: Record<string, Uint8Array>): KmlDoc[] {
  * the caller confirms the pyramid by resolving its raster tiles.
  */
 function looksLikeSuperOverlay(kmlDocs: KmlDoc[]): boolean {
-  return kmlDocs.length > 1 && kmlDocs.some((doc) => KML_REGION.test(doc.text) && KML_NETWORK_LINK.test(doc.text));
+  return (
+    kmlDocs.length > 1 &&
+    kmlDocs.some((doc) => KML_REGION.test(doc.text) && KML_NETWORK_LINK.test(doc.text))
+  );
 }
 
 /**
@@ -1456,7 +1523,8 @@ export function superOverlayDocNames(kmlDocs: KmlDoc[]): Set<string> {
     const doc = queue.pop() as KmlDoc;
     for (const href of kmlNodeHrefs(doc.text)) {
       const target =
-        byName.get(normalizeArchivePath(archiveDirname(doc.name) + href)) ?? byName.get(normalizeArchivePath(href));
+        byName.get(normalizeArchivePath(archiveDirname(doc.name) + href)) ??
+        byName.get(normalizeArchivePath(href));
       if (!target || linked.has(target.name)) continue;
       linked.add(target.name);
       queue.push(target);
@@ -1478,12 +1546,16 @@ function kmlNodeHrefs(text: string): string[] {
 }
 
 /** Every archive-local `<GroundOverlay>` image in a KMZ, as pyramid tiles. */
-function superOverlayTilesFromKmz(entries: Record<string, Uint8Array>, kmlDocs: KmlDoc[]): KmlSuperOverlayTile[] {
+function superOverlayTilesFromKmz(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: KmlDoc[],
+): KmlSuperOverlayTile[] {
   return kmlDocs.flatMap((doc) =>
     parseKmlGroundOverlays(doc.text).flatMap((overlay) => {
       if (isHttpUrl(overlay.href) || isUnrenderableOverlayImage(overlay.href)) return [];
       const data =
-        findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ?? findArchiveEntry(entries, overlay.href);
+        findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ??
+        findArchiveEntry(entries, overlay.href);
       return data ? [{ overlay, bytes: data }] : [];
     }),
   );
@@ -1499,7 +1571,9 @@ function placemarkKmlEntries(
   entries: Record<string, Uint8Array>,
   kmlDocs: KmlDoc[],
 ): Record<string, Uint8Array> | null {
-  const withPlacemarks = new Set(kmlDocs.filter((doc) => KML_PLACEMARK.test(doc.text)).map((doc) => doc.name));
+  const withPlacemarks = new Set(
+    kmlDocs.filter((doc) => KML_PLACEMARK.test(doc.text)).map((doc) => doc.name),
+  );
   if (withPlacemarks.size === 0) return null;
   const kept = { ...entries };
   for (const doc of kmlDocs) {
@@ -1514,7 +1588,12 @@ function placemarkKmlEntries(
 // saved project, so it is whitelisted exactly like `restoreLocalFileLayers`
 // before anything is read off disk.
 setKmlSuperOverlayResolver(async (path) => {
-  if (!isTauri() || !isAbsoluteLocalPath(path) || hasPathTraversal(path) || !isRestorableVectorPath(path)) {
+  if (
+    !isTauri() ||
+    !isAbsoluteLocalPath(path) ||
+    hasPathTraversal(path) ||
+    !isRestorableVectorPath(path)
+  ) {
     return null;
   }
   const entries = await unzipArchive(await readLocalFileBytes(path));
@@ -1526,7 +1605,10 @@ setKmlSuperOverlayResolver(async (path) => {
   );
 });
 
-async function parseKmz(data: ArrayBuffer | Uint8Array, options?: DuckDbVectorLoadOptions): Promise<FeatureCollection> {
+async function parseKmz(
+  data: ArrayBuffer | Uint8Array,
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
   const kmlFiles = await readKmzKmlFiles(data);
   // Load each KML independently so declining one large KML inside a multi-KML
   // archive drops just that layer instead of failing the whole KMZ (Promise.all
@@ -1544,7 +1626,9 @@ async function parseKmz(data: ArrayBuffer | Uint8Array, options?: DuckDbVectorLo
       ),
     ),
   );
-  const collections = settled.filter((collection): collection is FeatureCollection => collection !== null);
+  const collections = settled.filter(
+    (collection): collection is FeatureCollection => collection !== null,
+  );
   // Every KML was declined: propagate the cancellation so the caller skips the
   // whole archive rather than adding an empty layer.
   if (collections.length === 0 && cancellation) throw cancellation;
@@ -1566,10 +1650,14 @@ interface NativeDuckDbVectorAttempt {
   featureCountChecked: boolean;
 }
 
-function nativeDuckDbInvokeOptions(options?: DuckDbVectorLoadOptions): NativeDuckDbVectorInvokeOptions {
+function nativeDuckDbInvokeOptions(
+  options?: DuckDbVectorLoadOptions,
+): NativeDuckDbVectorInvokeOptions {
   return {
     ...(options?.layer?.trim() ? { layer: options.layer.trim() } : {}),
-    ...(options?.overrideSourceCrs?.trim() ? { overrideSourceCrs: options.overrideSourceCrs.trim() } : {}),
+    ...(options?.overrideSourceCrs?.trim()
+      ? { overrideSourceCrs: options.overrideSourceCrs.trim() }
+      : {}),
   };
 }
 
@@ -1587,7 +1675,10 @@ async function tryLoadNativeDuckDbVectorPath(
         path,
         ...invokeOptions,
       });
-      await confirmLargeDataset({ name: browserSafeFileName(path), featureCount }, options.onLargeDataset);
+      await confirmLargeDataset(
+        { name: browserSafeFileName(path), featureCount },
+        options.onLargeDataset,
+      );
       featureCountChecked = true;
     }
 
@@ -1601,7 +1692,10 @@ async function tryLoadNativeDuckDbVectorPath(
     };
   } catch (error) {
     if (isVectorLoadCancelled(error)) throw error;
-    console.warn("[GeoLibre] Native DuckDB vector load failed; falling back to DuckDB-WASM.", error);
+    console.warn(
+      "[GeoLibre] Native DuckDB vector load failed; falling back to DuckDB-WASM.",
+      error,
+    );
     return { data: null, featureCountChecked };
   }
 }
@@ -1621,7 +1715,10 @@ function confirmPickedNativeVectorDataset({ name, featureCount }: LargeVectorDat
  * not cover (so geometry still loads, without the styling). Cancellation from
  * the DuckDB fallback is allowed to propagate.
  */
-async function loadKmlFile(file: DuckDbVectorFile, options?: DuckDbVectorLoadOptions): Promise<FeatureCollection> {
+async function loadKmlFile(
+  file: DuckDbVectorFile,
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
   try {
     return parseKmlText(new TextDecoder("utf-8").decode(file.data));
   } catch {
@@ -1845,10 +1942,15 @@ export async function readVectorFileWithSidecars(path: string): Promise<{
     // Use the scope-tolerant reader: a project-reopened path was never picked
     // or dropped this session, so the `fs` plugin scope rejects it and a raw
     // `readFile` would throw — silently dropping the vector-control layer.
-    const file = new File([toArrayBuffer(await readLocalFileBytes(path))], browserSafeFileName(path));
+    const file = new File(
+      [toArrayBuffer(await readLocalFileBytes(path))],
+      browserSafeFileName(path),
+    );
     const companionFiles =
       fileExtension(path) === "shp"
-        ? (await readShapefileSiblings(path)).map((sibling) => new File([toArrayBuffer(sibling.data)], sibling.name))
+        ? (await readShapefileSiblings(path)).map(
+            (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
+          )
         : [];
     return {
       file,
@@ -1979,7 +2081,9 @@ async function loadTauriVectorFile(
     };
   }
   const wasmOptions =
-    nativeAttempt.featureCountChecked && options ? { ...options, onLargeDataset: undefined } : options;
+    nativeAttempt.featureCountChecked && options
+      ? { ...options, onLargeDataset: undefined }
+      : options;
 
   try {
     const siblingFiles = extension === "shp" ? await readShapefileSiblings(path) : [];
@@ -2009,7 +2113,10 @@ async function readShapefileSiblings(path: string): Promise<DuckDbVectorFile[]> 
   // command reads them directly and case-insensitively, returning each under the
   // `.shp`'s base name with a lowercased extension. Returns [] off the desktop.
   if (!isTauri()) return [];
-  const siblings = await invoke<Array<{ name: string; data: number[] }>>("read_shapefile_siblings", { path });
+  const siblings = await invoke<Array<{ name: string; data: number[] }>>(
+    "read_shapefile_siblings",
+    { path },
+  );
   return siblings.map((sibling) => ({
     name: sibling.name,
     extension: fileExtension(sibling.name),
@@ -2101,7 +2208,10 @@ export function browserSaveFallsBackToDownload(): boolean {
   return typeof (window as BrowserFilePickerWindow).showSaveFilePicker !== "function";
 }
 
-async function saveProjectFileBrowser(content: string, defaultName?: string): Promise<string | null> {
+async function saveProjectFileBrowser(
+  content: string,
+  defaultName?: string,
+): Promise<string | null> {
   const fileName = browserSafeFileName(defaultName ?? "project.geolibre.json");
   const pickerWindow = window as BrowserFilePickerWindow;
 
@@ -2135,7 +2245,10 @@ async function saveProjectFileBrowser(content: string, defaultName?: string): Pr
   return fileName;
 }
 
-async function saveTextFileBrowser(content: string, options: SaveTextFileOptions): Promise<string | null> {
+async function saveTextFileBrowser(
+  content: string,
+  options: SaveTextFileOptions,
+): Promise<string | null> {
   const fileName = browserSafeFileName(options.defaultName);
   const pickerWindow = window as BrowserFilePickerWindow;
 
@@ -2179,7 +2292,10 @@ async function saveBinaryFileBrowser(
   // need wrapping, so large callers can avoid an extra full-size copy.
   // Note: a Blob's own .type is used as-is; options.mimeType applies only when
   // wrapping a Uint8Array, so pass a Blob that already carries the right type.
-  const blob = content instanceof Blob ? content : new Blob([toArrayBuffer(content)], { type: options.mimeType });
+  const blob =
+    content instanceof Blob
+      ? content
+      : new Blob([toArrayBuffer(content)], { type: options.mimeType });
 
   if (pickerWindow.showSaveFilePicker) {
     try {
@@ -2251,7 +2367,9 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   });
 }
 
-export async function pickLocalPathWithFallback(options: PickLocalPathOptions = {}): Promise<string | null> {
+export async function pickLocalPathWithFallback(
+  options: PickLocalPathOptions = {},
+): Promise<string | null> {
   if (isTauri()) {
     const selected = await open({
       directory: options.directory ?? false,
@@ -2285,7 +2403,9 @@ export async function pickLocalDirectory(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-export async function pickSavePathWithFallback(options: PickSavePathOptions): Promise<string | null> {
+export async function pickSavePathWithFallback(
+  options: PickSavePathOptions,
+): Promise<string | null> {
   if (isTauri()) {
     return save({
       defaultPath: options.defaultName,
@@ -2384,7 +2504,9 @@ function isFileMissingError(error: unknown): boolean {
   // Match filesystem "missing file" signals only. Avoid broad substrings like
   // "not found" / "cannot find" that also appear in transient IPC errors
   // (e.g. "Command not found", Windows os error 3 for a disconnected drive).
-  return /no such file|os error 2|\benoent\b|cannot find the file|file not found|does not exist/i.test(message);
+  return /no such file|os error 2|\benoent\b|cannot find the file|file not found|does not exist/i.test(
+    message,
+  );
 }
 
 export async function openRecentProjectFile(
@@ -2416,7 +2538,9 @@ export async function openRecentProjectFile(
 
     const contentType = response.headers.get("content-type") ?? "";
     if (/\bhtml\b/i.test(contentType)) {
-      throw new Error(`Unexpected content type "${contentType}" - the URL does not appear to be a project file.`);
+      throw new Error(
+        `Unexpected content type "${contentType}" - the URL does not appear to be a project file.`,
+      );
     }
 
     return { project: parseProject(await response.text()), path };
@@ -2439,7 +2563,10 @@ export async function openRecentProjectFile(
   return { project: parseProject(text), path };
 }
 
-export async function saveProjectFile(content: string, defaultName?: string): Promise<string | null> {
+export async function saveProjectFile(
+  content: string,
+  defaultName?: string,
+): Promise<string | null> {
   if (!isTauri()) {
     return saveProjectFileBrowser(content, defaultName);
   }
@@ -2476,7 +2603,10 @@ export async function writeTextFileToPath(path: string, content: string): Promis
   await writeTextFile(path, content);
 }
 
-export async function saveTextFileWithFallback(content: string, options: SaveTextFileOptions): Promise<string | null> {
+export async function saveTextFileWithFallback(
+  content: string,
+  options: SaveTextFileOptions,
+): Promise<string | null> {
   if (!isTauri()) {
     return saveTextFileBrowser(content, options);
   }
@@ -2624,7 +2754,9 @@ export async function loadDroppedVectorFiles(
         extension === "shp"
           ? await Promise.all(
               (filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ?? [])
-                .filter((candidate) => SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(candidate.name)))
+                .filter((candidate) =>
+                  SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(candidate.name)),
+                )
                 .map(fileToDuckDbVectorFile),
             )
           : [];
@@ -2793,7 +2925,9 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
  * caller can fall through to the vector/raster pipeline). TIFF is intentionally
  * excluded here and handled as a raster instead.
  */
-export async function loadDroppedPhotoFiles(droppedFiles: FileList | File[]): Promise<GeotaggedPhotoResult | null> {
+export async function loadDroppedPhotoFiles(
+  droppedFiles: FileList | File[],
+): Promise<GeotaggedPhotoResult | null> {
   const photos = Array.from(droppedFiles).filter((file) => isPhotoDropFileName(file.name));
   if (!photos.length) return null;
   const { loadGeotaggedPhotos } = await import("./geotagged-photos");
@@ -2914,7 +3048,9 @@ export function parseCsvHeaderLine(line: string): string[] {
   let best: string[] = [];
   for (const delimiter of DELIMITER_CANDIDATES) {
     try {
-      const fields = parseDelimitedTextFields(header, delimiter).filter((name) => name.trim().length > 0);
+      const fields = parseDelimitedTextFields(header, delimiter).filter(
+        (name) => name.trim().length > 0,
+      );
       if (fields.length > best.length) best = fields;
     } catch {
       // No header row for this delimiter; try the next candidate.
