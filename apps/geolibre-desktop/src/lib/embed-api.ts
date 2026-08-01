@@ -13,7 +13,7 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
-import { LAYER_TYPES, hasRestorableLayerSource } from "@geolibre/core";
+import { LAYER_TYPES, hasRestorableLayerSource, validateMapExpression } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
@@ -275,6 +275,35 @@ function parseToolParams(value: unknown): Record<string, string> {
 }
 
 /**
+ * Compile a host-sent `setFilter` expression through the MapLibre style spec —
+ * the same check the Expression Builder runs — and describe the problem, or
+ * null when it is a usable filter.
+ *
+ * `setFilter` stores its expression as `layer.embedFilter`, which `layer-sync`
+ * merges into every render layer's filter (`["all", <geometry>, …]`). A
+ * malformed one cannot be reported from there: the store write always succeeds,
+ * so the host would get `ok: true` and the failure would surface later, on a
+ * `setFilter` call the host is no longer waiting on — or not at all. Compiling
+ * here keeps the ack honest ("ok" means the map now filters on this).
+ *
+ * @param expression - The array the host sent.
+ * @returns The compile problem, or null when the expression is usable.
+ */
+function filterExpressionProblem(expression: unknown[]): string | null {
+  let source: string;
+  try {
+    source = JSON.stringify(expression);
+  } catch {
+    // Structured clone preserves cycles, so an array that cannot be serialized
+    // can genuinely arrive here.
+    return "the expression is not serializable";
+  }
+  const validation = validateMapExpression(source, { expectedType: "boolean" });
+  if (validation.ok) return null;
+  return validation.errors.join("; ") || "not a MapLibre filter expression";
+}
+
+/**
  * Whether an `addLayer` spec carries anything the map could actually render:
  * a re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
  * same predicate the Layer Library uses) or inline features, either on the spec
@@ -365,6 +394,10 @@ export function parseEmbedRequest(
       const expression = payload.expression;
       if (!layerId || (expression !== null && !Array.isArray(expression))) {
         return fail("setFilter: expected layerId and a MapLibre expression array or null");
+      }
+      if (expression !== null) {
+        const problem = filterExpressionProblem(expression);
+        if (problem) return fail(`setFilter: ${problem}`);
       }
       return {
         command: { type: "setFilter", layerId, expression },

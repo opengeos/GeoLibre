@@ -181,12 +181,14 @@ describe("parseEmbedRequest: v2 commands", () => {
       requestId: null,
     });
     assert.deepEqual(
-      parseEmbedRequest(message("setFilter", { layerId: "roads", expression: ["==", "x", 1] })),
+      parseEmbedRequest(
+        message("setFilter", { layerId: "roads", expression: ["==", ["get", "x"], 1] }),
+      ),
       {
         command: {
           type: "setFilter",
           layerId: "roads",
-          expression: ["==", "x", 1],
+          expression: ["==", ["get", "x"], 1],
         },
         requestId: null,
       },
@@ -213,6 +215,56 @@ describe("parseEmbedRequest: v2 commands", () => {
       command: { type: "exportImage" },
       requestId: null,
     });
+  });
+});
+
+describe("parseEmbedRequest: setFilter", () => {
+  it("accepts a compiling filter expression and a null clear", () => {
+    for (const expression of [
+      ["==", ["get", "kind"], "road"],
+      ["all", [">", ["get", "pop"], 1000], ["!", ["has", "hidden"]]],
+      null,
+    ]) {
+      const parsed = parseEmbedRequest(message("setFilter", { layerId: "roads", expression }));
+      assert.deepEqual(parsed, {
+        command: { type: "setFilter", layerId: "roads", expression },
+        requestId: null,
+      });
+    }
+  });
+
+  it("rejects an expression the style spec cannot compile", () => {
+    // Acked `ok` before: the store write always succeeds, and the failure only
+    // showed up later inside layer-sync, where the host could never see it.
+    const unknownOperator = parseEmbedRequest(
+      message("setFilter", { layerId: "roads", expression: ["nonsense", 1] }),
+    );
+    assert.ok(unknownOperator && "error" in unknownOperator);
+    assert.match(unknownOperator.error, /^setFilter: .*Unknown expression "nonsense"/);
+
+    const mistyped = parseEmbedRequest(
+      message("setFilter", { layerId: "roads", expression: ["==", "x", 1] }),
+    );
+    assert.ok(mistyped && "error" in mistyped);
+    assert.match(mistyped.error, /Cannot compare types/);
+  });
+
+  it("rejects an empty expression rather than storing a filter that does nothing", () => {
+    const parsed = parseEmbedRequest(message("setFilter", { layerId: "roads", expression: [] }));
+    assert.ok(parsed && "error" in parsed);
+    assert.equal(parsed.error, "setFilter: not a MapLibre filter expression");
+  });
+
+  it("still requires a layerId and an array or null", () => {
+    for (const payload of [
+      { layerId: "", expression: null },
+      { layerId: "roads", expression: "kind = road" },
+    ]) {
+      assert.deepEqual(parseEmbedRequest(message("setFilter", payload)), {
+        error: "setFilter: expected layerId and a MapLibre expression array or null",
+        requestId: null,
+      });
+    }
   });
 });
 

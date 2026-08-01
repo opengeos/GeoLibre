@@ -76,8 +76,12 @@ Drop the viewer into an `<iframe>`:
 ```
 
 Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
-basemap switching. Use `layout=compact` for the complete authoring toolbar in a
-smaller space, or `maponly` for a pure map.
+basemap switching. Its layer list mirrors the authoring Layers panel, folders
+and all, so group names carry over. Read-only covers the keyboard too: the
+global shortcuts (Ctrl/Cmd+N, +O, +S) and the command palette (Ctrl/Cmd+K) are
+switched off with the menus they belong to, so an embed cannot be steered into
+authoring by a key press. Use `layout=compact` for the complete authoring
+toolbar in a smaller space, or `maponly` for a pure map.
 
 ## Talking to the map at runtime
 
@@ -158,6 +162,11 @@ treated as a clear, so a mistyped id does not silently wipe the user's selection
 Highlighting reads the layer's features from the project, so it applies to vector
 layers GeoLibre holds as GeoJSON, not to ones whose features live only in a tile
 source.
+
+`setFilter` compiles the expression through the MapLibre style spec before
+storing it, and `addLayer` requires a source the map can actually read (a `url`,
+a non-empty `tiles`, or inline features). Both report the problem in the `ack`
+rather than reporting success and rendering nothing.
 
 Add a `requestId` to any message and the app answers with an `ack` (below)
 reporting whether it worked.

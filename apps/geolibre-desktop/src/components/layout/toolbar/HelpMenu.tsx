@@ -32,6 +32,13 @@ import {
 
 interface HelpMenuProps {
   chrome: ToolbarChrome;
+  /**
+   * The read-only viewer preset. Hides the command palette and keyboard
+   * shortcut entries, which reach the authoring commands whose own menus the
+   * preset already hides (the toolbar switches the palette and the global
+   * shortcuts off entirely in this mode).
+   */
+  viewer?: boolean;
   diagnosticsErrorCount: number;
   onOpenCommandPalette: () => void;
   onOpenShortcuts: () => void;
@@ -43,6 +50,7 @@ interface HelpMenuProps {
 /** The Help menu: command palette, shortcuts, diagnostics, feedback, updates, about. */
 export function HelpMenu({
   chrome,
+  viewer = false,
   diagnosticsErrorCount,
   onOpenCommandPalette,
   onOpenShortcuts,
@@ -54,8 +62,11 @@ export function HelpMenu({
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   // The Microsoft Store build strips the "Check for updates" item entirely so the
   // app only updates through the Store (policy 10.2.5); other builds keep it.
-  const show = (id: string) =>
-    id === "help.checkForUpdates" && IS_STORE_BUILD ? false : isMenuItemVisible(uiProfile, id);
+  const show = (id: string) => {
+    if (id === "help.checkForUpdates" && IS_STORE_BUILD) return false;
+    if (viewer && (id === "help.commandPalette" || id === "help.keyboardShortcuts")) return false;
+    return isMenuItemVisible(uiProfile, id);
+  };
 
   return (
     <DropdownMenu>

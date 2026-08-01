@@ -1454,10 +1454,18 @@ export function TopToolbar({
     },
   ];
 
+  // The viewer preset hides every authoring menu, so the two surfaces that
+  // reach the same commands without a menu — the global shortcuts (Ctrl/Cmd+N,
+  // +O, +S) and the command palette (Ctrl/Cmd+K) — are switched off with them.
+  // Otherwise a `layout=viewer` embed still answers Ctrl+N with "New Project"
+  // or overwrites the host's project on Ctrl+S, which is exactly what the
+  // read-only chrome promises it cannot do. The Help menu drops its palette and
+  // shortcut entries to match (see `viewer` on HelpMenu).
   useGlobalShortcuts({
     commands,
     onOpenPalette: () => setCommandPaletteOpen(true),
     onOpenShortcuts: () => setShortcutsOpen(true),
+    enabled: !viewer,
   });
 
   const toolbarButtonSize = compact ? "icon" : "sm";
@@ -1724,6 +1732,7 @@ export function TopToolbar({
       {isMenuVisible(uiProfile, "help") && (
         <HelpMenu
           chrome={chrome}
+          viewer={viewer}
           diagnosticsErrorCount={diagnosticsErrorCount}
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
@@ -1771,16 +1780,20 @@ export function TopToolbar({
         renderTrigger={false}
         onOpenChange={setAboutOpen}
       />
-      <CommandPalette
-        open={commandPaletteOpen}
-        commands={commands}
-        onOpenChange={setCommandPaletteOpen}
-      />
-      <KeyboardShortcutsDialog
-        open={shortcutsOpen}
-        commands={commands}
-        onOpenChange={setShortcutsOpen}
-      />
+      {!viewer && (
+        <CommandPalette
+          open={commandPaletteOpen}
+          commands={commands}
+          onOpenChange={setCommandPaletteOpen}
+        />
+      )}
+      {!viewer && (
+        <KeyboardShortcutsDialog
+          open={shortcutsOpen}
+          commands={commands}
+          onOpenChange={setShortcutsOpen}
+        />
+      )}
       <div className="ms-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
           aria-label={

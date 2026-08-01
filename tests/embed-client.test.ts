@@ -92,6 +92,31 @@ describe("@geolibre/embed client", () => {
     await assert.rejects(viewport, /disconnected/i);
   });
 
+  it("rejects a bad origin instead of throwing out of the call", async () => {
+    // `connect` is typed to return a Promise, so `connect(...).catch(...)` has
+    // to see an origin failure — a synchronous throw would escape it entirely.
+    const { iframe } = harness();
+    for (const origin of ["not-a-url", "mailto:a@b.com"]) {
+      let thrown: unknown = null;
+      let pending: Promise<unknown> | null = null;
+      try {
+        pending = connect(iframe, { origin, timeoutMs: 5 });
+      } catch (error) {
+        thrown = error;
+      }
+      assert.equal(thrown, null, `connect threw synchronously for "${origin}"`);
+      await assert.rejects(pending as Promise<unknown>, /origin|Invalid URL/i);
+    }
+  });
+
+  it("rejects an iframe that has no contentWindow", async () => {
+    const iframe = { contentWindow: null } as unknown as HTMLIFrameElement;
+    await assert.rejects(
+      connect(iframe, { origin: "https://app.test", timeoutMs: 5 }),
+      /contentWindow/,
+    );
+  });
+
   it("times out when the frame never becomes ready", async () => {
     const { iframe } = harness();
     await assert.rejects(

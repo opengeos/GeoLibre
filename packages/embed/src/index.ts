@@ -100,7 +100,17 @@ export function connect(
   iframe: HTMLIFrameElement,
   options: ConnectOptions,
 ): Promise<GeoLibreEmbedClient> {
-  const origin = validOrigin(options.origin);
+  // Every failure leaves through the returned promise, including this one:
+  // `validOrigin` throws synchronously, and a caller writing
+  // `connect(iframe, opts).catch(...)` — the shape the `Promise` return type
+  // invites — would never see it, because the throw happens before `.catch` is
+  // attached.
+  let origin: string;
+  try {
+    origin = validOrigin(options.origin);
+  } catch (error) {
+    return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+  }
   const target = iframe.contentWindow;
   if (!target) return Promise.reject(new Error("The iframe has no contentWindow"));
 
