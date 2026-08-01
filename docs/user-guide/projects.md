@@ -37,7 +37,7 @@ Both capture the current map view, basemap, layers, styles, preferences, and plu
 
 GeoLibre autosaves the project as you work. Three seconds after a change settles — a layer added, a style edited, the camera moved — it writes a snapshot to your browser's local IndexedDB storage. Autosaves never touch your `.geolibre.json` file; only **Save** does that.
 
-**Project → History...** lists the snapshots for the current project, newest first, each summarized by its layer count and zoom level. **Restore** loads a snapshot back into the workspace (as an undoable step, so you can back out of it), and **Discard** deletes one.
+**Project → History...** lists the snapshots for the current project, newest first, each summarized by its layer count and zoom level. **Restore** loads a snapshot back into the workspace, as an undoable step so you can back out of it. There is no manual delete here — snapshots age out on their own once a cap is hit.
 
 The store is capped, so history stays bounded: at most 20 snapshots per project, 10 MB per snapshot, and 50 MB in total. The oldest snapshots are dropped once a cap is hit, and a project too large to fit in a single snapshot is not autosaved.
 

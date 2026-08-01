@@ -62,7 +62,7 @@ The Controls menu also carries tools that move the camera, drape live data over 
 
 ## Annotations and the Elements panel
 
-The annotation tools draw on top of the map: **Text**, **Arrow**, **Rectangle highlight**, **Ellipse highlight**, **Freehand highlight**, **Pin marker**, **Sticky note**, and **Placed image**. Each has a color and a line width, and you can delete the last annotation or clear them all.
+The annotation tools draw on top of the map: **Text**, **Arrow**, **Rectangle highlight**, **Ellipse highlight**, **Freehand highlight**, **Pin marker**, **Sticky note**, and **Placed image**. Each has a color, and the stroked shapes (Arrow, Rectangle, Ellipse, and Freehand) also honor the line width. You can delete the last annotation or clear them all.
 
 Annotations are saved with the project, and the **Elements** panel lists them so you can find and manage each one instead of hunting for it on the canvas. Most elements are anchored **At Point** — a geographic coordinate they move with. **Placed image** additionally offers **Pinned to Extent**, which stretches it across a bounding box so it scales with the view.
 
