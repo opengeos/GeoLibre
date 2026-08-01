@@ -134,22 +134,36 @@ function canDownload(item: ArcGisHubItem): boolean {
 }
 
 async function visualize(item: ArcGisHubItem): Promise<void> {
-  if (!appRef) return;
+  const app = appRef;
+  if (!app) return;
   if (item.type === "Feature Service") {
-    await addArcGISLayer(appRef, {
+    await addArcGISLayer(app, {
       layerType: "feature",
       sourceType: "portal-item",
       itemId: item.id,
       name: item.title,
     });
   } else if (item.type === "GeoJson") {
-    const response = await fetch(arcGisHubItemDataUrl(item));
+    const dataUrl = arcGisHubItemDataUrl(item);
+    const response = await fetch(dataUrl);
     if (!response.ok) throw new Error(`GeoJSON download failed with ${response.status}.`);
-    const data = await response.json();
+    // A portal behind sign-in can answer 200 with an HTML login page, so read
+    // the body as text first and say so, rather than letting JSON.parse raise a
+    // bare `SyntaxError: Unexpected token '<'` (matches fetchArcGISGeoJson).
+    const text = await response.text();
+    if (/^\s*</.test(text)) {
+      throw new Error(
+        "The portal returned HTML instead of GeoJSON (the item may require a token or sign-in).",
+      );
+    }
+    const data = JSON.parse(text);
     if (data?.type !== "FeatureCollection") throw new Error("The item is not valid GeoJSON.");
-    appRef.addGeoJsonLayer(item.title, data, arcGisHubItemDataUrl(item));
+    // deactivate() nulls appRef, which can happen while the fetch above is in
+    // flight; bail explicitly instead of adding a layer to a torn-down host.
+    if (!appRef) return;
+    app.addGeoJsonLayer(item.title, data, dataUrl);
     const bounds = itemBounds(item);
-    if (bounds) appRef.fitBounds?.(bounds);
+    if (bounds) app.fitBounds?.(bounds);
   } else {
     throw new Error("This item cannot be visualized directly.");
   }

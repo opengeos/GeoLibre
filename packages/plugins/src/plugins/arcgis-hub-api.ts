@@ -99,7 +99,16 @@ export function arcGisHubItemThumbnailUrl(
 ): string | null {
   const thumbnail = item.thumbnail?.trim();
   if (!thumbnail) return null;
-  const encodedThumbnail = thumbnail.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  // `thumbnail` is published by whoever owns the Hub item. Dot segments survive
+  // `encodeURIComponent` untouched (they are unreserved), and the URL parser
+  // then collapses them — so a value like `../../../sharing/rest/portals/self`
+  // would steer this `<img src>` to an arbitrary path on the portal origin,
+  // sent with the viewer's ambient arcgis.com cookies. Drop them before joining.
+  const encodedThumbnail = thumbnail
+    .split("/")
+    .filter((segment) => segment && segment !== "." && segment !== "..")
+    .map(encodeURIComponent)
+    .join("/");
   if (!encodedThumbnail) return null;
   return new URL(
     `/sharing/rest/content/items/${encodeURIComponent(item.id)}/info/${encodedThumbnail}`,
@@ -107,11 +116,28 @@ export function arcGisHubItemThumbnailUrl(
   ).href;
 }
 
+// Mirrors the geographic-bounds check `arcgis-layer.ts` applies to portal item
+// extents. Kept inline rather than imported so this module stays free of the
+// store and MapLibre dependencies that file pulls in.
+function isGeoBounds(west: number, south: number, east: number, north: number): boolean {
+  return (
+    [west, south, east, north].every(Number.isFinite) &&
+    west >= -180 &&
+    east <= 180 &&
+    south >= -90 &&
+    north <= 90 &&
+    west < east &&
+    south < north
+  );
+}
+
 export function itemBounds(item: ArcGisHubItem): [number, number, number, number] | null {
   const extent = item.extent;
   if (!extent || extent.length !== 2) return null;
   const [[west, south], [east, north]] = extent;
-  return [west, south, east, north].every(Number.isFinite) ? [west, south, east, north] : null;
+  // A Hub item can advertise a degenerate or non-WGS84 extent; handing that to
+  // fitBounds produces a nonsensical viewport jump, so treat it as absent.
+  return isGeoBounds(west, south, east, north) ? [west, south, east, north] : null;
 }
 
 export async function fetchFeatureServiceGeoJson(

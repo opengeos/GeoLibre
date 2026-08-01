@@ -56,6 +56,17 @@ describe("ArcGIS Hub catalog client", () => {
     assert.equal(arcGisHubItemThumbnailUrl(item), null);
   });
 
+  it("strips dot segments from an item-supplied thumbnail path", () => {
+    const item = { id: "abc" };
+    // encodeURIComponent leaves `..` intact, so without the filter the URL
+    // parser would collapse these and escape the item's /info/ directory.
+    assert.equal(
+      arcGisHubItemThumbnailUrl({ ...item, thumbnail: "../../../sharing/rest/portals/self" }),
+      "https://www.arcgis.com/sharing/rest/content/items/abc/info/sharing/rest/portals/self",
+    );
+    assert.equal(arcGisHubItemThumbnailUrl({ ...item, thumbnail: "./../.." }), null);
+  });
+
   it("normalizes valid item extents and rejects invalid ones", () => {
     const base = {
       id: "1",
@@ -79,6 +90,28 @@ describe("ArcGIS Hub catalog client", () => {
         extent: [
           [Number.NaN, 35],
           [-79, 36],
+        ],
+      }),
+      null,
+    );
+    // Degenerate (zero-area) and out-of-range extents would send fitBounds to a
+    // nonsensical viewport, so they are treated the same as a missing extent.
+    assert.equal(
+      itemBounds({
+        ...base,
+        extent: [
+          [-80, 35],
+          [-80, 35],
+        ],
+      }),
+      null,
+    );
+    assert.equal(
+      itemBounds({
+        ...base,
+        extent: [
+          [-8236000, 4970000],
+          [-8230000, 4975000],
         ],
       }),
       null,
