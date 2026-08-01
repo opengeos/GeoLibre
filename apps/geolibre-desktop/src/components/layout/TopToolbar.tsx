@@ -315,6 +315,8 @@ export function TopToolbar({
       zoom: t("arcgisHub.zoom"),
       download: t("arcgisHub.download"),
       preparing: (title) => t("arcgisHub.preparing", { title }),
+      downloading: (completed, total, title) =>
+        t("arcgisHub.downloading", { completed, total, title }),
       downloadStarted: (title) => t("arcgisHub.downloadStarted", { title }),
       downloadError: t("arcgisHub.downloadError"),
       details: t("arcgisHub.details"),

@@ -2902,6 +2902,7 @@
     "zoom": "Zoom",
     "download": "Download",
     "preparing": "Preparing {{title}}…",
+    "downloading": "Downloading {{title}}: {{completed}} of {{total}} features…",
     "downloadStarted": "Download started for {{title}}.",
     "downloadError": "Could not download this dataset.",
     "details": "Details"

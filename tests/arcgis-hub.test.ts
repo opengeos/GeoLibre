@@ -105,14 +105,18 @@ describe("ArcGIS Hub catalog client", () => {
       });
     }) as typeof fetch;
     try {
+      const progress: Array<[number, number]> = [];
       const result = await fetchFeatureServiceGeoJson(
         "https://example.com/arcgis/rest/services/Test/FeatureServer/0",
+        undefined,
+        (completed, total) => progress.push([completed, total]),
       );
       assert.equal(result.features.length, 1001);
       assert.equal(requests.length, 12);
       assert.equal(requests[1].searchParams.get("f"), "geojson");
       assert.equal(requests.at(-1)?.searchParams.get("objectIds"), "1001");
       assert.ok(requests.slice(1).every((url) => url.href.length < 2_000));
+      assert.deepEqual(progress.at(-1), [1001, 1001]);
     } finally {
       globalThis.fetch = originalFetch;
     }

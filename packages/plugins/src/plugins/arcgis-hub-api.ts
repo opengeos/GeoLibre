@@ -117,6 +117,7 @@ export function itemBounds(item: ArcGisHubItem): [number, number, number, number
 export async function fetchFeatureServiceGeoJson(
   serviceUrl: string,
   signal?: AbortSignal,
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<FeatureCollection> {
   const layerUrl = await resolveFeatureLayerUrl(serviceUrl, signal);
   const idsUrl = new URL(`${layerUrl}/query`);
@@ -158,6 +159,7 @@ export async function fetchFeatureServiceGeoJson(
       throw new Error("ArcGIS did not return GeoJSON features.");
     }
     result.features.push(...json.features);
+    onProgress?.(Math.min(offset + objectIdPageSize, objectIds.length), objectIds.length);
   }
   return result;
 }

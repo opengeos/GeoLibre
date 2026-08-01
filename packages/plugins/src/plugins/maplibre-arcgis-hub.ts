@@ -34,6 +34,7 @@ export interface ArcGisHubLabels {
   zoom: string;
   download: string;
   preparing: (title: string) => string;
+  downloading: (completed: number, total: number, title: string) => string;
   downloadStarted: (title: string) => string;
   downloadError: string;
   details: string;
@@ -59,6 +60,8 @@ export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
   zoom: "Zoom",
   download: "Download",
   preparing: (title) => `Preparing ${title}…`,
+  downloading: (completed, total, title) =>
+    `Downloading ${title}: ${completed} of ${total} features…`,
   downloadStarted: (title) => `Download started for ${title}.`,
   downloadError: "Could not download this dataset.",
   details: "Details",
@@ -146,10 +149,14 @@ async function visualize(item: ArcGisHubItem): Promise<void> {
   }
 }
 
-async function download(item: ArcGisHubItem, signal?: AbortSignal): Promise<void> {
+async function download(
+  item: ArcGisHubItem,
+  signal?: AbortSignal,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<void> {
   if (!appRef) return;
   if (item.type === "Feature Service" && item.url) {
-    const data = await fetchFeatureServiceGeoJson(item.url, signal);
+    const data = await fetchFeatureServiceGeoJson(item.url, signal, onProgress);
     appRef.exportTextFile?.(`${safeFilename(item.title)}.geojson`, JSON.stringify(data), {
       description: "GeoJSON",
       extensions: ["geojson", "json"],
@@ -312,7 +319,9 @@ function buildPanel(container: HTMLElement): () => void {
       const downloadController = new AbortController();
       downloadControllers.add(downloadController);
       try {
-        await download(item, downloadController.signal);
+        await download(item, downloadController.signal, (completed, total) => {
+          status.textContent = labels.downloading(completed, total, item.title);
+        });
         status.textContent = labels.downloadStarted(item.title);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
@@ -347,6 +356,7 @@ function buildPanel(container: HTMLElement): () => void {
       activeQuery = query;
       start = 1;
       shown = 0;
+      removeThumbnailPreview();
       results.replaceChildren();
     }
     setBusy(true);
