@@ -127,6 +127,10 @@ export type GeoLensFetch = (
   },
 ) => Promise<GeoLensHttpResponse>;
 
+/** The platform `fetch`, narrowed to the subset of `Response` this client uses. */
+const platformGeoLensFetch: GeoLensFetch = (url, init) =>
+  fetch(url, init) as unknown as Promise<GeoLensHttpResponse>;
+
 /**
  * The active default transport.
  *
@@ -134,8 +138,7 @@ export type GeoLensFetch = (
  * with Tauri's native HTTP transport for the built-in GeoLens service, whose
  * origin allowlist cannot reliably cover every WebView origin.
  */
-let geoLensFetch: GeoLensFetch = (url, init) =>
-  fetch(url, init) as unknown as Promise<GeoLensHttpResponse>;
+let geoLensFetch: GeoLensFetch = platformGeoLensFetch;
 
 /** The default transport used by the plugin, resolved lazily for host overrides. */
 export const defaultGeoLensFetch: GeoLensFetch = (url, init) => geoLensFetch(url, init);
@@ -147,7 +150,7 @@ export function setGeoLensFetch(fetchImpl: GeoLensFetch): void {
 
 /** Restore the platform-fetch transport (used to isolate tests). */
 export function resetGeoLensFetch(): void {
-  geoLensFetch = (url, init) => fetch(url, init) as unknown as Promise<GeoLensHttpResponse>;
+  geoLensFetch = platformGeoLensFetch;
 }
 
 /**
@@ -157,8 +160,7 @@ export function resetGeoLensFetch(): void {
 export function createGeoLensHostFetch(
   nativeHosts: Iterable<string>,
   nativeFetch: GeoLensFetch,
-  fallbackFetch: GeoLensFetch = (url, init) =>
-    fetch(url, init) as unknown as Promise<GeoLensHttpResponse>,
+  fallbackFetch: GeoLensFetch = platformGeoLensFetch,
 ): GeoLensFetch {
   const hosts = new Set(nativeHosts);
   return (url, init) => {
