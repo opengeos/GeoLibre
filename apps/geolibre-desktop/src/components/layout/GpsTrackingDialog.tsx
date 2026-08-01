@@ -14,9 +14,12 @@ import {
   Input,
   Label,
   ScrollArea,
+  Select,
   Separator,
 } from "@geolibre/ui";
 import {
+  Bluetooth,
+  Cable,
   Circle,
   Download,
   LocateFixed,
@@ -27,6 +30,7 @@ import {
   Save,
   Square,
   Trash2,
+  Unplug,
 } from "lucide-react";
 import {
   buildTrackGpx,
@@ -53,6 +57,17 @@ import {
   trackStats,
 } from "../../lib/gps-tracking";
 import { watchPosition } from "../../lib/geolocation";
+import type { NmeaStreamStats } from "../../lib/nmea";
+import {
+  bluetoothNmeaSupported,
+  connectBluetoothNmea,
+  connectSerialNmea,
+  DEFAULT_NMEA_BAUD_RATE,
+  NMEA_BAUD_RATES,
+  NmeaError,
+  serialNmeaSupported,
+  type NmeaConnection,
+} from "../../lib/nmea-source";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 
 interface GpsTrackingDialogProps {
@@ -71,6 +86,25 @@ const GPS_COLOR = "#2563eb";
 const TRACK_COLOR = "#ef4444";
 
 const GPS_SETTINGS_STORAGE_KEY = "geolibre.gpsTracking.settings";
+/** Remembered baud rate, so reconnecting a receiver doesn't mean re-picking it. */
+const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
+
+/**
+ * Where fixes come from: the device's own Geolocation API, or an external NMEA
+ * 0183 receiver on a serial port or Bluetooth (issue #1617). Both feed the same
+ * {@link GpsFix} pipeline, so tracking, recording, and export are identical.
+ */
+type PositionSource = "device" | "nmea";
+
+function loadStoredBaudRate(): number {
+  try {
+    const raw = Number(window.localStorage.getItem(NMEA_BAUD_STORAGE_KEY));
+    if ((NMEA_BAUD_RATES as readonly number[]).includes(raw)) return raw;
+  } catch {
+    // Corrupt or unavailable storage falls through to the default.
+  }
+  return DEFAULT_NMEA_BAUD_RATE;
+}
 
 const EMPTY_FC: FeatureCollection = {
   type: "FeatureCollection",
@@ -183,11 +217,16 @@ function removeGpsSources(map: maplibregl.Map): void {
 type RecordingState = "off" | "recording" | "paused";
 
 /**
- * GPS Tracking (issue #1316): stream the device position onto the map with an
+ * GPS Tracking (issue #1316): stream a live position onto the map with an
  * accuracy circle and heading marker, optionally keep the map centered, record
  * a timestamped track log with distance/duration stats and min-distance /
  * min-time / accuracy filters, save the track as a layer or export it as
  * GPX/GeoJSON, and capture point features at the current position.
+ *
+ * Positions come from either the device's own Geolocation API or an external
+ * NMEA 0183 receiver on a serial port or Bluetooth (issue #1617). Both produce
+ * {@link GpsFix} records, so everything downstream of {@link handleFix} — the
+ * marker, the track log, the exports — is identical either way.
  *
  * The live overlays are transient map sources — only saved tracks and captured
  * points become store layers, so per-fix updates never touch undo history.
@@ -211,6 +250,14 @@ export function GpsTrackingDialog({
   const [settings, setSettings] = useState<GpsTrackingSettings>(loadStoredSettings);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [source, setSource] = useState<PositionSource>("device");
+  const [baudRate, setBaudRate] = useState<number>(loadStoredBaudRate);
+  /** Non-null exactly while an NMEA receiver is connected; holds its label. */
+  const [nmeaLabel, setNmeaLabel] = useState<string | null>(null);
+  const [nmeaStats, setNmeaStats] = useState<NmeaStreamStats | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const nmeaConnRef = useRef<NmeaConnection | null>(null);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerArrowRef = useRef<HTMLDivElement | null>(null);
@@ -307,14 +354,21 @@ export function GpsTrackingDialog({
     [getMap, setGpsStatus],
   );
 
-  // The watchPosition subscription follows `tracking`. On Tauri mobile this
-  // routes through the native geolocation plugin (which requests the OS location
-  // permission first); elsewhere it wraps navigator.geolocation. Starting a
-  // native watch is async, so the effect tracks cancellation and unsubscribes
-  // once the watch resolves. See lib/geolocation.ts.
+  // The first fix of every tracking session zooms in, whichever source it came
+  // from; later fixes only pan.
   useEffect(() => {
-    if (!tracking) return;
-    zoomedRef.current = false;
+    if (tracking) zoomedRef.current = false;
+  }, [tracking]);
+
+  // The watchPosition subscription follows `tracking`, and only runs for the
+  // device source — an NMEA receiver drives handleFix from its own stream
+  // instead. On Tauri mobile this routes through the native geolocation plugin
+  // (which requests the OS location permission first); elsewhere it wraps
+  // navigator.geolocation. Starting a native watch is async, so the effect
+  // tracks cancellation and unsubscribes once the watch resolves. See
+  // lib/geolocation.ts.
+  useEffect(() => {
+    if (!tracking || source !== "device") return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     watchPosition(
@@ -342,7 +396,7 @@ export function GpsTrackingDialog({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [tracking, handleFix, t]);
+  }, [tracking, source, handleFix, t]);
 
   // Map subscriptions while tracking. Manual panning turns follow mode off,
   // QGIS-style, so the map stays where the user dragged it instead of snapping
@@ -409,6 +463,9 @@ export function GpsTrackingDialog({
     () => () => {
       clearMapArtifacts();
       useAppStore.getState().setGpsStatus(null);
+      // Release the serial port / GATT server so a re-mount can reopen it.
+      void nmeaConnRef.current?.close();
+      nmeaConnRef.current = null;
     },
     [clearMapArtifacts],
   );
@@ -421,6 +478,90 @@ export function GpsTrackingDialog({
     });
   }, []);
 
+  /** Close the NMEA connection, if any, and clear its readout. */
+  const disconnectNmea = useCallback(async () => {
+    const conn = nmeaConnRef.current;
+    nmeaConnRef.current = null;
+    setNmeaLabel(null);
+    setNmeaStats(null);
+    await conn?.close();
+  }, []);
+
+  /**
+   * Open an NMEA receiver and start tracking from it. Both transports show a
+   * browser device chooser, so this must run from a user gesture; a dismissed
+   * chooser is a deliberate "never mind" and is not surfaced as an error.
+   */
+  const connectNmea = useCallback(
+    async (transport: "serial" | "bluetooth") => {
+      setError(null);
+      setNotice(null);
+      setConnecting(true);
+      try {
+        await disconnectNmea();
+        const handlers = {
+          onFix: handleFix,
+          // A dropped device or a read failure stops the session rather than
+          // leaving a stale position on the map.
+          onError: (err: NmeaError) => {
+            setError(err.message);
+            setTracking(false);
+            void disconnectNmea();
+          },
+        };
+        const conn =
+          transport === "serial"
+            ? await connectSerialNmea({ baudRate }, handlers)
+            : await connectBluetoothNmea(handlers);
+        nmeaConnRef.current = conn;
+        setNmeaLabel(conn.label);
+        setNmeaStats(conn.stats());
+        setTracking(true);
+      } catch (err) {
+        if (!(err instanceof NmeaError && err.cancelled)) {
+          setError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
+        }
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [baudRate, disconnectNmea, handleFix, t],
+  );
+
+  // Poll the assembler's counters while connected so the readout shows the
+  // stream is alive even before the first usable fix arrives.
+  useEffect(() => {
+    if (!nmeaLabel) return;
+    const id = window.setInterval(() => {
+      setNmeaStats(nmeaConnRef.current?.stats() ?? null);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [nmeaLabel]);
+
+  const updateBaudRate = useCallback((next: number) => {
+    setBaudRate(next);
+    try {
+      window.localStorage.setItem(NMEA_BAUD_STORAGE_KEY, String(next));
+    } catch {
+      // Best-effort persistence; the session keeps the in-memory value.
+    }
+  }, []);
+
+  /** Switching source ends the current session so no stale fixes linger. */
+  const changeSource = useCallback(
+    (next: PositionSource) => {
+      setSource((prev) => {
+        if (prev === next) return prev;
+        setTracking(false);
+        void disconnectNmea();
+        setError(null);
+        setNotice(null);
+        return next;
+      });
+    },
+    [disconnectNmea],
+  );
+
   const handleStart = useCallback(() => {
     setError(null);
     setNotice(null);
@@ -429,7 +570,8 @@ export function GpsTrackingDialog({
 
   const handleStop = useCallback(() => {
     setTracking(false);
-  }, []);
+    void disconnectNmea();
+  }, [disconnectNmea]);
 
   const clearTrack = useCallback(() => {
     fixesRef.current = [[]];
@@ -579,6 +721,31 @@ export function GpsTrackingDialog({
 
           <ScrollArea className="max-h-[65vh] pe-3">
             <div className="space-y-4 py-1">
+              {/* Position source */}
+              <div className="space-y-2">
+                <Label htmlFor="gps-source">{t("gps.source")}</Label>
+                <Select
+                  id="gps-source"
+                  value={source}
+                  onChange={(e) => changeSource(e.target.value as PositionSource)}
+                >
+                  <option value="device">{t("gps.sourceDevice")}</option>
+                  <option value="nmea">{t("gps.sourceNmea")}</option>
+                </Select>
+                {source === "nmea" && (
+                  <NmeaControls
+                    baudRate={baudRate}
+                    onBaudRateChange={updateBaudRate}
+                    connecting={connecting}
+                    connectedLabel={nmeaLabel}
+                    stats={nmeaStats}
+                    onConnect={(transport) => void connectNmea(transport)}
+                  />
+                )}
+              </div>
+
+              <Separator />
+
               {/* Live position */}
               <div className="space-y-2">
                 {tracking ? (
@@ -593,15 +760,23 @@ export function GpsTrackingDialog({
                       {t("gps.follow")}
                     </label>
                     <Button variant="outline" className="w-full" onClick={handleStop}>
-                      <Square className="me-2 h-4 w-4" />
-                      {t("gps.stop")}
+                      {source === "nmea" ? (
+                        <Unplug className="me-2 h-4 w-4" />
+                      ) : (
+                        <Square className="me-2 h-4 w-4" />
+                      )}
+                      {source === "nmea" ? t("gps.nmeaDisconnect") : t("gps.stop")}
                     </Button>
                   </>
-                ) : (
+                ) : source === "device" ? (
                   <Button className="w-full" onClick={handleStart}>
                     <LocateFixed className="me-2 h-4 w-4" />
                     {t("gps.start")}
                   </Button>
+                ) : (
+                  <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                    {t("gps.nmeaNotConnected")}
+                  </p>
                 )}
               </div>
 
@@ -762,9 +937,110 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
       <span>±{formatAccuracy(fix.accuracy, t("gps.notAvailable"))}</span>
       <span>{t("gps.satellitesValue", { value: fix.satellites ?? t("gps.notAvailable") })}</span>
       {fix.altitude != null && <span>{Math.round(fix.altitude)} m ASL</span>}
-      {fix.speed != null && <span>{formatSpeedKmh(fix.speed)} km/h</span>}
-      {fix.heading != null && <span>{Math.round(fix.heading)}°</span>}
+      {fix.speed != null && (
+        <span>{t("gps.speedValue", { value: formatSpeedKmh(fix.speed) })}</span>
+      )}
+      {fix.heading != null && (
+        <span>{t("gps.headingValue", { value: Math.round(fix.heading) })}</span>
+      )}
       <span className="text-muted-foreground">{new Date(fix.timestamp).toLocaleTimeString()}</span>
+    </div>
+  );
+}
+
+interface NmeaControlsProps {
+  baudRate: number;
+  onBaudRateChange: (value: number) => void;
+  connecting: boolean;
+  /** Device label while connected, null when not. */
+  connectedLabel: string | null;
+  stats: NmeaStreamStats | null;
+  onConnect: (transport: "serial" | "bluetooth") => void;
+}
+
+/**
+ * Connect controls for an external NMEA 0183 receiver (issue #1617).
+ *
+ * Serial is listed first and Bluetooth second on purpose: most Bluetooth GNSS
+ * pucks speak classic Bluetooth (Serial Port Profile), which Web Bluetooth
+ * cannot reach at all — they are paired in the OS and opened here as a virtual
+ * serial port. The Bluetooth button is for Bluetooth Low Energy receivers only,
+ * which the hint below spells out.
+ */
+function NmeaControls({
+  baudRate,
+  onBaudRateChange,
+  connecting,
+  connectedLabel,
+  stats,
+  onConnect,
+}: NmeaControlsProps) {
+  const { t } = useTranslation();
+  const serialOk = serialNmeaSupported();
+  const bluetoothOk = bluetoothNmeaSupported();
+
+  if (connectedLabel) {
+    return (
+      <div className="space-y-1 rounded-md bg-muted p-2 text-sm">
+        <p>{t("gps.nmeaConnected", { device: connectedLabel })}</p>
+        {stats && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {stats.fixes > 0 || stats.parsed > 0
+              ? t("gps.nmeaStats", { parsed: stats.parsed, fixes: stats.fixes })
+              : t("gps.nmeaWaiting")}
+            {stats.fixQuality ? ` · ${t(`gps.fixQuality.${stats.fixQuality}`)}` : ""}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!serialOk && !bluetoothOk) {
+    return <p className="text-xs text-muted-foreground">{t("gps.nmeaUnsupported")}</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {serialOk && (
+        <div className="space-y-1">
+          <Label htmlFor="gps-nmea-baud" className="text-xs font-normal text-muted-foreground">
+            {t("gps.nmeaBaudRate")}
+          </Label>
+          <Select
+            id="gps-nmea-baud"
+            value={baudRate}
+            onChange={(e) => onBaudRateChange(Number(e.target.value))}
+          >
+            {NMEA_BAUD_RATES.map((rate) => (
+              <option key={rate} value={rate}>
+                {rate}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={!serialOk || connecting} onClick={() => onConnect("serial")}>
+          <Cable className="me-1 h-3.5 w-3.5" />
+          {connecting ? t("gps.nmeaConnecting") : t("gps.nmeaConnectSerial")}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!bluetoothOk || connecting}
+          onClick={() => onConnect("bluetooth")}
+        >
+          <Bluetooth className="me-1 h-3.5 w-3.5" />
+          {t("gps.nmeaConnectBluetooth")}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("gps.nmeaBluetoothHint")}</p>
+      {!serialOk && (
+        <p className="text-xs text-muted-foreground">{t("gps.nmeaSerialUnsupported")}</p>
+      )}
+      {!bluetoothOk && (
+        <p className="text-xs text-muted-foreground">{t("gps.nmeaBluetoothUnsupported")}</p>
+      )}
     </div>
   );
 }
@@ -840,6 +1116,19 @@ function FloatingPanel({
           <span className="text-muted-foreground">{t("gps.waitingForFix")}</span>
         )}
       </div>
+      {/* Speed and heading over ground, the readout an external NMEA receiver
+          makes meaningful (issue #1617). Hidden until the fix reports them, so
+          a stationary device shows nothing rather than a row of dashes. */}
+      {fix && (fix.speed != null || fix.heading != null) && (
+        <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+          {fix.speed != null && (
+            <span>{t("gps.speedValue", { value: formatSpeedKmh(fix.speed) })}</span>
+          )}
+          {fix.heading != null && (
+            <span>{t("gps.headingValue", { value: Math.round(fix.heading) })}</span>
+          )}
+        </div>
+      )}
       {recording !== "off" && (
         <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
           {recording === "recording" && (
