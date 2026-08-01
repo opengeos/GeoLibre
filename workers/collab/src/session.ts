@@ -10,7 +10,12 @@ import type {
   PresenceEntry,
   ServerMessage,
 } from "./protocol";
-import { MIN_COMMENT_INTERVAL_MS, validateComment, validateReply } from "./comment-validate";
+import {
+  MAX_REPLIES_PER_COMMENT,
+  MIN_COMMENT_INTERVAL_MS,
+  validateComment,
+  validateReply,
+} from "./comment-validate";
 
 function finite(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
@@ -753,6 +758,11 @@ export class CollabSession extends DurableObject<Env> {
       }
       sanitizedAction = { type: "delete", commentId: action.commentId };
     } else {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Unsupported comment-mutation action type.",
+      });
       return;
     }
 
@@ -776,6 +786,22 @@ export class CollabSession extends DurableObject<Env> {
           updatedComments = exists ? comments : [...comments, newComment];
         } else if (sanitizedAction.type === "reply") {
           const replyObj = sanitizedAction.reply as Record<string, unknown>;
+          const target = comments.find(
+            (c) => c && typeof c === "object" && c.id === sanitizedAction.commentId,
+          );
+          if (target) {
+            const targetReplies = Array.isArray(target.replies)
+              ? (target.replies as Record<string, unknown>[])
+              : [];
+            if (targetReplies.length >= MAX_REPLIES_PER_COMMENT) {
+              this.send(ws, {
+                type: "error",
+                code: "bad-message",
+                message: "Reply limit reached for this comment.",
+              });
+              return;
+            }
+          }
           updatedComments = comments.map((c) => {
             if (!c || typeof c !== "object" || c.id !== sanitizedAction.commentId) return c;
             const existingReplies = Array.isArray(c.replies)

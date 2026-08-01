@@ -359,6 +359,24 @@ describe("validateComment", () => {
     assert.equal(result.replies.length, MAX_REPLIES_PER_COMMENT);
   });
 
+  it("only inspects the first MAX_REPLIES_PER_COMMENT entries", () => {
+    const invalid = Array.from({ length: MAX_REPLIES_PER_COMMENT }, (_, i) => ({
+      id: `bad-${i}`,
+      author: { name: "", color: "#abc" },
+      body: `Reply ${i}`,
+      createdAt: "2026-06-15T12:30:00.000Z",
+    }));
+    const valid = Array.from({ length: 5 }, (_, i) => ({
+      id: `good-${i}`,
+      author: { name: "Alice", color: "#abc" },
+      body: `Reply ${i}`,
+      createdAt: "2026-06-15T12:30:00.000Z",
+    }));
+    const result = validateComment({ ...validComment, replies: [...invalid, ...valid] });
+    assert.ok(result);
+    assert.equal(result.replies.length, 0);
+  });
+
   it("falls back to now for unparseable createdAt", () => {
     const result = validateComment({ ...validComment, createdAt: "garbage" });
     assert.ok(result);

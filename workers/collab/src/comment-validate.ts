@@ -121,8 +121,7 @@ export function validateComment(raw: unknown): ValidatedComment | null {
 
   const replies: ValidatedReply[] = [];
   if (Array.isArray(o.replies)) {
-    for (const r of o.replies) {
-      if (replies.length >= MAX_REPLIES_PER_COMMENT) break;
+    for (const r of o.replies.slice(0, MAX_REPLIES_PER_COMMENT)) {
       const validated = validateReply(r);
       if (validated) replies.push(validated);
     }
