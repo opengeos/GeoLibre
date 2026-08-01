@@ -248,7 +248,13 @@ export async function connectSerialNmea(
     try {
       for (;;) {
         const { value, done } = await reader.read();
-        if (done) break;
+        // `closed` is re-checked here, not just at the error dispatch below: a
+        // read that resolved just before close() runs would otherwise deliver a
+        // fix afterwards, and handleFix re-creates the marker and map sources
+        // that teardown has already removed, leaving a stray overlay behind.
+        // The Bluetooth transport gets this for free, since removing the
+        // listener in close() is synchronous.
+        if (done || closed) break;
         if (!value) continue;
         buffer = consumeChunk(decoder.decode(value, { stream: true }), buffer, assembler, onFix);
       }
