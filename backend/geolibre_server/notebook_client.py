@@ -71,6 +71,8 @@ from IPython.display import Javascript, display
 __all__ = [
     "GeoLibreNotConnectedError",
     "GeoLibreNotConnectedWarning",
+    "GeoLibreTimeoutError",
+    "GeoLibreTimeoutWarning",
     "HostMap",
     "Map",
     "connect",
@@ -102,14 +104,35 @@ class GeoLibreNotConnectedWarning(UserWarning):
     """Warned when a map command could not be delivered to a GeoLibre window."""
 
 
+class GeoLibreTimeoutWarning(UserWarning):
+    """Warned when a command was accepted but its result did not arrive in time.
+
+    The command is running in a GeoLibre window; only its return value is lost.
+    Distinct from :class:`GeoLibreNotConnectedWarning`, which means the command
+    reached no window at all.
+    """
+
+
 class GeoLibreNotConnectedError(RuntimeError):
-    """Raised when a read-back command found no GeoLibre window to run it.
+    """Raised when a read-back command never reached a GeoLibre window.
+
+    Covers both "no window is subscribed" and "the relay itself could not be
+    reached" — in either case nothing ran, so a caller is free to retry.
 
     Only the read-back calls (:meth:`HostMap.list_layers`,
     :meth:`HostMap.get_layer`) raise this: they have nothing to return without a
     window. Mutations degrade to the fire-and-forget transport and warn with
     :class:`GeoLibreNotConnectedWarning` instead. Subclasses ``RuntimeError``, so
     code that already catches that keeps working.
+    """
+
+
+class GeoLibreTimeoutError(RuntimeError):
+    """Raised when a window took a command but did not return a result in time.
+
+    The opposite of :class:`GeoLibreNotConnectedError` in the way that matters
+    for retries: the command *was* dispatched and is probably still running, so
+    sending it again risks doing the work twice.
     """
 
 
@@ -205,8 +228,22 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
             request, timeout=_RELAY_TIMEOUT_SECONDS + 1
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, OSError, ValueError) as error:
+    except urllib.error.HTTPError as error:
+        # 504: a window took the command and is likely still running it, which is
+        # a different situation for the caller than "nothing ran". Other statuses
+        # (400 malformed, 409 duplicate id) are bugs and stay loud.
+        if error.code == 504:
+            raise GeoLibreTimeoutError(
+                f"GeoLibre did not return a result within {_RELAY_TIMEOUT_SECONDS:.0f}s. "
+                "The command is still running in the app."
+            ) from error
         raise RuntimeError(f"GeoLibre read-back failed: {_relay_failure_reason(error)}") from error
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        # The relay never answered, so nothing was dispatched: the same situation
+        # for a caller as no window being connected.
+        raise GeoLibreNotConnectedError(
+            f"GeoLibre read-back failed: {_relay_failure_reason(error)}"
+        ) from error
     if not payload.get("delivered"):
         raise GeoLibreNotConnectedError(f"No GeoLibre window is connected. {_NOT_CONNECTED_HINT}")
     if not payload.get("ok"):
@@ -472,10 +509,12 @@ class HostMap:
                 ``fillColor="#facc15"`` or ``strokeColor="#d97706"``).
 
         Returns:
-            The new layer's id on desktop, or None when the id is unavailable —
-            on JupyterLite, and on desktop when no window held the relay socket
-            (the layer is still sent over the display transport, with a
-            :class:`GeoLibreNotConnectedWarning`).
+            The new layer's id on desktop, or None when the id is unavailable:
+            on JupyterLite; on desktop when the command reached no window (it is
+            re-sent over the display transport, with a
+            :class:`GeoLibreNotConnectedWarning`); and on desktop when a window
+            took it but did not answer in time (:class:`GeoLibreTimeoutWarning`
+            — the layer is still being added, so it is not re-sent).
         """
         params = {
             "name": name,
@@ -490,12 +529,24 @@ class HostMap:
             try:
                 value = _request_from_relay(url, "addGeoJsonLayer", params)
             except GeoLibreNotConnectedError:
-                # Nothing held the relay socket. Every other mutation degrades to
-                # the display transport here (which still reaches the embedded
-                # Notebook panel) and warns, so adding a layer must not be the
-                # one call that hard-fails. The id is then unavailable, exactly
-                # as on JupyterLite. A handler error still raises.
+                # Nothing ran. Every other mutation degrades to the display
+                # transport here (which still reaches the embedded Notebook
+                # panel) and warns, so adding a layer must not be the one call
+                # that hard-fails. The id is then unavailable, exactly as on
+                # JupyterLite. A handler error still raises.
                 _send("addGeoJsonLayer", params)
+                return None
+            except GeoLibreTimeoutError as error:
+                # A window DID take this command — a big FeatureCollection can
+                # outrun the relay's result timeout — and is probably still
+                # adding the layer. Re-sending would add it twice, so give up on
+                # the id alone and say what happened.
+                warnings.warn(
+                    f"GeoLibre: {error} The layer is most likely being added; "
+                    "its id is unavailable. Use list_layers() to find it.",
+                    GeoLibreTimeoutWarning,
+                    stacklevel=3,
+                )
                 return None
             if not isinstance(value, str) or not value:
                 # Fail loudly rather than handing back an id ("None") that no

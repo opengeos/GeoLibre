@@ -57,11 +57,20 @@ fire-and-forget command — including `add_marker`/`add_markers` — still reach
 every connected window. This is only visible if you attach two GeoLibre windows
 to one Jupyter server.
 
-If no window is connected when `add_geojson` runs, it behaves like every other
-mutation — the layer goes out over the display transport, you get a
-`GeoLibreNotConnectedWarning`, and the return value is `None` rather than an id.
-The read-back calls have nothing to return in that situation, so they raise
-`GeoLibreNotConnectedError` (a `RuntimeError`) instead.
+`add_geojson` returns `None` instead of an id in two situations, and never
+fails outright in either:
+
+- **Nothing received the command** (no window connected, or the relay itself
+  unreachable). It behaves like every other mutation — the layer goes out over
+  the display transport with a `GeoLibreNotConnectedWarning`.
+- **A window took it but did not answer within 5s**, which a large
+  `FeatureCollection` can do. You get a `GeoLibreTimeoutWarning`; the layer is
+  still being added, so it is deliberately *not* re-sent (that would add it
+  twice) — find it with `list_layers()`.
+
+The read-back calls have nothing to return in either situation, so they raise
+`GeoLibreNotConnectedError` / `GeoLibreTimeoutError` (both `RuntimeError`)
+instead.
 
 Synchronous read-back is desktop-only. JupyterLite uses browser `postMessage`;
 blocking its Python call would also block the browser event loop that must

@@ -266,6 +266,45 @@ def test_add_geojson_falls_back_when_no_window_is_connected(relay, displays):
     assert len(displays) == 1
 
 
+def test_add_geojson_does_not_resend_after_a_result_timeout(relay, displays):
+    # A window took the command (504 from the relay) and is probably still adding
+    # the layer, so re-sending it would add a duplicate. Only the id is lost.
+    relay.error = urllib.error.HTTPError(
+        "http://127.0.0.1:8766/geolibre/relay/command", 504, "Gateway Timeout", {}, None
+    )
+
+    with pytest.warns(notebook_client.GeoLibreTimeoutWarning, match="still running"):
+        layer_id = notebook_client.HostMap().add_geojson(
+            {"type": "FeatureCollection", "features": []}
+        )
+
+    assert layer_id is None
+    assert displays == []
+
+
+def test_add_geojson_falls_back_when_the_relay_is_unreachable(relay, displays):
+    # Nothing was dispatched, so re-sending is safe — and is what every other
+    # mutation does.
+    relay.error = urllib.error.URLError("connection refused")
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning):
+        layer_id = notebook_client.HostMap().add_geojson(
+            {"type": "FeatureCollection", "features": []}
+        )
+
+    assert layer_id is None
+    assert len(displays) == 1
+
+
+def test_read_back_timeout_raises_rather_than_reporting_no_layers(relay):
+    relay.error = urllib.error.HTTPError(
+        "http://127.0.0.1:8766/geolibre/relay/command", 504, "Gateway Timeout", {}, None
+    )
+
+    with pytest.raises(notebook_client.GeoLibreTimeoutError, match="still running"):
+        notebook_client.HostMap().list_layers()
+
+
 def test_add_geojson_still_raises_when_the_handler_fails(relay, monkeypatch):
     # Only the not-connected case degrades; a real handler error must surface.
     def fail(url, method, params=None):
@@ -291,20 +330,21 @@ def test_add_geojson_raises_on_a_missing_layer_id(relay, monkeypatch):
 
 
 def test_read_back_reports_an_answered_error_status_as_such(relay):
-    # The relay answered (504 = the app did not return a result in time), so the
-    # message must not send the reader looking for an unreachable server.
+    # The relay answered (400 = it rejected the command), so the message must not
+    # send the reader looking for an unreachable server. 504 is its own case, see
+    # test_read_back_timeout_raises_rather_than_reporting_no_layers.
     relay.error = urllib.error.HTTPError(
         "http://127.0.0.1:8766/geolibre/relay/command",
-        504,
-        "Gateway Timeout",
+        400,
+        "Bad Request",
         {},
-        io.BytesIO(json.dumps({"message": "GeoLibre did not return a result in time."}).encode()),
+        io.BytesIO(json.dumps({"message": "Missing a non-empty 'method'."}).encode()),
     )
 
-    with pytest.raises(RuntimeError, match="returned HTTP 504") as excinfo:
+    with pytest.raises(RuntimeError, match="returned HTTP 400") as excinfo:
         notebook_client.HostMap().list_layers()
 
-    assert "did not return a result in time" in str(excinfo.value)
+    assert "Missing a non-empty" in str(excinfo.value)
     assert "could not be reached" not in str(excinfo.value)
 
 
