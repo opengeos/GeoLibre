@@ -4,6 +4,7 @@ import { subscribeJupyterServer } from "../lib/jupyter";
 import {
   type RelayCommand,
   type RelayResult,
+  encodeRelayResult,
   parseRelayMessage,
   relayReconnectDelay,
   relaySocketUrl,
@@ -49,7 +50,7 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
     const reply = (activeSocket: WebSocket, payload: RelayResult) => {
       if (activeSocket.readyState !== WebSocket.OPEN) return;
       try {
-        activeSocket.send(JSON.stringify(payload));
+        activeSocket.send(encodeRelayResult(payload));
       } catch (error) {
         console.warn("Jupyter relay: could not return a command result", error);
       }

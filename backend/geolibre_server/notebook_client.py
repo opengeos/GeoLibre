@@ -467,8 +467,9 @@ class HostMap:
         # Desktop kernels have a correlated request/reply relay, so return the
         # new layer id. JupyterLite retains its display/postMessage transport,
         # where a synchronous Python call cannot wait on the browser event loop.
-        if _relay_url() is not None:
-            value = _request("addGeoJsonLayer", params)
+        url = _relay_url()
+        if url is not None:
+            value = _request_from_relay(url, "addGeoJsonLayer", params)
             if not isinstance(value, str) or not value:
                 # Fail loudly rather than handing back an id ("None") that no
                 # later set_style/remove_layer call could ever resolve.

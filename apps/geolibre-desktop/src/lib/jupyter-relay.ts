@@ -120,6 +120,32 @@ export async function runRelayCommand(
   }
 }
 
+/**
+ * Serialize a result for the wire, degrading to an error rather than nothing.
+ *
+ * A handler can in principle resolve with a value `JSON.stringify` refuses (a
+ * circular structure, a BigInt). Sending no frame at all would leave the kernel
+ * waiting out the relay's whole result timeout for a generic 504, so send a
+ * failure the caller can actually read.
+ *
+ * @param result - The reply to encode.
+ * @returns The JSON frame to send.
+ */
+export function encodeRelayResult(result: RelayResult): string {
+  try {
+    return JSON.stringify(result);
+  } catch (error) {
+    return JSON.stringify({
+      type: "geolibre:result",
+      requestId: result.requestId,
+      ok: false,
+      error: `Result could not be serialized: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    } satisfies RelayResult);
+  }
+}
+
 /** Reconnect backoff (ms) after a dropped socket, capped so it stays responsive. */
 export const RELAY_RECONNECT_MIN_MS = 1_000;
 export const RELAY_RECONNECT_MAX_MS = 15_000;

@@ -8,6 +8,7 @@ environment it publishes to kernels, and the broadcast bookkeeping itself.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
@@ -37,13 +38,17 @@ def _isolate_listeners():
     """Keep each test's listener list independent of the module-level one."""
     saved = list(jupyter_relay._listeners)
     saved_pending = dict(jupyter_relay._pending_results)
+    saved_owners = dict(jupyter_relay._pending_owners)
     jupyter_relay._listeners.clear()
     jupyter_relay._pending_results.clear()
+    jupyter_relay._pending_owners.clear()
     yield
     jupyter_relay._listeners.clear()
     jupyter_relay._listeners.extend(saved)
     jupyter_relay._pending_results.clear()
     jupyter_relay._pending_results.update(saved_pending)
+    jupyter_relay._pending_owners.clear()
+    jupyter_relay._pending_owners.update(saved_owners)
 
 
 # -- the command envelope ----------------------------------------------------
@@ -207,20 +212,20 @@ def test_broadcast_with_no_listeners_reports_zero():
     assert jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"}) == 0
 
 
-def test_limited_broadcast_reaches_only_one_listener():
+# -- single-window dispatch (correlated read-back) ---------------------------
+
+
+def test_dispatch_one_reaches_only_one_listener():
     first, second = FakeSocket(), FakeSocket()
     jupyter_relay._listeners.extend([first, second])
 
-    delivered = jupyter_relay._broadcast(
-        {"type": "geolibre:command", "method": "listLayers"},
-        limit=1,
-    )
+    owner = jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"})
 
-    assert delivered == 1
+    assert owner is first
     assert len(first.received) + len(second.received) == 1
 
 
-def test_limited_broadcast_keeps_picking_the_same_window():
+def test_dispatch_one_keeps_picking_the_same_window():
     # A mutation and the read-back that follows it must reach the same map, so
     # the single-window pick has to be the oldest connection every time — not
     # whichever one an unordered set happened to yield.
@@ -228,24 +233,50 @@ def test_limited_broadcast_keeps_picking_the_same_window():
     jupyter_relay._listeners.extend([first, second])
 
     for method in ("addGeoJsonLayer", "listLayers"):
-        jupyter_relay._broadcast({"type": "geolibre:command", "method": method}, limit=1)
+        jupyter_relay._dispatch_one({"type": "geolibre:command", "method": method})
 
     assert len(first.received) == 2
     assert second.received == []
 
 
-def test_limited_broadcast_falls_through_a_dead_first_window():
+def test_dispatch_one_falls_through_a_dead_first_window():
     dead, alive = FakeSocket(fails=True), FakeSocket()
     jupyter_relay._listeners.extend([dead, alive])
 
-    delivered = jupyter_relay._broadcast(
-        {"type": "geolibre:command", "method": "listLayers"},
-        limit=1,
-    )
+    owner = jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"})
 
-    assert delivered == 1
+    assert owner is alive
     assert len(alive.received) == 1
     assert jupyter_relay._listeners == [alive]
+
+
+def test_dispatch_one_reports_no_window():
+    assert jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"}) is None
+
+
+def test_closing_the_owning_window_fails_its_request_at_once():
+    # Without this the kernel would sit out the full RESULT_TIMEOUT_SECONDS for
+    # an answer the relay already knows can never arrive.
+    loop = asyncio.new_event_loop()
+    try:
+        socket, other = FakeSocket(), FakeSocket()
+        future, untouched = loop.create_future(), loop.create_future()
+        jupyter_relay._listeners.extend([socket, other])
+        jupyter_relay._pending_results.update({"mine": future, "theirs": untouched})
+        jupyter_relay._pending_owners.update({"mine": socket, "theirs": other})
+
+        jupyter_relay.GeoLibreRelaySocket.on_close(socket)
+
+        assert jupyter_relay._listeners == [other]
+        assert future.result() == {
+            "requestId": "mine",
+            "ok": False,
+            "error": "The GeoLibre window running this command closed.",
+        }
+        # Another window's in-flight request is none of this socket's business.
+        assert not untouched.done()
+    finally:
+        loop.close()
 
 
 # -- extension load ----------------------------------------------------------

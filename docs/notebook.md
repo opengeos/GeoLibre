@@ -48,6 +48,15 @@ returns one matching layer or raises `ValueError`. The id can be passed directly
 `set_visibility`, `set_opacity`, `set_style`, `remove_layer`, or
 `zoom_to_layer`.
 
+These three are also the only commands that do **not** fan out: a correlated
+request/reply can have exactly one authoritative responder, so `add_geojson`,
+`list_layers`, and `get_layer` run in a single app window (the one that
+connected first) and consistently keep using it, which is what makes an id
+returned by `add_geojson` resolvable by a later `get_layer`. Every
+fire-and-forget command — including `add_marker`/`add_markers` — still reaches
+every connected window. This is only visible if you attach two GeoLibre windows
+to one Jupyter server.
+
 Synchronous read-back is desktop-only. JupyterLite uses browser `postMessage`;
 blocking its Python call would also block the browser event loop that must
 deliver the result. Canonical client source:

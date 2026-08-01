@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   RELAY_RECONNECT_MAX_MS,
   RELAY_RECONNECT_MIN_MS,
+  encodeRelayResult,
   parseRelayMessage,
   relayReconnectDelay,
   relaySocketUrl,
@@ -193,6 +194,36 @@ describe("runRelayCommand", () => {
       await quietly(() => runRelayCommand(spy, { requestId: "", method: "boom", params: {} })),
       null,
     );
+  });
+});
+
+describe("encodeRelayResult", () => {
+  it("encodes an ordinary result unchanged", () => {
+    const result = {
+      type: "geolibre:result",
+      requestId: "request-1",
+      ok: true,
+      value: [{ id: "layer-1" }],
+    } as const;
+    assert.deepEqual(JSON.parse(encodeRelayResult(result)), result);
+  });
+
+  it("degrades an unserializable value to a readable failure", () => {
+    // Sending nothing would leave the kernel waiting out the relay's whole
+    // result timeout for a generic 504.
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const frame = JSON.parse(
+      encodeRelayResult({
+        type: "geolibre:result",
+        requestId: "request-2",
+        ok: true,
+        value: circular,
+      }),
+    );
+    assert.equal(frame.requestId, "request-2");
+    assert.equal(frame.ok, false);
+    assert.match(frame.error, /could not be serialized/);
   });
 });
 

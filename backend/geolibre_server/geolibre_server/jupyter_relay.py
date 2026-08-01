@@ -96,6 +96,10 @@ _listeners: list[GeoLibreRelaySocket] = []
 # enter this mapping.
 _pending_results: dict[str, Future[dict[str, Any]]] = {}
 
+# Which window each in-flight correlated request was dispatched to, so closing
+# that window can fail its requests at once instead of waiting out the timeout.
+_pending_owners: dict[str, GeoLibreRelaySocket] = {}
+
 #: How long a correlated POST waits for the app's result before answering 504.
 #: The kernel client's own socket timeout (``_RELAY_TIMEOUT_SECONDS + 1`` in
 #: ``notebook_client.py``) must stay longer than this, so the precise 504 message
@@ -196,16 +200,8 @@ def _drop_listener(socket: GeoLibreRelaySocket) -> None:
         _listeners.remove(socket)
 
 
-def _broadcast(message: dict[str, Any], *, limit: int | None = None) -> int:
-    """Send ``message`` to open app sockets; return how many received it.
-
-    Args:
-        message: The envelope to encode and send.
-        limit: Stop after this many windows received it. ``limit=1`` delivers to
-            the oldest connected window, which is stable for as long as that
-            window stays open, so a mutation and the read-back that follows it
-            reach the same map.
-    """
+def _broadcast(message: dict[str, Any]) -> int:
+    """Send ``message`` to every open app socket; return how many received it."""
     encoded = json.dumps(message)
     delivered = 0
     # Copy: write_message on a closed socket raises and we drop it from the list.
@@ -216,9 +212,25 @@ def _broadcast(message: dict[str, Any], *, limit: int | None = None) -> int:
             _drop_listener(socket)
             continue
         delivered += 1
-        if limit is not None and delivered >= limit:
-            break
     return delivered
+
+
+def _dispatch_one(message: dict[str, Any]) -> GeoLibreRelaySocket | None:
+    """Send ``message`` to exactly one app window; return the one that took it.
+
+    That is the oldest still-open window, a choice that is stable for as long as
+    it stays open, so a mutation and the read-back that follows it reach the same
+    map. Returns None when no window could be written to.
+    """
+    encoded = json.dumps(message)
+    for socket in list(_listeners):
+        try:
+            socket.write_message(encoded)
+        except Exception:  # noqa: BLE001 - a dead peer must not fail the request
+            _drop_listener(socket)
+            continue
+        return socket
+    return None
 
 
 class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHandler):
@@ -255,8 +267,23 @@ class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHan
             future.set_result(result)
 
     def on_close(self) -> None:
-        """Unregister this app window."""
+        """Unregister this app window and fail anything it still owed."""
         _drop_listener(self)
+        # A correlated command runs in exactly one window. When that window is
+        # this one, nothing can answer it any more, so say so now rather than
+        # making the kernel sit out RESULT_TIMEOUT_SECONDS for a certain 504.
+        for request_id, owner in list(_pending_owners.items()):
+            if owner is not self:
+                continue
+            future = _pending_results.get(request_id)
+            if future is not None and not future.done():
+                future.set_result(
+                    {
+                        "requestId": request_id,
+                        "ok": False,
+                        "error": "The GeoLibre window running this command closed.",
+                    }
+                )
 
 
 class GeoLibreRelayCommandHandler(APIHandler):
@@ -281,20 +308,22 @@ class GeoLibreRelayCommandHandler(APIHandler):
         try:
             # A correlated mutation must execute in only one app window; its
             # returned layer id then always belongs to the window that handled
-            # it. `_listeners` is ordered, so "one window" is consistently the
-            # oldest connected one and a later read-back finds what the mutation
-            # created. Fire-and-forget commands retain the historical broadcast.
-            delivered = _broadcast(message, limit=1)
-            if not delivered:
+            # it. Fire-and-forget commands retain the historical broadcast.
+            owner = _dispatch_one(message)
+            if owner is None:
                 self.finish(json.dumps({"delivered": 0}))
                 return
+            # No await between the dispatch and this record, so the window's
+            # on_close can never miss the request it is now responsible for.
+            _pending_owners[request_id] = owner
             try:
                 result = await wait_for(future, RESULT_TIMEOUT_SECONDS)
             except (TimeoutError, AsyncTimeoutError) as error:
                 raise web.HTTPError(504, "GeoLibre did not return a result in time.") from error
-            self.finish(json.dumps({"delivered": delivered, **result}))
+            self.finish(json.dumps({"delivered": 1, **result}))
         finally:
             _pending_results.pop(request_id, None)
+            _pending_owners.pop(request_id, None)
 
 
 class GeoLibreRelayStatusHandler(APIHandler):

@@ -254,7 +254,9 @@ def test_list_layers_raises_on_a_non_list_result(relay, monkeypatch):
 
 def test_add_geojson_raises_on_a_missing_layer_id(relay, monkeypatch):
     # str(None) would hand back "None", an id no later call could ever resolve.
-    monkeypatch.setattr(notebook_client, "_request", lambda method, params=None: None)
+    monkeypatch.setattr(
+        notebook_client, "_request_from_relay", lambda url, method, params=None: None
+    )
 
     with pytest.raises(RuntimeError, match="unexpected layer id"):
         notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
