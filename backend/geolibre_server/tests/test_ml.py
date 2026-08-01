@@ -55,11 +55,15 @@ class _FakeAsyncClient:
         return _FakeResp()
 
 
+class _FakeHTTPError(Exception):
+    """Narrow stand-in so ``except httpx.HTTPError`` doesn't swallow unrelated exceptions."""
+
+
 class _FakeHttpx:
     """Minimal stand-in for the httpx module used by ml.py."""
 
     calls: list = []
-    HTTPError = Exception
+    HTTPError = _FakeHTTPError
     AsyncClient = _FakeAsyncClient
 
     @staticmethod
@@ -354,10 +358,13 @@ def test_segment_rejects_oversized_chunked_stream(monkeypatch):
     monkeypatch.setattr(ml, "_require_httpx", lambda: _FakeHttpx)
     monkeypatch.setattr(ml, "_ensure_server", lambda: "http://backend:9")
 
+    def _oversized_body():
+        yield b"x" * 50
+
     client = TestClient(app)
     resp = client.post(
         "/ml/segment/text",
-        content=b"x" * 50,
+        content=_oversized_body(),
         headers={"content-type": "multipart/form-data; boundary=----"},
     )
     assert resp.status_code == 413
