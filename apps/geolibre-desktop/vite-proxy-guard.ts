@@ -123,10 +123,7 @@ function isPrivateIPv6(addr: string): boolean {
  * Fetch `targetUrl` with manual redirect following, re-validating each hop.
  * Returns the final Response or throws on disallowed targets / too many hops.
  */
-export async function fetchWithGuard(
-  targetUrl: string,
-  init: RequestInit = {},
-): Promise<Response> {
+export async function fetchWithGuard(targetUrl: string, init: RequestInit = {}): Promise<Response> {
   assertPublicHttpUrl(targetUrl);
 
   let current = targetUrl;
