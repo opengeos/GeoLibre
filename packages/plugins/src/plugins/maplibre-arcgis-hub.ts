@@ -127,6 +127,12 @@ function canVisualize(item: ArcGisHubItem): boolean {
   return item.type === "Feature Service" || item.type === "GeoJson";
 }
 
+// A Feature Service is downloaded by querying its FeatureServer URL; without one
+// the item-data endpoint has nothing to hand back, so there is nothing to offer.
+function canDownload(item: ArcGisHubItem): boolean {
+  return item.type !== "Feature Service" || Boolean(item.url);
+}
+
 async function visualize(item: ArcGisHubItem): Promise<void> {
   if (!appRef) return;
   if (item.type === "Feature Service") {
@@ -313,6 +319,7 @@ function buildPanel(container: HTMLElement): () => void {
     const save = element("button", labels.download);
     save.type = "button";
     save.style.cssText = styles.button;
+    save.disabled = !canDownload(item);
     save.addEventListener("click", async () => {
       save.disabled = true;
       status.textContent = labels.preparing(item.title);
@@ -330,7 +337,7 @@ function buildPanel(container: HTMLElement): () => void {
         }
       } finally {
         downloadControllers.delete(downloadController);
-        save.disabled = false;
+        save.disabled = !canDownload(item);
       }
     });
     const details = element("button", labels.details);
