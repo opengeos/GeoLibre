@@ -76,7 +76,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI, getPluginManager, usePluginRegistry } from "../../hooks/usePlugins";
 import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
@@ -783,6 +783,15 @@ export function TopToolbar({
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
   const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
   const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
+  // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener
+  // (the Add Data menu, the command palette, the 3D-model button) is ungrouped,
+  // so it must drop any group target a previous open left behind — otherwise
+  // this session's layers would be swept into that stale, unrelated group when
+  // the dialog closes. Only the listener sets a target, and it sets both.
+  const openAddDataKind = useCallback((kind: AddDataKind) => {
+    setAddDataTargetGroupId(null);
+    setAddDataKind(kind);
+  }, []);
   // PostgreSQL prefill (saved connection / clicked table) from the Browser panel.
   const [addDataPostgres, setAddDataPostgres] = useState<OpenAddDataPostgres | undefined>(
     undefined,
@@ -1003,7 +1012,7 @@ export function TopToolbar({
         id: `add.${kind}`,
         title: t("toolbar.command.addLayer", { name: t(titleKey) }),
         group: t("toolbar.commandGroup.addData"),
-        run: () => setAddDataKind(kind),
+        run: () => openAddDataKind(kind),
       }),
     ),
     {
@@ -1561,10 +1570,10 @@ export function TopToolbar({
           chrome={chrome}
           addLayer={addLayer}
           osmPbfBusy={osmPbf.busy}
-          onSetAddDataKind={setAddDataKind}
+          onSetAddDataKind={openAddDataKind}
           onAddGltfModel={() => {
             setAddDataDeckVizKind("scenegraph");
-            setAddDataKind("deckgl-viz");
+            openAddDataKind("deckgl-viz");
           }}
           onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
         />

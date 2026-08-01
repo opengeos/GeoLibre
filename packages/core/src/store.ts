@@ -1698,9 +1698,20 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           const requestedIds = new Set(layerIds);
           if (requestedIds.has(targetLayerId)) return s;
-          const moving = s.layers.filter((layer) => requestedIds.has(layer.id));
+          const target = s.layers.find((layer) => layer.id === targetLayerId);
+          if (!target) return s;
+          const targetGroupId = target.groupId ?? null;
+          // This is a pure reorder — `groupId` is never touched — so a requested
+          // layer from another group can only be lifted out of its own block,
+          // and `normalizeGroupContiguity` would then drag that group's
+          // untouched members along to reunite it. Move only the layers that
+          // already sit in the target's group.
+          const moving = s.layers.filter(
+            (layer) => requestedIds.has(layer.id) && (layer.groupId ?? null) === targetGroupId,
+          );
           if (moving.length === 0) return s;
-          const without = s.layers.filter((layer) => !requestedIds.has(layer.id));
+          const movingIds = new Set(moving.map((layer) => layer.id));
+          const without = s.layers.filter((layer) => !movingIds.has(layer.id));
           const targetIndex = without.findIndex((layer) => layer.id === targetLayerId);
           if (targetIndex < 0) return s;
           // Store order is the reverse of panel display order, so "above" is

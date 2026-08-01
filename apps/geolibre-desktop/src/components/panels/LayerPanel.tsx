@@ -83,7 +83,16 @@ import {
   invertLayerSelection,
   zoomToSelection,
 } from "../../lib/selection-actions";
-import { activeInterfaceProfile } from "../../lib/ui-profile";
+import { isMobile } from "../../lib/is-mobile";
+import { masHidesDataSource } from "../../lib/mas-build";
+import {
+  DATA_SOURCE_CATALOG,
+  type DataSourceCatalogEntry,
+  activeInterfaceProfile,
+  isDataSourceVisible,
+} from "../../lib/ui-profile";
+import type { AddDataKind } from "../layout/add-data/types";
+import { KIND_I18N_KEY } from "../layout/add-data/constants";
 import { openAddData } from "../layout/add-data/open-add-data";
 import {
   Button,
@@ -268,6 +277,18 @@ const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+
+/**
+ * The Add Data sources a group's "Add data to group" submenu can offer, in Add
+ * Data menu order. `openAddData` scopes the layers a source creates to a group,
+ * so only the sources the Add Data *dialog* owns qualify — `KIND_I18N_KEY` is
+ * keyed by `AddDataKind`, so membership in it is that test. The rest of the
+ * catalog (vector/raster file pickers, STAC, PMTiles, …) never routes through
+ * the dialog and so has no group-scoped open.
+ */
+const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
+  (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } => entry.id in KIND_I18N_KEY,
+);
 
 /** Menu labels for the planet switcher, keyed by celestial body. */
 const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
@@ -559,6 +580,21 @@ export function LayerPanel({
   const { i18n, t } = useTranslation();
   const isBeginnerProfile = useDesktopSettingsStore(
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
+  );
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  // Same visibility rules the Add Data menu applies (profile, Mac App Store,
+  // and the mobile-only postgres rule); the user agent is stable for the
+  // session, so evaluate it once.
+  const mobile = useMemo(() => isMobile(), []);
+  const addDataGroupSources = useMemo(
+    () =>
+      ADD_DATA_DIALOG_SOURCES.filter(
+        (entry) =>
+          isDataSourceVisible(uiProfile, entry.id) &&
+          !(entry.id === "postgres" && mobile) &&
+          !masHidesDataSource(entry.id),
+      ),
+    [uiProfile, mobile],
   );
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
@@ -2532,25 +2568,24 @@ export function LayerPanel({
                 <Pencil className="me-2 h-3.5 w-3.5" />
                 {t("layers.renameGroup")}
               </DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <FolderPlus className="h-3.5 w-3.5" />
-                  {t("layers.addDataToGroup")}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem
-                    onSelect={() => openAddData("delimited-text", { groupId: group.id })}
-                  >
-                    {t("layers.addDelimitedTextToGroup")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => openAddData("gpx", { groupId: group.id })}>
-                    {t("layers.addGpxToGroup")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => openAddData("mbtiles", { groupId: group.id })}>
-                    {t("layers.addMbtilesToGroup")}
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              {addDataGroupSources.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    {t("layers.addDataToGroup")}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {addDataGroupSources.map((entry) => (
+                      <DropdownMenuItem
+                        key={entry.id}
+                        onSelect={() => openAddData(entry.id, { groupId: group.id })}
+                      >
+                        {t(entry.labelKey)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               {moveTargets.length > 0 && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>

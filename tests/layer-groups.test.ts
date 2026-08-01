@@ -269,6 +269,30 @@ describe("layer group store actions", () => {
     assert.ok(useAppStore.getState().layers.every((item) => item.groupId === gid));
   });
 
+  it("skips selected layers outside the target's group when reordering", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const d = useAppStore.getState().addGeoJsonLayer("D", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G", [b, c]);
+
+    // C belongs to G but A does not, so lifting C out of G's block would make
+    // normalizeGroupContiguity drag the never-selected B along with it.
+    useAppStore.getState().moveLayersRelative([c, d], a, "below");
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [d, a, b, c],
+    );
+    assert.deepEqual(
+      useAppStore
+        .getState()
+        .layers.filter((item) => item.groupId === gid)
+        .map((item) => item.id),
+      [b, c],
+    );
+  });
+
   it("nests groups, rejects cycles, and promotes children when ungrouping", () => {
     const parent = useAppStore.getState().addLayerGroup("Parent");
     const child = useAppStore.getState().addLayerGroup("Child");
