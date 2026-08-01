@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ProjectComment } from "@geolibre/core";
 import { Button, Textarea, cn } from "@geolibre/ui";
 import {
@@ -29,6 +30,7 @@ export function CommentThread({
   onDelete,
   onZoomTo,
 }: CommentThreadProps) {
+  const { t } = useTranslation();
   const [replyText, setReplyText] = useState("");
   const [isReplying, setIsReplying] = useState(false);
 
@@ -117,10 +119,7 @@ export function CommentThread({
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-destructive"
             onClick={() => {
-              if (
-                typeof window !== "undefined" &&
-                window.confirm("Are you sure you want to delete this comment thread?")
-              ) {
+              if (typeof window !== "undefined" && window.confirm(t("comments.confirmDelete"))) {
                 onDelete(comment.id);
               }
             }}

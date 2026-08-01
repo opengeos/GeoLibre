@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Button,
   Dialog,
@@ -19,6 +20,7 @@ interface AddCommentDialogProps {
 }
 
 export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddCommentDialogProps) {
+  const { t } = useTranslation();
   const [savedName, setSavedName] = useState<string | null>(() => {
     try {
       return typeof localStorage !== "undefined"
@@ -65,10 +67,10 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
         <DialogHeader className="mb-2">
           <DialogTitle className="flex items-center gap-2 text-sm">
             <MessageSquare className="h-4 w-4 text-primary" />
-            <span>Add Review Comment</span>
+            <span>{t("comments.addDialogTitle")}</span>
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Post an anchored note on this project for team review or offline reference.
+            {t("comments.addDialogDescription")}
           </DialogDescription>
         </DialogHeader>
 
@@ -100,13 +102,13 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
                 className="text-[11px] font-medium text-muted-foreground flex items-center gap-1"
               >
                 <User className="h-3 w-3 text-primary" />
-                <span>Your Name (Asked once, saved automatically)</span>
+                <span>{t("comments.authorNameLabel")}</span>
               </label>
               <Input
                 id="author-name-input"
                 value={authorName}
                 onChange={(e) => setAuthorName(e.target.value)}
-                placeholder="e.g. Alex or Sarah"
+                placeholder={t("comments.authorNamePlaceholder")}
                 className="text-xs h-8"
                 autoFocus
               />
@@ -139,13 +141,13 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
               htmlFor="comment-text-input"
               className="text-[11px] font-medium text-muted-foreground"
             >
-              Comment / Feedback
+              {t("comments.commentLabel")}
             </label>
             <Textarea
               id="comment-text-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Type your review note or feedback here..."
+              placeholder={t("comments.commentPlaceholder")}
               rows={3}
               className="text-xs min-h-20 resize-none"
               autoFocus={hasSavedName}

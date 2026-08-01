@@ -687,14 +687,16 @@ export class CollabSession extends DurableObject<Env> {
           updatedComments = [...comments, action.comment as Record<string, unknown>];
         } else if (action.type === "reply") {
           if (!action.reply || typeof action.reply !== "object") return;
-          updatedComments = comments.map((c) =>
-            c && typeof c === "object" && c.id === action.commentId
-              ? {
-                  ...c,
-                  replies: Array.isArray(c.replies) ? [...c.replies, action.reply] : [action.reply],
-                }
-              : c,
-          );
+          const replyObj = action.reply as Record<string, unknown>;
+          updatedComments = comments.map((c) => {
+            if (!c || typeof c !== "object" || c.id !== action.commentId) return c;
+            const existingReplies = Array.isArray(c.replies)
+              ? (c.replies as Record<string, unknown>[])
+              : [];
+            if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
+              return c;
+            return { ...c, replies: [...existingReplies, replyObj] };
+          });
         } else if (action.type === "toggle-resolve") {
           updatedComments = comments.map((c) =>
             c && typeof c === "object" && c.id === action.commentId

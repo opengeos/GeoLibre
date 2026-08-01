@@ -103,15 +103,14 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
     const handleMapClick = (e: maplibreGl.MapMouseEvent) => {
       e.originalEvent.stopPropagation();
 
-      // Map MapLibre layer IDs to store layer IDs so feature anchors
-      // consistently store the canonical store layer ID.
+      // Map source and style layer IDs to canonical store layer IDs.
       const storeLayers = useAppStore.getState().layers;
-      const layerMap = new Map<string, string>();
+      const sourceMap = new Map<string, string>();
       for (const l of storeLayers) {
-        layerMap.set(l.id, l.id);
+        sourceMap.set(l.id, l.id);
         if (Array.isArray(l.metadata?.sourceIds)) {
           for (const sid of l.metadata.sourceIds) {
-            if (typeof sid === "string") layerMap.set(sid, l.id);
+            if (typeof sid === "string") sourceMap.set(sid, l.id);
           }
         }
       }
@@ -129,7 +128,10 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
 
       // Search for feature with a valid ID on a user data layer
       for (const feat of features) {
-        const storeLayerId = feat.layer?.id ? layerMap.get(feat.layer.id) : undefined;
+        const featSource = feat.source || (feat as { layer?: { source?: string } }).layer?.source;
+        const storeLayerId =
+          (featSource ? sourceMap.get(featSource) : undefined) ??
+          (feat.layer?.id ? sourceMap.get(feat.layer.id) : undefined);
         if (storeLayerId && feat.id !== undefined && feat.id !== null) {
           anchor = {
             type: "feature",

@@ -53,17 +53,34 @@ export function resolveCommentCoordinates(
   // 2. Query rendered features on active layer
   if (comment.anchor.type === "feature") {
     const { layerId, featureId } = comment.anchor;
-    try {
-      const features = map.queryRenderedFeatures(undefined, {
-        layers: [layerId],
-        filter: ["==", ["id"], featureId],
-      });
-      if (features.length > 0 && features[0].geometry) {
-        const coords = extractGeometryCoords(features[0].geometry);
-        if (coords) return coords;
+    const storeLayer = useAppStore.getState().layers.find((l) => l.id === layerId);
+    const styleLayerIds =
+      storeLayer &&
+      Array.isArray(storeLayer.metadata?.sourceIds) &&
+      storeLayer.metadata.sourceIds.length > 0
+        ? (storeLayer.metadata.sourceIds as string[])
+        : [layerId];
+    const validLayers = styleLayerIds.filter((id) => {
+      try {
+        return !!map.getLayer(id);
+      } catch {
+        return false;
       }
-    } catch {
-      // Ignore query errors
+    });
+
+    if (validLayers.length > 0) {
+      try {
+        const features = map.queryRenderedFeatures(undefined, {
+          layers: validLayers,
+          filter: ["==", ["id"], featureId],
+        });
+        if (features.length > 0 && features[0].geometry) {
+          const coords = extractGeometryCoords(features[0].geometry);
+          if (coords) return coords;
+        }
+      } catch {
+        // Ignore query errors
+      }
     }
 
     // 3. Fallback to GeoJSON features in store layers

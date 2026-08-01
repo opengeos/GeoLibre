@@ -1012,14 +1012,17 @@ export const useAppStore = create<AppState>()(
           return { comments: [...s.comments, comment], isDirty: true };
         }),
       replyToComment: (commentId, reply) =>
-        set((s) => ({
-          comments: s.comments.map((c) => {
+        set((s) => {
+          let appended = false;
+          const nextComments = s.comments.map((c) => {
             if (c.id !== commentId) return c;
             if (c.replies.some((r) => r.id === reply.id)) return c;
+            appended = true;
             return { ...c, replies: [...c.replies, reply] };
-          }),
-          isDirty: true,
-        })),
+          });
+          if (!appended) return s;
+          return { comments: nextComments, isDirty: true };
+        }),
       toggleResolveComment: (commentId, resolved) =>
         set((s) => ({
           comments: s.comments.map((c) =>

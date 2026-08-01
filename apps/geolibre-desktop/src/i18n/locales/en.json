@@ -4932,5 +4932,14 @@
     "distributionAria": "Distribution of {{field}}: {{total}} values from {{min}} to {{max}}",
     "noPopulated": "No populated values.",
     "moreValues": "+{{total}} more values"
+  },
+  "comments": {
+    "addDialogTitle": "Add Review Comment",
+    "addDialogDescription": "Post an anchored note on this project for team review or offline reference.",
+    "authorNameLabel": "Your Name (Asked once, saved automatically)",
+    "authorNamePlaceholder": "e.g. Alex or Sarah",
+    "commentLabel": "Comment / Feedback",
+    "commentPlaceholder": "Type your review note or feedback here...",
+    "confirmDelete": "Are you sure you want to delete this comment thread?"
   }
 }

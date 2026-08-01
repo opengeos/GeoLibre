@@ -302,12 +302,13 @@ export function useCollaboration(
         onOpen: () => attach(displayName, color, hostToken),
         onMessage: handleMessage,
         onClose: (reconnecting) => {
+          if (connRef.current && connRef.current !== conn) return;
           teardownRef.current?.();
           teardownRef.current = null;
           if (reconnecting && pendingConnectRef.current) {
             const p = pendingConnectRef.current;
             pendingConnectRef.current = null;
-            connRef.current?.close();
+            conn.close();
             useAppStore
               .getState()
               .setCollaboration({ connecting: false, error: "Could not connect to the session." });
