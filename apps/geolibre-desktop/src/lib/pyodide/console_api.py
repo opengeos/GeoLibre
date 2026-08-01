@@ -187,13 +187,15 @@ class _GeoLibre:
                 return layer
         raise ValueError(f"No layer with id {layer_id!r}")
 
-    def add_geojson(self, data, name="GeoJSON"):
+    def add_geojson(self, data, name="GeoJSON", **style):
         """Add a GeoJSON layer from a dict / geometry / ``__geo_interface__``.
 
+        Style overrides (e.g. ``fillColor="#facc15"``) are applied to the new
+        layer in the same call, matching the notebook client's ``add_geojson``.
         Returns the new layer id. For a remote URL use :meth:`load_geojson`.
         """
         fc = _coerce_featurecollection(data)
-        return _js.addGeoJsonLayer(_to_js({"name": name, "geojson": fc}))
+        return _js.addGeoJsonLayer(_to_js({"name": name, "geojson": fc, "style": style}))
 
     async def load_geojson(self, url, name="GeoJSON"):
         """Fetch a GeoJSON URL and add it as a layer (async). Returns the id."""
