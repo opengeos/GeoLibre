@@ -2131,6 +2131,10 @@ export const useAppStore = create<AppState>()(
           const before = useAppStore.temporal.getState().pastStates;
           debounced(...args);
           if (useAppStore.temporal.getState().pastStates !== before) {
+            if (!applyingProjectRestoreHistory && projectRestoreRedo) {
+              projectRestoreRedo = null;
+              notifyProjectRestoreHistory();
+            }
             pruneHistoryBySize();
           }
         };
@@ -2207,19 +2211,21 @@ export function undo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.pastStates.length === 0 && projectRestoreUndo) {
     const entry = projectRestoreUndo;
-    projectRestoreUndo = null;
     applyingProjectRestoreHistory = true;
     try {
       useAppStore.getState().loadProject(entry.before, entry.beforePath, {
         rememberRecent: false,
         presenting: false,
       });
+      projectRestoreUndo = null;
+      useAppStore.setState({ isDirty: true });
+      projectRestoreRedo = entry;
+      notifyProjectRestoreHistory();
+    } catch (error) {
+      console.error("Could not undo the project snapshot restore.", error);
     } finally {
       applyingProjectRestoreHistory = false;
     }
-    useAppStore.setState({ isDirty: true });
-    projectRestoreRedo = entry;
-    notifyProjectRestoreHistory();
     return;
   }
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
@@ -2234,19 +2240,21 @@ export function redo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.futureStates.length === 0 && projectRestoreRedo) {
     const entry = projectRestoreRedo;
-    projectRestoreRedo = null;
     applyingProjectRestoreHistory = true;
     try {
       useAppStore.getState().loadProject(entry.after, null, {
         rememberRecent: false,
         presenting: false,
       });
+      projectRestoreRedo = null;
+      useAppStore.setState({ isDirty: true });
+      projectRestoreUndo = entry;
+      notifyProjectRestoreHistory();
+    } catch (error) {
+      console.error("Could not redo the project snapshot restore.", error);
     } finally {
       applyingProjectRestoreHistory = false;
     }
-    useAppStore.setState({ isDirty: true });
-    projectRestoreUndo = entry;
-    notifyProjectRestoreHistory();
     return;
   }
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean

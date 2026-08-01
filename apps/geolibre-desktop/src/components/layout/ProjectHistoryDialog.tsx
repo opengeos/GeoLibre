@@ -13,13 +13,15 @@ interface ProjectHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   snapshots: ProjectHistorySnapshot[];
-  onRestore: (snapshot: ProjectHistorySnapshot) => void;
+  restoreError: string | null;
+  onRestore: (snapshot: ProjectHistorySnapshot) => boolean;
 }
 
 export function ProjectHistoryDialog({
   open,
   onOpenChange,
   snapshots,
+  restoreError,
   onRestore,
 }: ProjectHistoryDialogProps) {
   const { t, i18n } = useTranslation();
@@ -31,6 +33,14 @@ export function ProjectHistoryDialog({
           <DialogDescription>{t("projectHistory.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
+          {restoreError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/50 p-3 text-sm text-destructive"
+            >
+              {restoreError}
+            </p>
+          ) : null}
           {snapshots.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {t("projectHistory.empty")}
@@ -62,8 +72,7 @@ export function ProjectHistoryDialog({
                 <Button
                   size="sm"
                   onClick={() => {
-                    onRestore(snapshot);
-                    onOpenChange(false);
+                    if (onRestore(snapshot)) onOpenChange(false);
                   }}
                 >
                   {t("projectHistory.restore")}

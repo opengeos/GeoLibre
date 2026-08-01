@@ -186,6 +186,20 @@ describe("project restore history", () => {
     assert.equal(useAppStore.getState().projectPath, null);
     assert.equal(useAppStore.getState().isDirty, true);
   });
+
+  it("invalidates restore redo when a normal edit follows undo", () => {
+    const before = createEmptyProject("Before restore");
+    const after = createEmptyProject("Restored snapshot");
+    useAppStore.getState().loadProject(after, null, { rememberRecent: false, presenting: false });
+    registerProjectRestoreHistory(before, null, after);
+
+    undo();
+    useAppStore.getState().setBasemapOpacity(0.5);
+    redo();
+
+    assert.equal(useAppStore.getState().projectName, "Before restore");
+    assert.equal(useAppStore.getState().basemapOpacity, 0.5);
+  });
 });
 
 describe("history size budget (issue #341)", () => {

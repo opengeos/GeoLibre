@@ -26,6 +26,7 @@ const AUTOSAVE_DELAY_MS = 3_000;
 export function useProjectHistory(mapControllerRef: RefObject<MapController | null>) {
   const [snapshots, setSnapshots] = useState<ProjectHistorySnapshot[]>([]);
   const [recoverySnapshot, setRecoverySnapshot] = useState<ProjectHistorySnapshot | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const refresh = useCallback(async () => {
     try {
@@ -85,6 +86,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
 
   const restore = useCallback(
     (snapshot: ProjectHistorySnapshot) => {
+      setRestoreError(null);
       try {
         const before = buildProjectSnapshot(mapControllerRef);
         const beforePath = useAppStore.getState().projectPath;
@@ -96,8 +98,13 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
         registerProjectRestoreHistory(before, beforePath, restored);
         useAppStore.setState({ isDirty: true });
         setRecoverySnapshot(null);
+        return true;
       } catch (error) {
         console.error("Could not restore the project snapshot.", error);
+        setRestoreError(
+          error instanceof Error ? error.message : "Could not restore the project snapshot.",
+        );
+        return false;
       }
     },
     [mapControllerRef],
@@ -114,5 +121,13 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
 
   const dismissRecovery = useCallback(() => setRecoverySnapshot(null), []);
 
-  return { snapshots, recoverySnapshot, refresh, restore, discardRecovery, dismissRecovery };
+  return {
+    snapshots,
+    recoverySnapshot,
+    restoreError,
+    refresh,
+    restore,
+    discardRecovery,
+    dismissRecovery,
+  };
 }

@@ -2343,10 +2343,12 @@ export function DesktopShell({
         open={projectHistoryOpen}
         onOpenChange={setProjectHistoryOpen}
         snapshots={projectHistory.snapshots}
+        restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}
       />
       <ProjectRecoveryDialog
         snapshot={projectHistory.recoverySnapshot}
+        restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}
         onDiscard={projectHistory.discardRecovery}
         onDismiss={projectHistory.dismissRecovery}
