@@ -61,8 +61,17 @@ function openDatabase(): Promise<IDBDatabase> {
         }
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error ?? new Error("Could not open project history."));
+    request.onblocked = () =>
+      reject(
+        new Error(
+          "Project history is blocked by another GeoLibre tab. Close or reload other tabs and try again.",
+        ),
+      );
   });
 }
 

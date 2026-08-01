@@ -7,6 +7,8 @@ import {
 import type { MapController } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
+import { isEmbedded } from "./embedHost";
+import { isTauri } from "../lib/is-tauri";
 import { projectChanged } from "../lib/project-broadcast-changed";
 import {
   addProjectSnapshot,
@@ -34,25 +36,28 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
   }, []);
 
   useEffect(() => {
+    const crashRecoveryEnabled = !isTauri() && !isEmbedded();
     void (async () => {
       try {
         const entries = await listProjectSnapshots();
         setSnapshots(entries);
-        const previousSession = readProjectSessionState();
-        const lastSave = readLastExplicitProjectSave();
-        const latest = entries[0];
-        if (previousSession === "open" && latest && (!lastSave || latest.createdAt > lastSave)) {
-          setRecoverySnapshot(latest);
+        if (crashRecoveryEnabled) {
+          const previousSession = readProjectSessionState();
+          const lastSave = readLastExplicitProjectSave();
+          const latest = entries[0];
+          if (previousSession === "open" && latest && (!lastSave || latest.createdAt > lastSave)) {
+            setRecoverySnapshot(latest);
+          }
         }
       } catch (error) {
         console.error("Could not initialize project recovery.", error);
       } finally {
-        markProjectSession("open");
+        if (crashRecoveryEnabled) markProjectSession("open");
       }
     })();
 
     const markClean = () => markProjectSession("closed");
-    window.addEventListener("pagehide", markClean);
+    if (crashRecoveryEnabled) window.addEventListener("pagehide", markClean);
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       if (
         !state.isDirty ||
@@ -73,7 +78,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
     });
     return () => {
       unsubscribe();
-      window.removeEventListener("pagehide", markClean);
+      if (crashRecoveryEnabled) window.removeEventListener("pagehide", markClean);
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
   }, [mapControllerRef, refresh]);
