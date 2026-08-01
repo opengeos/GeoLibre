@@ -14,9 +14,61 @@ export const ARCGIS_HUB_PLUGIN_ID = "maplibre-gl-arcgis-hub";
 const PANEL_ID = ARCGIS_HUB_PLUGIN_ID;
 const PAGE_SIZE = 20;
 
+export interface ArcGisHubLabels {
+  hint: string;
+  searchPlaceholder: string;
+  search: string;
+  searchCurrentView: string;
+  enterKeyword: string;
+  loadMore: string;
+  searching: string;
+  loadingMore: string;
+  noResults: string;
+  searchError: string;
+  showing: (shown: number, total: number) => string;
+  noDescription: string;
+  add: string;
+  adding: (title: string) => string;
+  added: (title: string) => string;
+  addError: string;
+  zoom: string;
+  download: string;
+  preparing: (title: string) => string;
+  downloadStarted: (title: string) => string;
+  downloadError: string;
+  details: string;
+}
+
+export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
+  hint: "Search public datasets from ArcGIS Hub. Add supported layers to the map or download data.",
+  searchPlaceholder: "Search ArcGIS Hub datasets",
+  search: "Search",
+  searchCurrentView: "Search the current map area",
+  enterKeyword: "Enter a keyword to begin.",
+  loadMore: "Load more",
+  searching: "Searching…",
+  loadingMore: "Loading more datasets…",
+  noResults: "No public datasets found.",
+  searchError: "Could not search ArcGIS Hub.",
+  showing: (shown, total) => `Showing ${shown} of ${total} datasets.`,
+  noDescription: "No description provided.",
+  add: "Add to map",
+  adding: (title) => `Adding ${title}…`,
+  added: (title) => `Added ${title}.`,
+  addError: "Could not add this dataset.",
+  zoom: "Zoom",
+  download: "Download",
+  preparing: (title) => `Preparing ${title}…`,
+  downloadStarted: (title) => `Download started for ${title}.`,
+  downloadError: "Could not download this dataset.",
+  details: "Details",
+};
+
 let appRef: GeoLibreAppAPI | null = null;
 let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
+let panelContainer: HTMLElement | null = null;
+let labels: ArcGisHubLabels = { ...DEFAULT_ARCGIS_HUB_LABELS };
 
 const styles = {
   panel:
@@ -74,7 +126,7 @@ function canVisualize(item: ArcGisHubItem): boolean {
 
 async function visualize(item: ArcGisHubItem): Promise<void> {
   if (!appRef) return;
-  if (item.type === "Feature Service" && item.url) {
+  if (item.type === "Feature Service") {
     await addArcGISLayer(appRef, {
       layerType: "feature",
       sourceType: "portal-item",
@@ -94,10 +146,10 @@ async function visualize(item: ArcGisHubItem): Promise<void> {
   }
 }
 
-async function download(item: ArcGisHubItem): Promise<void> {
+async function download(item: ArcGisHubItem, signal?: AbortSignal): Promise<void> {
   if (!appRef) return;
   if (item.type === "Feature Service" && item.url) {
-    const data = await fetchFeatureServiceGeoJson(item.url);
+    const data = await fetchFeatureServiceGeoJson(item.url, signal);
     appRef.exportTextFile?.(`${safeFilename(item.title)}.geojson`, JSON.stringify(data), {
       description: "GeoJSON",
       extensions: ["geojson", "json"],
@@ -113,19 +165,16 @@ function buildPanel(container: HTMLElement): () => void {
   container.replaceChildren();
   const panel = element("div");
   panel.style.cssText = styles.panel;
-  const hint = element(
-    "div",
-    "Search public datasets from ArcGIS Hub. Add supported layers to the map or download data.",
-  );
+  const hint = element("div", labels.hint);
   hint.style.cssText = styles.status;
   const form = element("form");
   form.style.cssText = styles.row;
   const input = element("input");
   input.type = "search";
-  input.placeholder = "Search ArcGIS Hub datasets";
-  input.ariaLabel = "Search ArcGIS Hub datasets";
+  input.placeholder = labels.searchPlaceholder;
+  input.ariaLabel = labels.searchPlaceholder;
   input.style.cssText = styles.input;
-  const submit = element("button", "Search");
+  const submit = element("button", labels.search);
   submit.type = "submit";
   submit.style.cssText = styles.primary;
   form.append(input, submit);
@@ -134,12 +183,12 @@ function buildPanel(container: HTMLElement): () => void {
   const viewOnly = element("input");
   viewOnly.type = "checkbox";
   viewOnly.checked = true;
-  viewRow.append(viewOnly, document.createTextNode(" Search the current map area"));
-  const status = element("div", "Enter a keyword to begin.");
+  viewRow.append(viewOnly, document.createTextNode(` ${labels.searchCurrentView}`));
+  const status = element("div", labels.enterKeyword);
   status.style.cssText = styles.status;
   const results = element("div");
   results.style.cssText = styles.results;
-  const more = element("button", "Load more");
+  const more = element("button", labels.loadMore);
   more.type = "button";
   more.style.cssText = styles.button;
   more.hidden = true;
@@ -150,7 +199,10 @@ function buildPanel(container: HTMLElement): () => void {
   let total = 0;
   let shown = 0;
   let controller: AbortController | null = null;
+  let generation = 0;
+  let activeQuery = "";
   let thumbnailPreview: HTMLImageElement | null = null;
+  const downloadControllers = new Set<AbortController>();
 
   const removeThumbnailPreview = () => {
     thumbnailPreview?.remove();
@@ -177,7 +229,7 @@ function buildPanel(container: HTMLElement): () => void {
   const setBusy = (busy: boolean) => {
     submit.disabled = busy;
     more.disabled = busy;
-    submit.textContent = busy ? "Searching…" : "Search";
+    submit.textContent = busy ? labels.searching : labels.search;
   };
 
   const renderItem = (item: ArcGisHubItem) => {
@@ -220,29 +272,30 @@ function buildPanel(container: HTMLElement): () => void {
     title.style.cssText = styles.title;
     const meta = element("div", `${item.type} · ${item.owner}`);
     meta.style.cssText = styles.meta;
-    const summary = element("div", item.snippet || "No description provided.");
+    const summary = element("div", item.snippet || labels.noDescription);
     summary.style.cssText = styles.status;
     const actions = element("div");
     actions.style.cssText = styles.actions;
     if (canVisualize(item)) {
-      const add = element("button", "Add to map");
+      const add = element("button", labels.add);
       add.type = "button";
       add.style.cssText = styles.button;
       add.addEventListener("click", async () => {
         add.disabled = true;
-        status.textContent = `Adding ${item.title}…`;
+        status.textContent = labels.adding(item.title);
         try {
           await visualize(item);
-          status.textContent = `Added ${item.title}.`;
+          status.textContent = labels.added(item.title);
         } catch (error) {
-          status.textContent = error instanceof Error ? error.message : "Could not add dataset.";
+          console.error("Could not add the ArcGIS Hub dataset.", error);
+          status.textContent = labels.addError;
         } finally {
           add.disabled = false;
         }
       });
       actions.append(add);
     }
-    const zoom = element("button", "Zoom");
+    const zoom = element("button", labels.zoom);
     zoom.type = "button";
     zoom.style.cssText = styles.button;
     const bounds = itemBounds(item);
@@ -250,22 +303,28 @@ function buildPanel(container: HTMLElement): () => void {
     zoom.addEventListener("click", () => {
       if (bounds) appRef?.fitBounds?.(bounds);
     });
-    const save = element("button", "Download");
+    const save = element("button", labels.download);
     save.type = "button";
     save.style.cssText = styles.button;
     save.addEventListener("click", async () => {
       save.disabled = true;
-      status.textContent = `Preparing ${item.title}…`;
+      status.textContent = labels.preparing(item.title);
+      const downloadController = new AbortController();
+      downloadControllers.add(downloadController);
       try {
-        await download(item);
-        status.textContent = `Download started for ${item.title}.`;
+        await download(item, downloadController.signal);
+        status.textContent = labels.downloadStarted(item.title);
       } catch (error) {
-        status.textContent = error instanceof Error ? error.message : "Could not download dataset.";
+        if ((error as Error).name !== "AbortError") {
+          console.error("Could not download the ArcGIS Hub dataset.", error);
+          status.textContent = labels.downloadError;
+        }
       } finally {
+        downloadControllers.delete(downloadController);
         save.disabled = false;
       }
     });
-    const details = element("button", "Details");
+    const details = element("button", labels.details);
     details.type = "button";
     details.style.cssText = styles.button;
     details.addEventListener("click", () => appRef?.openExternalUrl?.(arcGisHubItemPageUrl(item)));
@@ -276,20 +335,22 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const runSearch = async (append: boolean) => {
-    const query = input.value.trim();
+    const query = append ? activeQuery : input.value.trim();
     if (!query) {
-      status.textContent = "Enter a search term.";
+      status.textContent = labels.enterKeyword;
       return;
     }
     controller?.abort();
     controller = new AbortController();
+    const token = ++generation;
     if (!append) {
+      activeQuery = query;
       start = 1;
       shown = 0;
       results.replaceChildren();
     }
     setBusy(true);
-    status.textContent = append ? "Loading more datasets…" : "Searching ArcGIS Hub…";
+    status.textContent = append ? labels.loadingMore : labels.searching;
     try {
       const mapBounds = appRef?.getMap?.()?.getBounds();
       const bbox =
@@ -307,20 +368,20 @@ function buildPanel(container: HTMLElement): () => void {
         bbox,
         signal: controller.signal,
       });
+      if (token !== generation) return;
       page.results.forEach(renderItem);
       total = page.total;
       shown += page.results.length;
       start = page.nextStart;
-      status.textContent =
-        shown === 0 ? "No public datasets found." : `Showing ${shown} of ${total} datasets.`;
+      status.textContent = shown === 0 ? labels.noResults : labels.showing(shown, total);
       more.hidden = page.nextStart < 1 || shown >= total;
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
-        status.textContent =
-          error instanceof Error ? error.message : "Could not search ArcGIS Hub.";
+        console.error("Could not search ArcGIS Hub.", error);
+        status.textContent = labels.searchError;
       }
     } finally {
-      setBusy(false);
+      if (token === generation) setBusy(false);
     }
   };
 
@@ -334,10 +395,21 @@ function buildPanel(container: HTMLElement): () => void {
 
   return () => {
     controller?.abort();
+    generation += 1;
+    downloadControllers.forEach((downloadController) => downloadController.abort());
+    downloadControllers.clear();
     removeThumbnailPreview();
     form.removeEventListener("submit", onSubmit);
     container.replaceChildren();
   };
+}
+
+export function setArcGisHubLabels(next: Partial<ArcGisHubLabels>): void {
+  labels = { ...labels, ...next };
+  if (panelContainer) {
+    disposePanel?.();
+    disposePanel = buildPanel(panelContainer);
+  }
 }
 
 export const maplibreArcGisHubPlugin: GeoLibrePlugin = {
@@ -353,10 +425,12 @@ export const maplibreArcGisHubPlugin: GeoLibrePlugin = {
         dock: "right-of-style",
         defaultWidth: 360,
         render: (container) => {
+          panelContainer = container;
           disposePanel = buildPanel(container);
           return () => {
             disposePanel?.();
             disposePanel = null;
+            if (panelContainer === container) panelContainer = null;
           };
         },
       }) ?? null;

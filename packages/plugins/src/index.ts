@@ -395,7 +395,13 @@ export {
   setOpenAerialMapLabels,
   type OpenAerialMapLabels,
 } from "./plugins/maplibre-openaerialmap";
-export { ARCGIS_HUB_PLUGIN_ID, maplibreArcGisHubPlugin } from "./plugins/maplibre-arcgis-hub";
+export {
+  ARCGIS_HUB_PLUGIN_ID,
+  DEFAULT_ARCGIS_HUB_LABELS,
+  maplibreArcGisHubPlugin,
+  setArcGisHubLabels,
+  type ArcGisHubLabels,
+} from "./plugins/maplibre-arcgis-hub";
 export {
   ARCGIS_HUB_PAGE_URL,
   ARCGIS_HUB_PORTAL_URL,
@@ -405,6 +411,7 @@ export {
   buildArcGisHubSearchUrl,
   fetchFeatureServiceGeoJson,
   itemBounds as arcGisHubItemBounds,
+  sanitizeArcGisHubSearchText,
   searchArcGisHub,
   type ArcGisHubItem,
   type ArcGisHubSearchResult,

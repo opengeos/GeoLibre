@@ -29,6 +29,15 @@ interface ArcGisErrorEnvelope {
 }
 
 const SEARCH_TYPES = ["Feature Service", "GeoJson", "CSV", "Shapefile", "KML", "File Geodatabase"];
+const LUCENE_METACHARACTERS_RE = /["\\/(){}[\]^~:!?+]|&&|\|\|/g;
+
+export function sanitizeArcGisHubSearchText(value: string): string {
+  return value
+    .replace(LUCENE_METACHARACTERS_RE, " ")
+    .replace(/\b(?:AND|OR|NOT)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function buildArcGisHubSearchUrl(
   query: string,
@@ -41,7 +50,7 @@ export function buildArcGisHubSearchUrl(
 ): string {
   const portalUrl = options.portalUrl ?? ARCGIS_HUB_PORTAL_URL;
   const url = new URL("/sharing/rest/search", portalUrl);
-  const text = query.trim();
+  const text = sanitizeArcGisHubSearchText(query);
   const typeQuery = SEARCH_TYPES.map((type) => `type:"${type}"`).join(" OR ");
   url.searchParams.set("q", `${text ? `(${text}) AND ` : ""}(${typeQuery}) AND access:public`);
   url.searchParams.set("f", "json");
@@ -154,18 +163,24 @@ export async function fetchFeatureServiceGeoJson(
 }
 
 async function resolveFeatureLayerUrl(serviceUrl: string, signal?: AbortSignal): Promise<string> {
-  const trimmed = serviceUrl.replace(/\/+$/, "");
-  if (/\/FeatureServer\/\d+$/i.test(trimmed)) return trimmed;
-  const metadataUrl = new URL(trimmed);
+  const service = new URL(serviceUrl);
+  service.hash = "";
+  service.search = "";
+  service.pathname = service.pathname.replace(/\/+$/, "");
+  if (/\/FeatureServer\/\d+$/i.test(service.pathname)) return service.href;
+  const metadataUrl = new URL(service);
   metadataUrl.searchParams.set("f", "json");
   const response = await fetch(metadataUrl, { signal });
   if (!response.ok) throw new Error(`ArcGIS service metadata failed with ${response.status}.`);
   const metadata = (await response.json()) as {
-    layers?: Array<{ id?: number }>;
+    layers?: Array<{ id?: number; subLayerIds?: number[] }>;
     error?: { message?: string };
   };
   if (metadata.error) throw new Error(metadata.error.message || "ArcGIS service metadata failed.");
-  const layerId = metadata.layers?.find((layer) => Number.isInteger(layer.id))?.id;
+  const layerId = metadata.layers?.find(
+    (layer) => Number.isInteger(layer.id) && !layer.subLayerIds,
+  )?.id;
   if (layerId === undefined) throw new Error("This feature service has no feature layer.");
-  return `${trimmed}/${layerId}`;
+  service.pathname = `${service.pathname}/${layerId}`;
+  return service.href;
 }
