@@ -65,8 +65,8 @@ export function scrubLegendForRemovedLayers(
   // --- overrides ---
   const overrides: Record<string, (typeof legend.overrides)[string]> = {};
   for (const [key, value] of Object.entries(legend.overrides)) {
-    const isRemoved = removed.has(key) || [...removed].some((id) => key.startsWith(`${id}::`));
-    if (isRemoved) {
+    const base = key.includes("::") ? key.slice(0, key.indexOf("::")) : key;
+    if (removed.has(base)) {
       changed = true;
     } else {
       overrides[key] = value;
@@ -76,17 +76,18 @@ export function scrubLegendForRemovedLayers(
   // --- customEntries ---
   let customEntries = legend.customEntries;
   if (customEntries) {
+    let customEntriesChanged = false;
     const nextCustom: Record<string, (typeof customEntries)[string]> = {};
     for (const [key, value] of Object.entries(customEntries)) {
       if (key.startsWith("custom:")) {
         nextCustom[key] = value;
       } else if (removed.has(key)) {
-        changed = true;
+        customEntriesChanged = true;
       } else {
         nextCustom[key] = value;
       }
     }
-    if (changed || Object.keys(nextCustom).length !== Object.keys(customEntries).length) {
+    if (customEntriesChanged) {
       customEntries = Object.keys(nextCustom).length > 0 ? nextCustom : undefined;
       changed = true;
     }
