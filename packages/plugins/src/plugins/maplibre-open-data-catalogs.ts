@@ -273,6 +273,7 @@ function createCatalogPlugin(options: {
                 page = 0;
                 shown = 0;
                 results.replaceChildren();
+                more.hidden = true;
               }
               controller?.abort();
               controller = new AbortController();
