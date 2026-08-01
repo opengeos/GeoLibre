@@ -46,6 +46,7 @@ import {
   type KmlGroundOverlay,
   type KmlModel,
 } from "./kml";
+import { registerKmlSuperOverlay } from "./kml-super-overlay";
 import {
   findArchiveEntry,
   findArchiveEntryKey,
@@ -278,6 +279,17 @@ export interface LoadedImageOverlay {
   visible?: boolean;
 }
 
+/** A tiled KML Super-Overlay registered with GeoLibre's in-memory tile protocol. */
+export interface LoadedKmlSuperOverlay {
+  kind: "kml-super-overlay";
+  name: string;
+  path: string;
+  url: string;
+  bounds: [number, number, number, number];
+  minzoom: number;
+  maxzoom: number;
+}
+
 /**
  * A 3D model produced by a KML/KMZ `<Model>` (a COLLADA `.dae` converted to a
  * self-contained GLB). The caller turns it into a deck.gl scenegraph layer. The
@@ -314,11 +326,19 @@ export interface LoadedModel {
  * a 3D model. A KMZ/KML file can yield a mix (placemarks plus ground overlays
  * plus models), mirroring how a GPX file yields several vector layers.
  */
-export type LoadedLayer = LoadedVectorLayer | LoadedImageOverlay | LoadedModel;
+export type LoadedLayer =
+  | LoadedVectorLayer
+  | LoadedImageOverlay
+  | LoadedKmlSuperOverlay
+  | LoadedModel;
 
 /** Narrow a {@link LoadedLayer} to its image-overlay variant. */
 export function isLoadedImageOverlay(layer: LoadedLayer): layer is LoadedImageOverlay {
   return "kind" in layer && layer.kind === "image-overlay";
+}
+
+export function isLoadedKmlSuperOverlay(layer: LoadedLayer): layer is LoadedKmlSuperOverlay {
+  return "kind" in layer && layer.kind === "kml-super-overlay";
 }
 
 /** Narrow a {@link LoadedLayer} to its 3D-model variant. */
@@ -1316,6 +1336,37 @@ async function loadKmzLayers(
       name,
       text: new TextDecoder("utf-8").decode(bytes),
     }));
+
+  // A Super-Overlay is a linked raster pyramid, not thousands of independent
+  // persistent image layers. Register one lazy tile source and skip vector
+  // parsing of its NetworkLink-only KML nodes.
+  const isSuperOverlay =
+    kmlDocs.length > 1 &&
+    kmlDocs.some(
+      (doc) =>
+        /<(?:\w+:)?Region(?:\s|>)/i.test(doc.text) &&
+        /<(?:\w+:)?NetworkLink(?:\s|>)/i.test(doc.text),
+    );
+  if (isSuperOverlay) {
+    const tiles = kmlDocs.flatMap((doc) =>
+      parseKmlGroundOverlays(doc.text).flatMap((overlay) => {
+        if (isHttpUrl(overlay.href) || isUnrenderableOverlayImage(overlay.href)) return [];
+        const data =
+          findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ??
+          findArchiveEntry(entries, overlay.href);
+        return data ? [{ overlay, bytes: data }] : [];
+      }),
+    );
+    const source = await registerKmlSuperOverlay(tiles);
+    return [
+      {
+        kind: "kml-super-overlay",
+        name: `${pathWithoutExtension(fileBaseName(path))} Super-Overlay`,
+        path,
+        ...source,
+      },
+    ];
+  }
 
   // Ground overlays are drawn under vector placemarks (as in Google Earth), so
   // they are added first: a later store index renders on top. 3D models render

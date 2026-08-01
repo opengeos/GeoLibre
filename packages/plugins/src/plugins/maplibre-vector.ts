@@ -92,6 +92,18 @@ let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
 let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
+let kmlFileImportHandler: ((files: File[]) => void | Promise<void>) | null = null;
+
+/**
+ * Let the host app handle KML/KMZ constructs that are not vector datasets
+ * (GroundOverlay, Model, and Super-Overlay) before the vector control sends
+ * them to DuckDB/GDAL.
+ */
+export function setKmlFileImportHandler(
+  handler: ((files: File[]) => void | Promise<void>) | null,
+): void {
+  kmlFileImportHandler = handler;
+}
 
 /**
  * Opens the maplibre-gl-vector panel, mounting the control on first use.
@@ -126,6 +138,7 @@ export function openVectorLayerPanel(app: GeoLibreAppAPI): void {
         wireVectorCloseButton(control);
         applyVectorPanelClass(control);
         wireDesktopFilePicker(control, app);
+        wireKmlFileImporter(control);
       } catch (error) {
         console.error("[GeoLibre] Failed to open the vector layer panel", error);
       }
@@ -726,6 +739,32 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
       }
     })();
   });
+}
+
+function wireKmlFileImporter(control: VectorControl): void {
+  const panel = (control as unknown as VectorControlInternals)._panel;
+  const fileInput = panel?.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!fileInput || fileInput.dataset.geolibreKmlImporterWired === "true") return;
+  fileInput.dataset.geolibreKmlImporterWired = "true";
+  fileInput.addEventListener(
+    "change",
+    (event) => {
+      const files = Array.from(fileInput.files ?? []);
+      if (
+        !kmlFileImportHandler ||
+        files.length === 0 ||
+        !files.every((file) => /\.(?:kml|kmz)$/i.test(file.name))
+      ) {
+        return;
+      }
+      // Capture-phase interception keeps the vector control from reporting
+      // "Dataset does not contain any layers" for overlay-only documents.
+      event.stopImmediatePropagation();
+      fileInput.value = "";
+      void kmlFileImportHandler(files);
+    },
+    true,
+  );
 }
 
 /** The subset of VectorControl used to load picked files (eases testing). */

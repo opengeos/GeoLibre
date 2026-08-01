@@ -31,6 +31,7 @@ import {
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,
+  setKmlFileImportHandler,
   setTerrainMeasureLabels,
   setViewStateLabels,
   startLayerGeometryEdit,
@@ -64,6 +65,7 @@ import {
   pickLocalRasterFiles,
   readRasterFileAtPath,
   isLoadedImageOverlay,
+  isLoadedKmlSuperOverlay,
   isLoadedModel,
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
@@ -631,6 +633,7 @@ export function DesktopShell({
   const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
+  const addTileLayer = useAppStore((s) => s.addTileLayer);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const addLayer = useAppStore((s) => s.addLayer);
@@ -1159,6 +1162,21 @@ export function DesktopShell({
       // group marker), so they can be gathered into one layer group afterward.
       const frameGroups = new Map<string, string[]>();
       for (const layer of importedLayers) {
+        if (isLoadedKmlSuperOverlay(layer)) {
+          lastLayerId = addTileLayer(layer.name || layerNameFromPath(layer.path), {
+            tiles: [layer.url],
+            type: "xyz",
+            tileSize: 256,
+            bounds: layer.bounds,
+            minzoom: layer.minzoom,
+            maxzoom: layer.maxzoom,
+            metadata: {
+              sourceKind: "kml-super-overlay",
+              bounds: layer.bounds,
+            },
+          });
+          continue;
+        }
         // A KML/KMZ ground overlay becomes an image layer, not a vector one.
         if (isLoadedImageOverlay(layer)) {
           lastLayerId = addImageOverlayLayer(
@@ -1240,6 +1258,7 @@ export function DesktopShell({
     [
       addGeoJsonLayer,
       addImageOverlayLayer,
+      addTileLayer,
       addLayer,
       addLayerGroup,
       isPluginActive,
@@ -1247,6 +1266,21 @@ export function DesktopShell({
       t,
     ],
   );
+
+  useEffect(() => {
+    setKmlFileImportHandler(async (files) => {
+      setDropError(null);
+      try {
+        const layers = await loadDroppedVectorFiles(files, {
+          onLargeDataset: confirmLargeVectorDataset,
+        });
+        addImportedVectorLayers(layers);
+      } catch (error) {
+        setDropError(error instanceof Error ? error.message : "Could not import KML/KMZ.");
+      }
+    });
+    return () => setKmlFileImportHandler(null);
+  }, [addImportedVectorLayers, confirmLargeVectorDataset]);
 
   const addDroppedPhotos = useCallback(
     (result: GeotaggedPhotoResult | null): number => {

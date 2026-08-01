@@ -233,6 +233,7 @@ export {
   openVectorLayerPanel,
   reloadVectorControlLayer,
   restoreVectorLayers,
+  setKmlFileImportHandler,
 } from "./plugins/maplibre-vector";
 // The rest of the raster-layer-sync / vector-layer-sync internals stay
 // unexported: the app drives the panels through the functions above, and the
