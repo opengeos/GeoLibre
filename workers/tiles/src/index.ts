@@ -659,7 +659,7 @@ export default {
         const rawUrl = new URL(
           `https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/${parts.slice(3).join("/")}`,
         );
-        originResponse = await fetch(rawUrl.toString(), {
+        originResponse = await fetchAllowlistedUpstream(rawUrl.toString(), {
           headers: { accept: "application/octet-stream" },
         });
       } catch {

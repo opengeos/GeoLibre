@@ -11,6 +11,7 @@ import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
+import { proxyBinaryRequestGuarded } from "./vite-proxy-guard";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const EARTH_ENGINE_CONTROL_BUNDLE = "maplibre-gl-earth-engine/dist/";
@@ -376,7 +377,7 @@ function wmsProxyPlugin(): Plugin {
       });
       server.middlewares.use(WFS_PROXY_PATH, async (req, res) => {
         try {
-          await proxyBinaryRequest(req, res, WFS_PROXY_PATH);
+          await proxyBinaryRequestGuarded(req, res, WFS_PROXY_PATH);
         } catch (error) {
           const message = error instanceof Error ? error.message : "WFS proxy request failed";
           res.statusCode = 502;
@@ -386,7 +387,7 @@ function wmsProxyPlugin(): Plugin {
       });
       server.middlewares.use(GPX_PROXY_PATH, async (req, res) => {
         try {
-          await proxyBinaryRequest(req, res, GPX_PROXY_PATH);
+          await proxyBinaryRequestGuarded(req, res, GPX_PROXY_PATH);
         } catch (error) {
           const message = error instanceof Error ? error.message : "GPX proxy request failed";
           res.statusCode = 502;
@@ -396,7 +397,7 @@ function wmsProxyPlugin(): Plugin {
       });
       server.middlewares.use(RASTER_PROXY_PATH, async (req, res) => {
         try {
-          await proxyBinaryRequest(req, res, RASTER_PROXY_PATH);
+          await proxyBinaryRequestGuarded(req, res, RASTER_PROXY_PATH);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Raster proxy request failed";
           res.statusCode = 502;
@@ -637,46 +638,7 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 async function proxyWmsRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  await proxyBinaryRequest(req, res, WMS_PROXY_PATH);
-}
-
-async function proxyBinaryRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  proxyPath: string,
-): Promise<void> {
-  const requestUrl = new URL(req.url ?? "", `http://localhost${proxyPath}`);
-  const target = requestUrl.searchParams.get("url");
-  if (!target || !/^https?:\/\//i.test(target)) {
-    res.statusCode = 400;
-    res.setHeader("content-type", "text/plain");
-    res.end("Missing or invalid target URL");
-    return;
-  }
-
-  const headers = new Headers();
-  const range = req.headers.range;
-  if (range) headers.set("range", range);
-
-  const response = await fetch(target, { headers });
-  const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-  const body = Buffer.from(await response.arrayBuffer());
-
-  res.statusCode = response.status;
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("cache-control", "public, max-age=3600");
-  res.setHeader("content-type", contentType);
-  for (const header of ["accept-ranges", "content-range"]) {
-    const value = response.headers.get(header);
-    if (value) res.setHeader(header, value);
-  }
-  // Derive content-length from the buffered body, never the upstream header:
-  // fetch() transparently decompresses gzip/br responses, so the upstream
-  // content-length (the compressed size) would be smaller than the body we
-  // send and truncate it in the browser. The buffer length is correct for both
-  // full (200) and partial (206 + content-range) responses.
-  res.setHeader("content-length", String(body.byteLength));
-  res.end(body);
+  await proxyBinaryRequestGuarded(req, res, WMS_PROXY_PATH);
 }
 
 // Installable, offline-capable web build. See docs/architecture.md (Offline /

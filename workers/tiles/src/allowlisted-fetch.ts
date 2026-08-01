@@ -18,6 +18,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",
+  "https://raw.githubusercontent.com/",
 ] as const;
 
 /** @deprecated Prefer {@link TILES_ALLOWED_URL_PREFIXES}; kept for tests/docs. */

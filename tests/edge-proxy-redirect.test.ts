@@ -11,6 +11,11 @@ import {
   fetchAllowlistedUpstream,
   isAllowedTilesUpstreamUrl,
 } from "../workers/tiles/src/allowlisted-fetch";
+import {
+  assertPublicHttpUrl,
+  validatePublicUrl,
+  fetchWithGuard,
+} from "../apps/geolibre-desktop/vite-proxy-guard";
 
 describe("viewer proxy path sanitization", () => {
   it("accepts normal asset paths and rejects traversal", () => {
@@ -200,5 +205,177 @@ describe("tiles allowlisted fetch", () => {
     );
     assert.equal(response.status, 304);
     assert.equal(response.headers.get("etag"), '"tile-abc"');
+  });
+
+  it("accepts raw.githubusercontent.com and rejects evil redirect from it", async () => {
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://raw.githubusercontent.com/owner/repo/main/file.geojson"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://raw.githubusercontent.com/"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://evil.githubusercontent.com/x"), false);
+
+    const fetchImpl: typeof fetch = async () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://evil.example/steal" },
+      });
+    await assert.rejects(
+      () =>
+        fetchAllowlistedUpstream(
+          "https://raw.githubusercontent.com/owner/repo/main/data.geojson",
+          {},
+          fetchImpl,
+        ),
+      /non-allowlisted/,
+    );
+  });
+});
+
+describe("Vite proxy guard — validatePublicUrl", () => {
+  it("accepts public HTTP(S) URLs", () => {
+    assert.equal(validatePublicUrl("https://example.com/tiles"), null);
+    assert.equal(validatePublicUrl("http://example.com/data"), null);
+    assert.equal(validatePublicUrl("https://8.8.8.8/dns"), null);
+  });
+
+  it("rejects non-HTTP protocols", () => {
+    assert.notEqual(validatePublicUrl("ftp://example.com"), null);
+    assert.notEqual(validatePublicUrl("file:///etc/passwd"), null);
+    assert.notEqual(validatePublicUrl("data:text/html,<h1>hi</h1>"), null);
+  });
+
+  it("rejects URLs with credentials", () => {
+    assert.notEqual(validatePublicUrl("https://user:pass@example.com"), null);
+    assert.notEqual(validatePublicUrl("https://user@example.com"), null);
+  });
+
+  it("rejects localhost and .localhost", () => {
+    assert.notEqual(validatePublicUrl("http://localhost/secret"), null);
+    assert.notEqual(validatePublicUrl("http://foo.localhost/bar"), null);
+  });
+
+  it("rejects loopback IPv4 (127.0.0.0/8)", () => {
+    assert.notEqual(validatePublicUrl("http://127.0.0.1/admin"), null);
+    assert.notEqual(validatePublicUrl("http://127.0.0.2/x"), null);
+    assert.notEqual(validatePublicUrl("http://127.255.255.255"), null);
+  });
+
+  it("rejects private RFC-1918 ranges", () => {
+    assert.notEqual(validatePublicUrl("http://10.0.0.1"), null);
+    assert.notEqual(validatePublicUrl("http://172.16.0.1"), null);
+    assert.notEqual(validatePublicUrl("http://172.31.255.255"), null);
+    assert.notEqual(validatePublicUrl("http://192.168.1.1"), null);
+  });
+
+  it("rejects link-local / cloud metadata 169.254.x.x", () => {
+    assert.notEqual(validatePublicUrl("http://169.254.169.254/latest/meta-data/"), null);
+    assert.notEqual(validatePublicUrl("http://169.254.0.1"), null);
+  });
+
+  it("rejects 0.0.0.0/8 and multicast/reserved (224+)", () => {
+    assert.notEqual(validatePublicUrl("http://0.0.0.0"), null);
+    assert.notEqual(validatePublicUrl("http://224.0.0.1"), null);
+    assert.notEqual(validatePublicUrl("http://255.255.255.255"), null);
+  });
+
+  it("rejects CGNAT (100.64.0.0/10) and benchmarking (198.18.0.0/15)", () => {
+    assert.notEqual(validatePublicUrl("http://100.64.0.1"), null);
+    assert.notEqual(validatePublicUrl("http://100.127.255.254"), null);
+    assert.notEqual(validatePublicUrl("http://198.18.0.1"), null);
+    assert.notEqual(validatePublicUrl("http://198.19.255.254"), null);
+  });
+
+  it("rejects IPv6 loopback, link-local, and ULA", () => {
+    assert.notEqual(validatePublicUrl("http://[::1]"), null);
+    assert.notEqual(validatePublicUrl("http://[::]"), null);
+    assert.notEqual(validatePublicUrl("http://[fe80::1]"), null);
+    assert.notEqual(validatePublicUrl("http://[fd00::1]"), null);
+    assert.notEqual(validatePublicUrl("http://[fc00::1]"), null);
+  });
+
+  it("rejects IPv4-mapped IPv6 private addresses", () => {
+    assert.notEqual(validatePublicUrl("http://[::ffff:127.0.0.1]"), null);
+    assert.notEqual(validatePublicUrl("http://[::ffff:169.254.169.254]"), null);
+    assert.notEqual(validatePublicUrl("http://[::ffff:10.0.0.1]"), null);
+  });
+
+  it("rejects metadata.google.internal", () => {
+    assert.notEqual(validatePublicUrl("http://metadata.google.internal/v1/"), null);
+  });
+
+  it("allows non-private 172.x addresses outside 172.16-31", () => {
+    assert.equal(validatePublicUrl("http://172.15.0.1"), null);
+    assert.equal(validatePublicUrl("http://172.32.0.1"), null);
+  });
+});
+
+describe("Vite proxy guard — assertPublicHttpUrl", () => {
+  it("throws on private URLs", () => {
+    assert.throws(() => assertPublicHttpUrl("http://127.0.0.1"), /private|reserved|Blocked/i);
+    assert.throws(
+      () => assertPublicHttpUrl("http://169.254.169.254/latest/meta-data/"),
+      /private|reserved|Blocked/i,
+    );
+  });
+
+  it("does not throw on public URLs", () => {
+    assert.doesNotThrow(() => assertPublicHttpUrl("https://example.com/tiles"));
+    assert.doesNotThrow(() => assertPublicHttpUrl("https://8.8.8.8/dns"));
+  });
+});
+
+describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
+  it("follows a public redirect and refuses a private-address redirect", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        assert.equal((init as Record<string, string> | undefined)?.redirect, "manual");
+        if (url === "https://example.com/a") {
+          return new Response(null, {
+            status: 302,
+            headers: { location: "https://example.com/b" },
+          });
+        }
+        if (url === "https://example.com/b") {
+          return new Response("ok", { status: 200 });
+        }
+        return new Response("unexpected", { status: 500 });
+      }) as typeof fetch;
+
+      const resp = await fetchWithGuard("https://example.com/a");
+      assert.equal(resp.status, 200);
+      assert.equal(await resp.text(), "ok");
+
+      globalThis.fetch = (async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://169.254.169.254/latest/meta-data/" },
+        })) as typeof fetch;
+
+      await assert.rejects(() => fetchWithGuard("https://example.com/evil"), /Blocked/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("caps redirect hops", async () => {
+    const originalFetch = globalThis.fetch;
+    let hops = 0;
+    try {
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        hops++;
+        return new Response(null, {
+          status: 302,
+          headers: { location: `${String(input)}?n=${hops}` },
+        });
+      }) as typeof fetch;
+
+      await assert.rejects(() => fetchWithGuard("https://example.com/loop"), /Too many/);
+      assert.equal(hops, 6); // 0..5 inclusive = 6 fetches
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
