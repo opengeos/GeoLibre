@@ -283,7 +283,7 @@
       },
       "delimitedText": {
         "label": "Add Delimited Text Layer",
-        "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields, or as a non-spatial attribute table when no coordinates are available."
+        "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields, by geocoding an address column, or as a non-spatial attribute table when no coordinates are available."
       },
       "cad": {
         "label": "Add CAD (DXF/DWG) Layer",
@@ -579,7 +579,14 @@
       "crs": "Coordinate system",
       "crsPlaceholder": "e.g. EPSG:32643",
       "crsPresetLabel": "Common coordinate systems...",
-      "crsHelp": "Leave blank if the coordinates are already longitude/latitude (WGS84). Otherwise enter the EPSG code of the coordinate columns and the points will be reprojected to WGS84. For a projected CRS, the longitude and latitude fields select the X (easting) and Y (northing) columns."
+      "crsHelp": "Leave blank if the coordinates are already longitude/latitude (WGS84). Otherwise enter the EPSG code of the coordinate columns and the points will be reprojected to WGS84. For a projected CRS, the longitude and latitude fields select the X (easting) and Y (northing) columns.",
+      "importMode": "Import as",
+      "modeCoordinates": "Coordinates",
+      "modeAddresses": "Addresses (geocode)",
+      "addressColumns": "Address columns",
+      "addressColumnsHint": "Select one or more columns to concatenate into the address sent to the geocoder (e.g. street, city, state).",
+      "errorNoAddressColumns": "Select at least one address column.",
+      "errorNoAddressesFound": "No rows had a value in the selected address column(s)."
     },
     "photos": {
       "defaultName": "Photos",

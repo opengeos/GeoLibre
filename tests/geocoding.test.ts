@@ -21,6 +21,7 @@ import {
   resolveGeocoderConfig,
   rowCap,
   shouldThrottle,
+  unmatchedGeocodeFeature,
   type GeocoderConfig,
   type NominatimForwardResult,
 } from "@geolibre/core";
@@ -472,6 +473,42 @@ describe("geocodeMatchToFeature", () => {
 
   it("returns null for non-finite coordinates", () => {
     assert.equal(geocodeMatchToFeature({ lat: NaN, lon: 0, displayName: "", score: null }), null);
+  });
+
+  it("stamps provider and matched status only when extra.providerId is passed", () => {
+    const withoutExtra = geocodeMatchToFeature(
+      { lat: 48.85, lon: 2.35, displayName: "Paris", score: 0.9 },
+      { id: "1" },
+    );
+    assert.ok(withoutExtra);
+    assert.equal(withoutExtra.properties?.geocode_provider, undefined);
+    assert.equal(withoutExtra.properties?.geocode_status, undefined);
+
+    const withExtra = geocodeMatchToFeature(
+      { lat: 48.85, lon: 2.35, displayName: "Paris", score: 0.9 },
+      { id: "1" },
+      { providerId: "nominatim" },
+    );
+    assert.ok(withExtra);
+    assert.equal(withExtra.properties?.geocode_provider, "nominatim");
+    assert.equal(withExtra.properties?.geocode_status, "matched");
+  });
+});
+
+describe("unmatchedGeocodeFeature", () => {
+  it("builds a null-geometry feature flagged unmatched, keeping the original row", () => {
+    const feature = unmatchedGeocodeFeature({ id: "2", address: "nowhere" }, "nominatim");
+    assert.equal(feature.geometry, null);
+    assert.equal(feature.properties?.id, "2");
+    assert.equal(feature.properties?.address, "nowhere");
+    assert.equal(feature.properties?.geocode_status, "unmatched");
+    assert.equal(feature.properties?.geocode_provider, "nominatim");
+  });
+
+  it("de-duplicates against an existing geocode_status column instead of clobbering it", () => {
+    const feature = unmatchedGeocodeFeature({ geocode_status: "original value" }, "mapbox");
+    assert.equal(feature.properties?.geocode_status, "original value");
+    assert.equal(feature.properties?.geocode_status_2, "unmatched");
   });
 });
 

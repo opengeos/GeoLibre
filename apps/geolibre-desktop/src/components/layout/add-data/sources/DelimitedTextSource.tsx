@@ -1,12 +1,26 @@
-import { Button, Input, Label, Select } from "@geolibre/ui";
-import { Columns3, FileUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  csvRowsToGeocodeRequests,
+  geocodeForward,
+  geocodeMatchToFeature,
+  geocoderMinIntervalMs,
+  getGeocodingProvider,
+  nextDelayMs,
+  resolveGeocoderConfig,
+  rowCap,
+  unmatchedGeocodeFeature,
+  useAppStore,
+} from "@geolibre/core";
+import { Button, Input, Label, ScrollArea, Select } from "@geolibre/ui";
+import type { Feature, FeatureCollection, Point } from "geojson";
+import { Columns3, FileUp, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isGeographicCrs } from "../../../../lib/crs-utils";
 import {
   detectCoordinateFields,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
+  parseDelimitedTextRows,
 } from "../../../../lib/delimited-text";
 import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
@@ -25,7 +39,35 @@ import {
   resolveDelimitedTextDelimiter,
 } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
-import type { DelimitedTextDelimiter, DelimitedTextMode } from "../types";
+import type { DelimitedTextDelimiter, DelimitedTextImportMode, DelimitedTextMode } from "../types";
+
+/** A cancellable delay that rejects with an AbortError when the signal fires. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (ms <= 0) {
+      resolve();
+      return;
+    }
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort);
+  });
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
 
 export function DelimitedTextSource() {
   const { t } = useTranslation();
@@ -55,6 +97,23 @@ export function DelimitedTextSource() {
     path: string;
     text: string;
   } | null>(null);
+  // Whether points are built from coordinate columns (default, unchanged
+  // behaviour) or by geocoding an address composed from one or more columns.
+  const [delimitedTextImportMode, setDelimitedTextImportMode] =
+    useState<DelimitedTextImportMode>("coordinates");
+  const [delimitedTextAddressColumns, setDelimitedTextAddressColumns] = useState<string[]>([]);
+  const [geocodeLog, setGeocodeLog] = useState<string[]>([]);
+  const [geocodeRunning, setGeocodeRunning] = useState(false);
+  const geocodeAbortRef = useRef<AbortController | null>(null);
+  const geocodeLogEndRef = useRef<HTMLDivElement>(null);
+
+  const appendGeocodeLog = useCallback((line: string) => {
+    setGeocodeLog((prev) => [...prev, line]);
+  }, []);
+
+  useEffect(() => {
+    geocodeLogEndRef.current?.scrollIntoView({ block: "end" });
+  }, [geocodeLog]);
 
   const resetDelimitedTextColumns = () => {
     setDelimitedTextFields([]);
@@ -76,6 +135,18 @@ export function DelimitedTextSource() {
     setSelectedDelimitedText(null);
     resetDelimitedTextColumns();
     resetDelimitedTextCrs();
+  };
+
+  const handleImportModeChange = (mode: DelimitedTextImportMode) => {
+    setDelimitedTextImportMode(mode);
+    setDelimitedTextAddressColumns([]);
+    setGeocodeLog([]);
+  };
+
+  const toggleAddressColumn = (field: string) => {
+    setDelimitedTextAddressColumns((prev) =>
+      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
+    );
   };
 
   const readDelimitedTextSource = async (): Promise<{
@@ -190,6 +261,128 @@ export function DelimitedTextSource() {
     }
   };
 
+  // Geocodes each row's composed address (one or more concatenated columns),
+  // keeping rows that fail to match as null-geometry features (flagged
+  // `geocode_status: "unmatched"`) rather than dropping them, so a batch that
+  // is mostly-but-not-fully matched still lands as one inspectable layer.
+  // Mirrors GeocodeDialog.tsx's paced batch loop (pacing/cap policy from
+  // @geolibre/core, log/cancel UX) but is duplicated rather than shared: the
+  // two call sites build different output shapes and GeocodeDialog is a
+  // separately shipped tool this change should not need to touch.
+  const submitAddresses = async (name: string, delimiter: string, sourcePath: string, text: string) => {
+    if (delimitedTextAddressColumns.length === 0) {
+      throw new Error(t("addData.delimitedText.errorNoAddressColumns"));
+    }
+
+    const { fields, rows } = parseDelimitedTextRows(text, delimiter);
+    const config = resolveGeocoderConfig(useAppStore.getState().preferences.geocoding);
+    const provider = getGeocodingProvider(config.providerId);
+    const requests = csvRowsToGeocodeRequests(rows, delimitedTextAddressColumns);
+    if (requests.length === 0) {
+      throw new Error(t("addData.delimitedText.errorNoAddressesFound"));
+    }
+    const skippedEmpty = rows.length - requests.length;
+    const cap = rowCap(config.forwardEndpoint);
+    const toProcess = Number.isFinite(cap) ? requests.slice(0, cap) : requests;
+    const interval = geocoderMinIntervalMs(config.forwardEndpoint);
+
+    const controller = new AbortController();
+    geocodeAbortRef.current = controller;
+    const { signal } = controller;
+    setGeocodeRunning(true);
+    setGeocodeLog([]);
+
+    appendGeocodeLog(
+      t("geocode.usingProvider", { provider: provider.label, endpoint: config.forwardEndpoint }),
+    );
+    if (skippedEmpty > 0) appendGeocodeLog(t("geocode.skippedEmpty", { count: skippedEmpty }));
+    if (requests.length > toProcess.length) appendGeocodeLog(t("geocode.rowCapWarning", { cap }));
+
+    const matchedFeatures: Feature<Point>[] = [];
+    const unmatchedFeatures: Feature<null>[] = [];
+    let lastStartedAt: number | null = null;
+    let cancelled = false;
+
+    try {
+      for (let i = 0; i < toProcess.length; i += 1) {
+        const request = toProcess[i];
+        const wait = nextDelayMs(lastStartedAt, performance.now(), interval);
+        if (wait > 0) await sleep(wait, signal);
+        lastStartedAt = performance.now();
+        appendGeocodeLog(
+          t("geocode.progress", { current: i + 1, total: toProcess.length, address: request.address }),
+        );
+        try {
+          const results = await geocodeForward(request.address, { signal, config, limit: 1 });
+          const match = results[0];
+          const feature = match
+            ? geocodeMatchToFeature(match, request.row, { providerId: config.providerId })
+            : null;
+          if (feature) matchedFeatures.push(feature);
+          else unmatchedFeatures.push(unmatchedGeocodeFeature(request.row, config.providerId));
+        } catch (requestError) {
+          // A cancel propagates to stop the whole batch; any other per-request
+          // failure (e.g. an HTTP 429) is logged and the row is kept unmatched
+          // so the remaining rows still run.
+          if (isAbortError(requestError)) throw requestError;
+          appendGeocodeLog(t("geocode.error", { message: (requestError as Error).message }));
+          unmatchedFeatures.push(unmatchedGeocodeFeature(request.row, config.providerId));
+        }
+      }
+    } catch (error) {
+      if (isAbortError(error)) cancelled = true;
+      else appendGeocodeLog(t("geocode.error", { message: (error as Error).message }));
+    }
+
+    geocodeAbortRef.current = null;
+    setGeocodeRunning(false);
+    appendGeocodeLog(
+      cancelled
+        ? t("geocode.cancelled", { matched: matchedFeatures.length })
+        : t("geocode.summary", {
+            matched: matchedFeatures.length,
+            total: toProcess.length,
+            failed: unmatchedFeatures.length,
+          }),
+    );
+
+    const features = [...matchedFeatures, ...unmatchedFeatures];
+    if (features.length === 0) throw new Error(t("geocode.noMatches"));
+
+    // Rows kept but flagged as unmatched are inspectable, not just present: a
+    // stale filter from a prior layer should not carry over, so this is only
+    // set (never cleared) when this run actually has unmatched rows.
+    if (unmatchedFeatures.length > 0) {
+      useAppStore.getState().setAttributeFilter("unmatched");
+    }
+
+    source.addAndClose(
+      {
+        ...createBaseLayer(
+          name,
+          "geojson",
+          { type: "geojson", url: sourcePath },
+          {
+            addressColumns: delimitedTextAddressColumns,
+            fields,
+            geocodeMatched: matchedFeatures.length,
+            geocodeProvider: config.providerId,
+            geocodeUnmatched: unmatchedFeatures.length,
+            isTable: false,
+            sourceKind: "delimited-text",
+            totalRows: rows.length,
+          },
+        ),
+        // Mixed Point/null geometries (matched/unmatched rows) are a legal
+        // GeoJSON FeatureCollection, same as parseDelimitedTextLayer's
+        // attribute-table branch; the cast matches that existing precedent.
+        geojson: { type: "FeatureCollection", features } as FeatureCollection,
+        sourcePath,
+      },
+      { fit: matchedFeatures.length > 0 },
+    );
+  };
+
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || defaultName;
     const delimiter = resolveDelimitedTextDelimiter(
@@ -198,6 +391,11 @@ export function DelimitedTextSource() {
     );
     const { sourcePath, text } = await readDelimitedTextSource();
     if (!text) throw new Error(t("addData.delimitedText.errorDataMissing"));
+
+    if (delimitedTextImportMode === "addresses") {
+      await submitAddresses(name, delimiter, sourcePath, text);
+      return;
+    }
 
     const sourceCrs = normalizeCrs(delimitedTextCrs);
     const result = parseDelimitedTextLayer(text, {
@@ -339,6 +537,21 @@ export function DelimitedTextSource() {
           <p className="text-xs text-muted-foreground">{delimitedTextColumnsStatus}</p>
         ) : null}
 
+        <div className="space-y-1.5">
+          <Label htmlFor="delimited-text-import-mode">{t("addData.delimitedText.importMode")}</Label>
+          <Select
+            id="delimited-text-import-mode"
+            value={delimitedTextImportMode}
+            onChange={(event) =>
+              handleImportModeChange(event.target.value as DelimitedTextImportMode)
+            }
+            disabled={source.isSubmitting}
+          >
+            <option value="coordinates">{t("addData.delimitedText.modeCoordinates")}</option>
+            <option value="addresses">{t("addData.delimitedText.modeAddresses")}</option>
+          </Select>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="delimited-text-delimiter">{t("addData.delimitedText.delimiter")}</Label>
@@ -374,70 +587,126 @@ export function DelimitedTextSource() {
           ) : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="delimited-text-longitude">
-              {t("addData.delimitedText.longitudeField")}
-            </Label>
-            <Select
-              id="delimited-text-longitude"
-              value={delimitedTextLongitudeField}
-              onChange={(event) => setDelimitedTextLongitudeField(event.target.value)}
-            >
-              <option value="">{t("addData.delimitedText.noneField")}</option>
-              {delimitedTextFieldOptions.map((field) => (
-                <option key={field} value={field}>
-                  {field}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="delimited-text-latitude">
-              {t("addData.delimitedText.latitudeField")}
-            </Label>
-            <Select
-              id="delimited-text-latitude"
-              value={delimitedTextLatitudeField}
-              onChange={(event) => setDelimitedTextLatitudeField(event.target.value)}
-            >
-              <option value="">{t("addData.delimitedText.noneField")}</option>
-              {delimitedTextFieldOptions.map((field) => (
-                <option key={field} value={field}>
-                  {field}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground">{t("addData.delimitedText.tableHint")}</p>
+        {delimitedTextImportMode === "coordinates" ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="delimited-text-longitude">
+                  {t("addData.delimitedText.longitudeField")}
+                </Label>
+                <Select
+                  id="delimited-text-longitude"
+                  value={delimitedTextLongitudeField}
+                  onChange={(event) => setDelimitedTextLongitudeField(event.target.value)}
+                >
+                  <option value="">{t("addData.delimitedText.noneField")}</option>
+                  {delimitedTextFieldOptions.map((field) => (
+                    <option key={field} value={field}>
+                      {field}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="delimited-text-latitude">
+                  {t("addData.delimitedText.latitudeField")}
+                </Label>
+                <Select
+                  id="delimited-text-latitude"
+                  value={delimitedTextLatitudeField}
+                  onChange={(event) => setDelimitedTextLatitudeField(event.target.value)}
+                >
+                  <option value="">{t("addData.delimitedText.noneField")}</option>
+                  {delimitedTextFieldOptions.map((field) => (
+                    <option key={field} value={field}>
+                      {field}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("addData.delimitedText.tableHint")}</p>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="delimited-text-crs">{t("addData.delimitedText.crs")}</Label>
-          <Input
-            id="delimited-text-crs"
-            placeholder={t("addData.delimitedText.crsPlaceholder")}
-            value={delimitedTextCrs}
-            onChange={(event) => setDelimitedTextCrs(event.target.value)}
-          />
-          <Select
-            aria-label={t("addData.delimitedText.crsPresetLabel")}
-            value=""
-            onChange={(event) => {
-              if (event.target.value) setDelimitedTextCrs(event.target.value);
-            }}
-          >
-            <option value="" disabled>
-              {t("addData.delimitedText.crsPresetLabel")}
-            </option>
-            {COMMON_CRS_PRESETS.map((preset) => (
-              <option key={preset.value} value={preset.value}>
-                {preset.label}
-              </option>
-            ))}
-          </Select>
-          <p className="text-xs text-muted-foreground">{t("addData.delimitedText.crsHelp")}</p>
-        </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="delimited-text-crs">{t("addData.delimitedText.crs")}</Label>
+              <Input
+                id="delimited-text-crs"
+                placeholder={t("addData.delimitedText.crsPlaceholder")}
+                value={delimitedTextCrs}
+                onChange={(event) => setDelimitedTextCrs(event.target.value)}
+              />
+              <Select
+                aria-label={t("addData.delimitedText.crsPresetLabel")}
+                value=""
+                onChange={(event) => {
+                  if (event.target.value) setDelimitedTextCrs(event.target.value);
+                }}
+              >
+                <option value="" disabled>
+                  {t("addData.delimitedText.crsPresetLabel")}
+                </option>
+                {COMMON_CRS_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("addData.delimitedText.crsHelp")}</p>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>{t("addData.delimitedText.addressColumns")}</Label>
+              <div className="space-y-1 rounded-md border p-2">
+                {delimitedTextFieldOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("addData.delimitedText.retrieveColumns")}
+                  </p>
+                ) : (
+                  delimitedTextFieldOptions.map((field) => (
+                    <label key={field} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={delimitedTextAddressColumns.includes(field)}
+                        disabled={source.isSubmitting}
+                        onChange={() => toggleAddressColumn(field)}
+                      />
+                      {field}
+                    </label>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("addData.delimitedText.addressColumnsHint")}
+              </p>
+            </div>
+
+            {geocodeLog.length > 0 ? (
+              <div className="space-y-1.5">
+                <ScrollArea className="h-32 rounded-md border bg-muted/30 p-2 font-mono text-xs">
+                  {geocodeLog.map((line, index) => (
+                    <div key={index} className="whitespace-pre-wrap">
+                      {line}
+                    </div>
+                  ))}
+                  <div ref={geocodeLogEndRef} />
+                </ScrollArea>
+                {geocodeRunning ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => geocodeAbortRef.current?.abort()}
+                  >
+                    <X className="me-2 h-3.5 w-3.5" />
+                    {t("geocode.cancel")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <SampleDataSelect
           samples={[

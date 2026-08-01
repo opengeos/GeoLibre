@@ -10,7 +10,7 @@ The **Add Data** menu is the main way to bring layers into GeoLibre. It groups s
 | --- | --- |
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
-| **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features. |
+| **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 
