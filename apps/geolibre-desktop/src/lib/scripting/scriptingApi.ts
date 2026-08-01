@@ -131,7 +131,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const geojson = params.geojson as FeatureCollection;
       const layerId = useAppStore.getState().addGeoJsonLayer(name, geojson);
       const style = params.style;
-      if (style && typeof style === "object" && !Array.isArray(style)) {
+      if (
+        style &&
+        typeof style === "object" &&
+        !Array.isArray(style) &&
+        Object.keys(style).length > 0
+      ) {
         useAppStore.getState().setLayerStyle(layerId, style as Record<string, unknown>);
       }
       return layerId;
