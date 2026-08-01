@@ -1315,6 +1315,7 @@
     }
   },
   "kml": {
+    "importFailed": "Tidak dapat mengimpor KML/KMZ.",
     "timeOverlayGroup": "Animasi overlay waktu"
   },
   "map": {

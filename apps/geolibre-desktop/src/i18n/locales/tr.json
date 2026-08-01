@@ -1353,6 +1353,7 @@
     }
   },
   "kml": {
+    "importFailed": "KML/KMZ içe aktarılamadı.",
     "timeOverlayGroup": "Zaman kaplaması animasyonu"
   },
   "map": {

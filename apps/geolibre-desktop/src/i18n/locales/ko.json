@@ -1315,6 +1315,7 @@
     }
   },
   "kml": {
+    "importFailed": "KML/KMZ를 가져올 수 없습니다.",
     "timeOverlayGroup": "시간 오버레이 애니메이션"
   },
   "map": {

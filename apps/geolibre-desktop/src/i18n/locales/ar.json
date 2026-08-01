@@ -1505,6 +1505,7 @@
     }
   },
   "kml": {
+    "importFailed": "تعذر استيراد KML/KMZ.",
     "timeOverlayGroup": "تحريك التراكب الزمني"
   },
   "map": {

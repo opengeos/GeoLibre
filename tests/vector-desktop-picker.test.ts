@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   addPickedVectorFiles,
+  isKmlFileSelection,
+  routeKmlFileSelection,
+  setKmlFileImportHandler,
+  type KmlFileImport,
   type VectorDataSink,
 } from "../packages/plugins/src/plugins/maplibre-vector";
 import type { GeoLibrePickedVectorFile } from "../packages/plugins/src/types";
@@ -132,5 +136,57 @@ describe("addPickedVectorFiles", () => {
       addPickedVectorFiles(sink, [{ file: new File(["x"], "a.geojson"), companionFiles: [] }]),
       /boom/,
     );
+  });
+});
+
+// The desktop picker preempts the file input's `change` event, so a KML/KMZ
+// pick never reaches the capture listener that routes browser selections. It
+// has to consult the same predicate itself or the vector control gets overlay
+// documents it cannot read.
+describe("routeKmlFileSelection", () => {
+  function record() {
+    const seen: KmlFileImport[][] = [];
+    setKmlFileImportHandler((files) => {
+      seen.push(files);
+    });
+    return seen;
+  }
+
+  it("hands a KML/KMZ-only selection to the host importer with its source paths", async () => {
+    const seen = record();
+    const files: KmlFileImport[] = [
+      { file: new File(["x"], "pyramid.kmz"), sourcePath: "/data/pyramid.kmz" },
+      { file: new File(["x"], "notes.KML"), sourcePath: "/data/notes.KML" },
+    ];
+
+    assert.equal(await routeKmlFileSelection(files), true);
+    assert.deepEqual(
+      seen[0].map((entry) => entry.sourcePath),
+      ["/data/pyramid.kmz", "/data/notes.KML"],
+    );
+    setKmlFileImportHandler(null);
+  });
+
+  it("leaves a mixed or non-KML selection to the vector control", async () => {
+    const seen = record();
+
+    assert.equal(
+      await routeKmlFileSelection([
+        { file: new File(["x"], "a.kml") },
+        { file: new File(["x"], "b.geojson") },
+      ]),
+      false,
+    );
+    assert.equal(await routeKmlFileSelection([{ file: new File(["x"], "b.geojson") }]), false);
+    assert.equal(await routeKmlFileSelection([]), false);
+    assert.equal(seen.length, 0);
+    setKmlFileImportHandler(null);
+  });
+
+  it("is a no-op when no host importer is registered", async () => {
+    setKmlFileImportHandler(null);
+
+    assert.equal(isKmlFileSelection([{ file: new File(["x"], "a.kmz") }]), true);
+    assert.equal(await routeKmlFileSelection([{ file: new File(["x"], "a.kmz") }]), false);
   });
 });

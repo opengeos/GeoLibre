@@ -1353,6 +1353,7 @@
     }
   },
   "kml": {
+    "importFailed": "KML/KMZ-ის იმპორტი ვერ მოხერხდა.",
     "timeOverlayGroup": "დროითი გადაფენის ანიმაცია"
   },
   "map": {

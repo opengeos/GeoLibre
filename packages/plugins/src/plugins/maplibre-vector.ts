@@ -92,16 +92,27 @@ let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
 let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
-let kmlFileImportHandler: ((files: File[]) => void | Promise<void>) | null = null;
+/** One KML/KMZ file handed to the host importer. */
+export interface KmlFileImport {
+  file: File;
+  /**
+   * Absolute filesystem path, when the host picked or dropped the file
+   * natively. It lets the importer re-read the archive later (a Super-Overlay's
+   * tile pyramid is not embedded in the project), so pass it whenever known.
+   */
+  sourcePath?: string;
+}
+
+export type KmlFileImportHandler = (files: KmlFileImport[]) => void | Promise<void>;
+
+let kmlFileImportHandler: KmlFileImportHandler | null = null;
 
 /**
  * Let the host app handle KML/KMZ constructs that are not vector datasets
  * (GroundOverlay, Model, and Super-Overlay) before the vector control sends
  * them to DuckDB/GDAL.
  */
-export function setKmlFileImportHandler(
-  handler: ((files: File[]) => void | Promise<void>) | null,
-): void {
+export function setKmlFileImportHandler(handler: KmlFileImportHandler | null): void {
   kmlFileImportHandler = handler;
 }
 
@@ -733,12 +744,38 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
     event.preventDefault();
     void (async () => {
       try {
-        await addPickedVectorFiles(control, await pickFiles());
+        const picked = await pickFiles();
+        // This handler preempts the native input's `change` event entirely, so
+        // a KML/KMZ-only selection has to be routed to the host importer here
+        // too — `wireKmlFileImporter` never sees a desktop pick.
+        if (
+          await routeKmlFileSelection(picked.map(({ file, sourcePath }) => ({ file, sourcePath })))
+        ) {
+          return;
+        }
+        await addPickedVectorFiles(control, picked);
       } catch (error) {
         console.error("[GeoLibre] Failed to load vector files from the desktop picker", error);
       }
     })();
   });
+}
+
+/** Whether every selected file is a KML/KMZ (and there is at least one). */
+export function isKmlFileSelection(files: readonly KmlFileImport[]): boolean {
+  return files.length > 0 && files.every(({ file }) => /\.(?:kml|kmz)$/i.test(file.name));
+}
+
+/**
+ * Hands a KML/KMZ-only selection to the host importer, which loads the
+ * constructs the vector control cannot (GroundOverlay, Model, Super-Overlay).
+ * Returns whether the selection was consumed; a mixed or non-KML selection (or
+ * no registered handler) is left to the vector control.
+ */
+export async function routeKmlFileSelection(files: readonly KmlFileImport[]): Promise<boolean> {
+  if (!kmlFileImportHandler || !isKmlFileSelection(files)) return false;
+  await kmlFileImportHandler([...files]);
+  return true;
 }
 
 function wireKmlFileImporter(control: VectorControl): void {
@@ -749,19 +786,14 @@ function wireKmlFileImporter(control: VectorControl): void {
   fileInput.addEventListener(
     "change",
     (event) => {
-      const files = Array.from(fileInput.files ?? []);
-      if (
-        !kmlFileImportHandler ||
-        files.length === 0 ||
-        !files.every((file) => /\.(?:kml|kmz)$/i.test(file.name))
-      ) {
-        return;
-      }
+      // A browser File has no filesystem path, so no `sourcePath` here.
+      const files = Array.from(fileInput.files ?? [], (file) => ({ file }));
+      if (!kmlFileImportHandler || !isKmlFileSelection(files)) return;
       // Capture-phase interception keeps the vector control from reporting
       // "Dataset does not contain any layers" for overlay-only documents.
       event.stopImmediatePropagation();
       fileInput.value = "";
-      void kmlFileImportHandler(files);
+      void routeKmlFileSelection(files);
     },
     true,
   );

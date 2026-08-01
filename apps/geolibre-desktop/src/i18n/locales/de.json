@@ -1353,6 +1353,7 @@
     }
   },
   "kml": {
+    "importFailed": "KML/KMZ konnte nicht importiert werden.",
     "timeOverlayGroup": "Animation der Zeitüberlagerung"
   },
   "map": {

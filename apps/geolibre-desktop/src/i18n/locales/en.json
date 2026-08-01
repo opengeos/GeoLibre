@@ -1391,6 +1391,7 @@
     }
   },
   "kml": {
+    "importFailed": "Could not import KML/KMZ.",
     "timeOverlayGroup": "Time overlay animation"
   },
   "map": {

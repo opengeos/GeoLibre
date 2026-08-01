@@ -46,7 +46,11 @@ import {
   type KmlGroundOverlay,
   type KmlModel,
 } from "./kml";
-import { registerKmlSuperOverlay } from "./kml-super-overlay";
+import {
+  registerKmlSuperOverlay,
+  setKmlSuperOverlayResolver,
+  type KmlSuperOverlayTile,
+} from "./kml-super-overlay";
 import {
   findArchiveEntry,
   findArchiveEntryKey,
@@ -1330,42 +1334,51 @@ async function loadKmzLayers(
   // overlay href can resolve relative to its KML's directory. Reading from
   // `entries` (not the copies in `kmlFiles`) also avoids the DuckDB-WASM
   // fallback transferring/detaching a KML buffer before overlays are parsed.
-  const kmlDocs = Object.entries(entries)
-    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
-    .map(([name, bytes]) => ({
-      name,
-      text: new TextDecoder("utf-8").decode(bytes),
-    }));
+  const kmlDocs = readKmlDocs(entries);
 
   // A Super-Overlay is a linked raster pyramid, not thousands of independent
-  // persistent image layers. Register one lazy tile source and skip vector
-  // parsing of its NetworkLink-only KML nodes.
-  const isSuperOverlay =
-    kmlDocs.length > 1 &&
-    kmlDocs.some(
-      (doc) =>
-        /<(?:\w+:)?Region(?:\s|>)/i.test(doc.text) &&
-        /<(?:\w+:)?NetworkLink(?:\s|>)/i.test(doc.text),
-    );
-  if (isSuperOverlay) {
-    const tiles = kmlDocs.flatMap((doc) =>
-      parseKmlGroundOverlays(doc.text).flatMap((overlay) => {
-        if (isHttpUrl(overlay.href) || isUnrenderableOverlayImage(overlay.href)) return [];
-        const data =
-          findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ??
-          findArchiveEntry(entries, overlay.href);
-        return data ? [{ overlay, bytes: data }] : [];
-      }),
-    );
-    const source = await registerKmlSuperOverlay(tiles);
-    return [
+  // persistent image layers, so it becomes one lazy tile source instead. The
+  // `<Region>` + `<NetworkLink>` shape it is detected by is also how a plain
+  // *vector* regionated KML is built, so the pyramid is only claimed once its
+  // raster tiles actually resolve; anything else falls through to the normal
+  // overlay/vector parse below rather than failing the whole import.
+  const superOverlayTiles = looksLikeSuperOverlay(kmlDocs)
+    ? superOverlayTilesFromKmz(entries, kmlDocs)
+    : [];
+  if (superOverlayTiles.length > 0) {
+    const source = await registerKmlSuperOverlay(superOverlayTiles, {
+      // Keyed by the source file, so the tile URL saved into a project resolves
+      // again after `kmlSuperOverlayResolver` re-reads the KMZ on reopen. A
+      // browser File has no re-readable path and gets a session-only key.
+      ...(isAbsoluteLocalPath(path) ? { key: path } : {}),
+    });
+    // A composite export can carry placemarks or models alongside its raster
+    // pyramid; returning only the tile layer would silently drop them.
+    const layers: LoadedLayer[] = [
       {
         kind: "kml-super-overlay",
         name: `${pathWithoutExtension(fileBaseName(path))} Super-Overlay`,
         path,
         ...source,
       },
+      ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
     ];
+    const placemarkEntries = placemarkKmlEntries(entries, kmlDocs);
+    if (placemarkEntries) {
+      try {
+        const features = await kmzVectorFeatures(
+          readKmlEntries(placemarkEntries),
+          entries,
+          options,
+        );
+        if (features.features.length > 0) layers.push({ data: features, path });
+      } catch (error) {
+        // Declining the oversized-vector prompt must not throw away the
+        // pyramid, which is already registered and loads on its own.
+        if (!isVectorLoadCancelled(error)) throw error;
+      }
+    }
+    return layers;
   }
 
   // Ground overlays are drawn under vector placemarks (as in Google Earth), so
@@ -1400,6 +1413,89 @@ async function loadKmzLayers(
   }
   return layers;
 }
+
+interface KmlDoc {
+  name: string;
+  text: string;
+}
+
+function readKmlDocs(entries: Record<string, Uint8Array>): KmlDoc[] {
+  return Object.entries(entries)
+    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
+    .map(([name, bytes]) => ({ name, text: new TextDecoder("utf-8").decode(bytes) }));
+}
+
+/**
+ * Whether an archive has the shape of a Super-Overlay: several KML nodes, at
+ * least one carrying both a `<Region>` and a `<NetworkLink>`. Regionated
+ * *vector* KML is built the same way, so this only narrows the candidates —
+ * the caller confirms the pyramid by resolving its raster tiles.
+ */
+function looksLikeSuperOverlay(kmlDocs: KmlDoc[]): boolean {
+  return (
+    kmlDocs.length > 1 &&
+    kmlDocs.some(
+      (doc) =>
+        /<(?:\w+:)?Region(?:\s|>)/i.test(doc.text) &&
+        /<(?:\w+:)?NetworkLink(?:\s|>)/i.test(doc.text),
+    )
+  );
+}
+
+/** Every archive-local `<GroundOverlay>` image in a KMZ, as pyramid tiles. */
+function superOverlayTilesFromKmz(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: KmlDoc[],
+): KmlSuperOverlayTile[] {
+  return kmlDocs.flatMap((doc) =>
+    parseKmlGroundOverlays(doc.text).flatMap((overlay) => {
+      if (isHttpUrl(overlay.href) || isUnrenderableOverlayImage(overlay.href)) return [];
+      const data =
+        findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ??
+        findArchiveEntry(entries, overlay.href);
+      return data ? [{ overlay, bytes: data }] : [];
+    }),
+  );
+}
+
+/**
+ * The archive with its placemark-free KML nodes dropped, or null when no node
+ * holds a `<Placemark>`. Lets a Super-Overlay's supplementary vector content
+ * still load, without sending the pyramid's thousands of NetworkLink-only
+ * nodes through DuckDB.
+ */
+function placemarkKmlEntries(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: KmlDoc[],
+): Record<string, Uint8Array> | null {
+  const withPlacemarks = new Set(
+    kmlDocs.filter((doc) => /<(?:\w+:)?Placemark(?:\s|>)/i.test(doc.text)).map((doc) => doc.name),
+  );
+  if (withPlacemarks.size === 0) return null;
+  const kept = { ...entries };
+  for (const doc of kmlDocs) {
+    if (!withPlacemarks.has(doc.name)) delete kept[doc.name];
+  }
+  return kept;
+}
+
+// Only the tile URL of a Super-Overlay layer persists into a project, never the
+// pyramid's bytes, so a reopened project re-reads them from the source KMZ the
+// first time MapLibre asks the protocol for a tile. The path comes out of a
+// saved project, so it is whitelisted exactly like `restoreLocalFileLayers`
+// before anything is read off disk.
+setKmlSuperOverlayResolver(async (path) => {
+  if (
+    !isTauri() ||
+    !isAbsoluteLocalPath(path) ||
+    hasPathTraversal(path) ||
+    !isRestorableVectorPath(path)
+  ) {
+    return null;
+  }
+  const entries = await unzipArchive(await readLocalFileBytes(path));
+  return superOverlayTilesFromKmz(entries, readKmlDocs(entries));
+});
 
 async function parseKmz(
   data: ArrayBuffer | Uint8Array,

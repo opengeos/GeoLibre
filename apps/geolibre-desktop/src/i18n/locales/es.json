@@ -1353,6 +1353,7 @@
     }
   },
   "kml": {
+    "importFailed": "No se pudo importar el KML/KMZ.",
     "timeOverlayGroup": "Animación de superposición temporal"
   },
   "map": {

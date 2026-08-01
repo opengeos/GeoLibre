@@ -1268,19 +1268,29 @@ export function DesktopShell({
   );
 
   useEffect(() => {
-    setKmlFileImportHandler(async (files) => {
+    setKmlFileImportHandler(async (imports) => {
       setDropError(null);
       try {
-        const layers = await loadDroppedVectorFiles(files, {
-          onLargeDataset: confirmLargeVectorDataset,
-        });
+        const paths = imports
+          .map(({ sourcePath }) => sourcePath)
+          .filter((sourcePath): sourcePath is string => typeof sourcePath === "string");
+        // Prefer the filesystem paths the desktop picker reports: a Super-Overlay
+        // records its source in the tile URL so a saved project can re-read the
+        // pyramid, which a path-less browser File cannot support.
+        const layers =
+          paths.length === imports.length
+            ? await loadDroppedVectorPaths(paths, { onLargeDataset: confirmLargeVectorDataset })
+            : await loadDroppedVectorFiles(
+                imports.map(({ file }) => file),
+                { onLargeDataset: confirmLargeVectorDataset },
+              );
         addImportedVectorLayers(layers);
       } catch (error) {
-        setDropError(error instanceof Error ? error.message : "Could not import KML/KMZ.");
+        setDropError(error instanceof Error ? error.message : t("kml.importFailed"));
       }
     });
     return () => setKmlFileImportHandler(null);
-  }, [addImportedVectorLayers, confirmLargeVectorDataset]);
+  }, [addImportedVectorLayers, confirmLargeVectorDataset, t]);
 
   const addDroppedPhotos = useCallback(
     (result: GeotaggedPhotoResult | null): number => {
