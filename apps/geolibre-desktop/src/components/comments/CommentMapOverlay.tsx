@@ -54,19 +54,28 @@ export function resolveCommentCoordinates(
   if (comment.anchor.type === "feature") {
     const { layerId, featureId } = comment.anchor;
     const storeLayer = useAppStore.getState().layers.find((l) => l.id === layerId);
-    const styleLayerIds =
-      storeLayer &&
-      Array.isArray(storeLayer.metadata?.sourceIds) &&
-      storeLayer.metadata.sourceIds.length > 0
+    const sourceIds = new Set(
+      storeLayer && Array.isArray(storeLayer.metadata?.sourceIds)
         ? (storeLayer.metadata.sourceIds as string[])
-        : [layerId];
-    const validLayers = styleLayerIds.filter((id) => {
-      try {
-        return !!map.getLayer(id);
-      } catch {
-        return false;
+        : [layerId],
+    );
+    const styleLayers = map.getStyle()?.layers ?? [];
+    const validLayers: string[] = [];
+    for (const sl of styleLayers) {
+      const slSource = "source" in sl && typeof sl.source === "string" ? sl.source : undefined;
+      if (sl.id === layerId || (slSource && sourceIds.has(slSource))) {
+        try {
+          if (map.getLayer(sl.id)) {
+            validLayers.push(sl.id);
+          }
+        } catch {
+          // ignore layer lookup error
+        }
       }
-    });
+    }
+    if (validLayers.length === 0 && map.getLayer(layerId)) {
+      validLayers.push(layerId);
+    }
 
     if (validLayers.length > 0) {
       try {

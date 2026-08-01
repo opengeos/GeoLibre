@@ -154,7 +154,10 @@ export function CommentsPanel({
     collaboration?.leave();
   };
 
+  const canModifyComments = !collab.isActive || (collaboration?.canEdit() ?? true);
+
   const handleReply = (commentId: string, body: string) => {
+    if (!canModifyComments) return;
     const reply: CommentReply = {
       id: uuidv4(),
       author: { name: selfAuthorName, color: selfAuthorColor },
@@ -168,6 +171,7 @@ export function CommentsPanel({
   };
 
   const handleToggleResolve = (commentId: string, resolved: boolean) => {
+    if (!canModifyComments) return;
     toggleResolveComment(commentId, resolved);
     if (collab.isActive) {
       collaboration?.sendCommentMutation({ type: "toggle-resolve", commentId, resolved });
@@ -175,6 +179,7 @@ export function CommentsPanel({
   };
 
   const handleDelete = (commentId: string) => {
+    if (!canModifyComments) return;
     deleteComment(commentId);
     if (collab.isActive) {
       collaboration?.sendCommentMutation({ type: "delete", commentId });

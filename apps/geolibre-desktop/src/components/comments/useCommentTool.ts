@@ -41,6 +41,7 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   const submitComment = useCallback(
     (body: string, authorName?: string) => {
       if (!pendingComment || !body.trim()) return;
+      if (collab.isActive && collaboration && !collaboration.canEdit()) return;
 
       // Priority: collab identity > caller-supplied name > localStorage > fallback
       let selfName: string;

@@ -28,6 +28,7 @@ const CURSOR_THROTTLE_MS = 40;
 
 export interface CollaborationApi {
   enabled: boolean;
+  canEdit: () => boolean;
   start: (displayName: string, color: string, mode: CollaborationMode) => Promise<string>;
   join: (sessionId: string, displayName: string, color: string) => Promise<void>;
   leave: () => void;
@@ -324,6 +325,11 @@ export function useCollaboration(
   const disconnect = (): void => {
     teardownRef.current?.();
     teardownRef.current = null;
+    if (pendingConnectRef.current) {
+      const p = pendingConnectRef.current;
+      pendingConnectRef.current = null;
+      p.reject(new Error("Session disconnected."));
+    }
     connRef.current?.close();
     connRef.current = null;
     selfIdRef.current = null;
@@ -331,7 +337,6 @@ export function useCollaboration(
       clearTimeout(restoreTimerRef.current);
       restoreTimerRef.current = null;
     }
-    pendingConnectRef.current = null;
   };
 
   const start = useCallback(
@@ -391,6 +396,7 @@ export function useCollaboration(
 
   return {
     enabled,
+    canEdit,
     start,
     join,
     leave,
