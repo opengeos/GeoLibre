@@ -300,8 +300,14 @@ export function useCollaboration(
       pendingConnectRef.current = { resolve, reject };
 
       const conn = new CollabConnection(sessionWsUrl(baseUrl!, normalizedCode), {
-        onOpen: () => attach(displayName, color, hostToken),
-        onMessage: handleMessage,
+        onOpen: () => {
+          if (connRef.current !== conn) return;
+          attach(displayName, color, hostToken);
+        },
+        onMessage: (msg) => {
+          if (connRef.current !== conn) return;
+          handleMessage(msg);
+        },
         onClose: (reconnecting) => {
           if (connRef.current && connRef.current !== conn) return;
           teardownRef.current?.();
@@ -328,7 +334,7 @@ export function useCollaboration(
     if (pendingConnectRef.current) {
       const p = pendingConnectRef.current;
       pendingConnectRef.current = null;
-      p.reject(new Error("Session disconnected."));
+      p.reject(new Error(i18n.t("comments.sessionDisconnected")));
     }
     connRef.current?.close();
     connRef.current = null;

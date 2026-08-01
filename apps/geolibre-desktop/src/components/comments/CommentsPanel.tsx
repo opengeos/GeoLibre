@@ -435,6 +435,7 @@ export function CommentsPanel({
                   onToggleResolve={handleToggleResolve}
                   onDelete={handleDelete}
                   onZoomTo={handleZoomTo}
+                  readOnly={!canModifyComments}
                 />
               );
             })}

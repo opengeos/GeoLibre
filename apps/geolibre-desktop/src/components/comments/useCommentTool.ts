@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type React from "react";
 import { useAppStore, type CommentAnchor, type ProjectComment } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -17,6 +18,7 @@ export interface PendingCommentState {
 }
 
 export function useCommentTool({ mapControllerRef, collaboration }: UseCommentToolOptions) {
+  const { t } = useTranslation();
   const [isActive, setIsActive] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingCommentState | null>(null);
 
@@ -59,7 +61,7 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
         } catch {
           storedName = "";
         }
-        selfName = authorName?.trim() || storedName || "Author";
+        selfName = authorName?.trim() || storedName || t("comments.defaultAuthorName");
         selfColor = "#3b82f6";
       }
 
