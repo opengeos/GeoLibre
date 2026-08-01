@@ -58,7 +58,7 @@ The Controls menu also carries tools that move the camera, drape live data over 
 | **Record Video...** | Record the map canvas, or a drawn bounding box, to a video file, optionally burning in on-map HTML, legend, and colorbar panels. |
 
 !!! warning "Some tools call external services"
-    Directions and Reverse Geocode send coordinates to a third-party service (the OSRM demo server and your geocoding provider). Everything else in the table runs locally against tiles the map already fetches.
+    Directions and Reverse Geocode send your coordinates to a third-party service — the OSRM demo server and your configured geocoding provider. Weather fetches overlay imagery from NASA and RainViewer. The rest of the table runs locally against tiles the map already fetches.
 
 ## Annotations and the Elements panel
 
