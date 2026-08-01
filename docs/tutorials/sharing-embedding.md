@@ -49,11 +49,48 @@ Use an `<iframe>` and the embed parameters to control the chrome. For a clean, m
 Adjust the look with parameters (they combine):
 
 - `maponly` hides all chrome, leaving only the map.
+- `layout=viewer` gives a read-only map: Layers, View, Controls, basemaps, and
+  search/identify stay, while everything that edits the project is hidden.
 - `layout=compact` keeps a slim, icon-only toolbar.
 - `panels=none` hides the side and bottom panels but keeps the toolbar.
 - `theme=dark` forces the dark theme on load.
 
+Reach for `layout=viewer` when readers should be able to toggle layers and
+explore the data but not change it, and `maponly` when the map is a figure in
+your page rather than something to interact with.
+
 See the full [parameter table](../user-guide/embedding.md#url-parameters).
+
+## 5. Drive the map from your page
+
+URL parameters configure the embed once, at load. To keep talking to it — fly to
+the record someone just clicked in your own UI, and hear what they do inside the
+map — install the typed client:
+
+```bash
+npm install @geolibre/embed
+```
+
+```ts
+import { connect } from "@geolibre/embed";
+
+const map = await connect(document.querySelector("iframe"), {
+  origin: "https://web.geolibre.app",
+});
+
+map.on("selectionChanged", ({ featureIds }) => showRecordFor(featureIds[0]));
+
+async function focusField(field) {
+  await map.setView({ bbox: field.bbox });
+  await map.highlightFeature({ layerId: "fields", filter: { parcel_id: field.id }, fit: true });
+}
+```
+
+This works only against a deployment that has allowlisted your page's origin —
+`web.geolibre.app` has not, so the runtime API is for your own hosted build. See
+[Talking to the map at runtime](../user-guide/embedding.md#talking-to-the-map-at-runtime)
+for the allowlist, the full command list, and the raw `postMessage` protocol if
+you would rather not add a dependency.
 
 ## Next steps
 

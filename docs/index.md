@@ -152,6 +152,12 @@ For a fully chrome-free, map-only embed, add `&maponly` to hide the toolbar menu
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
 ```
 
+For a read-only embed that viewers can still explore, use `&layout=viewer`. It keeps the Layers list, View and Controls menus, basemaps, and search/identify, and hides everything that would change the project:
+
+```text
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=viewer
+```
+
 Other parameters control the toolbar, panels, and theme. See [Embedding & Sharing](user-guide/embedding.md) for the full parameter reference and `<iframe>` examples.
 
 [Launch GeoLibre Web](https://web.geolibre.app/){ .md-button .md-button--primary }

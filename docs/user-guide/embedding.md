@@ -138,6 +138,68 @@ by the [Python package](../python.md)) to the same origins. As extra hardening
 you can stop other sites from framing the app at all by adding
 `Content-Security-Policy: frame-ancestors <your origins>` at your reverse proxy.
 
+### The typed client
+
+`@geolibre/embed` is a dependency-free ESM package published to npm from each
+GeoLibre release, so its version tracks the app version:
+
+```bash
+npm install @geolibre/embed
+```
+
+`connect(iframe, options)` returns a promise that resolves once the app sends
+`ready`, so there is no `ready` handshake to write yourself. It also stamps a
+`requestId` on every command and settles that command's promise from the
+matching `ack`, which is what lets several commands be in flight at once
+without their answers getting crossed.
+
+```ts
+import { connect } from "@geolibre/embed";
+
+const map = await connect(iframe, {
+  origin: "https://web.geolibre.app", // exact origin hosting the iframe
+  timeoutMs: 15_000, // wait for `ready`; default 15s
+  requestTimeoutMs: 15_000, // wait for each `ack`; default 15s
+});
+```
+
+`origin` is required and must be an `http(s)` origin: it is both the target of
+every outbound message and the filter on inbound ones, so a message from any
+other frame or origin is ignored. Pass the *app's* origin, not your own.
+
+| Method                                 | Resolves with           | Notes                                                                   |
+| -------------------------------------- | ----------------------- | ----------------------------------------------------------------------- |
+| `loadProject(url)`                     | `void`                  | Swaps the project without reloading the iframe.                         |
+| `setView(target)`                      | `void`                  | `{ bbox }`, or any of `{ center, zoom, bearing, pitch, duration }`.      |
+| `highlightFeature({ layerId, … })`     | `void`                  | `featureId`, `featureIds`, or `filter`; `fit: true` zooms to the match.  |
+| `openTool(id, params?)`                | `void`                  | Runtime twin of `?tool=`.                                               |
+| `setLayerVisibility(layerId, visible)` | `void`                  | Shows or hides a project layer.                                         |
+| `listLayers()`                         | `LayerSummary[]`        | `{ id, name, type, visible, opacity }` per layer.                       |
+| `setFilter(layerId, expression)`       | `void`                  | A MapLibre filter expression, or `null` to clear it.                    |
+| `getViewport()`                        | `Viewport`              | `{ bbox, center, zoom, bearing, pitch }`.                               |
+| `addLayer(spec)`                       | the new layer's `id`    | Takes a project-format layer specification.                             |
+| `exportImage()`                        | a PNG `data:` URL       | The map as currently rendered.                                          |
+| `on(event, listener)`                  | an unsubscribe function | Not a promise; events are the set the app posts (see below).            |
+| `disconnect()`                         | not a promise           | Removes the listener and rejects anything still in flight.              |
+
+Every command rejects rather than resolving falsely: an `ack` carrying
+`ok: false` rejects with the app's own error message, and a command with no
+answer inside `requestTimeoutMs` rejects with a timeout. `connect` itself
+rejects if `ready` does not arrive inside `timeoutMs` — most often because the
+deployment has not allowlisted your origin, or because `origin` does not match
+the iframe.
+
+Call `disconnect()` when you tear the iframe down (a React effect cleanup, a
+route change). It stops the `message` listener and rejects every pending
+command, so a promise cannot hang for the life of the page.
+
+`on` returns its own unsubscribe function and accepts every event in the table
+[below](#geolibre-to-host), typed by name. Subscribing to `ack` is only worth it
+to observe the traffic, since each command's promise is already settled from it.
+
+Hosts that cannot take a dependency can speak the protocol directly; the rest of
+this page documents it.
+
 ### Message shape
 
 Every message, in both directions, is versioned:

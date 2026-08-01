@@ -26,6 +26,7 @@ flowchart LR
 | `@geolibre/ui` | Shared UI primitives (shadcn-style) |
 | `@geolibre/processing` | Client-side algorithm registry |
 | `@geolibre/plugins` | Plugin interface and built-in plugins |
+| `@geolibre/embed` | Typed, dependency-free client for the iframe embed API, published to npm |
 | `geolibre-desktop` | Shell layout, Tauri I/O, composition |
 
 ## State flow
