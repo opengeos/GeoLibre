@@ -567,7 +567,7 @@ export function LayerPanel({
   const setLayerGroupVisibility = useAppStore((s) => s.setLayerGroupVisibility);
   const setLayerGroupOpacity = useAppStore((s) => s.setLayerGroupOpacity);
   const toggleLayerGroupCollapsed = useAppStore((s) => s.toggleLayerGroupCollapsed);
-  const moveLayerToGroup = useAppStore((s) => s.moveLayerToGroup);
+  const moveLayersToGroup = useAppStore((s) => s.moveLayersToGroup);
   const moveLayerGroupToGroup = useAppStore((s) => s.moveLayerGroupToGroup);
   const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -741,6 +741,10 @@ export function LayerPanel({
     }
   }, [autoCollapse, internalCollapsed, isControlled]);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
+  const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(
+    () => new Set(selectedLayerId ? [selectedLayerId] : []),
+  );
+  const selectionAnchorRef = useRef<string | null>(selectedLayerId);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
   const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -767,6 +771,24 @@ export function LayerPanel({
   // still resolving — see the watch-lifecycle effect below).
   const watchUnsubsRef = useRef(new Map<string, { path: string; unwatch: () => void }>());
   const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
+  useEffect(() => {
+    const existingIds = new Set(layers.map((layer) => layer.id));
+    setSelectedLayerIds((current) => {
+      const next = new Set([...current].filter((id) => existingIds.has(id)));
+      if (next.size === current.size) return current;
+      return next;
+    });
+    if (selectionAnchorRef.current && !existingIds.has(selectionAnchorRef.current)) {
+      selectionAnchorRef.current = null;
+    }
+  }, [layers]);
+  useEffect(() => {
+    if (!selectedLayerId) return;
+    setSelectedLayerIds((current) =>
+      current.has(selectedLayerId) ? current : new Set([selectedLayerId]),
+    );
+    selectionAnchorRef.current = selectedLayerId;
+  }, [selectedLayerId]);
   // Group lookup + the top-most member of each group in display order. Members
   // are kept contiguous in `layers`, so the first occurrence walking the
   // reversed list is where the group's header is drawn inline. Memoized so they
@@ -990,6 +1012,37 @@ export function LayerPanel({
     setDraggedLayerId(null);
     setDropTargetLayerId(null);
     setDropTargetGroupId(null);
+  };
+
+  const selectedMoveIds = (layerId: string) =>
+    selectedLayerIds.has(layerId) && selectedLayerIds.size > 1
+      ? layers.filter((layer) => selectedLayerIds.has(layer.id)).map((layer) => layer.id)
+      : [layerId];
+
+  const handleLayerSelection = (event: ReactMouseEvent<HTMLDivElement>, layerId: string) => {
+    if (event.shiftKey && selectionAnchorRef.current) {
+      const anchorIndex = visibleLayers.findIndex(
+        (layer) => layer.id === selectionAnchorRef.current,
+      );
+      const layerIndex = visibleLayers.findIndex((layer) => layer.id === layerId);
+      if (anchorIndex >= 0 && layerIndex >= 0) {
+        const start = Math.min(anchorIndex, layerIndex);
+        const end = Math.max(anchorIndex, layerIndex);
+        setSelectedLayerIds(new Set(visibleLayers.slice(start, end + 1).map((layer) => layer.id)));
+      }
+    } else if (event.ctrlKey || event.metaKey) {
+      setSelectedLayerIds((current) => {
+        const next = new Set(current);
+        if (next.has(layerId) && next.size > 1) next.delete(layerId);
+        else next.add(layerId);
+        return next;
+      });
+      selectionAnchorRef.current = layerId;
+    } else {
+      setSelectedLayerIds(new Set([layerId]));
+      selectionAnchorRef.current = layerId;
+    }
+    selectLayer(layerId);
   };
 
   const beginGroupRename = (group: LayerGroup) => {
@@ -2287,6 +2340,11 @@ export function LayerPanel({
     event.stopPropagation();
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", layerId);
+    if (!selectedLayerIds.has(layerId)) {
+      setSelectedLayerIds(new Set([layerId]));
+      selectionAnchorRef.current = layerId;
+      selectLayer(layerId);
+    }
     setDraggedLayerId(layerId);
   };
 
@@ -2319,7 +2377,7 @@ export function LayerPanel({
       moveLayer(draggedLayerId, layers.length - 1 - displayIndex);
     } else {
       // Crossing a group boundary: adopt the target's group and land next to it.
-      moveLayerToGroup(draggedLayerId, targetGroupId, layerId);
+      moveLayersToGroup(selectedMoveIds(draggedLayerId), targetGroupId, layerId);
     }
     resetDragState();
   };
@@ -2340,7 +2398,7 @@ export function LayerPanel({
     }
     event.preventDefault();
     event.stopPropagation();
-    moveLayerToGroup(draggedLayerId, groupId);
+    moveLayersToGroup(selectedMoveIds(draggedLayerId), groupId);
     resetDragState();
   };
 
@@ -2845,7 +2903,7 @@ export function LayerPanel({
                     data-testid="layer-row"
                     data-layer-name={layer.name}
                     className={`relative min-w-0 max-w-full rounded-md border p-2 transition-colors ${
-                      selectedLayerId === layer.id
+                      selectedLayerIds.has(layer.id)
                         ? "border-primary bg-primary/5"
                         : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
                     } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
@@ -2864,9 +2922,14 @@ export function LayerPanel({
                     onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                     onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                     onDragEnd={resetDragState}
-                    onClick={() => selectLayer(layer.id)}
+                    aria-pressed={selectedLayerIds.has(layer.id)}
+                    onClick={(e) => handleLayerSelection(e, layer.id)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") selectLayer(layer.id);
+                      if (e.key === "Enter") {
+                        setSelectedLayerIds(new Set([layer.id]));
+                        selectionAnchorRef.current = layer.id;
+                        selectLayer(layer.id);
+                      }
                     }}
                     role="button"
                     tabIndex={0}
@@ -3119,17 +3182,21 @@ export function LayerPanel({
                           leaving it pinned open. */}
                           <DropdownMenuItem
                             onSelect={() => {
-                              addLayerGroup(undefined, [layer.id]);
+                              addLayerGroup(undefined, selectedMoveIds(layer.id));
                             }}
                           >
                             <FolderPlus className="me-2 h-3.5 w-3.5" />
-                            {t("layers.newGroupFromLayer")}
+                            {selectedLayerIds.size > 1
+                              ? t("layers.newGroupFromSelectedLayers")
+                              : t("layers.newGroupFromLayer")}
                           </DropdownMenuItem>
                           {layerGroups.length > 0 && (
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>
                                 <Folder className="h-3.5 w-3.5" />
-                                {t("layers.moveToGroup")}
+                                {selectedLayerIds.size > 1
+                                  ? t("layers.moveSelectedToGroup")
+                                  : t("layers.moveToGroup")}
                               </DropdownMenuSubTrigger>
                               <DropdownMenuSubContent>
                                 {layerGroups.map((g) => (
@@ -3137,7 +3204,7 @@ export function LayerPanel({
                                     key={g.id}
                                     disabled={layer.groupId === g.id}
                                     onSelect={() => {
-                                      moveLayerToGroup(layer.id, g.id);
+                                      moveLayersToGroup(selectedMoveIds(layer.id), g.id);
                                     }}
                                   >
                                     {g.name}
@@ -3149,7 +3216,7 @@ export function LayerPanel({
                           {layer.groupId && (
                             <DropdownMenuItem
                               onSelect={() => {
-                                moveLayerToGroup(layer.id, null);
+                                moveLayersToGroup(selectedMoveIds(layer.id), null);
                               }}
                             >
                               <FolderMinus className="me-2 h-3.5 w-3.5" />

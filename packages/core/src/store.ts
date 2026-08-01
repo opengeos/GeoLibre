@@ -620,6 +620,11 @@ export interface AppState {
     groupId: string | null,
     beforeLayerId?: string | null,
   ) => void;
+  moveLayersToGroup: (
+    layerIds: string[],
+    groupId: string | null,
+    beforeLayerId?: string | null,
+  ) => void;
   moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
 }
@@ -1925,6 +1930,43 @@ export const useAppStore = create<AppState>()(
           const normalized = normalizeGroupContiguity(next);
           const unchanged = normalized.every(
             (l, i) => l.id === s.layers[i]?.id && l.groupId === s.layers[i]?.groupId,
+          );
+          if (unchanged) return s;
+          return { layers: normalized, isDirty: true };
+        }),
+
+      moveLayersToGroup: (layerIds, groupId, beforeLayerId = null) =>
+        set((s) => {
+          if (groupId && !s.layerGroups.some((g) => g.id === groupId)) return s;
+          const requestedIds = new Set(layerIds);
+          const moving = s.layers.filter((layer) => requestedIds.has(layer.id));
+          if (moving.length === 0) return s;
+          const movingIds = new Set(moving.map((layer) => layer.id));
+          const without = s.layers.filter((layer) => !movingIds.has(layer.id));
+          const updated = moving.map((layer) => ({
+            ...layer,
+            groupId: groupId ?? undefined,
+          }));
+          let index: number;
+          if (beforeLayerId && !movingIds.has(beforeLayerId)) {
+            const at = without.findIndex((layer) => layer.id === beforeLayerId);
+            index = at < 0 ? without.length : at;
+          } else if (groupId) {
+            let last = -1;
+            without.forEach((layer, layerIndex) => {
+              if (layer.groupId === groupId) last = layerIndex;
+            });
+            index = last < 0 ? without.length : last + 1;
+          } else {
+            index = without.length;
+          }
+          const next = [...without];
+          next.splice(index, 0, ...updated);
+          const normalized = normalizeGroupContiguity(next);
+          const unchanged = normalized.every(
+            (layer, layerIndex) =>
+              layer.id === s.layers[layerIndex]?.id &&
+              layer.groupId === s.layers[layerIndex]?.groupId,
           );
           if (unchanged) return s;
           return { layers: normalized, isDirty: true };

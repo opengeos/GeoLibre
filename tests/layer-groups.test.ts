@@ -205,6 +205,24 @@ describe("layer group store actions", () => {
     assert.equal(useAppStore.getState().layers.find((l) => l.id === a)?.groupId, undefined);
   });
 
+  it("moves multiple layers into a group atomically and preserves their order", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G");
+    useAppStore.temporal.getState().clear();
+
+    useAppStore.getState().moveLayersToGroup([c, a], gid);
+
+    const grouped = useAppStore
+      .getState()
+      .layers.filter((item) => item.groupId === gid)
+      .map((item) => item.id);
+    assert.deepEqual(grouped, [a, c]);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+    assert.equal(useAppStore.getState().layers.find((item) => item.id === b)?.groupId, undefined);
+  });
+
   it("nests groups, rejects cycles, and promotes children when ungrouping", () => {
     const parent = useAppStore.getState().addLayerGroup("Parent");
     const child = useAppStore.getState().addLayerGroup("Child");
