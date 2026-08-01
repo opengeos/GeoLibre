@@ -176,9 +176,9 @@ def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_statement_timeout_constant_exists() -> None:
-    """The wall-clock timeout constant must be defined and positive."""
+    """The wall-clock timeout constant must equal the documented 60-second contract."""
     assert hasattr(sedona_ops, "_STATEMENT_TIMEOUT_MS")
-    assert sedona_ops._STATEMENT_TIMEOUT_MS > 0
+    assert sedona_ops._STATEMENT_TIMEOUT_MS == 60_000
 
 
 def test_sql_timeout_maps_to_504(monkeypatch: pytest.MonkeyPatch) -> None:

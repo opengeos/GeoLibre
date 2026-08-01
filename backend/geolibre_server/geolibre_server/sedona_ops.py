@@ -165,7 +165,8 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             r = r.limit(MAX_FEATURES + 1)
             return r.to_pandas()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
             future = pool.submit(_execute)
             try:
                 frame = future.result(timeout=timeout_secs)
@@ -179,6 +180,8 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
                 raise SqlTimeout(
                     f"Spatial SQL timed out after {int(timeout_secs)} seconds"
                 ) from None
+        finally:
+            pool.shutdown(wait=False)
         if len(frame) > MAX_FEATURES:
             # Input registration already caps each layer, but a query can still
             # expand rows (cross joins, generate_series, etc.). Bound the
