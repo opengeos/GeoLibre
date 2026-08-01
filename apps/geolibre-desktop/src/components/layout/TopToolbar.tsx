@@ -781,6 +781,8 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
+  const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
   // PostgreSQL prefill (saved connection / clicked table) from the Browser panel.
   const [addDataPostgres, setAddDataPostgres] = useState<OpenAddDataPostgres | undefined>(
     undefined,
@@ -803,6 +805,10 @@ export function TopToolbar({
       // open a dialog whose backing service is compiled out.
       if (detail?.kind && !masHidesDataSource(detail.kind)) {
         setAddDataPostgres(detail.postgres);
+        setAddDataTargetGroupId(detail.groupId ?? null);
+        addDataInitialLayerIdsRef.current = new Set(
+          useAppStore.getState().layers.map((layer) => layer.id),
+        );
         setAddDataKind(detail.kind);
       }
     };
@@ -1726,7 +1732,17 @@ export function TopToolbar({
         initialPostgres={addDataPostgres}
         onOpenChange={(open: boolean) => {
           if (!open) {
+            if (addDataTargetGroupId) {
+              const state = useAppStore.getState();
+              const addedIds = state.layers
+                .filter((layer) => !addDataInitialLayerIdsRef.current.has(layer.id))
+                .map((layer) => layer.id);
+              if (addedIds.length > 0) {
+                state.moveLayersToGroup(addedIds, addDataTargetGroupId);
+              }
+            }
             setAddDataKind(null);
+            setAddDataTargetGroupId(null);
             setAddDataDeckVizKind(undefined);
             setAddDataPostgres(undefined);
           }

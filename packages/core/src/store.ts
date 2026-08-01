@@ -567,6 +567,11 @@ export interface AppState {
   setLayerVirtualFields: (id: string, fields: LayerVirtualField[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
+  moveLayersRelative: (
+    layerIds: string[],
+    targetLayerId: string,
+    position: "above" | "below",
+  ) => void;
   addGeoJsonLayer: (
     name: string,
     geojson: FeatureCollection,
@@ -1687,6 +1692,25 @@ export const useAppStore = create<AppState>()(
             return s;
           }
           return { layers: next, isDirty: true };
+        }),
+
+      moveLayersRelative: (layerIds, targetLayerId, position) =>
+        set((s) => {
+          const requestedIds = new Set(layerIds);
+          if (requestedIds.has(targetLayerId)) return s;
+          const moving = s.layers.filter((layer) => requestedIds.has(layer.id));
+          if (moving.length === 0) return s;
+          const without = s.layers.filter((layer) => !requestedIds.has(layer.id));
+          const targetIndex = without.findIndex((layer) => layer.id === targetLayerId);
+          if (targetIndex < 0) return s;
+          // Store order is the reverse of panel display order, so "above" is
+          // immediately after the target in this array.
+          const insertIndex = position === "above" ? targetIndex + 1 : targetIndex;
+          const next = [...without];
+          next.splice(insertIndex, 0, ...moving);
+          const normalized = normalizeGroupContiguity(next);
+          if (normalized.every((layer, index) => layer.id === s.layers[index]?.id)) return s;
+          return { layers: normalized, isDirty: true };
         }),
 
       addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {

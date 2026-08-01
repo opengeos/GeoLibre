@@ -223,6 +223,37 @@ describe("layer group store actions", () => {
     assert.equal(useAppStore.getState().layers.find((item) => item.id === b)?.groupId, undefined);
   });
 
+  it("reorders selected top-level layers as one block", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const d = useAppStore.getState().addGeoJsonLayer("D", emptyFC);
+    useAppStore.temporal.getState().clear();
+
+    useAppStore.getState().moveLayersRelative([a, b], d, "above");
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [c, d, a, b],
+    );
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+  });
+
+  it("reorders selected grouped layers as one block", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G", [a, b, c]);
+
+    useAppStore.getState().moveLayersRelative([b, c], a, "below");
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [b, c, a],
+    );
+    assert.ok(useAppStore.getState().layers.every((item) => item.groupId === gid));
+  });
+
   it("nests groups, rejects cycles, and promotes children when ungrouping", () => {
     const parent = useAppStore.getState().addLayerGroup("Parent");
     const child = useAppStore.getState().addLayerGroup("Child");

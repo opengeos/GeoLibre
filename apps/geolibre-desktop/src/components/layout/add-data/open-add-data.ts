@@ -22,6 +22,8 @@ export interface OpenAddDataDetail {
   kind: AddDataKind;
   /** Prefill for the PostgreSQL source (only meaningful when `kind` is "postgres"). */
   postgres?: OpenAddDataPostgres;
+  /** Layers created before this dialog closes are moved into this group. */
+  groupId?: string;
 }
 
 /**
@@ -33,11 +35,14 @@ export interface OpenAddDataDetail {
  * @param kind - The Add Data source to open (e.g. "wms", "wfs", "xyz").
  * @param options - Optional source-specific prefill (currently `postgres`).
  */
-export function openAddData(kind: AddDataKind, options?: { postgres?: OpenAddDataPostgres }): void {
+export function openAddData(
+  kind: AddDataKind,
+  options?: { postgres?: OpenAddDataPostgres; groupId?: string },
+): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<OpenAddDataDetail>(OPEN_ADD_DATA_EVENT, {
-      detail: { kind, postgres: options?.postgres },
+      detail: { kind, postgres: options?.postgres, groupId: options?.groupId },
     }),
   );
 }
