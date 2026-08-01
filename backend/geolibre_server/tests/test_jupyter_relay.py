@@ -34,14 +34,14 @@ class FakeSocket:
 
 @pytest.fixture(autouse=True)
 def _isolate_listeners():
-    """Keep each test's listener set independent of the module-level one."""
-    saved = set(jupyter_relay._listeners)
+    """Keep each test's listener list independent of the module-level one."""
+    saved = list(jupyter_relay._listeners)
     saved_pending = dict(jupyter_relay._pending_results)
     jupyter_relay._listeners.clear()
     jupyter_relay._pending_results.clear()
     yield
     jupyter_relay._listeners.clear()
-    jupyter_relay._listeners.update(saved)
+    jupyter_relay._listeners.extend(saved)
     jupyter_relay._pending_results.clear()
     jupyter_relay._pending_results.update(saved_pending)
 
@@ -181,7 +181,7 @@ def test_relay_base_url_falls_back_to_loopback(host):
 
 def test_broadcast_reaches_every_listener_and_counts_them():
     first, second = FakeSocket(), FakeSocket()
-    jupyter_relay._listeners.update({first, second})
+    jupyter_relay._listeners.extend([first, second])
 
     delivered = jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"})
 
@@ -192,7 +192,7 @@ def test_broadcast_reaches_every_listener_and_counts_them():
 
 def test_broadcast_drops_a_dead_listener_instead_of_failing():
     alive, dead = FakeSocket(), FakeSocket(fails=True)
-    jupyter_relay._listeners.update({alive, dead})
+    jupyter_relay._listeners.extend([alive, dead])
 
     delivered = jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"})
 
@@ -209,7 +209,7 @@ def test_broadcast_with_no_listeners_reports_zero():
 
 def test_limited_broadcast_reaches_only_one_listener():
     first, second = FakeSocket(), FakeSocket()
-    jupyter_relay._listeners.update({first, second})
+    jupyter_relay._listeners.extend([first, second])
 
     delivered = jupyter_relay._broadcast(
         {"type": "geolibre:command", "method": "listLayers"},
@@ -218,6 +218,34 @@ def test_limited_broadcast_reaches_only_one_listener():
 
     assert delivered == 1
     assert len(first.received) + len(second.received) == 1
+
+
+def test_limited_broadcast_keeps_picking_the_same_window():
+    # A mutation and the read-back that follows it must reach the same map, so
+    # the single-window pick has to be the oldest connection every time — not
+    # whichever one an unordered set happened to yield.
+    first, second = FakeSocket(), FakeSocket()
+    jupyter_relay._listeners.extend([first, second])
+
+    for method in ("addGeoJsonLayer", "listLayers"):
+        jupyter_relay._broadcast({"type": "geolibre:command", "method": method}, limit=1)
+
+    assert len(first.received) == 2
+    assert second.received == []
+
+
+def test_limited_broadcast_falls_through_a_dead_first_window():
+    dead, alive = FakeSocket(fails=True), FakeSocket()
+    jupyter_relay._listeners.extend([dead, alive])
+
+    delivered = jupyter_relay._broadcast(
+        {"type": "geolibre:command", "method": "listLayers"},
+        limit=1,
+    )
+
+    assert delivered == 1
+    assert len(alive.received) == 1
+    assert jupyter_relay._listeners == [alive]
 
 
 # -- extension load ----------------------------------------------------------

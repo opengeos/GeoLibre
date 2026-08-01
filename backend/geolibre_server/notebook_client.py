@@ -83,6 +83,11 @@ _RELAY_TOKEN_ENV = "GEOLIBRE_RELAY_TOKEN"
 
 # Loopback round-trip to the local app. Short: a hung relay must not stall a
 # notebook, and the caller only loses a fire-and-forget command.
+#
+# Read-back calls wait one second longer than this (see _request_from_relay), so
+# they stay above the relay's own RESULT_TIMEOUT_SECONDS (5.0, in
+# geolibre_server/jupyter_relay.py) and surface its precise 504 rather than
+# timing out here first. Keep the two in step if either moves.
 _RELAY_TIMEOUT_SECONDS = 5.0
 
 _NOT_CONNECTED_HINT = (
@@ -129,9 +134,35 @@ def _post_to_relay(url: str, message: dict[str, Any]) -> tuple[int, str | None]:
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError) as error:
-        return 0, f"the local GeoLibre relay could not be reached ({error})"
+        return 0, _relay_failure_reason(error)
     delivered = payload.get("delivered")
     return (delivered if isinstance(delivered, int) else 0), None
+
+
+def _relay_failure_reason(error: Exception) -> str:
+    """Describe a failed relay call, in the terms that actually apply.
+
+    An :class:`urllib.error.HTTPError` means the relay *was* reached and answered
+    with an error status (400 for a malformed command, 409 for a duplicate
+    request id, 504 when the app did not return a result in time); saying it
+    "could not be reached" would send a reader looking in the wrong place.
+    """
+    if isinstance(error, urllib.error.HTTPError):
+        return f"the local GeoLibre relay returned HTTP {error.code} ({_http_error_detail(error)})"
+    return f"the local GeoLibre relay could not be reached ({error})"
+
+
+def _http_error_detail(error: urllib.error.HTTPError) -> str:
+    """Best-effort human message from a relay error response."""
+    try:
+        payload = json.loads(error.read().decode("utf-8"))
+    except (OSError, ValueError):
+        payload = None
+    if isinstance(payload, dict):
+        message = payload.get("message") or payload.get("reason")
+        if isinstance(message, str) and message:
+            return message
+    return str(error.reason or error)
 
 
 def _relay_request(url: str, message: dict[str, Any]) -> urllib.request.Request:
@@ -163,7 +194,7 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError) as error:
-        raise RuntimeError(f"The local GeoLibre relay could not be reached: {error}") from error
+        raise RuntimeError(f"GeoLibre read-back failed: {_relay_failure_reason(error)}") from error
     if not payload.get("delivered"):
         raise RuntimeError(f"No GeoLibre window is connected. {_NOT_CONNECTED_HINT}")
     if not payload.get("ok"):
@@ -405,7 +436,11 @@ class HostMap:
     def list_layers(self) -> list[dict[str, Any]]:
         """Return live layer metadata in draw order."""
         value = _request("listLayers")
-        return value if isinstance(value, list) else []
+        if not isinstance(value, list):
+            # A successful reply that is not a list means the app's handler is
+            # broken; returning [] would read as "the map has no layers".
+            raise RuntimeError(f"GeoLibre returned an unexpected layer list: {value!r}")
+        return value
 
     def get_layer(self, layer_id: str) -> dict[str, Any]:
         """Return live metadata for one layer id (raises if absent)."""
@@ -434,7 +469,11 @@ class HostMap:
         # where a synchronous Python call cannot wait on the browser event loop.
         if _relay_url() is not None:
             value = _request("addGeoJsonLayer", params)
-            return str(value)
+            if not isinstance(value, str) or not value:
+                # Fail loudly rather than handing back an id ("None") that no
+                # later set_style/remove_layer call could ever resolve.
+                raise RuntimeError(f"GeoLibre returned an unexpected layer id: {value!r}")
+            return value
         _send("addGeoJsonLayer", params)
         return None
 

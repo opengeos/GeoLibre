@@ -42,9 +42,9 @@ m.set_basemap("https://…/style.json")
 
 Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the
 relay's correlated request/reply path and returns the new layer id. The same
-path exposes `list_layers()`, which returns each live layer's id, name, type,
-visibility, and opacity, and `get_layer(layer_id)`, which returns one matching
-layer or raises `ValueError`. The id can be passed directly to
+path exposes `list_layers()`, which returns one dict per live layer with `id`,
+`name`, `type`, `visible`, and `opacity`, and `get_layer(layer_id)`, which
+returns one matching layer or raises `ValueError`. The id can be passed directly to
 `set_visibility`, `set_opacity`, `set_style`, `remove_layer`, or
 `zoom_to_layer`.
 

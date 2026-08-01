@@ -242,3 +242,47 @@ def test_get_layer_raises_for_an_unknown_id(monkeypatch):
 
     with pytest.raises(ValueError, match="missing"):
         notebook_client.HostMap().get_layer("missing")
+
+
+def test_list_layers_raises_on_a_non_list_result(relay, monkeypatch):
+    # An empty list would read as "the map has no layers" and hide the bug.
+    monkeypatch.setattr(notebook_client, "_request", lambda method, params=None: {"oops": True})
+
+    with pytest.raises(RuntimeError, match="unexpected layer list"):
+        notebook_client.HostMap().list_layers()
+
+
+def test_add_geojson_raises_on_a_missing_layer_id(relay, monkeypatch):
+    # str(None) would hand back "None", an id no later call could ever resolve.
+    monkeypatch.setattr(notebook_client, "_request", lambda method, params=None: None)
+
+    with pytest.raises(RuntimeError, match="unexpected layer id"):
+        notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
+
+
+# -- relay failures ----------------------------------------------------------
+
+
+def test_read_back_reports_an_answered_error_status_as_such(relay):
+    # The relay answered (504 = the app did not return a result in time), so the
+    # message must not send the reader looking for an unreachable server.
+    relay.error = urllib.error.HTTPError(
+        "http://127.0.0.1:8766/geolibre/relay/command",
+        504,
+        "Gateway Timeout",
+        {},
+        io.BytesIO(json.dumps({"message": "GeoLibre did not return a result in time."}).encode()),
+    )
+
+    with pytest.raises(RuntimeError, match="returned HTTP 504") as excinfo:
+        notebook_client.HostMap().list_layers()
+
+    assert "did not return a result in time" in str(excinfo.value)
+    assert "could not be reached" not in str(excinfo.value)
+
+
+def test_read_back_reports_an_unreachable_relay_as_such(relay):
+    relay.error = urllib.error.URLError("connection refused")
+
+    with pytest.raises(RuntimeError, match="could not be reached"):
+        notebook_client.HostMap().list_layers()

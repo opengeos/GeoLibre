@@ -1,4 +1,5 @@
 import type { JupyterServerInfo } from "./jupyter";
+import type { ScriptingHandlers } from "./scripting/scriptingApi";
 
 // Wire format for the desktop Jupyter map-command relay
 // (backend/geolibre_server/geolibre_server/jupyter_relay.py). The relay lets a
@@ -69,6 +70,54 @@ export function parseRelayMessage(data: unknown): RelayCommand | null {
     method: message.method,
     params,
   };
+}
+
+/** The correlated reply the app sends back for a command carrying a requestId. */
+export type RelayResult =
+  | { type: "geolibre:result"; requestId: string; ok: true; value: unknown }
+  | { type: "geolibre:result"; requestId: string; ok: false; error: string };
+
+/**
+ * Run one relayed command against the scripting handlers and build its reply.
+ *
+ * @param handlers - The scripting command surface (`createScriptingHandlers`).
+ * @param command - The parsed command to run.
+ * @returns The result to send back, or null for a fire-and-forget command (empty
+ *   `requestId`) — the handler still ran, there is just nothing to correlate.
+ */
+export async function runRelayCommand(
+  handlers: ScriptingHandlers,
+  command: RelayCommand,
+): Promise<RelayResult | null> {
+  // Own-property only, so an inherited member ("constructor", …) can never be
+  // invoked as a command.
+  if (!Object.hasOwn(handlers, command.method)) {
+    console.warn(`Jupyter relay: unknown command "${command.method}"`);
+    return command.requestId
+      ? {
+          type: "geolibre:result",
+          requestId: command.requestId,
+          ok: false,
+          error: `Unknown command "${command.method}"`,
+        }
+      : null;
+  }
+  try {
+    const value = await handlers[command.method](command.params);
+    return command.requestId
+      ? { type: "geolibre:result", requestId: command.requestId, ok: true, value }
+      : null;
+  } catch (error) {
+    console.error(`Jupyter relay: command "${command.method}" failed`, error);
+    return command.requestId
+      ? {
+          type: "geolibre:result",
+          requestId: command.requestId,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      : null;
+  }
 }
 
 /** Reconnect backoff (ms) after a dropped socket, capped so it stays responsive. */

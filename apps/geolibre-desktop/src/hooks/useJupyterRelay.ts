@@ -6,6 +6,7 @@ import {
   parseRelayMessage,
   relayReconnectDelay,
   relaySocketUrl,
+  runRelayCommand,
 } from "../lib/jupyter-relay";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 
@@ -54,41 +55,8 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
     };
 
     const run = async (command: RelayCommand, activeSocket: WebSocket) => {
-      // Own-property only, so an inherited member ("constructor", …) can never be
-      // invoked as a command.
-      if (!Object.hasOwn(handlers, command.method)) {
-        console.warn(`Jupyter relay: unknown command "${command.method}"`);
-        if (command.requestId) {
-          reply(activeSocket, {
-            type: "geolibre:result",
-            requestId: command.requestId,
-            ok: false,
-            error: `Unknown command "${command.method}"`,
-          });
-        }
-        return;
-      }
-      try {
-        const value = await handlers[command.method](command.params);
-        if (command.requestId) {
-          reply(activeSocket, {
-            type: "geolibre:result",
-            requestId: command.requestId,
-            ok: true,
-            value,
-          });
-        }
-      } catch (error) {
-        console.error(`Jupyter relay: command "${command.method}" failed`, error);
-        if (command.requestId) {
-          reply(activeSocket, {
-            type: "geolibre:result",
-            requestId: command.requestId,
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      const result = await runRelayCommand(handlers, command);
+      if (result) reply(activeSocket, result);
     };
 
     const close = () => {

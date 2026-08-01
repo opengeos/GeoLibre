@@ -82,16 +82,24 @@ COMMAND_TYPE = "geolibre:command"
 _ALLOWED_ORIGIN_HOSTS = frozenset({"localhost", "127.0.0.1", "tauri.localhost"})
 _ALLOWED_ORIGIN_SCHEMES = frozenset({"http", "https", "tauri"})
 
-# Open app-side sockets. Module level (not per-handler) because every handler
-# instance is created per request: the POST handler needs the set the WebSocket
-# handlers registered themselves in.
-_listeners: set[GeoLibreRelaySocket] = set()
+# Open app-side sockets, oldest connection first. Module level (not per-handler)
+# because every handler instance is created per request: the POST handler needs
+# the list the WebSocket handlers registered themselves in. Ordered (a list, not
+# a set) because single-window dispatch below takes the first entry: with a set
+# that would be whatever the hash table happens to yield, so a correlated
+# read-back could land in a different window than the mutation it follows up on
+# once a second window connects.
+_listeners: list[GeoLibreRelaySocket] = []
 
 # Correlated read-back requests waiting for the app-side socket to execute a
 # scripting handler. Fire-and-forget commands keep an empty requestId and never
 # enter this mapping.
 _pending_results: dict[str, Future[dict[str, Any]]] = {}
 
+#: How long a correlated POST waits for the app's result before answering 504.
+#: The kernel client's own socket timeout (``_RELAY_TIMEOUT_SECONDS + 1`` in
+#: ``notebook_client.py``) must stay longer than this, so the precise 504 message
+#: reaches the notebook instead of the client's generic "could not be reached".
 RESULT_TIMEOUT_SECONDS = 5.0
 
 
@@ -182,16 +190,30 @@ def relay_base_url(host: str, port: int, base_url: str) -> str:
     return f"http://{host}:{port}" + url_path_join(base_url, RELAY_PATH)
 
 
+def _drop_listener(socket: GeoLibreRelaySocket) -> None:
+    """Unregister a socket, tolerating one that is already gone."""
+    if socket in _listeners:
+        _listeners.remove(socket)
+
+
 def _broadcast(message: dict[str, Any], *, limit: int | None = None) -> int:
-    """Send ``message`` to open app sockets; return how many received it."""
+    """Send ``message`` to open app sockets; return how many received it.
+
+    Args:
+        message: The envelope to encode and send.
+        limit: Stop after this many windows received it. ``limit=1`` delivers to
+            the oldest connected window, which is stable for as long as that
+            window stays open, so a mutation and the read-back that follows it
+            reach the same map.
+    """
     encoded = json.dumps(message)
     delivered = 0
-    # Copy: write_message on a closed socket raises and we drop it from the set.
+    # Copy: write_message on a closed socket raises and we drop it from the list.
     for socket in list(_listeners):
         try:
             socket.write_message(encoded)
         except Exception:  # noqa: BLE001 - a dead peer must not fail the request
-            _listeners.discard(socket)
+            _drop_listener(socket)
             continue
         delivered += 1
         if limit is not None and delivered >= limit:
@@ -218,7 +240,8 @@ class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHan
 
     def open(self, *args: Any, **kwargs: Any) -> None:
         """Register this app window as a command listener."""
-        _listeners.add(self)
+        if self not in _listeners:
+            _listeners.append(self)
         self.write_message(json.dumps({"type": "geolibre:relay-ready"}))
 
     def on_message(self, message: str) -> None:
@@ -233,7 +256,7 @@ class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHan
 
     def on_close(self) -> None:
         """Unregister this app window."""
-        _listeners.discard(self)
+        _drop_listener(self)
 
 
 class GeoLibreRelayCommandHandler(APIHandler):
@@ -258,7 +281,9 @@ class GeoLibreRelayCommandHandler(APIHandler):
         try:
             # A correlated mutation must execute in only one app window; its
             # returned layer id then always belongs to the window that handled
-            # it. Fire-and-forget commands retain the historical broadcast.
+            # it. `_listeners` is ordered, so "one window" is consistently the
+            # oldest connected one and a later read-back finds what the mutation
+            # created. Fire-and-forget commands retain the historical broadcast.
             delivered = _broadcast(message, limit=1)
             if not delivered:
                 self.finish(json.dumps({"delivered": 0}))
