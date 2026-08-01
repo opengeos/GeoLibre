@@ -1009,7 +1009,7 @@
     "maxAccuracy": "Max. nauwkeurigheid (m)",
     "settingsHint": "Fixes dichter dan de minimale afstand of tijd worden overgeslagen. Fixes die minder nauwkeurig zijn dan de nauwkeurigheidsdrempel worden niet gelogd, en het vastleggen van punten wordt geblokkeerd. 0 schakelt een filter uit.",
     "openDialog": "GPS-tracking openen",
-    "altitudeValue": "Hgt: {{value}} m",
+    "altitudeValue": "Hoogte: {{value}} m",
     "speedValue": "{{value}} km/u",
     "headingValue": "{{value}}°",
     "source": "Positiebron",
@@ -2482,7 +2482,7 @@
         "remote-file": "Externe QGIS-bestandsbronnen worden nog niet ondersteund.",
         "network-path": "Netwerkpaden worden om veiligheidsredenen niet geladen.",
         "browser-local-file": "Er wordt naar het lokale bestand verwezen, maar browsers kunnen QGIS-gegevenspaden niet opnieuw openen. Gebruik GeoLibre Desktop om het te laden.",
-        "browser-local-raster": "Er wordt via een lokaal pad naar de raster verwezen. Gebruik GeoLibre Desktop om hem te laden."
+        "browser-local-raster": "Er wordt via een lokaal pad naar het raster verwezen. Gebruik GeoLibre Desktop om het te laden."
       },
       "openProjectFromUrlDesc": "Laad een `.geolibre.json`-project en voeg het toe aan recente projecten.",
       "projectUrl": "Project-URL",
@@ -3660,7 +3660,7 @@
       "crs": {
         "browse": "Bladeren",
         "codePlaceholder": "EPSG-code",
-        "searchLabel": "Coördinaatreferentiesystemen zoeken",
+        "searchLabel": "Coördinatenreferentiesystemen zoeken",
         "searchPlaceholder": "Zoeken op naam of EPSG-code",
         "geographic": "Geografisch",
         "projected": "Geprojecteerd",
@@ -5026,7 +5026,7 @@
     "cogUnsupported": "Deze GeoLibre-host kan externe GeoTIFF-assets niet weergeven"
   },
   "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "De KML-export kon object {{position}} niet wegschrijven omdat het ongeldige coördinaten heeft.",
+    "invalidKmlCoordinatesByPosition": "De KML-export kon het object op positie {{position}} niet wegschrijven omdat het ongeldige coördinaten heeft.",
     "invalidKmlCoordinatesById": "De KML-export kon object met ID {{id}} niet wegschrijven omdat het ongeldige coördinaten heeft."
   },
   "comments": {

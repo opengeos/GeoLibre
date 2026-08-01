@@ -975,7 +975,7 @@
     "maxAccuracy": "Akurasi maks (m)",
     "settingsHint": "Titik trek yang lebih dekat dari jarak atau waktu minimum dilewati. Sinyal yang kurang akurat dari ambang akurasi tidak dicatat, dan penangkapan titik diblokir. 0 menonaktifkan filter.",
     "openDialog": "Buka Pelacakan GPS",
-    "altitudeValue": "Ket: {{value}} m",
+    "altitudeValue": "Ketinggian: {{value}} m",
     "speedValue": "{{value}} km/jam",
     "headingValue": "{{value}}°",
     "source": "Sumber posisi",
@@ -1004,7 +1004,7 @@
       "pps": "Fix PPS",
       "rtk-fixed": "RTK fixed",
       "rtk-float": "RTK float",
-      "estimated": "Perhitungan mati",
+      "estimated": "Estimasi (perhitungan mati)",
       "manual": "Masukan manual",
       "simulation": "Simulasi"
     }

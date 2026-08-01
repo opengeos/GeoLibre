@@ -3206,7 +3206,7 @@
       "rectangle": "Destaque retangular",
       "ellipse": "Destaque elíptico",
       "freehand": "Destaque à mão livre",
-      "pin": "Marcador de alfinete",
+      "pin": "Alfinete",
       "sticky_note": "Nota adesiva",
       "placed_image": "Imagem posicionada"
     },
@@ -3540,8 +3540,8 @@
       "south": "{{latitude}}°S",
       "equator": "o equador",
       "geographicNote": "As camadas selecionadas usam um CRS geográfico (WGS84), portanto as distâncias estão em graus. Escolha uma unidade ao lado de um campo de distância para digitar metros, ou reprojete para um CRS projetado para obter resultados exatos.",
-      "converted": "Enviado à ferramenta como {{degrees}}°, convertido em {{latitude}}. Um grau varia com a latitude e a direção, então este valor é aproximado.",
-      "convertedEmpty": "Os valores serão convertidos em graus em {{latitude}}. Um grau varia com a latitude e a direção, então este valor é aproximado.",
+      "converted": "Enviado à ferramenta como {{degrees}}°, com a conversão calculada para {{latitude}}. Um grau varia com a latitude e a direção, então este valor é aproximado.",
+      "convertedEmpty": "Os valores serão convertidos em graus, com a conversão calculada para {{latitude}}. Um grau varia com a latitude e a direção, então este valor é aproximado.",
       "notANumber": "Não é um número, então é passado à ferramenta como digitado em vez de convertido. Use um decimal simples como 12000 ou 1.5."
     },
     "history": {
@@ -5032,7 +5032,7 @@
   "comments": {
     "addDialogTitle": "Adicionar comentário de revisão",
     "addDialogDescription": "Publique uma nota ancorada neste projeto para revisão da equipe ou referência offline.",
-    "authorNameLabel": "Seu nome (perguntado uma vez, salvo automaticamente)",
+    "authorNameLabel": "Seu nome (solicitado uma vez, salvo automaticamente)",
     "authorNamePlaceholder": "ex.: Alex ou Sara",
     "commentLabel": "Comentário / Feedback",
     "commentPlaceholder": "Digite aqui sua nota de revisão ou feedback...",

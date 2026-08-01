@@ -2473,7 +2473,7 @@
       "qgisImportComplete": "QGIS projesi içe aktarıldı",
       "qgisImportWarnings_one": "Proje içe aktarıldı, ancak {{count}} katman yüklenemedi.",
       "qgisImportWarnings_other": "Proje içe aktarıldı, ancak {{count}} katman yüklenemedi.",
-      "qgisUnknownProvider": "bilinmiyor",
+      "qgisUnknownProvider": "bilinmeyen",
       "qgisImportReason": {
         "non-vector": "Bu ilk sürümde yalnızca dosya tabanlı vektör katmanları desteklenir.",
         "provider": "{{provider}} veri sağlayıcısı desteklenmiyor.",
@@ -3281,8 +3281,8 @@
     "noLayersHint": "Önce bir vektör veya DuckDB sorgu katmanı ekleyin.",
     "layerMissing": "Katman kullanılamıyor",
     "noData": "Bu katmanda grafiği çizilebilir öznitelik yok.",
-    "selectorMatches_one": "{{total}} nesneden {{count}} tanesi",
-    "selectorMatches_other": "{{total}} nesneden {{count}} tanesi",
+    "selectorMatches_one": "{{total}} öğeden {{count}} tanesi",
+    "selectorMatches_other": "{{total}} öğeden {{count}} tanesi",
     "selectorClear": "Temizle",
     "moveBack": "Geriye taşı",
     "moveForward": "İleriye taşı",
@@ -4528,7 +4528,7 @@
     "saveToLibrary": "Verilerim'e kaydet",
     "savedToLibrary": "\"{{name}}\" Verilerim'e kaydedildi.",
     "saveToLibraryNoSource": "Bu katmanın yeniden eklenebilir bir kaynağı yok, bu yüzden Verilerim'e kaydedilemez.",
-    "saveToLibraryTooLarge": "Bu katmanın nesneleri tek kopyası olduğu ve çok büyük olduğu için Verilerim'e kaydedilemez.",
+    "saveToLibraryTooLarge": "Bu katman, verilerinin tek kopyasını içerdiği ve boyutu çok büyük olduğu için Verilerim'e kaydedilemez.",
     "saveToLibraryConfigTooLarge": "Bu katmanın kaydedilmiş yapılandırması Verilerim için çok büyük.",
     "bindToTimeSlider": "Zaman Kaydırıcısına Bağla…",
     "bindTimeDimensionToTimeSlider": "Zaman boyutunu Zaman Kaydırıcısına bağla",
@@ -5026,8 +5026,8 @@
     "cogUnsupported": "Bu GeoLibre ana bilgisayarı uzak GeoTIFF varlıklarını görselleştiremiyor"
   },
   "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{position}}. nesneyi yazamadı.",
-    "invalidKmlCoordinatesById": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{id}} kimlikli nesneyi yazamadı."
+    "invalidKmlCoordinatesByPosition": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{position}}. öğeyi yazamadı.",
+    "invalidKmlCoordinatesById": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{id}} kimlikli öğeyi yazamadı."
   },
   "comments": {
     "addDialogTitle": "İnceleme Yorumu Ekle",

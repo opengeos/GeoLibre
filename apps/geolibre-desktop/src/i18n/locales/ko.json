@@ -1002,8 +1002,8 @@
       "gps": "GPS 측위",
       "dgps": "차분 GPS",
       "pps": "PPS 측위",
-      "rtk-fixed": "RTK 고정해",
-      "rtk-float": "RTK 부동해",
+      "rtk-fixed": "RTK 고정",
+      "rtk-float": "RTK 부동",
       "estimated": "추측 항법",
       "manual": "수동 입력",
       "simulation": "시뮬레이션"
@@ -3480,7 +3480,7 @@
       "equator": "적도",
       "geographicNote": "선택한 레이어가 지리 좌표계(WGS84)를 사용하므로 거리 단위는 도입니다. 거리 입력란 옆에서 단위를 선택하면 미터로 입력할 수 있으며, 정확한 결과가 필요하면 투영 좌표계로 재투영하세요.",
       "converted": "{{latitude}} 기준으로 환산하여 {{degrees}}°로 도구에 전달됩니다. 1도의 길이는 위도와 방향에 따라 달라지므로 근사값입니다.",
-      "convertedEmpty": "값은 {{latitude}} 기준으로 도로 환산됩니다. 1도의 길이는 위도와 방향에 따라 달라지므로 근사값입니다.",
+      "convertedEmpty": "값은 {{latitude}} 기준으로 도 단위로 환산됩니다. 1도의 길이는 위도와 방향에 따라 달라지므로 근사값입니다.",
       "notANumber": "숫자가 아니므로 환산하지 않고 입력한 그대로 도구에 전달됩니다. 12000이나 1.5 같은 일반 소수를 사용하세요."
     },
     "history": {

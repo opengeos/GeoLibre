@@ -2432,7 +2432,7 @@
       "qgisImportWarnings_other": "项目已导入，但有 {{count}} 个图层无法加载。",
       "qgisUnknownProvider": "未知",
       "qgisImportReason": {
-        "non-vector": "此首个版本仅支持基于文件的矢量图层。",
+        "non-vector": "首个版本仅支持基于文件的矢量图层。",
         "provider": "不支持 {{provider}} 数据提供程序。",
         "missing-source": "该图层没有可读取的数据源。",
         "format": "不支持该图层的文件格式。",
