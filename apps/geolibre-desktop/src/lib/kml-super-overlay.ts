@@ -1,5 +1,7 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { KmlGroundOverlay } from "./kml";
+import { isTiffImageName } from "./kml-overlays";
+import { tiffBytesToImageBitmap } from "./tiff-image";
 
 const PROTOCOL = "geolibre-kml-super-overlay";
 // Terrain drapes raster layers into per-tile textures. A 256 px protocol tile
@@ -334,7 +336,11 @@ function bitmapFor(archive: SuperOverlayArchive, tile: SuperOverlayTile): Promis
     archive.bitmapCache.set(tile, cached);
     return cached;
   }
-  const bitmap = createImageBitmap(new Blob([tile.bytes as BlobPart]));
+  // No browser decodes TIFF, and gdal2tiles/Global Mapper pyramids are often
+  // written as `.tif` tiles, so those go through the geotiff decoder instead.
+  const bitmap = isTiffImageName(tile.href)
+    ? tiffBytesToImageBitmap(tile.bytes)
+    : createImageBitmap(new Blob([tile.bytes as BlobPart]));
   // Never cache a failed decode: a corrupt tile would otherwise keep
   // re-throwing the same rejection for the rest of the session.
   void bitmap.catch(() => archive.bitmapCache.delete(tile));

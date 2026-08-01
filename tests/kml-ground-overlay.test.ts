@@ -4,6 +4,7 @@ import { latLonBoxCorners } from "../apps/geolibre-desktop/src/lib/kml";
 import {
   findArchiveEntry,
   imageMimeFromName,
+  isTiffImageName,
   normalizeArchivePath,
 } from "../apps/geolibre-desktop/src/lib/kml-overlays";
 
@@ -123,5 +124,21 @@ describe("imageMimeFromName", () => {
 
   it("falls back to a generic type for unknown extensions", () => {
     assert.equal(imageMimeFromName("data.bin"), "application/octet-stream");
+  });
+});
+
+describe("isTiffImageName", () => {
+  it("recognizes both TIFF extensions, case- and query-insensitively", () => {
+    assert.equal(isTiffImageName("kml_image_L1_0_0.tif"), true);
+    assert.equal(isTiffImageName("overlay.TIFF"), true);
+    assert.equal(isTiffImageName("tiles/0/0/0.tif?v=2"), true);
+  });
+
+  it("leaves the formats browsers decode natively alone", () => {
+    assert.equal(isTiffImageName("overlay.png"), false);
+    assert.equal(isTiffImageName("overlay.jpg"), false);
+    // A name that merely contains "tif" is not a TIFF.
+    assert.equal(isTiffImageName("certificate.pdf"), false);
+    assert.equal(isTiffImageName("motif.png"), false);
   });
 });

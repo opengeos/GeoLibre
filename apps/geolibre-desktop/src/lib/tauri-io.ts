@@ -56,8 +56,10 @@ import {
   findArchiveEntry,
   findArchiveEntryKey,
   imageMimeFromName,
+  isTiffImageName,
   normalizeArchivePath,
 } from "./kml-overlays";
+import { tiffBytesToPngBytes } from "./tiff-image";
 
 // Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
 // working; the implementation lives in the lightweight ./is-tauri module.
@@ -893,8 +895,9 @@ function archiveDirname(entryName: string): string {
 
 // Resolve every GroundOverlay in the archive's KML documents to an image layer,
 // pulling each overlay's image bytes out of the archive (or using an absolute
-// URL directly). Overlays whose image is missing, oversized, or in a format
-// browsers cannot render are skipped with a warning.
+// URL directly). An archive-embedded TIFF is transcoded to PNG first, since no
+// browser can paint TIFF. Overlays whose image is missing, oversized, or in a
+// format browsers cannot render are skipped with a warning.
 async function groundOverlaysFromKmz(
   entries: Record<string, Uint8Array>,
   kmlDocs: { name: string; text: string }[],
@@ -914,13 +917,8 @@ async function groundOverlaysFromKmz(
 
   const overlays: LoadedImageOverlay[] = [];
   for (const { overlay, baseDir } of parsed) {
-    // Applies to every href type (archive-embedded or absolute URL): browsers
-    // cannot decode TIFF for a MapLibre image source.
-    if (isUnrenderableOverlayImage(overlay.href)) {
-      warnUnrenderableOverlay(overlay.href);
-      continue;
-    }
     if (isHttpUrl(overlay.href)) {
+      if (isRemoteTiffOverlay(overlay.href)) continue;
       overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
       continue;
     }
@@ -935,29 +933,53 @@ async function groundOverlaysFromKmz(
       );
       continue;
     }
-    if (data.length > MAX_OVERLAY_IMAGE_BYTES) {
-      console.warn(
-        `Skipping a KML ground overlay: its image "${overlay.href}" is ${Math.round(
-          data.length / (1024 * 1024),
-        )} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
-      );
-      continue;
+    if (isOverlayImageTooLarge(data, overlay.href)) continue;
+
+    // Global Mapper and gdal2tiles both write `.tif` overlay images, which no
+    // browser can decode, so re-encode them as PNG. The PNG is what gets
+    // inlined, so it is size-checked in turn: a compressed TIFF can transcode
+    // into a much larger file.
+    let image = data;
+    let mime = imageMimeFromName(overlay.href);
+    if (isTiffImageName(overlay.href)) {
+      try {
+        image = await tiffBytesToPngBytes(data);
+      } catch (error) {
+        console.warn(
+          `Skipping a KML ground overlay: its TIFF image "${overlay.href}" could not be decoded.`,
+          error,
+        );
+        continue;
+      }
+      if (isOverlayImageTooLarge(image, overlay.href)) continue;
+      mime = "image/png";
     }
-    const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
-    overlays.push(imageOverlayLayer(overlay, url, path));
+    overlays.push(imageOverlayLayer(overlay, await bytesToDataUrl(image, mime), path));
   }
   return sequenceTimeOverlays(overlays);
 }
 
-// Browsers cannot decode TIFF into an <img>/canvas/createImageBitmap, which is
-// what a MapLibre image source paints from, so a TIFF overlay would fail to
-// render with no feedback. Detected from the href extension.
-function isUnrenderableOverlayImage(href: string): boolean {
-  return imageMimeFromName(href) === "image/tiff";
+// Whether an overlay's image is a TIFF that lives at an absolute URL. Unlike an
+// archive-embedded TIFF, which is transcoded to PNG on import, a remote one
+// cannot be re-encoded: fetching it needs CORS the overlay host rarely grants,
+// and MapLibre would be handed a URL no browser can paint.
+function isRemoteTiffOverlay(href: string): boolean {
+  if (!isTiffImageName(href)) return false;
+  console.warn(
+    `Skipping a KML ground overlay: browsers cannot render the remote TIFF image "${href}".`,
+  );
+  return true;
 }
 
-function warnUnrenderableOverlay(href: string): void {
-  console.warn(`Skipping a KML ground overlay: browsers cannot render the TIFF image "${href}".`);
+// Whether an overlay image is over the inline limit, warning when it is.
+function isOverlayImageTooLarge(image: Uint8Array, href: string): boolean {
+  if (image.length <= MAX_OVERLAY_IMAGE_BYTES) return false;
+  console.warn(
+    `Skipping a KML ground overlay: its image "${href}" is ${Math.round(
+      image.length / (1024 * 1024),
+    )} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
+  );
+  return true;
 }
 
 // Order overlays by KML `<drawOrder>` ascending. Layers added later render on
@@ -984,10 +1006,7 @@ function groundOverlaysFromKml(text: string, path: string): LoadedImageOverlay[]
       );
       continue;
     }
-    if (isUnrenderableOverlayImage(overlay.href)) {
-      warnUnrenderableOverlay(overlay.href);
-      continue;
-    }
+    if (isRemoteTiffOverlay(overlay.href)) continue;
     overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
   }
   return sequenceTimeOverlays(overlays);
@@ -1552,7 +1571,10 @@ function superOverlayTilesFromKmz(
 ): KmlSuperOverlayTile[] {
   return kmlDocs.flatMap((doc) =>
     parseKmlGroundOverlays(doc.text).flatMap((overlay) => {
-      if (isHttpUrl(overlay.href) || isUnrenderableOverlayImage(overlay.href)) return [];
+      // A remote tile is not archive-local, so it is not part of the pyramid
+      // this protocol serves. TIFF tiles stay in: the protocol decodes them
+      // through geotiff when it paints them.
+      if (isHttpUrl(overlay.href)) return [];
       const data =
         findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ??
         findArchiveEntry(entries, overlay.href);

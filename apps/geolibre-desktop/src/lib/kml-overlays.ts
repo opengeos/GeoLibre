@@ -30,6 +30,18 @@ export function imageMimeFromName(name: string): string {
 }
 
 /**
+ * Whether a file name or href points at a TIFF. Browsers cannot decode TIFF
+ * natively (`<img>`, `createImageBitmap`), so a TIFF overlay image has to go
+ * through the geotiff decoder in `tiff-image.ts` before it can be painted.
+ *
+ * @param name - A file name, archive entry name, or href.
+ * @returns True when the name's extension is `.tif`/`.tiff`.
+ */
+export function isTiffImageName(name: string): boolean {
+  return imageMimeFromName(name) === "image/tiff";
+}
+
+/**
  * Normalize a KMZ archive path (or a GroundOverlay href) for matching: drop any
  * query/fragment, decode `%XX` escapes, collapse backslashes, strip a leading
  * `./` or `/`, and lower-case it.
