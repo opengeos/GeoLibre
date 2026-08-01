@@ -223,6 +223,21 @@ describe("layer group store actions", () => {
     assert.equal(useAppStore.getState().layers.find((item) => item.id === b)?.groupId, undefined);
   });
 
+  it("leaves already-targeted layers in place during a mixed bulk move", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G", [b]);
+
+    useAppStore.getState().moveLayersToGroup([a, b], gid);
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [b, a, c],
+    );
+    assert.equal(useAppStore.getState().layers.find((item) => item.id === a)?.groupId, gid);
+  });
+
   it("reorders selected top-level layers as one block", () => {
     const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
     const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);

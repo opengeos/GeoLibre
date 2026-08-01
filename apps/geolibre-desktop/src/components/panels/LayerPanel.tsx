@@ -2956,7 +2956,8 @@ export function LayerPanel({
                     aria-pressed={selectedLayerIds.has(layer.id)}
                     onClick={(e) => handleLayerSelection(e, layer.id)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
                         setSelectedLayerIds(new Set([layer.id]));
                         selectionAnchorRef.current = layer.id;
                         selectLayer(layer.id);
