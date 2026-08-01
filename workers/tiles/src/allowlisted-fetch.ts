@@ -12,6 +12,7 @@ export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3.us-east-2.amazonaws.com/opmmarstiles/",
   "https://s3.amazonaws.com/opmbuilder/",
   "https://api.openaerialmap.org/",
+  "https://data.humdata.org/api/3/action/package_search",
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

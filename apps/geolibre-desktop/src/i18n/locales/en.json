@@ -4643,6 +4643,8 @@
     "export": "Export",
     "refresh": "Refresh",
     "autoRefreshOn": "Auto refresh on",
+    "lastSynced": "Last synced {{time}}",
+    "syncErrorStatus": "Sync failed: {{message}}",
     "autoRefresh": "Auto refresh",
     "refreshWfsGeojsonOnly": "WFS and GeoJSON URLs only",
     "editSqlQuery": "Edit query in SQL Workspace",

@@ -78,6 +78,12 @@ const OAM_CACHE_CONTROL = "public, max-age=120";
 // Upper bound on the forwarded `limit` (OAM's own page-size ceiling).
 const OAM_MAX_LIMIT = 100;
 
+// Public CKAN catalog search proxy. HDX's API has inconsistent browser CORS
+// behavior, so GeoLibre reads this fixed upstream through a named route.
+const CKAN_SEARCH_PATH = "/ckan/search";
+const CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/package_search";
+const CKAN_MAX_ROWS = 50;
+
 // Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
 // at all, so a browser cannot read it; this route fetches it server-side and
 // re-emits the JSON with `Access-Control-Allow-Origin: *`, exactly as the OAM
@@ -522,6 +528,7 @@ export default {
           "  Reprojected WMS: /wms/<dataset>/<z>/<x>/<y>.png\n" +
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
+          "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
@@ -583,6 +590,41 @@ export default {
         status: originResponse.status,
         headers,
       });
+    }
+
+    if (url.pathname === CKAN_SEARCH_PATH) {
+      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+      }
+      const upstream = new URL(CKAN_SEARCH_UPSTREAM);
+      const query = url.searchParams.get("q")?.trim().slice(0, 300);
+      if (!query) {
+        return new Response("Missing query", { status: 400, headers: CORS_HEADERS });
+      }
+      const requestedRows = Number(url.searchParams.get("rows"));
+      const rows = Number.isFinite(requestedRows)
+        ? Math.min(Math.max(Math.trunc(requestedRows), 1), CKAN_MAX_ROWS)
+        : 20;
+      const requestedStart = Number(url.searchParams.get("start"));
+      const start = Number.isFinite(requestedStart)
+        ? Math.min(Math.max(Math.trunc(requestedStart), 0), 10_000)
+        : 0;
+      upstream.searchParams.set("q", query);
+      upstream.searchParams.set("rows", String(rows));
+      upstream.searchParams.set("start", String(start));
+      let originResponse: Response;
+      try {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
+          headers: { accept: "application/json" },
+          cf: { cacheEverything: true, cacheTtl: 120 },
+        });
+      } catch {
+        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
+      headers.set("cache-control", originResponse.ok ? "public, max-age=120" : "no-store");
+      return new Response(originResponse.body, { status: originResponse.status, headers });
     }
 
     // Source Cooperative metadata: source.coop sends no CORS headers, so the

@@ -838,6 +838,20 @@ export interface LayerVirtualField {
   errorCount?: number;
 }
 
+/** Persisted refresh policy and most recent synchronization result for a layer. */
+export interface LayerConnection {
+  /** Owning layer id. Repeated here so records remain self-describing when exported. */
+  layerId: string;
+  /** Automatic refresh cadence in seconds, or null for manual synchronization only. */
+  interval: number | null;
+  /** ISO timestamp of the most recent successful synchronization. */
+  lastSyncedAt: string | null;
+  /** Most recent synchronization error. Cleared by a successful synchronization. */
+  lastError: string | null;
+  /** Whether a failed synchronization retains the last good data or clears it. */
+  onFailure: "keep-last" | "clear";
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -889,6 +903,11 @@ export interface GeoLibreLayer {
    * as one block; see `@geolibre/core`'s `layer-groups` helpers.
    */
   groupId?: string;
+  /**
+   * Project-persisted connection policy for reloadable layers. Runtime timers
+   * are reconstructed from this record when a project opens.
+   */
+  connection?: LayerConnection;
 }
 
 /**

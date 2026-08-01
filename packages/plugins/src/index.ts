@@ -695,6 +695,12 @@ export {
 } from "./plugins/time-slider-tile-sample";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";
 export {
+  CKAN_PLUGIN_ID,
+  SOCRATA_PLUGIN_ID,
+  maplibreCkanPlugin,
+  maplibreSocrataPlugin,
+} from "./plugins/maplibre-open-data-catalogs";
+export {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,

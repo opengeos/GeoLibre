@@ -172,6 +172,7 @@ import {
   isVectorControlRefreshLayer,
   MIN_REFRESH_INTERVAL_MS,
   refreshGeoJsonLayer,
+  setLayerConnectionResult,
   setLayerRefreshConfig,
 } from "../../lib/layer-refresh";
 import {
@@ -555,6 +556,17 @@ function parseCustomRefreshIntervalMs(value: string): number | null {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
   return Math.max(MIN_REFRESH_INTERVAL_MS, Math.round(seconds * 1000));
+}
+
+function relativeSyncTime(iso: string, locale: string): string {
+  const elapsedSeconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  if (Math.abs(elapsedSeconds) < 60) return formatter.format(elapsedSeconds, "second");
+  const minutes = Math.round(elapsedSeconds / 60);
+  if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return formatter.format(hours, "hour");
+  return formatter.format(Math.round(hours / 24), "day");
 }
 
 function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
@@ -1321,6 +1333,10 @@ export function LayerPanel({
 
           updateLayer(layer.id, {
             geojson,
+            ...setLayerConnectionResult(latest, {
+              syncedAt: new Date().toISOString(),
+              error: null,
+            }),
             metadata: {
               ...latest.metadata,
               featureCount,
@@ -1350,6 +1366,10 @@ export function LayerPanel({
 
           updateLayer(layer.id, {
             geojson,
+            ...setLayerConnectionResult(latest, {
+              syncedAt: new Date().toISOString(),
+              error: null,
+            }),
             metadata: {
               ...latest.metadata,
               featureCount,
@@ -1394,6 +1414,18 @@ export function LayerPanel({
           // write would risk clobbering the synced values. `info` feeds only
           // the toast below.
           const featureCount = typeof info.featureCount === "number" ? info.featureCount : null;
+          const latest = useAppStore
+            .getState()
+            .layers.find((candidate) => candidate.id === layer.id);
+          if (latest) {
+            updateLayer(
+              layer.id,
+              setLayerConnectionResult(latest, {
+                syncedAt: new Date().toISOString(),
+                error: null,
+              }),
+            );
+          }
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: {
@@ -1419,6 +1451,10 @@ export function LayerPanel({
 
         updateLayer(layer.id, {
           geojson,
+          ...setLayerConnectionResult(latest, {
+            syncedAt: new Date().toISOString(),
+            error: null,
+          }),
           metadata: {
             ...latest.metadata,
             featureCount,
@@ -1440,6 +1476,10 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       } catch (error) {
         const message = error instanceof Error ? error.message : t("layers.refreshError");
+        const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
+        if (latest) {
+          updateLayer(layer.id, setLayerConnectionResult(latest, { error: message }));
+        }
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: {
@@ -2217,6 +2257,7 @@ export function LayerPanel({
 
       if (existing) window.clearInterval(existing.timer);
       const timer = window.setInterval(() => {
+        if (document.hidden) return;
         const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
         if (!latest) return;
 
@@ -2237,6 +2278,27 @@ export function LayerPanel({
       refreshTimersRef.current.delete(id);
     }
   }, [layers]);
+
+  // Timers pause while the tab is hidden. On return, immediately catch up any
+  // connection whose last successful sync is older than its configured cadence.
+  useEffect(() => {
+    const catchUp = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      for (const layer of useAppStore.getState().layers) {
+        const config = getLayerRefreshConfig(layer);
+        if (!config.enabled || !isRefreshableLayer(layer)) continue;
+        const lastSynced = layer.connection?.lastSyncedAt
+          ? new Date(layer.connection.lastSyncedAt).getTime()
+          : 0;
+        if (!Number.isFinite(lastSynced) || now - lastSynced >= config.intervalMs) {
+          void handleRefreshLayerRef.current(layer, true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", catchUp);
+    return () => document.removeEventListener("visibilitychange", catchUp);
+  }, []);
 
   // Watch-mode lifecycle: for each local-file layer with watch enabled, register
   // a debounced filesystem watcher that reloads the layer when the file changes.
@@ -2950,7 +3012,24 @@ export function LayerPanel({
             // and watched for changes instead of the URL-based refresh above.
             const canWatchLocalFile = isTauri() && isLocalFileLayer(layer);
             const watchConfig = getLayerWatchConfig(layer);
-            const refreshStatus = refreshStatuses[layer.id];
+            const transientRefreshStatus = refreshStatuses[layer.id];
+            const refreshStatus: LayerRefreshStatus | undefined =
+              transientRefreshStatus ??
+              (layer.connection?.lastError
+                ? {
+                    type: "error",
+                    message: t("layers.syncErrorStatus", {
+                      message: layer.connection.lastError,
+                    }),
+                  }
+                : layer.connection?.lastSyncedAt
+                  ? {
+                      type: "success",
+                      message: t("layers.lastSynced", {
+                        time: relativeSyncTime(layer.connection.lastSyncedAt, i18n.language),
+                      }),
+                    }
+                  : undefined);
             const isRefreshing = refreshStatus?.type === "refreshing";
             const moveIds = selectedMoveIds(layer.id);
             return (
@@ -3092,6 +3171,7 @@ export function LayerPanel({
                     )}
                     {refreshStatus && (
                       <p
+                        title={layer.connection?.lastError ?? layer.connection?.lastSyncedAt ?? ""}
                         className={`mt-1 text-[10px] ${
                           refreshStatus.type === "error"
                             ? "text-destructive"

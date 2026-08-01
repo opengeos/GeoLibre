@@ -344,7 +344,30 @@ describe("layer refresh helpers", () => {
       intervalMs: MIN_REFRESH_INTERVAL_MS,
     });
     assert.deepEqual(setLayerRefreshConfig(source, { enabled: false, intervalMs: 0 }), {
+      connection: {
+        layerId: "layer-a",
+        interval: null,
+        lastSyncedAt: null,
+        lastError: null,
+        onFailure: "keep-last",
+      },
       metadata: {},
+    });
+  });
+
+  it("restores refresh cadence from a persisted connection record", () => {
+    const source = layer({
+      connection: {
+        layerId: "layer-a",
+        interval: 300,
+        lastSyncedAt: "2026-08-01T12:00:00.000Z",
+        lastError: null,
+        onFailure: "keep-last",
+      },
+    });
+    assert.deepEqual(getLayerRefreshConfig(source), {
+      enabled: true,
+      intervalMs: 300_000,
     });
   });
 
