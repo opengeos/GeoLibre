@@ -1600,6 +1600,7 @@ export function TopToolbar({
       {isMenuVisible(uiProfile, "controls") && (
         <ControlsMenu
           chrome={chrome}
+          viewer={viewer}
           controlsVisible={controlsVisible}
           panels={panels}
           effectsActive={isActive(EFFECTS_PLUGIN_ID)}
@@ -1668,16 +1669,24 @@ export function TopToolbar({
         onOpenChange={setPrintLayoutOpen}
         mapControllerRef={mapControllerRef}
       />
-      <FieldCollectionDialog
-        open={fieldCollectionOpen}
-        onOpenChange={setFieldCollectionOpen}
-        mapControllerRef={mapControllerRef}
-      />
-      <GpsTrackingDialog
-        open={gpsTrackingOpen}
-        onOpenChange={setGpsTrackingOpen}
-        mapControllerRef={mapControllerRef}
-      />
+      {/* Field Collection and GPS Tracking add features and layers to the
+          project, so they follow the Controls menu entries that open them out
+          of the read-only viewer preset. Record Tour and Record Video below
+          only read the map, so they stay. */}
+      {!viewer && (
+        <FieldCollectionDialog
+          open={fieldCollectionOpen}
+          onOpenChange={setFieldCollectionOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
+      {!viewer && (
+        <GpsTrackingDialog
+          open={gpsTrackingOpen}
+          onOpenChange={setGpsTrackingOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
       <RecordTourDialog
         open={recordTourOpen}
         onOpenChange={setRecordTourOpen}

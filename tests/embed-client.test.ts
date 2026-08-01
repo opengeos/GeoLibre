@@ -82,6 +82,33 @@ describe("@geolibre/embed client", () => {
     client.disconnect();
   });
 
+  it("delivers ack to subscribers as well as to the waiting command", async () => {
+    // `ack` is a key of EmbedEventMap, so `on("ack", ...)` type-checks — it has
+    // to actually fire, including for an ack no request is waiting on.
+    const { iframe, receive, sent } = harness();
+    const pending = connect(iframe, { origin: "https://app.test" });
+    receive("ready", {});
+    const client = await pending;
+    const seen: Array<{ requestId: string; ok: boolean }> = [];
+    const off = client.on("ack", (payload) => seen.push(payload));
+    const viewport = client.getViewport();
+    const requestId = sent.at(-1)!.message.requestId as string;
+    receive("ack", { requestId, ok: true, result: { zoom: 4 } });
+    await viewport;
+    receive("ack", { requestId: "never-sent", ok: false, error: "stale" });
+    assert.deepEqual(
+      seen.map((entry) => [entry.requestId, entry.ok]),
+      [
+        [requestId, true],
+        ["never-sent", false],
+      ],
+    );
+    off();
+    receive("ack", { requestId: "after-off", ok: true });
+    assert.equal(seen.length, 2);
+    client.disconnect();
+  });
+
   it("rejects pending requests on disconnect", async () => {
     const { iframe, receive } = harness();
     const pending = connect(iframe, { origin: "https://app.test" });

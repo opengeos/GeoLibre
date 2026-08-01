@@ -77,7 +77,10 @@ Drop the viewer into an `<iframe>`:
 
 Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
 basemap switching. Its layer list mirrors the authoring Layers panel, folders
-and all, so group names carry over. Read-only covers the keyboard too: the
+and all, so group names carry over. The Controls menu is part of the viewer
+chrome, minus the two entries that write to the project (Field Collection and
+GPS Tracking); Record Tour and Record Video only read the map, so they stay.
+Read-only covers the keyboard too: the
 global shortcuts (Ctrl/Cmd+N, +O, +S) and the command palette (Ctrl/Cmd+K) are
 switched off with the menus they belong to, so an embed cannot be steered into
 authoring by a key press. Use `layout=compact` for the complete authoring

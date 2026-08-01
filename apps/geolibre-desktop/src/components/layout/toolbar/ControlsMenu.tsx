@@ -50,8 +50,18 @@ import {
   type ToolbarMapControl,
 } from "./constants";
 
+/**
+ * Controls-menu entries that write to the project rather than only changing
+ * what the map shows, so the read-only viewer preset hides them. The rest of
+ * the menu — on-map controls, panels, Record Tour, Record Video — is part of
+ * the viewer chrome and stays.
+ */
+const AUTHORING_CONTROL_ITEMS = ["controls.fieldCollection", "controls.gpsTracking"];
+
 interface ControlsMenuProps {
   chrome: ToolbarChrome;
+  /** The read-only viewer preset; hides {@link AUTHORING_CONTROL_ITEMS}. */
+  viewer?: boolean;
   controlsVisible: Record<ToolbarMapControl, boolean>;
   panels: ToolbarPanels;
   effectsActive: boolean;
@@ -79,6 +89,7 @@ interface ControlsMenuProps {
 /** The Controls menu: built-in map controls, atmosphere/routing toggles, and panels. */
 export function ControlsMenu({
   chrome,
+  viewer = false,
   controlsVisible,
   panels,
   effectsActive,
@@ -104,7 +115,8 @@ export function ControlsMenu({
 }: ControlsMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  const show = (id: string) =>
+    viewer && AUTHORING_CONTROL_ITEMS.includes(id) ? false : isMenuItemVisible(uiProfile, id);
   // Atmospheric effects only render on the globe (the engine idles in Mercator),
   // so the submenu is disabled while the map is in a flat projection (#783). The
   // GlobeControl toggle syncs this preference via the map "projectiontransition"

@@ -43,6 +43,11 @@ export interface AddLayerSpec {
 
 export type EmbedEventMap = {
   ready: { version: string };
+  /**
+   * Every command already returns a promise the client settles from this ack,
+   * so subscribing is only worth it to observe the traffic (logging, or an ack
+   * that arrives with no request waiting for it).
+   */
   ack: { requestId: string; ok: boolean; error?: string; result?: unknown };
   projectLoaded: { url: string | null; name: string; layerIds: string[] };
   selectionChanged: { layerId: string | null; featureIds: string[] };
@@ -183,16 +188,20 @@ export function connect(
     const type = data.type as EventName;
     const payload = (data.payload ?? {}) as Record<string, unknown>;
     if (type === "ack") {
-      const requestId = payload.requestId;
-      if (typeof requestId !== "string") return;
-      const request = pending.get(requestId);
-      if (!request) return;
-      pending.delete(requestId);
-      if (payload.ok === true) request.resolve(payload.result);
-      else request.reject(new Error(String(payload.error ?? "GeoLibre request failed")));
-      return;
+      // Settling the command promise is the ack's job, but it stays an event
+      // too: `ack` is a key of `EmbedEventMap`, so `on("ack", …)` type-checks
+      // and has to fire — including for an ack with no pending request, which
+      // is exactly the case a host would subscribe to see.
+      const requestId = typeof payload.requestId === "string" ? payload.requestId : null;
+      const request = requestId ? pending.get(requestId) : undefined;
+      if (requestId && request) {
+        pending.delete(requestId);
+        if (payload.ok === true) request.resolve(payload.result);
+        else request.reject(new Error(String(payload.error ?? "GeoLibre request failed")));
+      }
+    } else if (type === "ready") {
+      readyResolve?.(client);
     }
-    if (type === "ready") readyResolve?.(client);
     for (const listener of listeners.get(type) ?? []) listener(payload as never);
   };
   window.addEventListener("message", receive);
