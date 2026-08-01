@@ -392,6 +392,8 @@ describe("Vite proxy guard — readBodyWithLimit", () => {
 });
 
 describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
+  const publicLookup = (async () => [{ address: "93.184.216.34", family: 4 as const }]) as never;
+
   it("follows a public redirect and refuses a private-address redirect", async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
@@ -408,7 +410,11 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
       return new Response("unexpected", { status: 500 });
     };
 
-    const resp = await fetchWithGuard("https://example.com/a", {}, { fetchImpl });
+    const resp = await fetchWithGuard(
+      "https://example.com/a",
+      {},
+      { fetchImpl, lookup: publicLookup },
+    );
     assert.equal(resp.status, 200);
     assert.equal(await resp.text(), "ok");
 
@@ -418,7 +424,7 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
         headers: { location: "http://169.254.169.254/latest/meta-data/" },
       });
     await assert.rejects(
-      () => fetchWithGuard("https://example.com/evil", {}, { fetchImpl: evil }),
+      () => fetchWithGuard("https://example.com/evil", {}, { fetchImpl: evil, lookup: publicLookup }),
       /Blocked/,
     );
   });
@@ -434,9 +440,23 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
     };
 
     await assert.rejects(
-      () => fetchWithGuard("https://example.com/loop", {}, { fetchImpl }),
+      () => fetchWithGuard("https://example.com/loop", {}, { fetchImpl, lookup: publicLookup }),
       /Too many/,
     );
     assert.equal(hops, PROXY_MAX_REDIRECT_HOPS + 1);
+  });
+
+  it("still resolves DNS when a test fetchImpl is injected", async () => {
+    let called = false;
+    const fetchImpl: typeof fetch = async () => {
+      called = true;
+      return new Response("should not run", { status: 200 });
+    };
+    const lookup = (async () => [{ address: "10.0.0.5", family: 4 as const }]) as never;
+    await assert.rejects(
+      () => fetchWithGuard("https://evil.example/x", {}, { fetchImpl, lookup }),
+      /10\.0\.0\.5/,
+    );
+    assert.equal(called, false);
   });
 });

@@ -239,14 +239,19 @@ function mergeAbortSignals(timeoutMs: number, caller?: AbortSignal | null): Abor
  * (by default) a dispatcher that pins connects to validated public addresses.
  *
  * DNS SSRF checks happen inside `guardedDispatcher.lookup` for production
- * fetches. Inject `fetchImpl` for offline unit tests (no real DNS/connect).
+ * fetches. Inject `fetchImpl` only for offline unit tests — that path still
+ * runs {@link assertResolvedPublicHost} so a custom fetch cannot skip the
+ * DNS-rebinding check.
  */
 export async function fetchWithGuard(
   targetUrl: string,
   init: RequestInit = {},
   options: {
     timeoutMs?: number;
+    /** Test-only fetch substitute. Still resolves+validates the hostname. */
     fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    /** Test-only DNS override used with `fetchImpl`. */
+    lookup?: typeof dnsLookup;
   } = {},
 ): Promise<Response> {
   assertPublicHttpUrl(targetUrl);
@@ -257,14 +262,19 @@ export async function fetchWithGuard(
   for (let hop = 0; hop <= PROXY_MAX_REDIRECT_HOPS; hop++) {
     const { signal: callerSignal, ...rest } = init;
     const signal = mergeAbortSignals(timeoutMs, callerSignal ?? null);
-    const response = fetchImpl
-      ? await fetchImpl(current, { ...rest, signal, redirect: "manual" })
-      : ((await undiciFetch(current, {
-          ...rest,
-          signal,
-          redirect: "manual",
-          dispatcher: guardedDispatcher,
-        })) as unknown as Response);
+    let response: Response;
+    if (fetchImpl) {
+      // No undici dispatcher on this path — resolve+validate before fetching.
+      await assertResolvedPublicHost(new URL(current).hostname, options.lookup);
+      response = await fetchImpl(current, { ...rest, signal, redirect: "manual" });
+    } else {
+      response = (await undiciFetch(current, {
+        ...rest,
+        signal,
+        redirect: "manual",
+        dispatcher: guardedDispatcher,
+      })) as unknown as Response;
+    }
     if (!REDIRECT_STATUSES.has(response.status)) {
       return response;
     }
