@@ -401,6 +401,7 @@ export {
   ARCGIS_HUB_PORTAL_URL,
   arcGisHubItemDataUrl,
   arcGisHubItemPageUrl,
+  arcGisHubItemThumbnailUrl,
   buildArcGisHubSearchUrl,
   fetchFeatureServiceGeoJson,
   itemBounds as arcGisHubItemBounds,

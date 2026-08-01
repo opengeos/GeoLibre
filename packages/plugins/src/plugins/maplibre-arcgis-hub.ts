@@ -3,6 +3,7 @@ import { addArcGISLayer } from "./arcgis-layer";
 import {
   arcGisHubItemDataUrl,
   arcGisHubItemPageUrl,
+  arcGisHubItemThumbnailUrl,
   fetchFeatureServiceGeoJson,
   itemBounds,
   searchArcGisHub,
@@ -34,8 +35,12 @@ const styles = {
   status: "font-size:11px;color:hsl(var(--muted-foreground));line-height:1.4;",
   results: "display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;flex:1;",
   card:
-    "display:flex;flex-direction:column;gap:5px;padding:8px;border:1px solid hsl(var(--border));" +
+    "display:flex;gap:8px;padding:8px;border:1px solid hsl(var(--border));" +
     "border-radius:6px;background:hsl(var(--muted));",
+  thumbnail:
+    "width:88px;height:66px;flex:0 0 88px;object-fit:cover;border-radius:4px;" +
+    "background:hsl(var(--accent));",
+  cardBody: "display:flex;flex:1;min-width:0;flex-direction:column;gap:5px;",
   title: "font-weight:600;line-height:1.3;",
   meta: "font-size:10px;color:hsl(var(--muted-foreground));",
   actions: "display:flex;gap:4px;flex-wrap:wrap;",
@@ -151,6 +156,19 @@ function buildPanel(container: HTMLElement): () => void {
   const renderItem = (item: ArcGisHubItem) => {
     const card = element("article");
     card.style.cssText = styles.card;
+    const thumbnailUrl = arcGisHubItemThumbnailUrl(item);
+    if (thumbnailUrl) {
+      const thumbnail = element("img");
+      thumbnail.src = thumbnailUrl;
+      thumbnail.alt = "";
+      thumbnail.loading = "lazy";
+      thumbnail.referrerPolicy = "no-referrer";
+      thumbnail.style.cssText = styles.thumbnail;
+      thumbnail.addEventListener("error", () => thumbnail.remove(), { once: true });
+      card.append(thumbnail);
+    }
+    const body = element("div");
+    body.style.cssText = styles.cardBody;
     const title = element("div", item.title);
     title.style.cssText = styles.title;
     const meta = element("div", `${item.type} · ${item.owner}`);
@@ -205,7 +223,8 @@ function buildPanel(container: HTMLElement): () => void {
     details.style.cssText = styles.button;
     details.addEventListener("click", () => appRef?.openExternalUrl?.(arcGisHubItemPageUrl(item)));
     actions.append(zoom, save, details);
-    card.append(title, meta, summary, actions);
+    body.append(title, meta, summary, actions);
+    card.append(body);
     results.append(card);
   };
 

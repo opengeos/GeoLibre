@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   arcGisHubItemDataUrl,
   arcGisHubItemPageUrl,
+  arcGisHubItemThumbnailUrl,
   buildArcGisHubSearchUrl,
   fetchFeatureServiceGeoJson,
   itemBounds,
@@ -33,6 +34,11 @@ describe("ArcGIS Hub catalog client", () => {
       arcGisHubItemDataUrl(item),
       "https://www.arcgis.com/sharing/rest/content/items/abc%20123/data",
     );
+    assert.equal(
+      arcGisHubItemThumbnailUrl({ ...item, thumbnail: "thumbnail/ago_downloaded.png" }),
+      "https://www.arcgis.com/sharing/rest/content/items/abc%20123/info/thumbnail/ago_downloaded.png",
+    );
+    assert.equal(arcGisHubItemThumbnailUrl(item), null);
   });
 
   it("normalizes valid item extents and rejects invalid ones", () => {

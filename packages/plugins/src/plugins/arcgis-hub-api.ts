@@ -15,6 +15,7 @@ export interface ArcGisHubItem {
   modified?: number;
   size?: number;
   tags?: string[];
+  thumbnail?: string;
 }
 
 export interface ArcGisHubSearchResult {
@@ -81,6 +82,20 @@ export function arcGisHubItemDataUrl(
   portalUrl = ARCGIS_HUB_PORTAL_URL,
 ): string {
   return new URL(`/sharing/rest/content/items/${encodeURIComponent(item.id)}/data`, portalUrl).href;
+}
+
+export function arcGisHubItemThumbnailUrl(
+  item: Pick<ArcGisHubItem, "id" | "thumbnail">,
+  portalUrl = ARCGIS_HUB_PORTAL_URL,
+): string | null {
+  const thumbnail = item.thumbnail?.trim();
+  if (!thumbnail) return null;
+  const encodedThumbnail = thumbnail.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  if (!encodedThumbnail) return null;
+  return new URL(
+    `/sharing/rest/content/items/${encodeURIComponent(item.id)}/info/${encodedThumbnail}`,
+    portalUrl,
+  ).href;
 }
 
 export function itemBounds(item: ArcGisHubItem): [number, number, number, number] | null {
