@@ -22,6 +22,9 @@ const CLASSIFICATION_FALLBACK_COLORS = [
   "#0891b2",
 ];
 
+/** Maximum categorized rows the manual Style panel may render at once. */
+export const MAX_MANUAL_CATEGORIZED_VALUES = 256;
+
 /** Return the non-null values of a GeoJSON property. */
 export function getPropertyValues(layer: ClassifiableLayer, property: string): unknown[] {
   if (!property) return [];
@@ -151,7 +154,7 @@ export function createCategorizedStops(
     }
   }
 
-  const count = clampClassCount(classCount, 1, Number.POSITIVE_INFINITY);
+  const count = clampClassCount(classCount, 1, MAX_MANUAL_CATEGORIZED_VALUES);
   const sortedCategories = Array.from(categories.values()).sort((a, b) => {
     if (classificationScheme === "alphabetical") {
       return String(a.value).localeCompare(String(b.value), undefined, {

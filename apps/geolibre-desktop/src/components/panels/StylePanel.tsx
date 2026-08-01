@@ -100,6 +100,7 @@ import {
   getPropertyValues,
   isCategoricalProperty,
   isNumericProperty,
+  MAX_MANUAL_CATEGORIZED_VALUES,
   proportionalSizeBounds,
 } from "../../lib/vector-style-classification";
 import { buildStyleSuggestions, type StyleSuggestion } from "../../lib/style-suggestions";
@@ -585,7 +586,7 @@ function normalizeVectorStyleClassCount(mode: VectorStyleMode, value: number): n
   return clampClassCount(
     value,
     mode === "categorized" ? 1 : 2,
-    mode === "categorized" ? Number.POSITIVE_INFINITY : 12,
+    mode === "categorized" ? MAX_MANUAL_CATEGORIZED_VALUES : 12,
   );
 }
 
@@ -1470,9 +1471,10 @@ export function StylePanel({
       loadedVectorPropertyValues?.layerId === layer.id
         ? loadedVectorPropertyValues.byProperty[draftVectorStyleProperty]
         : undefined;
-    return countCategorizedValues(
+    const count = countCategorizedValues(
       loadedValues ?? getPropertyValues(layer, draftVectorStyleProperty),
     );
+    return count <= MAX_MANUAL_CATEGORIZED_VALUES ? count : 0;
     // The calculation reads only these stable layer fields. Depending on the
     // whole layer object would rescan on every unrelated style edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1843,7 +1845,7 @@ export function StylePanel({
         ? draftVectorStyleClassCount === currentCategoryCount
           ? nextCategoryCount
           : Math.min(draftVectorStyleClassCount, nextCategoryCount)
-        : draftVectorStyleClassCount;
+        : Math.min(draftVectorStyleClassCount, 12);
     setDraftVectorStyleProperty(property);
     setDraftVectorStyleClassCount(classCount);
     regenerateDraftVectorStyleStops(
@@ -2463,6 +2465,10 @@ export function StylePanel({
                     {classCount}
                   </option>
                 ))}
+              {draftVectorStyleClassCount > 12 &&
+                draftVectorStyleClassCount !== categorizedValueCount && (
+                  <option value={draftVectorStyleClassCount}>{draftVectorStyleClassCount}</option>
+                )}
               {draftVectorStyleMode === "categorized" && categorizedValueCount > 0 && (
                 <option value="all">
                   {t("style.symbology.allClasses", {

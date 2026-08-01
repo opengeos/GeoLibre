@@ -4,6 +4,7 @@ import {
   createCategorizedStops,
   createGraduatedStops,
   countCategorizedValues,
+  MAX_MANUAL_CATEGORIZED_VALUES,
   proportionalSizeBounds,
 } from "../apps/geolibre-desktop/src/lib/vector-style-classification";
 
@@ -97,6 +98,23 @@ describe("vector style classification", () => {
     );
 
     assert.equal(stops.length, 14);
+  });
+
+  it("bounds manual categorized stops to the editor safety limit", () => {
+    const values = Array.from(
+      { length: MAX_MANUAL_CATEGORIZED_VALUES + 10 },
+      (_, index) => `category-${index + 1}`,
+    );
+    const stops = createCategorizedStops(
+      tiledLayer,
+      "category",
+      values.length,
+      "viridis",
+      "first-values",
+      values,
+    );
+
+    assert.equal(stops.length, MAX_MANUAL_CATEGORIZED_VALUES);
   });
 
   it("keeps adjacent high-magnitude breaks distinct", () => {
