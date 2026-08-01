@@ -1460,11 +1460,11 @@ export function SettingsDialog({
             <DialogTitle>{t("settings.title")}</DialogTitle>
             <DialogDescription>{t("settings.description")}</DialogDescription>
           </DialogHeader>
-          <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
-            <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-e">
+          <div className="grid min-h-0 min-w-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
+            <nav className="flex min-w-0 gap-1 overflow-x-auto border-b p-3 md:flex-col md:overflow-x-visible md:border-b-0 md:border-e">
               {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(renderSectionButton)}
             </nav>
-            <div className="min-h-0 overflow-y-auto p-6">
+            <div className="min-h-0 min-w-0 overflow-y-auto p-6">
               {effectiveSection === "map" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
