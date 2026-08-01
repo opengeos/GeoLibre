@@ -4307,6 +4307,7 @@
       "styleType": "نوع النمط",
       "attribute": "السمة",
       "classes": "الفئات",
+      "allClasses": "الكل ({{total}})",
       "scheme": "أسلوب التصنيف",
       "stops": "نقاط التوقف",
       "categories": "الأصناف",

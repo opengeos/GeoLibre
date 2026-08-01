@@ -3973,6 +3973,7 @@
       "styleType": "스타일 유형",
       "attribute": "속성",
       "classes": "클래스 수",
+      "allClasses": "전체({{total}})",
       "scheme": "분류 방식",
       "stops": "구분점",
       "categories": "카테고리",

@@ -3973,6 +3973,7 @@
       "styleType": "スタイルタイプ",
       "attribute": "属性",
       "classes": "クラス数",
+      "allClasses": "すべて（{{total}}）",
       "scheme": "分類方法",
       "stops": "区分点",
       "categories": "カテゴリ",

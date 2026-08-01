@@ -4040,6 +4040,7 @@
       "styleType": "სტილის ტიპი",
       "attribute": "ატრიბუტი",
       "classes": "კლასები",
+      "allClasses": "ყველა ({{total}})",
       "scheme": "სქემა",
       "stops": "საფეხურები",
       "categories": "კატეგორიები",

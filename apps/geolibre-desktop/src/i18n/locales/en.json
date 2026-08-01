@@ -4259,7 +4259,7 @@
       "styleType": "Style type",
       "attribute": "Attribute",
       "classes": "Classes",
-      "allClasses": "All ({{count}})",
+      "allClasses": "All ({{total}})",
       "scheme": "Scheme",
       "stops": "Stops",
       "categories": "Categories",

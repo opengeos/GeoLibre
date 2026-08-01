@@ -4040,6 +4040,7 @@
       "styleType": "Stiltyp",
       "attribute": "Attribut",
       "classes": "Klassen",
+      "allClasses": "Alle ({{total}})",
       "scheme": "Schema",
       "stops": "Stopps",
       "categories": "Kategorien",

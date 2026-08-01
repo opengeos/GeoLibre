@@ -4040,6 +4040,7 @@
       "styleType": "Stil türü",
       "attribute": "Öznitelik",
       "classes": "Sınıflar",
+      "allClasses": "Tümü ({{total}})",
       "scheme": "Şema",
       "stops": "Duraklar",
       "categories": "Kategoriler",

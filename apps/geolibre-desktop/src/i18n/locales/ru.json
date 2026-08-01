@@ -4174,6 +4174,7 @@
       "styleType": "Тип стиля",
       "attribute": "Атрибут",
       "classes": "Классы",
+      "allClasses": "Все ({{total}})",
       "scheme": "Схема",
       "stops": "Границы",
       "categories": "Категории",

@@ -3973,6 +3973,7 @@
       "styleType": "Jenis gaya",
       "attribute": "Atribut",
       "classes": "Kelas",
+      "allClasses": "Semua ({{total}})",
       "scheme": "Skema",
       "stops": "Titik henti",
       "categories": "Kategori",
