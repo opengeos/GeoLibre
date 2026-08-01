@@ -70,7 +70,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
   const toolbarLabels =
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
   const showProjectInfo = compact ? false : layoutSettings.showProjectInfo;
-  const layerPanelVisible = panelsHidden ? false : layoutSettings.layerPanelVisible;
+  const layerPanelVisible = panelsHidden ? false : viewer ? true : layoutSettings.layerPanelVisible;
   const stylePanelVisible = panelsHidden || viewer ? false : layoutSettings.stylePanelVisible;
   // The attribute table is hidden by default and opened on demand from a
   // vector layer's context menu, so it has no persisted settings toggle; it

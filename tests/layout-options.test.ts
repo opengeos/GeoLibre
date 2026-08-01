@@ -100,4 +100,13 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.attributePanelVisible, false);
     assert.equal(options.panelsHidden, false);
   });
+
+  it("forces the viewer layer legend on despite a persisted hidden setting", () => {
+    withSearch("?layout=viewer");
+    const options = layoutOptionsFromLocation({
+      ...DEFAULT_DESKTOP_LAYOUT_SETTINGS,
+      layerPanelVisible: false,
+    });
+    assert.equal(options.layerPanelVisible, true);
+  });
 });

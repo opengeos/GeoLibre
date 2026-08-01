@@ -59,6 +59,8 @@ export interface ConnectOptions {
   origin: string;
   /** Time allowed for the initial ready event. Defaults to 15 seconds. */
   timeoutMs?: number;
+  /** Time allowed for each command acknowledgement. Defaults to 15 seconds. */
+  requestTimeoutMs?: number;
 }
 
 export interface GeoLibreEmbedClient {
@@ -112,7 +114,20 @@ export function connect(
     const requestId = `geolibre-${Date.now()}-${++sequence}`;
     target.postMessage({ v: EMBED_API_VERSION, type, payload, requestId }, origin);
     return new Promise<T>((resolve, reject) => {
-      pending.set(requestId, { resolve: (value) => resolve(value as T), reject });
+      const timer = window.setTimeout(() => {
+        pending.delete(requestId);
+        reject(new Error(`Timed out waiting for a response to "${type}"`));
+      }, options.requestTimeoutMs ?? 15_000);
+      pending.set(requestId, {
+        resolve: (value) => {
+          window.clearTimeout(timer);
+          resolve(value as T);
+        },
+        reject: (reason) => {
+          window.clearTimeout(timer);
+          reject(reason);
+        },
+      });
     });
   };
 

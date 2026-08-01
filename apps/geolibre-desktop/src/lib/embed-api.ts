@@ -13,6 +13,7 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
+import { LAYER_TYPES } from "@geolibre/core";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
 export { EMBED_API_SOURCE, EMBED_API_VERSION };
@@ -356,10 +357,20 @@ export function parseEmbedRequest(
         typeof spec.name !== "string" ||
         !spec.name ||
         typeof spec.type !== "string" ||
-        !spec.type ||
-        !isRecord(spec.source)
+        !LAYER_TYPES.includes(spec.type as (typeof LAYER_TYPES)[number]) ||
+        !isRecord(spec.source) ||
+        (spec.visible !== undefined && typeof spec.visible !== "boolean") ||
+        (spec.opacity !== undefined &&
+          (typeof spec.opacity !== "number" ||
+            !Number.isFinite(spec.opacity) ||
+            spec.opacity < 0 ||
+            spec.opacity > 1)) ||
+        (spec.style !== undefined && !isRecord(spec.style)) ||
+        (spec.metadata !== undefined && !isRecord(spec.metadata)) ||
+        (spec.geojson !== undefined && !isRecord(spec.geojson)) ||
+        (spec.beforeId !== undefined && typeof spec.beforeId !== "string")
       ) {
-        return fail("addLayer: spec must include non-empty id, name, type, and source");
+        return fail("addLayer: invalid project layer specification");
       }
       return {
         command: { type: "addLayer", spec: spec as unknown as AddLayerSpec },

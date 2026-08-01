@@ -19,14 +19,20 @@ function harness() {
   };
   (globalThis as { window?: unknown }).window = host;
   const iframe = { contentWindow: frameWindow } as unknown as HTMLIFrameElement;
-  const receive = (type: string, payload: Record<string, unknown>, origin = "https://app.test") => {
+  const receive = (
+    type: string,
+    payload: Record<string, unknown>,
+    origin = "https://app.test",
+    source: unknown = frameWindow,
+    protocolSource = EMBED_API_SOURCE,
+  ) => {
     const event = new Event("message");
     Object.defineProperties(event, {
       data: {
-        value: { v: EMBED_API_VERSION, source: EMBED_API_SOURCE, type, payload },
+        value: { v: EMBED_API_VERSION, source: protocolSource, type, payload },
       },
       origin: { value: origin },
-      source: { value: frameWindow },
+      source: { value: source },
     });
     host.dispatchEvent(event);
   };
@@ -47,6 +53,12 @@ describe("@geolibre/embed client", () => {
     void pending.then(() => {
       settled = true;
     });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(settled, false);
+    receive("ready", {}, "https://app.test", {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(settled, false);
+    receive("ready", {}, "https://app.test", undefined, "another-app");
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(settled, false);
     receive("ready", {});
@@ -86,5 +98,17 @@ describe("@geolibre/embed client", () => {
       connect(iframe, { origin: "https://app.test", timeoutMs: 5 }),
       /timed out/i,
     );
+  });
+
+  it("times out a command that receives no acknowledgement", async () => {
+    const { iframe, receive } = harness();
+    const pending = connect(iframe, {
+      origin: "https://app.test",
+      requestTimeoutMs: 5,
+    });
+    receive("ready", {});
+    const client = await pending;
+    await assert.rejects(client.listLayers(), /response to "listLayers"/i);
+    client.disconnect();
   });
 });
