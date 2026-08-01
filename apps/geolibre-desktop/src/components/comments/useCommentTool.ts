@@ -16,10 +16,7 @@ export interface PendingCommentState {
   point: { x: number; y: number };
 }
 
-export function useCommentTool({
-  mapControllerRef,
-  collaboration,
-}: UseCommentToolOptions) {
+export function useCommentTool({ mapControllerRef, collaboration }: UseCommentToolOptions) {
   const [isActive, setIsActive] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingCommentState | null>(null);
 
@@ -104,9 +101,11 @@ export function useCommentTool({
       // Check rendered features under cursor — restrict to user data layers
       // so basemap tile layers (which also have numeric feature IDs) are ignored.
       const userLayerIds = new Set(
-        useAppStore.getState().layers.flatMap((l) =>
-          Array.isArray(l.metadata?.sourceIds) ? (l.metadata.sourceIds as string[]) : [l.id],
-        ),
+        useAppStore
+          .getState()
+          .layers.flatMap((l) =>
+            Array.isArray(l.metadata?.sourceIds) ? (l.metadata.sourceIds as string[]) : [l.id],
+          ),
       );
       const bbox: [maplibreGl.PointLike, maplibreGl.PointLike] = [
         [e.point.x - 5, e.point.y - 5],

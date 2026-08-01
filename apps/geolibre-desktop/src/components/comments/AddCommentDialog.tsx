@@ -18,12 +18,9 @@ interface AddCommentDialogProps {
   onCancel: () => void;
 }
 
-export function AddCommentDialog({
-  pendingComment,
-  onSubmit,
-  onCancel,
-}: AddCommentDialogProps) {
-  const savedName = typeof localStorage !== "undefined" ? localStorage.getItem("geolibre_author_name") : null;
+export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddCommentDialogProps) {
+  const savedName =
+    typeof localStorage !== "undefined" ? localStorage.getItem("geolibre_author_name") : null;
   const hasSavedName = !!savedName && savedName.trim().length > 0;
 
   const [text, setText] = useState("");
@@ -50,7 +47,12 @@ export function AddCommentDialog({
   const lngLat = anchor.lngLat;
 
   return (
-    <Dialog open={true} onOpenChange={(open) => { if (!open) onCancel(); }}>
+    <Dialog
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
+    >
       <DialogContent className="max-w-md p-5 sm:max-w-md">
         <DialogHeader className="mb-2">
           <DialogTitle className="flex items-center gap-2 text-sm">
@@ -75,7 +77,8 @@ export function AddCommentDialog({
               <>
                 <MapPin className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                 <span className="font-medium text-foreground">
-                  Anchored to ({lngLat ? `${lngLat[1].toFixed(4)}, ${lngLat[0].toFixed(4)}` : "Map Point"})
+                  Anchored to (
+                  {lngLat ? `${lngLat[1].toFixed(4)}, ${lngLat[0].toFixed(4)}` : "Map Point"})
                 </span>
               </>
             )}
@@ -98,7 +101,9 @@ export function AddCommentDialog({
             </div>
           ) : (
             <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
-              <span>Posting as <strong className="text-foreground">{savedName}</strong></span>
+              <span>
+                Posting as <strong className="text-foreground">{savedName}</strong>
+              </span>
               <button
                 type="button"
                 onClick={() => {

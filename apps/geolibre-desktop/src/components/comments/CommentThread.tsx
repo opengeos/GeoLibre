@@ -137,7 +137,11 @@ export function CommentThread({
           <>
             <MapPin className="h-3 w-3 text-amber-400 shrink-0" />
             <span>
-              Point ({anchorLngLat ? `${anchorLngLat[1].toFixed(4)}, ${anchorLngLat[0].toFixed(4)}` : "Map Point"})
+              Point (
+              {anchorLngLat
+                ? `${anchorLngLat[1].toFixed(4)}, ${anchorLngLat[0].toFixed(4)}`
+                : "Map Point"}
+              )
             </span>
           </>
         )}

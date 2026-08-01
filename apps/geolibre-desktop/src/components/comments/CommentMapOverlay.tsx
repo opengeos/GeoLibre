@@ -88,7 +88,8 @@ export function CommentMapOverlay({
         const pinColor = comment.author?.color || "#3b82f6";
 
         const container = document.createElement("div");
-        container.className = "group relative cursor-pointer select-none transition-transform duration-150 ease-out hover:scale-115";
+        container.className =
+          "group relative cursor-pointer select-none transition-transform duration-150 ease-out hover:scale-115";
         container.style.zIndex = comment.resolved ? "9" : "10";
 
         // Build the pin with DOM APIs so the author color is set as a style

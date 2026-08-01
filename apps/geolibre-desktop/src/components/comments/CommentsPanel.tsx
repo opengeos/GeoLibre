@@ -2,7 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import { useAppStore, type ProjectComment, type CommentReply } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Input, ScrollArea, cn } from "@geolibre/ui";
-import { MessageSquare, Plus, MessageCircle, Copy, Link2, KeyRound, Radio, User, Pencil, Check } from "lucide-react";
+import {
+  MessageSquare,
+  Plus,
+  MessageCircle,
+  Copy,
+  Link2,
+  KeyRound,
+  Radio,
+  User,
+  Pencil,
+  Check,
+} from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { CommentThread } from "./CommentThread";
 import { resolveCommentCoordinates } from "./CommentMapOverlay";
@@ -76,12 +87,8 @@ export function CommentsPanel({
   const [nameInput, setNameInput] = useState<string>("");
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const selfAuthorName = collab.isActive && collab.selfName
-    ? collab.selfName
-    : storedName || "";
-  const selfAuthorColor = collab.isActive && collab.selfColor
-    ? collab.selfColor
-    : "#3b82f6";
+  const selfAuthorName = collab.isActive && collab.selfName ? collab.selfName : storedName || "";
+  const selfAuthorColor = collab.isActive && collab.selfColor ? collab.selfColor : "#3b82f6";
 
   const handleEditName = () => {
     setNameInput(storedName);
@@ -250,7 +257,10 @@ export function CommentsPanel({
               />
               <button
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); handleSaveName(); }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSaveName();
+                }}
                 className="text-emerald-500 hover:text-emerald-600 shrink-0"
                 title="Save name"
               >
@@ -283,108 +293,108 @@ export function CommentsPanel({
 
       {/* Session Controls — only shown when the relay is configured */}
       {collaboration?.enabled && (
-      <div className="p-2.5 space-y-2 border-b border-border bg-muted/30 shrink-0">
-        {/* Session code — only shown once a session is active */}
-        {collab.isActive && activeCode ? (
-          <div className="flex items-center justify-between gap-2 p-2 rounded-md bg-card border border-border">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                <KeyRound className="h-3 w-3 text-primary shrink-0" />
-                <span>Session Code</span>
+        <div className="p-2.5 space-y-2 border-b border-border bg-muted/30 shrink-0">
+          {/* Session code — only shown once a session is active */}
+          {collab.isActive && activeCode ? (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-md bg-card border border-border">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <KeyRound className="h-3 w-3 text-primary shrink-0" />
+                  <span>Session Code</span>
+                </div>
+                <div className="font-mono text-xs font-bold text-primary tracking-widest truncate mt-0.5">
+                  {activeCode}
+                </div>
               </div>
-              <div className="font-mono text-xs font-bold text-primary tracking-widest truncate mt-0.5">
-                {activeCode}
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopyCode}
+                className="h-7 px-2 text-[11px] shrink-0"
+                title="Copy session code"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                {copied ? "Copied" : "Copy"}
+              </Button>
             </div>
+          ) : (
+            /* Host button — starts a new session */
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
-              onClick={handleCopyCode}
-              className="h-7 px-2 text-[11px] shrink-0"
-              title="Copy session code"
+              onClick={handleStartHostingSession}
+              disabled={busy || !collaboration}
+              className="w-full h-8 text-xs gap-1.5"
             >
-              <Copy className="h-3 w-3 mr-1" />
-              {copied ? "Copied" : "Copy"}
-            </Button>
-          </div>
-        ) : (
-          /* Host button — starts a new session */
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={handleStartHostingSession}
-            disabled={busy || !collaboration}
-            className="w-full h-8 text-xs gap-1.5"
-          >
-            <Radio className="h-3.5 w-3.5 text-emerald-500" />
-            {busy ? "Starting…" : "Start Live Session"}
-          </Button>
-        )}
-
-        {/* Join input — only shown when not already active */}
-        {!collab.isActive && (
-          <div className="flex items-center gap-1.5 p-2 rounded-md bg-card border border-border">
-            <Input
-              value={joinCodeInput}
-              onChange={(e) =>
-                setJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
-              }
-              placeholder="ENTER SESSION CODE"
-              className="h-7 font-mono text-xs uppercase tracking-wider"
-              disabled={busy}
-            />
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={handleConnectSession}
-              disabled={busy || !joinCodeInput.trim() || !collaboration}
-              className="h-7 px-2.5 text-[11px] gap-1 shrink-0"
-            >
-              <Link2 className="h-3 w-3" />
-              <span>{busy ? "Joining…" : "Connect"}</span>
-            </Button>
-          </div>
-        )}
-
-        {/* Status indicator */}
-        <div className="flex items-center justify-between p-2 rounded-md bg-card border border-border text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className={cn(
-                "h-2.5 w-2.5 rounded-full shrink-0",
-                collab.isActive ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40",
-              )}
-            />
-            <span className="font-medium text-[11px] truncate">
-              {collab.connecting
-                ? "Connecting…"
-                : collab.isActive
-                  ? `Live Sync (${collab.participants?.length ?? 1} online)`
-                  : "Offline / Private Workspace"}
-            </span>
-          </div>
-          {collab.isActive && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleDisconnectSession}
-              className="h-6 px-1.5 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-            >
-              Disconnect
+              <Radio className="h-3.5 w-3.5 text-emerald-500" />
+              {busy ? "Starting…" : "Start Live Session"}
             </Button>
           )}
-        </div>
 
-        {sessionError && (
-          <div className="text-[11px] text-destructive bg-destructive/10 p-1.5 rounded border border-destructive/30">
-            {sessionError}
+          {/* Join input — only shown when not already active */}
+          {!collab.isActive && (
+            <div className="flex items-center gap-1.5 p-2 rounded-md bg-card border border-border">
+              <Input
+                value={joinCodeInput}
+                onChange={(e) =>
+                  setJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                }
+                placeholder="ENTER SESSION CODE"
+                className="h-7 font-mono text-xs uppercase tracking-wider"
+                disabled={busy}
+              />
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleConnectSession}
+                disabled={busy || !joinCodeInput.trim() || !collaboration}
+                className="h-7 px-2.5 text-[11px] gap-1 shrink-0"
+              >
+                <Link2 className="h-3 w-3" />
+                <span>{busy ? "Joining…" : "Connect"}</span>
+              </Button>
+            </div>
+          )}
+
+          {/* Status indicator */}
+          <div className="flex items-center justify-between p-2 rounded-md bg-card border border-border text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full shrink-0",
+                  collab.isActive ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40",
+                )}
+              />
+              <span className="font-medium text-[11px] truncate">
+                {collab.connecting
+                  ? "Connecting…"
+                  : collab.isActive
+                    ? `Live Sync (${collab.participants?.length ?? 1} online)`
+                    : "Offline / Private Workspace"}
+              </span>
+            </div>
+            {collab.isActive && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDisconnectSession}
+                className="h-6 px-1.5 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+              >
+                Disconnect
+              </Button>
+            )}
           </div>
-        )}
-      </div>
+
+          {sessionError && (
+            <div className="text-[11px] text-destructive bg-destructive/10 p-1.5 rounded border border-destructive/30">
+              {sessionError}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Filter Bar */}
@@ -419,7 +429,8 @@ export function CommentsPanel({
               {filter === "resolved" ? "No resolved comments" : "No open comments"}
             </p>
             <p className="text-[11px] text-muted-foreground max-w-[200px]">
-              Click &quot;Add Comment&quot; above and select any location or feature on the map to drop a review note.
+              Click &quot;Add Comment&quot; above and select any location or feature on the map to
+              drop a review note.
             </p>
           </div>
         ) : (
