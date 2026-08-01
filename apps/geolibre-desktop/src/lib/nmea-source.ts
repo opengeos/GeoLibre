@@ -161,6 +161,32 @@ function isChooserCancellation(err: unknown): boolean {
 }
 
 /**
+ * Cap on the unterminated tail carried between reads. A device that never emits
+ * a line terminator would otherwise grow the buffer without bound.
+ */
+const MAX_LINE_BUFFER_BYTES = 8192;
+
+/**
+ * Fold one decoded chunk into the assembler, emitting whatever fixes it
+ * completes, and return the unterminated remainder to carry into the next
+ * chunk. Shared by both transports so their line-splitting and overflow rules
+ * cannot drift apart.
+ */
+function consumeChunk(
+  chunk: string,
+  buffer: string,
+  assembler: NmeaAssembler,
+  onFix: (fix: GpsFix) => void,
+): string {
+  const { lines, rest } = splitNmeaLines(buffer + chunk);
+  for (const line of lines) {
+    const fix = assembler.push(line);
+    if (fix) onFix(fix);
+  }
+  return rest.length > MAX_LINE_BUFFER_BYTES ? "" : rest;
+}
+
+/**
  * Open a serial port chosen by the user and stream fixes from it.
  *
  * Must be called from a user gesture: `requestPort()` shows the browser's port
@@ -209,16 +235,7 @@ export async function connectSerialNmea(
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
-        buffer += decoder.decode(value, { stream: true });
-        const { lines, rest } = splitNmeaLines(buffer);
-        buffer = rest;
-        // Guard against a device that never emits a line terminator, which
-        // would otherwise grow the buffer without bound.
-        if (buffer.length > 8192) buffer = "";
-        for (const line of lines) {
-          const fix = assembler.push(line);
-          if (fix) onFix(fix);
-        }
+        buffer = consumeChunk(decoder.decode(value, { stream: true }), buffer, assembler, onFix);
       }
     } catch (err) {
       failure = new NmeaError(err instanceof Error ? err.message : "Serial read failed.");
@@ -289,7 +306,15 @@ export async function connectBluetoothNmea({
   }
 
   if (!device.gatt) throw new NmeaError("The selected device does not support GATT.");
-  const server = await device.gatt.connect();
+  let server: BluetoothServerLike;
+  try {
+    server = await device.gatt.connect();
+  } catch (err) {
+    // Out of range, already bonded to another host, or refusing the connection:
+    // normalize to NmeaError like every other failure path in this module, so
+    // the caller never has to handle a raw DOMException.
+    throw new NmeaError(err instanceof Error ? err.message : "Could not connect to the device.");
+  }
 
   // The chooser filters on the services above, but a device may advertise one
   // and expose another, so try each until a notify characteristic is found.
@@ -323,14 +348,7 @@ export async function connectBluetoothNmea({
     const target = event.target as BluetoothCharacteristicLike;
     const value = target.value;
     if (!value) return;
-    buffer += decoder.decode(value, { stream: true });
-    const { lines, rest } = splitNmeaLines(buffer);
-    buffer = rest;
-    if (buffer.length > 8192) buffer = "";
-    for (const line of lines) {
-      const fix = assembler.push(line);
-      if (fix) onFix(fix);
-    }
+    buffer = consumeChunk(decoder.decode(value, { stream: true }), buffer, assembler, onFix);
   };
 
   const onDisconnected = () => {

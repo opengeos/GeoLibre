@@ -59,6 +59,13 @@ describe("parseNmeaCoordinate", () => {
     assert.ok(Math.abs(parseNmeaCoordinate("08355.1234", "W")! - -83.91872333) < 1e-6);
   });
 
+  it("rejects a corrupted field that would parse into an impossible position", () => {
+    // A checksum is optional in NMEA, so garbled coordinates do reach here.
+    assert.equal(parseNmeaCoordinate("3599.9999", "N"), undefined, "minutes >= 60");
+    assert.equal(parseNmeaCoordinate("19000.0000", "E"), undefined, "190 degrees");
+    assert.equal(parseNmeaCoordinate("-100.0000", "N"), undefined, "negative magnitude");
+  });
+
   it("returns undefined for empty fields or an unknown hemisphere", () => {
     assert.equal(parseNmeaCoordinate("", "N"), undefined);
     assert.equal(parseNmeaCoordinate("3557.5432", ""), undefined);
@@ -251,21 +258,49 @@ describe("NmeaAssembler", () => {
     assert.equal(new Date(fixes[1]!.timestamp).toISOString(), "2026-08-01T17:45:13.000Z");
   });
 
-  it("closes an epoch when a sentence type repeats, the only boundary signal for timeless sentences", () => {
-    // VTG and GSA carry no time field, so a repeat is the only way to know the
-    // receiver has moved on to the next epoch.
+  it("closes an epoch when an anchor sentence repeats, covering a receiver with no usable time", () => {
+    // With no time field the clock can never move, so a repeated GGA is the
+    // only signal left that the receiver has begun a new epoch.
+    const noTime = sentence("GNGGA,,3557.5432,N,08355.1234,W,1,09,0.92,268.4,M,-33.2,M,,");
     const a = new NmeaAssembler();
-    assert.equal(a.push(GGA), null);
+    assert.equal(a.push(noTime), null, "first one opens the epoch");
+    assert.ok(a.push(noTime), "the repeated GGA closed it");
+  });
+
+  it("does not let a repeated timeless sentence close an epoch", () => {
+    // VTG carries no time, and a repeat of it is not evidence of a new epoch.
+    const a = new NmeaAssembler();
+    a.push(GGA);
+    a.push(VTG);
     assert.equal(a.push(VTG), null, "still the same epoch");
-    const fix = a.push(VTG);
-    assert.ok(fix, "the repeated VTG closed the pending epoch");
-    assert.equal(fix!.heading, 187.3, "and the closed epoch kept the first VTG's heading");
+  });
+
+  it("keeps a multi-GNSS epoch together when the receiver sends one GSA per constellation", () => {
+    // u-blox and similar multi-constellation receivers emit one $GNGSA per
+    // satellite system inside a single epoch (NMEA 4.10 tells them apart by the
+    // trailing system ID). Treating the second as a new epoch would split one
+    // real fix into two: an early one carrying only GGA, and a later one with
+    // the speed and heading that belonged to the same measurement.
+    const gsaGps = sentence("GNGSA,A,3,05,13,15,20,24,,,,,,,,1.81,0.92,1.56,1");
+    const gsaGlonass = sentence("GNGSA,A,3,71,72,73,,,,,,,,,,1.81,0.92,1.56,2");
+    const gsaGalileo = sentence("GNGSA,A,3,03,05,,,,,,,,,,,1.81,0.92,1.56,3");
+    const fixes = run([GGA, gsaGps, gsaGlonass, gsaGalileo, RMC, VTG]);
+    assert.equal(fixes.length, 1, "one epoch yields one fix, not one per GSA");
+    assert.equal(fixes[0]!.heading, 187.3, "kept RMC's heading");
+    assert.ok(Math.abs(fixes[0]!.speed! - 2.315) < 1e-3, "kept RMC's speed");
   });
 
   it("drops an epoch whose fix is void", () => {
     const voidRmc = sentence("GNRMC,174512.00,V,,,,,,,010826,,,N");
     const noFixGga = sentence("GNGGA,174512.00,3557.5432,N,08355.1234,W,0,00,,,M,,M,,");
     assert.deepEqual(run([noFixGga, voidRmc]), []);
+  });
+
+  it("drops a latitude beyond the poles, which only the axis-aware check can catch", () => {
+    // 95 degrees passes parseNmeaCoordinate's 180-degree magnitude bound
+    // (it cannot know which axis it parsed) but is not a latitude.
+    const bad = sentence("GNGGA,174512.00,9530.0000,N,08355.1234,W,1,09,0.92,268.4,M,-33.2,M,,");
+    assert.deepEqual(run([bad]), [], "95.5 degrees north is not a position");
   });
 
   it("drops the null island position a receiver emits while acquiring", () => {

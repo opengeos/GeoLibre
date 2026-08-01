@@ -96,6 +96,9 @@ const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
  */
 type PositionSource = "device" | "nmea";
 
+/** How an NMEA receiver is reached. See lib/nmea-source.ts for why both exist. */
+type NmeaTransport = "serial" | "bluetooth";
+
 function loadStoredBaudRate(): number {
   try {
     const raw = Number(window.localStorage.getItem(NMEA_BAUD_STORAGE_KEY));
@@ -256,7 +259,7 @@ export function GpsTrackingDialog({
   /** Non-null exactly while an NMEA receiver is connected; holds its label. */
   const [nmeaLabel, setNmeaLabel] = useState<string | null>(null);
   const [nmeaStats, setNmeaStats] = useState<NmeaStreamStats | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState<NmeaTransport | null>(null);
   const nmeaConnRef = useRef<NmeaConnection | null>(null);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -484,7 +487,13 @@ export function GpsTrackingDialog({
     nmeaConnRef.current = null;
     setNmeaLabel(null);
     setNmeaStats(null);
-    await conn?.close();
+    try {
+      await conn?.close();
+    } catch {
+      // A device that will not release cleanly (unplugged mid-close, GATT
+      // already gone) must not surface as an unhandled rejection from the
+      // `void disconnectNmea()` call sites. The readout is cleared regardless.
+    }
   }, []);
 
   /**
@@ -493,10 +502,10 @@ export function GpsTrackingDialog({
    * chooser is a deliberate "never mind" and is not surfaced as an error.
    */
   const connectNmea = useCallback(
-    async (transport: "serial" | "bluetooth") => {
+    async (transport: NmeaTransport) => {
       setError(null);
       setNotice(null);
-      setConnecting(true);
+      setConnecting(transport);
       try {
         await disconnectNmea();
         const handlers = {
@@ -522,7 +531,7 @@ export function GpsTrackingDialog({
           setError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
         }
       } finally {
-        setConnecting(false);
+        setConnecting(null);
       }
     },
     [baudRate, disconnectNmea, handleFix, t],
@@ -560,11 +569,20 @@ export function GpsTrackingDialog({
     [source, disconnectNmea],
   );
 
+  /**
+   * Whether anything can actually feed {@link handleFix} right now. The device
+   * watch starts on demand, but an NMEA receiver has to be connected first —
+   * otherwise starting a recording produces a session that silently logs
+   * nothing, reports no error, and hides the "connect a receiver" hint.
+   */
+  const canTrack = source === "device" || nmeaLabel != null;
+
   const handleStart = useCallback(() => {
+    if (!canTrack) return;
     setError(null);
     setNotice(null);
     setTracking(true);
-  }, []);
+  }, [canTrack]);
 
   const handleStop = useCallback(() => {
     setTracking(false);
@@ -579,11 +597,12 @@ export function GpsTrackingDialog({
   }, [getMap]);
 
   const handleStartRecording = useCallback(() => {
+    if (!canTrack) return;
     clearTrack();
     changeRecording("recording");
     setNotice(null);
     if (!tracking) handleStart();
-  }, [clearTrack, changeRecording, tracking, handleStart]);
+  }, [canTrack, clearTrack, changeRecording, tracking, handleStart]);
 
   const handleDiscardTrack = useCallback(() => {
     clearTrack();
@@ -592,13 +611,14 @@ export function GpsTrackingDialog({
   }, [clearTrack, changeRecording]);
 
   const handleResumeRecording = useCallback(() => {
+    if (!canTrack) return;
     // A pause/resume boundary starts a new segment, so the stretch travelled
     // while paused is never drawn or measured as if it had been walked.
     const segments = fixesRef.current;
     if (segments[segments.length - 1].length > 0) segments.push([]);
     changeRecording("recording");
     if (!tracking) handleStart();
-  }, [changeRecording, tracking, handleStart]);
+  }, [canTrack, changeRecording, tracking, handleStart]);
 
   const trackName = useCallback(() => {
     const first = fixesRef.current.flat()[0];
@@ -792,7 +812,7 @@ export function GpsTrackingDialog({
                 )}
                 <div className="flex flex-wrap gap-2">
                   {recording === "off" && (
-                    <Button size="sm" onClick={handleStartRecording}>
+                    <Button size="sm" disabled={!canTrack} onClick={handleStartRecording}>
                       <Circle className="me-1 h-3.5 w-3.5 fill-red-500 text-red-500" />
                       {t("gps.record")}
                     </Button>
@@ -804,7 +824,7 @@ export function GpsTrackingDialog({
                     </Button>
                   )}
                   {recording === "paused" && (
-                    <Button size="sm" onClick={handleResumeRecording}>
+                    <Button size="sm" disabled={!canTrack} onClick={handleResumeRecording}>
                       <Play className="me-1 h-3.5 w-3.5" />
                       {t("gps.resume")}
                     </Button>
@@ -954,11 +974,11 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
 interface NmeaControlsProps {
   baudRate: number;
   onBaudRateChange: (value: number) => void;
-  connecting: boolean;
+  connecting: NmeaTransport | null;
   /** Device label while connected, null when not. */
   connectedLabel: string | null;
   stats: NmeaStreamStats | null;
-  onConnect: (transport: "serial" | "bluetooth") => void;
+  onConnect: (transport: NmeaTransport) => void;
 }
 
 /**
@@ -1023,18 +1043,22 @@ function NmeaControls({
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={!serialOk || connecting} onClick={() => onConnect("serial")}>
+        <Button
+          size="sm"
+          disabled={!serialOk || connecting !== null}
+          onClick={() => onConnect("serial")}
+        >
           <Cable className="me-1 h-3.5 w-3.5" />
-          {connecting ? t("gps.nmeaConnecting") : t("gps.nmeaConnectSerial")}
+          {connecting === "serial" ? t("gps.nmeaConnecting") : t("gps.nmeaConnectSerial")}
         </Button>
         <Button
           size="sm"
           variant="outline"
-          disabled={!bluetoothOk || connecting}
+          disabled={!bluetoothOk || connecting !== null}
           onClick={() => onConnect("bluetooth")}
         >
           <Bluetooth className="me-1 h-3.5 w-3.5" />
-          {t("gps.nmeaConnectBluetooth")}
+          {connecting === "bluetooth" ? t("gps.nmeaConnecting") : t("gps.nmeaConnectBluetooth")}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">{t("gps.nmeaBluetoothHint")}</p>

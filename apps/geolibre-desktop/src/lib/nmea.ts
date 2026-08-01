@@ -136,7 +136,13 @@ export function parseNmeaCoordinate(
   const degrees = Number(value.slice(0, split));
   const minutes = Number(value.slice(split));
   if (!Number.isFinite(degrees) || !Number.isFinite(minutes)) return undefined;
+  // A checksum is optional in NMEA, so corrupted fields do reach this function.
+  // Minutes are a sexagesimal fraction and no coordinate exceeds 180 degrees;
+  // without these bounds a garbled field parses into a plausible-looking but
+  // impossible position that would flow on into the map, track log, and GPX.
+  if (degrees < 0 || degrees > 180 || minutes < 0 || minutes >= 60) return undefined;
   const decimal = degrees + minutes / 60;
+  if (decimal > 180) return undefined;
   const h = hemisphere.toUpperCase();
   if (h === "S" || h === "W") return -decimal;
   if (h === "N" || h === "E") return decimal;
@@ -288,6 +294,25 @@ export function splitNmeaLines(buffer: string): { lines: string[]; rest: string 
   return { lines: parts.filter((l) => l.trim().length > 0), rest };
 }
 
+/**
+ * Sentence types whose repetition means the receiver has moved on to the next
+ * epoch. These are exactly the types that carry a time field, so a second one
+ * is genuinely a new measurement.
+ *
+ * The timeless types are deliberately excluded, because one epoch legitimately
+ * contains several of them: a multi-constellation receiver emits one GSA per
+ * satellite system, often all under the same `GN` talker (NMEA 4.10 tells them
+ * apart by a trailing system ID). Treating the second as a new epoch would
+ * split a single measurement into an early GGA-only fix plus a second fix
+ * carrying the speed and heading that belonged with it, doubling the apparent
+ * fix rate and duplicating track points.
+ */
+const EPOCH_ANCHOR_TYPES: ReadonlySet<NmeaSentenceType> = new Set<NmeaSentenceType>([
+  "GGA",
+  "RMC",
+  "GST",
+]);
+
 /** Accumulated state for the epoch currently being assembled. */
 interface Epoch {
   timeOfDayS?: number;
@@ -334,9 +359,10 @@ export interface NmeaStreamStats {
  * A receiver reports one position "epoch" as a burst of related sentences
  * (typically GGA, GSA, GSV…, RMC, VTG), so the fields for a single fix are
  * spread across several lines and must be merged before a fix can be emitted.
- * The assembler closes an epoch when either the UTC time field changes or a
- * sentence type repeats — the second rule matters because VTG and GSA carry no
- * time of their own, so time alone cannot group them.
+ * The assembler closes an epoch when either the UTC time field changes or an
+ * {@link EPOCH_ANCHOR_TYPES} sentence repeats. The second rule catches a
+ * receiver whose sentences carry no usable time at all; it is confined to the
+ * timed types because the timeless ones legitimately repeat within one epoch.
  *
  * A fix is therefore emitted when the *next* epoch begins, which at a typical
  * 1 Hz output rate means a fix is handed over about a second after it was
@@ -371,14 +397,16 @@ export class NmeaAssembler {
     this.stats.parsed += 1;
     this.talkers.add(sentence.talker);
 
-    // Close the current epoch when the clock moves on, or when a sentence type
-    // repeats (the only boundary signal for the sentences that carry no time).
+    // Close the current epoch when the clock moves on, or when an anchor type
+    // repeats (see EPOCH_ANCHOR_TYPES).
     let fix: GpsFix | null = null;
     const timeMoved =
       sentence.timeOfDayS != null &&
       this.epoch.timeOfDayS != null &&
       sentence.timeOfDayS !== this.epoch.timeOfDayS;
-    if (timeMoved || this.epoch.seen.has(sentence.type)) {
+    const anchorRepeated =
+      EPOCH_ANCHOR_TYPES.has(sentence.type) && this.epoch.seen.has(sentence.type);
+    if (timeMoved || anchorRepeated) {
       fix = this.flush();
     }
     this.merge(sentence);
@@ -426,6 +454,9 @@ export class NmeaAssembler {
     if (e.fixMode != null) this.stats.fixMode = e.fixMode;
 
     if (e.invalid || e.lat == null || e.lng == null) return null;
+    // parseNmeaCoordinate bounds the magnitude to 180 without knowing which
+    // axis it parsed; latitude is only valid to 90, which is checkable here.
+    if (Math.abs(e.lat) > 90 || Math.abs(e.lng) > 180) return null;
     // A position at exactly 0,0 with no satellites is the classic "no fix yet"
     // output of a receiver that is still acquiring, not a fix in the Gulf of
     // Guinea.
