@@ -1432,8 +1432,15 @@ export function DesktopShell({
     [addImportedVectorLayers, t],
   );
 
+  // Dropping a file adds a layer to the project, so it belongs with the menus,
+  // shortcuts, and command palette the viewer preset switches off — otherwise
+  // drag and drop is a way back into authoring that the read-only chrome never
+  // advertises. Both drop paths are gated: the Tauri native listener here and
+  // the webview handlers below.
+  const viewerReadOnly = layoutOptions.viewer;
+
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || viewerReadOnly) return;
 
     let unlisten: (() => void) | null = null;
     let disposed = false;
@@ -1585,31 +1592,49 @@ export function DesktopShell({
       disposed = true;
       unlisten?.();
     };
-  }, [clearDropMessageLater, finishDrop, addDroppedRasters, addDroppedPhotos, addGeoJsonLayer]);
+  }, [
+    clearDropMessageLater,
+    finishDrop,
+    addDroppedRasters,
+    addDroppedPhotos,
+    addGeoJsonLayer,
+    viewerReadOnly,
+  ]);
 
-  const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!hasDroppedFiles(event)) return;
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setIsDraggingFiles(true);
-  }, []);
+  const handleDragEnter = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (viewerReadOnly || !hasDroppedFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current += 1;
+      setIsDraggingFiles(true);
+    },
+    [viewerReadOnly],
+  );
 
-  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!hasDroppedFiles(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }, []);
+  const handleDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      // Leaving the default action in place makes the browser refuse the drop,
+      // so the overlay never appears and nothing is imported.
+      if (viewerReadOnly || !hasDroppedFiles(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    [viewerReadOnly],
+  );
 
-  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!hasDroppedFiles(event)) return;
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
-  }, []);
+  const handleDragLeave = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (viewerReadOnly || !hasDroppedFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) setIsDraggingFiles(false);
+    },
+    [viewerReadOnly],
+  );
 
   const handleDrop = useCallback(
     async (event: DragEvent<HTMLDivElement>) => {
-      if (!hasDroppedFiles(event)) return;
+      if (viewerReadOnly || !hasDroppedFiles(event)) return;
       event.preventDefault();
       dragDepthRef.current = 0;
       setIsDraggingFiles(false);
@@ -1711,7 +1736,14 @@ export function DesktopShell({
         clearDropMessageLater();
       }
     },
-    [clearDropMessageLater, finishDrop, addDroppedRasters, addDroppedPhotos, addGeoJsonLayer],
+    [
+      clearDropMessageLater,
+      finishDrop,
+      addDroppedRasters,
+      addDroppedPhotos,
+      addGeoJsonLayer,
+      viewerReadOnly,
+    ],
   );
 
   const startLayerPanelResize = useCallback(

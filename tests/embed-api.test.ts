@@ -272,28 +272,40 @@ describe("parseEmbedRequest: addLayer", () => {
   it("rejects a spec whose source carries nothing renderable", () => {
     // An `xyz` layer whose source has no usable tile template would be acked as
     // a success and then render nothing, so it is refused up front instead.
-    assert.deepEqual(
-      parseEmbedRequest(message("addLayer", { spec: addLayerSpec({ source: { tiles: [] } }) })),
-      {
-        error: 'addLayer: a "xyz" layer needs a source with a url, tiles, or inline data',
+    for (const source of [{ tiles: [] }, { minzoom: 0 }]) {
+      assert.deepEqual(parseEmbedRequest(message("addLayer", { spec: addLayerSpec({ source }) })), {
+        error: 'addLayer: a "xyz" layer needs a source with a url or tiles',
         requestId: null,
-      },
-    );
-    assert.deepEqual(
-      parseEmbedRequest(message("addLayer", { spec: addLayerSpec({ source: { minzoom: 0 } }) })),
-      {
-        error: 'addLayer: a "xyz" layer needs a source with a url, tiles, or inline data',
-        requestId: null,
-      },
-    );
+      });
+    }
   });
 
-  it("accepts inline features on the spec or on the source", () => {
+  it("does not let inline features stand in for a tile-backed layer's tiles", () => {
+    // layer-sync's raster/vector-tile/MBTiles paths read `tiles`/`url` and
+    // never look at inline features, so accepting these would be the same
+    // silent no-op with a different shape.
+    const empty = { type: "FeatureCollection", features: [] };
+    for (const spec of [
+      addLayerSpec({ geojson: empty, source: {} }),
+      addLayerSpec({ source: { data: empty } }),
+      addLayerSpec({ type: "vector-tiles", source: { data: empty } }),
+      addLayerSpec({ type: "pmtiles", geojson: empty, source: {} }),
+    ]) {
+      const parsed = parseEmbedRequest(message("addLayer", { spec }));
+      assert.ok(parsed && "error" in parsed, `expected ${spec.type} to be rejected`);
+      assert.match(parsed.error, /needs a source with a url or tiles$/);
+    }
+  });
+
+  it("accepts inline features on the spec or on the source for a data-backed type", () => {
     const empty = { type: "FeatureCollection", features: [] };
     for (const spec of [
       addLayerSpec({ type: "geojson", source: {}, geojson: empty }),
       addLayerSpec({ type: "geojson", source: { type: "geojson", data: empty } }),
+      addLayerSpec({ type: "deckgl-viz", source: {}, geojson: empty }),
       addLayerSpec({ type: "cog", source: { url: "https://x/y.tif" } }),
+      // A string `data` is a URL, which counts for a tile-backed type too.
+      addLayerSpec({ source: { data: "https://x/features.json" } }),
     ]) {
       const parsed = parseEmbedRequest(message("addLayer", { spec }));
       assert.ok(parsed && !("error" in parsed), `expected ${spec.type} to parse`);

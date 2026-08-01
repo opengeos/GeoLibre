@@ -304,10 +304,30 @@ function filterExpressionProblem(expression: unknown[]): string | null {
 }
 
 /**
+ * Layer types whose renderers read a fetched tile or tileset and nothing else.
+ * `layer-sync`'s raster path bails when `getRenderableRasterTiles` finds no
+ * `tiles`/`url`, and the vector-tile, MBTiles, and PMTiles paths have the same
+ * shape — none of them looks at inline features, however well-formed. So an
+ * inline `geojson` (or a `data` object on the source) does not make one of
+ * these renderable, and accepting it would reintroduce the silent failure
+ * {@link hasRenderableEmbedSource} exists to prevent.
+ */
+const TILE_ONLY_LAYER_TYPES = [
+  "raster",
+  "wms",
+  "wmts",
+  "xyz",
+  "vector-tiles",
+  "mbtiles",
+  "pmtiles",
+];
+
+/**
  * Whether an `addLayer` spec carries anything the map could actually render:
  * a re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
- * same predicate the Layer Library uses) or inline features, either on the spec
- * or as a `data` object on the source.
+ * same predicate the Layer Library uses), or, for a type that is not
+ * {@link TILE_ONLY_LAYER_TYPES}, inline features on the spec or as a `data`
+ * object on the source.
  *
  * Without this a spec whose `source` does not match its `type` (say `xyz` with
  * no `tiles`) would be acked as a success, pushed into the store, listed by
@@ -316,15 +336,16 @@ function filterExpressionProblem(expression: unknown[]): string | null {
  * host sees on the call it made.
  */
 function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
-  if (isRecord(spec.geojson)) return true;
   const source = isRecord(spec.source) ? spec.source : {};
-  // Inline GeoJSON is an object on `source.data`, which the string-valued
-  // `hasRestorableLayerSource` check below does not count.
-  if (isRecord(source.data)) return true;
-  return hasRestorableLayerSource({
-    source,
-    metadata: isRecord(spec.metadata) ? spec.metadata : {},
-  });
+  if (
+    hasRestorableLayerSource({ source, metadata: isRecord(spec.metadata) ? spec.metadata : {} })
+  ) {
+    return true;
+  }
+  if (typeof spec.type === "string" && TILE_ONLY_LAYER_TYPES.includes(spec.type)) return false;
+  // Inline GeoJSON is an object, on the spec's `geojson` or on `source.data`;
+  // the `hasRestorableLayerSource` check above only counts a string there.
+  return isRecord(spec.geojson) || isRecord(source.data);
 }
 
 /**
@@ -432,7 +453,8 @@ export function parseEmbedRequest(
       }
       if (!hasRenderableEmbedSource(spec)) {
         return fail(
-          `addLayer: a "${spec.type}" layer needs a source with a url, tiles, or inline data`,
+          `addLayer: a "${spec.type}" layer needs a source with a url` +
+            (TILE_ONLY_LAYER_TYPES.includes(spec.type) ? " or tiles" : ", tiles, or inline data"),
         );
       }
       return {
