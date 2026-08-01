@@ -1,3 +1,5 @@
+from typing import NoReturn
+
 import pytest
 from fastapi import HTTPException
 
@@ -220,13 +222,12 @@ def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> 
     sensitive_path = "/var/data/credentials.json"
     monkeypatch.setattr(sedona_ops, "sedonadb_import_error", lambda: None)
 
-    def _boom(*_a, **_kw):
-        raise RuntimeError(f"Failed to read {sensitive_path}")
+    def _boom(*_args: object, **_kwargs: object) -> NoReturn:
+        raise RuntimeError(f"Failed to read {sensitive_path}")  # noqa: TRY003
 
     monkeypatch.setattr(sedona_ops, "run_sql", _boom)
     with pytest.raises(HTTPException) as exc:
         sql_run(SqlRunRequest(sql="SELECT 1"))
     assert exc.value.status_code == 400
     assert sensitive_path not in str(exc.value.detail)
-    assert "internal error" in str(exc.value.detail).lower()
-
+    assert exc.value.detail == "Spatial SQL failed due to an internal error."

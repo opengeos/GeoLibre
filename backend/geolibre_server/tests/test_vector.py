@@ -1,3 +1,5 @@
+from typing import NoReturn
+
 import pytest
 from fastapi import HTTPException
 
@@ -354,16 +356,16 @@ def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> 
     """Broad exceptions must not surface internal paths or secrets in the detail."""
     sensitive_path = "/var/secret/key.pem"
     monkeypatch.setattr(vector_ops, "geopandas_import_error", lambda: None)
-    monkeypatch.setattr(
-        vector_ops,
-        "run_vector_tool",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError(f"Cannot read {sensitive_path}")),
-    )
+
+    def _boom(*_args: object, **_kwargs: object) -> NoReturn:
+        raise RuntimeError(f"Cannot read {sensitive_path}")  # noqa: TRY003
+
+    monkeypatch.setattr(vector_ops, "run_vector_tool", _boom)
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE))
     assert exc.value.status_code == 400
     assert sensitive_path not in str(exc.value.detail)
-    assert "internal error" in str(exc.value.detail).lower()
+    assert exc.value.detail == "Vector tool failed due to an internal error."
 
 
 @requires_geopandas
@@ -379,15 +381,15 @@ def test_write_does_not_leak_exception_detail(tmp_path, monkeypatch: pytest.Monk
     )
     sensitive_path = "/etc/shadow"
 
-    def _boom(*_a, **_kw):
-        raise RuntimeError(f"leaked {sensitive_path}")
+    def _boom(*_args: object, **_kwargs: object) -> NoReturn:
+        raise RuntimeError(f"leaked {sensitive_path}")  # noqa: TRY003
 
     monkeypatch.setattr(vector_mod, "_write_geojson", _boom)
     with pytest.raises(HTTPException) as exc:
         vector_write(WriteVectorRequest(path=str(src), geojson=_edited("b")))
     assert exc.value.status_code == 400
     assert sensitive_path not in str(exc.value.detail)
-    assert "internal error" in str(exc.value.detail).lower()
+    assert exc.value.detail == "Write-back failed due to an internal error."
 
 
 @requires_geopandas
