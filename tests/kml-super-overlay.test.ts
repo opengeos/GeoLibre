@@ -142,6 +142,15 @@ describe("parseTileUrl", () => {
     assert.equal(parseTileUrl(`${PROTOCOL}://archive`), null);
     assert.equal(parseTileUrl(`${PROTOCOL}://archive/1/x/3`), null);
   });
+
+  it("rejects invalid percent-encoding instead of throwing", () => {
+    // Reached from the store subscription, where a URIError would break every
+    // later store update.
+    assert.equal(parseTileUrl(`${PROTOCOL}://%E0%A4%A/1/2/3`), null);
+    assert.doesNotThrow(() => {
+      pruneKmlSuperOverlays([tileLayer(`${PROTOCOL}://100%/{z}/{x}/{y}`)]);
+    });
+  });
 });
 
 describe("pruneKmlSuperOverlays", () => {

@@ -290,7 +290,14 @@ function archiveIdFromUrl(url: string): string | null {
   if (!isKmlSuperOverlayUrl(url)) return null;
   const path = url.slice(`${PROTOCOL}://`.length);
   const slash = path.indexOf("/");
-  return decodeURIComponent(slash < 0 ? path : path.slice(0, slash));
+  try {
+    return decodeURIComponent(slash < 0 ? path : path.slice(0, slash));
+  } catch {
+    // Invalid percent-encoding (a crafted or corrupted project's tile URL).
+    // Reached from the store subscription, where a throw would break every
+    // later store update, so treat it as "no archive" instead.
+    return null;
+  }
 }
 
 export function parseTileUrl(url: string): { id: string; z: number; x: number; y: number } | null {
