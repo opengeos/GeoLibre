@@ -102,7 +102,7 @@ m.to_project()["mapView"]["center"]
   (works in the running server with no restart where it is installed). On other
   remote servers (Binder, remote JupyterLab), pass `Map(server_proxy=True)` to
   use that same remote path; `Map(server_proxy=False)` forces the direct path.
-- Optional extras: `pip install geolibre[all]` adds GeoPandas/Shapely support
+- Optional extras: `pip install "geolibre[all]"` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
   (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),
   which the kernel reads and inlines as GeoJSON. Remote URLs for the same formats stream through
