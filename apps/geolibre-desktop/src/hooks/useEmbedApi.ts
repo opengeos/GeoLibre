@@ -253,7 +253,7 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
             ...(spec.geojson ? { geojson: spec.geojson as GeoLibreLayer["geojson"] } : {}),
             ...(spec.beforeId ? { beforeId: spec.beforeId } : {}),
           };
-          state.addLayer(layer);
+          state.addLayer(layer, spec.beforeId);
           return layer.id;
         }
         case "exportImage": {

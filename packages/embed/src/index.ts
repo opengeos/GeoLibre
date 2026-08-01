@@ -3,7 +3,7 @@ export const EMBED_API_VERSION = 2 as const;
 export const EMBED_API_SOURCE = "geolibre" as const;
 
 export interface Viewport {
-  bbox?: [number, number, number, number];
+  bbox?: [number, number, number, number] | null;
   center: [number, number];
   zoom: number;
   bearing: number;

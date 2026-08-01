@@ -18,7 +18,7 @@ export function ViewerLayerPanel() {
         {layers.map((layer) => (
           <label
             key={layer.id}
-            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted focus-within:outline-none focus-within:ring-2 focus-within:ring-ring"
           >
             <input
               type="checkbox"
