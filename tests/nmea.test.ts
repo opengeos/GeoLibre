@@ -82,8 +82,21 @@ describe("parseNmeaTime / parseNmeaDate", () => {
   });
 
   it("rejects an impossible date", () => {
-    assert.equal(parseNmeaDate("011326"), undefined);
-    assert.equal(parseNmeaDate("0108"), undefined);
+    assert.equal(parseNmeaDate("011326"), undefined, "month 13");
+    assert.equal(parseNmeaDate("0108"), undefined, "truncated");
+  });
+
+  it("rejects a day the month cannot have, which Date.UTC would silently roll over", () => {
+    // Date.UTC(1999, 1, 31) is 3 March, so accepting this would move the fix.
+    assert.equal(parseNmeaDate("310299"), undefined, "31 February");
+    assert.equal(parseNmeaDate("310424"), undefined, "31 April");
+    assert.deepEqual(parseNmeaDate("300424"), [2024, 4, 30], "30 April is valid");
+  });
+
+  it("applies leap years to February", () => {
+    assert.deepEqual(parseNmeaDate("290224"), [2024, 2, 29], "2024 is a leap year");
+    assert.equal(parseNmeaDate("290223"), undefined, "2023 is not");
+    assert.deepEqual(parseNmeaDate("290200"), [2000, 2, 29], "2000 is a leap year");
   });
 });
 
@@ -264,6 +277,32 @@ describe("NmeaAssembler", () => {
     const a = new NmeaAssembler();
     assert.equal(a.push(GGA), null, "no fix until the epoch closes");
     assert.ok(a.flush(), "flush closes it");
+  });
+
+  it("reports losing the fix instead of leaving the last good quality in the readout", () => {
+    const a = new NmeaAssembler();
+    a.push(GGA);
+    a.push(RMC);
+    a.flush();
+    assert.equal(a.getStats().fixQuality, "gps");
+    // The receiver loses lock: these epochs yield no fix, but the readout must
+    // stop claiming a GPS fix rather than showing the last good value.
+    a.push(sentence("GNGGA,174513.00,3557.5432,N,08355.1234,W,0,00,,,M,,M,,"));
+    a.push(sentence("GNRMC,174513.00,V,,,,,,,010826,,,N"));
+    assert.equal(a.flush(), null, "no fix from a void epoch");
+    assert.equal(a.getStats().fixQuality, "invalid");
+  });
+
+  it("leaves fix quality untouched for an epoch that reports none", () => {
+    const a = new NmeaAssembler();
+    a.push(GGA);
+    a.push(RMC);
+    a.flush();
+    // VTG and GSA say nothing about fix quality, so they must not clear it.
+    a.push(VTG);
+    a.push(GSA);
+    a.flush();
+    assert.equal(a.getStats().fixQuality, "gps");
   });
 
   it("counts parsed and ignored lines and records the talkers seen", () => {

@@ -142,7 +142,10 @@ export interface NmeaConnection {
   readonly label: string;
   /** Stream health for the readout; recomputed on demand. */
   stats(): NmeaStreamStats;
-  /** Stop reading and release the port or GATT server. Safe to call twice. */
+  /**
+   * Stop reading and release the port or GATT server. Safe to call twice, and
+   * guaranteed not to deliver another fix once it has been called.
+   */
   close(): Promise<void>;
 }
 
@@ -200,6 +203,7 @@ export async function connectSerialNmea(
     const decoder = new TextDecoder();
     reader = readable.getReader();
     let buffer = "";
+    let failure: NmeaError | null = null;
     try {
       for (;;) {
         const { value, done } = await reader.read();
@@ -217,9 +221,7 @@ export async function connectSerialNmea(
         }
       }
     } catch (err) {
-      if (!closed) {
-        onError(new NmeaError(err instanceof Error ? err.message : "Serial read failed."));
-      }
+      failure = new NmeaError(err instanceof Error ? err.message : "Serial read failed.");
     } finally {
       try {
         reader.releaseLock();
@@ -227,8 +229,9 @@ export async function connectSerialNmea(
         // Already released by a concurrent cancel; nothing to do.
       }
     }
-    // A clean end-of-stream while still connected means the device went away.
-    if (!closed) onError(new NmeaError("The serial device disconnected."));
+    // A read failure and a clean end-of-stream both end the session while still
+    // connected, so report exactly one error, preferring the specific cause.
+    if (!closed) onError(failure ?? new NmeaError("The serial device disconnected."));
   };
 
   void pump();
@@ -239,9 +242,10 @@ export async function connectSerialNmea(
     close: async () => {
       if (closed) return;
       closed = true;
-      // Emit whatever the final, still-open epoch had accumulated.
-      const last = assembler.flush();
-      if (last) onFix(last);
+      // The half-assembled final epoch is deliberately dropped rather than
+      // emitted: closing races with the caller's own teardown, so a late fix
+      // can land after the position readout has already been cleared. At 1 Hz
+      // that costs at most the last second of a track.
       try {
         await reader?.cancel();
       } catch {
@@ -353,8 +357,8 @@ export async function connectBluetoothNmea({
     close: async () => {
       if (closed) return;
       closed = true;
-      const last = assembler.flush();
-      if (last) onFix(last);
+      // The half-assembled final epoch is dropped for the same reason as the
+      // serial transport: a late fix would race the caller's teardown.
       notifying.removeEventListener("characteristicvaluechanged", onValueChanged);
       device.removeEventListener("gattserverdisconnected", onDisconnected);
       try {

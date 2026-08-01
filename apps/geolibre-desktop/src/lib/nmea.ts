@@ -155,9 +155,22 @@ export function parseNmeaTime(field: string | undefined): number | undefined {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** Days in a 1-based month, accounting for leap years. */
+function daysInMonth(year: number, month: number): number {
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  if (month === 2 && leap) return 29;
+  return DAYS_IN_MONTH[month - 1];
+}
+
 /**
  * Parse RMC's `ddmmyy` date field. The two-digit year follows the NMEA
  * convention of 1900 for 80-99 and 2000 for 00-79.
+ *
+ * The day is validated against the specific month rather than a flat 1-31,
+ * because `Date.UTC` silently rolls an impossible date forward — a corrupt
+ * `3102yy` would otherwise land the fix on 3 March instead of being rejected.
  */
 export function parseNmeaDate(field: string | undefined): [number, number, number] | undefined {
   if (!field || field.length !== 6) return undefined;
@@ -165,8 +178,10 @@ export function parseNmeaDate(field: string | undefined): [number, number, numbe
   const month = Number(field.slice(2, 4));
   const yy = Number(field.slice(4, 6));
   if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(yy)) return undefined;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
-  return [yy >= 80 ? 1900 + yy : 2000 + yy, month, day];
+  if (month < 1 || month > 12) return undefined;
+  const year = yy >= 80 ? 1900 + yy : 2000 + yy;
+  if (day < 1 || day > daysInMonth(year, month)) return undefined;
+  return [year, month, day];
 }
 
 /**
@@ -325,7 +340,8 @@ export interface NmeaStreamStats {
  *
  * A fix is therefore emitted when the *next* epoch begins, which at a typical
  * 1 Hz output rate means a fix is handed over about a second after it was
- * measured. {@link flush} force-closes the pending epoch on disconnect.
+ * measured. {@link flush} force-closes the pending epoch for callers reading a
+ * finite stream.
  */
 export class NmeaAssembler {
   private epoch: Epoch = emptyEpoch();
@@ -393,11 +409,22 @@ export class NmeaAssembler {
 
   /**
    * Close the pending epoch and start a new one, returning its fix if it held a
-   * usable position. Call on disconnect so the final epoch is not dropped.
+   * usable position. The live transports deliberately do not call this on
+   * disconnect — a fix emitted during teardown races the caller's own cleanup —
+   * so it exists for callers that drive the assembler over a finite stream.
    */
   flush(): GpsFix | null {
     const e = this.epoch;
     this.epoch = emptyEpoch();
+    // Record what this epoch reported about fix quality before deciding whether
+    // it yields a position. A receiver that loses lock produces epochs that are
+    // dropped, so updating quality only on success would leave the readout
+    // showing the last good "GPS fix" while the device reports none. Epochs
+    // carrying no quality information at all (VTG/GSA only) leave it unchanged.
+    if (e.invalid) this.stats.fixQuality = "invalid";
+    else if (e.fixQuality) this.stats.fixQuality = e.fixQuality;
+    if (e.fixMode != null) this.stats.fixMode = e.fixMode;
+
     if (e.invalid || e.lat == null || e.lng == null) return null;
     // A position at exactly 0,0 with no satellites is the classic "no fix yet"
     // output of a receiver that is still acquiring, not a fix in the Gulf of
@@ -417,8 +444,6 @@ export class NmeaAssembler {
       timestamp: epochTimestamp(e.timeOfDayS, e.date),
     };
     this.stats.fixes += 1;
-    this.stats.fixQuality = e.fixQuality ?? this.stats.fixQuality;
-    this.stats.fixMode = e.fixMode ?? null;
     return fix;
   }
 

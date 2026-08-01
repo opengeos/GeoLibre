@@ -1009,6 +1009,7 @@
     "maxAccuracy": "Max accuracy (m)",
     "settingsHint": "Track fixes closer than the minimum distance or time are skipped. Fixes less accurate than the accuracy threshold are not logged, and point capture is blocked. 0 disables a filter.",
     "openDialog": "Open GPS Tracking",
+    "altitudeValue": "Alt: {{value}} m",
     "speedValue": "{{value}} km/h",
     "headingValue": "{{value}}°",
     "source": "Position source",

@@ -550,16 +550,14 @@ export function GpsTrackingDialog({
   /** Switching source ends the current session so no stale fixes linger. */
   const changeSource = useCallback(
     (next: PositionSource) => {
-      setSource((prev) => {
-        if (prev === next) return prev;
-        setTracking(false);
-        void disconnectNmea();
-        setError(null);
-        setNotice(null);
-        return next;
-      });
+      if (next === source) return;
+      setSource(next);
+      setTracking(false);
+      void disconnectNmea();
+      setError(null);
+      setNotice(null);
     },
-    [disconnectNmea],
+    [source, disconnectNmea],
   );
 
   const handleStart = useCallback(() => {
@@ -936,7 +934,12 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
       </span>
       <span>±{formatAccuracy(fix.accuracy, t("gps.notAvailable"))}</span>
       <span>{t("gps.satellitesValue", { value: fix.satellites ?? t("gps.notAvailable") })}</span>
-      {fix.altitude != null && <span>{Math.round(fix.altitude)} m ASL</span>}
+      {/* Not "ASL": GpsFix.altitude is height above the WGS84 ellipsoid, both
+          from the Geolocation API and from NMEA (GGA's MSL altitude plus its
+          geoid separation), which differs from sea level by tens of meters. */}
+      {fix.altitude != null && (
+        <span>{t("gps.altitudeValue", { value: Math.round(fix.altitude) })}</span>
+      )}
       {fix.speed != null && (
         <span>{t("gps.speedValue", { value: formatSpeedKmh(fix.speed) })}</span>
       )}
