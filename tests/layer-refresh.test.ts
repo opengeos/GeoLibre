@@ -5,6 +5,7 @@ import {
   fetchWfsGeoJson,
   isRefreshableLayer,
   isVectorControlRefreshLayer,
+  supportsRefreshFailurePolicy,
   WFS_XML_RESPONSE_ERROR,
 } from "../apps/geolibre-desktop/src/lib/layer-refresh";
 
@@ -145,6 +146,31 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
     });
 
     assert.equal(isRefreshableLayer(layer), false);
+  });
+});
+
+describe("supportsRefreshFailurePolicy", () => {
+  it("is false for a vector-control layer, whose features the store never holds", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson", url: "https://x.com/a.geojson" },
+      metadata: {
+        sourceKind: "maplibre-gl-vector",
+        externalNativeLayer: true,
+      },
+    });
+
+    assert.equal(supportsRefreshFailurePolicy(layer), false);
+  });
+
+  it("is true for a store-backed GeoJSON URL layer", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson", url: "https://example.com/data.geojson" },
+      metadata: { sourceKind: "geojson-url" },
+    });
+
+    assert.equal(supportsRefreshFailurePolicy(layer), true);
   });
 });
 

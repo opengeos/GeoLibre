@@ -376,6 +376,21 @@ export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/**
+ * True when the "clear the layer on refresh failure" policy can actually be
+ * honored for this layer. Clearing works by writing an empty FeatureCollection
+ * into `layer.geojson`, which vector-control layers never populate — their
+ * features live in the external control's own sources and are mirrored into the
+ * store only as metadata. Offering the option there would silently do nothing,
+ * so the refresh-settings dialog hides it for those layers.
+ *
+ * @param layer - The store layer to test.
+ * @returns Whether a failure policy other than "keep-last" takes effect.
+ */
+export function supportsRefreshFailurePolicy(layer: GeoLibreLayer): boolean {
+  return !isVectorControlRefreshLayer(layer);
+}
+
 export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
   return (
     Boolean(refreshSourceUrl(layer)) ||

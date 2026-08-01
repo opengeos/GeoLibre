@@ -4,10 +4,46 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 export const SOCRATA_PLUGIN_ID = "maplibre-gl-socrata";
 export const CKAN_PLUGIN_ID = "maplibre-gl-ckan";
 const FETCH_TIMEOUT_MS = 30_000;
+// Downloads pull whole datasets (a Socrata `.geojson?$limit=50000`, or an
+// arbitrary CKAN resource), so they get a much longer ceiling than a search —
+// a valid but large resource on a slow link must not abort with a generic
+// "Could not add dataset."
 const DOWNLOAD_TIMEOUT_MS = 120_000;
+
+const CKAN_PAGE_SIZE = 20;
+// HDX does not send Access-Control-Allow-Origin on browser-issued requests, so
+// the search only works through the tiles-worker route that fronts it (see
+// workers/tiles CKAN_SEARCH_PATH). There is no usable direct fallback.
+const CKAN_SEARCH_PROXY = "https://tiles.geolibre.app/ckan/search";
 
 function boundedSignal(signal: AbortSignal, timeoutMs = FETCH_TIMEOUT_MS): AbortSignal {
   return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+}
+
+// The panel is raw DOM inside a plugin container, so every element carries its
+// own theme-token styling. An unstyled <button> falls back to the user agent's
+// chrome, which is borderless and low-contrast against the card — these mirror
+// the button styles the sibling catalog panels (ArcGIS Hub, Source Cooperative)
+// use.
+const SECONDARY_BUTTON_STYLE =
+  "padding:3px 9px;font-size:11px;border:1px solid hsl(var(--border));border-radius:5px;" +
+  "cursor:pointer;background:hsl(var(--background));color:hsl(var(--foreground));";
+const PRIMARY_BUTTON_STYLE =
+  "padding:3px 9px;font-size:11px;border:1px solid hsl(var(--primary));border-radius:5px;" +
+  "cursor:pointer;background:hsl(var(--primary));color:hsl(var(--primary-foreground));";
+
+/**
+ * Applies the disabled affordance to a themed button. The user-agent's own
+ * disabled shading does not apply once the button carries explicit colors, so
+ * the state has to be styled here.
+ *
+ * @param button - The button to update.
+ * @param disabled - Whether the button is disabled.
+ */
+function setButtonDisabled(button: HTMLButtonElement, disabled: boolean): void {
+  button.disabled = disabled;
+  button.style.opacity = disabled ? "0.5" : "1";
+  button.style.cursor = disabled ? "not-allowed" : "pointer";
 }
 
 interface CatalogItem {
@@ -108,10 +144,10 @@ async function searchSocrata(
 
 async function searchCkan(query: string, page: number, signal: AbortSignal): Promise<CatalogPage> {
   const portal = "https://data.humdata.org";
-  const url = new URL("https://tiles.geolibre.app/ckan/search");
+  const url = new URL(CKAN_SEARCH_PROXY);
   url.searchParams.set("q", query);
-  url.searchParams.set("rows", "20");
-  url.searchParams.set("start", String(page * 20));
+  url.searchParams.set("rows", String(CKAN_PAGE_SIZE));
+  url.searchParams.set("start", String(page * CKAN_PAGE_SIZE));
   const response = await fetch(url, { signal: boundedSignal(signal) });
   if (!response.ok) throw new Error(`CKAN search failed (${response.status}).`);
   const payload = (await response.json()) as {
@@ -199,6 +235,7 @@ function createCatalogPlugin(options: {
             const more = document.createElement("button");
             more.type = "button";
             more.textContent = labels.loadMore;
+            more.style.cssText = SECONDARY_BUTTON_STYLE;
             more.hidden = true;
             panel.append(hint, form, status, results, more);
             container.append(panel);
@@ -229,12 +266,13 @@ function createCatalogPlugin(options: {
               const add = document.createElement("button");
               add.type = "button";
               add.textContent = labels.add;
-              add.disabled = !item.dataUrl;
+              add.style.cssText = PRIMARY_BUTTON_STYLE;
+              setButtonDisabled(add, !item.dataUrl);
               add.addEventListener("click", async () => {
                 if (!item.dataUrl) return;
                 const downloadController = new AbortController();
                 downloads.add(downloadController);
-                add.disabled = true;
+                setButtonDisabled(add, true);
                 status.textContent = labels.adding(item.title);
                 try {
                   const response = await fetch(item.dataUrl, {
@@ -254,12 +292,13 @@ function createCatalogPlugin(options: {
                   }
                 } finally {
                   downloads.delete(downloadController);
-                  if (active) add.disabled = !item.dataUrl;
+                  if (active) setButtonDisabled(add, !item.dataUrl);
                 }
               });
               const details = document.createElement("button");
               details.type = "button";
               details.textContent = labels.details;
+              details.style.cssText = SECONDARY_BUTTON_STYLE;
               details.addEventListener("click", () => app.openExternalUrl?.(item.pageUrl));
               actions.append(add, details);
               card.append(title, meta, description, actions);
@@ -279,7 +318,7 @@ function createCatalogPlugin(options: {
               controller?.abort();
               controller = new AbortController();
               const token = ++generation;
-              submit.disabled = true;
+              setButtonDisabled(submit, true);
               status.textContent = labels.searching;
               try {
                 const result = await options.search(query, page, controller.signal);
@@ -295,7 +334,7 @@ function createCatalogPlugin(options: {
                   status.textContent = labels.searchError;
                 }
               } finally {
-                if (token === generation) submit.disabled = false;
+                if (token === generation) setButtonDisabled(submit, false);
               }
             };
             const onSubmit = (event: SubmitEvent) => {

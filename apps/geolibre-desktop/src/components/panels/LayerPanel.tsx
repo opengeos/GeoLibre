@@ -174,6 +174,7 @@ import {
   refreshGeoJsonLayer,
   setLayerConnectionResult,
   setLayerRefreshConfig,
+  supportsRefreshFailurePolicy,
 } from "../../lib/layer-refresh";
 import {
   getLayerWatchConfig,
@@ -278,6 +279,8 @@ const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+/** How often the durable "Last synced …" labels are recomputed. */
+const SYNC_CLOCK_TICK_MS = 60_000;
 
 /**
  * The Add Data sources a group's "Add data to group" submenu can offer, in Add
@@ -697,9 +700,13 @@ export function LayerPanel({
   const [layerPendingRemoval, setLayerPendingRemoval] = useState<GeoLibreLayer | null>(null);
   const [refreshSettingsLayerId, setRefreshSettingsLayerId] = useState<string | null>(null);
   const [refreshStatuses, setRefreshStatuses] = useState<Record<string, LayerRefreshStatus>>({});
+  // "Last synced <relative time>" is derived from the clock, not from store
+  // state, so without a tick the label would keep reading "a few seconds ago"
+  // until an unrelated re-render happened to recompute it. Tick once a minute
+  // while the panel is open and at least one layer carries a sync timestamp.
+  const [, setSyncClockTick] = useState(0);
   const [refreshIntervalChoice, setRefreshIntervalChoice] = useState("0");
   const [customRefreshSeconds, setCustomRefreshSeconds] = useState("");
-  const [, setSyncClock] = useState(0);
   // Time Slider binding dialog: the target layer, the detected timestamp
   // columns, the chosen property, and the window width. `candidates` is null
   // while the layer's features are still being inspected.
@@ -734,16 +741,20 @@ export function LayerPanel({
   useSyncExternalStore(subscribeTemporalLayers, getTemporalLayersVersion, getTemporalLayersVersion);
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setSyncClock((value) => value + 1), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
   // In the shared left-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
   // owner applies so every existing call site keeps working.
   const isControlled = controlledCollapsed !== undefined;
   const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
+  const hasSyncTimestamps = layers.some((layer) => Boolean(layer.connection?.lastSyncedAt));
+  useEffect(() => {
+    if (isCollapsed || !hasSyncTimestamps) return;
+    const timer = window.setInterval(
+      () => setSyncClockTick((tick) => tick + 1),
+      SYNC_CLOCK_TICK_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [isCollapsed, hasSyncTimestamps]);
   // Quick analysis (#1523): run an existing vector tool over a whole layer from
   // its actions menu, with defaults filled in. No new algorithms — each entry
   // dispatches the same tool the Processing dialog would, so the run shows up in
@@ -4216,7 +4227,11 @@ export function LayerPanel({
                   )}
                 </div>
               )}
-              {!isVectorControlRefreshLayer(refreshSettingsLayer) && (
+              {/* Vector-control layers keep their features in the external
+                  control, so "clear the layer" cannot be honored for them and
+                  the whole policy picker is hidden rather than offering a
+                  setting that silently does nothing. */}
+              {supportsRefreshFailurePolicy(refreshSettingsLayer) && (
                 <>
                   <Label htmlFor="layer-refresh-failure-policy">
                     {t("layers.refreshFailurePolicy")}
