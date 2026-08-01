@@ -1315,6 +1315,7 @@
     }
   },
   "kml": {
+    "importFailed": "无法导入 KML/KMZ。",
     "timeOverlayGroup": "时间叠加动画"
   },
   "map": {

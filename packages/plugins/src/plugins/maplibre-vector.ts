@@ -92,6 +92,29 @@ let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
 let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
+/** One KML/KMZ file handed to the host importer. */
+export interface KmlFileImport {
+  file: File;
+  /**
+   * Absolute filesystem path, when the host picked or dropped the file
+   * natively. It lets the importer re-read the archive later (a Super-Overlay's
+   * tile pyramid is not embedded in the project), so pass it whenever known.
+   */
+  sourcePath?: string;
+}
+
+export type KmlFileImportHandler = (files: KmlFileImport[]) => void | Promise<void>;
+
+let kmlFileImportHandler: KmlFileImportHandler | null = null;
+
+/**
+ * Let the host app handle KML/KMZ constructs that are not vector datasets
+ * (GroundOverlay, Model, and Super-Overlay) before the vector control sends
+ * them to DuckDB/GDAL.
+ */
+export function setKmlFileImportHandler(handler: KmlFileImportHandler | null): void {
+  kmlFileImportHandler = handler;
+}
 
 /**
  * Opens the maplibre-gl-vector panel, mounting the control on first use.
@@ -126,6 +149,7 @@ export function openVectorLayerPanel(app: GeoLibreAppAPI): void {
         wireVectorCloseButton(control);
         applyVectorPanelClass(control);
         wireDesktopFilePicker(control, app);
+        wireKmlFileImporter(control);
       } catch (error) {
         console.error("[GeoLibre] Failed to open the vector layer panel", error);
       }
@@ -720,12 +744,59 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
     event.preventDefault();
     void (async () => {
       try {
-        await addPickedVectorFiles(control, await pickFiles());
+        const picked = await pickFiles();
+        // This handler preempts the native input's `change` event entirely, so
+        // a KML/KMZ-only selection has to be routed to the host importer here
+        // too — `wireKmlFileImporter` never sees a desktop pick.
+        if (
+          await routeKmlFileSelection(picked.map(({ file, sourcePath }) => ({ file, sourcePath })))
+        ) {
+          return;
+        }
+        await addPickedVectorFiles(control, picked);
       } catch (error) {
         console.error("[GeoLibre] Failed to load vector files from the desktop picker", error);
       }
     })();
   });
+}
+
+/** Whether every selected file is a KML/KMZ (and there is at least one). */
+export function isKmlFileSelection(files: readonly KmlFileImport[]): boolean {
+  return files.length > 0 && files.every(({ file }) => /\.(?:kml|kmz)$/i.test(file.name));
+}
+
+/**
+ * Hands a KML/KMZ-only selection to the host importer, which loads the
+ * constructs the vector control cannot (GroundOverlay, Model, Super-Overlay).
+ * Returns whether the selection was consumed; a mixed or non-KML selection (or
+ * no registered handler) is left to the vector control.
+ */
+export async function routeKmlFileSelection(files: readonly KmlFileImport[]): Promise<boolean> {
+  if (!kmlFileImportHandler || !isKmlFileSelection(files)) return false;
+  await kmlFileImportHandler([...files]);
+  return true;
+}
+
+function wireKmlFileImporter(control: VectorControl): void {
+  const panel = (control as unknown as VectorControlInternals)._panel;
+  const fileInput = panel?.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!fileInput || fileInput.dataset.geolibreKmlImporterWired === "true") return;
+  fileInput.dataset.geolibreKmlImporterWired = "true";
+  fileInput.addEventListener(
+    "change",
+    (event) => {
+      // A browser File has no filesystem path, so no `sourcePath` here.
+      const files = Array.from(fileInput.files ?? [], (file) => ({ file }));
+      if (!kmlFileImportHandler || !isKmlFileSelection(files)) return;
+      // Capture-phase interception keeps the vector control from reporting
+      // "Dataset does not contain any layers" for overlay-only documents.
+      event.stopImmediatePropagation();
+      fileInput.value = "";
+      void routeKmlFileSelection(files);
+    },
+    true,
+  );
 }
 
 /** The subset of VectorControl used to load picked files (eases testing). */

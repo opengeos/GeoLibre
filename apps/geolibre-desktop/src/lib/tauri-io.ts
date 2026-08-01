@@ -47,6 +47,12 @@ import {
   type KmlModel,
 } from "./kml";
 import {
+  registerKmlSuperOverlay,
+  setKmlSuperOverlayResolver,
+  unregisterKmlSuperOverlay,
+  type KmlSuperOverlayTile,
+} from "./kml-super-overlay";
+import {
   findArchiveEntry,
   findArchiveEntryKey,
   imageMimeFromName,
@@ -278,6 +284,18 @@ export interface LoadedImageOverlay {
   visible?: boolean;
 }
 
+/** A tiled KML Super-Overlay registered with GeoLibre's in-memory tile protocol. */
+export interface LoadedKmlSuperOverlay {
+  kind: "kml-super-overlay";
+  name: string;
+  path: string;
+  url: string;
+  bounds: [number, number, number, number];
+  minzoom: number;
+  maxzoom: number;
+  tileSize: number;
+}
+
 /**
  * A 3D model produced by a KML/KMZ `<Model>` (a COLLADA `.dae` converted to a
  * self-contained GLB). The caller turns it into a deck.gl scenegraph layer. The
@@ -314,11 +332,26 @@ export interface LoadedModel {
  * a 3D model. A KMZ/KML file can yield a mix (placemarks plus ground overlays
  * plus models), mirroring how a GPX file yields several vector layers.
  */
-export type LoadedLayer = LoadedVectorLayer | LoadedImageOverlay | LoadedModel;
+export type LoadedLayer =
+  | LoadedVectorLayer
+  | LoadedImageOverlay
+  | LoadedKmlSuperOverlay
+  | LoadedModel;
 
 /** Narrow a {@link LoadedLayer} to its image-overlay variant. */
 export function isLoadedImageOverlay(layer: LoadedLayer): layer is LoadedImageOverlay {
   return "kind" in layer && layer.kind === "image-overlay";
+}
+
+export function isLoadedKmlSuperOverlay(layer: LoadedLayer): layer is LoadedKmlSuperOverlay {
+  return "kind" in layer && layer.kind === "kml-super-overlay";
+}
+
+/** Free protocol archives accumulated by a batch that ultimately rejects. */
+function unregisterLoadedKmlSuperOverlays(layers: readonly LoadedLayer[]): void {
+  for (const layer of layers) {
+    if (isLoadedKmlSuperOverlay(layer)) unregisterKmlSuperOverlay(layer.url);
+  }
 }
 
 /** Narrow a {@link LoadedLayer} to its 3D-model variant. */
@@ -443,7 +476,9 @@ async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
   }
   // Drop the deprecated `crs` member (RFC 7946 mandates WGS84) so it does not
   // linger on an already-WGS84 collection.
-  const { crs: _deprecatedCrs, ...stripped } = fc as FeatureCollection & { crs?: unknown };
+  const { crs: _deprecatedCrs, ...stripped } = fc as FeatureCollection & {
+    crs?: unknown;
+  };
   return stripped as FeatureCollection;
 }
 
@@ -902,7 +937,9 @@ async function groundOverlaysFromKmz(
     }
     if (data.length > MAX_OVERLAY_IMAGE_BYTES) {
       console.warn(
-        `Skipping a KML ground overlay: its image "${overlay.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
+        `Skipping a KML ground overlay: its image "${overlay.href}" is ${Math.round(
+          data.length / (1024 * 1024),
+        )} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
       );
       continue;
     }
@@ -1045,7 +1082,9 @@ async function daeToGlbDataUrl(
     );
     if (glb.length > MAX_MODEL_GLB_BYTES) {
       console.warn(
-        `Skipping a KML model: "${href}" converts to ${Math.round(glb.length / (1024 * 1024))} MB, over the ${Math.round(MAX_MODEL_GLB_BYTES / (1024 * 1024))} MB inline limit.`,
+        `Skipping a KML model: "${href}" converts to ${Math.round(
+          glb.length / (1024 * 1024),
+        )} MB, over the ${Math.round(MAX_MODEL_GLB_BYTES / (1024 * 1024))} MB inline limit.`,
       );
       return null;
     }
@@ -1099,7 +1138,9 @@ async function modelsFromKmz(
     const data = entries[daeKey];
     if (data.length > MAX_DAE_SOURCE_BYTES) {
       console.warn(
-        `Skipping a KML model: its mesh "${model.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+        `Skipping a KML model: its mesh "${model.href}" is ${Math.round(
+          data.length / (1024 * 1024),
+        )} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
       );
       continue;
     }
@@ -1116,7 +1157,9 @@ async function modelsFromKmz(
       // the GLB-size cap ever measures the result; skip it (untextured) instead.
       if (bytes && bytes.length > MAX_OVERLAY_IMAGE_BYTES) {
         console.warn(
-          `Skipping a KML model texture "${texturePath}": ${Math.round(bytes.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB limit.`,
+          `Skipping a KML model texture "${texturePath}": ${Math.round(
+            bytes.length / (1024 * 1024),
+          )} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB limit.`,
         );
         return undefined;
       }
@@ -1155,7 +1198,9 @@ async function fetchDaeAsGlbDataUrl(href: string): Promise<{
     const contentLength = response.headers.get("content-length");
     if (contentLength !== null && Number(contentLength) > MAX_DAE_SOURCE_BYTES) {
       console.warn(
-        `Skipping a KML model: "${href}" is ${Math.round(Number(contentLength) / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+        `Skipping a KML model: "${href}" is ${Math.round(
+          Number(contentLength) / (1024 * 1024),
+        )} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
       );
       return null;
     }
@@ -1165,7 +1210,9 @@ async function fetchDaeAsGlbDataUrl(href: string): Promise<{
     const daeBytes = new Blob([daeText]).size;
     if (daeBytes > MAX_DAE_SOURCE_BYTES) {
       console.warn(
-        `Skipping a KML model: "${href}" is ${Math.round(daeBytes / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+        `Skipping a KML model: "${href}" is ${Math.round(daeBytes / (1024 * 1024))} MB, over the ${Math.round(
+          MAX_DAE_SOURCE_BYTES / (1024 * 1024),
+        )} MB limit.`,
       );
       return null;
     }
@@ -1310,12 +1357,77 @@ async function loadKmzLayers(
   // overlay href can resolve relative to its KML's directory. Reading from
   // `entries` (not the copies in `kmlFiles`) also avoids the DuckDB-WASM
   // fallback transferring/detaching a KML buffer before overlays are parsed.
-  const kmlDocs = Object.entries(entries)
-    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
-    .map(([name, bytes]) => ({
-      name,
-      text: new TextDecoder("utf-8").decode(bytes),
-    }));
+  const kmlDocs = readKmlDocs(entries);
+
+  // A Super-Overlay is a linked raster pyramid, not thousands of independent
+  // persistent image layers, so it becomes one lazy tile source instead. The
+  // `<Region>` + `<NetworkLink>` shape it is detected by is also how a plain
+  // *vector* regionated KML is built, so the pyramid is only claimed once its
+  // raster tiles actually resolve; anything else falls through to the normal
+  // overlay/vector parse below rather than failing the whole import.
+  // A pyramid node is a KML doc carrying a `<Region>`, and its overlays are that
+  // level's tiles. The grain is deliberately the document, not the element: KML
+  // attaches a `<Region>` to the enclosing Feature, so a gdal2tiles node's
+  // `<GroundOverlay>` is the Region's *sibling*, and filtering by containment
+  // would reject every real tile. A doc with no Region holds no tiles, so its
+  // overlays (a legend, an inset, a full-extent image) load as their own image
+  // layers instead of being given a pyramid level and folded into its bounds.
+  // The residual gap is a hand-composed node that bundles an unrelated overlay
+  // beside its tile; that one would still be swept in.
+  const pyramidDocs = looksLikeSuperOverlay(kmlDocs) ? superOverlayDocNames(kmlDocs) : new Set();
+  const superOverlayTiles = pyramidDocs.size
+    ? superOverlayTilesFromKmz(
+        entries,
+        kmlDocs.filter((doc) => pyramidDocs.has(doc.name)),
+      )
+    : [];
+  if (superOverlayTiles.length > 0) {
+    const source = await registerKmlSuperOverlay(superOverlayTiles, {
+      // Keyed by the source file, so the tile URL saved into a project resolves
+      // again after `kmlSuperOverlayResolver` re-reads the KMZ on reopen. A
+      // browser File has no re-readable path and gets a session-only key.
+      ...(isAbsoluteLocalPath(path) ? { key: path } : {}),
+    });
+    try {
+      // A composite export can carry standalone overlays, placemarks, or models
+      // alongside its raster pyramid; returning only the tile layer would
+      // silently drop them. The standalone overlays draw above the imagery.
+      const plainDocs = kmlDocs.filter((doc) => !pyramidDocs.has(doc.name));
+      const layers: LoadedLayer[] = [
+        {
+          kind: "kml-super-overlay",
+          name: `${pathWithoutExtension(fileBaseName(path))} Super-Overlay`,
+          path,
+          ...source,
+        },
+        ...(plainDocs.length > 0 ? await groundOverlaysFromKmz(entries, plainDocs, path) : []),
+        ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
+      ];
+      const placemarkEntries = placemarkKmlEntries(entries, kmlDocs);
+      if (placemarkEntries) {
+        try {
+          const features = await kmzVectorFeatures(
+            readKmlEntries(placemarkEntries),
+            entries,
+            options,
+          );
+          if (features.features.length > 0) layers.push({ data: features, path });
+        } catch (error) {
+          // Declining the oversized-vector prompt must not throw away the
+          // pyramid, which is already registered and loads on its own.
+          if (!isVectorLoadCancelled(error)) throw error;
+        }
+      }
+      return layers;
+    } catch (error) {
+      // The caller never gets the layer, so nothing will ever reference the
+      // tile URL — and an archive that never goes live is never pruned. Free
+      // it here or a failed import (e.g. an unreadable bundled `.dae`) pins
+      // the whole pyramid's bytes for the session.
+      unregisterKmlSuperOverlay(source.url);
+      throw error;
+    }
+  }
 
   // Ground overlays are drawn under vector placemarks (as in Google Earth), so
   // they are added first: a later store index renders on top. 3D models render
@@ -1349,6 +1461,149 @@ async function loadKmzLayers(
   }
   return layers;
 }
+
+interface KmlDoc {
+  name: string;
+  text: string;
+}
+
+// `(?:\w+:)?` so a namespace-prefixed `<kml:Region>` (valid but rare) still
+// matches, mirroring the model filter in `modelsFromKmz`.
+const KML_REGION = /<(?:\w+:)?Region(?:\s|>)/i;
+const KML_NETWORK_LINK = /<(?:\w+:)?NetworkLink(?:\s|>)/i;
+const KML_PLACEMARK = /<(?:\w+:)?Placemark(?:\s|>)/i;
+
+function readKmlDocs(entries: Record<string, Uint8Array>): KmlDoc[] {
+  return Object.entries(entries)
+    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
+    .map(([name, bytes]) => ({
+      name,
+      text: new TextDecoder("utf-8").decode(bytes),
+    }));
+}
+
+/**
+ * Whether an archive has the shape of a Super-Overlay: several KML nodes, at
+ * least one carrying both a `<Region>` and a `<NetworkLink>`. Regionated
+ * *vector* KML is built the same way, so this only narrows the candidates —
+ * the caller confirms the pyramid by resolving its raster tiles.
+ */
+function looksLikeSuperOverlay(kmlDocs: KmlDoc[]): boolean {
+  return (
+    kmlDocs.length > 1 &&
+    kmlDocs.some((doc) => KML_REGION.test(doc.text) && KML_NETWORK_LINK.test(doc.text))
+  );
+}
+
+/**
+ * The names of the KML nodes that make up the pyramid: every node carrying a
+ * `<Region>`, plus everything those nodes link to transitively.
+ *
+ * Membership cannot be `<Region>` alone. A gdal2tiles-style export regionates
+ * its *inner* nodes but writes the deepest level as a bare `<GroundOverlay>`
+ * with no Region — issue #1598's sample has 1,256 regionated nodes and 3,640
+ * such leaves — so keying on Region would leave every leaf tile to load as its
+ * own persistent image layer (each one inlined as a data URL), which is enough
+ * to hang the app, and would silently drop the pyramid's deepest zoom.
+ * Following the `<NetworkLink>` graph instead claims exactly the nodes the
+ * pyramid reaches, so an overlay in a node it never links to — a legend, an
+ * inset, a full-extent image — still loads on its own.
+ */
+export function superOverlayDocNames(kmlDocs: KmlDoc[]): Set<string> {
+  const byName = new Map<string, KmlDoc>();
+  for (const doc of kmlDocs) byName.set(normalizeArchivePath(doc.name), doc);
+  const linked = new Set<string>();
+  const queue: KmlDoc[] = [];
+  for (const doc of kmlDocs) {
+    if (!KML_REGION.test(doc.text)) continue;
+    linked.add(doc.name);
+    queue.push(doc);
+  }
+  while (queue.length > 0) {
+    const doc = queue.pop() as KmlDoc;
+    for (const href of kmlNodeHrefs(doc.text)) {
+      const target =
+        byName.get(normalizeArchivePath(archiveDirname(doc.name) + href)) ??
+        byName.get(normalizeArchivePath(href));
+      if (!target || linked.has(target.name)) continue;
+      linked.add(target.name);
+      queue.push(target);
+    }
+  }
+  return linked;
+}
+
+/**
+ * The archive-local KML nodes an `<href>` in this document points at. Matching
+ * on the extension rather than the enclosing element keeps this a text scan (a
+ * pyramid holds thousands of nodes): a `<GroundOverlay>`'s own href names an
+ * image, never another node.
+ */
+function kmlNodeHrefs(text: string): string[] {
+  return [...text.matchAll(/<href>([^<]+)<\/href>/gi)]
+    .map((match) => match[1].trim())
+    .filter((href) => !isHttpUrl(href) && /\.kml$/i.test(normalizeArchivePath(href)));
+}
+
+/** Every archive-local `<GroundOverlay>` image in a KMZ, as pyramid tiles. */
+function superOverlayTilesFromKmz(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: KmlDoc[],
+): KmlSuperOverlayTile[] {
+  return kmlDocs.flatMap((doc) =>
+    parseKmlGroundOverlays(doc.text).flatMap((overlay) => {
+      if (isHttpUrl(overlay.href) || isUnrenderableOverlayImage(overlay.href)) return [];
+      const data =
+        findArchiveEntry(entries, archiveDirname(doc.name) + overlay.href) ??
+        findArchiveEntry(entries, overlay.href);
+      return data ? [{ overlay, bytes: data }] : [];
+    }),
+  );
+}
+
+/**
+ * The archive with its placemark-free KML nodes dropped, or null when no node
+ * holds a `<Placemark>`. Lets a Super-Overlay's supplementary vector content
+ * still load, without sending the pyramid's thousands of NetworkLink-only
+ * nodes through DuckDB.
+ */
+function placemarkKmlEntries(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: KmlDoc[],
+): Record<string, Uint8Array> | null {
+  const withPlacemarks = new Set(
+    kmlDocs.filter((doc) => KML_PLACEMARK.test(doc.text)).map((doc) => doc.name),
+  );
+  if (withPlacemarks.size === 0) return null;
+  const kept = { ...entries };
+  for (const doc of kmlDocs) {
+    if (!withPlacemarks.has(doc.name)) delete kept[doc.name];
+  }
+  return kept;
+}
+
+// Only the tile URL of a Super-Overlay layer persists into a project, never the
+// pyramid's bytes, so a reopened project re-reads them from the source KMZ the
+// first time MapLibre asks the protocol for a tile. The path comes out of a
+// saved project, so it is whitelisted exactly like `restoreLocalFileLayers`
+// before anything is read off disk.
+setKmlSuperOverlayResolver(async (path) => {
+  if (
+    !isTauri() ||
+    !isAbsoluteLocalPath(path) ||
+    hasPathTraversal(path) ||
+    !isRestorableVectorPath(path)
+  ) {
+    return null;
+  }
+  const entries = await unzipArchive(await readLocalFileBytes(path));
+  const docs = readKmlDocs(entries);
+  const pyramidDocs = superOverlayDocNames(docs);
+  return superOverlayTilesFromKmz(
+    entries,
+    docs.filter((doc) => pyramidDocs.has(doc.name)),
+  );
+});
 
 async function parseKmz(
   data: ArrayBuffer | Uint8Array,
@@ -2443,75 +2698,83 @@ export async function loadDroppedVectorFiles(
   }
 
   const layers: LoadedLayer[] = [];
-  for (const file of files) {
-    const extension = fileExtension(file.name);
-    if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
+  try {
+    for (const file of files) {
+      const extension = fileExtension(file.name);
+      if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
 
-    if (extension === "gpx") {
-      layers.push(...parseGpxTextLayers(await file.text(), file.name));
-      continue;
-    }
+      if (extension === "gpx") {
+        layers.push(...parseGpxTextLayers(await file.text(), file.name));
+        continue;
+      }
 
-    if (extension === "kmz") {
+      if (extension === "kmz") {
+        try {
+          layers.push(...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)));
+        } catch (error) {
+          if (isVectorLoadCancelled(error)) continue;
+          throw error;
+        }
+        continue;
+      }
+
+      if (extension === "kml") {
+        // Load the vector placemarks and the ground overlays independently so an
+        // overlay-only KML still adds its overlays even when it has no readable
+        // placemarks (which makes the vector load throw).
+        const text = await file.text();
+        const overlays = groundOverlaysFromKml(text, file.name);
+        const models = options?.skipModels ? [] : await modelsFromKml(text, file.name);
+        // Overlays go under the placemarks (added first), matching the KMZ path.
+        layers.push(...overlays, ...models);
+        try {
+          // Only add a vector layer when it actually has features: the DuckDB
+          // fallback for an overlay-only KML can return an empty collection, and
+          // an empty vector layer alongside the overlay is just clutter.
+          const vector = await loadBrowserVectorFile(file, [], options);
+          if (vector.data.features.length > 0) layers.push(vector);
+        } catch (error) {
+          // Declining the oversized-vector prompt, or a genuine parse failure,
+          // still leaves any ground overlays/models already added above (a real
+          // non-cancellation failure with nothing to salvage is rethrown).
+          // Cancellation is not surfaced; other failures are logged so they are
+          // not fully invisible.
+          if (!isVectorLoadCancelled(error)) {
+            if (!overlays.length && !models.length) throw error;
+            console.warn(
+              `Loaded ground overlays/models from "${file.name}" but could not read its vector placemarks.`,
+              error,
+            );
+          }
+        }
+        continue;
+      }
+
+      const siblingFiles =
+        extension === "shp"
+          ? await Promise.all(
+              (filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ?? [])
+                .filter((candidate) =>
+                  SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(candidate.name)),
+                )
+                .map(fileToDuckDbVectorFile),
+            )
+          : [];
       try {
-        layers.push(...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)));
+        layers.push(await loadBrowserVectorFile(file, siblingFiles, options));
       } catch (error) {
+        // The user declined this oversized file: skip it without abandoning the
+        // rest of the dropped batch.
         if (isVectorLoadCancelled(error)) continue;
         throw error;
       }
-      continue;
     }
-
-    if (extension === "kml") {
-      // Load the vector placemarks and the ground overlays independently so an
-      // overlay-only KML still adds its overlays even when it has no readable
-      // placemarks (which makes the vector load throw).
-      const text = await file.text();
-      const overlays = groundOverlaysFromKml(text, file.name);
-      const models = options?.skipModels ? [] : await modelsFromKml(text, file.name);
-      // Overlays go under the placemarks (added first), matching the KMZ path.
-      layers.push(...overlays, ...models);
-      try {
-        // Only add a vector layer when it actually has features: the DuckDB
-        // fallback for an overlay-only KML can return an empty collection, and
-        // an empty vector layer alongside the overlay is just clutter.
-        const vector = await loadBrowserVectorFile(file, [], options);
-        if (vector.data.features.length > 0) layers.push(vector);
-      } catch (error) {
-        // Declining the oversized-vector prompt, or a genuine parse failure,
-        // still leaves any ground overlays/models already added above (a real
-        // non-cancellation failure with nothing to salvage is rethrown).
-        // Cancellation is not surfaced; other failures are logged so they are
-        // not fully invisible.
-        if (!isVectorLoadCancelled(error)) {
-          if (!overlays.length && !models.length) throw error;
-          console.warn(
-            `Loaded ground overlays/models from "${file.name}" but could not read its vector placemarks.`,
-            error,
-          );
-        }
-      }
-      continue;
-    }
-
-    const siblingFiles =
-      extension === "shp"
-        ? await Promise.all(
-            (filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ?? [])
-              .filter((candidate) =>
-                SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(candidate.name)),
-              )
-              .map(fileToDuckDbVectorFile),
-          )
-        : [];
-    try {
-      layers.push(await loadBrowserVectorFile(file, siblingFiles, options));
-    } catch (error) {
-      // The user declined this oversized file: skip it without abandoning the
-      // rest of the dropped batch.
-      if (isVectorLoadCancelled(error)) continue;
-      throw error;
-    }
+  } catch (error) {
+    // A successful Super-Overlay earlier in a batch is not handed to the
+    // caller when a later file rejects, so its in-memory archive can never be
+    // claimed by a store layer. Free it before propagating the batch failure.
+    unregisterLoadedKmlSuperOverlays(layers);
+    throw error;
   }
 
   return layers;
@@ -2594,7 +2857,10 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
   const selected = await open({
     multiple: true,
     filters: [
-      { name: i18next.t("raster.filePickerLabel"), extensions: [...RASTER_DROP_EXTENSIONS] },
+      {
+        name: i18next.t("raster.filePickerLabel"),
+        extensions: [...RASTER_DROP_EXTENSIONS],
+      },
     ],
   });
   if (!selected) return [];
@@ -2697,68 +2963,73 @@ export async function loadDroppedVectorPaths(
   if (!vectorPaths.length) return [];
 
   const layers: LoadedLayer[] = [];
-  for (const path of vectorPaths) {
-    const extension = fileExtension(path);
-    if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
-    if (extension === "gpx") {
-      try {
-        layers.push(...parseGpxTextLayers(await readLocalFileText(path), path));
-      } catch (error) {
-        // `read_local_file` rejects with a plain string, not an `Error`, so
-        // fall back to `String(error)` to keep that detail instead of a generic
-        // "Unknown error" when the fs-plugin fallback fails.
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`Could not read this GPX file. ${detail}`);
-      }
-      continue;
-    }
-    if (extension === "kmz") {
-      try {
-        layers.push(...(await loadKmzLayers(await readLocalFileBytes(path), path, options)));
-      } catch (error) {
-        if (isVectorLoadCancelled(error)) continue;
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`Could not read this KMZ file. ${detail}`);
-      }
-      continue;
-    }
-    if (extension === "kml") {
-      // Load placemarks and ground overlays independently so an overlay-only
-      // KML still contributes its overlays when the vector load throws.
-      const kmlText = await readLocalFileText(path);
-      const overlays = groundOverlaysFromKml(kmlText, path);
-      const models = options?.skipModels ? [] : await modelsFromKml(kmlText, path);
-      // Overlays go under the placemarks (added first), matching the KMZ path.
-      layers.push(...overlays, ...models);
-      try {
-        // Only add a vector layer when it actually has features (an overlay-only
-        // KML's DuckDB fallback can return an empty collection).
-        const vector = await loadTauriVectorFile(path, options);
-        if (vector.data.features.length > 0) layers.push(vector);
-      } catch (error) {
-        // Declining the oversized-vector prompt, or a genuine parse failure,
-        // still leaves any ground overlays/models already added above (a real
-        // non-cancellation failure with nothing to salvage is rethrown).
-        // Cancellation is not surfaced; other failures are logged so they are
-        // not fully invisible.
-        if (!isVectorLoadCancelled(error)) {
-          if (!overlays.length && !models.length) throw error;
-          console.warn(
-            `Loaded ground overlays/models from "${path}" but could not read its vector placemarks.`,
-            error,
-          );
+  try {
+    for (const path of vectorPaths) {
+      const extension = fileExtension(path);
+      if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
+      if (extension === "gpx") {
+        try {
+          layers.push(...parseGpxTextLayers(await readLocalFileText(path), path));
+        } catch (error) {
+          // `read_local_file` rejects with a plain string, not an `Error`, so
+          // fall back to `String(error)` to keep that detail instead of a generic
+          // "Unknown error" when the fs-plugin fallback fails.
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Could not read this GPX file. ${detail}`);
         }
+        continue;
       }
-      continue;
+      if (extension === "kmz") {
+        try {
+          layers.push(...(await loadKmzLayers(await readLocalFileBytes(path), path, options)));
+        } catch (error) {
+          if (isVectorLoadCancelled(error)) continue;
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Could not read this KMZ file. ${detail}`);
+        }
+        continue;
+      }
+      if (extension === "kml") {
+        // Load placemarks and ground overlays independently so an overlay-only
+        // KML still contributes its overlays when the vector load throws.
+        const kmlText = await readLocalFileText(path);
+        const overlays = groundOverlaysFromKml(kmlText, path);
+        const models = options?.skipModels ? [] : await modelsFromKml(kmlText, path);
+        // Overlays go under the placemarks (added first), matching the KMZ path.
+        layers.push(...overlays, ...models);
+        try {
+          // Only add a vector layer when it actually has features (an overlay-only
+          // KML's DuckDB fallback can return an empty collection).
+          const vector = await loadTauriVectorFile(path, options);
+          if (vector.data.features.length > 0) layers.push(vector);
+        } catch (error) {
+          // Declining the oversized-vector prompt, or a genuine parse failure,
+          // still leaves any ground overlays/models already added above (a real
+          // non-cancellation failure with nothing to salvage is rethrown).
+          // Cancellation is not surfaced; other failures are logged so they are
+          // not fully invisible.
+          if (!isVectorLoadCancelled(error)) {
+            if (!overlays.length && !models.length) throw error;
+            console.warn(
+              `Loaded ground overlays/models from "${path}" but could not read its vector placemarks.`,
+              error,
+            );
+          }
+        }
+        continue;
+      }
+      try {
+        layers.push(await loadTauriVectorFile(path, options));
+      } catch (error) {
+        // The user declined this oversized file: skip it without abandoning the
+        // rest of the dropped batch.
+        if (isVectorLoadCancelled(error)) continue;
+        throw error;
+      }
     }
-    try {
-      layers.push(await loadTauriVectorFile(path, options));
-    } catch (error) {
-      // The user declined this oversized file: skip it without abandoning the
-      // rest of the dropped batch.
-      if (isVectorLoadCancelled(error)) continue;
-      throw error;
-    }
+  } catch (error) {
+    unregisterLoadedKmlSuperOverlays(layers);
+    throw error;
   }
 
   return layers;

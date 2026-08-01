@@ -31,6 +31,7 @@ import {
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,
+  setKmlFileImportHandler,
   setTerrainMeasureLabels,
   setViewStateLabels,
   startLayerGeometryEdit,
@@ -64,6 +65,7 @@ import {
   pickLocalRasterFiles,
   readRasterFileAtPath,
   isLoadedImageOverlay,
+  isLoadedKmlSuperOverlay,
   isLoadedModel,
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
@@ -92,6 +94,7 @@ import {
   useSwipeSplitViewExclusivity,
   useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
+import { registerKmlSuperOverlayProtocol } from "../../lib/kml-super-overlay";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { hasKnowledgeCardConsent, recordKnowledgeCardConsent } from "../../lib/knowledge-consent";
@@ -631,6 +634,7 @@ export function DesktopShell({
   const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
+  const addTileLayer = useAppStore((s) => s.addTileLayer);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const addLayer = useAppStore((s) => s.addLayer);
@@ -937,6 +941,10 @@ export function DesktopShell({
   );
 
   useEffect(() => {
+    // Registered unconditionally, not on first import: a saved project's KML
+    // Super-Overlay tile URLs must resolve in a session that only reopens it,
+    // which is exactly when nothing has called registerKmlSuperOverlay yet.
+    void registerKmlSuperOverlayProtocol();
     if (isTauri()) {
       registerMbtilesProtocol();
       registerXyzTileProtocol();
@@ -1023,7 +1031,9 @@ export function DesktopShell({
         const cog = await convertGeoTiffToCog(bytes);
         // The cast is required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
         // which is not directly assignable to BlobPart's ArrayBufferView.
-        const file = new File([cog as BlobPart], name, { type: "image/tiff" });
+        const file = new File([cog as BlobPart], name, {
+          type: "image/tiff",
+        });
         await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
         // Drop the failed layer only after the replacement is fully loaded, so
         // any failure above (conversion or re-add) leaves the original errored
@@ -1159,6 +1169,21 @@ export function DesktopShell({
       // group marker), so they can be gathered into one layer group afterward.
       const frameGroups = new Map<string, string[]>();
       for (const layer of importedLayers) {
+        if (isLoadedKmlSuperOverlay(layer)) {
+          lastLayerId = addTileLayer(layer.name || layerNameFromPath(layer.path), {
+            tiles: [layer.url],
+            type: "xyz",
+            tileSize: layer.tileSize,
+            bounds: layer.bounds,
+            minzoom: layer.minzoom,
+            maxzoom: layer.maxzoom,
+            metadata: {
+              sourceKind: "kml-super-overlay",
+              bounds: layer.bounds,
+            },
+          });
+          continue;
+        }
         // A KML/KMZ ground overlay becomes an image layer, not a vector one.
         if (isLoadedImageOverlay(layer)) {
           lastLayerId = addImageOverlayLayer(
@@ -1240,6 +1265,7 @@ export function DesktopShell({
     [
       addGeoJsonLayer,
       addImageOverlayLayer,
+      addTileLayer,
       addLayer,
       addLayerGroup,
       isPluginActive,
@@ -1247,6 +1273,33 @@ export function DesktopShell({
       t,
     ],
   );
+
+  useEffect(() => {
+    setKmlFileImportHandler(async (imports) => {
+      setDropError(null);
+      try {
+        const paths = imports
+          .map(({ sourcePath }) => sourcePath)
+          .filter((sourcePath): sourcePath is string => typeof sourcePath === "string");
+        // Prefer the filesystem paths the desktop picker reports: a Super-Overlay
+        // records its source in the tile URL so a saved project can re-read the
+        // pyramid, which a path-less browser File cannot support.
+        const layers =
+          paths.length === imports.length
+            ? await loadDroppedVectorPaths(paths, {
+                onLargeDataset: confirmLargeVectorDataset,
+              })
+            : await loadDroppedVectorFiles(
+                imports.map(({ file }) => file),
+                { onLargeDataset: confirmLargeVectorDataset },
+              );
+        addImportedVectorLayers(layers);
+      } catch (error) {
+        setDropError(error instanceof Error ? error.message : t("kml.importFailed"));
+      }
+    });
+    return () => setKmlFileImportHandler(null);
+  }, [addImportedVectorLayers, confirmLargeVectorDataset, t]);
 
   const addDroppedPhotos = useCallback(
     (result: GeotaggedPhotoResult | null): number => {
@@ -2295,7 +2348,9 @@ export function DesktopShell({
             const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
               type: "image/tiff",
             });
-            await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+            await addRasterToMap(createAppAPI(mapControllerRef), file, {
+              name,
+            });
           }}
         />
       </Suspense>
