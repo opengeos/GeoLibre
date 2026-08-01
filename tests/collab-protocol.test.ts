@@ -265,7 +265,7 @@ describe("CollabConnection", () => {
     assert.ok(second.events.includes("close:false"));
   });
 
-  it("handles comment-mutation messages correctly", () => {
+  it("receives and parses comment-mutation messages", () => {
     const { conn, holder, received } = setup();
     conn.connect();
     holder.socket!.readyState = FakeWebSocket.OPEN;
@@ -292,6 +292,31 @@ describe("CollabConnection", () => {
     if (received[0]?.type === "comment-mutation") {
       assert.equal(received[0].action.type, "add");
       assert.equal(received[0].action.comment.id, "comm-123");
+    }
+    conn.close();
+  });
+
+  it("sends comment-mutation client messages correctly", () => {
+    const { conn, holder } = setup();
+    conn.connect();
+    holder.socket!.readyState = FakeWebSocket.OPEN;
+
+    const sendMsg: ClientMessage = {
+      type: "comment-mutation",
+      action: {
+        type: "toggle-resolve",
+        commentId: "comm-456",
+        resolved: true,
+      },
+    };
+
+    conn.send(sendMsg);
+    assert.equal(holder.socket!.sent.length, 1);
+    const parsed = JSON.parse(holder.socket!.sent[0] ?? "null") as ClientMessage;
+    assert.equal(parsed.type, "comment-mutation");
+    if (parsed.type === "comment-mutation") {
+      assert.equal(parsed.action.type, "toggle-resolve");
+      assert.equal(parsed.action.commentId, "comm-456");
     }
     conn.close();
   });

@@ -1,7 +1,8 @@
-import { describe, it } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   createEmptyProject,
+  parseProject,
   serializeProject,
   applyProjectToStore,
   normalizeProjectComments,
@@ -72,16 +73,19 @@ describe("Anchored, Persistent Comments (#1518)", () => {
     const project = createEmptyProject("Roundtrip Project");
     project.comments = [sampleComment];
 
+    // serialize → parseProject (validates structure) → applyProjectToStore
     const jsonStr = serializeProject(project);
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseProject(jsonStr);
 
     assert.equal(Array.isArray(parsed.comments), true);
-    assert.equal(parsed.comments.length, 1);
+    assert.equal(parsed.comments!.length, 1);
 
     const applied = applyProjectToStore(parsed);
     assert.equal(applied.comments.length, 1);
     assert.equal(applied.comments[0].id, "comm-1");
     assert.equal(applied.comments[0].body, "Test comment body");
+    assert.equal(applied.comments[0].anchor.type, "point");
+    assert.equal(applied.comments[0].resolved, false);
   });
 
   it("supports store comment actions", () => {
@@ -118,5 +122,28 @@ describe("Anchored, Persistent Comments (#1518)", () => {
     // Delete comment
     useAppStore.getState().deleteComment("action-1");
     assert.equal(useAppStore.getState().comments.length, 0);
+  });
+
+  it("deduplicates addComment calls with the same id (relay echo guard)", () => {
+    useAppStore.getState().newProject({ name: "Dedup Test" });
+
+    const comment: ProjectComment = {
+      id: "dedup-1",
+      anchor: { type: "point", lngLat: [5, 10] },
+      author: { name: "Echo", color: "#3b82f6" },
+      body: "Only once",
+      createdAt: new Date().toISOString(),
+      resolved: false,
+      replies: [],
+    };
+
+    useAppStore.getState().addComment(comment);
+    useAppStore.getState().addComment(comment); // simulated relay echo
+    assert.equal(useAppStore.getState().comments.length, 1);
+  });
+
+  afterEach(() => {
+    // Reset the singleton store so tests don't share state.
+    useAppStore.getState().newProject({ name: "reset" });
   });
 });
