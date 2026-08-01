@@ -63,7 +63,9 @@ define in a script is immediately usable in the console, and vice-versa.
 ```python
 # Add data (a GeoJSON dict, a geometry, or anything with __geo_interface__)
 layer_id = geolibre.add_geojson(
-    {"type": "Point", "coordinates": [-122.4, 37.8]}, name="Pin"
+    {"type": "Point", "coordinates": [-122.4, 37.8]},
+    name="Pin",
+    fillColor="#facc15",  # style overrides are applied in the same call
 )
 
 # Style, toggle, and inspect layers
@@ -121,7 +123,7 @@ is available this way.
 | `fit_bounds([w, s, e, n])` | Fit the camera to a bounding box. |
 | `set_basemap(url)` | Set the basemap style (an http(s) or root-relative URL). |
 | `identify(lng, lat, layer_id=None)` | Query rendered features at a point (like a click). |
-| `add_geojson(data, name=)` | Add a layer from a GeoJSON dict / geometry / `__geo_interface__`; returns the layer id. |
+| `add_geojson(data, name=, **style)` | Add a layer from a GeoJSON dict / geometry / `__geo_interface__`, with optional inline style overrides; returns the layer id. |
 | `await load_geojson(url, name=)` | Fetch a GeoJSON URL and add it; returns the layer id. |
 | `layers` | List of [`Layer`](#layer) objects, in draw order. |
 | `get_layer(layer_id)` | The `Layer` with that id (raises if absent). |
