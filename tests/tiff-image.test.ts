@@ -22,6 +22,30 @@ async function tiffBytes(
   return new Uint8Array(buffer as ArrayBuffer);
 }
 
+/**
+ * Rewrite a TIFF's declared width/height without writing any more pixels, the
+ * way a "decompression bomb" is built: a few hundred bytes on disk claiming a
+ * raster of billions of pixels.
+ */
+function declareDimensions(tiff: Uint8Array, width: number, height: number): Uint8Array {
+  const bytes = tiff.slice();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const littleEndian = view.getUint16(0, true) === 0x4949;
+  const ifd = view.getUint32(4, littleEndian);
+  const entries = view.getUint16(ifd, littleEndian);
+  for (let entry = 0; entry < entries; entry++) {
+    const at = ifd + 2 + entry * 12;
+    const tag = view.getUint16(at, littleEndian);
+    if (tag !== 256 && tag !== 257) continue;
+    // Widen the tag to LONG so the value field can hold a number a SHORT could
+    // not, then write the fabricated dimension inline.
+    view.setUint16(at + 2, 4, littleEndian);
+    view.setUint32(at + 4, 1, littleEndian);
+    view.setUint32(at + 8, tag === 256 ? width : height, littleEndian);
+  }
+  return bytes;
+}
+
 /** The RGBA quadruple at a pixel index. */
 function pixel(image: { data: Uint8ClampedArray }, index: number): number[] {
   return Array.from(image.data.slice(index * 4, index * 4 + 4));
@@ -79,5 +103,14 @@ describe("decodeTiffToRgba", () => {
 
   it("rejects bytes that are not a TIFF", async () => {
     await assert.rejects(() => decodeTiffToRgba(new TextEncoder().encode("not a tiff at all")));
+  });
+
+  it("rejects a TIFF declaring more pixels than the decode limit", async () => {
+    // The dimensions are IFD tags, so a KMZ can carry a tiny file claiming a
+    // 50000x50000 raster. Decoding it would allocate ~10 GB on the main thread,
+    // so it has to be refused before any pixel buffer is created.
+    const bomb = declareDimensions(await tiffBytes([1, 2, 3], 1, 1, 3), 50000, 50000);
+    assert.ok(bomb.length < 1024);
+    await assert.rejects(() => decodeTiffToRgba(bomb), /megapixel decode limit/);
   });
 });

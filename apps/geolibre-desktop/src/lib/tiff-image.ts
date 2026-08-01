@@ -13,6 +13,20 @@
  * pulled in with a dynamic `import()` and stays out of the initial bundle.
  */
 
+/**
+ * The most pixels a TIFF may decode to, ~8192x8192.
+ *
+ * A TIFF's dimensions come from its IFD tags, which are just numbers in a file
+ * a user imported: a "decompression bomb" that is a few KB on disk can declare
+ * 50000x50000 and make the decode below allocate gigabytes on the main thread.
+ * The compressed-size caps around the callers (`MAX_OVERLAY_IMAGE_BYTES` in
+ * `tauri-io.ts`) bound the *file*, not what it expands to, so the ceiling has to
+ * be checked here, before any pixel buffer is allocated. 64 megapixels leaves
+ * room for the large aerials a ground overlay legitimately carries — at 4 bytes
+ * per pixel it still bounds the RGBA buffer at 256 MB.
+ */
+const MAX_DECODED_TIFF_PIXELS = 64 * 1024 * 1024;
+
 /** A decoded raster image: RGBA bytes plus the dimensions they describe. */
 export interface DecodedImage {
   width: number;
@@ -43,7 +57,8 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
  *
  * @param bytes - The raw TIFF file bytes.
  * @returns The decoded image as RGBA.
- * @throws If the bytes are not a TIFF, or hold no readable image.
+ * @throws If the bytes are not a TIFF, hold no readable image, or declare more
+ *   than `MAX_DECODED_TIFF_PIXELS` pixels.
  */
 export async function decodeTiffToRgba(bytes: Uint8Array): Promise<DecodedImage> {
   const { fromArrayBuffer } = await import("geotiff");
@@ -52,6 +67,16 @@ export async function decodeTiffToRgba(bytes: Uint8Array): Promise<DecodedImage>
   const width = image.getWidth();
   const height = image.getHeight();
   if (!width || !height) throw new Error("The TIFF image has no pixels.");
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 0 || height < 0) {
+    throw new Error("The TIFF image declares invalid dimensions.");
+  }
+  if (width * height > MAX_DECODED_TIFF_PIXELS) {
+    throw new Error(
+      `The TIFF image is ${width}x${height}, over the ${Math.round(
+        MAX_DECODED_TIFF_PIXELS / (1024 * 1024),
+      )} megapixel decode limit.`,
+    );
+  }
 
   const pixels = await image.readRGB({ interleave: true, enableAlpha: true });
   const channels = pixels.length / (width * height);
