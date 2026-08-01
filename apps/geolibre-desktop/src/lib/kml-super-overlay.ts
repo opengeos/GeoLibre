@@ -77,6 +77,19 @@ async function ensureProtocol(): Promise<void> {
   protocolRegistered = true;
 }
 
+/**
+ * Teach MapLibre this module's tile scheme, mirroring the MBTiles and XYZ
+ * protocols the shell registers on mount. A session that imports a KMZ
+ * registers it on the way through {@link registerKmlSuperOverlay}, but one that
+ * only reopens a saved project never does — and MapLibre would then try to
+ * `fetch()` the saved `geolibre-kml-super-overlay://…` tile URLs instead of
+ * routing them here, so the pyramid could never be re-read and the layer would
+ * render blank. Idempotent.
+ */
+export function registerKmlSuperOverlayProtocol(): Promise<void> {
+  return ensureProtocol();
+}
+
 function tileUrl(id: string): string {
   return `${PROTOCOL}://${encodeURIComponent(id)}/{z}/{x}/{y}`;
 }

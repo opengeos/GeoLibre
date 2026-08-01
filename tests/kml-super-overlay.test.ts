@@ -7,6 +7,7 @@ import {
   parseTileUrl,
   pruneKmlSuperOverlays,
   registerKmlSuperOverlay,
+  registerKmlSuperOverlayProtocol,
   setKmlSuperOverlayResolver,
   unregisterKmlSuperOverlay,
   type KmlSuperOverlayTile,
@@ -55,6 +56,21 @@ function tileLayer(url: string): GeoLibreLayer {
     source: { type: "raster", tiles: [url], tileSize: 256 },
   } as unknown as GeoLibreLayer;
 }
+
+// Runs first, before any registerKmlSuperOverlay call in this file, so it
+// really asserts that no import is needed to teach MapLibre the scheme.
+describe("registerKmlSuperOverlayProtocol", () => {
+  it("registers the tile scheme without importing an archive", async () => {
+    // A session that only reopens a saved project never imports a KMZ, and
+    // MapLibre would fetch() the saved tile URLs instead of routing them here.
+    await registerKmlSuperOverlayProtocol();
+
+    protocolHandler();
+
+    await registerKmlSuperOverlayProtocol();
+    protocolHandler();
+  });
+});
 
 describe("registerKmlSuperOverlay", () => {
   it("registers the protocol and reports the pyramid's extent and zoom range", async () => {

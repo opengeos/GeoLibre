@@ -94,6 +94,7 @@ import {
   useSwipeSplitViewExclusivity,
   useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
+import { registerKmlSuperOverlayProtocol } from "../../lib/kml-super-overlay";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { hasKnowledgeCardConsent, recordKnowledgeCardConsent } from "../../lib/knowledge-consent";
@@ -940,6 +941,10 @@ export function DesktopShell({
   );
 
   useEffect(() => {
+    // Registered unconditionally, not on first import: a saved project's KML
+    // Super-Overlay tile URLs must resolve in a session that only reopens it,
+    // which is exactly when nothing has called registerKmlSuperOverlay yet.
+    void registerKmlSuperOverlayProtocol();
     if (isTauri()) {
       registerMbtilesProtocol();
       registerXyzTileProtocol();
