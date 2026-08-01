@@ -269,7 +269,7 @@ layer), falling back to `style.textColor` when a feature does not set it.
 
 ## Layer types
 
-| Type             | v1.0 status                                                                                        |
+| Type             | Status                                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------------------- |
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
