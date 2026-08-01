@@ -1,4 +1,14 @@
 {
+  "projectHistory": {
+    "title": "Project History",
+    "description": "Browse autosaved snapshots stored on this device.",
+    "empty": "No autosaved snapshots yet.",
+    "summary": "{{count}} layers · zoom {{zoom}}",
+    "restore": "Restore",
+    "discard": "Discard",
+    "recoveryTitle": "Recover unsaved work?",
+    "recoveryDescription": "GeoLibre did not close cleanly. A newer autosave of “{{name}}” is available."
+  },
   "browser": {
     "title": "Browser",
     "services": "Services",
@@ -2278,6 +2288,7 @@
       "urlEllipsis": "URL...",
       "galleryEllipsis": "Gallery...",
       "openRecent": "Open Recent",
+      "projectHistoryEllipsis": "History...",
       "noRecentProjects": "No recent projects",
       "removeFromRecent": "Remove {{name}} from recent projects",
       "clearRecentProjects": "Clear Recent Projects",

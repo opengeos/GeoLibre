@@ -55,6 +55,7 @@ import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
+import { useProjectHistory } from "../../hooks/useProjectHistory";
 import {
   isRasterFileName,
   isTauri,
@@ -151,6 +152,8 @@ import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
 import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
+import { ProjectHistoryDialog } from "./ProjectHistoryDialog";
+import { ProjectRecoveryDialog } from "./ProjectRecoveryDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
@@ -579,6 +582,8 @@ export function DesktopShell({
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
+  const projectHistory = useProjectHistory(mapControllerRef);
+  const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
   // `pendingKnowledgePlace` holds the target while the one-time consent notice
   // is open, so it can be applied only after the user acknowledges it.
@@ -1928,6 +1933,10 @@ export function DesktopShell({
             collaboration={collaboration}
             projectFiles={projectFiles}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+            onOpenProjectHistory={() => {
+              void projectHistory.refresh();
+              setProjectHistoryOpen(true);
+            }}
             onToggleThemeMode={onToggleThemeMode}
             onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
           />
@@ -2329,6 +2338,17 @@ export function DesktopShell({
         diagnostics={diagnostics}
         open={diagnosticsOpen}
         onOpenChange={setDiagnosticsOpen}
+      />
+      <ProjectHistoryDialog
+        open={projectHistoryOpen}
+        onOpenChange={setProjectHistoryOpen}
+        snapshots={projectHistory.snapshots}
+        onRestore={projectHistory.restore}
+      />
+      <ProjectRecoveryDialog
+        snapshot={projectHistory.recoverySnapshot}
+        onRestore={projectHistory.restore}
+        onDiscard={projectHistory.discardRecovery}
       />
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}

@@ -165,6 +165,7 @@ interface TopToolbarProps {
   // instance — two would not coordinate their in-flight "open recent" aborts.
   projectFiles: ProjectFileActions;
   onOpenDiagnostics: () => void;
+  onOpenProjectHistory: () => void;
   onToggleThemeMode: () => void;
   // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
   // map so it can stay non-modal (the map is interactive for drawing a bbox).
@@ -182,6 +183,7 @@ export function TopToolbar({
   collaboration,
   projectFiles,
   onOpenDiagnostics,
+  onOpenProjectHistory,
   onToggleThemeMode,
   onOpenBasemapExtract,
 }: TopToolbarProps) {
@@ -1463,6 +1465,7 @@ export function TopToolbar({
               if (error) projectFiles.setActionError(error);
             });
           }}
+          onOpenHistory={onOpenProjectHistory}
           onSave={() => void projectFiles.handleSave()}
           onSaveAs={() => void projectFiles.handleSaveAs()}
           onDuplicate={() => projectFiles.handleDuplicate()}

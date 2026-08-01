@@ -47,6 +47,7 @@ interface ProjectMenuProps {
   onOpenGallery: () => void;
   onImportQgisProject: () => void;
   onOpenRecent: (path: string) => void;
+  onOpenHistory: () => void;
   onSave: () => void;
   onSaveAs: () => void;
   onDuplicate?: () => void;
@@ -68,6 +69,7 @@ export function ProjectMenu({
   onOpenGallery,
   onImportQgisProject,
   onOpenRecent,
+  onOpenHistory,
   onSave,
   onSaveAs,
   onDuplicate,
@@ -202,6 +204,12 @@ export function ProjectMenu({
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+        )}
+        {show("project.history") && (
+          <DropdownMenuItem onSelect={onOpenHistory}>
+            <History className="me-2 h-3.5 w-3.5" />
+            {t("toolbar.item.projectHistoryEllipsis")}
+          </DropdownMenuItem>
         )}
         {show("project.import") && (
           <DropdownMenuSub>

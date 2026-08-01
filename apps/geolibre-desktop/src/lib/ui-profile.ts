@@ -257,6 +257,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "basic",
   },
   {
+    id: "project.history",
+    menuId: "project",
+    labelKey: "toolbar.item.projectHistoryEllipsis",
+    tier: "basic",
+  },
+  {
     id: "project.import",
     menuId: "project",
     labelKey: "toolbar.menu.import",
