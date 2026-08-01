@@ -52,6 +52,11 @@ import {
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
 import { getEllipsoid } from "./ellipsoids";
+import {
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -1495,6 +1500,38 @@ export function applyProjectToStore(project: GeoLibreProject): {
     normalizeSecondaryMapViews(project.secondaryMapViews),
     { mapView },
   );
+
+  // Scrub cross-references that point at layers not present in the loaded
+  // project (orphans from hand-editing or a partial project file).
+  const existingLayerIds = new Set(normalizedLayers.map((l) => l.id));
+  const widgets = normalizeWidgets(project.widgets) ?? [];
+  const comments = normalizeProjectComments(project.comments);
+  const legend = normalizeLegendConfig(project.legend) ?? {
+    ...DEFAULT_LEGEND_CONFIG,
+  };
+
+  const allReferencedIds = new Set<string>();
+  for (const w of widgets) allReferencedIds.add(w.layerId);
+  for (const c of comments) {
+    if (c.anchor.type === "feature") allReferencedIds.add(c.anchor.layerId);
+  }
+  for (const id of legend.order) allReferencedIds.add(id);
+  for (const key of Object.keys(legend.overrides)) {
+    const base = key.includes("::") ? key.slice(0, key.indexOf("::")) : key;
+    allReferencedIds.add(base);
+  }
+  if (legend.customEntries) {
+    for (const key of Object.keys(legend.customEntries)) {
+      if (!key.startsWith("custom:")) allReferencedIds.add(key);
+    }
+  }
+
+  const orphanIds = new Set([...allReferencedIds].filter((id) => !existingLayerIds.has(id)));
+
+  const scrubbedWidgets = orphanIds.size > 0 ? scrubWidgetsForRemovedLayers(widgets, orphanIds) : widgets;
+  const scrubbedComments = orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
+  const scrubbedLegend = orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+
   return {
     projectName: project.name,
     mapView,
@@ -1505,19 +1542,17 @@ export function applyProjectToStore(project: GeoLibreProject): {
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
-    legend: normalizeLegendConfig(project.legend) ?? {
-      ...DEFAULT_LEGEND_CONFIG,
-    },
+    legend: scrubbedLegend,
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],
-    widgets: normalizeWidgets(project.widgets) ?? [],
+    widgets: scrubbedWidgets,
     dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     mapLayout,
     secondaryMapViews,
     primaryMapLabel: normalizeString(project.primaryMapLabel),
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
-    comments: normalizeProjectComments(project.comments),
+    comments: scrubbedComments,
     metadata: project.metadata,
   };
 }

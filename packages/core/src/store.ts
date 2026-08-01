@@ -63,6 +63,12 @@ import {
   type CommentReply,
   type ProjectComment,
 } from "./types";
+import {
+  removedLayerIdSet,
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
 import { hasSimpleStyleProperties } from "./vector-color";
 import {
   applyCopiedLayerStyle,
@@ -747,11 +753,6 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
   );
 }
 
-function removedLayerIdSet(layerIds: string | Iterable<string>): Set<string> {
-  if (typeof layerIds === "string") return new Set([layerIds]);
-  if (layerIds instanceof Set) return layerIds;
-  return new Set(layerIds);
-}
 
 /**
  * Strip storymap chapter enter/exit opacity rows that reference any of the
@@ -1618,6 +1619,9 @@ export const useAppStore = create<AppState>()(
           // Drop storymap chapter enter/exit opacity rows that pointed at the
           // removed layer so they do not keep a dangling id across save/reload.
           storymap: scrubStorymapLayerRefs(s.storymap, id),
+          widgets: scrubWidgetsForRemovedLayers(s.widgets, id),
+          comments: scrubCommentsForRemovedLayers(s.comments, id),
+          legend: scrubLegendForRemovedLayers(s.legend, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)
@@ -1944,6 +1948,15 @@ export const useAppStore = create<AppState>()(
               ? scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, removedIds)
               : s.secondaryMapViews,
             storymap: removeChildren ? scrubStorymapLayerRefs(s.storymap, removedIds) : s.storymap,
+            widgets: removeChildren
+              ? scrubWidgetsForRemovedLayers(s.widgets, removedIds)
+              : s.widgets,
+            comments: removeChildren
+              ? scrubCommentsForRemovedLayers(s.comments, removedIds)
+              : s.comments,
+            legend: removeChildren
+              ? scrubLegendForRemovedLayers(s.legend, removedIds)
+              : s.legend,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,

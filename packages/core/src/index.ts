@@ -23,6 +23,11 @@ export * from "./layer-style-clipboard";
 export * from "./layer-groups";
 export { createSampleStoryMap } from "./storymap-sample";
 export {
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
+export {
   serializeStoryMapJson,
   parseStoryMapJson,
   serializeStoryMapCsv,
