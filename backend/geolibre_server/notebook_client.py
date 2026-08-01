@@ -14,12 +14,12 @@ mutates a whole project model and renders its own app). Marker/choropleth helper
 here build GeoJSON and add it through the same layer command, so no extra bridge
 commands are needed.
 
-It is **fire-and-forget**: each call posts a command and returns immediately
-without waiting for a reply, so it behaves identically in JupyterLite (a
-browser/WebAssembly kernel) and a real JupyterLab server, with no
-``anywidget``/comm dependency. Consequently *read-back* queries (``get_view``,
-``identify``, ``list_layers``, …) are not available here — they need the blocking
-request/reply path the ``geolibre`` widget uses.
+Mutation calls are fire-and-forget except ``add_geojson`` on desktop, which uses
+the relay's correlated request/reply path to return the new layer id. The same
+path powers ``list_layers`` and ``get_layer`` against the live map. JupyterLite
+continues to use browser ``postMessage`` without a comm dependency; synchronous
+read-back is unavailable there because blocking the Python call would also block
+the browser event loop that has to deliver its result.
 
 Two transports carry those commands, picked per call:
 
@@ -44,7 +44,8 @@ Usage::
 
     m = geolibre.connect()
     m.fly_to(-122.4, 37.8, zoom=11)
-    m.add_geojson(gdf, name="My layer")          # GeoDataFrame, dict, or JSON
+    layer_id = m.add_geojson(gdf, name="My layer")  # returns an id on desktop
+    m.get_layer(layer_id)
     m.add_markers([(-122.4, 37.8), (-73.9, 40.7)], name="Cities")
 
 Canonical source: ``backend/geolibre_server/notebook_client.py``. The web build
@@ -60,6 +61,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+import uuid
 import warnings
 from collections.abc import Iterable, Sequence
 from typing import Any
@@ -139,6 +141,49 @@ def _post_to_relay(url: str, message: dict[str, Any]) -> tuple[int, str | None]:
         return 0, f"the local GeoLibre relay could not be reached ({error})"
     delivered = payload.get("delivered")
     return (delivered if isinstance(delivered, int) else 0), None
+
+
+def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = None) -> Any:
+    """Run one scripting command and return its correlated result."""
+    message = {
+        "type": "geolibre:command",
+        "requestId": uuid.uuid4().hex,
+        "method": method,
+        "params": params or {},
+    }
+    headers = {"Content-Type": "application/json"}
+    token = os.environ.get(_RELAY_TOKEN_ENV, "").strip()
+    if token:
+        headers["Authorization"] = f"token {token}"
+    request = urllib.request.Request(  # noqa: S310 - fixed http:// loopback URL
+        f"{url}/command",
+        data=json.dumps(message).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - see above
+            request, timeout=_RELAY_TIMEOUT_SECONDS + 1
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        raise RuntimeError(f"The local GeoLibre relay could not be reached: {error}") from error
+    if not payload.get("delivered"):
+        raise RuntimeError(f"No GeoLibre window is connected. {_NOT_CONNECTED_HINT}")
+    if not payload.get("ok"):
+        raise RuntimeError(str(payload.get("error") or "GeoLibre command failed."))
+    return payload.get("value")
+
+
+def _request(method: str, params: dict[str, Any] | None = None) -> Any:
+    """Run a read-back command through the desktop relay."""
+    url = _relay_url()
+    if url is None:
+        raise RuntimeError(
+            "GeoLibre read-back requires the desktop Notebook server relay. "
+            "It is not available in this kernel."
+        )
+    return _request_from_relay(url, method, params)
 
 
 def _post_message_via_display(message: dict[str, Any]) -> None:
@@ -361,7 +406,19 @@ class HostMap:
 
     # -- layers ---------------------------------------------------------------
 
-    def add_geojson(self, data: Any, name: str = "GeoJSON", **style: Any) -> None:
+    def list_layers(self) -> list[dict[str, Any]]:
+        """Return live layer metadata in draw order."""
+        value = _request("listLayers")
+        return value if isinstance(value, list) else []
+
+    def get_layer(self, layer_id: str) -> dict[str, Any]:
+        """Return live metadata for one layer id (raises if absent)."""
+        for layer in self.list_layers():
+            if layer.get("id") == layer_id:
+                return layer
+        raise ValueError(f"No layer with id {layer_id!r}")
+
+    def add_geojson(self, data: Any, name: str = "GeoJSON", **style: Any) -> str | None:
         """Add a GeoJSON layer.
 
         Args:
@@ -371,14 +428,19 @@ class HostMap:
             **style: Style overrides applied when the layer is created (e.g.
                 ``fillColor="#facc15"`` or ``strokeColor="#d97706"``).
         """
-        _send(
-            "addGeoJsonLayer",
-            {
-                "name": name,
-                "geojson": _to_featurecollection(data),
-                "style": dict(style),
-            },
-        )
+        params = {
+            "name": name,
+            "geojson": _to_featurecollection(data),
+            "style": dict(style),
+        }
+        # Desktop kernels have a correlated request/reply relay, so return the
+        # new layer id. JupyterLite retains its display/postMessage transport,
+        # where a synchronous Python call cannot wait on the browser event loop.
+        if _relay_url() is not None:
+            value = _request("addGeoJsonLayer", params)
+            return str(value)
+        _send("addGeoJsonLayer", params)
+        return None
 
     def add_marker(
         self, lng: float, lat: float, *, name: str = "Marker", **properties: Any

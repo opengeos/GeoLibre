@@ -36,10 +36,14 @@ class FakeSocket:
 def _isolate_listeners():
     """Keep each test's listener set independent of the module-level one."""
     saved = set(jupyter_relay._listeners)
+    saved_pending = dict(jupyter_relay._pending_results)
     jupyter_relay._listeners.clear()
+    jupyter_relay._pending_results.clear()
     yield
     jupyter_relay._listeners.clear()
     jupyter_relay._listeners.update(saved)
+    jupyter_relay._pending_results.clear()
+    jupyter_relay._pending_results.update(saved_pending)
 
 
 # -- the command envelope ----------------------------------------------------
@@ -62,6 +66,45 @@ def test_normalize_command_keeps_a_string_request_id():
 
 def test_normalize_command_defaults_missing_params_to_an_empty_object():
     assert jupyter_relay.normalize_command({"method": "getView"})["params"] == {}
+
+
+def test_normalize_result_keeps_a_success_value():
+    assert jupyter_relay.normalize_result(
+        {
+            "type": "geolibre:result",
+            "requestId": "abc",
+            "ok": True,
+            "value": [{"id": "layer-1"}],
+        }
+    ) == {
+        "requestId": "abc",
+        "ok": True,
+        "value": [{"id": "layer-1"}],
+    }
+
+
+def test_normalize_result_keeps_an_error_message():
+    assert jupyter_relay.normalize_result(
+        {
+            "type": "geolibre:result",
+            "requestId": "abc",
+            "ok": False,
+            "error": "No layer",
+        }
+    ) == {"requestId": "abc", "ok": False, "error": "No layer"}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"type": "geolibre:result", "requestId": "", "ok": True},
+        {"type": "geolibre:result", "requestId": "abc", "ok": "yes"},
+    ],
+)
+def test_normalize_result_rejects_malformed_payloads(payload):
+    with pytest.raises(ValueError):
+        jupyter_relay.normalize_result(payload)
 
 
 @pytest.mark.parametrize(

@@ -56,7 +56,7 @@ describe("parseRelayMessage", () => {
         params: { zoom: 4 },
       }),
     );
-    assert.deepEqual(command, { method: "flyTo", params: { zoom: 4 } });
+    assert.deepEqual(command, { requestId: "", method: "flyTo", params: { zoom: 4 } });
   });
 
   it("defaults missing or non-object params to an empty object", () => {
@@ -65,7 +65,19 @@ describe("parseRelayMessage", () => {
         JSON.stringify({ type: "geolibre:command", method: "x", params }),
       );
       assert.deepEqual(command?.params, {});
+      assert.equal(command?.requestId, "");
     }
+  });
+
+  it("preserves a correlated request id", () => {
+    const command = parseRelayMessage(
+      JSON.stringify({
+        type: "geolibre:command",
+        requestId: "request-1",
+        method: "listLayers",
+      }),
+    );
+    assert.equal(command?.requestId, "request-1");
   });
 
   it("ignores the relay's ready greeting", () => {

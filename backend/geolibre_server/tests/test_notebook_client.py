@@ -48,12 +48,20 @@ def relay(monkeypatch):
         body = (
             {"listeners": Relay.listeners}
             if request.full_url.endswith("/status")
-            else {"delivered": Relay.listeners}
+            else _command_response(request, Relay.listeners)
         )
         return FakeResponse(json.dumps(body).encode())
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     return Relay
+
+
+def _command_response(request, listeners):
+    message = json.loads(request.data)
+    response = {"delivered": listeners}
+    if message.get("requestId"):
+        response.update({"ok": True, "value": f"result-for-{message['method']}"})
+    return response
 
 
 @pytest.fixture
@@ -173,9 +181,13 @@ def test_is_connected_without_a_relay_follows_the_kernel_kind(monkeypatch):
 
 
 def test_add_geojson_wraps_a_bare_geometry(relay, displays):
-    notebook_client.HostMap().add_geojson({"type": "Point", "coordinates": [1, 2]}, name="Pin")
+    layer_id = notebook_client.HostMap().add_geojson(
+        {"type": "Point", "coordinates": [1, 2]}, name="Pin"
+    )
 
     params = json.loads(relay.calls[0].data)["params"]
+    assert json.loads(relay.calls[0].data)["requestId"]
+    assert layer_id == "result-for-addGeoJsonLayer"
     assert params["name"] == "Pin"
     assert params["geojson"]["features"][0]["geometry"]["coordinates"] == [1, 2]
     assert params["style"] == {}
@@ -202,3 +214,31 @@ def test_add_markers_builds_a_point_collection(relay, displays):
     features = json.loads(relay.calls[0].data)["params"]["geojson"]["features"]
     assert [f["geometry"]["coordinates"] for f in features] == [[-122.4, 37.8], [1.0, 2.0]]
     assert features[1]["properties"] == {"kind": "x"}
+
+
+def test_list_layers_returns_live_metadata(relay, monkeypatch):
+    layers = [{"id": "cities", "name": "Cities", "type": "geojson"}]
+    monkeypatch.setattr(
+        notebook_client,
+        "_request",
+        lambda method, params=None: layers if method == "listLayers" else None,
+    )
+
+    assert notebook_client.HostMap().list_layers() == layers
+
+
+def test_get_layer_returns_a_matching_layer(monkeypatch):
+    layers = [
+        {"id": "roads", "name": "Roads", "type": "geojson"},
+        {"id": "cities", "name": "Cities", "type": "geojson"},
+    ]
+    monkeypatch.setattr(notebook_client.HostMap, "list_layers", lambda self: layers)
+
+    assert notebook_client.HostMap().get_layer("cities") == layers[1]
+
+
+def test_get_layer_raises_for_an_unknown_id(monkeypatch):
+    monkeypatch.setattr(notebook_client.HostMap, "list_layers", lambda self: [])
+
+    with pytest.raises(ValueError, match="missing"):
+        notebook_client.HostMap().get_layer("missing")

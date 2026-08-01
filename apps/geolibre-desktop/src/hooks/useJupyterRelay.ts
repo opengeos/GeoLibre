@@ -44,17 +44,47 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
     // server can never resurrect the reconnect loop after we moved on.
     let generation = 0;
 
-    const run = async (command: RelayCommand) => {
+    const run = async (command: RelayCommand, activeSocket: WebSocket) => {
       // Own-property only, so an inherited member ("constructor", …) can never be
       // invoked as a command.
       if (!Object.hasOwn(handlers, command.method)) {
         console.warn(`Jupyter relay: unknown command "${command.method}"`);
+        if (command.requestId) {
+          activeSocket.send(
+            JSON.stringify({
+              type: "geolibre:result",
+              requestId: command.requestId,
+              ok: false,
+              error: `Unknown command "${command.method}"`,
+            }),
+          );
+        }
         return;
       }
       try {
-        await handlers[command.method](command.params);
+        const value = await handlers[command.method](command.params);
+        if (command.requestId) {
+          activeSocket.send(
+            JSON.stringify({
+              type: "geolibre:result",
+              requestId: command.requestId,
+              ok: true,
+              value,
+            }),
+          );
+        }
       } catch (error) {
         console.error(`Jupyter relay: command "${command.method}" failed`, error);
+        if (command.requestId) {
+          activeSocket.send(
+            JSON.stringify({
+              type: "geolibre:result",
+              requestId: command.requestId,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        }
       }
     };
 
@@ -96,7 +126,7 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
         };
         next.onmessage = (event: MessageEvent) => {
           const command = parseRelayMessage(event.data);
-          if (command) void run(command);
+          if (command) void run(command, next);
         };
         next.onclose = () => {
           if (generation !== mine) return;

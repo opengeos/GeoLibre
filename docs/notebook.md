@@ -28,31 +28,30 @@ import geolibre
 
 m = geolibre.connect()          # or geolibre.Map()
 m.fly_to(-122.4, 37.8, zoom=11) # animate the live map in the left pane
-m.add_geojson(
+layer_id = m.add_geojson(
     gdf,
     name="My layer",
     fillColor="#facc15",
     strokeColor="#d97706",
-)  # GeoDataFrame, dict, or JSON string
+)  # GeoDataFrame, dict, or JSON string; returns an id on desktop
+m.get_layer(layer_id)
+m.list_layers()
 m.fit_bounds([-123, 37, -122, 38])
 m.set_basemap("https://…/style.json")
 ```
 
-Calls are **fire-and-forget**: each posts a command to the host app over the
-shared scripting protocol (the same `createScriptingHandlers` surface used by the
-in-app Python console and the Jupyter widget) and returns immediately, so the
-client behaves identically on the in-browser kernel and a real server. Canonical
-client source: `backend/geolibre_server/notebook_client.py`.
+Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the
+relay's correlated request/reply path and returns the new layer id. The same
+path exposes `list_layers()`, which returns each live layer's id, name, type,
+visibility, and opacity, and `get_layer(layer_id)`, which returns one matching
+layer or raises `ValueError`. The id can be passed directly to
+`set_visibility`, `set_opacity`, `set_style`, `remove_layer`, or
+`zoom_to_layer`.
 
-> Read-back queries (e.g. `get_center`) are not exposed by this fire-and-forget
-> client; they need the blocking request/reply path the `geolibre` widget uses.
-
-The client also has layer-targeted calls — `set_visibility(layer_id, visible)`,
-`set_opacity`, `set_style`, `remove_layer`, `zoom_to_layer` — but they are left
-out of the snippet above because there is no way to obtain a `layer_id` here:
-being fire-and-forget, this client's `add_geojson` returns `None`. Use them with
-an id from the blocking [`geolibre` widget](python.md), whose `add_geojson`
-returns the new layer's id.
+Synchronous read-back is desktop-only. JupyterLite uses browser `postMessage`;
+blocking its Python call would also block the browser event loop that must
+deliver the result. Canonical client source:
+`backend/geolibre_server/notebook_client.py`.
 
 ## Driving the map from an external client (VS Code, …)
 

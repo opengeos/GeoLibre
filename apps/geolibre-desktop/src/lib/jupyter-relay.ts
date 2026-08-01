@@ -11,6 +11,7 @@ import type { JupyterServerInfo } from "./jupyter";
 
 /** One scripting command relayed from a kernel, in the shared bridge envelope. */
 export interface RelayCommand {
+  requestId: string;
   method: string;
   params: Record<string, unknown>;
 }
@@ -51,14 +52,23 @@ export function parseRelayMessage(data: unknown): RelayCommand | null {
     return null;
   }
   if (!payload || typeof payload !== "object") return null;
-  const message = payload as { type?: unknown; method?: unknown; params?: unknown };
+  const message = payload as {
+    type?: unknown;
+    requestId?: unknown;
+    method?: unknown;
+    params?: unknown;
+  };
   if (message.type !== "geolibre:command") return null;
   if (typeof message.method !== "string" || !message.method) return null;
   const params =
     message.params && typeof message.params === "object" && !Array.isArray(message.params)
       ? (message.params as Record<string, unknown>)
       : {};
-  return { method: message.method, params };
+  return {
+    requestId: typeof message.requestId === "string" ? message.requestId : "",
+    method: message.method,
+    params,
+  };
 }
 
 /** Reconnect backoff (ms) after a dropped socket, capped so it stays responsive. */

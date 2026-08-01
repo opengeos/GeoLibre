@@ -14,7 +14,9 @@ being *displayed*, only on which server the kernel belongs to:
 ``POST {base_url}geolibre/relay/command``
     Send one scripting command (the kernel side). Responds with
     ``{"delivered": n}`` — the number of connected app windows it reached, so the
-    client can warn instead of failing silently.
+    client can warn instead of failing silently. When the command carries a
+    non-empty request id, the response also waits for and includes the app's
+    correlated ``ok``/``value`` or ``ok``/``error`` result.
 ``GET {base_url}geolibre/relay/socket`` (WebSocket)
     Subscribe to commands (the app side). Every posted command is broadcast to
     all open sockets.
@@ -42,6 +44,7 @@ from __future__ import annotations
 
 import json
 import os
+from asyncio import Future, wait_for
 from typing import Any
 from urllib.parse import urlparse
 
@@ -81,6 +84,13 @@ _ALLOWED_ORIGIN_SCHEMES = frozenset({"http", "https", "tauri"})
 # instance is created per request: the POST handler needs the set the WebSocket
 # handlers registered themselves in.
 _listeners: set[GeoLibreRelaySocket] = set()
+
+# Correlated read-back requests waiting for the app-side socket to execute a
+# scripting handler. Fire-and-forget commands keep an empty requestId and never
+# enter this mapping.
+_pending_results: dict[str, Future[dict[str, Any]]] = {}
+
+RESULT_TIMEOUT_SECONDS = 5.0
 
 
 def is_allowed_origin(origin: str | None) -> bool:
@@ -130,6 +140,27 @@ def normalize_command(payload: Any) -> dict[str, Any]:
         "method": method,
         "params": params,
     }
+
+
+def normalize_result(payload: Any) -> dict[str, Any]:
+    """Validate an app-side scripting result sent over the relay socket."""
+    if not isinstance(payload, dict) or payload.get("type") != "geolibre:result":
+        raise ValueError("Expected a GeoLibre result object.")
+    request_id = payload.get("requestId")
+    if not isinstance(request_id, str) or not request_id:
+        raise ValueError("Missing a non-empty 'requestId'.")
+    ok = payload.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError("Missing boolean 'ok'.")
+    result: dict[str, Any] = {
+        "requestId": request_id,
+        "ok": ok,
+    }
+    if ok:
+        result["value"] = payload.get("value")
+    else:
+        result["error"] = str(payload.get("error") or "GeoLibre command failed.")
+    return result
 
 
 def relay_base_url(host: str, port: int, base_url: str) -> str:
@@ -187,7 +218,14 @@ class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHan
         self.write_message(json.dumps({"type": "geolibre:relay-ready"}))
 
     def on_message(self, message: str) -> None:
-        """Ignore app→relay traffic: commands are fire-and-forget today."""
+        """Resolve a correlated kernel request with the app's command result."""
+        try:
+            result = normalize_result(json.loads(message))
+        except (ValueError, json.JSONDecodeError):
+            return
+        future = _pending_results.get(result["requestId"])
+        if future is not None and not future.done():
+            future.set_result(result)
 
     def on_close(self) -> None:
         """Unregister this app window."""
@@ -198,13 +236,33 @@ class GeoLibreRelayCommandHandler(APIHandler):
     """The kernel side: posts one command to every connected app window."""
 
     @web.authenticated
-    def post(self) -> None:
+    async def post(self) -> None:
         """Relay the posted command and report how many windows received it."""
         try:
             message = normalize_command(json.loads(self.request.body or b"{}"))
         except (ValueError, json.JSONDecodeError) as error:
             raise web.HTTPError(400, str(error)) from error
-        self.finish(json.dumps({"delivered": _broadcast(message)}))
+        request_id = message["requestId"]
+        if not request_id:
+            self.finish(json.dumps({"delivered": _broadcast(message)}))
+            return
+
+        if request_id in _pending_results:
+            raise web.HTTPError(409, "Duplicate requestId.")
+        future: Future[dict[str, Any]] = Future()
+        _pending_results[request_id] = future
+        try:
+            delivered = _broadcast(message)
+            if not delivered:
+                self.finish(json.dumps({"delivered": 0}))
+                return
+            try:
+                result = await wait_for(future, RESULT_TIMEOUT_SECONDS)
+            except TimeoutError as error:
+                raise web.HTTPError(504, "GeoLibre did not return a result in time.") from error
+            self.finish(json.dumps({"delivered": delivered, **result}))
+        finally:
+            _pending_results.pop(request_id, None)
 
 
 class GeoLibreRelayStatusHandler(APIHandler):
