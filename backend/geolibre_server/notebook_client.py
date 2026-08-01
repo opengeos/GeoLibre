@@ -124,7 +124,17 @@ class GeoLibreNotConnectedError(RuntimeError):
     window. Mutations degrade to the fire-and-forget transport and warn with
     :class:`GeoLibreNotConnectedWarning` instead. Subclasses ``RuntimeError``, so
     code that already catches that keeps working.
+
+    Attributes:
+        relay_reason: Why the relay endpoint itself did not answer, or None when
+            it answered and simply had no window to hand the command to. A
+            caller degrading to another transport uses this to skip a retry that
+            would only burn a second timeout.
     """
+
+    def __init__(self, message: str, *, relay_reason: str | None = None) -> None:
+        super().__init__(message)
+        self.relay_reason = relay_reason
 
 
 class GeoLibreTimeoutError(RuntimeError):
@@ -240,9 +250,11 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
         raise RuntimeError(f"GeoLibre read-back failed: {_relay_failure_reason(error)}") from error
     except (urllib.error.URLError, OSError, ValueError) as error:
         # The relay never answered, so nothing was dispatched: the same situation
-        # for a caller as no window being connected.
+        # for a caller as no window being connected. Carry the reason so a caller
+        # that degrades to another transport can skip re-asking the relay.
+        reason = _relay_failure_reason(error)
         raise GeoLibreNotConnectedError(
-            f"GeoLibre read-back failed: {_relay_failure_reason(error)}"
+            f"GeoLibre read-back failed: {reason}", relay_reason=reason
         ) from error
     if not payload.get("delivered"):
         raise GeoLibreNotConnectedError(f"No GeoLibre window is connected. {_NOT_CONNECTED_HINT}")
@@ -319,7 +331,9 @@ def is_connected() -> bool:
     return bool(payload.get("listeners"))
 
 
-def _send(method: str, params: dict[str, Any] | None = None) -> None:
+def _send(
+    method: str, params: dict[str, Any] | None = None, *, known_failure: str | None = None
+) -> None:
     """Post one scripting command to the host GeoLibre app.
 
     Prefers the relay (works from any Jupyter frontend, and reports delivery);
@@ -329,6 +343,14 @@ def _send(method: str, params: dict[str, Any] | None = None) -> None:
 
     Warns with :class:`GeoLibreNotConnectedWarning` when the command provably did
     not reach a map, so a disconnected setup never looks like a silent success.
+
+    Args:
+        method: The scripting command name.
+        params: The command's parameters.
+        known_failure: A relay failure an earlier call in this same command
+            already established. Skips the relay POST — which would only wait out
+            a second timeout against an endpoint just proven unresponsive — and
+            goes straight to the display transport, warning with this reason.
     """
     message = {
         "type": "geolibre:command",
@@ -338,7 +360,10 @@ def _send(method: str, params: dict[str, Any] | None = None) -> None:
     }
     url = _relay_url()
     if url is not None:
-        delivered, error = _post_to_relay(url, message)
+        if known_failure is None:
+            delivered, error = _post_to_relay(url, message)
+        else:
+            delivered, error = 0, known_failure
         if delivered:
             return
         # Last-ditch: an app old enough to lack the relay socket still listens on
@@ -528,13 +553,18 @@ class HostMap:
         if url is not None:
             try:
                 value = _request_from_relay(url, "addGeoJsonLayer", params)
-            except GeoLibreNotConnectedError:
+            except GeoLibreNotConnectedError as error:
                 # Nothing ran. Every other mutation degrades to the display
                 # transport here (which still reaches the embedded Notebook
                 # panel) and warns, so adding a layer must not be the one call
                 # that hard-fails. The id is then unavailable, exactly as on
                 # JupyterLite. A handler error still raises.
-                _send("addGeoJsonLayer", params)
+                #
+                # relay_reason is set only when the relay endpoint itself did not
+                # answer; passing it through skips a second POST that would wait
+                # out another full timeout, keeping this no worse than the single
+                # attempt every other mutation makes.
+                _send("addGeoJsonLayer", params, known_failure=error.relay_reason)
                 return None
             except GeoLibreTimeoutError as error:
                 # A window DID take this command — a big FeatureCollection can

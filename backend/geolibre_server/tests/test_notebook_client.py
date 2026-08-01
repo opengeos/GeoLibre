@@ -294,6 +294,20 @@ def test_add_geojson_falls_back_when_the_relay_is_unreachable(relay, displays):
 
     assert layer_id is None
     assert len(displays) == 1
+    # One POST, not two: re-asking an endpoint that just failed to answer would
+    # wait out a second full timeout on top of the read-back's.
+    assert len(relay.calls) == 1
+
+
+def test_add_geojson_still_retries_the_relay_when_it_is_merely_unsubscribed(relay, displays):
+    # Here the relay answered (delivered: 0), so it is up and the second POST is
+    # immediate — worth making, since a window may have connected in between.
+    relay.listeners = 0
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning):
+        notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
+
+    assert len(relay.calls) == 2
 
 
 def test_read_back_timeout_raises_rather_than_reporting_no_layers(relay):

@@ -112,6 +112,20 @@ def test_normalize_result_rejects_malformed_payloads(payload):
         jupyter_relay.normalize_result(payload)
 
 
+def test_the_client_outwaits_this_modules_result_timeout():
+    # notebook_client's read-back waits _RELAY_TIMEOUT_SECONDS + 1 (see
+    # _request_from_relay). That has to stay above the budget here, or the
+    # kernel's own socket gives up first and the precise 504 -> GeoLibreTimeoutError
+    # ("still running in the app") degrades into GeoLibreNotConnectedError
+    # ("could not be reached"), which is both wrong and differently handled.
+    # The two constants live in separate modules, so pin their ordering here.
+    notebook_client = pytest.importorskip(
+        "notebook_client", reason="the notebook client renders IPython displays"
+    )
+
+    assert notebook_client._RELAY_TIMEOUT_SECONDS + 1 > jupyter_relay.RESULT_TIMEOUT_SECONDS
+
+
 @pytest.mark.parametrize(
     "payload",
     [
