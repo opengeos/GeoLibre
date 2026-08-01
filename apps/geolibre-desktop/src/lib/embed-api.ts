@@ -171,6 +171,61 @@ export interface EmbedEvent {
 }
 
 /**
+ * The `postMessage` targets an outbound event goes to.
+ *
+ * Before the host has sent an allowed message there is no single origin to
+ * address, so a broadcast goes to every configured origin — otherwise a host
+ * would have to speak first just to hear `ready`. Once its origin is known,
+ * everything is scoped to exactly that origin, keeping later payloads off any
+ * other frame that happens to share the allowlist. The wildcard collapses to
+ * `"*"` rather than enumerating, since that is what it means.
+ *
+ * @param hostOrigin - The host's origin, learned from its first allowed
+ *   message; null until then.
+ * @param allowedOrigins - The configured allowlist.
+ */
+export function embedEventTargets(hostOrigin: string | null, allowedOrigins: string[]): string[] {
+  if (hostOrigin) return [hostOrigin];
+  if (allowedOrigins.includes(EMBED_ORIGIN_WILDCARD)) return [EMBED_ORIGIN_WILDCARD];
+  return allowedOrigins;
+}
+
+/**
+ * The envelope versions one outbound event is sent as.
+ *
+ * An `ack` answers in the version its request used, so it passes `version`
+ * explicitly. A broadcast has no request to follow: until a host has sent one,
+ * it goes out as **both** v2 and v1, so a listen-only integration of either
+ * vintage receives it — a v1 host that only subscribes to `selectionChanged`
+ * and friends never sends a request, and would otherwise be pinned to nothing
+ * and hear only v2. The first request pins every later broadcast.
+ *
+ * @param version - The version this event must use, if it answers a request.
+ * @param hostVersion - The version the host's first request declared, or null.
+ */
+export function embedEventVersions(
+  version: 1 | 2 | undefined,
+  hostVersion: 1 | 2 | null,
+): readonly (1 | 2)[] {
+  if (version) return [version];
+  if (hostVersion) return [hostVersion];
+  return [2, 1];
+}
+
+/**
+ * The envelope version an inbound message declared.
+ *
+ * Only v1 is distinguished: {@link parseEmbedRequest} has already rejected any
+ * version outside {@link SUPPORTED_EMBED_API_VERSIONS}, so anything else is the
+ * current version.
+ *
+ * @param data - `MessageEvent.data`.
+ */
+export function embedRequestVersion(data: unknown): 1 | 2 {
+  return isRecord(data) && data.v === 1 ? 1 : EMBED_API_VERSION;
+}
+
+/**
  * Build an app → host message envelope.
  *
  * @param type - The event name.

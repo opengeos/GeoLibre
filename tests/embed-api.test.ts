@@ -9,7 +9,10 @@ import {
   EMBED_ORIGINS_ENV,
   buildEmbedEvent,
   buildEmbedLayer,
+  embedEventTargets,
+  embedEventVersions,
   embedLayerSummaries,
+  embedRequestVersion,
   isEmbedOriginAllowed,
   parseEmbedOrigins,
   parseEmbedRequest,
@@ -655,6 +658,63 @@ describe("resolveHighlightIds", () => {
       highlightTarget({ featureIds: ["f1"], filter: { parcel: "A-1" } }),
     );
     assert.deepEqual(ids, ["f1", "f3"]);
+  });
+});
+
+describe("embedEventTargets", () => {
+  const allowed = ["https://erp.example.com", "https://portal.example.com"];
+
+  it("broadcasts to every configured origin until the host has spoken", () => {
+    // Otherwise a host would have to send a request just to hear `ready`.
+    assert.deepEqual(embedEventTargets(null, allowed), allowed);
+  });
+
+  it("scopes to the host's exact origin once it is known", () => {
+    // Keeps later payloads off any other frame that shares the allowlist.
+    assert.deepEqual(embedEventTargets("https://erp.example.com", allowed), [
+      "https://erp.example.com",
+    ]);
+  });
+
+  it("collapses a wildcard allowlist to the wildcard target", () => {
+    assert.deepEqual(embedEventTargets(null, ["*", "https://erp.example.com"]), ["*"]);
+  });
+
+  it("still prefers a learned origin over the wildcard", () => {
+    assert.deepEqual(embedEventTargets("https://erp.example.com", ["*"]), [
+      "https://erp.example.com",
+    ]);
+  });
+});
+
+describe("embedEventVersions", () => {
+  it("sends both versions before a host has sent a request", () => {
+    // A listen-only v1 host never sends one, so it would otherwise be pinned to
+    // nothing and hear only v2 — which a strict `message.v !== 1` filter drops.
+    assert.deepEqual(embedEventVersions(undefined, null), [2, 1]);
+  });
+
+  it("pins broadcasts to the version the host's first request used", () => {
+    assert.deepEqual(embedEventVersions(undefined, 1), [1]);
+    assert.deepEqual(embedEventVersions(undefined, 2), [2]);
+  });
+
+  it("answers a request in its own version, whatever the host was pinned to", () => {
+    assert.deepEqual(embedEventVersions(1, 2), [1]);
+    assert.deepEqual(embedEventVersions(2, 1), [2]);
+    assert.deepEqual(embedEventVersions(1, null), [1]);
+  });
+});
+
+describe("embedRequestVersion", () => {
+  it("reads a v1 envelope as v1 and anything else as the current version", () => {
+    assert.equal(embedRequestVersion({ v: 1, type: "getViewport" }), 1);
+    assert.equal(embedRequestVersion({ v: EMBED_API_VERSION, type: "getViewport" }), 2);
+    // parseEmbedRequest has already rejected an unsupported version, so the
+    // remaining values are only reachable when it accepted the message.
+    assert.equal(embedRequestVersion({ type: "getViewport" }), 2);
+    assert.equal(embedRequestVersion({ v: "1" }), 2);
+    assert.equal(embedRequestVersion(null), 2);
   });
 });
 

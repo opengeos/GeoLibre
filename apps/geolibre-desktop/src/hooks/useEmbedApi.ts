@@ -3,10 +3,12 @@ import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
 import { captureMapImage } from "../lib/print-layout-export";
 import {
-  EMBED_ORIGIN_WILDCARD,
   buildEmbedEvent,
   buildEmbedLayer,
+  embedEventTargets,
+  embedEventVersions,
   embedLayerSummaries,
+  embedRequestVersion,
   isEmbedOriginAllowed,
   parseEmbedRequest,
   readEmbedOrigins,
@@ -59,25 +61,17 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     // Not framed: there is no host to talk to (the app is the top-level page).
     if (!host || host === window) return;
 
-    const wildcard = allowedOrigins.includes(EMBED_ORIGIN_WILDCARD);
-    // Learned from the host's first allowed message; until then broadcasts go to
-    // each configured origin, so the host never has to speak first to hear
-    // `ready`. Scoping to the exact origin afterwards keeps later payloads off
-    // any other frame that happens to share the allowlist.
+    // Both learned from the host's first allowed message, and both pinned for
+    // the rest of the session; see `embedEventTargets` / `embedEventVersions`
+    // for what each is null until then.
     let hostOrigin: string | null = null;
     let hostVersion: 1 | 2 | null = null;
     let disposed = false;
 
     const emit = (type: EmbedEventType, payload: Record<string, unknown>, version?: 1 | 2) => {
       if (disposed) return;
-      const targets = hostOrigin
-        ? [hostOrigin]
-        : wildcard
-          ? [EMBED_ORIGIN_WILDCARD]
-          : allowedOrigins;
-      // Before a host speaks, broadcast both versions so listen-only v1 and v2
-      // integrations each receive events. Its first request pins later events.
-      const versions = version ? [version] : hostVersion ? [hostVersion] : ([2, 1] as const);
+      const targets = embedEventTargets(hostOrigin, allowedOrigins);
+      const versions = embedEventVersions(version, hostVersion);
       for (const eventVersion of versions) {
         const message = buildEmbedEvent(type, payload, eventVersion);
         for (const target of targets) {
@@ -248,8 +242,7 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       // exactly this origin. ("null" is an opaque origin, only reachable under
       // the wildcard, and cannot be used as a postMessage target.)
       if (!hostOrigin && event.origin && event.origin !== "null") hostOrigin = event.origin;
-      const requestedVersion = (event.data as { v?: unknown }).v;
-      const requestVersion: 1 | 2 = requestedVersion === 1 ? 1 : 2;
+      const requestVersion = embedRequestVersion(event.data);
       hostVersion ??= requestVersion;
       if ("error" in request) {
         ack(request.requestId, requestVersion, false, request.error);
