@@ -571,11 +571,13 @@ class HostMap:
                 # outrun the relay's result timeout — and is probably still
                 # adding the layer. Re-sending would add it twice, so give up on
                 # the id alone and say what happened.
+                # stacklevel=2, not the 3 _send uses: this warn() is already in
+                # the HostMap method, so the user's cell is one frame up, not two.
                 warnings.warn(
                     f"GeoLibre: {error} The layer is most likely being added; "
                     "its id is unavailable. Use list_layers() to find it.",
                     GeoLibreTimeoutWarning,
-                    stacklevel=3,
+                    stacklevel=2,
                 )
                 return None
             if not isinstance(value, str) or not value:

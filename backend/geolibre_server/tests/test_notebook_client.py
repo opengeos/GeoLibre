@@ -273,13 +273,16 @@ def test_add_geojson_does_not_resend_after_a_result_timeout(relay, displays):
         "http://127.0.0.1:8766/geolibre/relay/command", 504, "Gateway Timeout", {}, None
     )
 
-    with pytest.warns(notebook_client.GeoLibreTimeoutWarning, match="still running"):
+    with pytest.warns(notebook_client.GeoLibreTimeoutWarning, match="still running") as caught:
         layer_id = notebook_client.HostMap().add_geojson(
             {"type": "FeatureCollection", "features": []}
         )
 
     assert layer_id is None
     assert displays == []
+    # The warning must blame the caller's line, not notebook_client's internals,
+    # so it points at the user's cell and repeats per cell.
+    assert caught[0].filename == __file__
 
 
 def test_add_geojson_falls_back_when_the_relay_is_unreachable(relay, displays):
