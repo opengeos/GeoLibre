@@ -13,16 +13,18 @@ interface ProjectRecoveryDialogProps {
   snapshot: ProjectHistorySnapshot | null;
   onRestore: (snapshot: ProjectHistorySnapshot) => void;
   onDiscard: () => void;
+  onDismiss: () => void;
 }
 
 export function ProjectRecoveryDialog({
   snapshot,
   onRestore,
   onDiscard,
+  onDismiss,
 }: ProjectRecoveryDialogProps) {
   const { t } = useTranslation();
   return (
-    <Dialog open={snapshot !== null} onOpenChange={(open) => !open && onDiscard()}>
+    <Dialog open={snapshot !== null} onOpenChange={(open) => !open && onDismiss()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("projectHistory.recoveryTitle")}</DialogTitle>

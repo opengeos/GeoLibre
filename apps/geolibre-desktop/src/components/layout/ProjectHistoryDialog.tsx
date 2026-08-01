@@ -52,7 +52,10 @@ export function ProjectHistoryDialog({
                   <p className="truncate text-xs text-muted-foreground">
                     {t("projectHistory.summary", {
                       count: snapshot.layerCount,
-                      zoom: snapshot.camera.zoom.toFixed(1),
+                      zoom: new Intl.NumberFormat(i18n.language, {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      }).format(snapshot.camera.zoom),
                     })}
                   </p>
                 </div>

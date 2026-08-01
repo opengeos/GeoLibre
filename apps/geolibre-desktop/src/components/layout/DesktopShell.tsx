@@ -2349,6 +2349,7 @@ export function DesktopShell({
         snapshot={projectHistory.recoverySnapshot}
         onRestore={projectHistory.restore}
         onDiscard={projectHistory.discardRecovery}
+        onDismiss={projectHistory.dismissRecovery}
       />
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}

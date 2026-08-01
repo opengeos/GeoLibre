@@ -17,6 +17,7 @@ import {
 } from "../../lib/basemap-presets";
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
+import { clearProjectSnapshots } from "../../lib/project-history-store";
 import { CollapsibleSection } from "../CollapsibleSection";
 import {
   Button,
@@ -200,6 +201,9 @@ export function NewProjectDialog({
       ellipsoidId: selectedPlanetary?.ellipsoidId,
       mapView: selectedBasemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
     });
+    void clearProjectSnapshots().catch((error) =>
+      console.error("Could not clear project history for the new project.", error),
+    );
     onProjectCreated?.();
     onOpenChange(false);
     resetForm();
@@ -236,6 +240,9 @@ export function NewProjectDialog({
         ? projectName.trim()
         : templateName;
     loadProject({ ...copy, name: finalName }, null);
+    void clearProjectSnapshots().catch((error) =>
+      console.error("Could not clear project history for the new project.", error),
+    );
     useAppStore.setState({ isDirty: true });
     onProjectCreated?.();
     onOpenChange(false);
