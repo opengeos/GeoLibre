@@ -2904,6 +2904,7 @@
     "preparing": "Preparing {{title}}…",
     "downloading": "Downloading {{title}}: {{completed}} of {{total}} features…",
     "downloadStarted": "Download started for {{title}}.",
+    "downloadFirstLayer": "{{title}} has {{layerCount}} layers; only the first was downloaded.",
     "downloadError": "Could not download this dataset.",
     "details": "Details"
   },

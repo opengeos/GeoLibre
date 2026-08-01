@@ -36,6 +36,7 @@ export interface ArcGisHubLabels {
   preparing: (title: string) => string;
   downloading: (completed: number, total: number, title: string) => string;
   downloadStarted: (title: string) => string;
+  downloadFirstLayer: (title: string, layerCount: number) => string;
   downloadError: string;
   details: string;
 }
@@ -63,6 +64,8 @@ export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
   downloading: (completed, total, title) =>
     `Downloading ${title}: ${completed} of ${total} features…`,
   downloadStarted: (title) => `Download started for ${title}.`,
+  downloadFirstLayer: (title, layerCount) =>
+    `${title} has ${layerCount} layers; only the first was downloaded.`,
   downloadError: "Could not download this dataset.",
   details: "Details",
 };
@@ -157,7 +160,9 @@ async function visualize(item: ArcGisHubItem): Promise<void> {
       );
     }
     const data = JSON.parse(text);
-    if (data?.type !== "FeatureCollection") throw new Error("The item is not valid GeoJSON.");
+    if (data?.type !== "FeatureCollection" || !Array.isArray(data.features)) {
+      throw new Error("The item is not valid GeoJSON.");
+    }
     // deactivate() nulls appRef, which can happen while the fetch above is in
     // flight; bail explicitly instead of adding a layer to a torn-down host.
     if (!appRef) return;
@@ -169,27 +174,35 @@ async function visualize(item: ArcGisHubItem): Promise<void> {
   }
 }
 
+/**
+ * Export the item, resolving to the service's layer count when the export
+ * covers only the first of several layers, and 0 when nothing was left behind.
+ */
 async function download(
   item: ArcGisHubItem,
   signal?: AbortSignal,
   onProgress?: (completed: number, total: number) => void,
-): Promise<void> {
+): Promise<number> {
   const app = appRef;
-  if (!app) return;
+  if (!app) return 0;
   if (item.type === "Feature Service" && item.url) {
-    const data = await fetchFeatureServiceGeoJson(item.url, signal, onProgress);
+    let skippedLayers = 0;
+    const data = await fetchFeatureServiceGeoJson(item.url, signal, onProgress, (layerCount) => {
+      skippedLayers = layerCount;
+    });
     // deactivate() nulls appRef, which can land while a large service download
     // is still in flight; bail rather than exporting through a torn-down host.
-    if (!appRef) return;
+    if (!appRef) return 0;
     app.exportTextFile?.(`${safeFilename(item.title)}.geojson`, JSON.stringify(data), {
       description: "GeoJSON",
       extensions: ["geojson", "json"],
       mimeType: "application/geo+json",
       promptName: true,
     });
-    return;
+    return skippedLayers;
   }
   app.openExternalUrl?.(arcGisHubItemDataUrl(item));
+  return 0;
 }
 
 function buildPanel(container: HTMLElement): () => void {
@@ -232,6 +245,9 @@ function buildPanel(container: HTMLElement): () => void {
   let controller: AbortController | null = null;
   let generation = 0;
   let activeQuery = "";
+  // Snapshotted with activeQuery: `start` is an offset into one specific result
+  // set, so Load more has to repeat the filter the offset was measured against.
+  let activeBbox: [number, number, number, number] | undefined;
   let thumbnailPreview: HTMLImageElement | null = null;
   const downloadControllers = new Set<AbortController>();
 
@@ -344,10 +360,13 @@ function buildPanel(container: HTMLElement): () => void {
       const downloadController = new AbortController();
       downloadControllers.add(downloadController);
       try {
-        await download(item, downloadController.signal, (completed, total) => {
+        const layerCount = await download(item, downloadController.signal, (completed, total) => {
           status.textContent = labels.downloading(completed, total, item.title);
         });
-        status.textContent = labels.downloadStarted(item.title);
+        status.textContent =
+          layerCount > 1
+            ? labels.downloadFirstLayer(item.title, layerCount)
+            : labels.downloadStarted(item.title);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           console.error("Could not download the ArcGIS Hub dataset.", error);
@@ -379,6 +398,14 @@ function buildPanel(container: HTMLElement): () => void {
     const token = ++generation;
     if (!append) {
       activeQuery = query;
+      // Capture the map filter once per search. Re-deriving it on Load more
+      // would page a stale `start` offset into a differently filtered result
+      // set if the user panned, silently skipping or repeating datasets.
+      const mapBounds = appRef?.getMap?.()?.getBounds();
+      activeBbox =
+        viewOnly.checked && mapBounds
+          ? [mapBounds.getWest(), mapBounds.getSouth(), mapBounds.getEast(), mapBounds.getNorth()]
+          : undefined;
       start = 1;
       shown = 0;
       removeThumbnailPreview();
@@ -387,20 +414,10 @@ function buildPanel(container: HTMLElement): () => void {
     setBusy(true);
     status.textContent = append ? labels.loadingMore : labels.searching;
     try {
-      const mapBounds = appRef?.getMap?.()?.getBounds();
-      const bbox =
-        viewOnly.checked && mapBounds
-          ? ([
-              mapBounds.getWest(),
-              mapBounds.getSouth(),
-              mapBounds.getEast(),
-              mapBounds.getNorth(),
-            ] as [number, number, number, number])
-          : undefined;
       const page = await searchArcGisHub(query, {
         start,
         num: PAGE_SIZE,
-        bbox,
+        bbox: activeBbox,
         signal: controller.signal,
       });
       if (token !== generation) return;

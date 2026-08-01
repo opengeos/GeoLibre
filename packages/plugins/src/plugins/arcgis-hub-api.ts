@@ -141,8 +141,13 @@ export async function fetchFeatureServiceGeoJson(
   serviceUrl: string,
   signal?: AbortSignal,
   onProgress?: (completed: number, total: number) => void,
+  // Called when the service holds more than one downloadable layer, since only
+  // the first is exported. Lets the caller say so instead of silently handing
+  // back a partial dataset.
+  onExtraLayers?: (layerCount: number) => void,
 ): Promise<FeatureCollection> {
-  const layerUrl = await resolveFeatureLayerUrl(serviceUrl, signal);
+  const { url: layerUrl, layerCount } = await resolveFeatureLayerUrl(serviceUrl, signal);
+  if (layerCount > 1) onExtraLayers?.(layerCount);
   const idsUrl = new URL(`${layerUrl}/query`);
   idsUrl.searchParams.set("where", "1=1");
   idsUrl.searchParams.set("returnIdsOnly", "true");
@@ -187,12 +192,23 @@ export async function fetchFeatureServiceGeoJson(
   return result;
 }
 
-async function resolveFeatureLayerUrl(serviceUrl: string, signal?: AbortSignal): Promise<string> {
+interface ResolvedFeatureLayer {
+  url: string;
+  /** How many downloadable (non-group) layers the service exposes. */
+  layerCount: number;
+}
+
+async function resolveFeatureLayerUrl(
+  serviceUrl: string,
+  signal?: AbortSignal,
+): Promise<ResolvedFeatureLayer> {
   const service = new URL(serviceUrl);
   service.hash = "";
   service.search = "";
   service.pathname = service.pathname.replace(/\/+$/, "");
-  if (/\/FeatureServer\/\d+$/i.test(service.pathname)) return service.href;
+  if (/\/FeatureServer\/\d+$/i.test(service.pathname)) {
+    return { url: service.href, layerCount: 1 };
+  }
   const metadataUrl = new URL(service);
   metadataUrl.searchParams.set("f", "json");
   const response = await fetch(metadataUrl, { signal });
@@ -202,10 +218,12 @@ async function resolveFeatureLayerUrl(serviceUrl: string, signal?: AbortSignal):
     error?: { message?: string };
   };
   if (metadata.error) throw new Error(metadata.error.message || "ArcGIS service metadata failed.");
-  const layerId = metadata.layers?.find(
+  // Group layers carry subLayerIds and hold no features of their own.
+  const featureLayers = (metadata.layers ?? []).filter(
     (layer) => Number.isInteger(layer.id) && !layer.subLayerIds,
-  )?.id;
+  );
+  const layerId = featureLayers[0]?.id;
   if (layerId === undefined) throw new Error("This feature service has no feature layer.");
   service.pathname = `${service.pathname}/${layerId}`;
-  return service.href;
+  return { url: service.href, layerCount: featureLayers.length };
 }

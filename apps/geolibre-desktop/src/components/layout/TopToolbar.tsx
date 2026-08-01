@@ -318,6 +318,8 @@ export function TopToolbar({
       downloading: (completed, total, title) =>
         t("arcgisHub.downloading", { completed, total, title }),
       downloadStarted: (title) => t("arcgisHub.downloadStarted", { title }),
+      downloadFirstLayer: (title, layerCount) =>
+        t("arcgisHub.downloadFirstLayer", { title, layerCount }),
       downloadError: t("arcgisHub.downloadError"),
       details: t("arcgisHub.details"),
     });

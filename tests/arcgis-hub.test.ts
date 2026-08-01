@@ -175,13 +175,50 @@ describe("ArcGIS Hub catalog client", () => {
       });
     }) as typeof fetch;
     try {
+      const extraLayers: number[] = [];
       const result = await fetchFeatureServiceGeoJson(
         "https://example.com/arcgis/rest/services/Test/FeatureServer/?token=discard#fragment",
+        undefined,
+        undefined,
+        (layerCount) => extraLayers.push(layerCount),
       );
       assert.equal(result.features.length, 1);
+      // One group layer and one feature layer: nothing was left behind.
+      assert.deepEqual(extraLayers, []);
       assert.equal(requests[0].pathname, "/arcgis/rest/services/Test/FeatureServer");
       assert.equal(requests[1].pathname, "/arcgis/rest/services/Test/FeatureServer/1/query");
       assert.equal(requests[1].searchParams.has("token"), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("reports that only the first layer was downloaded from a multi-layer service", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+      if (url.searchParams.get("f") === "json" && !url.pathname.endsWith("/query")) {
+        return Response.json({ layers: [{ id: 0 }, { id: 1 }, { id: 2, subLayerIds: [0, 1] }] });
+      }
+      if (url.searchParams.get("returnIdsOnly") === "true") {
+        return Response.json({ objectIds: [1] });
+      }
+      return Response.json({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: null, properties: {} }],
+      });
+    }) as typeof fetch;
+    try {
+      const extraLayers: number[] = [];
+      await fetchFeatureServiceGeoJson(
+        "https://example.com/arcgis/rest/services/Test/FeatureServer",
+        undefined,
+        undefined,
+        (layerCount) => extraLayers.push(layerCount),
+      );
+      // Two feature layers are downloadable but only the first is exported, so
+      // the caller is told rather than silently handed a partial dataset.
+      assert.deepEqual(extraLayers, [2]);
     } finally {
       globalThis.fetch = originalFetch;
     }
