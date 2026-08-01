@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   MAX_COMMENT_BODY_LENGTH,
   MAX_COMMENT_AUTHOR_LENGTH,
+  MAX_REPLIES_PER_COMMENT,
   MIN_COMMENT_INTERVAL_MS,
   validateAnchor,
   validateAuthor,
@@ -108,6 +109,14 @@ describe("validateAnchor", () => {
 
   it("rejects a feature anchor with non-string/non-number featureId", () => {
     assert.equal(validateAnchor({ type: "feature", layerId: "L", featureId: true }), null);
+  });
+
+  it("rejects a feature anchor with NaN featureId", () => {
+    assert.equal(validateAnchor({ type: "feature", layerId: "L", featureId: NaN }), null);
+  });
+
+  it("rejects a feature anchor with Infinity featureId", () => {
+    assert.equal(validateAnchor({ type: "feature", layerId: "L", featureId: Infinity }), null);
   });
 
   it("rejects unknown anchor types", () => {
@@ -220,6 +229,13 @@ describe("validateReply", () => {
     assert.ok(!isNaN(Date.parse(result.createdAt)));
   });
 
+  it("falls back to now for unparseable createdAt", () => {
+    const result = validateReply({ ...validReply, createdAt: "not-a-date" });
+    assert.ok(result);
+    assert.notEqual(result.createdAt, "not-a-date");
+    assert.ok(!isNaN(Date.parse(result.createdAt)));
+  });
+
   it("rejects null / undefined / primitives", () => {
     assert.equal(validateReply(null), null);
     assert.equal(validateReply(undefined), null);
@@ -329,6 +345,25 @@ describe("validateComment", () => {
     assert.equal(validateComment(undefined), null);
     assert.equal(validateComment("string"), null);
     assert.equal(validateComment(42), null);
+  });
+
+  it("caps replies at MAX_REPLIES_PER_COMMENT", () => {
+    const manyReplies = Array.from({ length: MAX_REPLIES_PER_COMMENT + 20 }, (_, i) => ({
+      id: `r-${i}`,
+      author: { name: "Bob", color: "#abc" },
+      body: `Reply ${i}`,
+      createdAt: "2026-06-15T12:30:00.000Z",
+    }));
+    const result = validateComment({ ...validComment, replies: manyReplies });
+    assert.ok(result);
+    assert.equal(result.replies.length, MAX_REPLIES_PER_COMMENT);
+  });
+
+  it("falls back to now for unparseable createdAt", () => {
+    const result = validateComment({ ...validComment, createdAt: "garbage" });
+    assert.ok(result);
+    assert.notEqual(result.createdAt, "garbage");
+    assert.ok(!isNaN(Date.parse(result.createdAt)));
   });
 
   it("strips extra fields (returns only known shape)", () => {

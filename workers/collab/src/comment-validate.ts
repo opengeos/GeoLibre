@@ -11,6 +11,9 @@ export const MAX_COMMENT_AUTHOR_LENGTH = 120;
 /** Minimum gap between a socket's comment-mutation frames (ms). */
 export const MIN_COMMENT_INTERVAL_MS = 250;
 
+/** Maximum number of replies stored per comment. */
+export const MAX_REPLIES_PER_COMMENT = 100;
+
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 function finite(n: unknown): n is number {
@@ -48,6 +51,7 @@ export function validateAnchor(raw: unknown): ValidatedAnchor | null {
     if (typeof o.layerId !== "string" || !o.layerId) return null;
     if (typeof o.featureId !== "string" && typeof o.featureId !== "number") return null;
     if (typeof o.featureId === "string" && !o.featureId) return null;
+    if (typeof o.featureId === "number" && !finite(o.featureId)) return null;
     const anchor: FeatureAnchor = {
       type: "feature",
       layerId: o.layerId,
@@ -110,11 +114,15 @@ export function validateComment(raw: unknown): ValidatedComment | null {
   const body = o.body.slice(0, MAX_COMMENT_BODY_LENGTH);
   if (!body.trim()) return null;
 
-  const createdAt = typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString();
+  const createdAt =
+    typeof o.createdAt === "string" && !Number.isNaN(Date.parse(o.createdAt))
+      ? o.createdAt
+      : new Date().toISOString();
 
   const replies: ValidatedReply[] = [];
   if (Array.isArray(o.replies)) {
     for (const r of o.replies) {
+      if (replies.length >= MAX_REPLIES_PER_COMMENT) break;
       const validated = validateReply(r);
       if (validated) replies.push(validated);
     }
@@ -153,7 +161,10 @@ export function validateReply(raw: unknown): ValidatedReply | null {
   const body = o.body.slice(0, MAX_COMMENT_BODY_LENGTH);
   if (!body.trim()) return null;
 
-  const createdAt = typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString();
+  const createdAt =
+    typeof o.createdAt === "string" && !Number.isNaN(Date.parse(o.createdAt))
+      ? o.createdAt
+      : new Date().toISOString();
 
   return { id: o.id, author, body, createdAt };
 }

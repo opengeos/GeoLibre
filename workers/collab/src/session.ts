@@ -729,14 +729,28 @@ export class CollabSession extends DurableObject<Env> {
       }
       sanitizedAction = { type: "reply", commentId: action.commentId, reply: validated };
     } else if (action.type === "toggle-resolve") {
-      if (typeof action.commentId !== "string" || !action.commentId) return;
+      if (typeof action.commentId !== "string" || !action.commentId) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid toggle-resolve target.",
+        });
+        return;
+      }
       sanitizedAction = {
         type: "toggle-resolve",
         commentId: action.commentId,
         ...(action.resolved !== undefined ? { resolved: action.resolved === true } : {}),
       };
     } else if (action.type === "delete") {
-      if (typeof action.commentId !== "string" || !action.commentId) return;
+      if (typeof action.commentId !== "string" || !action.commentId) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid delete target.",
+        });
+        return;
+      }
       sanitizedAction = { type: "delete", commentId: action.commentId };
     } else {
       return;
@@ -757,7 +771,11 @@ export class CollabSession extends DurableObject<Env> {
         let updatedComments = comments;
 
         if (sanitizedAction.type === "add") {
-          updatedComments = [...comments, sanitizedAction.comment as Record<string, unknown>];
+          const newComment = sanitizedAction.comment as Record<string, unknown>;
+          const exists = comments.some(
+            (c) => c && typeof c === "object" && c.id === newComment.id,
+          );
+          updatedComments = exists ? comments : [...comments, newComment];
         } else if (sanitizedAction.type === "reply") {
           const replyObj = sanitizedAction.reply as Record<string, unknown>;
           updatedComments = comments.map((c) => {
