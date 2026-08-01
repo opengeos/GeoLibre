@@ -36,11 +36,6 @@ m.add_geojson(
 )  # GeoDataFrame, dict, or JSON string
 m.fit_bounds([-123, 37, -122, 38])
 m.set_basemap("https://…/style.json")
-
-# Layer-targeted calls take a layer id. This client is fire-and-forget, so
-# `add_geojson` does not hand one back — see the note below.
-m.set_visibility(layer_id, False)
-m.remove_layer(layer_id)
 ```
 
 Calls are **fire-and-forget**: each posts a command to the host app over the
@@ -51,9 +46,13 @@ client source: `backend/geolibre_server/notebook_client.py`.
 
 > Read-back queries (e.g. `get_center`) are not exposed by this fire-and-forget
 > client; they need the blocking request/reply path the `geolibre` widget uses.
-> Layer ids come from the same path: this client's `add_geojson` returns
-> `None`, while the widget's ([`geolibre` package](python.md)) returns the new
-> layer's id — which is what the id-taking calls above expect.
+
+The client also has layer-targeted calls — `set_visibility(layer_id, visible)`,
+`set_opacity`, `set_style`, `remove_layer`, `zoom_to_layer` — but they are left
+out of the snippet above because there is no way to obtain a `layer_id` here:
+being fire-and-forget, this client's `add_geojson` returns `None`. Use them with
+an id from the blocking [`geolibre` widget](python.md), whose `add_geojson`
+returns the new layer's id.
 
 ## Driving the map from an external client (VS Code, …)
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
+import { setHistoryCoalesceMs } from "../packages/core/src/history";
 import { styleParamPatch } from "../apps/geolibre-desktop/src/lib/scripting/style-params";
 
 // The notebook client's `add_geojson(gdf, **style)` always sends a `style`
@@ -39,27 +40,56 @@ describe("styleParamPatch", () => {
   });
 });
 
+/** What the `addGeoJsonLayer` handler does with a raw `style` param. */
+function addGeoJsonCommand(name: string, style: unknown): string {
+  const layerId = useAppStore.getState().addGeoJsonLayer(name, FC);
+  const patch = styleParamPatch(style);
+  if (patch) useAppStore.getState().setLayerStyle(layerId, patch);
+  return layerId;
+}
+
 describe("addGeoJsonLayer command styling", () => {
   beforeEach(() => {
+    // 0 so each store write is its own history entry: with the app's default
+    // coalesce window the two writes of a styled add would merge and the guard
+    // below would pass whether or not it works.
+    setHistoryCoalesceMs(0);
     useAppStore.getState().newProject({ name: "Scripting" });
     useAppStore.temporal.getState().clear();
   });
 
+  afterEach(() => {
+    setHistoryCoalesceMs(400);
+  });
+
   it("merges an inline style into the new layer", () => {
-    const layerId = useAppStore.getState().addGeoJsonLayer("Styled", FC);
-    const style = styleParamPatch({ fillColor: "#facc15", strokeColor: "#d97706" });
-    assert.ok(style);
-    useAppStore.getState().setLayerStyle(layerId, style);
+    const layerId = addGeoJsonCommand("Styled", {
+      fillColor: "#facc15",
+      strokeColor: "#d97706",
+    });
 
     const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
     assert.equal(layer?.style?.fillColor, "#facc15");
     assert.equal(layer?.style?.strokeColor, "#d97706");
   });
 
-  it("costs a single undo step when no style kwargs were passed", () => {
-    const layerId = useAppStore.getState().addGeoJsonLayer("Plain", FC);
-    const style = styleParamPatch({});
-    if (style) useAppStore.getState().setLayerStyle(layerId, style);
+  it("writes nothing extra when no style kwargs were passed", () => {
+    const layerId = addGeoJsonCommand("Plain", {});
+
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+    useAppStore.temporal.getState().undo();
+    assert.equal(
+      useAppStore.getState().layers.find((item) => item.id === layerId),
+      undefined,
+    );
+  });
+
+  it("coalesces a styled add into one undo step at the app's window", () => {
+    // The two writes land in the same tick, so the leading debounce in the
+    // store's `handleSet` records only the first: one Ctrl+Z removes the
+    // styled layer outright rather than leaving an unstyled one behind.
+    setHistoryCoalesceMs(400);
+    const layerId = addGeoJsonCommand("Styled", { fillColor: "#facc15" });
 
     assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
     useAppStore.temporal.getState().undo();

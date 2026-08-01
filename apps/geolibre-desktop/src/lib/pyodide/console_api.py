@@ -197,8 +197,11 @@ class _GeoLibre:
         fc = _coerce_featurecollection(data)
         return _js.addGeoJsonLayer(_to_js({"name": name, "geojson": fc, "style": style}))
 
-    async def load_geojson(self, url, name="GeoJSON"):
-        """Fetch a GeoJSON URL and add it as a layer (async). Returns the id."""
+    async def load_geojson(self, url, name="GeoJSON", **style):
+        """Fetch a GeoJSON URL and add it as a layer (async). Returns the id.
+
+        Takes the same style overrides as :meth:`add_geojson`.
+        """
         from pyodide.http import pyfetch
 
         response = await pyfetch(url)
@@ -207,7 +210,7 @@ class _GeoLibre:
         if not response.ok:
             raise RuntimeError(f"Failed to fetch {url!r}: HTTP {response.status}")
         fc = _coerce_featurecollection(await response.json())
-        return _js.addGeoJsonLayer(_to_js({"name": name, "geojson": fc}))
+        return _js.addGeoJsonLayer(_to_js({"name": name, "geojson": fc, "style": style}))
 
     def remove_layer(self, layer_id):
         """Remove a layer by id."""
