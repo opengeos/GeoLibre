@@ -26,6 +26,18 @@ import { GEO_EDITOR_PLUGIN_ID } from "./plugins/maplibre-geo-editor";
  * cost is that this list is the thing to update: **a new plugin whose map
  * control writes to the project belongs here.** Adding one is cheap; missing
  * one is a viewer embed that can be drawn on.
+ *
+ * **A listed plugin must mount synchronously.** `PluginManager.activate` and
+ * `restoreProjectState` add a plugin to `active` before an async `activate()`
+ * has resolved (see `watchAsyncActivation`), and the viewer's guard reacts to
+ * that synchronous state: it calls `deactivate` in the same tick. A plugin that
+ * mounts its control behind a dynamic import would therefore be deactivated
+ * before the control existed, and the mount landing afterwards would leave a
+ * live authoring control in a read-only embed — the guard passing while the
+ * thing it guards against happens. Both plugins listed here return
+ * synchronously today (`tests/viewer-plugins.test.ts` checks they are not
+ * declared `async`). Making one async means teaching the guard to await the
+ * pending activation, not just adding the id.
  */
 export const VIEWER_BLOCKED_PLUGIN_IDS: readonly string[] = [
   GEO_EDITOR_PLUGIN_ID,
