@@ -753,7 +753,6 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
   );
 }
 
-
 /**
  * Strip storymap chapter enter/exit opacity rows that reference any of the
  * removed layer ids. Returns the same reference when nothing changes so
@@ -1954,9 +1953,7 @@ export const useAppStore = create<AppState>()(
             comments: removeChildren
               ? scrubCommentsForRemovedLayers(s.comments, removedIds)
               : s.comments,
-            legend: removeChildren
-              ? scrubLegendForRemovedLayers(s.legend, removedIds)
-              : s.legend,
+            legend: removeChildren ? scrubLegendForRemovedLayers(s.legend, removedIds) : s.legend,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,

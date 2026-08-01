@@ -1528,9 +1528,12 @@ export function applyProjectToStore(project: GeoLibreProject): {
 
   const orphanIds = new Set([...allReferencedIds].filter((id) => !existingLayerIds.has(id)));
 
-  const scrubbedWidgets = orphanIds.size > 0 ? scrubWidgetsForRemovedLayers(widgets, orphanIds) : widgets;
-  const scrubbedComments = orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
-  const scrubbedLegend = orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+  const scrubbedWidgets =
+    orphanIds.size > 0 ? scrubWidgetsForRemovedLayers(widgets, orphanIds) : widgets;
+  const scrubbedComments =
+    orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
+  const scrubbedLegend =
+    orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
 
   return {
     projectName: project.name,

@@ -65,8 +65,7 @@ export function scrubLegendForRemovedLayers(
   // --- overrides ---
   const overrides: Record<string, (typeof legend.overrides)[string]> = {};
   for (const [key, value] of Object.entries(legend.overrides)) {
-    const isRemoved =
-      removed.has(key) || [...removed].some((id) => key.startsWith(`${id}::`));
+    const isRemoved = removed.has(key) || [...removed].some((id) => key.startsWith(`${id}::`));
     if (isRemoved) {
       changed = true;
     } else {
