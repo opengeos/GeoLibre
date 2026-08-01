@@ -23,6 +23,26 @@ interface FakePort {
   closeCalls: number;
 }
 
+const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+
+/**
+ * Replace the whole `navigator` global rather than mutating the real one,
+ * matching the convention in tests/geolocation.test.ts. That keeps the stub
+ * from depending on the runtime providing an extensible `navigator`.
+ */
+function setSerialApi(serial: unknown): void {
+  Object.defineProperty(globalThis, "navigator", {
+    value: { userAgent: "node", serial },
+    configurable: true,
+    writable: true,
+  });
+}
+
+function restoreNavigator(): void {
+  if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+  else Reflect.deleteProperty(globalThis, "navigator");
+}
+
 /**
  * Install a fake `navigator.serial` whose port streams whatever the test
  * enqueues. Only the browser API boundary is faked; the transport, the parser,
@@ -49,20 +69,13 @@ function installFakeSerial(): { port: () => FakePort; restore: () => void } {
     fake = { controller, closeCalls: 0 };
     return port;
   };
-  const previous = Object.getOwnPropertyDescriptor(globalThis.navigator, "serial");
-  Object.defineProperty(globalThis.navigator, "serial", {
-    configurable: true,
-    value: { requestPort: async () => makePort() },
-  });
+  setSerialApi({ requestPort: async () => makePort() });
   return {
     port: () => {
       assert.ok(fake, "no port was requested");
       return fake;
     },
-    restore: () => {
-      if (previous) Object.defineProperty(globalThis.navigator, "serial", previous);
-      else Reflect.deleteProperty(globalThis.navigator as object, "serial");
-    },
+    restore: restoreNavigator,
   };
 }
 
@@ -142,16 +155,12 @@ describe("connectSerialNmea", () => {
   });
 
   it("classifies a dismissed port chooser as cancelled rather than a failure", async () => {
-    const previous = Object.getOwnPropertyDescriptor(globalThis.navigator, "serial");
-    Object.defineProperty(globalThis.navigator, "serial", {
-      configurable: true,
-      value: {
-        requestPort: async () => {
-          // What Chromium throws when the user dismisses the port picker.
-          const err = new Error("No port selected by the user.");
-          err.name = "NotFoundError";
-          throw err;
-        },
+    setSerialApi({
+      requestPort: async () => {
+        // What Chromium throws when the user dismisses the port picker.
+        const err = new Error("No port selected by the user.");
+        err.name = "NotFoundError";
+        throw err;
       },
     });
     try {
@@ -160,8 +169,7 @@ describe("connectSerialNmea", () => {
         (err: unknown) => err instanceof NmeaError && err.cancelled && err.code === "cancelled",
       );
     } finally {
-      if (previous) Object.defineProperty(globalThis.navigator, "serial", previous);
-      else Reflect.deleteProperty(globalThis.navigator as object, "serial");
+      restoreNavigator();
     }
   });
 });
