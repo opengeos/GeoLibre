@@ -538,9 +538,12 @@ export function GpsTrackingDialog({
   }, []);
 
   /** Close the NMEA connection, if any, and clear its readout. */
-  const disconnectNmea = useCallback(async () => {
-    // Any connect still in flight is now stale; see connectGenerationRef.
-    connectGenerationRef.current += 1;
+  /**
+   * Release the live connection and clear its readout, leaving the generation
+   * alone. Split from {@link disconnectNmea} so a connect attempt can close a
+   * previous connection without invalidating the generation it just claimed.
+   */
+  const closeNmea = useCallback(async () => {
     const conn = nmeaConnRef.current;
     nmeaConnRef.current = null;
     setNmeaLabel(null);
@@ -559,6 +562,12 @@ export function GpsTrackingDialog({
     }
   }, []);
 
+  /** Abandon any in-flight connect as well as closing the live connection. */
+  const disconnectNmea = useCallback(async () => {
+    connectGenerationRef.current += 1;
+    await closeNmea();
+  }, [closeNmea]);
+
   /**
    * Open an NMEA receiver and start tracking from it. Both transports show a
    * browser device chooser, so this must run from a user gesture; a dismissed
@@ -568,20 +577,29 @@ export function GpsTrackingDialog({
     async (transport: NmeaTransport) => {
       setError(null);
       setNotice(null);
-      // Supersede any earlier attempt, then claim this attempt's indicator and
-      // generation. Claiming after the disconnect matters: disconnectNmea
-      // resets `connecting`, so setting it first would wipe it immediately.
-      // disconnectNmea swallows close failures, so it cannot reject here.
-      await disconnectNmea();
-      setConnecting(transport);
-      const generation = connectGenerationRef.current;
+      // Claim a generation synchronously, before the first await: closing the
+      // previous connection suspends, and two invocations that both captured
+      // afterwards would read the same value and both believe they are current.
+      const generation = ++connectGenerationRef.current;
       const isStale = () => generation !== connectGenerationRef.current;
+      // Closes the previous connection without invalidating the generation
+      // just claimed, and cannot reject (closeNmea swallows close failures).
+      await closeNmea();
+      if (isStale()) return;
+      setConnecting(transport);
       try {
         const handlers = {
-          onFix: handleFix,
+          // Both callbacks are generation-guarded: the transport starts reading
+          // before this function commits the connection, so a superseded
+          // attempt could otherwise re-create overlays teardown had cleared, or
+          // tear down a newer connection that replaced it.
+          onFix: (fix: GpsFix) => {
+            if (!isStale()) handleFix(fix);
+          },
           // A dropped device or a read failure stops the session rather than
           // leaving a stale position on the map.
           onError: (err: NmeaError) => {
+            if (isStale()) return;
             setError(nmeaErrorText(err, t));
             setTracking(false);
             void disconnectNmea();
@@ -615,7 +633,7 @@ export function GpsTrackingDialog({
         if (!isStale()) setConnecting(null);
       }
     },
-    [baudRate, disconnectNmea, handleFix, t],
+    [baudRate, closeNmea, disconnectNmea, handleFix, t],
   );
 
   // Poll the assembler's counters while connected so the readout shows the
