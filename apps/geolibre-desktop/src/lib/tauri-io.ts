@@ -49,6 +49,7 @@ import {
 import {
   registerKmlSuperOverlay,
   setKmlSuperOverlayResolver,
+  unregisterKmlSuperOverlay,
   type KmlSuperOverlayTile,
 } from "./kml-super-overlay";
 import {
@@ -1342,9 +1343,15 @@ async function loadKmzLayers(
   // *vector* regionated KML is built, so the pyramid is only claimed once its
   // raster tiles actually resolve; anything else falls through to the normal
   // overlay/vector parse below rather than failing the whole import.
-  // The pyramid's tiles are the overlays inside its `<Region>` nodes; an overlay
-  // anywhere else (a legend, an inset, a full-extent image) is not part of it
-  // and must not be given a pyramid level or folded into its bounds.
+  // A pyramid node is a KML doc carrying a `<Region>`, and its overlays are that
+  // level's tiles. The grain is deliberately the document, not the element: KML
+  // attaches a `<Region>` to the enclosing Feature, so a gdal2tiles node's
+  // `<GroundOverlay>` is the Region's *sibling*, and filtering by containment
+  // would reject every real tile. A doc with no Region holds no tiles, so its
+  // overlays (a legend, an inset, a full-extent image) load as their own image
+  // layers instead of being given a pyramid level and folded into its bounds.
+  // The residual gap is a hand-composed node that bundles an unrelated overlay
+  // beside its tile; that one would still be swept in.
   const regionDocs = kmlDocs.filter((doc) => KML_REGION.test(doc.text));
   const superOverlayTiles = looksLikeSuperOverlay(kmlDocs)
     ? superOverlayTilesFromKmz(entries, regionDocs)
@@ -1356,36 +1363,45 @@ async function loadKmzLayers(
       // browser File has no re-readable path and gets a session-only key.
       ...(isAbsoluteLocalPath(path) ? { key: path } : {}),
     });
-    // A composite export can carry standalone overlays, placemarks, or models
-    // alongside its raster pyramid; returning only the tile layer would
-    // silently drop them. The standalone overlays draw above the imagery.
-    const plainDocs = kmlDocs.filter((doc) => !KML_REGION.test(doc.text));
-    const layers: LoadedLayer[] = [
-      {
-        kind: "kml-super-overlay",
-        name: `${pathWithoutExtension(fileBaseName(path))} Super-Overlay`,
-        path,
-        ...source,
-      },
-      ...(plainDocs.length > 0 ? await groundOverlaysFromKmz(entries, plainDocs, path) : []),
-      ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
-    ];
-    const placemarkEntries = placemarkKmlEntries(entries, kmlDocs);
-    if (placemarkEntries) {
-      try {
-        const features = await kmzVectorFeatures(
-          readKmlEntries(placemarkEntries),
-          entries,
-          options,
-        );
-        if (features.features.length > 0) layers.push({ data: features, path });
-      } catch (error) {
-        // Declining the oversized-vector prompt must not throw away the
-        // pyramid, which is already registered and loads on its own.
-        if (!isVectorLoadCancelled(error)) throw error;
+    try {
+      // A composite export can carry standalone overlays, placemarks, or models
+      // alongside its raster pyramid; returning only the tile layer would
+      // silently drop them. The standalone overlays draw above the imagery.
+      const plainDocs = kmlDocs.filter((doc) => !KML_REGION.test(doc.text));
+      const layers: LoadedLayer[] = [
+        {
+          kind: "kml-super-overlay",
+          name: `${pathWithoutExtension(fileBaseName(path))} Super-Overlay`,
+          path,
+          ...source,
+        },
+        ...(plainDocs.length > 0 ? await groundOverlaysFromKmz(entries, plainDocs, path) : []),
+        ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
+      ];
+      const placemarkEntries = placemarkKmlEntries(entries, kmlDocs);
+      if (placemarkEntries) {
+        try {
+          const features = await kmzVectorFeatures(
+            readKmlEntries(placemarkEntries),
+            entries,
+            options,
+          );
+          if (features.features.length > 0) layers.push({ data: features, path });
+        } catch (error) {
+          // Declining the oversized-vector prompt must not throw away the
+          // pyramid, which is already registered and loads on its own.
+          if (!isVectorLoadCancelled(error)) throw error;
+        }
       }
+      return layers;
+    } catch (error) {
+      // The caller never gets the layer, so nothing will ever reference the
+      // tile URL — and an archive that never goes live is never pruned. Free
+      // it here or a failed import (e.g. an unreadable bundled `.dae`) pins
+      // the whole pyramid's bytes for the session.
+      unregisterKmlSuperOverlay(source.url);
+      throw error;
     }
-    return layers;
   }
 
   // Ground overlays are drawn under vector placemarks (as in Google Earth), so
