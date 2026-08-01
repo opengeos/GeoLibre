@@ -289,18 +289,27 @@ function parseToolParams(value: unknown): Record<string, string> {
  * @param expression - The array the host sent.
  * @returns The compile problem, or null when the expression is usable.
  */
-function filterExpressionProblem(expression: unknown[]): string | null {
+function checkFilterExpression(
+  expression: unknown[],
+): { expression: unknown[] } | { error: string } {
   let source: string;
   try {
     source = JSON.stringify(expression);
   } catch {
     // Structured clone preserves cycles, so an array that cannot be serialized
     // can genuinely arrive here.
-    return "the expression is not serializable";
+    return { error: "the expression is not serializable" };
   }
   const validation = validateMapExpression(source, { expectedType: "boolean" });
-  if (validation.ok) return null;
-  return validation.errors.join("; ") || "not a MapLibre filter expression";
+  if (!validation.ok) {
+    return { error: validation.errors.join("; ") || "not a MapLibre filter expression" };
+  }
+  // Return what was compiled, not what arrived. `JSON.stringify` rewrites
+  // `undefined`, `NaN`, and `Infinity` — all of which survive a structured
+  // clone — as `null`, so the host's array and the array the style spec
+  // approved can differ. Storing the original would mean `layer-sync` applies a
+  // value the `ok` ack never actually covered.
+  return { expression: validation.parsed ?? expression };
 }
 
 /**
@@ -466,12 +475,13 @@ export function parseEmbedRequest(
       if (!layerId || (expression !== null && !Array.isArray(expression))) {
         return fail("setFilter: expected layerId and a MapLibre expression array or null");
       }
-      if (expression !== null) {
-        const problem = filterExpressionProblem(expression);
-        if (problem) return fail(`setFilter: ${problem}`);
+      if (expression === null) {
+        return { command: { type: "setFilter", layerId, expression: null }, requestId };
       }
+      const checked = checkFilterExpression(expression);
+      if ("error" in checked) return fail(`setFilter: ${checked.error}`);
       return {
-        command: { type: "setFilter", layerId, expression },
+        command: { type: "setFilter", layerId, expression: checked.expression },
         requestId,
       };
     }

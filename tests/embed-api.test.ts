@@ -249,6 +249,21 @@ describe("parseEmbedRequest: setFilter", () => {
     assert.match(mistyped.error, /Cannot compare types/);
   });
 
+  it("stores the expression the style spec compiled, not the raw one", () => {
+    // `undefined`, `NaN`, and `Infinity` survive a structured clone but become
+    // `null` in the JSON the compile sees. layer-sync has to get the array that
+    // was actually checked, or the `ok` ack covers a value nothing validated.
+    const parsed = parseEmbedRequest(
+      message("setFilter", { layerId: "roads", expression: ["==", ["get", "x"], undefined] }),
+    );
+    assert.ok(parsed && !("error" in parsed));
+    assert.deepEqual(parsed.command, {
+      type: "setFilter",
+      layerId: "roads",
+      expression: ["==", ["get", "x"], null],
+    });
+  });
+
   it("rejects an empty expression rather than storing a filter that does nothing", () => {
     const parsed = parseEmbedRequest(message("setFilter", { layerId: "roads", expression: [] }));
     assert.ok(parsed && "error" in parsed);

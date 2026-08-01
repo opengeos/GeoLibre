@@ -268,8 +268,10 @@ function combineExternalFilters(
 }
 
 /**
- * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window and
- * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter})
+ * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window, the
+ * embed API's host-set `setFilter` expression, and the rule-based
+ * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}, and
+ * {@link externalFeatureFilterExtras} for the set this reads)
  * — on an external-native vector layer that a control owns and paints itself
  * (e.g. the Add Vector Layer control). The control segregates geometry across
  * its own native layers with a base filter such as
@@ -280,7 +282,8 @@ function combineExternalFilters(
  *
  * @param map - The MapLibre map.
  * @param nativeLayerId - A control-owned native layer id.
- * @param layer - The store layer (reads `timeFilter` and the rule filter).
+ * @param layer - The store layer (reads `timeFilter`, `embedFilter`, and the
+ *   rule filter).
  */
 function applyExternalNativeFeatureFilters(
   map: maplibregl.Map,
