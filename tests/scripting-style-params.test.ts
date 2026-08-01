@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
-import { setHistoryCoalesceMs } from "../packages/core/src/history";
+import { getHistoryCoalesceMs, setHistoryCoalesceMs } from "../packages/core/src/history";
 import { styleParamPatch } from "../apps/geolibre-desktop/src/lib/scripting/style-params";
 
 // The notebook client's `add_geojson(gdf, **style)` always sends a `style`
@@ -40,6 +40,11 @@ describe("styleParamPatch", () => {
   });
 });
 
+// Captured before any test changes it, so the app's real window is what the
+// coalescing case exercises and what cleanup restores — not a copy of it that
+// would go stale if the default moved.
+const APP_COALESCE_MS = getHistoryCoalesceMs();
+
 /** What the `addGeoJsonLayer` handler does with a raw `style` param. */
 function addGeoJsonCommand(name: string, style: unknown): string {
   const layerId = useAppStore.getState().addGeoJsonLayer(name, FC);
@@ -59,7 +64,7 @@ describe("addGeoJsonLayer command styling", () => {
   });
 
   afterEach(() => {
-    setHistoryCoalesceMs(400);
+    setHistoryCoalesceMs(APP_COALESCE_MS);
   });
 
   it("merges an inline style into the new layer", () => {
@@ -88,7 +93,7 @@ describe("addGeoJsonLayer command styling", () => {
     // The two writes land in the same tick, so the leading debounce in the
     // store's `handleSet` records only the first: one Ctrl+Z removes the
     // styled layer outright rather than leaving an unstyled one behind.
-    setHistoryCoalesceMs(400);
+    setHistoryCoalesceMs(APP_COALESCE_MS);
     const layerId = addGeoJsonCommand("Styled", { fillColor: "#facc15" });
 
     assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
