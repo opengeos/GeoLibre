@@ -46,7 +46,9 @@ export function isAllowedTilesUpstreamUrl(url: string): boolean {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
     const candidate = `${parsed.origin}${parsed.pathname}`;
-    return TILES_ALLOWED_URL_PREFIXES.some((prefix) => candidate.startsWith(prefix));
+    return TILES_ALLOWED_URL_PREFIXES.some((prefix) =>
+      prefix.endsWith("/") ? candidate.startsWith(prefix) : candidate === prefix,
+    );
   } catch {
     return false;
   }

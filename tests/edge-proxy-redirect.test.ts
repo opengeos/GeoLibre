@@ -119,6 +119,14 @@ describe("tiles allowlisted fetch", () => {
     assert.equal(isAllowedTilesUpstreamUrl("https://api.openaerialmap.org/meta"), true);
     assert.equal(isAllowedTilesUpstreamUrl("https://evil.example/meta"), false);
     assert.equal(
+      isAllowedTilesUpstreamUrl("https://data.humdata.org/api/3/action/package_search"),
+      true,
+    );
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://data.humdata.org/api/3/action/package_search_v2"),
+      false,
+    );
+    assert.equal(
       isAllowedTilesUpstreamUrl(
         "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-color/0/0/0.png",
       ),

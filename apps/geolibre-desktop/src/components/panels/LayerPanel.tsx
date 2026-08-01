@@ -2433,6 +2433,25 @@ export function LayerPanel({
     [updateLayer],
   );
 
+  const setRefreshFailurePolicy = useCallback(
+    (layer: GeoLibreLayer, onFailure: "keep-last" | "clear") => {
+      const latest =
+        useAppStore.getState().layers.find((candidate) => candidate.id === layer.id) ?? layer;
+      const config = getLayerRefreshConfig(latest);
+      updateLayer(layer.id, {
+        ...setLayerRefreshConfig(latest, config),
+        connection: {
+          layerId: layer.id,
+          interval: config.enabled ? config.intervalMs / 1000 : null,
+          lastSyncedAt: latest.connection?.lastSyncedAt ?? null,
+          lastError: latest.connection?.lastError ?? null,
+          onFailure,
+        },
+      });
+    },
+    [updateLayer],
+  );
+
   const toggleWatchLayer = useCallback(
     (layer: GeoLibreLayer, enabled: boolean) => {
       // Read the latest layer so a concurrent reload's metadata is not
@@ -4191,6 +4210,22 @@ export function LayerPanel({
                   )}
                 </div>
               )}
+              <Label htmlFor="layer-refresh-failure-policy">
+                {t("layers.refreshFailurePolicy")}
+              </Label>
+              <Select
+                id="layer-refresh-failure-policy"
+                value={refreshSettingsLayer.connection?.onFailure ?? "keep-last"}
+                onChange={(event) =>
+                  setRefreshFailurePolicy(
+                    refreshSettingsLayer,
+                    event.target.value === "clear" ? "clear" : "keep-last",
+                  )
+                }
+              >
+                <option value="keep-last">{t("layers.refreshFailureKeepLast")}</option>
+                <option value="clear">{t("layers.refreshFailureClear")}</option>
+              </Select>
             </div>
           )}
           <div className="flex justify-end">
