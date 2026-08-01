@@ -60,7 +60,9 @@ export function CommentThread({
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: comment.author?.color || "#3b82f6" }}
           />
-          <span className="font-semibold text-foreground truncate">{comment.author?.name || "Author"}</span>
+          <span className="font-semibold text-foreground truncate">
+            {comment.author?.name || "Author"}
+          </span>
           <span className="text-[10px] text-muted-foreground">
             {new Date(comment.createdAt).toLocaleDateString(undefined, {
               month: "short",
@@ -116,7 +118,10 @@ export function CommentThread({
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                 onClick={() => {
-                  if (typeof window !== "undefined" && window.confirm(t("comments.confirmDelete"))) {
+                  if (
+                    typeof window !== "undefined" &&
+                    window.confirm(t("comments.confirmDelete"))
+                  ) {
                     onDelete(comment.id);
                   }
                 }}
@@ -184,8 +189,8 @@ export function CommentThread({
       )}
 
       {/* Reply Trigger or Reply Form */}
-      {!readOnly && (
-        !isReplying ? (
+      {!readOnly &&
+        (!isReplying ? (
           <Button
             type="button"
             variant="ghost"
@@ -224,8 +229,7 @@ export function CommentThread({
               </Button>
             </div>
           </form>
-        )
-      )}
+        ))}
     </div>
   );
 }
