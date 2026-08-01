@@ -1,22 +1,56 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature } from "geojson";
+import type { GeoLibreLayer } from "@geolibre/core";
+import type { AddLayerSpec } from "@geolibre/embed";
 import {
   EMBED_API_SOURCE,
   EMBED_API_VERSION,
   EMBED_ORIGINS_ENV,
   buildEmbedEvent,
+  buildEmbedLayer,
+  embedLayerSummaries,
   isEmbedOriginAllowed,
   parseEmbedOrigins,
   parseEmbedRequest,
   readEmbedOrigins,
+  requireEmbedLayer,
   resolveHighlightIds,
   type EmbedHighlightTarget,
 } from "../apps/geolibre-desktop/src/lib/embed-api";
 
+/** A tile template that satisfies the addLayer renderable-source check. */
+const XYZ_TILE_URL = "https://tiles.example.com/{z}/{x}/{y}.png";
+
 /** Build an inbound host message with the right envelope by default. */
 function message(type: string, payload?: unknown, extra: Record<string, unknown> = {}) {
   return { v: EMBED_API_VERSION, type, payload, ...extra };
+}
+
+/** A minimal store layer, enough for the layer-facing command helpers. */
+function layer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+  return {
+    id: "roads",
+    name: "Roads",
+    type: "xyz",
+    source: { tiles: [XYZ_TILE_URL] },
+    visible: true,
+    opacity: 1,
+    style: {} as GeoLibreLayer["style"],
+    metadata: {},
+    ...patch,
+  } as GeoLibreLayer;
+}
+
+/** A valid `addLayer` spec, as `parseEmbedRequest` would have accepted it. */
+function addLayerSpec(patch: Partial<AddLayerSpec> = {}): AddLayerSpec {
+  return {
+    id: "runtime",
+    name: "Runtime",
+    type: "xyz",
+    source: { tiles: [XYZ_TILE_URL] },
+    ...patch,
+  };
 }
 
 function highlightTarget(patch: Partial<EmbedHighlightTarget> = {}): EmbedHighlightTarget {
@@ -164,13 +198,13 @@ describe("parseEmbedRequest: v2 commands", () => {
     assert.deepEqual(
       parseEmbedRequest(
         message("addLayer", {
-          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [] } },
+          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [XYZ_TILE_URL] } },
         }),
       ),
       {
         command: {
           type: "addLayer",
-          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [] } },
+          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [XYZ_TILE_URL] } },
         },
         requestId: null,
       },
@@ -179,6 +213,128 @@ describe("parseEmbedRequest: v2 commands", () => {
       command: { type: "exportImage" },
       requestId: null,
     });
+  });
+});
+
+describe("parseEmbedRequest: addLayer", () => {
+  it("rejects a spec whose source carries nothing renderable", () => {
+    // An `xyz` layer whose source has no usable tile template would be acked as
+    // a success and then render nothing, so it is refused up front instead.
+    assert.deepEqual(
+      parseEmbedRequest(message("addLayer", { spec: addLayerSpec({ source: { tiles: [] } }) })),
+      {
+        error: 'addLayer: a "xyz" layer needs a source with a url, tiles, or inline data',
+        requestId: null,
+      },
+    );
+    assert.deepEqual(
+      parseEmbedRequest(message("addLayer", { spec: addLayerSpec({ source: { minzoom: 0 } }) })),
+      {
+        error: 'addLayer: a "xyz" layer needs a source with a url, tiles, or inline data',
+        requestId: null,
+      },
+    );
+  });
+
+  it("accepts inline features on the spec or on the source", () => {
+    const empty = { type: "FeatureCollection", features: [] };
+    for (const spec of [
+      addLayerSpec({ type: "geojson", source: {}, geojson: empty }),
+      addLayerSpec({ type: "geojson", source: { type: "geojson", data: empty } }),
+      addLayerSpec({ type: "cog", source: { url: "https://x/y.tif" } }),
+    ]) {
+      const parsed = parseEmbedRequest(message("addLayer", { spec }));
+      assert.ok(parsed && !("error" in parsed), `expected ${spec.type} to parse`);
+    }
+  });
+});
+
+describe("requireEmbedLayer", () => {
+  it("returns the named layer", () => {
+    const roads = layer();
+    assert.equal(requireEmbedLayer([layer({ id: "parcels" }), roads], "roads"), roads);
+  });
+
+  it("throws the ack message a host sees for an unknown layer", () => {
+    // The failure `setLayerVisibility`, `setFilter`, and `highlightFeature` all
+    // report when the host names a layer the project no longer has.
+    assert.throws(() => requireEmbedLayer([layer()], "missing"), /No layer with id "missing"/);
+    assert.throws(() => requireEmbedLayer([], "roads"), /No layer with id "roads"/);
+  });
+});
+
+describe("embedLayerSummaries", () => {
+  it("projects only the fields listLayers publishes", () => {
+    assert.deepEqual(
+      embedLayerSummaries([
+        layer({ opacity: 0.5, geojson: { type: "FeatureCollection", features: [] } }),
+        layer({ id: "parcels", name: "Parcels", type: "geojson", visible: false }),
+      ]),
+      [
+        { id: "roads", name: "Roads", type: "xyz", visible: true, opacity: 0.5 },
+        { id: "parcels", name: "Parcels", type: "geojson", visible: false, opacity: 1 },
+      ],
+    );
+  });
+});
+
+describe("buildEmbedLayer", () => {
+  it("fills the store defaults a spec left out", () => {
+    assert.deepEqual(buildEmbedLayer(addLayerSpec(), []), {
+      id: "runtime",
+      name: "Runtime",
+      type: "xyz",
+      source: { tiles: [XYZ_TILE_URL] },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: {},
+    });
+  });
+
+  it("keeps the optional blocks a spec did supply", () => {
+    const geojson = { type: "FeatureCollection", features: [] };
+    assert.deepEqual(
+      buildEmbedLayer(
+        addLayerSpec({
+          visible: false,
+          opacity: 0.25,
+          style: { color: "#ff0000" },
+          metadata: { note: "from the host" },
+          geojson,
+          beforeId: "basemap",
+        }),
+        [],
+      ),
+      {
+        id: "runtime",
+        name: "Runtime",
+        type: "xyz",
+        source: { tiles: [XYZ_TILE_URL] },
+        visible: false,
+        opacity: 0.25,
+        style: { color: "#ff0000" },
+        metadata: { note: "from the host" },
+        geojson,
+        beforeId: "basemap",
+      },
+    );
+  });
+
+  it("refuses an id already in the project", () => {
+    assert.throws(
+      () => buildEmbedLayer(addLayerSpec({ id: "roads" }), [layer()]),
+      /A layer with id "roads" already exists/,
+    );
+  });
+
+  it("refuses a type no renderer knows", () => {
+    // A made-up type would be added to the store and listed by `listLayers`,
+    // but `layer-sync` has no branch for it, so nothing would ever draw.
+    assert.throws(
+      () => buildEmbedLayer(addLayerSpec({ type: "wobble" }), []),
+      /Unsupported layer type "wobble"/,
+    );
   });
 });
 

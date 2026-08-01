@@ -1,14 +1,16 @@
-import { LAYER_TYPES, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
 import { captureMapImage } from "../lib/print-layout-export";
 import {
   EMBED_ORIGIN_WILDCARD,
   buildEmbedEvent,
+  buildEmbedLayer,
+  embedLayerSummaries,
   isEmbedOriginAllowed,
   parseEmbedRequest,
   readEmbedOrigins,
+  requireEmbedLayer,
   resolveHighlightIds,
   type EmbedCommand,
   type EmbedEventType,
@@ -189,11 +191,8 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       state.setProcessingOpen(true);
     };
 
-    const requireLayer = (layerId: string) => {
-      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (!layer) throw new Error(`No layer with id "${layerId}"`);
-      return layer;
-    };
+    const requireLayer = (layerId: string) =>
+      requireEmbedLayer(useAppStore.getState().layers, layerId);
 
     const runCommand = async (command: EmbedCommand): Promise<unknown> => {
       switch (command.type) {
@@ -214,13 +213,7 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
           useAppStore.getState().setLayerVisibility(command.layerId, command.visible);
           return;
         case "listLayers":
-          return useAppStore.getState().layers.map(({ id, name, type, visible, opacity }) => ({
-            id,
-            name,
-            type,
-            visible,
-            opacity,
-          }));
+          return embedLayerSummaries(useAppStore.getState().layers);
         case "setFilter":
           requireLayer(command.layerId);
           useAppStore.getState().updateLayer(command.layerId, {
@@ -234,26 +227,8 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
         }
         case "addLayer": {
           const state = useAppStore.getState();
-          if (state.layers.some((layer) => layer.id === command.spec.id)) {
-            throw new Error(`A layer with id "${command.spec.id}" already exists`);
-          }
-          const spec = command.spec;
-          if (!(LAYER_TYPES as readonly string[]).includes(spec.type)) {
-            throw new Error(`Unsupported layer type "${spec.type}"`);
-          }
-          const layer: GeoLibreLayer = {
-            id: spec.id,
-            name: spec.name,
-            type: spec.type as GeoLibreLayer["type"],
-            source: spec.source,
-            visible: spec.visible ?? true,
-            opacity: spec.opacity ?? 1,
-            style: (spec.style ?? {}) as unknown as GeoLibreLayer["style"],
-            metadata: spec.metadata ?? {},
-            ...(spec.geojson ? { geojson: spec.geojson as GeoLibreLayer["geojson"] } : {}),
-            ...(spec.beforeId ? { beforeId: spec.beforeId } : {}),
-          };
-          state.addLayer(layer, spec.beforeId);
+          const layer = buildEmbedLayer(command.spec, state.layers);
+          state.addLayer(layer, command.spec.beforeId);
           return layer.id;
         }
         case "exportImage": {

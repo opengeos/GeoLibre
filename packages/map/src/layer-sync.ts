@@ -145,10 +145,12 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
 /**
  * Combine a sub-layer's geometry filter with the layer's per-feature filters:
  * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
- * only renders features inside the current timeline window) and the rule-based
- * visibility filter (a rule-based layer whose else rule is switched off hides
- * features matching no rule — see {@link ruleBasedVisibilityFilter}). Returns
- * the geometry filter unchanged when neither applies, so the common path
+ * only renders features inside the current timeline window), the transient
+ * {@link GeoLibreLayer.embedFilter} (the embed API's `setFilter`, set by the
+ * host page that frames the app), and the rule-based visibility filter (a
+ * rule-based layer whose else rule is switched off hides features matching no
+ * rule — see {@link ruleBasedVisibilityFilter}). Returns the geometry filter
+ * unchanged when none applies, so the common path
  * produces an identical spec and `ensureLayer` performs no filter update.
  *
  * Aggregate cluster layers (the bubble and its count) intentionally do not pass
@@ -230,9 +232,9 @@ function nativeLayerSupportsFilter(type: string): boolean {
 
 /**
  * The active per-feature filters GeoLibre applies on top of an external
- * layer's own filters: the transient Time-Slider window and the rule-based
- * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}). Empty when
- * neither applies.
+ * layer's own filters: the transient Time-Slider window, the embed API's
+ * host-set `setFilter` expression, and the rule-based hide-unmatched filter
+ * (see {@link ruleBasedVisibilityFilter}). Empty when none applies.
  */
 function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   const extras: unknown[] = [];

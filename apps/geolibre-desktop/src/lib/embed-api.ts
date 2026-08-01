@@ -13,7 +13,8 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
-import { LAYER_TYPES } from "@geolibre/core";
+import { LAYER_TYPES, hasRestorableLayerSource } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
 export { EMBED_API_SOURCE, EMBED_API_VERSION };
@@ -274,6 +275,30 @@ function parseToolParams(value: unknown): Record<string, string> {
 }
 
 /**
+ * Whether an `addLayer` spec carries anything the map could actually render:
+ * a re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
+ * same predicate the Layer Library uses) or inline features, either on the spec
+ * or as a `data` object on the source.
+ *
+ * Without this a spec whose `source` does not match its `type` (say `xyz` with
+ * no `tiles`) would be acked as a success, pushed into the store, listed by
+ * `listLayers`, and then quietly render nothing — `layer-sync` has no fallback
+ * for a source it cannot read. Rejecting it here turns that into an error the
+ * host sees on the call it made.
+ */
+function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
+  if (isRecord(spec.geojson)) return true;
+  const source = isRecord(spec.source) ? spec.source : {};
+  // Inline GeoJSON is an object on `source.data`, which the string-valued
+  // `hasRestorableLayerSource` check below does not count.
+  if (isRecord(source.data)) return true;
+  return hasRestorableLayerSource({
+    source,
+    metadata: isRecord(spec.metadata) ? spec.metadata : {},
+  });
+}
+
+/**
  * Validate an inbound `postMessage` payload as an embed-API request.
  *
  * A message must carry the protocol version and a known verb; anything else
@@ -372,6 +397,11 @@ export function parseEmbedRequest(
       ) {
         return fail("addLayer: invalid project layer specification");
       }
+      if (!hasRenderableEmbedSource(spec)) {
+        return fail(
+          `addLayer: a "${spec.type}" layer needs a source with a url, tiles, or inline data`,
+        );
+      }
       return {
         command: { type: "addLayer", spec: spec as unknown as AddLayerSpec },
         requestId,
@@ -422,4 +452,77 @@ export function resolveHighlightIds(
     if (!ids.includes(id)) ids.push(id);
   });
   return ids;
+}
+
+/**
+ * Resolve the layer a command names, or throw the message the host receives in
+ * its `ack`. Shared by `setLayerVisibility`, `setFilter`, and `highlightFeature`
+ * so a stale layer id fails the same way for all three.
+ *
+ * @param layers - The store's layers.
+ * @param layerId - The id the host sent.
+ */
+export function requireEmbedLayer(layers: GeoLibreLayer[], layerId: string): GeoLibreLayer {
+  const layer = layers.find((item) => item.id === layerId);
+  if (!layer) throw new Error(`No layer with id "${layerId}"`);
+  return layer;
+}
+
+/** One entry of the `listLayers` result. */
+export interface EmbedLayerSummary {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  opacity: number;
+}
+
+/**
+ * Project the store's layers down to the fields `listLayers` returns. Kept
+ * narrow deliberately: the full layer record carries styles, features, and
+ * local file paths that a host has no business reading.
+ *
+ * @param layers - The store's layers, in map order.
+ */
+export function embedLayerSummaries(layers: GeoLibreLayer[]): EmbedLayerSummary[] {
+  return layers.map(({ id, name, type, visible, opacity }) => ({
+    id,
+    name,
+    type,
+    visible,
+    opacity,
+  }));
+}
+
+/**
+ * Build the store layer an `addLayer` spec describes.
+ *
+ * The spec was already validated by {@link parseEmbedRequest}; the checks
+ * repeated here are the ones that need the current store — a duplicate id — plus
+ * the layer-type gate, which stays as a second line of defence because the cast
+ * below is what puts the value in front of every renderer.
+ *
+ * @param spec - The validated spec from the host.
+ * @param layers - The store's current layers, checked for an id collision.
+ * @throws When the id is taken or the type is not a known layer type.
+ */
+export function buildEmbedLayer(spec: AddLayerSpec, layers: GeoLibreLayer[]): GeoLibreLayer {
+  if (layers.some((layer) => layer.id === spec.id)) {
+    throw new Error(`A layer with id "${spec.id}" already exists`);
+  }
+  if (!(LAYER_TYPES as readonly string[]).includes(spec.type)) {
+    throw new Error(`Unsupported layer type "${spec.type}"`);
+  }
+  return {
+    id: spec.id,
+    name: spec.name,
+    type: spec.type as GeoLibreLayer["type"],
+    source: spec.source,
+    visible: spec.visible ?? true,
+    opacity: spec.opacity ?? 1,
+    style: (spec.style ?? {}) as unknown as GeoLibreLayer["style"],
+    metadata: spec.metadata ?? {},
+    ...(spec.geojson ? { geojson: spec.geojson as GeoLibreLayer["geojson"] } : {}),
+    ...(spec.beforeId ? { beforeId: spec.beforeId } : {}),
+  };
 }
