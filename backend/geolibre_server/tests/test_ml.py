@@ -231,3 +231,70 @@ def test_segment_forwards_request_to_backend(monkeypatch):
     assert forwarded and forwarded[0][1] == "http://backend:9/segment/text"
     # The original multipart body is streamed through unchanged.
     assert b"fakebytes" in forwarded[0][2]
+
+
+# --- concurrency cap -------------------------------------------------------
+
+
+def test_segment_rejects_when_in_flight_cap_reached(monkeypatch):
+    """A new segmentation request is refused with 429 when in-flight work is at the cap."""
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    monkeypatch.setattr(ml, "MAX_IN_FLIGHT_SEGMENT_REQUESTS", 1)
+    monkeypatch.setattr(ml, "_segment_in_flight", 1)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/ml/segment/text",
+        files={"file": ("a.tif", b"fakebytes", "image/tiff")},
+        data={"prompt": "tree"},
+    )
+    assert resp.status_code == 429
+    assert "Too many segmentation requests" in resp.json()["detail"]
+
+
+def test_segment_releases_slot_after_success(monkeypatch):
+    """The in-flight counter is decremented after a successful proxy request."""
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    _FakeHttpx.calls.clear()
+    monkeypatch.setattr(ml, "_require_httpx", lambda: _FakeHttpx)
+    monkeypatch.setattr(ml, "_ensure_server", lambda: "http://backend:9")
+    monkeypatch.setattr(ml, "MAX_IN_FLIGHT_SEGMENT_REQUESTS", 4)
+    monkeypatch.setattr(ml, "_segment_in_flight", 0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/ml/segment/text",
+        files={"file": ("a.tif", b"bytes", "image/tiff")},
+    )
+    assert resp.status_code == 200
+    assert ml._segment_in_flight == 0
+
+
+def test_segment_rejects_oversized_body(monkeypatch):
+    """A request with Content-Length above the cap is refused with 413."""
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    monkeypatch.setattr(ml, "MAX_IN_FLIGHT_SEGMENT_REQUESTS", 4)
+    monkeypatch.setattr(ml, "_segment_in_flight", 0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/ml/segment/text",
+        content=b"x",
+        headers={
+            "content-type": "multipart/form-data; boundary=----",
+            "content-length": str(200 * 1024 * 1024),
+        },
+    )
+    assert resp.status_code == 413

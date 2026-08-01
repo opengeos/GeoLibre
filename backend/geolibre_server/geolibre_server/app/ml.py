@@ -67,6 +67,18 @@ _LAUNCH_CMD = os.environ.get("GEOLIBRE_ML_SAMGEO_CMD", "samgeo-api")
 _HEALTH_TIMEOUT_SECS = 60
 _PROXY_TIMEOUT_SECS = 1800  # model inference on large rasters can be slow
 
+# Cap concurrent segmentation proxy requests so a burst of large uploads cannot
+# exhaust sidecar memory or starve the event loop. Mirrors the conversion
+# engine's MAX_IN_FLIGHT_JOBS pattern.
+MAX_IN_FLIGHT_SEGMENT_REQUESTS = 4
+_segment_lock = threading.Lock()
+_segment_in_flight = 0
+
+# Reject uploads whose Content-Length exceeds this (100 MiB). When the header
+# is missing (chunked transfer) the limit is not enforced — the backend's own
+# size handling applies.
+_MAX_SEGMENT_BODY_BYTES = 100 * 1024 * 1024
+
 # Guards the launch-or-reuse decision for the child process.
 _child_lock = threading.Lock()
 _child: dict = {"proc": None, "url": None}
@@ -375,6 +387,9 @@ async def _forward_segment(request: Request, path: str) -> Response:
     and ``output_format`` supported by samgeo-api works without re-encoding, and
     so a large GeoTIFF upload is never buffered whole in the sidecar's memory.
 
+    Concurrency is capped at :data:`MAX_IN_FLIGHT_SEGMENT_REQUESTS` to prevent a
+    burst of large uploads from exhausting sidecar resources.
+
     Args:
         request: The incoming FastAPI request (multipart/form-data).
         path: The backend path to forward to, e.g. ``/segment/text``.
@@ -382,33 +397,51 @@ async def _forward_segment(request: Request, path: str) -> Response:
     Returns:
         The backend response (status, body, content-type) passed straight back.
     """
-    httpx = _require_httpx()
-    base = await _resolve_base()
-    headers = {}
-    content_type = request.headers.get("content-type")
-    if content_type:
-        headers["content-type"] = content_type
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > _MAX_SEGMENT_BODY_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Upload exceeds the 100 MiB segmentation size limit.",
+                )
+        except ValueError:
+            pass
 
-    async def _body_iter():
-        # Forward the upload chunk-by-chunk so the whole payload never sits in
-        # memory at once (uvicorn/httpx negotiate chunked transfer encoding).
-        async for chunk in request.stream():
-            if chunk:
-                yield chunk
-
+    global _segment_in_flight  # noqa: PLW0603
+    with _segment_lock:
+        if _segment_in_flight >= MAX_IN_FLIGHT_SEGMENT_REQUESTS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many segmentation requests in progress; try again shortly.",
+            )
+        _segment_in_flight += 1
     try:
-        async with httpx.AsyncClient(timeout=_PROXY_TIMEOUT_SECS) as client:
-            resp = await client.post(f"{base}{path}", content=_body_iter(), headers=headers)
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"samgeo-api error: {exc}")
-    # The GeoJSON/PNG response is buffered (resp.content); it is bounded and far
-    # smaller than the upload. Streaming it back would need client.stream() +
-    # StreamingResponse and is left as a follow-up.
-    return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        media_type=resp.headers.get("content-type"),
-    )
+        httpx = _require_httpx()
+        base = await _resolve_base()
+        headers = {}
+        content_type = request.headers.get("content-type")
+        if content_type:
+            headers["content-type"] = content_type
+
+        async def _body_iter():
+            async for chunk in request.stream():
+                if chunk:
+                    yield chunk
+
+        try:
+            async with httpx.AsyncClient(timeout=_PROXY_TIMEOUT_SECS) as client:
+                resp = await client.post(f"{base}{path}", content=_body_iter(), headers=headers)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"samgeo-api error: {exc}")
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            media_type=resp.headers.get("content-type"),
+        )
+    finally:
+        with _segment_lock:
+            _segment_in_flight -= 1
 
 
 @router.post("/segment/automatic")
