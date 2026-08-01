@@ -10,8 +10,10 @@ import type {
   CollaborationMode,
   CollaborationParticipant,
   CollaborationRole,
+  CommentReply,
   GeoLibreProject,
   MapViewState,
+  ProjectComment,
 } from "@geolibre/core";
 
 export type { CollaborationMode, CollaborationRole };
@@ -80,13 +82,31 @@ export interface ChatSendMessage {
   coordinate?: CollabCursor | null;
 }
 
+export type CommentMutationAction =
+  | { type: "add"; comment: ProjectComment }
+  | { type: "reply"; commentId: string; reply: CommentReply }
+  | { type: "toggle-resolve"; commentId: string; resolved?: boolean }
+  | { type: "delete"; commentId: string };
+
+export interface CommentMutationMessage {
+  type: "comment-mutation";
+  action: CommentMutationAction;
+  /**
+   * clientId of the sender, set on BroadcastChannel frames so the originating
+   * tab can skip re-applying its own mutation (it already applied it locally).
+   * Omitted on WebSocket frames; the relay never inspects this field.
+   */
+  origin?: string;
+}
+
 export type ClientMessage =
   | JoinMessage
   | ClientSnapshotMessage
   | ClientPresenceMessage
   | SetModeMessage
   | SetParticipantModeMessage
-  | ChatSendMessage;
+  | ChatSendMessage
+  | CommentMutationMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -153,4 +173,5 @@ export type ServerMessage =
   | ParticipantsMessage
   | ModeMessage
   | ChatBroadcastMessage
+  | CommentMutationMessage
   | ErrorMessage;

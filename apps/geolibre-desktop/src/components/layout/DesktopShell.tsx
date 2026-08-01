@@ -1,3 +1,4 @@
+// @refresh reset
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
@@ -53,6 +54,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
+import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
+import { CommentsPanel } from "../comments/CommentsPanel";
+import { CommentMapOverlay } from "../comments/CommentMapOverlay";
+import { useCommentTool } from "../comments/useCommentTool";
+import { AddCommentDialog } from "../comments/AddCommentDialog";
+import { openRightPanel } from "@geolibre/plugins";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useProjectHistory } from "../../hooks/useProjectHistory";
@@ -651,6 +658,7 @@ export function DesktopShell({
   // Register the Browser as a movable/dockable right panel; its body is portaled
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
+  useRegisterCommentsPanel();
   // One shared project-file-actions instance for both the toolbar and the
   // Browser panel, so their "open recent" calls coordinate their aborts (two
   // instances would race). Lifted here for the same reason as `collaboration`.
@@ -686,11 +694,22 @@ export function DesktopShell({
     el.className = "contents";
     return el;
   });
+  // A third, dedicated host for the Comments panel's React portal.
+  const [commentsContentEl] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
   const activePanelId = useRightPanelState().activeId;
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
   // The dock slots adopt whichever host owns the active panel's content: the
-  // Browser's dedicated portal host, or the shared imperative plugin host.
-  const dockContentEl = activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
+  // Browser's dedicated portal host, the Comments dedicated portal host, or the shared imperative plugin host.
+  const dockContentEl =
+    activePanelId === BROWSER_PANEL_ID
+      ? browserContentEl
+      : activePanelId === COMMENTS_PANEL_ID
+        ? commentsContentEl
+        : pluginContentEl;
   // Render the active panel into the shared host once; re-run when its
   // registration is replaced (re-registration refresh) but not on dock/collapse
   // changes. Keyed on the render function identity so that a plugin
@@ -753,6 +772,8 @@ export function DesktopShell({
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
   const collaboration = useCollaboration(mapControllerRef);
+  const commentTool = useCommentTool({ mapControllerRef, collaboration });
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
   const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate
@@ -1957,6 +1978,18 @@ export function DesktopShell({
               browserContentEl,
             )
           : null}
+        {activePanelId === COMMENTS_PANEL_ID && !layoutOptions.panelsHidden
+          ? createPortal(
+              <CommentsPanel
+                mapControllerRef={mapControllerRef}
+                collaboration={collaboration}
+                onActivateCommentTool={commentTool.toggleTool}
+                isCommentToolActive={commentTool.isActive}
+                onShowResolvedChange={setShowResolvedComments}
+              />,
+              commentsContentEl,
+            )
+          : null}
         {/* Map-only / hidden-panels embeds show nothing but the map: skip the
             whole left side-dock (Layers, plugin panels, and the shared rail that
             hosts the Browser entry), not just the built-in Layers panel. */}
@@ -2074,6 +2107,11 @@ export function DesktopShell({
                 onControllerReady={handleMapControllerReady}
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
+              <CommentMapOverlay
+                mapControllerRef={mapControllerRef}
+                onSelectComment={() => openRightPanel(COMMENTS_PANEL_ID)}
+                showResolved={showResolvedComments}
+              />
               <MapContextMenu
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
@@ -2450,6 +2488,13 @@ export function DesktopShell({
           {dropError ?? dropMessage}
         </div>
       ) : null}
+      {commentTool.pendingComment && (
+        <AddCommentDialog
+          pendingComment={commentTool.pendingComment}
+          onSubmit={commentTool.submitComment}
+          onCancel={commentTool.cancelPendingComment}
+        />
+      )}
     </div>
   );
 }

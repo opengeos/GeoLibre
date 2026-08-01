@@ -102,11 +102,11 @@ function renderPresence(
         anchor: "top-left",
       });
       markers.set(id, marker);
-      marker.addTo(map);
+      marker.setLngLat([p.cursor.lng, p.cursor.lat]).addTo(map);
     } else {
       updateCursorElement(marker.getElement(), p);
+      marker.setLngLat([p.cursor.lng, p.cursor.lat]);
     }
-    marker.setLngLat([p.cursor.lng, p.cursor.lat]);
   }
 
   // Adding/updating the viewport source+layer mutates the style, so only touch

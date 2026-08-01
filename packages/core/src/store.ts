@@ -58,6 +58,10 @@ import {
   type StoryMap,
   type StyleLibraryEntry,
   type ProjectTemplateEntry,
+  type CommentAnchor,
+  type CommentAuthor,
+  type CommentReply,
+  type ProjectComment,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
 import {
@@ -249,6 +253,8 @@ export interface AppState {
   pointerCoords: [number, number] | null;
   /** Live GPS fix for the status bar, or null while GPS tracking is off. */
   gpsStatus: GpsStatusFix | null;
+  /** Anchored review comments on map points or features (issue #1518). */
+  comments: ProjectComment[];
   metadata: Record<string, unknown>;
   recentProjects: RecentProjectEntry[];
   attributeFilter: string;
@@ -622,6 +628,12 @@ export interface AppState {
   ) => void;
   moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
+
+  addComment: (comment: ProjectComment) => void;
+  replyToComment: (commentId: string, reply: CommentReply) => void;
+  toggleResolveComment: (commentId: string, resolved?: boolean) => void;
+  deleteComment: (commentId: string) => void;
+  setComments: (comments: ProjectComment[]) => void;
 }
 
 const MAX_RECENT_PROJECTS = 10;
@@ -946,6 +958,7 @@ export const useAppStore = create<AppState>()(
       identifyLayerId: null,
       pointerCoords: null,
       gpsStatus: null,
+      comments: [],
       metadata: {},
       recentProjects: [],
       attributeFilter: "",
@@ -989,6 +1002,38 @@ export const useAppStore = create<AppState>()(
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
       setGpsStatus: (fix) => set({ gpsStatus: fix }),
+
+      addComment: (comment) =>
+        set((s) => {
+          // Ignore a duplicate id: the WebSocket relay echoes our own
+          // comment-mutation back to the sender, and a reconnect can replay
+          // recent history, so de-dupe defensively (mirrors addCollaborationChat).
+          if (s.comments.some((c) => c.id === comment.id)) return s;
+          return { comments: [...s.comments, comment], isDirty: true };
+        }),
+      replyToComment: (commentId, reply) =>
+        set((s) => ({
+          comments: s.comments.map((c) =>
+            c.id === commentId ? { ...c, replies: [...c.replies, reply] } : c,
+          ),
+          isDirty: true,
+        })),
+      toggleResolveComment: (commentId, resolved) =>
+        set((s) => ({
+          comments: s.comments.map((c) =>
+            c.id === commentId
+              ? { ...c, resolved: resolved !== undefined ? resolved : !c.resolved }
+              : c,
+          ),
+          isDirty: true,
+        })),
+      deleteComment: (commentId) =>
+        set((s) => ({
+          comments: s.comments.filter((c) => c.id !== commentId),
+          isDirty: true,
+        })),
+      setComments: (comments) => set({ comments, isDirty: true }),
+
       setCollaboration: (patch) =>
         set((s) => ({ collaboration: { ...s.collaboration, ...patch } })),
       // Add or remove a single remote participant's presence without rebuilding
@@ -2101,6 +2146,7 @@ export const useAppStore = create<AppState>()(
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
         storymap: s.storymap,
+        comments: s.comments,
       }),
       // Records a history entry only when the tracked slice really changed.
       // Basemap fields compare with ===; `layers` is compared element-by-element
@@ -2111,12 +2157,14 @@ export const useAppStore = create<AppState>()(
       // new object, so real edits differ while an unchanged null stays equal.
       // `layerGroups` is compared ignoring `collapsed`, which is a UI preference
       // excluded from undo (see toggleLayerGroupCollapsed).
+      // `comments` is compared shallowly by reference.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
         a.storymap === b.storymap &&
         shallow(a.layers, b.layers) &&
+        shallow(a.comments, b.comments) &&
         layerGroupsEqualForHistory(a.layerGroups, b.layerGroups),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.

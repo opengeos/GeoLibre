@@ -38,6 +38,7 @@ import {
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
+  openRightPanel,
 } from "@geolibre/plugins";
 import { Button, cn, Input } from "@geolibre/ui";
 import {
@@ -1287,6 +1288,14 @@ export function TopToolbar({
         "set view go to coordinates center zoom pitch bearing camera location longitude latitude",
       icon: Crosshair,
       run: () => setSetViewOpen(true),
+    },
+    {
+      id: "view.comments",
+      title: "View Comments",
+      group: t("toolbar.commandGroup.view"),
+      keywords: "comments review threads notes annotations pins",
+      icon: MessageSquare,
+      run: () => openRightPanel("comments"),
     },
     {
       id: "view.theme",

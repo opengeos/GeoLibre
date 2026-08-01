@@ -1741,7 +1741,35 @@ export interface GeoLibreProject {
    * library is persisted outside the project file and never serialized here.
    */
   styleLibrary?: StyleLibraryEntry[];
+  /** Anchored review comments on map points or features (issue #1518). */
+  comments?: ProjectComment[];
   metadata: Record<string, unknown>;
+}
+
+export type CommentAnchor =
+  | { type: "point"; lngLat: [number, number] }
+  | { type: "feature"; layerId: string; featureId: string | number; lngLat?: [number, number] };
+
+export interface CommentAuthor {
+  name: string;
+  color: string;
+}
+
+export interface CommentReply {
+  id: string;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+}
+
+export interface ProjectComment {
+  id: string;
+  anchor: CommentAnchor;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+  resolved: boolean;
+  replies: CommentReply[];
 }
 
 export interface RecentProjectEntry {

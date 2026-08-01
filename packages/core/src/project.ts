@@ -44,6 +44,10 @@ import {
   type StoryMap,
   type StorySlideMode,
   type StyleLibraryEntry,
+  type CommentAnchor,
+  type CommentAuthor,
+  type CommentReply,
+  type ProjectComment,
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
@@ -92,6 +96,7 @@ export function createEmptyProject(
         }
       : DEFAULT_PROJECT_PREFERENCES,
     legend: { ...DEFAULT_LEGEND_CONFIG },
+    comments: [],
     metadata: {},
   };
 }
@@ -132,6 +137,7 @@ export function parseProject(json: string): GeoLibreProject {
     { mapView },
   );
   const styleLibrary = normalizeStyleLibraryEntries(data.styleLibrary);
+  const parsedComments = normalizeProjectComments(data.comments);
   return {
     version: data.version,
     name: data.name,
@@ -165,6 +171,7 @@ export function parseProject(json: string): GeoLibreProject {
         }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
+    ...(parsedComments.length > 0 ? { comments: parsedComments } : {}),
     metadata: data.metadata ?? {},
   };
 }
@@ -1159,6 +1166,100 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   };
 }
 
+export function normalizeProjectComments(rawComments: unknown): ProjectComment[] {
+  if (!Array.isArray(rawComments)) return [];
+  const result: ProjectComment[] = [];
+  for (const item of rawComments) {
+    if (!item || typeof item !== "object") continue;
+    const c = item as Record<string, unknown>;
+    if (typeof c.id !== "string" || !c.id) continue;
+
+    if (!c.anchor || typeof c.anchor !== "object") continue;
+    const anchorObj = c.anchor as Record<string, unknown>;
+    let anchor: CommentAnchor;
+    if (
+      anchorObj.type === "point" &&
+      Array.isArray(anchorObj.lngLat) &&
+      anchorObj.lngLat.length === 2 &&
+      typeof anchorObj.lngLat[0] === "number" &&
+      typeof anchorObj.lngLat[1] === "number"
+    ) {
+      anchor = { type: "point", lngLat: [anchorObj.lngLat[0], anchorObj.lngLat[1]] };
+    } else if (
+      anchorObj.type === "feature" &&
+      typeof anchorObj.layerId === "string" &&
+      (typeof anchorObj.featureId === "string" || typeof anchorObj.featureId === "number")
+    ) {
+      const featLngLat =
+        Array.isArray(anchorObj.lngLat) &&
+        anchorObj.lngLat.length === 2 &&
+        typeof anchorObj.lngLat[0] === "number" &&
+        typeof anchorObj.lngLat[1] === "number"
+          ? ([anchorObj.lngLat[0], anchorObj.lngLat[1]] as [number, number])
+          : undefined;
+      anchor = {
+        type: "feature",
+        layerId: anchorObj.layerId,
+        featureId: anchorObj.featureId,
+        ...(featLngLat ? { lngLat: featLngLat } : {}),
+      };
+    } else {
+      continue;
+    }
+
+    const authorObj =
+      c.author && typeof c.author === "object" ? (c.author as Record<string, unknown>) : {};
+    const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    const author: CommentAuthor = {
+      name:
+        typeof authorObj.name === "string" && authorObj.name.trim()
+          ? authorObj.name.trim()
+          : "Anonymous",
+      color:
+        typeof authorObj.color === "string" && HEX.test(authorObj.color.trim())
+          ? authorObj.color.trim()
+          : "#3b82f6",
+    };
+
+    const replies: CommentReply[] = [];
+    if (Array.isArray(c.replies)) {
+      for (const rItem of c.replies) {
+        if (!rItem || typeof rItem !== "object") continue;
+        const r = rItem as Record<string, unknown>;
+        if (typeof r.id !== "string" || !r.id) continue;
+        const rAuthorObj =
+          r.author && typeof r.author === "object" ? (r.author as Record<string, unknown>) : {};
+        replies.push({
+          id: r.id,
+          author: {
+            name:
+              typeof rAuthorObj.name === "string" && rAuthorObj.name.trim()
+                ? rAuthorObj.name.trim()
+                : "Anonymous",
+            color:
+              typeof rAuthorObj.color === "string" && HEX.test(rAuthorObj.color.trim())
+                ? rAuthorObj.color.trim()
+                : "#3b82f6",
+          },
+          body: typeof r.body === "string" ? r.body : "",
+          createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
+        });
+      }
+    }
+
+    result.push({
+      id: c.id,
+      anchor,
+      author,
+      body: typeof c.body === "string" ? c.body : "",
+      createdAt: typeof c.createdAt === "string" ? c.createdAt : new Date().toISOString(),
+      resolved: Boolean(c.resolved),
+      replies,
+    });
+  }
+  return result;
+}
+
 export function projectFromStore(state: {
   projectName: string;
   mapView: MapViewState;
@@ -1181,6 +1282,7 @@ export function projectFromStore(state: {
   primaryMapLabel?: string;
   /** Project-scoped Style Manager entries (the store's `projectStyleLibrary`). */
   styleLibrary?: StyleLibraryEntry[] | null;
+  comments?: ProjectComment[] | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -1193,6 +1295,7 @@ export function projectFromStore(state: {
   const models = normalizeModels(state.models);
   const processingHistory = normalizeProcessingHistory(state.processingHistory);
   const widgets = normalizeWidgets(state.widgets);
+  const comments = normalizeProjectComments(state.comments);
   // Persist a non-default column count only; a default-layout dashboard (or a
   // widget-less project) stays free of the key for legacy readers.
   const dashboardColumns =
@@ -1249,6 +1352,7 @@ export function projectFromStore(state: {
         }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
+    ...(comments.length > 0 ? { comments } : {}),
     metadata: state.metadata,
   };
 }
@@ -1356,6 +1460,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   secondaryMapViews: SecondaryMapView[];
   primaryMapLabel: string;
   projectStyleLibrary: StyleLibraryEntry[];
+  comments: ProjectComment[];
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -1412,6 +1517,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     secondaryMapViews,
     primaryMapLabel: normalizeString(project.primaryMapLabel),
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
+    comments: normalizeProjectComments(project.comments),
     metadata: project.metadata,
   };
 }

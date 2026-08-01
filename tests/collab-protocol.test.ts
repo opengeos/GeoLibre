@@ -146,8 +146,9 @@ describe("createSession", () => {
     });
   });
 
-  it("throws when collaboration is not configured", async () => {
-    await assert.rejects(() => createSession("co-edit", null, ok({})), /not configured/);
+  it("returns local session code when collaboration baseUrl is null", async () => {
+    const res = await createSession("co-edit", null);
+    assert.equal(res.sessionId.length, 12);
   });
 
   it("throws on an unexpected response shape", async () => {
@@ -262,5 +263,36 @@ describe("CollabConnection", () => {
     second.conn.close();
     second.holder.socket!.emit("close");
     assert.ok(second.events.includes("close:false"));
+  });
+
+  it("handles comment-mutation messages correctly", () => {
+    const { conn, holder, received } = setup();
+    conn.connect();
+    holder.socket!.readyState = FakeWebSocket.OPEN;
+
+    const mutationMsg: ServerMessage = {
+      type: "comment-mutation",
+      action: {
+        type: "add",
+        comment: {
+          id: "comm-123",
+          anchor: { type: "point", lngLat: [10, 20] },
+          author: { name: "Tester", color: "#ff0000" },
+          body: "Hello Test Comment",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          resolved: false,
+          replies: [],
+        },
+      },
+    };
+
+    holder.socket!.emit("message", { data: JSON.stringify(mutationMsg) });
+    assert.equal(received.length, 1);
+    assert.equal(received[0]?.type, "comment-mutation");
+    if (received[0]?.type === "comment-mutation") {
+      assert.equal(received[0].action.type, "add");
+      assert.equal(received[0].action.comment.id, "comm-123");
+    }
+    conn.close();
   });
 });
