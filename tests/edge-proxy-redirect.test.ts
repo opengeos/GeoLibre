@@ -424,7 +424,8 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
         headers: { location: "http://169.254.169.254/latest/meta-data/" },
       });
     await assert.rejects(
-      () => fetchWithGuard("https://example.com/evil", {}, { fetchImpl: evil, lookup: publicLookup }),
+      () =>
+        fetchWithGuard("https://example.com/evil", {}, { fetchImpl: evil, lookup: publicLookup }),
       /Blocked/,
     );
   });
