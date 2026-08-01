@@ -1460,6 +1460,41 @@ export function StylePanel({
   // hook order stays stable.
   const builderFeatures = useMemo(() => layer?.geojson?.features ?? [], [layer]);
   const builderFieldNames = useMemo(() => (layer ? getAttributePropertyNames(layer) : []), [layer]);
+  const categorizedValueCount = useMemo(() => {
+    if (!layer || draftVectorStyleMode !== "categorized") return 0;
+    const valuesAreSampled =
+      !layer.geojson &&
+      (layer.type === "vector-tiles" || layer.type === "pmtiles" || layer.type === "mbtiles");
+    if (valuesAreSampled) return 0;
+    const loadedValues =
+      loadedVectorPropertyValues?.layerId === layer.id
+        ? loadedVectorPropertyValues.byProperty[draftVectorStyleProperty]
+        : undefined;
+    return countCategorizedValues(
+      loadedValues ?? getPropertyValues(layer, draftVectorStyleProperty),
+    );
+    // The calculation reads only these stable layer fields. Depending on the
+    // whole layer object would rescan on every unrelated style edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    draftVectorStyleMode,
+    draftVectorStyleProperty,
+    layer?.geojson,
+    layer?.id,
+    layer?.type,
+    loadedVectorPropertyValues,
+  ]);
+
+  useEffect(() => {
+    if (
+      draftVectorStyleMode !== "categorized" ||
+      categorizedValueCount === 0 ||
+      draftVectorStyleClassCount <= categorizedValueCount
+    ) {
+      return;
+    }
+    setDraftVectorStyleClassCount(categorizedValueCount);
+  }, [categorizedValueCount, draftVectorStyleClassCount, draftVectorStyleMode]);
   // Zoom and variables snapshot the camera via getState() when the builder
   // opens instead of subscribing: the dialog is modal (the map cannot move
   // while it is open), and mapView subscriptions would re-render this whole
@@ -2084,13 +2119,6 @@ export function StylePanel({
   const vectorClassCountOptions = VECTOR_STYLE_CLASS_COUNTS.filter((classCount) =>
     draftVectorStyleMode === "categorized" ? true : classCount >= 2,
   );
-  const categorizedValueCount =
-    draftVectorStyleMode === "categorized"
-      ? countCategorizedValues(
-          draftVectorPropertyValues ?? getPropertyValues(layer, draftVectorStyleProperty),
-        )
-      : 0;
-
   // --- Rule-based renderer (immediate writes to style.vectorRules) ---
   const currentRules = styleValue(style, "vectorRules");
   const concreteRules = currentRules.filter((rule) => !rule.isElse);

@@ -115,6 +115,10 @@ export function createGraduatedStops(
 
 /**
  * Create categorized color stops from GeoJSON or separately loaded property values.
+ *
+ * Automatic style suggestions intentionally recognize at most
+ * {@link MAX_CATEGORICAL_VALUES} distinct values so suggested legends stay
+ * compact. Manual categorized styling can request every distinct value.
  */
 export function createCategorizedStops(
   layer: ClassifiableLayer,
