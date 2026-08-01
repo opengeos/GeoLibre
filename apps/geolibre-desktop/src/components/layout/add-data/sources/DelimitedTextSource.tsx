@@ -119,6 +119,7 @@ export function DelimitedTextSource() {
   const resetDelimitedTextColumns = () => {
     setDelimitedTextFields([]);
     setDelimitedTextColumnsStatus(null);
+    setDelimitedTextAddressColumns([]);
   };
 
   // Clear the entered CRS whenever the underlying data source changes (new file,
@@ -281,12 +282,22 @@ export function DelimitedTextSource() {
     }
 
     const { fields, rows } = parseDelimitedTextRows(text, delimiter);
+    // Columns picked against a previously retrieved header can go stale (a
+    // re-fetched URL's columns changed underneath the selection); drop any
+    // that no longer exist in what was just parsed rather than handing
+    // csvRowsToGeocodeRequests a column name no row has.
+    const addressColumns = delimitedTextAddressColumns.filter((column) =>
+      fields.includes(column),
+    );
+    if (addressColumns.length === 0) {
+      throw new Error(t("addData.delimitedText.errorNoAddressColumns"));
+    }
     const config = resolveGeocoderConfig(useAppStore.getState().preferences.geocoding);
     const provider = getGeocodingProvider(config.providerId);
     if (geocoderNeedsApiKey(config) && !config.apiKey) {
       throw new Error(t("geocode.apiKeyRequired", { provider: provider.label }));
     }
-    const requests = csvRowsToGeocodeRequests(rows, delimitedTextAddressColumns);
+    const requests = csvRowsToGeocodeRequests(rows, addressColumns);
     if (requests.length === 0) {
       throw new Error(t("addData.delimitedText.errorNoAddressesFound"));
     }
@@ -307,6 +318,11 @@ export function DelimitedTextSource() {
     if (skippedEmpty > 0) appendGeocodeLog(t("geocode.skippedEmpty", { count: skippedEmpty }));
     if (requests.length > toProcess.length) appendGeocodeLog(t("geocode.rowCapWarning", { cap }));
 
+    // Kept in original row order (unlike matchedFeatures/unmatchedFeatures
+    // below, which only exist to count/style by outcome) so the resulting
+    // layer's attribute table lines up with the source CSV instead of
+    // grouping every match before every miss.
+    const features: Feature<Point | null>[] = [];
     const matchedFeatures: Feature<Point>[] = [];
     const unmatchedFeatures: Feature<null>[] = [];
     let lastStartedAt: number | null = null;
@@ -331,15 +347,23 @@ export function DelimitedTextSource() {
           const feature = match
             ? geocodeMatchToFeature(match, request.row, { providerId: config.providerId })
             : null;
-          if (feature) matchedFeatures.push(feature);
-          else unmatchedFeatures.push(unmatchedGeocodeFeature(request.row, config.providerId));
+          if (feature) {
+            matchedFeatures.push(feature);
+            features.push(feature);
+          } else {
+            const unmatched = unmatchedGeocodeFeature(request.row, config.providerId);
+            unmatchedFeatures.push(unmatched);
+            features.push(unmatched);
+          }
         } catch (requestError) {
           // A cancel propagates to stop the whole batch; any other per-request
           // failure (e.g. an HTTP 429) is logged and the row is kept unmatched
           // so the remaining rows still run.
           if (isAbortError(requestError)) throw requestError;
           appendGeocodeLog(t("geocode.error", { message: (requestError as Error).message }));
-          unmatchedFeatures.push(unmatchedGeocodeFeature(request.row, config.providerId));
+          const unmatched = unmatchedGeocodeFeature(request.row, config.providerId);
+          unmatchedFeatures.push(unmatched);
+          features.push(unmatched);
         }
       }
     } catch (error) {
@@ -359,7 +383,6 @@ export function DelimitedTextSource() {
           }),
     );
 
-    const features = [...matchedFeatures, ...unmatchedFeatures];
     if (features.length === 0) {
       throw new Error(cancelled ? t("geocode.cancelledNoRows") : t("geocode.noMatches"));
     }
@@ -371,7 +394,7 @@ export function DelimitedTextSource() {
           "geojson",
           { type: "geojson", url: sourcePath },
           {
-            addressColumns: delimitedTextAddressColumns,
+            addressColumns,
             fields,
             geocodeCancelled: cancelled,
             geocodeMatched: matchedFeatures.length,
@@ -384,11 +407,13 @@ export function DelimitedTextSource() {
           },
           // No matched rows means nothing to draw, same as the coordinate-mode
           // attribute-table branch below: stay on the flat defaults rather than
-          // reserving a palette color no map ever shows.
+          // reserving a palette color no map ever shows. Styling is inferred
+          // from the matched points only, not the mixed matched/unmatched
+          // collection actually rendered.
           {
             geojson:
               matchedFeatures.length > 0
-                ? ({ type: "FeatureCollection", features } as FeatureCollection)
+                ? ({ type: "FeatureCollection", features: matchedFeatures } as FeatureCollection)
                 : undefined,
           },
         ),
@@ -484,6 +509,16 @@ export function DelimitedTextSource() {
         ),
       ),
     [delimitedTextFields, delimitedTextLatitudeField, delimitedTextLongitudeField],
+  );
+
+  // The address-columns checklist must show exactly the retrieved header, not
+  // delimitedTextFieldOptions' coordinate-mode defaults ("longitude"/
+  // "latitude" are always non-blank, so mixing them in here would both hide
+  // the "retrieve columns first" empty state and offer columns that may not
+  // exist in the file).
+  const delimitedTextAddressFieldOptions = useMemo(
+    () => Array.from(new Set(delimitedTextFields.filter((field) => field.trim()))),
+    [delimitedTextFields],
   );
 
   const missingCustomDelimiter =
@@ -689,12 +724,12 @@ export function DelimitedTextSource() {
             <div className="space-y-1.5">
               <Label>{t("addData.delimitedText.addressColumns")}</Label>
               <div className="space-y-1 rounded-md border p-2">
-                {delimitedTextFieldOptions.length === 0 ? (
+                {delimitedTextAddressFieldOptions.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
                     {t("addData.delimitedText.addressColumnsEmptyHint")}
                   </p>
                 ) : (
-                  delimitedTextFieldOptions.map((field) => (
+                  delimitedTextAddressFieldOptions.map((field) => (
                     <label key={field} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
