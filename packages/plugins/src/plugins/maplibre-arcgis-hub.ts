@@ -174,10 +174,14 @@ async function download(
   signal?: AbortSignal,
   onProgress?: (completed: number, total: number) => void,
 ): Promise<void> {
-  if (!appRef) return;
+  const app = appRef;
+  if (!app) return;
   if (item.type === "Feature Service" && item.url) {
     const data = await fetchFeatureServiceGeoJson(item.url, signal, onProgress);
-    appRef.exportTextFile?.(`${safeFilename(item.title)}.geojson`, JSON.stringify(data), {
+    // deactivate() nulls appRef, which can land while a large service download
+    // is still in flight; bail rather than exporting through a torn-down host.
+    if (!appRef) return;
+    app.exportTextFile?.(`${safeFilename(item.title)}.geojson`, JSON.stringify(data), {
       description: "GeoJSON",
       extensions: ["geojson", "json"],
       mimeType: "application/geo+json",
@@ -185,7 +189,7 @@ async function download(
     });
     return;
   }
-  appRef.openExternalUrl?.(arcGisHubItemDataUrl(item));
+  app.openExternalUrl?.(arcGisHubItemDataUrl(item));
 }
 
 function buildPanel(container: HTMLElement): () => void {

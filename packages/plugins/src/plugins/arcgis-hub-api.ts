@@ -12,9 +12,6 @@ export interface ArcGisHubItem {
   snippet?: string;
   url?: string;
   extent?: [[number, number], [number, number]];
-  modified?: number;
-  size?: number;
-  tags?: string[];
   thumbnail?: string;
 }
 
