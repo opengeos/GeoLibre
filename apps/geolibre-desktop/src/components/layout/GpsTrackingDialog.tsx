@@ -545,6 +545,11 @@ export function GpsTrackingDialog({
     nmeaConnRef.current = null;
     setNmeaLabel(null);
     setNmeaStats(null);
+    // Clearing the indicator belongs here rather than only in connectNmea's
+    // `finally`: an attempt abandoned by a source change or a stop is stale by
+    // the time it resolves, so that `finally` deliberately skips it, and the
+    // buttons would stay disabled showing "Connecting…" for the session.
+    setConnecting(null);
     try {
       await conn?.close();
     } catch {
@@ -563,10 +568,12 @@ export function GpsTrackingDialog({
     async (transport: NmeaTransport) => {
       setError(null);
       setNotice(null);
-      setConnecting(transport);
-      // Supersede any earlier attempt, then claim this attempt's generation.
+      // Supersede any earlier attempt, then claim this attempt's indicator and
+      // generation. Claiming after the disconnect matters: disconnectNmea
+      // resets `connecting`, so setting it first would wipe it immediately.
       // disconnectNmea swallows close failures, so it cannot reject here.
       await disconnectNmea();
+      setConnecting(transport);
       const generation = connectGenerationRef.current;
       const isStale = () => generation !== connectGenerationRef.current;
       try {
@@ -602,7 +609,9 @@ export function GpsTrackingDialog({
           setError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
         }
       } finally {
-        // A superseded attempt must not clear the newer attempt's indicator.
+        // A superseded attempt must not clear the newer attempt's indicator;
+        // one abandoned by a source change or a stop already had it reset by
+        // disconnectNmea itself.
         if (!isStale()) setConnecting(null);
       }
     },
