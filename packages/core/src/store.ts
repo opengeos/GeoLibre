@@ -853,6 +853,7 @@ interface ProjectRestoreHistoryEntry {
   before: GeoLibreProject;
   beforePath: string | null;
   after: GeoLibreProject;
+  afterPath: string | null;
 }
 
 let projectRestoreUndo: ProjectRestoreHistoryEntry | null = null;
@@ -887,8 +888,9 @@ export function registerProjectRestoreHistory(
   before: GeoLibreProject,
   beforePath: string | null,
   after: GeoLibreProject,
+  afterPath: string | null = null,
 ): void {
-  projectRestoreUndo = { before, beforePath, after };
+  projectRestoreUndo = { before, beforePath, after, afterPath };
   projectRestoreRedo = null;
   notifyProjectRestoreHistory();
 }
@@ -2242,7 +2244,7 @@ export function redo(): void {
     const entry = projectRestoreRedo;
     applyingProjectRestoreHistory = true;
     try {
-      useAppStore.getState().loadProject(entry.after, null, {
+      useAppStore.getState().loadProject(entry.after, entry.afterPath, {
         rememberRecent: false,
         presenting: false,
       });

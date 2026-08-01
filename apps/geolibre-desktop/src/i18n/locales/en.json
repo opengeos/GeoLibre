@@ -6,6 +6,7 @@
     "summary": "{{count}} layers · zoom {{zoom}}",
     "restore": "Restore",
     "discard": "Discard",
+    "restoreError": "Could not restore this snapshot. It may be damaged or incompatible with this GeoLibre version.",
     "recoveryTitle": "Recover unsaved work?",
     "recoveryDescription": "GeoLibre did not close cleanly. A newer autosave of “{{name}}” is available."
   },

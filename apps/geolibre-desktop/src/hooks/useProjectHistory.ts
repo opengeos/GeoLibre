@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
 import { isEmbedded } from "./embedHost";
 import { isTauri } from "../lib/is-tauri";
@@ -23,14 +24,20 @@ import {
 } from "../lib/project-history-session";
 const AUTOSAVE_DELAY_MS = 3_000;
 
+function currentProjectKey(): string {
+  const { projectPath, projectName } = useAppStore.getState();
+  return projectPath ? `path:${projectPath}` : `unsaved:${projectName}`;
+}
+
 export function useProjectHistory(mapControllerRef: RefObject<MapController | null>) {
+  const { t } = useTranslation();
   const [snapshots, setSnapshots] = useState<ProjectHistorySnapshot[]>([]);
   const [recoverySnapshot, setRecoverySnapshot] = useState<ProjectHistorySnapshot | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const refresh = useCallback(async () => {
     try {
-      setSnapshots(await listProjectSnapshots());
+      setSnapshots(await listProjectSnapshots(currentProjectKey()));
     } catch (error) {
       console.error("Could not load project history.", error);
     }
@@ -41,7 +48,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
     void (async () => {
       try {
         const entries = await listProjectSnapshots();
-        setSnapshots(entries);
+        setSnapshots(entries.filter((entry) => entry.projectKey === currentProjectKey()));
         if (crashRecoveryEnabled) {
           const previousSession = readProjectSessionState();
           const lastSave = readLastExplicitProjectSave();
@@ -70,11 +77,9 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
         const content = serializeProject(buildProjectSnapshot(mapControllerRef));
-        void addProjectSnapshot(content)
-          .then((result) => {
-            if (result === "added") return refresh();
-          })
-          .catch((error) => console.error("Could not autosave the project.", error));
+        void addProjectSnapshot(content, currentProjectKey()).catch((error) =>
+          console.error("Could not autosave the project.", error),
+        );
       }, AUTOSAVE_DELAY_MS);
     });
     return () => {
@@ -91,23 +96,21 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
         const before = buildProjectSnapshot(mapControllerRef);
         const beforePath = useAppStore.getState().projectPath;
         const restored = parseProject(snapshot.content);
-        useAppStore.getState().loadProject(restored, null, {
+        useAppStore.getState().loadProject(restored, beforePath, {
           rememberRecent: false,
           presenting: false,
         });
-        registerProjectRestoreHistory(before, beforePath, restored);
+        registerProjectRestoreHistory(before, beforePath, restored, beforePath);
         useAppStore.setState({ isDirty: true });
         setRecoverySnapshot(null);
         return true;
       } catch (error) {
         console.error("Could not restore the project snapshot.", error);
-        setRestoreError(
-          error instanceof Error ? error.message : "Could not restore the project snapshot.",
-        );
+        setRestoreError(t("projectHistory.restoreError"));
         return false;
       }
     },
-    [mapControllerRef],
+    [mapControllerRef, t],
   );
 
   const discardRecovery = useCallback(() => {
@@ -120,6 +123,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
   }, [recoverySnapshot, refresh]);
 
   const dismissRecovery = useCallback(() => setRecoverySnapshot(null), []);
+  const clearRestoreError = useCallback(() => setRestoreError(null), []);
 
   return {
     snapshots,
@@ -129,5 +133,6 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
     restore,
     discardRecovery,
     dismissRecovery,
+    clearRestoreError,
   };
 }

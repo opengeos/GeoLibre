@@ -18,6 +18,7 @@ export interface ProjectHistorySnapshot {
   basemap: string;
   camera: GeoLibreProject["mapView"];
   contentHash?: string;
+  projectKey?: string;
 }
 
 type ProjectHistoryMetadata = Omit<ProjectHistorySnapshot, "content">;
@@ -32,6 +33,7 @@ function snapshotMetadata(snapshot: ProjectHistorySnapshot): ProjectHistoryMetad
     basemap: snapshot.basemap,
     camera: snapshot.camera,
     contentHash: snapshot.contentHash,
+    projectKey: snapshot.projectKey,
   };
 }
 
@@ -42,6 +44,12 @@ function available(): boolean {
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME, { keyPath: "id" });
@@ -62,12 +70,19 @@ function openDatabase(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => {
-      request.result.onversionchange = () => request.result.close();
-      resolve(request.result);
+      const db = request.result;
+      db.onversionchange = () => db.close();
+      if (settled) {
+        db.close();
+        return;
+      }
+      settled = true;
+      resolve(db);
     };
-    request.onerror = () => reject(request.error ?? new Error("Could not open project history."));
+    request.onerror = () =>
+      rejectOnce(request.error ?? new Error("Could not open project history."));
     request.onblocked = () =>
-      reject(
+      rejectOnce(
         new Error(
           "Project history is blocked by another GeoLibre tab. Close or reload other tabs and try again.",
         ),
@@ -92,7 +107,7 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
   });
 }
 
-export async function listProjectSnapshots(): Promise<ProjectHistorySnapshot[]> {
+export async function listProjectSnapshots(projectKey?: string): Promise<ProjectHistorySnapshot[]> {
   if (!available()) return [];
   const db = await openDatabase();
   try {
@@ -100,7 +115,9 @@ export async function listProjectSnapshots(): Promise<ProjectHistorySnapshot[]> 
     const snapshots = await requestResult(
       transaction.objectStore(STORE_NAME).getAll() as IDBRequest<ProjectHistorySnapshot[]>,
     );
-    return snapshots.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return snapshots
+      .filter((snapshot) => projectKey === undefined || snapshot.projectKey === projectKey)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   } finally {
     db.close();
   }
@@ -122,7 +139,26 @@ async function listProjectSnapshotMetadata(): Promise<ProjectHistoryMetadata[]> 
 
 export type AddProjectSnapshotResult = "added" | "duplicate" | "too-large";
 
-export async function addProjectSnapshot(content: string): Promise<AddProjectSnapshotResult> {
+function hashContent(content: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < content.length; index += 1) {
+    hash ^= content.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function createSnapshotId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
+}
+
+export async function addProjectSnapshot(
+  content: string,
+  projectKey?: string,
+): Promise<AddProjectSnapshotResult> {
   if (!available()) return "duplicate";
   const size = new Blob([content]).size;
   if (size > MAX_SNAPSHOT_BYTES) {
@@ -132,14 +168,11 @@ export async function addProjectSnapshot(content: string): Promise<AddProjectSna
     return "too-large";
   }
   const project = parseProject(content);
-  const contentHash = Array.from(
-    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content))),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
+  const contentHash = hashContent(content);
   const existing = await listProjectSnapshotMetadata();
   if (existing[0]?.contentHash === contentHash) return "duplicate";
   const snapshot: ProjectHistorySnapshot = {
-    id: crypto.randomUUID(),
+    id: createSnapshotId(),
     createdAt: new Date().toISOString(),
     content,
     size,
@@ -148,6 +181,7 @@ export async function addProjectSnapshot(content: string): Promise<AddProjectSna
     basemap: project.basemapStyleUrl,
     camera: project.mapView,
     contentHash,
+    projectKey,
   };
   const retained = [snapshot, ...existing];
   let total = 0;

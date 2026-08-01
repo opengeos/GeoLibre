@@ -174,7 +174,12 @@ describe("project restore history", () => {
     const before = createEmptyProject("Before restore");
     const after = createEmptyProject("Restored snapshot");
     useAppStore.getState().loadProject(after, null, { rememberRecent: false, presenting: false });
-    registerProjectRestoreHistory(before, "/tmp/before.geolibre.json", after);
+    registerProjectRestoreHistory(
+      before,
+      "/tmp/before.geolibre.json",
+      after,
+      "/tmp/before.geolibre.json",
+    );
 
     undo();
     assert.equal(useAppStore.getState().projectName, "Before restore");
@@ -183,7 +188,7 @@ describe("project restore history", () => {
 
     redo();
     assert.equal(useAppStore.getState().projectName, "Restored snapshot");
-    assert.equal(useAppStore.getState().projectPath, null);
+    assert.equal(useAppStore.getState().projectPath, "/tmp/before.geolibre.json");
     assert.equal(useAppStore.getState().isDirty, true);
   });
 

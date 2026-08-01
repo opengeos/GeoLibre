@@ -1934,6 +1934,7 @@ export function DesktopShell({
             projectFiles={projectFiles}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
             onOpenProjectHistory={() => {
+              projectHistory.clearRestoreError();
               void projectHistory.refresh();
               setProjectHistoryOpen(true);
             }}
@@ -2341,7 +2342,10 @@ export function DesktopShell({
       />
       <ProjectHistoryDialog
         open={projectHistoryOpen}
-        onOpenChange={setProjectHistoryOpen}
+        onOpenChange={(open) => {
+          setProjectHistoryOpen(open);
+          if (!open) projectHistory.clearRestoreError();
+        }}
         snapshots={projectHistory.snapshots}
         restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}
@@ -2350,8 +2354,14 @@ export function DesktopShell({
         snapshot={projectHistory.recoverySnapshot}
         restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}
-        onDiscard={projectHistory.discardRecovery}
-        onDismiss={projectHistory.dismissRecovery}
+        onDiscard={() => {
+          projectHistory.clearRestoreError();
+          projectHistory.discardRecovery();
+        }}
+        onDismiss={() => {
+          projectHistory.clearRestoreError();
+          projectHistory.dismissRecovery();
+        }}
       />
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}
