@@ -122,17 +122,32 @@ const BLE_NMEA_SERVICES: { service: string; notify: string; label: string }[] = 
   },
 ];
 
+/**
+ * Classification of an {@link NmeaError}, so the UI can localize the cases it
+ * recognizes. `failed` covers everything else, where the message is relayed
+ * from the browser (a `DOMException` string) and is more informative than a
+ * generic sentence would be.
+ */
+export type NmeaErrorCode =
+  | "cancelled"
+  | "unavailable"
+  | "unsupported-device"
+  | "disconnected"
+  | "failed";
+
 /** Why an NMEA connection could not be established or was lost. */
 export class NmeaError extends Error {
   constructor(
     message: string,
-    /** The user dismissed the browser's device chooser. */
-    readonly cancelled = false,
-    /** No usable NMEA service on the chosen device. */
-    readonly unsupportedDevice = false,
+    readonly code: NmeaErrorCode = "failed",
   ) {
     super(message);
     this.name = "NmeaError";
+  }
+
+  /** The user dismissed the browser's device chooser. */
+  get cancelled(): boolean {
+    return this.code === "cancelled";
   }
 }
 
@@ -197,13 +212,13 @@ export async function connectSerialNmea(
   { onFix, onError }: ConnectHandlers,
 ): Promise<NmeaConnection> {
   const serial = serialApi();
-  if (!serial) throw new NmeaError("Web Serial is not available in this browser.");
+  if (!serial) throw new NmeaError("Web Serial is not available in this browser.", "unavailable");
 
   let port: SerialPortLike;
   try {
     port = await serial.requestPort();
   } catch (err) {
-    if (isChooserCancellation(err)) throw new NmeaError("No port selected.", true);
+    if (isChooserCancellation(err)) throw new NmeaError("No port selected.", "cancelled");
     throw new NmeaError(err instanceof Error ? err.message : "Could not open the serial port.");
   }
 
@@ -220,7 +235,7 @@ export async function connectSerialNmea(
   const pump = async (): Promise<void> => {
     const readable = port.readable;
     if (!readable) {
-      onError(new NmeaError("The serial port has no readable stream."));
+      onError(new NmeaError("The serial port has no readable stream.", "disconnected"));
       return;
     }
     // Decoding is done here rather than with a piped TextDecoderStream so the
@@ -248,7 +263,8 @@ export async function connectSerialNmea(
     }
     // A read failure and a clean end-of-stream both end the session while still
     // connected, so report exactly one error, preferring the specific cause.
-    if (!closed) onError(failure ?? new NmeaError("The serial device disconnected."));
+    if (!closed)
+      onError(failure ?? new NmeaError("The serial device disconnected.", "disconnected"));
   };
 
   void pump();
@@ -291,7 +307,8 @@ export async function connectBluetoothNmea({
   onError,
 }: ConnectHandlers): Promise<NmeaConnection> {
   const bluetooth = bluetoothApi();
-  if (!bluetooth) throw new NmeaError("Web Bluetooth is not available in this browser.");
+  if (!bluetooth)
+    throw new NmeaError("Web Bluetooth is not available in this browser.", "unavailable");
 
   const services = BLE_NMEA_SERVICES.map((s) => s.service);
   let device: BluetoothDeviceLike;
@@ -301,11 +318,12 @@ export async function connectBluetoothNmea({
       optionalServices: services,
     });
   } catch (err) {
-    if (isChooserCancellation(err)) throw new NmeaError("No device selected.", true);
+    if (isChooserCancellation(err)) throw new NmeaError("No device selected.", "cancelled");
     throw new NmeaError(err instanceof Error ? err.message : "Could not open the device chooser.");
   }
 
-  if (!device.gatt) throw new NmeaError("The selected device does not support GATT.");
+  if (!device.gatt)
+    throw new NmeaError("The selected device does not support GATT.", "unsupported-device");
   let server: BluetoothServerLike;
   try {
     server = await device.gatt.connect();
@@ -334,8 +352,7 @@ export async function connectBluetoothNmea({
     server.disconnect();
     throw new NmeaError(
       "No known NMEA service on this device. It may be a classic Bluetooth receiver, which must be paired in your system settings and opened as a serial port instead.",
-      false,
-      true,
+      "unsupported-device",
     );
   }
 
@@ -352,7 +369,7 @@ export async function connectBluetoothNmea({
   };
 
   const onDisconnected = () => {
-    if (!closed) onError(new NmeaError("The Bluetooth device disconnected."));
+    if (!closed) onError(new NmeaError("The Bluetooth device disconnected.", "disconnected"));
   };
 
   characteristic.addEventListener("characteristicvaluechanged", onValueChanged);

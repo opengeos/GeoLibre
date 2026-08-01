@@ -399,6 +399,13 @@ export class NmeaAssembler {
 
     // Close the current epoch when the clock moves on, or when an anchor type
     // repeats (see EPOCH_ANCHOR_TYPES).
+    //
+    // The time comparison is numeric, so the usual variation in how many
+    // fractional digits a receiver prints (174512 / 174512.0 / 174512.00) is
+    // read as one instant and does not split an epoch. No tolerance is applied
+    // beyond that: a high-rate receiver legitimately emits epochs 0.1-0.2 s
+    // apart, and treating a small delta as "still the same fix" would collapse
+    // a 5-10 Hz stream into a fraction of its fixes.
     let fix: GpsFix | null = null;
     const timeMoved =
       sentence.timeOfDayS != null &&

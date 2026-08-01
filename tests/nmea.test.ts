@@ -275,6 +275,25 @@ describe("NmeaAssembler", () => {
     assert.equal(a.push(VTG), null, "still the same epoch");
   });
 
+  it("treats differing fractional-second precision across an epoch as one instant", () => {
+    // Receivers vary in how many fractional digits they print, and it can differ
+    // by sentence type. Those are the same instant and must not split the epoch.
+    const ggaNoFraction = sentence(
+      "GNGGA,174512,3557.5432,N,08355.1234,W,1,09,0.92,268.4,M,-33.2,M,,",
+    );
+    const fixes = run([ggaNoFraction, RMC, VTG]);
+    assert.equal(fixes.length, 1, "one epoch despite 174512 vs 174512.00");
+    assert.equal(fixes[0]!.heading, 187.3, "and it kept RMC's heading");
+  });
+
+  it("still splits epochs a high-rate receiver reports a fraction of a second apart", () => {
+    // 5 Hz output is 0.2 s between genuinely distinct epochs, so no tolerance
+    // may be applied to the time comparison.
+    const at = (time: string) =>
+      sentence(`GNGGA,${time},3557.5432,N,08355.1234,W,1,09,0.92,268.4,M,-33.2,M,,`);
+    assert.equal(run([at("174512.00"), at("174512.20"), at("174512.40")]).length, 3);
+  });
+
   it("keeps a multi-GNSS epoch together when the receiver sends one GSA per constellation", () => {
     // u-blox and similar multi-constellation receivers emit one $GNGSA per
     // satellite system inside a single epoch (NMEA 4.10 tells them apart by the

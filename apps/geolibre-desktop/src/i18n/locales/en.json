@@ -1025,6 +1025,8 @@
     "nmeaWaiting": "Waiting for sentences…",
     "nmeaStats": "{{parsed}} sentences · {{fixes}} fixes",
     "nmeaConnectFailed": "Could not connect to the receiver.",
+    "nmeaDisconnected": "The receiver disconnected.",
+    "nmeaUnsupportedDevice": "No NMEA service was found on that device. It may be a classic Bluetooth receiver, which has to be paired in your system settings and then connected here as a serial port.",
     "nmeaUnsupported": "Reading an NMEA receiver needs the Web Serial or Web Bluetooth APIs, which this browser does not provide. Open GeoLibre in a Chromium browser such as Chrome or Edge.",
     "nmeaSerialUnsupported": "Web Serial is not available here, so serial receivers cannot be opened.",
     "nmeaBluetoothUnsupported": "Web Bluetooth is not available here, so Bluetooth Low Energy receivers cannot be opened.",

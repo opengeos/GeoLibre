@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { Feature, FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
@@ -218,6 +219,25 @@ function removeGpsSources(map: maplibregl.Map): void {
 }
 
 type RecordingState = "off" | "recording" | "paused";
+
+/**
+ * Localized text for an {@link NmeaError}. Only the cases the UI can describe
+ * better than the browser are translated; a `failed` error carries a message
+ * relayed from the platform (a `DOMException` string, or a driver error), and
+ * showing that is more useful than a generic localized sentence.
+ */
+function nmeaErrorText(err: NmeaError, t: TFunction): string {
+  switch (err.code) {
+    case "unavailable":
+      return t("gps.nmeaUnsupported");
+    case "unsupported-device":
+      return t("gps.nmeaUnsupportedDevice");
+    case "disconnected":
+      return t("gps.nmeaDisconnected");
+    default:
+      return err.message;
+  }
+}
 
 /**
  * GPS Tracking (issue #1316): stream a live position onto the map with an
@@ -513,7 +533,7 @@ export function GpsTrackingDialog({
           // A dropped device or a read failure stops the session rather than
           // leaving a stale position on the map.
           onError: (err: NmeaError) => {
-            setError(err.message);
+            setError(nmeaErrorText(err, t));
             setTracking(false);
             void disconnectNmea();
           },
@@ -527,7 +547,9 @@ export function GpsTrackingDialog({
         setNmeaStats(conn.stats());
         setTracking(true);
       } catch (err) {
-        if (!(err instanceof NmeaError && err.cancelled)) {
+        if (err instanceof NmeaError) {
+          if (!err.cancelled) setError(nmeaErrorText(err, t));
+        } else {
           setError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
         }
       } finally {
