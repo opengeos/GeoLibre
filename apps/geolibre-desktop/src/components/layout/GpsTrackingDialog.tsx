@@ -547,11 +547,6 @@ export function GpsTrackingDialog({
     nmeaConnRef.current = null;
     setNmeaLabel(null);
     setNmeaStats(null);
-    // Clearing the indicator belongs here rather than only in connectNmea's
-    // `finally`: an attempt abandoned by a source change or a stop is stale by
-    // the time it resolves, so that `finally` deliberately skips it, and the
-    // buttons would stay disabled showing "Connecting…" for the session.
-    setConnecting(null);
     try {
       await conn?.close();
     } catch {
@@ -564,6 +559,12 @@ export function GpsTrackingDialog({
   /** Abandon any in-flight connect as well as closing the live connection. */
   const disconnectNmea = useCallback(async () => {
     connectGenerationRef.current += 1;
+    // Clearing the indicator belongs on the abandon path rather than in
+    // connectNmea's `finally`: an attempt abandoned by a source change or a
+    // stop is stale by the time it resolves, so that `finally` deliberately
+    // skips it, and the buttons would stay disabled showing "Connecting…" for
+    // the rest of the session.
+    setConnecting(null);
     await closeNmea();
   }, [closeNmea]);
 
@@ -581,11 +582,15 @@ export function GpsTrackingDialog({
       // afterwards would read the same value and both believe they are current.
       const generation = ++connectGenerationRef.current;
       const isStale = () => generation !== connectGenerationRef.current;
+      // Show the indicator before the first await, so there is no window in
+      // which an attempt is in flight but the buttons look idle — closing a
+      // live connection below can take real time. closeNmea deliberately does
+      // not clear it; only the abandon path (disconnectNmea) does.
+      setConnecting(transport);
       // Closes the previous connection without invalidating the generation
       // just claimed, and cannot reject (closeNmea swallows close failures).
       await closeNmea();
       if (isStale()) return;
-      setConnecting(transport);
       try {
         const handlers = {
           // Both callbacks are generation-guarded: the transport starts reading
