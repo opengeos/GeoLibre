@@ -350,6 +350,47 @@ def test_write_geopackage_preserves_source_crs(tmp_path) -> None:
 
 
 @requires_geopandas
+def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Broad exceptions must not surface internal paths or secrets in the detail."""
+    secret = "/var/secret/key.pem"
+    monkeypatch.setattr(vector_ops, "geopandas_import_error", lambda: None)
+    monkeypatch.setattr(
+        vector_ops,
+        "run_vector_tool",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError(f"Cannot read {secret}")),
+    )
+    with pytest.raises(HTTPException) as exc:
+        vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE))
+    assert exc.value.status_code == 400
+    assert secret not in str(exc.value.detail)
+    assert "internal error" in str(exc.value.detail).lower()
+
+
+@requires_geopandas
+def test_write_does_not_leak_exception_detail(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write-back broad exceptions must not surface internal detail."""
+    import geopandas as gpd
+
+    from geolibre_server.app import vector as vector_mod
+
+    src = tmp_path / "layer.geojson"
+    gpd.GeoDataFrame.from_features(_edited("a")["features"], crs="EPSG:4326").to_file(
+        src, driver="GeoJSON"
+    )
+    secret = "/etc/shadow"
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError(f"leaked {secret}")
+
+    monkeypatch.setattr(vector_mod, "_write_geojson", _boom)
+    with pytest.raises(HTTPException) as exc:
+        vector_write(WriteVectorRequest(path=str(src), geojson=_edited("b")))
+    assert exc.value.status_code == 400
+    assert secret not in str(exc.value.detail)
+    assert "internal error" in str(exc.value.detail).lower()
+
+
+@requires_geopandas
 def test_write_respects_conversion_allowlist(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     import geopandas as gpd
 

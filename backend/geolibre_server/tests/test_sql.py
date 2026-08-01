@@ -213,3 +213,20 @@ def test_run_sql_raises_timeout_on_slow_query(monkeypatch: pytest.MonkeyPatch) -
 
     with pytest.raises(SqlTimeout, match="timed out"):
         sedona_ops.run_sql("SELECT 1")
+
+
+def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Broad exceptions must not surface internal paths or secrets in the detail."""
+    secret = "/var/data/credentials.json"
+    monkeypatch.setattr(sedona_ops, "sedonadb_import_error", lambda: None)
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError(f"Failed to read {secret}")
+
+    monkeypatch.setattr(sedona_ops, "run_sql", _boom)
+    with pytest.raises(HTTPException) as exc:
+        sql_run(SqlRunRequest(sql="SELECT 1"))
+    assert exc.value.status_code == 400
+    assert secret not in str(exc.value.detail)
+    assert "internal error" in str(exc.value.detail).lower()
+

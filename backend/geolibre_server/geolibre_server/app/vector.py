@@ -106,7 +106,10 @@ def vector_run(request: VectorToolRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Vector tool %s failed", request.tool_id)
-        raise HTTPException(status_code=400, detail=f"Vector tool failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail="Vector tool failed due to an internal error.",
+        ) from exc
 
     return {"geojson": geojson, "messages": messages}
 
@@ -298,7 +301,10 @@ def vector_write(request: WriteVectorRequest):
         raise
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Write-back to %s failed", target)
-        raise HTTPException(status_code=400, detail=f"Write-back failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail="Write-back failed due to an internal error.",
+        ) from exc
 
     return {
         "path": str(target),
