@@ -352,17 +352,17 @@ def test_write_geopackage_preserves_source_crs(tmp_path) -> None:
 @requires_geopandas
 def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     """Broad exceptions must not surface internal paths or secrets in the detail."""
-    secret = "/var/secret/key.pem"
+    sensitive_path = "/var/secret/key.pem"
     monkeypatch.setattr(vector_ops, "geopandas_import_error", lambda: None)
     monkeypatch.setattr(
         vector_ops,
         "run_vector_tool",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError(f"Cannot read {secret}")),
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError(f"Cannot read {sensitive_path}")),
     )
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE))
     assert exc.value.status_code == 400
-    assert secret not in str(exc.value.detail)
+    assert sensitive_path not in str(exc.value.detail)
     assert "internal error" in str(exc.value.detail).lower()
 
 
@@ -377,16 +377,16 @@ def test_write_does_not_leak_exception_detail(tmp_path, monkeypatch: pytest.Monk
     gpd.GeoDataFrame.from_features(_edited("a")["features"], crs="EPSG:4326").to_file(
         src, driver="GeoJSON"
     )
-    secret = "/etc/shadow"
+    sensitive_path = "/etc/shadow"
 
     def _boom(*_a, **_kw):
-        raise RuntimeError(f"leaked {secret}")
+        raise RuntimeError(f"leaked {sensitive_path}")
 
     monkeypatch.setattr(vector_mod, "_write_geojson", _boom)
     with pytest.raises(HTTPException) as exc:
         vector_write(WriteVectorRequest(path=str(src), geojson=_edited("b")))
     assert exc.value.status_code == 400
-    assert secret not in str(exc.value.detail)
+    assert sensitive_path not in str(exc.value.detail)
     assert "internal error" in str(exc.value.detail).lower()
 
 
