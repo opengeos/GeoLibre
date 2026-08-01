@@ -203,6 +203,8 @@ function createCatalogPlugin(options: {
             let activeQuery = "";
             let controller: AbortController | null = null;
             let generation = 0;
+            let active = true;
+            const downloads = new Set<AbortController>();
 
             const render = (item: CatalogItem) => {
               const card = document.createElement("article");
@@ -224,21 +226,29 @@ function createCatalogPlugin(options: {
               add.disabled = !item.dataUrl;
               add.addEventListener("click", async () => {
                 if (!item.dataUrl) return;
+                const downloadController = new AbortController();
+                downloads.add(downloadController);
                 add.disabled = true;
                 status.textContent = labels.adding(item.title);
                 try {
-                  const response = await fetch(item.dataUrl);
+                  const response = await fetch(item.dataUrl, {
+                    signal: downloadController.signal,
+                  });
                   if (!response.ok) throw new Error(`Download failed (${response.status}).`);
                   const data = (await response.json()) as FeatureCollection;
                   if (data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
                     throw new Error("The resource is not GeoJSON.");
                   }
+                  if (!active) return;
                   app.addGeoJsonLayer(item.title, data, item.dataUrl);
                   status.textContent = labels.added(item.title);
                 } catch (error) {
-                  status.textContent = error instanceof Error ? error.message : labels.addError;
+                  if (active && (error as Error).name !== "AbortError") {
+                    status.textContent = labels.addError;
+                  }
                 } finally {
-                  add.disabled = !item.dataUrl;
+                  downloads.delete(downloadController);
+                  if (active) add.disabled = !item.dataUrl;
                 }
               });
               const details = document.createElement("button");
@@ -275,7 +285,7 @@ function createCatalogPlugin(options: {
                 more.hidden = shown >= total || result.items.length === 0;
               } catch (error) {
                 if ((error as Error).name !== "AbortError") {
-                  status.textContent = error instanceof Error ? error.message : labels.searchError;
+                  status.textContent = labels.searchError;
                 }
               } finally {
                 if (token === generation) submit.disabled = false;
@@ -289,7 +299,10 @@ function createCatalogPlugin(options: {
             more.addEventListener("click", () => void run(true));
             input.focus();
             dispose = () => {
+              active = false;
               controller?.abort();
+              downloads.forEach((download) => download.abort());
+              downloads.clear();
               container.replaceChildren();
             };
             return dispose;

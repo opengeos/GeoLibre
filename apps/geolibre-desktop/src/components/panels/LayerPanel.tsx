@@ -621,6 +621,7 @@ export function LayerPanel({
   const moveLayerGroupToGroup = useAppStore((s) => s.moveLayerGroupToGroup);
   const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
   const selectLayer = useAppStore((s) => s.selectLayer);
   const selectedFeatureCount = useAppStore((s) => s.selectedFeatureIds.length);
   // Select by Location needs a second layer to compare against (see EditMenu).
@@ -1479,7 +1480,12 @@ export function LayerPanel({
         const message = error instanceof Error ? error.message : t("layers.refreshError");
         const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
         if (latest) {
-          updateLayer(layer.id, setLayerConnectionResult(latest, { error: message }));
+          updateLayer(layer.id, {
+            ...setLayerConnectionResult(latest, { error: message }),
+            ...(latest.connection?.onFailure === "clear" && latest.geojson
+              ? { geojson: { type: "FeatureCollection" as const, features: [] } }
+              : {}),
+          });
         }
         setRefreshStatuses((current) => ({
           ...current,
@@ -2298,8 +2304,9 @@ export function LayerPanel({
       }
     };
     document.addEventListener("visibilitychange", catchUp);
+    catchUp();
     return () => document.removeEventListener("visibilitychange", catchUp);
-  }, []);
+  }, [projectGeneration]);
 
   // Watch-mode lifecycle: for each local-file layer with watch enabled, register
   // a debounced filesystem watcher that reloads the layer when the file changes.
