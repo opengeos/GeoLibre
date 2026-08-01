@@ -124,7 +124,7 @@ is available this way.
 | `set_basemap(url)` | Set the basemap style (an http(s) or root-relative URL). |
 | `identify(lng, lat, layer_id=None)` | Query rendered features at a point (like a click). |
 | `add_geojson(data, name=, **style)` | Add a layer from a GeoJSON dict / geometry / `__geo_interface__`, with optional inline style overrides; returns the layer id. |
-| `await load_geojson(url, name=)` | Fetch a GeoJSON URL and add it; returns the layer id. |
+| `await load_geojson(url, name=, **style)` | Fetch a GeoJSON URL and add it, with the same optional inline style overrides; returns the layer id. |
 | `layers` | List of [`Layer`](#layer) objects, in draw order. |
 | `get_layer(layer_id)` | The `Layer` with that id (raises if absent). |
 | `remove_layer(layer_id)` | Remove a layer by id. |
