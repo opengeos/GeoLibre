@@ -70,6 +70,21 @@ describe("UI layer pointer cleanup", () => {
       assert.equal(ui.selectByLocationLayerId, null);
       assert.equal(ui.loadEditorFeaturesLayerId, null);
     });
+
+    it("preserves pointers when removeChildren is false", () => {
+      const store = useAppStore.getState();
+      const groupId = store.addLayerGroup("G");
+      store.addLayer(geojsonLayer({ id: "child", groupId }));
+      store.setSelectByExpressionOpen(true, "child");
+      store.setSelectByLocationOpen(true, "child");
+      store.setLoadEditorFeaturesOpen(true, "child");
+
+      useAppStore.getState().removeLayerGroup(groupId, { removeChildren: false });
+      const ui = useAppStore.getState().ui;
+      assert.equal(ui.selectByExpressionLayerId, "child");
+      assert.equal(ui.selectByLocationLayerId, "child");
+      assert.equal(ui.loadEditorFeaturesLayerId, "child");
+    });
   });
 
   describe("newProject/loadProject clear load-editor-features state", () => {

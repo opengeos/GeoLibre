@@ -1962,24 +1962,26 @@ export const useAppStore = create<AppState>()(
               s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
                 ? null
                 : s.identifyLayerId,
-            ui: {
-              ...s.ui,
-              selectByExpressionLayerId:
-                s.ui.selectByExpressionLayerId !== null &&
-                removedIds.has(s.ui.selectByExpressionLayerId)
-                  ? null
-                  : s.ui.selectByExpressionLayerId,
-              selectByLocationLayerId:
-                s.ui.selectByLocationLayerId !== null &&
-                removedIds.has(s.ui.selectByLocationLayerId)
-                  ? null
-                  : s.ui.selectByLocationLayerId,
-              loadEditorFeaturesLayerId:
-                s.ui.loadEditorFeaturesLayerId !== null &&
-                removedIds.has(s.ui.loadEditorFeaturesLayerId)
-                  ? null
-                  : s.ui.loadEditorFeaturesLayerId,
-            },
+            ui: removeChildren
+              ? {
+                  ...s.ui,
+                  selectByExpressionLayerId:
+                    s.ui.selectByExpressionLayerId !== null &&
+                    removedIds.has(s.ui.selectByExpressionLayerId)
+                      ? null
+                      : s.ui.selectByExpressionLayerId,
+                  selectByLocationLayerId:
+                    s.ui.selectByLocationLayerId !== null &&
+                    removedIds.has(s.ui.selectByLocationLayerId)
+                      ? null
+                      : s.ui.selectByLocationLayerId,
+                  loadEditorFeaturesLayerId:
+                    s.ui.loadEditorFeaturesLayerId !== null &&
+                    removedIds.has(s.ui.loadEditorFeaturesLayerId)
+                      ? null
+                      : s.ui.loadEditorFeaturesLayerId,
+                }
+              : s.ui,
             isDirty: true,
           };
         }),
