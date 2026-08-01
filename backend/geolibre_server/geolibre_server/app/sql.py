@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from geolibre_server import sedona_ops
-from geolibre_server.sedona_ops import SqlInputTooLarge
+from geolibre_server.sedona_ops import SqlInputTooLarge, SqlTimeout
 
 router = APIRouter(prefix="/sql", tags=["sql"])
 logger = logging.getLogger(__name__)
@@ -77,6 +77,8 @@ def sql_run(request: SqlRunRequest) -> dict[str, Any]:
             request.sql,
             [{"name": layer.name, "geojson": layer.geojson} for layer in request.layers],
         )
+    except SqlTimeout as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
     except SqlInputTooLarge as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     except ValueError as exc:

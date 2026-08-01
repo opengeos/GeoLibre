@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from geolibre_server import sedona_ops
 from geolibre_server.app.sql import SqlRunRequest, sql_run, sql_status
+from geolibre_server.sedona_ops import SqlTimeout
 
 try:
     import sedona.db  # noqa: F401
@@ -172,3 +173,43 @@ def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc.value.status_code == 413
     assert "Query result exceeds" in str(exc.value.detail)
     assert limited_to == [sedona_ops.MAX_FEATURES + 1]
+
+
+def test_statement_timeout_constant_exists() -> None:
+    """The wall-clock timeout constant must be defined and positive."""
+    assert hasattr(sedona_ops, "_STATEMENT_TIMEOUT_MS")
+    assert sedona_ops._STATEMENT_TIMEOUT_MS > 0
+
+
+def test_sql_timeout_maps_to_504(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A SqlTimeout from run_sql is surfaced as HTTP 504."""
+    monkeypatch.setattr(sedona_ops, "sedonadb_import_error", lambda: None)
+
+    def _boom(*_a, **_kw):
+        raise SqlTimeout("Spatial SQL timed out after 60 seconds")
+
+    monkeypatch.setattr(sedona_ops, "run_sql", _boom)
+    with pytest.raises(HTTPException) as exc:
+        sql_run(SqlRunRequest(sql="SELECT pg_sleep(999)"))
+    assert exc.value.status_code == 504
+    assert "timed out" in str(exc.value.detail)
+
+
+def test_run_sql_raises_timeout_on_slow_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_sql raises SqlTimeout when the query exceeds the budget."""
+    import time
+
+    monkeypatch.setattr(sedona_ops, "_STATEMENT_TIMEOUT_MS", 100)
+
+    class _FakeConnection:
+        def sql(self, statement):  # noqa: ARG002
+            time.sleep(5)
+
+        def close(self):
+            pass
+
+    fake_mod = type("M", (), {"connect": staticmethod(lambda: _FakeConnection())})()
+    monkeypatch.setattr(sedona_ops, "_import_sedona", lambda: fake_mod)
+
+    with pytest.raises(SqlTimeout, match="timed out"):
+        sedona_ops.run_sql("SELECT 1")
