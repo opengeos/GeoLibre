@@ -269,7 +269,12 @@ export function DelimitedTextSource() {
   // @geolibre/core, log/cancel UX) but is duplicated rather than shared: the
   // two call sites build different output shapes and GeocodeDialog is a
   // separately shipped tool this change should not need to touch.
-  const submitAddresses = async (name: string, delimiter: string, sourcePath: string, text: string) => {
+  const submitAddresses = async (
+    name: string,
+    delimiter: string,
+    sourcePath: string,
+    text: string,
+  ) => {
     if (delimitedTextAddressColumns.length === 0) {
       throw new Error(t("addData.delimitedText.errorNoAddressColumns"));
     }
@@ -310,7 +315,11 @@ export function DelimitedTextSource() {
         if (wait > 0) await sleep(wait, signal);
         lastStartedAt = performance.now();
         appendGeocodeLog(
-          t("geocode.progress", { current: i + 1, total: toProcess.length, address: request.address }),
+          t("geocode.progress", {
+            current: i + 1,
+            total: toProcess.length,
+            address: request.address,
+          }),
         );
         try {
           const results = await geocodeForward(request.address, { signal, config, limit: 1 });
@@ -538,7 +547,9 @@ export function DelimitedTextSource() {
         ) : null}
 
         <div className="space-y-1.5">
-          <Label htmlFor="delimited-text-import-mode">{t("addData.delimitedText.importMode")}</Label>
+          <Label htmlFor="delimited-text-import-mode">
+            {t("addData.delimitedText.importMode")}
+          </Label>
           <Select
             id="delimited-text-import-mode"
             value={delimitedTextImportMode}
