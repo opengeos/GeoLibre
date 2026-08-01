@@ -242,6 +242,19 @@ export function GpsTrackingDialog({
   const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
 
   /**
+   * Center the map on a fix. The first recenter of a session also zooms in;
+   * later ones only pan, so following doesn't fight the user's chosen zoom.
+   */
+  const recenterOnFix = useCallback((map: maplibregl.Map, fix: GpsFix) => {
+    map.easeTo({
+      center: [fix.lng, fix.lat],
+      duration: 500,
+      ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
+    });
+    zoomedRef.current = true;
+  }, []);
+
+  /**
    * Toggle follow mode. The ref moves first so a fix arriving before the
    * re-render doesn't recenter a map the user has just panned away from, and
    * switching it back on recenters immediately instead of leaving the map
@@ -254,9 +267,9 @@ export function GpsTrackingDialog({
       if (!next) return;
       const map = getMap();
       const fix = lastFixRef.current;
-      if (map && fix) map.easeTo({ center: [fix.lng, fix.lat], duration: 500 });
+      if (map && fix) recenterOnFix(map, fix);
     },
-    [getMap],
+    [getMap, recenterOnFix],
   );
 
   const handleFix = useCallback(
@@ -313,17 +326,10 @@ export function GpsTrackingDialog({
         }
         if (fix.heading != null) markerRef.current.setRotation(fix.heading);
 
-        if (followRef.current) {
-          map.easeTo({
-            center: [fix.lng, fix.lat],
-            duration: 500,
-            ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
-          });
-          zoomedRef.current = true;
-        }
+        if (followRef.current) recenterOnFix(map, fix);
       }
     },
-    [getMap, setGpsStatus],
+    [getMap, recenterOnFix, setGpsStatus],
   );
 
   // The watchPosition subscription follows `tracking`. On Tauri mobile this
@@ -583,7 +589,10 @@ export function GpsTrackingDialog({
           stats={stats}
           capturedCount={capturedCount}
           follow={follow}
-          onToggleFollow={() => setFollowMode(!follow)}
+          // Flip the ref, not the rendered `follow`: a drag that has just
+          // turned follow off updates the ref synchronously but the state only
+          // on the next render, so `!follow` could re-disable it instead.
+          onToggleFollow={() => setFollowMode(!followRef.current)}
           onCapture={handleCapturePoint}
           onPause={() => changeRecording("paused")}
           onResume={handleResumeRecording}

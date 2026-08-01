@@ -79,10 +79,11 @@ describe("nativeGeolocationAvailable", () => {
 // a fix twice a minute (the live position and "keep map centered" both freeze
 // in between). These lock the watch to a GNSS-rate interval.
 describe("nativeWatchOptions", () => {
-  it("asks for a fix at the native watch interval, not the one-shot timeout", () => {
+  it("asks for a fix every second, not at the one-shot timeout", () => {
     const opts = nativeWatchOptions({ enableHighAccuracy: true, maximumAge: 0 });
-    assert.equal(opts.timeout, NATIVE_WATCH_INTERVAL_MS);
-    assert.ok(NATIVE_WATCH_INTERVAL_MS <= 1000);
+    // A literal, not NATIVE_WATCH_INTERVAL_MS: comparing the constant with
+    // itself would hold however far the default drifted from a GNSS fix rate.
+    assert.equal(opts.timeout, 1000);
   });
 
   it("ignores the browser timeout, which means something else entirely", () => {
