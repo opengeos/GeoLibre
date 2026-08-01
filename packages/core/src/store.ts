@@ -1625,6 +1625,15 @@ export const useAppStore = create<AppState>()(
           selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
           selectedFeatureIds: s.selectedLayerId === id ? [] : s.selectedFeatureIds,
           identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
+          ui: {
+            ...s.ui,
+            selectByExpressionLayerId:
+              s.ui.selectByExpressionLayerId === id ? null : s.ui.selectByExpressionLayerId,
+            selectByLocationLayerId:
+              s.ui.selectByLocationLayerId === id ? null : s.ui.selectByLocationLayerId,
+            loadEditorFeaturesLayerId:
+              s.ui.loadEditorFeaturesLayerId === id ? null : s.ui.loadEditorFeaturesLayerId,
+          },
           isDirty: true,
         })),
 
@@ -1953,6 +1962,24 @@ export const useAppStore = create<AppState>()(
               s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
                 ? null
                 : s.identifyLayerId,
+            ui: {
+              ...s.ui,
+              selectByExpressionLayerId:
+                s.ui.selectByExpressionLayerId !== null &&
+                removedIds.has(s.ui.selectByExpressionLayerId)
+                  ? null
+                  : s.ui.selectByExpressionLayerId,
+              selectByLocationLayerId:
+                s.ui.selectByLocationLayerId !== null &&
+                removedIds.has(s.ui.selectByLocationLayerId)
+                  ? null
+                  : s.ui.selectByLocationLayerId,
+              loadEditorFeaturesLayerId:
+                s.ui.loadEditorFeaturesLayerId !== null &&
+                removedIds.has(s.ui.loadEditorFeaturesLayerId)
+                  ? null
+                  : s.ui.loadEditorFeaturesLayerId,
+            },
             isDirty: true,
           };
         }),
@@ -2129,6 +2156,8 @@ export const useAppStore = create<AppState>()(
             selectByExpressionLayerId: null,
             selectByLocationOpen: false,
             selectByLocationLayerId: null,
+            loadEditorFeaturesOpen: false,
+            loadEditorFeaturesLayerId: null,
           },
         }));
         clearHistory();
@@ -2180,6 +2209,8 @@ export const useAppStore = create<AppState>()(
             selectByExpressionLayerId: null,
             selectByLocationOpen: false,
             selectByLocationLayerId: null,
+            loadEditorFeaturesOpen: false,
+            loadEditorFeaturesLayerId: null,
           },
         }));
         clearHistory();
