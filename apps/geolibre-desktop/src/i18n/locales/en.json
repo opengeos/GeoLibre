@@ -584,6 +584,7 @@
       "modeCoordinates": "Coordinates",
       "modeAddresses": "Addresses (geocode)",
       "addressColumns": "Address columns",
+      "addressColumnsEmptyHint": "Retrieve columns first to select address columns.",
       "addressColumnsHint": "Select one or more columns to concatenate into the address sent to the geocoder (e.g. street, city, state).",
       "errorNoAddressColumns": "Select at least one address column.",
       "errorNoAddressesFound": "No rows had a value in the selected address column(s)."
@@ -2749,6 +2750,7 @@
     "summary": "Geocoded {{matched}} of {{total}} row(s); {{failed}} had no match.",
     "failedRows": "Rows with no match: {{rows}}",
     "noMatches": "No rows could be geocoded.",
+    "cancelledNoRows": "Cancelled before any rows were geocoded.",
     "cancelled": "Cancelled. Added {{matched}} matched row(s).",
     "error": "Error: {{message}}",
     "reverseLookingUp": "Looking up address...",

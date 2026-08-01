@@ -356,13 +356,8 @@ export function DelimitedTextSource() {
     );
 
     const features = [...matchedFeatures, ...unmatchedFeatures];
-    if (features.length === 0) throw new Error(t("geocode.noMatches"));
-
-    // Rows kept but flagged as unmatched are inspectable, not just present: a
-    // stale filter from a prior layer should not carry over, so this is only
-    // set (never cleared) when this run actually has unmatched rows.
-    if (unmatchedFeatures.length > 0) {
-      useAppStore.getState().setAttributeFilter("unmatched");
+    if (features.length === 0) {
+      throw new Error(cancelled ? t("geocode.cancelledNoRows") : t("geocode.noMatches"));
     }
 
     source.addAndClose(
@@ -374,8 +369,10 @@ export function DelimitedTextSource() {
           {
             addressColumns: delimitedTextAddressColumns,
             fields,
+            geocodeCancelled: cancelled,
             geocodeMatched: matchedFeatures.length,
             geocodeProvider: config.providerId,
+            geocodeSkippedEmpty: skippedEmpty,
             geocodeUnmatched: unmatchedFeatures.length,
             isTable: false,
             sourceKind: "delimited-text",
@@ -390,6 +387,15 @@ export function DelimitedTextSource() {
       },
       { fit: matchedFeatures.length > 0 },
     );
+
+    // Rows kept but flagged as unmatched are inspectable, not just present: a
+    // stale filter from a prior layer should not carry over, so this is only
+    // set (never cleared) when this run actually has unmatched rows. Applied
+    // after addAndClose so it lands on the layer it just selected, not
+    // whatever was selected before this run.
+    if (unmatchedFeatures.length > 0) {
+      useAppStore.getState().setAttributeFilter("unmatched");
+    }
   };
 
   const handleSubmit = source.runSubmit(async () => {
@@ -672,7 +678,7 @@ export function DelimitedTextSource() {
               <div className="space-y-1 rounded-md border p-2">
                 {delimitedTextFieldOptions.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    {t("addData.delimitedText.retrieveColumns")}
+                    {t("addData.delimitedText.addressColumnsEmptyHint")}
                   </p>
                 ) : (
                   delimitedTextFieldOptions.map((field) => (
