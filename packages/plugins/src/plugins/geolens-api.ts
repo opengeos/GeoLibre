@@ -151,15 +151,16 @@ export function resetGeoLensFetch(): void {
 }
 
 /**
- * Route one host through a special transport and leave every other GeoLens
- * deployment on the fallback transport.
+ * Route the given hosts through a special transport and leave every other
+ * GeoLens deployment on the fallback transport.
  */
 export function createGeoLensHostFetch(
-  nativeHost: string,
+  nativeHosts: Iterable<string>,
   nativeFetch: GeoLensFetch,
   fallbackFetch: GeoLensFetch = (url, init) =>
     fetch(url, init) as unknown as Promise<GeoLensHttpResponse>,
 ): GeoLensFetch {
+  const hosts = new Set(nativeHosts);
   return (url, init) => {
     let host: string | null = null;
     try {
@@ -167,7 +168,7 @@ export function createGeoLensHostFetch(
     } catch {
       // The client validates HTTP(S) URLs before calling its transport.
     }
-    return (host === nativeHost ? nativeFetch : fallbackFetch)(url, init);
+    return (host && hosts.has(host) ? nativeFetch : fallbackFetch)(url, init);
   };
 }
 
