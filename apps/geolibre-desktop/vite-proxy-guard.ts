@@ -190,42 +190,38 @@ const guardedDispatcher = new Agent({
     lookup(hostname, options, callback) {
       // Force all-address mode after spreading connector options so the
       // caller cannot downgrade us to the single-address callback form.
-      dnsLookupCallback(
-        hostname,
-        { ...options, all: true, verbatim: true },
-        (err, addresses) => {
-          if (err) {
-            callback(err as NodeJS.ErrnoException, "", 4);
-            return;
-          }
-          const list = addresses as Array<{ address: string; family: number }>;
-          if (!Array.isArray(list) || list.length === 0) {
+      dnsLookupCallback(hostname, { ...options, all: true, verbatim: true }, (err, addresses) => {
+        if (err) {
+          callback(err as NodeJS.ErrnoException, "", 4);
+          return;
+        }
+        const list = addresses as Array<{ address: string; family: number }>;
+        if (!Array.isArray(list) || list.length === 0) {
+          callback(
+            Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), {
+              code: "ENOTFOUND",
+            }),
+            "",
+            4,
+          );
+          return;
+        }
+        for (const entry of list) {
+          if (isPrivateHost(entry.address)) {
             callback(
-              Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), {
-                code: "ENOTFOUND",
-              }),
+              Object.assign(
+                new Error(`Blocked private/reserved address: ${hostname} → ${entry.address}`),
+                { code: "ENOTFOUND" },
+              ),
               "",
               4,
             );
             return;
           }
-          for (const entry of list) {
-            if (isPrivateHost(entry.address)) {
-              callback(
-                Object.assign(
-                  new Error(`Blocked private/reserved address: ${hostname} → ${entry.address}`),
-                  { code: "ENOTFOUND" },
-                ),
-                "",
-                4,
-              );
-              return;
-            }
-          }
-          const chosen = list[0];
-          callback(null, chosen.address, chosen.family);
-        },
-      );
+        }
+        const chosen = list[0];
+        callback(null, chosen.address, chosen.family);
+      });
     },
   },
 });

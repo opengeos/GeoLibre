@@ -351,10 +351,7 @@ describe("Vite proxy guard — assertResolvedPublicHost", () => {
 
   it("rejects a DNS name that resolves to a private address", async () => {
     const lookup = (async () => [{ address: "10.0.0.5", family: 4 as const }]) as never;
-    await assert.rejects(
-      () => assertResolvedPublicHost("evil.example", lookup),
-      /10\.0\.0\.5/,
-    );
+    await assert.rejects(() => assertResolvedPublicHost("evil.example", lookup), /10\.0\.0\.5/);
   });
 
   it("rejects an empty DNS result", async () => {
