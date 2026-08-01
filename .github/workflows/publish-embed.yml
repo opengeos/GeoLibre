@@ -21,6 +21,14 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1, which the runner's
+      # bundled npm is not guaranteed to be. Pin to a known-good version rather
+      # than `npm@latest`: that tag briefly shipped a build missing the bundled
+      # `sigstore` module, which breaks `npm publish --provenance`.
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install -g npm@11.5.1
+
       - run: npm ci
       - id: version
         run: |
@@ -30,7 +38,12 @@ jobs:
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.version.outputs.publish == 'true'
-        run: npm publish -w @geolibre/embed --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No NODE_AUTH_TOKEN: npm authenticates via the OIDC id-token from the
+      # trusted publisher configured on the package (opengeos/GeoLibre, this
+      # workflow file) and attaches build provenance. npm has no PyPI-style
+      # pending publisher, so the package has to exist before that connection
+      # can be made: version 2.4.0 is published from a maintainer's machine
+      # once, then every later release goes through here.
+      - name: Publish to npm (Trusted Publishing)
+        if: steps.version.outputs.publish == 'true'
+        run: npm publish -w @geolibre/embed --provenance --access public

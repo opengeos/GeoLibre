@@ -2,8 +2,27 @@
   "name": "@geolibre/embed",
   "version": "2.4.0",
   "description": "Typed client for GeoLibre's iframe embed API",
+  "keywords": [
+    "embed",
+    "geolibre",
+    "gis",
+    "iframe",
+    "map",
+    "maplibre",
+    "postmessage"
+  ],
+  "homepage": "https://geolibre.app/user-guide/embedding/",
+  "bugs": "https://github.com/opengeos/GeoLibre/issues",
+  "license": "MIT",
+  "author": "Qiusheng Wu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengeos/GeoLibre",
+    "directory": "packages/embed"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "type": "module",
   "sideEffects": false,
