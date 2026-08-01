@@ -48,16 +48,16 @@ export function clampClassCount(value: number, min: number, max = 12): number {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+/** Return the stable identity of a scalar that can be used as a categorized stop. */
+function categorizedValueKey(value: unknown): string | null {
+  if (typeof value === "string") return `string:${value}`;
+  if (typeof value === "number" && Number.isFinite(value)) return `number:${String(value)}`;
+  return null;
+}
+
 /** Count distinct scalar values that can be used as categorized stops. */
 export function countCategorizedValues(values: unknown[]): number {
-  const categories = new Set<string>();
-  for (const value of values) {
-    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
-      continue;
-    }
-    categories.add(`${typeof value}:${String(value)}`);
-  }
-  return categories.size;
+  return new Set(values.map(categorizedValueKey).filter((key) => key !== null)).size;
 }
 
 /** Convert a scalar numeric property value without coercing blanks or non-scalars. */
@@ -133,16 +133,14 @@ export function createCategorizedStops(
     }
   >();
   for (const value of propertyValues ?? getPropertyValues(layer, property)) {
-    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
-      continue;
-    }
-    const key = `${typeof value}:${String(value)}`;
+    const key = categorizedValueKey(value);
+    if (key === null) continue;
     const category = categories.get(key);
     if (category) {
       category.count += 1;
     } else {
       categories.set(key, {
-        value,
+        value: value as string | number,
         count: 1,
         firstSeen: categories.size,
       });

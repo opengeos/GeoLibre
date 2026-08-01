@@ -1791,11 +1791,30 @@ export function StylePanel({
     }
   };
   const updateDraftVectorStyleProperty = (property: string) => {
+    const currentCategoryCount =
+      draftVectorStyleMode === "categorized"
+        ? countCategorizedValues(
+            draftVectorPropertyValues ?? getPropertyValues(layer, draftVectorStyleProperty),
+          )
+        : 0;
+    const nextCategoryCount =
+      draftVectorStyleMode === "categorized"
+        ? countCategorizedValues(
+            matchingPropertyValues(property) ?? getPropertyValues(layer, property),
+          )
+        : 0;
+    const classCount =
+      nextCategoryCount > 0
+        ? draftVectorStyleClassCount === currentCategoryCount
+          ? nextCategoryCount
+          : Math.min(draftVectorStyleClassCount, nextCategoryCount)
+        : draftVectorStyleClassCount;
     setDraftVectorStyleProperty(property);
+    setDraftVectorStyleClassCount(classCount);
     regenerateDraftVectorStyleStops(
       draftVectorStyleMode,
       property,
-      draftVectorStyleClassCount,
+      classCount,
       draftVectorStyleColorRamp,
       draftVectorStyleClassificationScheme,
     );
