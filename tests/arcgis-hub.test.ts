@@ -88,9 +88,10 @@ describe("ArcGIS Hub catalog client", () => {
         "https://example.com/arcgis/rest/services/Test/FeatureServer/0",
       );
       assert.equal(result.features.length, 1001);
-      assert.equal(requests.length, 3);
+      assert.equal(requests.length, 12);
       assert.equal(requests[1].searchParams.get("f"), "geojson");
-      assert.equal(requests[2].searchParams.get("objectIds"), "1001");
+      assert.equal(requests.at(-1)?.searchParams.get("objectIds"), "1001");
+      assert.ok(requests.slice(1).every((url) => url.href.length < 2_000));
     } finally {
       globalThis.fetch = originalFetch;
     }

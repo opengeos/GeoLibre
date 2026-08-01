@@ -113,12 +113,15 @@ export async function fetchFeatureServiceGeoJson(
   }
 
   const result: FeatureCollection = { type: "FeatureCollection", features: [] };
-  // ArcGIS services publish different maxRecordCount values. A conservative
-  // 1,000-ID page works across old Enterprise portals and prevents the first
-  // page limit from silently truncating a download.
-  for (let offset = 0; offset < objectIds.length; offset += 1_000) {
+  // Keep object-id query strings short. Some ArcGIS deployments sit behind
+  // IIS/WAF proxies that answer an overlong GET URL with 404 even though the
+  // same layer works through an ordinary `where=1=1` map query. One hundred
+  // numeric IDs stays comfortably below common URL limits while still avoiding
+  // the service's maxRecordCount truncation.
+  const objectIdPageSize = 100;
+  for (let offset = 0; offset < objectIds.length; offset += objectIdPageSize) {
     const url = new URL(`${layerUrl}/query`);
-    url.searchParams.set("objectIds", objectIds.slice(offset, offset + 1_000).join(","));
+    url.searchParams.set("objectIds", objectIds.slice(offset, offset + objectIdPageSize).join(","));
     url.searchParams.set("outFields", "*");
     url.searchParams.set("returnGeometry", "true");
     url.searchParams.set("outSR", "4326");
