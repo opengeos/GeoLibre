@@ -200,19 +200,21 @@ def _drop_listener(socket: GeoLibreRelaySocket) -> None:
         _listeners.remove(socket)
 
 
+def _try_write(socket: GeoLibreRelaySocket, encoded: str) -> bool:
+    """Write to one app socket, dropping it if the peer is gone."""
+    try:
+        socket.write_message(encoded)
+    except Exception:  # noqa: BLE001 - a dead peer must not fail the request
+        _drop_listener(socket)
+        return False
+    return True
+
+
 def _broadcast(message: dict[str, Any]) -> int:
     """Send ``message`` to every open app socket; return how many received it."""
     encoded = json.dumps(message)
-    delivered = 0
-    # Copy: write_message on a closed socket raises and we drop it from the list.
-    for socket in list(_listeners):
-        try:
-            socket.write_message(encoded)
-        except Exception:  # noqa: BLE001 - a dead peer must not fail the request
-            _drop_listener(socket)
-            continue
-        delivered += 1
-    return delivered
+    # Copy: _try_write drops a dead socket from the list we are walking.
+    return sum(_try_write(socket, encoded) for socket in list(_listeners))
 
 
 def _dispatch_one(message: dict[str, Any]) -> GeoLibreRelaySocket | None:
@@ -224,12 +226,8 @@ def _dispatch_one(message: dict[str, Any]) -> GeoLibreRelaySocket | None:
     """
     encoded = json.dumps(message)
     for socket in list(_listeners):
-        try:
-            socket.write_message(encoded)
-        except Exception:  # noqa: BLE001 - a dead peer must not fail the request
-            _drop_listener(socket)
-            continue
-        return socket
+        if _try_write(socket, encoded):
+            return socket
     return None
 
 
@@ -261,6 +259,11 @@ class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHan
         try:
             result = normalize_result(json.loads(message))
         except (ValueError, json.JSONDecodeError):
+            return
+        # Only the window a request was dispatched to may answer it. Nothing else
+        # can learn the id today, but the single-authoritative-window guarantee
+        # this file builds up is worth enforcing where it is actually consumed.
+        if _pending_owners.get(result["requestId"]) is not self:
             return
         future = _pending_results.get(result["requestId"])
         if future is not None and not future.done():

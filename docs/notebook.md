@@ -57,6 +57,12 @@ fire-and-forget command — including `add_marker`/`add_markers` — still reach
 every connected window. This is only visible if you attach two GeoLibre windows
 to one Jupyter server.
 
+If no window is connected when `add_geojson` runs, it behaves like every other
+mutation — the layer goes out over the display transport, you get a
+`GeoLibreNotConnectedWarning`, and the return value is `None` rather than an id.
+The read-back calls have nothing to return in that situation, so they raise
+`GeoLibreNotConnectedError` (a `RuntimeError`) instead.
+
 Synchronous read-back is desktop-only. JupyterLite uses browser `postMessage`;
 blocking its Python call would also block the browser event loop that must
 deliver the result. Canonical client source:

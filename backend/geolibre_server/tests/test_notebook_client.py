@@ -252,6 +252,31 @@ def test_list_layers_raises_on_a_non_list_result(relay, monkeypatch):
         notebook_client.HostMap().list_layers()
 
 
+def test_add_geojson_falls_back_when_no_window_is_connected(relay, displays):
+    # Every other mutation degrades to the display transport (which still reaches
+    # the embedded Notebook panel) rather than failing, so this must too.
+    relay.listeners = 0
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning):
+        layer_id = notebook_client.HostMap().add_geojson(
+            {"type": "FeatureCollection", "features": []}
+        )
+
+    assert layer_id is None
+    assert len(displays) == 1
+
+
+def test_add_geojson_still_raises_when_the_handler_fails(relay, monkeypatch):
+    # Only the not-connected case degrades; a real handler error must surface.
+    def fail(url, method, params=None):
+        raise RuntimeError("layerId must be a non-empty string")
+
+    monkeypatch.setattr(notebook_client, "_request_from_relay", fail)
+
+    with pytest.raises(RuntimeError, match="layerId"):
+        notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
+
+
 def test_add_geojson_raises_on_a_missing_layer_id(relay, monkeypatch):
     # str(None) would hand back "None", an id no later call could ever resolve.
     monkeypatch.setattr(

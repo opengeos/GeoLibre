@@ -254,6 +254,27 @@ def test_dispatch_one_reports_no_window():
     assert jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"}) is None
 
 
+def test_only_the_owning_window_may_answer_a_request():
+    loop = asyncio.new_event_loop()
+    try:
+        owner, other = FakeSocket(), FakeSocket()
+        future = loop.create_future()
+        jupyter_relay._listeners.extend([owner, other])
+        jupyter_relay._pending_results["mine"] = future
+        jupyter_relay._pending_owners["mine"] = owner
+        reply = json.dumps(
+            {"type": "geolibre:result", "requestId": "mine", "ok": True, "value": "layer-1"}
+        )
+
+        jupyter_relay.GeoLibreRelaySocket.on_message(other, reply)
+        assert not future.done()
+
+        jupyter_relay.GeoLibreRelaySocket.on_message(owner, reply)
+        assert future.result()["value"] == "layer-1"
+    finally:
+        loop.close()
+
+
 def test_closing_the_owning_window_fails_its_request_at_once():
     # Without this the kernel would sit out the full RESULT_TIMEOUT_SECONDS for
     # an answer the relay already knows can never arrive.

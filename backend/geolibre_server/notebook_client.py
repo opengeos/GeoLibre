@@ -69,6 +69,7 @@ from typing import Any
 from IPython.display import Javascript, display
 
 __all__ = [
+    "GeoLibreNotConnectedError",
     "GeoLibreNotConnectedWarning",
     "HostMap",
     "Map",
@@ -99,6 +100,17 @@ _NOT_CONNECTED_HINT = (
 
 class GeoLibreNotConnectedWarning(UserWarning):
     """Warned when a map command could not be delivered to a GeoLibre window."""
+
+
+class GeoLibreNotConnectedError(RuntimeError):
+    """Raised when a read-back command found no GeoLibre window to run it.
+
+    Only the read-back calls (:meth:`HostMap.list_layers`,
+    :meth:`HostMap.get_layer`) raise this: they have nothing to return without a
+    window. Mutations degrade to the fire-and-forget transport and warn with
+    :class:`GeoLibreNotConnectedWarning` instead. Subclasses ``RuntimeError``, so
+    code that already catches that keeps working.
+    """
 
 
 def _relay_url() -> str | None:
@@ -196,7 +208,7 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
     except (urllib.error.URLError, OSError, ValueError) as error:
         raise RuntimeError(f"GeoLibre read-back failed: {_relay_failure_reason(error)}") from error
     if not payload.get("delivered"):
-        raise RuntimeError(f"No GeoLibre window is connected. {_NOT_CONNECTED_HINT}")
+        raise GeoLibreNotConnectedError(f"No GeoLibre window is connected. {_NOT_CONNECTED_HINT}")
     if not payload.get("ok"):
         raise RuntimeError(str(payload.get("error") or "GeoLibre command failed."))
     return payload.get("value")
@@ -458,6 +470,12 @@ class HostMap:
             name: Layer display name.
             **style: Style overrides applied when the layer is created (e.g.
                 ``fillColor="#facc15"`` or ``strokeColor="#d97706"``).
+
+        Returns:
+            The new layer's id on desktop, or None when the id is unavailable —
+            on JupyterLite, and on desktop when no window held the relay socket
+            (the layer is still sent over the display transport, with a
+            :class:`GeoLibreNotConnectedWarning`).
         """
         params = {
             "name": name,
@@ -469,7 +487,16 @@ class HostMap:
         # where a synchronous Python call cannot wait on the browser event loop.
         url = _relay_url()
         if url is not None:
-            value = _request_from_relay(url, "addGeoJsonLayer", params)
+            try:
+                value = _request_from_relay(url, "addGeoJsonLayer", params)
+            except GeoLibreNotConnectedError:
+                # Nothing held the relay socket. Every other mutation degrades to
+                # the display transport here (which still reaches the embedded
+                # Notebook panel) and warns, so adding a layer must not be the
+                # one call that hard-fails. The id is then unavailable, exactly
+                # as on JupyterLite. A handler error still raises.
+                _send("addGeoJsonLayer", params)
+                return None
             if not isinstance(value, str) or not value:
                 # Fail loudly rather than handing back an id ("None") that no
                 # later set_style/remove_layer call could ever resolve.
