@@ -703,10 +703,22 @@ export function DesktopShell({
   const enforceViewerPlugins = useCallback(() => {
     if (!layoutOptions.viewer) return;
     const manager = getPluginManager();
-    const blocked = VIEWER_BLOCKED_PLUGIN_IDS.filter((id) => manager.isActive(id));
-    if (blocked.length === 0) return;
-    const appAPI = createAppAPI(mapControllerRef);
-    for (const id of blocked) manager.deactivate(id, appAPI);
+    for (const id of VIEWER_BLOCKED_PLUGIN_IDS) {
+      if (!manager.isActive(id)) continue;
+      // `isActive` is true from the moment activation starts, so a plugin that
+      // mounts behind a dynamic import (GeoAgent) is "active" with no control
+      // yet: deactivating now would tear down nothing and the mount would land
+      // straight after. Wait for it, then re-check — a failed mount rolls the
+      // active flag back on its own, so there is nothing left to do.
+      const pending = manager.pendingActivation(id);
+      if (pending) {
+        void pending.then(() => {
+          if (manager.isActive(id)) manager.deactivate(id, createAppAPI(mapControllerRef));
+        });
+        continue;
+      }
+      manager.deactivate(id, createAppAPI(mapControllerRef));
+    }
   }, [layoutOptions.viewer, mapControllerRef]);
 
   useEffect(() => {

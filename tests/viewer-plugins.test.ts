@@ -1,44 +1,38 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { maplibreAnnotationsPlugin } from "../packages/plugins/src/plugins/maplibre-annotations";
+import { maplibreGeoEditorPlugin } from "../packages/plugins/src/plugins/maplibre-geo-editor";
 import {
   ANNOTATIONS_PLUGIN_ID,
-  maplibreAnnotationsPlugin,
-} from "../packages/plugins/src/plugins/maplibre-annotations";
-import {
+  GEOAGENT_PLUGIN_ID,
   GEO_EDITOR_PLUGIN_ID,
-  maplibreGeoEditorPlugin,
-} from "../packages/plugins/src/plugins/maplibre-geo-editor";
+} from "../packages/plugins/src/plugin-ids";
 import { VIEWER_BLOCKED_PLUGIN_IDS } from "../packages/plugins/src/viewer-plugins";
 
 describe("VIEWER_BLOCKED_PLUGIN_IDS", () => {
-  it("names the plugins whose on-map control writes to the project", () => {
-    assert.deepEqual([...VIEWER_BLOCKED_PLUGIN_IDS].sort(), [
-      ANNOTATIONS_PLUGIN_ID,
-      GEO_EDITOR_PLUGIN_ID,
-    ]);
+  it("names every plugin whose on-map control writes to the project", () => {
+    assert.deepEqual(
+      [...VIEWER_BLOCKED_PLUGIN_IDS].sort(),
+      [ANNOTATIONS_PLUGIN_ID, GEOAGENT_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID].sort(),
+    );
   });
 
-  it("uses the id the annotations plugin actually registers under", () => {
+  it("uses the ids the plugins actually register under", () => {
     // The viewer preset looks each id up through `PluginManager.isActive`, so a
     // plugin renamed without updating the list would silently stop being
-    // blocked and the embed would quietly become drawable again.
-    // (`maplibre-geo-editor.ts` has the same assertion for its own id.)
+    // blocked and the embed would quietly become drawable again. GeoAgent
+    // cannot be checked this way — importing its module pulls in
+    // `maplibre-gl-earth-engine`, which touches `window` at load — which is
+    // precisely why the ids live in `plugin-ids` and the plugin imports its own
+    // from there, making the two the same binding rather than two literals.
     assert.equal(maplibreAnnotationsPlugin.id, ANNOTATIONS_PLUGIN_ID);
+    assert.equal(maplibreGeoEditorPlugin.id, GEO_EDITOR_PLUGIN_ID);
   });
 
-  it("lists only plugins that mount synchronously", () => {
-    // PluginManager marks a plugin active before an async `activate()` has
-    // resolved, and the viewer guard deactivates in that same tick — so an
-    // async blocked plugin would be torn down before its control existed and
-    // then mount anyway, leaving a live authoring control in a read-only
-    // embed. Making one async means teaching the guard to await the pending
-    // activation (see the note on VIEWER_BLOCKED_PLUGIN_IDS).
-    for (const plugin of [maplibreGeoEditorPlugin, maplibreAnnotationsPlugin]) {
-      assert.equal(
-        plugin.activate.constructor.name,
-        "Function",
-        `${plugin.id} must not declare activate as async`,
-      );
-    }
+  it("keeps the list importable without a browser", () => {
+    // `viewer-plugins` reads `plugin-ids` rather than the plugin modules, so
+    // the guard and its tests do not drag plugin implementations (and their
+    // window-touching dependencies) in. This test passing IS that check.
+    assert.ok(VIEWER_BLOCKED_PLUGIN_IDS.every((id) => typeof id === "string" && id.length > 0));
   });
 });
