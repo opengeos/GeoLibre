@@ -66,8 +66,11 @@ m.to_project()["mapView"]["center"]
 | --- | --- |
 | `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. `layout` is `"embed"`, `"full"`, or `"maponly"`. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON (dict, path, URL, JSON, or GeoDataFrame). |
+| `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
+| `add_csv` / `add_xy_data` `(data, x=, y=, name=, **style)` | Add points from CSV, a DataFrame, or row mappings. |
+| `add_heatmap(points, name=, radius=, intensity=, **style)` | Add a point density heatmap. |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON) or a local file (read via GeoPandas, inlined). |
-| `add_geoparquet` / `add_flatgeobuf` / `add_shp` `(data, name=, **style)` | Format-specific wrappers over `add_vector`. |
+| `add_geoparquet` / `add_flatgeobuf` / `add_shp` / `add_kml` / `add_gpkg` | Format-specific wrappers over `add_vector`. |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add vector tiles from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
@@ -81,6 +84,8 @@ m.to_project()["mapView"]["center"]
 | `add_basemap(basemap)` | Set the background basemap. |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
+| `zoom_to_bounds(bounds)` / `zoom_to_layer(layer)` | Fit the view to bounds or a layer id/name/handle. |
+| `layer_names` / `find_layer(name)` / `set_layer_visibility` / `set_layer_opacity` | Inspect and update layers conveniently. |
 | `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
 | `to_project()` / `load_project(src)` / `save_project(path)` | Project I/O. |
 

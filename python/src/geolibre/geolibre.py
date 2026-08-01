@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import base64
 import copy
+import csv
 import html as _html
+import io
 import json
 import math
 import os
 import pathlib
 import re
 import time
+import urllib.request
 import uuid
 import warnings
 from typing import Any, Callable
@@ -40,7 +43,11 @@ _VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
 _VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 
 
-def _read_local_vector(path: Any, data_format: str | None = None) -> dict[str, Any]:
+def _read_local_vector(
+    path: Any,
+    data_format: str | None = None,
+    source_layer: str | None = None,
+) -> dict[str, Any]:
     """Read a local vector file into a GeoJSON FeatureCollection via GeoPandas.
 
     The browser cannot read a file that lives on the kernel host, so a local
@@ -54,6 +61,8 @@ def _read_local_vector(path: Any, data_format: str | None = None) -> dict[str, A
         data_format: Optional format hint (e.g. ``"parquet"``) that overrides
             filename-suffix detection, so a GeoParquet file saved under a
             non-standard name still uses the dedicated Parquet reader.
+        source_layer: Optional layer/table name for a multi-layer container such
+            as a GeoPackage.
 
     Returns:
         A GeoJSON FeatureCollection dict in EPSG:4326.
@@ -82,7 +91,7 @@ def _read_local_vector(path: Any, data_format: str | None = None) -> dict[str, A
     if is_parquet:
         gdf = geopandas.read_parquet(file_path)
     else:
-        gdf = geopandas.read_file(file_path)
+        gdf = geopandas.read_file(file_path, **({"layer": source_layer} if source_layer else {}))
     if gdf.crs is not None:
         gdf = gdf.to_crs(epsg=4326)
     # Round-trip through GeoPandas' own GeoJSON writer so numpy/datetime property
@@ -557,7 +566,27 @@ class Map(anywidget.AnyWidget):
         timeout: float = 10.0,
     ) -> None:
         """Fit the camera to ``[west, south, east, north]``."""
-        self.request("fitBounds", {"bounds": [float(b) for b in bounds]}, timeout=timeout)
+        values = [float(b) for b in bounds]
+        if len(values) != 4:
+            raise ValueError("bounds must contain [west, south, east, north]")
+        west, south, east, north = values
+        if west > east or south > north:
+            raise ValueError("bounds must satisfy west <= east and south <= north")
+        self.request("fitBounds", {"bounds": values}, timeout=timeout)
+
+    def zoom_to_bounds(
+        self,
+        bounds: list[float] | tuple[float, float, float, float],
+        *,
+        timeout: float = 10.0,
+    ) -> None:
+        """Fit the map to bounds (leafmap-style alias of :meth:`fit_bounds`)."""
+        self.fit_bounds(bounds, timeout=timeout)
+
+    def zoom_to_layer(self, layer: str | Layer, *, timeout: float = 10.0) -> None:
+        """Fit the map to a layer, addressed by id, name, or layer handle."""
+        resolved = self._resolve_layer(layer)
+        self.request("zoomToLayer", {"layerId": resolved.id}, timeout=timeout)
 
     def identify(
         self,
@@ -837,6 +866,11 @@ class Map(anywidget.AnyWidget):
             if isinstance(layer, dict) and "id" in layer
         ]
 
+    @property
+    def layer_names(self) -> list[str]:
+        """Return layer display names in map order."""
+        return [str(layer.name) for layer in self.layers]
+
     def get_layer(self, layer_id: str) -> Layer:
         """Return a :class:`Layer` handle for ``layer_id``.
 
@@ -847,6 +881,38 @@ class Map(anywidget.AnyWidget):
             if isinstance(layer, dict) and layer.get("id") == layer_id:
                 return Layer(self, layer_id)
         raise ValueError(f"No layer with id {layer_id!r}")
+
+    def find_layer(self, name: str) -> Layer | None:
+        """Return the first layer named ``name``, or ``None`` when absent."""
+        return next((layer for layer in self.layers if layer.name == name), None)
+
+    def find_layer_index(self, name: str) -> int:
+        """Return the index of the first layer named ``name``, or ``-1``."""
+        return next((i for i, layer in enumerate(self.layers) if layer.name == name), -1)
+
+    def _resolve_layer(self, layer: str | Layer) -> Layer:
+        """Resolve a layer handle, id, or display name to a live layer."""
+        if isinstance(layer, Layer):
+            if layer._map is not self:
+                raise ValueError("Layer belongs to a different map")
+            # Access verifies that a stale handle has not been removed.
+            layer._layer()
+            return layer
+        try:
+            return self.get_layer(str(layer))
+        except ValueError:
+            match = self.find_layer(str(layer))
+            if match is not None:
+                return match
+        raise ValueError(f"No layer with id or name {layer!r}")
+
+    def set_layer_visibility(self, layer: str | Layer, visible: bool = True) -> None:
+        """Show or hide a layer addressed by id, name, or layer handle."""
+        self._resolve_layer(layer).visible = visible
+
+    def set_layer_opacity(self, layer: str | Layer, opacity: float) -> None:
+        """Set a layer's opacity in ``[0, 1]``."""
+        self._resolve_layer(layer).opacity = opacity
 
     def _mutate_layer(self, layer_id: str, mutate: Callable[[dict[str, Any]], None]) -> None:
         """Apply an in-place mutation to one layer through the project trait."""
@@ -886,6 +952,40 @@ class Map(anywidget.AnyWidget):
         )
         fc = _project.load_featurecollection(data)
         return self._add_layer(_project.geojson_layer(name, fc, source_url=source_url, **style))
+
+    def add_gdf(
+        self,
+        gdf: Any,
+        name: str = "GeoDataFrame",
+        *,
+        column: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a GeoDataFrame, optionally styled by a numeric column."""
+        if not hasattr(gdf, "__geo_interface__"):
+            raise TypeError("gdf must provide a __geo_interface__")
+        return self.add_data(gdf, column=column, name=name, **style)
+
+    def add_kml(self, data: Any, name: str = "KML", **style: Any) -> str:
+        """Add a local or remote KML/KMZ dataset."""
+        return self.add_vector(data, name=name, data_format="kml", **style)
+
+    def add_gpkg(
+        self,
+        data: Any,
+        name: str = "GeoPackage",
+        *,
+        layer: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a local or remote GeoPackage, optionally selecting a table."""
+        return self.add_vector(
+            data,
+            name=name,
+            data_format="gpkg",
+            source_layer=layer,
+            **style,
+        )
 
     # -- markers ---------------------------------------------------------
 
@@ -1071,6 +1171,79 @@ class Map(anywidget.AnyWidget):
         style.setdefault("clusterRadius", int(cluster_radius))
         style.setdefault("clusterMaxZoom", int(cluster_max_zoom))
         return self.add_markers(points, name=name, **style)
+
+    def add_heatmap(
+        self,
+        points: Any,
+        name: str = "Heatmap",
+        *,
+        radius: float = 30,
+        intensity: float = 1,
+        **style: Any,
+    ) -> str:
+        """Add point data using GeoLibre's density heatmap renderer."""
+        if float(radius) <= 0:
+            raise ValueError("radius must be greater than zero")
+        if float(intensity) < 0:
+            raise ValueError("intensity must be non-negative")
+        style.setdefault("pointRenderer", "heatmap")
+        style.setdefault("heatmapRadius", float(radius))
+        style.setdefault("heatmapIntensity", float(intensity))
+        return self.add_markers(points, name=name, **style)
+
+    @staticmethod
+    def _tabular_records(data: Any) -> list[dict[str, Any]]:
+        """Convert a DataFrame, CSV path/URL/text, or row iterable to records."""
+        if hasattr(data, "to_dict"):
+            try:
+                records = data.to_dict(orient="records")
+            except TypeError:
+                records = data.to_dict("records")
+            if isinstance(records, list):
+                return [dict(row) for row in records]
+        if isinstance(data, (str, os.PathLike)):
+            source = str(data)
+            if source.startswith(("http://", "https://")):
+                with urllib.request.urlopen(source, timeout=30) as response:  # noqa: S310
+                    text = response.read().decode("utf-8-sig")
+            else:
+                path = pathlib.Path(source).expanduser()
+                text = path.read_text(encoding="utf-8-sig") if path.exists() else source
+            return [dict(row) for row in csv.DictReader(io.StringIO(text))]
+        return [dict(row) for row in data]
+
+    def add_xy_data(
+        self,
+        data: Any,
+        x: str = "longitude",
+        y: str = "latitude",
+        name: str = "XY Data",
+        **style: Any,
+    ) -> str:
+        """Add points from a DataFrame, CSV path/URL/text, or row mappings."""
+        records = self._tabular_records(data)
+        points: list[dict[str, Any]] = []
+        for index, row in enumerate(records, start=1):
+            if x not in row or y not in row:
+                raise ValueError(f"Row {index} is missing coordinate columns {x!r} and/or {y!r}")
+            point = {key: value for key, value in row.items() if key not in (x, y)}
+            try:
+                point.update(lng=float(row[x]), lat=float(row[y]))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Row {index} has invalid coordinates") from exc
+            points.append(point)
+        return self.add_markers(points, name=name, **style)
+
+    def add_csv(
+        self,
+        data: Any,
+        x: str = "longitude",
+        y: str = "latitude",
+        name: str = "CSV",
+        **style: Any,
+    ) -> str:
+        """Add a CSV containing longitude and latitude columns."""
+        return self.add_xy_data(data, x=x, y=y, name=name, **style)
 
     # -- choropleth ------------------------------------------------------
 
@@ -1492,17 +1665,16 @@ class Map(anywidget.AnyWidget):
                     stacklevel=2,
                 )
             return self.add_geojson(data, name=name, **style)
-        # A local file is read and inlined as GeoJSON; render_mode and
-        # source_layer only apply to the in-browser vector control (remote URLs),
-        # so flag them as no-ops here rather than dropping them silently.
-        if render_mode != "geojson" or source_layer is not None:
+        # A local file is read and inlined as GeoJSON. Tile rendering is a
+        # browser-only option, while source_layer is forwarded to GeoPandas for
+        # multi-layer containers such as GeoPackage.
+        if render_mode != "geojson":
             warnings.warn(
-                "render_mode and source_layer are ignored for local files; they "
-                "only apply to remote URLs handled by the in-browser vector "
-                "control.",
+                "render_mode is ignored for local files; it only applies to "
+                "remote URLs handled by the in-browser vector control.",
                 stacklevel=2,
             )
-        fc = _read_local_vector(data, data_format=data_format)
+        fc = _read_local_vector(data, data_format=data_format, source_layer=source_layer)
         return self._add_layer(_project.geojson_layer(name, fc, **style))
 
     def add_geoparquet(self, data: Any, name: str = "GeoParquet", **style: Any) -> str:
@@ -2200,7 +2372,10 @@ class Layer:
 
     @opacity.setter
     def opacity(self, value: float) -> None:
-        self._map._mutate_layer(self._id, lambda layer: layer.update(opacity=float(value)))
+        opacity = float(value)
+        if not math.isfinite(opacity) or not 0 <= opacity <= 1:
+            raise ValueError("opacity must be a finite number between 0 and 1")
+        self._map._mutate_layer(self._id, lambda layer: layer.update(opacity=opacity))
 
     @property
     def style(self) -> dict[str, Any]:
@@ -2221,7 +2396,7 @@ class Layer:
 
     def zoom_to(self, *, timeout: float = 10.0) -> None:
         """Fit the map camera to this layer's extent."""
-        self._map.request("zoomToLayer", {"layerId": self._id}, timeout=timeout)
+        self._map.zoom_to_layer(self, timeout=timeout)
 
     def remove(self) -> None:
         """Remove this layer from the map."""
