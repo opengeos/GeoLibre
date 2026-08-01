@@ -3,6 +3,7 @@ import type { MapController } from "@geolibre/map";
 import { subscribeJupyterServer } from "../lib/jupyter";
 import {
   type RelayCommand,
+  type RelayResult,
   parseRelayMessage,
   relayReconnectDelay,
   relaySocketUrl,
@@ -45,7 +46,7 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
     // server can never resurrect the reconnect loop after we moved on.
     let generation = 0;
 
-    const reply = (activeSocket: WebSocket, payload: object) => {
+    const reply = (activeSocket: WebSocket, payload: RelayResult) => {
       if (activeSocket.readyState !== WebSocket.OPEN) return;
       try {
         activeSocket.send(JSON.stringify(payload));
