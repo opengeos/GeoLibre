@@ -288,7 +288,7 @@ export function parseEmbedRequest(
   data: unknown,
 ): EmbedRequest | { error: string; requestId: string | null } | null {
   if (!isRecord(data)) return null;
-  if (data.v !== 1 && data.v !== EMBED_API_VERSION) return null;
+  if (!(SUPPORTED_EMBED_API_VERSIONS as readonly unknown[]).includes(data.v)) return null;
   if (typeof data.type !== "string") return null;
   // Our own events echo back when the host relays them; never treat one as a
   // command.

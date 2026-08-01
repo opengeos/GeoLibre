@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { LAYER_TYPES, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
@@ -63,34 +63,49 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     // `ready`. Scoping to the exact origin afterwards keeps later payloads off
     // any other frame that happens to share the allowlist.
     let hostOrigin: string | null = null;
-    let hostVersion: 1 | 2 = 2;
+    let hostVersion: 1 | 2 | null = null;
     let disposed = false;
 
-    const emit = (type: EmbedEventType, payload: Record<string, unknown>) => {
+    const emit = (type: EmbedEventType, payload: Record<string, unknown>, version?: 1 | 2) => {
       if (disposed) return;
-      const message = buildEmbedEvent(type, payload, hostVersion);
       const targets = hostOrigin
         ? [hostOrigin]
         : wildcard
           ? [EMBED_ORIGIN_WILDCARD]
           : allowedOrigins;
-      for (const target of targets) {
-        try {
-          host.postMessage(message, target);
-        } catch (error) {
-          console.error("[GeoLibre] Failed to post embed event", error);
+      // Before a host speaks, broadcast both versions so listen-only v1 and v2
+      // integrations each receive events. Its first request pins later events.
+      const versions = version ? [version] : hostVersion ? [hostVersion] : ([2, 1] as const);
+      for (const eventVersion of versions) {
+        const message = buildEmbedEvent(type, payload, eventVersion);
+        for (const target of targets) {
+          try {
+            host.postMessage(message, target);
+          } catch (error) {
+            console.error("[GeoLibre] Failed to post embed event", error);
+          }
         }
       }
     };
 
-    const ack = (requestId: string | null, ok: boolean, error?: string, result?: unknown) => {
+    const ack = (
+      requestId: string | null,
+      version: 1 | 2,
+      ok: boolean,
+      error?: string,
+      result?: unknown,
+    ) => {
       if (!requestId) return;
-      emit("ack", {
-        requestId,
-        ok,
-        ...(error ? { error } : {}),
-        ...(result === undefined ? {} : { result }),
-      });
+      emit(
+        "ack",
+        {
+          requestId,
+          ok,
+          ...(error ? { error } : {}),
+          ...(result === undefined ? {} : { result }),
+        },
+        version,
+      );
     };
 
     const controller = () => mapControllerRef.current;
@@ -223,6 +238,9 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
             throw new Error(`A layer with id "${command.spec.id}" already exists`);
           }
           const spec = command.spec;
+          if (!(LAYER_TYPES as readonly string[]).includes(spec.type)) {
+            throw new Error(`Unsupported layer type "${spec.type}"`);
+          }
           const layer: GeoLibreLayer = {
             id: spec.id,
             name: spec.name,
@@ -256,15 +274,21 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       // the wildcard, and cannot be used as a postMessage target.)
       if (!hostOrigin && event.origin && event.origin !== "null") hostOrigin = event.origin;
       const requestedVersion = (event.data as { v?: unknown }).v;
-      hostVersion = requestedVersion === 1 ? 1 : 2;
+      const requestVersion: 1 | 2 = requestedVersion === 1 ? 1 : 2;
+      hostVersion ??= requestVersion;
       if ("error" in request) {
-        ack(request.requestId, false, request.error);
+        ack(request.requestId, requestVersion, false, request.error);
         return;
       }
       void runCommand(request.command).then(
-        (result) => ack(request.requestId, true, undefined, result),
+        (result) => ack(request.requestId, requestVersion, true, undefined, result),
         (error: unknown) => {
-          ack(request.requestId, false, error instanceof Error ? error.message : String(error));
+          ack(
+            request.requestId,
+            requestVersion,
+            false,
+            error instanceof Error ? error.message : String(error),
+          );
         },
       );
     };
@@ -367,11 +391,6 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     rafId = requestAnimationFrame(attach);
 
     emit("ready", { version: __GEOLIBRE_VERSION__ });
-    // Existing v1 hosts filter by the envelope version. Announce both versions
-    // until the first request identifies which one this host speaks.
-    hostVersion = 1;
-    emit("ready", { version: __GEOLIBRE_VERSION__ });
-    hostVersion = 2;
 
     return () => {
       disposed = true;
