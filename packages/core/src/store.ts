@@ -849,6 +849,52 @@ function fitGrid(total: number, preferredCols: number): { rows: number; cols: nu
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
 let cancelHistoryCoalesce: () => void = () => {};
 
+interface ProjectRestoreHistoryEntry {
+  before: GeoLibreProject;
+  beforePath: string | null;
+  after: GeoLibreProject;
+  afterPath: string | null;
+}
+
+let projectRestoreUndo: ProjectRestoreHistoryEntry | null = null;
+let projectRestoreRedo: ProjectRestoreHistoryEntry | null = null;
+let applyingProjectRestoreHistory = false;
+const projectRestoreHistoryListeners = new Set<() => void>();
+
+function notifyProjectRestoreHistory(): void {
+  projectRestoreHistoryListeners.forEach((listener) => listener());
+}
+
+export function subscribeProjectRestoreHistory(listener: () => void): () => void {
+  projectRestoreHistoryListeners.add(listener);
+  return () => projectRestoreHistoryListeners.delete(listener);
+}
+
+export function canUndoProjectRestore(): boolean {
+  return projectRestoreUndo !== null;
+}
+
+export function canRedoProjectRestore(): boolean {
+  return projectRestoreRedo !== null;
+}
+
+/**
+ * Register a whole-project restore as one undoable operation. The regular
+ * temporal history intentionally tracks only editing fields, while restoring a
+ * history snapshot also changes project metadata, camera, plugins, and other
+ * serialized state, so it needs a full canonical project pair.
+ */
+export function registerProjectRestoreHistory(
+  before: GeoLibreProject,
+  beforePath: string | null,
+  after: GeoLibreProject,
+  afterPath: string | null = null,
+): void {
+  projectRestoreUndo = { before, beforePath, after, afterPath };
+  projectRestoreRedo = null;
+  notifyProjectRestoreHistory();
+}
+
 /**
  * Drop the oldest undo snapshots once their combined feature payload exceeds the
  * configured budget, bounding the memory held by history when a large vector
@@ -2087,6 +2133,10 @@ export const useAppStore = create<AppState>()(
           const before = useAppStore.temporal.getState().pastStates;
           debounced(...args);
           if (useAppStore.temporal.getState().pastStates !== before) {
+            if (!applyingProjectRestoreHistory && projectRestoreRedo) {
+              projectRestoreRedo = null;
+              notifyProjectRestoreHistory();
+            }
             pruneHistoryBySize();
           }
         };
@@ -2161,6 +2211,25 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
  */
 export function undo(): void {
   const temporal = useAppStore.temporal.getState();
+  if (temporal.pastStates.length === 0 && projectRestoreUndo) {
+    const entry = projectRestoreUndo;
+    applyingProjectRestoreHistory = true;
+    try {
+      useAppStore.getState().loadProject(entry.before, entry.beforePath, {
+        rememberRecent: false,
+        presenting: false,
+      });
+      projectRestoreUndo = null;
+      useAppStore.setState({ isDirty: true });
+      projectRestoreRedo = entry;
+      notifyProjectRestoreHistory();
+    } catch (error) {
+      console.error("Could not undo the project snapshot restore.", error);
+    } finally {
+      applyingProjectRestoreHistory = false;
+    }
+    return;
+  }
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
   const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
@@ -2171,6 +2240,25 @@ export function undo(): void {
 /** Step the history forward one entry and mark the project dirty. */
 export function redo(): void {
   const temporal = useAppStore.temporal.getState();
+  if (temporal.futureStates.length === 0 && projectRestoreRedo) {
+    const entry = projectRestoreRedo;
+    applyingProjectRestoreHistory = true;
+    try {
+      useAppStore.getState().loadProject(entry.after, entry.afterPath, {
+        rememberRecent: false,
+        presenting: false,
+      });
+      projectRestoreRedo = null;
+      useAppStore.setState({ isDirty: true });
+      projectRestoreUndo = entry;
+      notifyProjectRestoreHistory();
+    } catch (error) {
+      console.error("Could not redo the project snapshot restore.", error);
+    } finally {
+      applyingProjectRestoreHistory = false;
+    }
+    return;
+  }
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
   const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
@@ -2182,4 +2270,9 @@ export function redo(): void {
 export function clearHistory(): void {
   cancelHistoryCoalesce(); // reset any in-flight burst so the next edit records
   useAppStore.temporal.getState().clear();
+  if (!applyingProjectRestoreHistory) {
+    projectRestoreUndo = null;
+    projectRestoreRedo = null;
+    notifyProjectRestoreHistory();
+  }
 }

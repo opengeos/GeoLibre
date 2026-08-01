@@ -127,9 +127,52 @@ export type GeoLensFetch = (
   },
 ) => Promise<GeoLensHttpResponse>;
 
-/** The default transport: the platform `fetch`. */
-export const defaultGeoLensFetch: GeoLensFetch = (url, init) =>
+/** The platform `fetch`, narrowed to the subset of `Response` this client uses. */
+const platformGeoLensFetch: GeoLensFetch = (url, init) =>
   fetch(url, init) as unknown as Promise<GeoLensHttpResponse>;
+
+/**
+ * The active default transport.
+ *
+ * Browser builds keep the platform `fetch`. The desktop host may replace this
+ * with Tauri's native HTTP transport for the built-in GeoLens service, whose
+ * origin allowlist cannot reliably cover every WebView origin.
+ */
+let geoLensFetch: GeoLensFetch = platformGeoLensFetch;
+
+/** The default transport used by the plugin, resolved lazily for host overrides. */
+export const defaultGeoLensFetch: GeoLensFetch = (url, init) => geoLensFetch(url, init);
+
+/** Override the plugin's default transport (used by the desktop host and tests). */
+export function setGeoLensFetch(fetchImpl: GeoLensFetch): void {
+  geoLensFetch = fetchImpl;
+}
+
+/** Restore the platform-fetch transport (used to isolate tests). */
+export function resetGeoLensFetch(): void {
+  geoLensFetch = platformGeoLensFetch;
+}
+
+/**
+ * Route the given hosts through a special transport and leave every other
+ * GeoLens deployment on the fallback transport.
+ */
+export function createGeoLensHostFetch(
+  nativeHosts: Iterable<string>,
+  nativeFetch: GeoLensFetch,
+  fallbackFetch: GeoLensFetch = platformGeoLensFetch,
+): GeoLensFetch {
+  const hosts = new Set(nativeHosts);
+  return (url, init) => {
+    let host: string | null = null;
+    try {
+      host = new URL(url).host;
+    } catch {
+      // The client validates HTTP(S) URLs before calling its transport.
+    }
+    return (host && hosts.has(host) ? nativeFetch : fallbackFetch)(url, init);
+  };
+}
 
 /** Only http(s) URLs may ever reach the map or a token mint. */
 const HTTP_URL_RE = /^https?:\/\//i;

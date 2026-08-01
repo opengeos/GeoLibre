@@ -75,6 +75,14 @@ if (isTauri()) {
       // path this fixes); surface it rather than swallow the rejection.
       console.error("[GeoLibre] Failed to install native share fetch", error);
     });
+  // GeoLens sends X-Api-Key, which preflights in a WebView. Keep the built-in
+  // datasets.geolibre.app connection working even when its CORS origin
+  // allowlist does not include the packaged desktop origin.
+  void import("./lib/geolens-fetch")
+    .then(({ installNativeGeoLensFetch }) => installNativeGeoLensFetch())
+    .catch((error: unknown) => {
+      console.error("[GeoLibre] Failed to install native GeoLens fetch", error);
+    });
 }
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.

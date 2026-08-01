@@ -30,8 +30,12 @@ export {
 } from "./storymap-io";
 export {
   clearHistory,
+  canRedoProjectRestore,
+  canUndoProjectRestore,
   DEFAULT_COLLABORATION_STATE,
   projectPathLabel,
+  registerProjectRestoreHistory,
+  subscribeProjectRestoreHistory,
   redo,
   undo,
   useAppStore,

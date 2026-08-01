@@ -8,7 +8,13 @@ import {
   setMaxHistoryFeatureCount,
   trimHistoryBySize,
 } from "../packages/core/src/history";
-import { clearHistory, redo, undo, useAppStore } from "../packages/core/src/store";
+import {
+  clearHistory,
+  redo,
+  registerProjectRestoreHistory,
+  undo,
+  useAppStore,
+} from "../packages/core/src/store";
 import { createEmptyProject } from "../packages/core/src/project";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -155,6 +161,49 @@ describe("store history tracking", () => {
     useAppStore.getState().setPointerCoords([1, 2]);
     useAppStore.getState().setAttributeFilter("abc");
     assert.equal(pastLen(), before);
+  });
+});
+
+describe("project restore history", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+  });
+
+  it("undoes and redoes a whole-project snapshot restore", () => {
+    const before = createEmptyProject("Before restore");
+    const after = createEmptyProject("Restored snapshot");
+    useAppStore.getState().loadProject(after, null, { rememberRecent: false, presenting: false });
+    registerProjectRestoreHistory(
+      before,
+      "/tmp/before.geolibre.json",
+      after,
+      "/tmp/before.geolibre.json",
+    );
+
+    undo();
+    assert.equal(useAppStore.getState().projectName, "Before restore");
+    assert.equal(useAppStore.getState().projectPath, "/tmp/before.geolibre.json");
+    assert.equal(useAppStore.getState().isDirty, true);
+
+    redo();
+    assert.equal(useAppStore.getState().projectName, "Restored snapshot");
+    assert.equal(useAppStore.getState().projectPath, "/tmp/before.geolibre.json");
+    assert.equal(useAppStore.getState().isDirty, true);
+  });
+
+  it("invalidates restore redo when a normal edit follows undo", () => {
+    const before = createEmptyProject("Before restore");
+    const after = createEmptyProject("Restored snapshot");
+    useAppStore.getState().loadProject(after, null, { rememberRecent: false, presenting: false });
+    registerProjectRestoreHistory(before, null, after);
+
+    undo();
+    useAppStore.getState().setBasemapOpacity(0.5);
+    redo();
+
+    assert.equal(useAppStore.getState().projectName, "Before restore");
+    assert.equal(useAppStore.getState().basemapOpacity, 0.5);
   });
 });
 

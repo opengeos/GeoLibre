@@ -34,6 +34,7 @@ import { getShareFetch } from "../lib/share-fetch";
 import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
+import { recordExplicitProjectSave } from "../lib/project-history-session";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import {
   importQgisProject,
@@ -714,6 +715,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       openedAt: new Date().toISOString(),
     });
     markSaved();
+    recordExplicitProjectSave();
     return true;
   };
 

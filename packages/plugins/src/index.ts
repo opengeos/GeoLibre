@@ -446,6 +446,14 @@ export {
   type HuggingFaceLabels,
 } from "./plugins/maplibre-huggingface";
 export {
+  createGeoLensHostFetch,
+  defaultGeoLensFetch,
+  resetGeoLensFetch,
+  setGeoLensFetch,
+  type GeoLensFetch,
+  type GeoLensHttpResponse,
+} from "./plugins/geolens-api";
+export {
   DEFAULT_GEOLENS_LABELS,
   DEFAULT_GEOLENS_FEATURE_LIMIT,
   GEOLENS_FEATURES_SOURCE_KIND,

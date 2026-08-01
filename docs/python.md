@@ -28,7 +28,8 @@ conda install -c conda-forge geolibre
 
 Optional extras for `add_geojson()` from a GeoDataFrame and for reading **local**
 vector files with `add_vector()` / `add_geoparquet()` / `add_flatgeobuf()` /
-`add_shp()` (remote URLs for those formats need no extras):
+`add_shp()` / `add_kml()` / `add_gpkg()` (remote URLs for those formats need no
+extras):
 
 ```bash
 pip install "geolibre[all]"   # adds GeoPandas and Shapely
@@ -73,6 +74,8 @@ Add markers and data-driven symbology without precomputing styles:
 ```python
 m.add_marker(-122.4, 37.8, properties={"name": "San Francisco"})
 m.add_marker_cluster([(-122.4, 37.8), (-122.3, 37.9), (-122.5, 37.7)])
+m.add_heatmap([(-122.4, 37.8), (-122.3, 37.9)], radius=35)
+m.add_csv("cities.csv", x="longitude", y="latitude", name="Cities")
 m.add_choropleth(
     "https://example.com/counties.geojson",
     column="population",
@@ -185,11 +188,14 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `get_view()` / `get_center()` / `get_bounds()` | Read the live camera / center / viewport bounds. |
 | `fly_to(lng, lat, zoom=, bearing=, pitch=, duration=)` | Animate the camera. |
 | `fit_bounds([w, s, e, n])` | Fit the camera to a bounding box. |
+| `zoom_to_bounds([w, s, e, n])` / `zoom_to_layer(layer)` | Leafmap-style view helpers; layers may be addressed by id, name, or handle. |
 | `identify(lng, lat, layer_id=None)` | Query rendered features at a point. |
 | `get_features(layer_id)` | A layer's features as `Feature` objects. |
 | `get_selected_features(as_gdf=False)` | The feature(s) selected in the app, as `Feature` objects (or a GeoDataFrame). |
 | `get_drawn_features(as_gdf=False)` / `user_rois` | Features drawn with the Geo Editor; `user_rois` returns them as a FeatureCollection. |
 | `layers` / `get_layer(id)` | `Layer` handles (read state; set `name`/`visible`/`opacity`, `set_style`, `get_features`, `zoom_to`, `remove`). |
+| `layer_names` / `find_layer(name)` / `find_layer_index(name)` | Inspect layers by display name. |
+| `set_layer_visibility(layer, visible)` / `set_layer_opacity(layer, opacity)` | Change a layer by id, name, or handle. |
 | `list_algorithms()` | Available processing algorithms (`id`, `parameters`, …). |
 | `run_algorithm(id, parameters=None, timeout=)` | Run an algorithm; returns `{logs, resultLayerIds}`. |
 | `to_image(path=None, timeout=)` | Capture the map as PNG bytes, or write to `path`. |
@@ -203,16 +209,20 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | --- | --- |
 | `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
+| `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
+| `add_csv(data, x="longitude", y="latitude", name=, **style)` / `add_xy_data(...)` | Add points from a CSV path, URL, text, DataFrame, or row mappings. |
 | `add_marker(lng, lat, name=, properties=, **style)` | Add a single point marker (shown as a circle; `properties` appear on click). |
 | `add_markers(points, name=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
 | `add_circle_markers(points, name=, radius=, **style)` | Add circle markers with an explicit `radius`. |
 | `add_marker_cluster(points, name=, cluster_radius=, cluster_max_zoom=, **style)` | Add clustered point markers. |
+| `add_heatmap(points, name=, radius=, intensity=, **style)` | Add point data using the density heatmap renderer. |
 | `add_choropleth(data, column, name=, class_count=, colormap=, scheme=, **style)` | Add a GeoJSON layer with graduated symbology computed from a numeric `column`. |
 | `add_data(data, column=None, name=, **kwargs)` | Add data; a choropleth when `column` is given, else a plain GeoJSON layer (leafmap parity). |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON, …) or a local file (read via GeoPandas and inlined). |
 | `add_geoparquet(data, name=, **style)` | Add a GeoParquet dataset (URL or local file). |
 | `add_flatgeobuf(data, name=, **style)` | Add a FlatGeobuf dataset (URL or local file). |
 | `add_shp(data, name=, **style)` | Add a Shapefile (zipped URL or local `.shp`). |
+| `add_kml(data, name=, **style)` / `add_gpkg(data, name=, layer=None, **style)` | Add KML/KMZ or GeoPackage data. |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add a vector tile layer from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
@@ -277,13 +287,14 @@ UI edits flow back the same way.
 
 !!! warning "URL fetching"
 
-    `add_geojson(url)` fetches the URL from the **kernel**, following redirects,
-    so a notebook can reach any host the kernel can (including private and
-    link-local addresses such as cloud metadata endpoints). This is intended for
-    single-user local notebooks, where you already control the kernel. Private
-    and localhost URLs are intentionally allowed so you can load from a local
-    tile server. Do not load untrusted `.geolibre.json` projects or URLs on a
-    shared/multi-tenant kernel.
+    `add_geojson(url)`, `add_csv(url)` / `add_xy_data(url)`, and `add_wfs()`
+    fetch the URL from the **kernel**, following redirects, so a notebook can
+    reach any host the kernel can. Every hop is checked, and a URL that resolves
+    to a non-public address (private, loopback, or link-local — including cloud
+    metadata endpoints such as `169.254.169.254`) is refused; responses are
+    capped at 50 MB. Tile and service layers are fetched by the **browser**
+    instead, so those can still point at a local server. Do not load untrusted
+    `.geolibre.json` projects or URLs on a shared/multi-tenant kernel.
 
 ## Building from source
 
