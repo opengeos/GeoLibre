@@ -19,8 +19,15 @@ interface AddCommentDialogProps {
 }
 
 export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddCommentDialogProps) {
-  const savedName =
-    typeof localStorage !== "undefined" ? localStorage.getItem("geolibre_author_name") : null;
+  const [savedName, setSavedName] = useState<string | null>(() => {
+    try {
+      return typeof localStorage !== "undefined"
+        ? localStorage.getItem("geolibre_author_name")
+        : null;
+    } catch {
+      return null;
+    }
+  });
   const hasSavedName = !!savedName && savedName.trim().length > 0;
 
   const [text, setText] = useState("");
@@ -34,6 +41,7 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
     if (typeof localStorage !== "undefined" && finalName) {
       try {
         localStorage.setItem("geolibre_author_name", finalName);
+        setSavedName(finalName);
       } catch {
         // ignore storage errors
       }
@@ -87,11 +95,15 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           {/* Prompt for name 1 time if not saved in localStorage */}
           {!hasSavedName ? (
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+              <label
+                htmlFor="author-name-input"
+                className="text-[11px] font-medium text-muted-foreground flex items-center gap-1"
+              >
                 <User className="h-3 w-3 text-primary" />
                 <span>Your Name (Asked once, saved automatically)</span>
               </label>
               <Input
+                id="author-name-input"
                 value={authorName}
                 onChange={(e) => setAuthorName(e.target.value)}
                 placeholder="e.g. Alex or Sarah"
@@ -108,9 +120,12 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
                 type="button"
                 onClick={() => {
                   if (typeof localStorage !== "undefined") {
-                    localStorage.removeItem("geolibre_author_name");
-                    setAuthorName("");
+                    try {
+                      localStorage.removeItem("geolibre_author_name");
+                    } catch {}
                   }
+                  setSavedName(null);
+                  setAuthorName("");
                 }}
                 className="text-primary hover:underline text-[10px]"
               >
@@ -120,10 +135,14 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           )}
 
           <div className="space-y-1">
-            <label className="text-[11px] font-medium text-muted-foreground">
+            <label
+              htmlFor="comment-text-input"
+              className="text-[11px] font-medium text-muted-foreground"
+            >
               Comment / Feedback
             </label>
             <Textarea
+              id="comment-text-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Type your review note or feedback here..."

@@ -91,12 +91,6 @@ export type CommentMutationAction =
 export interface CommentMutationMessage {
   type: "comment-mutation";
   action: CommentMutationAction;
-  /**
-   * clientId of the sender, set on BroadcastChannel frames so the originating
-   * tab can skip re-applying its own mutation (it already applied it locally).
-   * Omitted on WebSocket frames; the relay never inspects this field.
-   */
-  origin?: string;
 }
 
 export type ClientMessage =

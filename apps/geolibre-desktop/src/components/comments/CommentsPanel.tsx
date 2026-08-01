@@ -183,25 +183,9 @@ export function CommentsPanel({
 
   const handleZoomTo = (comment: ProjectComment) => {
     const map = mapControllerRef.current?.getMap() ?? null;
-    const controller = mapControllerRef.current;
-
-    if (comment.anchor.type === "feature") {
-      const { layerId, featureId } = comment.anchor;
-      const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
-      if (layer?.geojson?.features) {
-        const feat = layer.geojson.features.find((f) => String(f.id) === String(featureId));
-        if (feat?.geometry) {
-          const coords = resolveCommentCoordinates(comment, map);
-          if (coords) {
-            controller?.fitBounds([coords[0], coords[1], coords[0], coords[1]]);
-            return;
-          }
-        }
-      }
-    }
-
+    if (!map) return;
     const coords = resolveCommentCoordinates(comment, map);
-    if (coords && map) {
+    if (coords) {
       map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 15), duration: 800 });
     }
   };
@@ -281,7 +265,7 @@ export function CommentsPanel({
               <button
                 type="button"
                 onClick={handleEditName}
-                className="text-muted-foreground hover:text-foreground shrink-0 ml-auto"
+                className="text-muted-foreground hover:text-foreground shrink-0 ms-auto"
                 title={selfAuthorName ? "Change name" : "Set your name"}
               >
                 <Pencil className="h-3 w-3" />
@@ -314,7 +298,7 @@ export function CommentsPanel({
                 className="h-7 px-2 text-[11px] shrink-0"
                 title="Copy session code"
               >
-                <Copy className="h-3 w-3 mr-1" />
+                <Copy className="h-3 w-3 me-1" />
                 {copied ? "Copied" : "Copy"}
               </Button>
             </div>

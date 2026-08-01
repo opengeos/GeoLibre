@@ -49,10 +49,15 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
         selfName = collab.selfName;
         selfColor = collab.selfColor || "#3b82f6";
       } else {
-        const storedName =
-          typeof localStorage !== "undefined"
-            ? (localStorage.getItem("geolibre_author_name") ?? "")
-            : "";
+        let storedName = "";
+        try {
+          storedName =
+            typeof localStorage !== "undefined"
+              ? (localStorage.getItem("geolibre_author_name") ?? "")
+              : "";
+        } catch {
+          storedName = "";
+        }
         selfName = authorName?.trim() || storedName || "Author";
         selfColor = "#3b82f6";
       }
@@ -98,15 +103,19 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
     const handleMapClick = (e: maplibreGl.MapMouseEvent) => {
       e.originalEvent.stopPropagation();
 
-      // Check rendered features under cursor — restrict to user data layers
-      // so basemap tile layers (which also have numeric feature IDs) are ignored.
-      const userLayerIds = new Set(
-        useAppStore
-          .getState()
-          .layers.flatMap((l) =>
-            Array.isArray(l.metadata?.sourceIds) ? (l.metadata.sourceIds as string[]) : [l.id],
-          ),
-      );
+      // Map MapLibre layer IDs to store layer IDs so feature anchors
+      // consistently store the canonical store layer ID.
+      const storeLayers = useAppStore.getState().layers;
+      const layerMap = new Map<string, string>();
+      for (const l of storeLayers) {
+        layerMap.set(l.id, l.id);
+        if (Array.isArray(l.metadata?.sourceIds)) {
+          for (const sid of l.metadata.sourceIds) {
+            if (typeof sid === "string") layerMap.set(sid, l.id);
+          }
+        }
+      }
+
       const bbox: [maplibreGl.PointLike, maplibreGl.PointLike] = [
         [e.point.x - 5, e.point.y - 5],
         [e.point.x + 5, e.point.y + 5],
@@ -120,16 +129,11 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
 
       // Search for feature with a valid ID on a user data layer
       for (const feat of features) {
-        if (
-          feat.layer &&
-          feat.layer.id &&
-          userLayerIds.has(feat.layer.id) &&
-          feat.id !== undefined &&
-          feat.id !== null
-        ) {
+        const storeLayerId = feat.layer?.id ? layerMap.get(feat.layer.id) : undefined;
+        if (storeLayerId && feat.id !== undefined && feat.id !== null) {
           anchor = {
             type: "feature",
-            layerId: feat.layer.id,
+            layerId: storeLayerId,
             featureId: feat.id as string | number,
             lngLat: [e.lngLat.lng, e.lngLat.lat],
           };

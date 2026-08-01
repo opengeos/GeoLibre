@@ -1013,9 +1013,11 @@ export const useAppStore = create<AppState>()(
         }),
       replyToComment: (commentId, reply) =>
         set((s) => ({
-          comments: s.comments.map((c) =>
-            c.id === commentId ? { ...c, replies: [...c.replies, reply] } : c,
-          ),
+          comments: s.comments.map((c) => {
+            if (c.id !== commentId) return c;
+            if (c.replies.some((r) => r.id === reply.id)) return c;
+            return { ...c, replies: [...c.replies, reply] };
+          }),
           isDirty: true,
         })),
       toggleResolveComment: (commentId, resolved) =>

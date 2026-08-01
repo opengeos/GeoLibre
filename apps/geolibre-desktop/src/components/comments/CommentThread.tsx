@@ -116,7 +116,14 @@ export function CommentThread({
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            onClick={() => onDelete(comment.id)}
+            onClick={() => {
+              if (
+                typeof window !== "undefined" &&
+                window.confirm("Are you sure you want to delete this comment thread?")
+              ) {
+                onDelete(comment.id);
+              }
+            }}
             title="Delete comment thread"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -154,7 +161,7 @@ export function CommentThread({
 
       {/* Replies List */}
       {comment.replies && comment.replies.length > 0 && (
-        <div className="space-y-2 mb-3 pl-2.5 border-l-2 border-border/60">
+        <div className="space-y-2 mb-3 ps-2.5 border-s-2 border-border/60">
           {comment.replies.map((reply) => (
             <div key={reply.id} className="bg-muted/40 rounded p-2 text-xs">
               <div className="flex items-center justify-between gap-1 mb-1">

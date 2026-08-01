@@ -679,11 +679,14 @@ export class CollabSession extends DurableObject<Env> {
           ? (parsed.comments as Record<string, unknown>[])
           : [];
         const action = message.action;
+        if (!action || typeof action !== "object") return;
         let updatedComments = comments;
 
         if (action.type === "add") {
+          if (!action.comment || typeof action.comment !== "object") return;
           updatedComments = [...comments, action.comment as Record<string, unknown>];
         } else if (action.type === "reply") {
+          if (!action.reply || typeof action.reply !== "object") return;
           updatedComments = comments.map((c) =>
             c && typeof c === "object" && c.id === action.commentId
               ? {

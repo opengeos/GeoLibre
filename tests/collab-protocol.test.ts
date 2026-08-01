@@ -146,9 +146,8 @@ describe("createSession", () => {
     });
   });
 
-  it("returns local session code when collaboration baseUrl is null", async () => {
-    const res = await createSession("co-edit", null);
-    assert.equal(res.sessionId.length, 12);
+  it("rejects when collaboration baseUrl is null", async () => {
+    await assert.rejects(() => createSession("co-edit", null), /Collaboration is not configured/);
   });
 
   it("throws on an unexpected response shape", async () => {
@@ -318,6 +317,24 @@ describe("CollabConnection", () => {
       assert.equal(parsed.action.type, "toggle-resolve");
       assert.equal(parsed.action.commentId, "comm-456");
     }
+    conn.close();
+  });
+
+  it("handles malformed comment-mutation actions safely", () => {
+    const { conn, holder } = setup();
+    conn.connect();
+    holder.socket!.readyState = FakeWebSocket.OPEN;
+
+    const malformedMsg = {
+      type: "comment-mutation",
+      action: {
+        type: "add",
+        comment: "not-an-object",
+      },
+    };
+
+    conn.send(malformedMsg as unknown as ClientMessage);
+    assert.equal(holder.socket!.sent.length, 1);
     conn.close();
   });
 });

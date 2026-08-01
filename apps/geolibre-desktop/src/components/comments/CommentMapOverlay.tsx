@@ -9,6 +9,36 @@ interface CommentMapOverlayProps {
   showResolved?: boolean;
 }
 
+function extractGeometryCoords(geometry: any): [number, number] | null {
+  if (!geometry) return null;
+  const { type, coordinates, geometries } = geometry;
+  if (type === "Point" && Array.isArray(coordinates)) {
+    return coordinates as [number, number];
+  }
+  if (type === "MultiPoint" && Array.isArray(coordinates?.[0])) {
+    return coordinates[0] as [number, number];
+  }
+  if (type === "LineString" && Array.isArray(coordinates?.[0])) {
+    return coordinates[0] as [number, number];
+  }
+  if (type === "MultiLineString" && Array.isArray(coordinates?.[0]?.[0])) {
+    return coordinates[0][0] as [number, number];
+  }
+  if (type === "Polygon" && Array.isArray(coordinates?.[0]?.[0])) {
+    return coordinates[0][0] as [number, number];
+  }
+  if (type === "MultiPolygon" && Array.isArray(coordinates?.[0]?.[0]?.[0])) {
+    return coordinates[0][0][0] as [number, number];
+  }
+  if (type === "GeometryCollection" && Array.isArray(geometries)) {
+    for (const g of geometries) {
+      const coords = extractGeometryCoords(g);
+      if (coords) return coords;
+    }
+  }
+  return null;
+}
+
 export function resolveCommentCoordinates(
   comment: ProjectComment,
   map: maplibreGl.Map | null,
@@ -29,14 +59,8 @@ export function resolveCommentCoordinates(
         filter: ["==", ["id"], featureId],
       });
       if (features.length > 0 && features[0].geometry) {
-        const g = features[0].geometry;
-        if (g.type === "Point") return g.coordinates as [number, number];
-        if (g.type === "Polygon" && g.coordinates[0]?.[0]) {
-          return g.coordinates[0][0] as [number, number];
-        }
-        if (g.type === "LineString" && g.coordinates[0]) {
-          return g.coordinates[0] as [number, number];
-        }
+        const coords = extractGeometryCoords(features[0].geometry);
+        if (coords) return coords;
       }
     } catch {
       // Ignore query errors
@@ -47,14 +71,8 @@ export function resolveCommentCoordinates(
     if (layer?.geojson?.features) {
       const feat = layer.geojson.features.find((f) => String(f.id) === String(featureId));
       if (feat?.geometry) {
-        const g = feat.geometry;
-        if (g.type === "Point") return g.coordinates as [number, number];
-        if (g.type === "Polygon" && g.coordinates[0]?.[0]) {
-          return g.coordinates[0][0] as [number, number];
-        }
-        if (g.type === "LineString" && g.coordinates[0]) {
-          return g.coordinates[0] as [number, number];
-        }
+        const coords = extractGeometryCoords(feat.geometry);
+        if (coords) return coords;
       }
     }
   }
@@ -89,7 +107,7 @@ export function CommentMapOverlay({
 
         const container = document.createElement("div");
         container.className =
-          "group relative cursor-pointer select-none transition-transform duration-150 ease-out hover:scale-115";
+          "group relative cursor-pointer select-none transition-transform duration-150 ease-out hover:scale-[1.15]";
         container.style.zIndex = comment.resolved ? "9" : "10";
 
         // Build the pin with DOM APIs so the author color is set as a style
