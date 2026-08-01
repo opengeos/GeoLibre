@@ -15,14 +15,12 @@ import {
 
 const PROTOCOL = "geolibre-kml-super-overlay";
 
-type ProtocolHandler = (
-  params: { url: string },
-  abort?: AbortController,
-) => Promise<{ data: ArrayBuffer }>;
+type ProtocolHandler = (params: { url: string }, abort?: AbortController) => Promise<{ data: ArrayBuffer }>;
 
 function protocolHandler(): ProtocolHandler {
-  const handler = (config as { REGISTERED_PROTOCOLS?: Record<string, ProtocolHandler> })
-    .REGISTERED_PROTOCOLS?.[PROTOCOL];
+  const handler = (config as { REGISTERED_PROTOCOLS?: Record<string, ProtocolHandler> }).REGISTERED_PROTOCOLS?.[
+    PROTOCOL
+  ];
   assert.ok(handler, "the Super-Overlay protocol should be registered");
   return handler;
 }
@@ -82,8 +80,9 @@ describe("registerKmlSuperOverlay", () => {
     protocolHandler();
     assert.equal(source.url, `${PROTOCOL}://${encodeURIComponent("/data/extent.kmz")}/{z}/{x}/{y}`);
     assert.deepEqual(source.bounds, [-180, -85, 180, 85]);
-    assert.equal(source.minzoom, 1);
-    assert.equal(source.maxzoom, 2);
+    assert.equal(source.minzoom, 0);
+    assert.equal(source.maxzoom, 1);
+    assert.equal(source.tileSize, 512);
     assert.equal(unregisterKmlSuperOverlay(source.url), true);
   });
 
@@ -99,7 +98,19 @@ describe("registerKmlSuperOverlay", () => {
       { key: "/data/no-draw-order.kmz" },
     );
 
-    assert.equal(source.minzoom, 1);
+    assert.equal(source.minzoom, 0);
+    assert.equal(source.maxzoom, 2);
+    assert.equal(source.tileSize, 512);
+    unregisterKmlSuperOverlay(source.url);
+  });
+
+  it("derives levels for tiles that cross the antimeridian", async () => {
+    const source = await registerKmlSuperOverlay(
+      [tile([170, -10, -145, 10], 0), tile([175, -5, -162.5, 5], 0)],
+      { key: "/data/antimeridian.kmz" },
+    );
+
+    assert.equal(source.minzoom, 2);
     assert.equal(source.maxzoom, 3);
     unregisterKmlSuperOverlay(source.url);
   });
@@ -124,6 +135,34 @@ describe("registerKmlSuperOverlay", () => {
     assert.ok(isKmlSuperOverlayUrl(source.url));
     assert.match(source.url, /^geolibre-kml-super-overlay:\/\/[\w-]+\/\{z\}\/\{x\}\/\{y\}$/);
     assert.equal(unregisterKmlSuperOverlay(source.url), true);
+  });
+});
+
+describe("KMZ Super-Overlay import", () => {
+  it("folds linked leaf KML documents without Regions into the pyramid", async () => {
+    // shpjs, pulled in by the general vector importer, expects the browser
+    // global even though this case never asks it to parse a shapefile.
+    globalThis.self = globalThis;
+    const { superOverlayDocNames } = await import("../apps/geolibre-desktop/src/lib/tauri-io");
+    const names = superOverlayDocNames([
+      {
+        name: "0.kml",
+        text: `<kml><NetworkLink><Link><href>level.kml</href></Link></NetworkLink></kml>`,
+      },
+      {
+        name: "level.kml",
+        text: `
+        <kml><Folder>
+          <Region><LatLonAltBox><north>1</north><south>0</south>
+            <east>1</east><west>0</west></LatLonAltBox></Region>
+          <NetworkLink><Link><href>leaf.kml</href></Link></NetworkLink>
+        </Folder></kml>`,
+      },
+      { name: "leaf.kml", text: `<kml><GroundOverlay /></kml>` },
+      { name: "legend.kml", text: `<kml><GroundOverlay /></kml>` },
+    ]);
+
+    assert.deepEqual([...names].sort(), ["leaf.kml", "level.kml"]);
   });
 });
 
@@ -195,10 +234,7 @@ describe("the tile protocol", () => {
     });
 
     try {
-      const [first, second] = await Promise.all([
-        protocolHandler()({ url }),
-        protocolHandler()({ url }),
-      ]);
+      const [first, second] = await Promise.all([protocolHandler()({ url }), protocolHandler()({ url })]);
 
       assert.equal(first.data.byteLength, 0);
       assert.equal(second.data.byteLength, 0);
@@ -231,7 +267,9 @@ describe("the tile protocol", () => {
     setKmlSuperOverlayResolver(async () => null);
 
     try {
-      const result = await protocolHandler()({ url: `${PROTOCOL}://missing/1/0/0` });
+      const result = await protocolHandler()({
+        url: `${PROTOCOL}://missing/1/0/0`,
+      });
 
       assert.equal(result.data.byteLength, 0);
     } finally {

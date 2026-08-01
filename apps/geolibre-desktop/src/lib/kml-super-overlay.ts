@@ -2,7 +2,15 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { KmlGroundOverlay } from "./kml";
 
 const PROTOCOL = "geolibre-kml-super-overlay";
-const TILE_SIZE = 256;
+// Terrain drapes raster layers into per-tile textures. A 256 px protocol tile
+// looks fine in the flat renderer but becomes visibly soft once that texture is
+// projected over a pitched terrain mesh. Serve one 512 px tile composed from
+// the next-finer KML pyramid level: it has the same native ground resolution
+// as four 256 px children, while giving the terrain texture four times as many
+// pixels. MapLibre requests a 512 px source one canonical zoom lower, hence the
+// matching zoom offset used below.
+const TILE_SIZE = 512;
+const SOURCE_ZOOM_OFFSET = 1;
 const LATITUDE_STRIPS = 16;
 /** Decoded source tiles kept per archive (~256 KB each); see {@link bitmapFor}. */
 const MAX_CACHED_BITMAPS = 256;
@@ -25,6 +33,7 @@ export interface RegisteredKmlSuperOverlay {
   bounds: [number, number, number, number];
   minzoom: number;
   maxzoom: number;
+  tileSize: number;
 }
 
 export interface KmlSuperOverlayTile {
@@ -113,7 +122,8 @@ function zoomsForTiles(tiles: KmlSuperOverlayTile[]): number[] {
 }
 
 function zoomFromLongitudeSpan(bounds: [number, number, number, number]): number {
-  const span = bounds[2] - bounds[0];
+  // KML represents an antimeridian-crossing box with east < west.
+  const span = bounds[2] >= bounds[0] ? bounds[2] - bounds[0] : bounds[2] + 360 - bounds[0];
   if (!(span > 0)) return 0;
   return Math.max(0, Math.round(Math.log2(360 / span)));
 }
@@ -170,8 +180,9 @@ export async function registerKmlSuperOverlay(
   return {
     url: tileUrl(id),
     bounds,
-    minzoom: levels[0],
-    maxzoom: levels[levels.length - 1],
+    minzoom: Math.max(0, levels[0] - SOURCE_ZOOM_OFFSET),
+    maxzoom: Math.max(0, levels[levels.length - 1] - SOURCE_ZOOM_OFFSET),
+    tileSize: TILE_SIZE,
   };
 }
 
@@ -350,23 +361,19 @@ async function handleTileRequest(
   const archive = await archiveFor(id);
   if (!archive || abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
   const zooms = [...archive.tilesByZoom.keys()];
-  const sourceZoom = zooms.reduce(
-    (best, candidate) => {
-      if (candidate <= z && candidate > best) return candidate;
-      return best;
-    },
-    Math.min(...zooms),
-  );
+  // A 512 px source tile at canonical z covers the same screen area and native
+  // resolution as four 256 px KML tiles at z + 1.
+  const requestedSourceZoom = z + SOURCE_ZOOM_OFFSET;
+  const sourceZoom = zooms.reduce((best, candidate) => {
+    if (candidate <= requestedSourceZoom && candidate > best) return candidate;
+    return best;
+  }, Math.min(...zooms));
   const west = longitudeAtTileX(z, x);
   const east = longitudeAtTileX(z, x + 1);
   const north = latitudeAtTileY(z, y);
   const south = latitudeAtTileY(z, y + 1);
   const candidates = (archive.tilesByZoom.get(sourceZoom) ?? []).filter(
-    (tile) =>
-      tile.bounds[2] > west &&
-      tile.bounds[0] < east &&
-      tile.bounds[3] > south &&
-      tile.bounds[1] < north,
+    (tile) => tile.bounds[2] > west && tile.bounds[0] < east && tile.bounds[3] > south && tile.bounds[1] < north,
   );
   if (!candidates.length) return { data: new ArrayBuffer(0) };
 
@@ -383,6 +390,7 @@ async function handleTileRequest(
   for (const [index, tile] of candidates.entries()) {
     const bitmap = decoded[index];
     const [tileWest, tileSouth, tileEast, tileNorth] = tile.bounds;
+    context.globalAlpha = tile.opacity;
     const dx = ((tileWest + 180) / 360) * scale - x * TILE_SIZE;
     const dw = ((tileEast - tileWest) / 360) * scale;
     // KML LatLonBox rasters are linear in latitude, while MapLibre's tile is
@@ -397,6 +405,7 @@ async function handleTileRequest(
       context.drawImage(bitmap, 0, sourceY, bitmap.width, sourceHeight, dx, dy, dw, dh);
     }
   }
+  context.globalAlpha = 1;
 
   const blob = await canvas.convertToBlob({ type: "image/png" });
   return { data: await blob.arrayBuffer() };
