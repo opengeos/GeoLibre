@@ -13,10 +13,10 @@ import os
 import pathlib
 import re
 import time
-import urllib.request
 import uuid
 import warnings
 from typing import Any, Callable
+from urllib.error import URLError
 
 import anywidget
 import traitlets
@@ -41,6 +41,15 @@ _VALID_THEMES = frozenset({"light", "dark"})
 _VALID_CONTROL_POSITIONS = _project.CONTROL_POSITIONS
 _VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
 _VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
+
+# CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
+# same 50 MB ceiling applies to a fetched response or a local file.
+_MAX_TABULAR_BYTES = _project._MAX_GEOJSON_BYTES
+
+# Column name for CSV fields beyond the header row. csv.DictReader's default
+# restkey is ``None``, which would put a non-string key in the feature
+# properties and break JSON serialization on the way to the widget.
+_CSV_RESTKEY = "_extra"
 
 
 def _read_local_vector(
@@ -89,6 +98,13 @@ def _read_local_vector(
         file_path.suffix.lower() in (".parquet", ".geoparquet", ".pq")
     )
     if is_parquet:
+        # read_parquet has no layer concept, so a source_layer here is a no-op.
+        if source_layer is not None:
+            warnings.warn(
+                "source_layer is ignored for (Geo)Parquet files; it only applies "
+                "to multi-layer containers such as GeoPackage.",
+                stacklevel=2,
+            )
         gdf = geopandas.read_parquet(file_path)
     else:
         gdf = geopandas.read_file(file_path, **({"layer": source_layer} if source_layer else {}))
@@ -569,6 +585,8 @@ class Map(anywidget.AnyWidget):
         values = [float(b) for b in bounds]
         if len(values) != 4:
             raise ValueError("bounds must contain [west, south, east, north]")
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("bounds must contain finite numbers")
         west, south, east, north = values
         if west > east or south > north:
             raise ValueError("bounds must satisfy west <= east and south <= north")
@@ -1182,10 +1200,12 @@ class Map(anywidget.AnyWidget):
         **style: Any,
     ) -> str:
         """Add point data using GeoLibre's density heatmap renderer."""
-        if float(radius) <= 0:
-            raise ValueError("radius must be greater than zero")
-        if float(intensity) < 0:
-            raise ValueError("intensity must be non-negative")
+        # NaN and infinity slip past the comparisons below, so check finiteness
+        # first rather than storing an unusable renderer setting.
+        if not math.isfinite(float(radius)) or float(radius) <= 0:
+            raise ValueError("radius must be a finite number greater than zero")
+        if not math.isfinite(float(intensity)) or float(intensity) < 0:
+            raise ValueError("intensity must be a finite non-negative number")
         style.setdefault("pointRenderer", "heatmap")
         style.setdefault("heatmapRadius", float(radius))
         style.setdefault("heatmapIntensity", float(intensity))
@@ -1204,12 +1224,31 @@ class Map(anywidget.AnyWidget):
         if isinstance(data, (str, os.PathLike)):
             source = str(data)
             if source.startswith(("http://", "https://")):
-                with urllib.request.urlopen(source, timeout=30) as response:  # noqa: S310
-                    text = response.read().decode("utf-8-sig")
+                # Same defences as the remote GeoJSON fetch in project.py: reject
+                # non-public hosts up front, re-check every redirect hop through
+                # the shared opener, and bound the response. read(limit + 1)
+                # detects an over-limit body without buffering the whole thing.
+                _project._assert_public_url(source)
+                try:
+                    with _project._GEOJSON_OPENER.open(  # noqa: S310 - user URL
+                        source, timeout=30
+                    ) as response:
+                        raw = response.read(_MAX_TABULAR_BYTES + 1)
+                except (URLError, TimeoutError) as exc:
+                    raise ValueError(f"Could not load CSV from URL: {source}") from exc
+                if len(raw) > _MAX_TABULAR_BYTES:
+                    raise ValueError("CSV response exceeds the 50 MB size limit")
+                text = raw.decode("utf-8-sig")
             else:
                 path = pathlib.Path(source).expanduser()
-                text = path.read_text(encoding="utf-8-sig") if path.exists() else source
-            return [dict(row) for row in csv.DictReader(io.StringIO(text))]
+                if path.exists():
+                    if path.stat().st_size > _MAX_TABULAR_BYTES:
+                        raise ValueError(f"CSV file exceeds the 50 MB size limit: {source}")
+                    text = path.read_text(encoding="utf-8-sig")
+                else:
+                    text = source
+            reader = csv.DictReader(io.StringIO(text), restkey=_CSV_RESTKEY)
+            return [dict(row) for row in reader]
         return [dict(row) for row in data]
 
     def add_xy_data(
@@ -1228,9 +1267,14 @@ class Map(anywidget.AnyWidget):
                 raise ValueError(f"Row {index} is missing coordinate columns {x!r} and/or {y!r}")
             point = {key: value for key, value in row.items() if key not in (x, y)}
             try:
-                point.update(lng=float(row[x]), lat=float(row[y]))
+                lng, lat = float(row[x]), float(row[y])
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Row {index} has invalid coordinates") from exc
+            # float() happily parses "nan"/"inf", which would produce a feature
+            # with coordinates no renderer can place.
+            if not math.isfinite(lng) or not math.isfinite(lat):
+                raise ValueError(f"Row {index} has invalid coordinates")
+            point.update(lng=lng, lat=lat)
             points.append(point)
         return self.add_markers(points, name=name, **style)
 

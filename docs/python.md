@@ -28,7 +28,8 @@ conda install -c conda-forge geolibre
 
 Optional extras for `add_geojson()` from a GeoDataFrame and for reading **local**
 vector files with `add_vector()` / `add_geoparquet()` / `add_flatgeobuf()` /
-`add_shp()` (remote URLs for those formats need no extras):
+`add_shp()` / `add_kml()` / `add_gpkg()` (remote URLs for those formats need no
+extras):
 
 ```bash
 pip install "geolibre[all]"   # adds GeoPandas and Shapely
@@ -286,13 +287,14 @@ UI edits flow back the same way.
 
 !!! warning "URL fetching"
 
-    `add_geojson(url)` fetches the URL from the **kernel**, following redirects,
-    so a notebook can reach any host the kernel can (including private and
-    link-local addresses such as cloud metadata endpoints). This is intended for
-    single-user local notebooks, where you already control the kernel. Private
-    and localhost URLs are intentionally allowed so you can load from a local
-    tile server. Do not load untrusted `.geolibre.json` projects or URLs on a
-    shared/multi-tenant kernel.
+    `add_geojson(url)`, `add_csv(url)` / `add_xy_data(url)`, and `add_wfs()`
+    fetch the URL from the **kernel**, following redirects, so a notebook can
+    reach any host the kernel can. Every hop is checked, and a URL that resolves
+    to a non-public address (private, loopback, or link-local — including cloud
+    metadata endpoints such as `169.254.169.254`) is refused; responses are
+    capped at 50 MB. Tile and service layers are fetched by the **browser**
+    instead, so those can still point at a local server. Do not load untrusted
+    `.geolibre.json` projects or URLs on a shared/multi-tenant kernel.
 
 ## Building from source
 

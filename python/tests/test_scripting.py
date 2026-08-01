@@ -382,7 +382,7 @@ def test_layer_lookup_and_map_mutators(m):
     assert m.find_layer_index("B") == 1
     assert m.find_layer_index("missing") == -1
 
-    m.set_layer_visibility("A", False)
+    m.set_layer_visibility("A", visible=False)
     m.set_layer_opacity(first_id, 0.25)
     assert m.get_layer(first_id).visible is False
     assert m.get_layer(first_id).opacity == 0.25
@@ -392,6 +392,8 @@ def test_layer_opacity_validation(m):
     layer_id = m.add_geojson({"type": "FeatureCollection", "features": []})
     with pytest.raises(ValueError, match="between 0 and 1"):
         m.get_layer(layer_id).opacity = 2
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        m.get_layer(layer_id).opacity = -0.1
 
 
 def test_layer_setters_mutate_project_and_bump_seq(m):
@@ -455,6 +457,10 @@ def test_fit_bounds_validates_shape_and_order(m):
         m.fit_bounds([0, 1])
     with pytest.raises(ValueError, match="west <= east"):
         m.fit_bounds([10, 0, -10, 1])
+    with pytest.raises(ValueError, match="south <= north"):
+        m.fit_bounds([-10, 5, 10, -5])
+    with pytest.raises(ValueError, match="finite"):
+        m.fit_bounds([-10, -5, float("nan"), 5])
 
 
 def test_stale_layer_access_raises(m):

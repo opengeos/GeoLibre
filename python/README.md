@@ -104,8 +104,8 @@ m.to_project()["mapView"]["center"]
   use that same remote path; `Map(server_proxy=False)` forces the direct path.
 - Optional extras: `pip install geolibre[all]` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)` and for reading **local** vector files
-  (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`), which the kernel
-  reads and inlines as GeoJSON. Remote URLs for the same formats stream through
+  (`add_vector`/`add_geoparquet`/`add_flatgeobuf`/`add_shp`/`add_kml`/`add_gpkg`),
+  which the kernel reads and inlines as GeoJSON. Remote URLs for the same formats stream through
   the in-browser vector control and need no extras.
 - `add_geojson` inlines file/URL data into the project (up to 50 MB), so a large
   dataset is held in memory and re-synced on every project update. For very large

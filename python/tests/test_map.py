@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 
 import geolibre.geolibre as gmod
@@ -192,6 +195,21 @@ def test_add_gpkg_forwards_local_source_layer(monkeypatch, m):
     }
 
 
+def test_read_local_vector_warns_on_parquet_source_layer(monkeypatch, tmp_path):
+    class _FakeGdf:
+        crs = None
+
+        def to_json(self):
+            return '{"type": "FeatureCollection", "features": []}'
+
+    path = tmp_path / "data.parquet"
+    path.write_bytes(b"")
+    fake_geopandas = types.SimpleNamespace(read_parquet=lambda _p: _FakeGdf())
+    monkeypatch.setitem(sys.modules, "geopandas", fake_geopandas)
+    with pytest.warns(UserWarning, match="source_layer is ignored"):
+        gmod._read_local_vector(path, source_layer="roads")
+
+
 def test_add_vector_geo_interface_inlined(m):
     class Fake:
         __geo_interface__ = {"type": "FeatureCollection", "features": []}
@@ -324,6 +342,12 @@ def test_add_heatmap_validates_parameters(m):
         m.add_heatmap([(0, 0)], radius=0)
     with pytest.raises(ValueError, match="intensity"):
         m.add_heatmap([(0, 0)], intensity=-1)
+    with pytest.raises(ValueError, match="radius"):
+        m.add_heatmap([(0, 0)], radius=float("nan"))
+    with pytest.raises(ValueError, match="radius"):
+        m.add_heatmap([(0, 0)], radius=float("inf"))
+    with pytest.raises(ValueError, match="intensity"):
+        m.add_heatmap([(0, 0)], intensity=float("nan"))
 
 
 def test_add_xy_data_from_records(m):
@@ -348,6 +372,29 @@ def test_add_xy_data_rejects_missing_or_invalid_coordinates(m):
         m.add_xy_data([{"longitude": 1}])
     with pytest.raises(ValueError, match="invalid coordinates"):
         m.add_xy_data([{"longitude": "nope", "latitude": 1}])
+    with pytest.raises(ValueError, match="invalid coordinates"):
+        m.add_xy_data([{"longitude": "nan", "latitude": 1}])
+    with pytest.raises(ValueError, match="invalid coordinates"):
+        m.add_xy_data([{"longitude": 1, "latitude": float("inf")}])
+
+
+def test_add_csv_keeps_extra_fields_under_a_string_key(m):
+    m.add_csv("longitude,latitude\n-100,40,spill\n")
+    properties = _last_layer(m)["geojson"]["features"][0]["properties"]
+    assert properties == {gmod._CSV_RESTKEY: ["spill"]}
+
+
+def test_add_csv_rejects_non_public_url(m):
+    with pytest.raises(ValueError, match="non-public address"):
+        m.add_csv("http://127.0.0.1/points.csv")
+
+
+def test_add_csv_rejects_oversized_file(monkeypatch, tmp_path, m):
+    path = tmp_path / "points.csv"
+    path.write_text("longitude,latitude\n-100,40\n", encoding="utf-8")
+    monkeypatch.setattr(gmod, "_MAX_TABULAR_BYTES", 4)
+    with pytest.raises(ValueError, match="size limit"):
+        m.add_csv(str(path))
 
 
 def test_add_gdf_requires_geo_interface(m):
