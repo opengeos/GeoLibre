@@ -699,6 +699,7 @@ export function LayerPanel({
   const [refreshStatuses, setRefreshStatuses] = useState<Record<string, LayerRefreshStatus>>({});
   const [refreshIntervalChoice, setRefreshIntervalChoice] = useState("0");
   const [customRefreshSeconds, setCustomRefreshSeconds] = useState("");
+  const [, setSyncClock] = useState(0);
   // Time Slider binding dialog: the target layer, the detected timestamp
   // columns, the chosen property, and the window width. `candidates` is null
   // while the layer's features are still being inspected.
@@ -733,6 +734,11 @@ export function LayerPanel({
   useSyncExternalStore(subscribeTemporalLayers, getTemporalLayersVersion, getTemporalLayersVersion);
   const { isActive: isPluginActive, toggle: togglePlugin } = usePluginRegistry();
   const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setSyncClock((value) => value + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   // In the shared left-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
   // owner applies so every existing call site keeps working.
@@ -4210,22 +4216,26 @@ export function LayerPanel({
                   )}
                 </div>
               )}
-              <Label htmlFor="layer-refresh-failure-policy">
-                {t("layers.refreshFailurePolicy")}
-              </Label>
-              <Select
-                id="layer-refresh-failure-policy"
-                value={refreshSettingsLayer.connection?.onFailure ?? "keep-last"}
-                onChange={(event) =>
-                  setRefreshFailurePolicy(
-                    refreshSettingsLayer,
-                    event.target.value === "clear" ? "clear" : "keep-last",
-                  )
-                }
-              >
-                <option value="keep-last">{t("layers.refreshFailureKeepLast")}</option>
-                <option value="clear">{t("layers.refreshFailureClear")}</option>
-              </Select>
+              {!isVectorControlRefreshLayer(refreshSettingsLayer) && (
+                <>
+                  <Label htmlFor="layer-refresh-failure-policy">
+                    {t("layers.refreshFailurePolicy")}
+                  </Label>
+                  <Select
+                    id="layer-refresh-failure-policy"
+                    value={refreshSettingsLayer.connection?.onFailure ?? "keep-last"}
+                    onChange={(event) =>
+                      setRefreshFailurePolicy(
+                        refreshSettingsLayer,
+                        event.target.value === "clear" ? "clear" : "keep-last",
+                      )
+                    }
+                  >
+                    <option value="keep-last">{t("layers.refreshFailureKeepLast")}</option>
+                    <option value="clear">{t("layers.refreshFailureClear")}</option>
+                  </Select>
+                </>
+              )}
             </div>
           )}
           <div className="flex justify-end">

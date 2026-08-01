@@ -4,9 +4,10 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 export const SOCRATA_PLUGIN_ID = "maplibre-gl-socrata";
 export const CKAN_PLUGIN_ID = "maplibre-gl-ckan";
 const FETCH_TIMEOUT_MS = 30_000;
+const DOWNLOAD_TIMEOUT_MS = 120_000;
 
-function boundedSignal(signal: AbortSignal): AbortSignal {
-  return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+function boundedSignal(signal: AbortSignal, timeoutMs = FETCH_TIMEOUT_MS): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
 }
 
 interface CatalogItem {
@@ -237,7 +238,7 @@ function createCatalogPlugin(options: {
                 status.textContent = labels.adding(item.title);
                 try {
                   const response = await fetch(item.dataUrl, {
-                    signal: boundedSignal(downloadController.signal),
+                    signal: boundedSignal(downloadController.signal, DOWNLOAD_TIMEOUT_MS),
                   });
                   if (!response.ok) throw new Error(`Download failed (${response.status}).`);
                   const data = (await response.json()) as FeatureCollection;
