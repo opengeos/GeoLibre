@@ -772,9 +772,7 @@ export class CollabSession extends DurableObject<Env> {
 
         if (sanitizedAction.type === "add") {
           const newComment = sanitizedAction.comment as Record<string, unknown>;
-          const exists = comments.some(
-            (c) => c && typeof c === "object" && c.id === newComment.id,
-          );
+          const exists = comments.some((c) => c && typeof c === "object" && c.id === newComment.id);
           updatedComments = exists ? comments : [...comments, newComment];
         } else if (sanitizedAction.type === "reply") {
           const replyObj = sanitizedAction.reply as Record<string, unknown>;
