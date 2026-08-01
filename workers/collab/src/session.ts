@@ -10,11 +10,7 @@ import type {
   PresenceEntry,
   ServerMessage,
 } from "./protocol";
-import {
-  MIN_COMMENT_INTERVAL_MS,
-  validateComment,
-  validateReply,
-} from "./comment-validate";
+import { MIN_COMMENT_INTERVAL_MS, validateComment, validateReply } from "./comment-validate";
 
 function finite(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
@@ -779,9 +775,7 @@ export class CollabSession extends DurableObject<Env> {
               ? {
                   ...c,
                   resolved:
-                    sanitizedAction.resolved !== undefined
-                      ? sanitizedAction.resolved
-                      : !c.resolved,
+                    sanitizedAction.resolved !== undefined ? sanitizedAction.resolved : !c.resolved,
                 }
               : c,
           );

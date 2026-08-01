@@ -107,10 +107,7 @@ describe("validateAnchor", () => {
   });
 
   it("rejects a feature anchor with non-string/non-number featureId", () => {
-    assert.equal(
-      validateAnchor({ type: "feature", layerId: "L", featureId: true }),
-      null,
-    );
+    assert.equal(validateAnchor({ type: "feature", layerId: "L", featureId: true }), null);
   });
 
   it("rejects unknown anchor types", () => {
@@ -294,7 +291,12 @@ describe("validateComment", () => {
     const withReplies = {
       ...validComment,
       replies: [
-        { id: "r-1", author: { name: "Bob", color: "#abc" }, body: "Agreed", createdAt: "2026-06-15T12:30:00.000Z" },
+        {
+          id: "r-1",
+          author: { name: "Bob", color: "#abc" },
+          body: "Agreed",
+          createdAt: "2026-06-15T12:30:00.000Z",
+        },
         { id: "", author: { name: "Bad", color: "#abc" }, body: "nope", createdAt: "x" },
         null,
         42,
