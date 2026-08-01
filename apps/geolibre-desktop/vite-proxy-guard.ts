@@ -88,7 +88,8 @@ export function isPrivateHost(host: string): boolean {
 
   if (isIpv4Literal(bare)) {
     const octets = bare.split(".").map(Number);
-    if (octets.some((o) => o > 255)) return false;
+    // Fail closed: unclassifiable / out-of-range literals are treated as blocked.
+    if (octets.some((o) => o > 255)) return true;
     return isPrivateIPv4(octets);
   }
 
@@ -150,8 +151,13 @@ function isPrivateIPv6(addr: string): boolean {
 /**
  * Resolve `hostname` (when it is a DNS name) and refuse if any returned
  * address is private/reserved. IP literals are checked synchronously.
+ *
+ * `lookup` is injectable so unit tests can cover the DNS branch offline.
  */
-export async function assertResolvedPublicHost(hostname: string): Promise<void> {
+export async function assertResolvedPublicHost(
+  hostname: string,
+  lookup: typeof dnsLookup = dnsLookup,
+): Promise<void> {
   const bare = stripIpv6Brackets(hostname);
   if (isIpLiteral(bare)) {
     if (isPrivateHost(bare)) {
@@ -162,7 +168,7 @@ export async function assertResolvedPublicHost(hostname: string): Promise<void> 
   if (isPrivateHost(bare)) {
     throw new Error(`Blocked private/reserved address: ${hostname}`);
   }
-  const results = await dnsLookup(bare, { all: true, verbatim: true });
+  const results = await lookup(bare, { all: true, verbatim: true });
   if (results.length === 0) {
     throw new Error(`DNS lookup returned no addresses for ${hostname}`);
   }
@@ -176,45 +182,50 @@ export async function assertResolvedPublicHost(hostname: string): Promise<void> 
 /**
  * undici Agent whose DNS lookup validates every address and only hands the
  * connector a previously-checked public address — closing the rebinding
- * window between a pre-check and connect.
+ * window between check and connect. This lookup is the authoritative SSRF
+ * gate for production fetches (no separate pre-resolve).
  */
 const guardedDispatcher = new Agent({
   connect: {
     lookup(hostname, options, callback) {
-      dnsLookupCallback(hostname, { all: true, verbatim: true, ...options }, (err, addresses) => {
-        if (err) {
-          callback(err as NodeJS.ErrnoException, "", 4);
-          return;
-        }
-        const list = Array.isArray(addresses)
-          ? addresses
-          : [{ address: String(addresses), family: 4 as const }];
-        if (list.length === 0) {
-          callback(
-            Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), {
-              code: "ENOTFOUND",
-            }),
-            "",
-            4,
-          );
-          return;
-        }
-        for (const entry of list) {
-          if (isPrivateHost(entry.address)) {
+      // Force all-address mode after spreading connector options so the
+      // caller cannot downgrade us to the single-address callback form.
+      dnsLookupCallback(
+        hostname,
+        { ...options, all: true, verbatim: true },
+        (err, addresses) => {
+          if (err) {
+            callback(err as NodeJS.ErrnoException, "", 4);
+            return;
+          }
+          const list = addresses as Array<{ address: string; family: number }>;
+          if (!Array.isArray(list) || list.length === 0) {
             callback(
-              Object.assign(
-                new Error(`Blocked private/reserved address: ${hostname} → ${entry.address}`),
-                { code: "ENOTFOUND" },
-              ),
+              Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), {
+                code: "ENOTFOUND",
+              }),
               "",
               4,
             );
             return;
           }
-        }
-        const chosen = list[0];
-        callback(null, chosen.address, chosen.family);
-      });
+          for (const entry of list) {
+            if (isPrivateHost(entry.address)) {
+              callback(
+                Object.assign(
+                  new Error(`Blocked private/reserved address: ${hostname} → ${entry.address}`),
+                  { code: "ENOTFOUND" },
+                ),
+                "",
+                4,
+              );
+              return;
+            }
+          }
+          const chosen = list[0];
+          callback(null, chosen.address, chosen.family);
+        },
+      );
     },
   },
 });
@@ -228,13 +239,11 @@ function mergeAbortSignals(timeoutMs: number, caller?: AbortSignal | null): Abor
 }
 
 /**
- * Fetch `targetUrl` with manual redirect following, DNS-resolved SSRF checks,
- * a per-hop timeout, and (by default) a dispatcher that pins connects to
- * validated addresses. Returns the final Response or throws on disallowed
- * targets / too many hops.
+ * Fetch `targetUrl` with manual redirect following, a per-hop timeout, and
+ * (by default) a dispatcher that pins connects to validated public addresses.
  *
- * `options.fetchImpl` is for tests; production callers leave it unset so the
- * undici agent with the validating DNS lookup is used.
+ * DNS SSRF checks happen inside `guardedDispatcher.lookup` for production
+ * fetches. Inject `fetchImpl` for offline unit tests (no real DNS/connect).
  */
 export async function fetchWithGuard(
   targetUrl: string,
@@ -250,12 +259,6 @@ export async function fetchWithGuard(
 
   let current = targetUrl;
   for (let hop = 0; hop <= PROXY_MAX_REDIRECT_HOPS; hop++) {
-    // Production always resolves so DNS-rebinding hosts are refused. Injected
-    // fetchImpl (unit tests) skips the lookup so offline mocks stay offline.
-    if (!fetchImpl) {
-      await assertResolvedPublicHost(new URL(current).hostname);
-    }
-
     const { signal: callerSignal, ...rest } = init;
     const signal = mergeAbortSignals(timeoutMs, callerSignal ?? null);
     const response = fetchImpl
@@ -348,9 +351,12 @@ export async function proxyBinaryRequestGuarded(
   try {
     response = await fetchWithGuard(target, { headers });
   } catch (err) {
+    // Do not echo err.message — resolved private IPs / undici connect details
+    // would turn this proxy into an internal-network disclosure oracle.
+    console.warn("[vite-proxy-guard] upstream fetch blocked or failed:", err);
     res.statusCode = 502;
     res.setHeader("content-type", "text/plain");
-    res.end(err instanceof Error ? err.message : "Upstream fetch failed");
+    res.end("Upstream fetch failed");
     return;
   }
 
@@ -359,9 +365,10 @@ export async function proxyBinaryRequestGuarded(
   try {
     body = await readBodyWithLimit(response);
   } catch (err) {
+    console.warn("[vite-proxy-guard] upstream body rejected:", err);
     res.statusCode = 502;
     res.setHeader("content-type", "text/plain");
-    res.end(err instanceof Error ? err.message : "Upstream response exceeds size limit");
+    res.end("Upstream response exceeds size limit");
     return;
   }
 

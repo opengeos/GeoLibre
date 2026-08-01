@@ -16,6 +16,7 @@ import {
   assertResolvedPublicHost,
   fetchWithGuard,
   PROXY_MAX_BODY_BYTES,
+  PROXY_MAX_REDIRECT_HOPS,
   readBodyWithLimit,
   validatePublicUrl,
 } from "../apps/geolibre-desktop/vite-proxy-guard";
@@ -254,8 +255,8 @@ describe("Vite proxy guard — validatePublicUrl", () => {
   });
 
   it("rejects non-default ports", () => {
-    assert.notEqual(validatePublicUrl("https://example.com:8443/tiles"), null);
-    assert.notEqual(validatePublicUrl("http://8.8.8.8:8080/dns"), null);
+    assert.match(validatePublicUrl("https://example.com:8443/tiles") ?? "", /port/i);
+    assert.match(validatePublicUrl("http://8.8.8.8:8080/dns") ?? "", /port/i);
   });
 
   it("rejects localhost and .localhost", () => {
@@ -347,6 +348,19 @@ describe("Vite proxy guard — assertResolvedPublicHost", () => {
   it("accepts a public IP literal", async () => {
     await assertResolvedPublicHost("8.8.8.8");
   });
+
+  it("rejects a DNS name that resolves to a private address", async () => {
+    const lookup = (async () => [{ address: "10.0.0.5", family: 4 as const }]) as never;
+    await assert.rejects(
+      () => assertResolvedPublicHost("evil.example", lookup),
+      /10\.0\.0\.5/,
+    );
+  });
+
+  it("rejects an empty DNS result", async () => {
+    const lookup = (async () => []) as never;
+    await assert.rejects(() => assertResolvedPublicHost("empty.example", lookup), /no addresses/);
+  });
 });
 
 describe("Vite proxy guard — readBodyWithLimit", () => {
@@ -426,6 +440,6 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
       () => fetchWithGuard("https://example.com/loop", {}, { fetchImpl }),
       /Too many/,
     );
-    assert.equal(hops, 6); // 0..5 inclusive = 6 fetches
+    assert.equal(hops, PROXY_MAX_REDIRECT_HOPS + 1);
   });
 });

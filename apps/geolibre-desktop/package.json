@@ -94,6 +94,7 @@
     "shpjs": "^6.2.0",
     "sql.js": "^1.14.0",
     "three": "^0.185.1",
+    "undici": "^7.29.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
