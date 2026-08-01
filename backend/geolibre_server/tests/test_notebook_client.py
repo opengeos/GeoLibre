@@ -178,6 +178,22 @@ def test_add_geojson_wraps_a_bare_geometry(relay, displays):
     params = json.loads(relay.calls[0].data)["params"]
     assert params["name"] == "Pin"
     assert params["geojson"]["features"][0]["geometry"]["coordinates"] == [1, 2]
+    assert params["style"] == {}
+
+
+def test_add_geojson_sends_inline_style_overrides(relay, displays):
+    notebook_client.HostMap().add_geojson(
+        {"type": "FeatureCollection", "features": []},
+        name="Major Cities",
+        fillColor="#facc15",
+        strokeColor="#d97706",
+    )
+
+    params = json.loads(relay.calls[0].data)["params"]
+    assert params["style"] == {
+        "fillColor": "#facc15",
+        "strokeColor": "#d97706",
+    }
 
 
 def test_add_markers_builds_a_point_collection(relay, displays):

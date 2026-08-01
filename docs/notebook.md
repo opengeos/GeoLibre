@@ -28,7 +28,12 @@ import geolibre
 
 m = geolibre.connect()          # or geolibre.Map()
 m.fly_to(-122.4, 37.8, zoom=11) # animate the live map in the left pane
-m.add_geojson(gdf, name="My layer")   # GeoDataFrame, dict, or JSON string
+m.add_geojson(
+    gdf,
+    name="My layer",
+    fillColor="#facc15",
+    strokeColor="#d97706",
+)  # GeoDataFrame, dict, or JSON string
 m.fit_bounds([-123, 37, -122, 38])
 m.set_basemap("https://…/style.json")
 m.set_visibility(layer_id, False)

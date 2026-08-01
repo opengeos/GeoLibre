@@ -361,17 +361,23 @@ class HostMap:
 
     # -- layers ---------------------------------------------------------------
 
-    def add_geojson(self, data: Any, name: str = "GeoJSON") -> None:
+    def add_geojson(self, data: Any, name: str = "GeoJSON", **style: Any) -> None:
         """Add a GeoJSON layer.
 
         Args:
             data: A FeatureCollection/Feature/geometry dict, a JSON string, or
                 any object with ``__geo_interface__`` (e.g. a GeoDataFrame).
             name: Layer display name.
+            **style: Style overrides applied when the layer is created (e.g.
+                ``fillColor="#facc15"`` or ``strokeColor="#d97706"``).
         """
         _send(
             "addGeoJsonLayer",
-            {"name": name, "geojson": _to_featurecollection(data)},
+            {
+                "name": name,
+                "geojson": _to_featurecollection(data),
+                "style": dict(style),
+            },
         )
 
     def add_marker(
@@ -391,8 +397,8 @@ class HostMap:
             {"name": name, "geojson": _points_to_featurecollection(points)},
         )
 
-    # add_circle_markers is an alias today (styling is applied via set_style or
-    # the Style panel); kept for parity with the geolibre package's vocabulary.
+    # add_circle_markers is an alias today; kept for parity with the geolibre
+    # package's vocabulary.
     add_circle_markers = add_markers
 
     def remove_layer(self, layer_id: str) -> None:
