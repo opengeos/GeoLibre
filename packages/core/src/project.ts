@@ -1278,6 +1278,10 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     const { timeFilter: _timeFilter, ...rest } = layer;
     layer = rest;
   }
+  if (layer.embedFilter !== undefined) {
+    const { embedFilter: _embedFilter, ...rest } = layer;
+    layer = rest;
+  }
 
   // External native layers that restore their features from a source URL keep
   // a `geojson` copy on the map only for the attribute table; it is redundant

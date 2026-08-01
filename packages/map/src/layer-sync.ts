@@ -176,6 +176,9 @@ function withFeatureFilters(
   if (Array.isArray(timeFilter) && timeFilter.length > 0) {
     filters.push(timeFilter);
   }
+  if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
+    filters.push(layer.embedFilter);
+  }
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
   if (layer.metadata?.sourceKind === "annotation") {
@@ -236,6 +239,9 @@ function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   const timeFilter = layer.timeFilter;
   if (Array.isArray(timeFilter) && timeFilter.length > 0) {
     extras.push(timeFilter);
+  }
+  if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
+    extras.push(layer.embedFilter);
   }
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) extras.push(ruleFilter);
@@ -1887,6 +1893,7 @@ function applyVectorDataRenderLayers(
   // them for the duration, mirroring the dedup-label behavior.
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
     ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {

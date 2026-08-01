@@ -1,6 +1,8 @@
 import { useAppStore } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
+import { captureMapImage } from "../lib/print-layout-export";
 import {
   EMBED_ORIGIN_WILDCARD,
   buildEmbedEvent,
@@ -61,11 +63,12 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     // `ready`. Scoping to the exact origin afterwards keeps later payloads off
     // any other frame that happens to share the allowlist.
     let hostOrigin: string | null = null;
+    let hostVersion: 1 | 2 = 2;
     let disposed = false;
 
     const emit = (type: EmbedEventType, payload: Record<string, unknown>) => {
       if (disposed) return;
-      const message = buildEmbedEvent(type, payload);
+      const message = buildEmbedEvent(type, payload, hostVersion);
       const targets = hostOrigin
         ? [hostOrigin]
         : wildcard
@@ -80,9 +83,14 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       }
     };
 
-    const ack = (requestId: string | null, ok: boolean, error?: string) => {
+    const ack = (requestId: string | null, ok: boolean, error?: string, result?: unknown) => {
       if (!requestId) return;
-      emit("ack", { requestId, ok, ...(error ? { error } : {}) });
+      emit("ack", {
+        requestId,
+        ok,
+        ...(error ? { error } : {}),
+        ...(result === undefined ? {} : { result }),
+      });
     };
 
     const controller = () => mapControllerRef.current;
@@ -166,7 +174,13 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       state.setProcessingOpen(true);
     };
 
-    const runCommand = async (command: EmbedCommand): Promise<void> => {
+    const requireLayer = (layerId: string) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      if (!layer) throw new Error(`No layer with id "${layerId}"`);
+      return layer;
+    };
+
+    const runCommand = async (command: EmbedCommand): Promise<unknown> => {
       switch (command.type) {
         case "loadProject":
           await loadProjectFromUrl(command.url);
@@ -180,6 +194,55 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
         case "openTool":
           applyOpenTool(command);
           return;
+        case "setLayerVisibility":
+          requireLayer(command.layerId);
+          useAppStore.getState().setLayerVisibility(command.layerId, command.visible);
+          return;
+        case "listLayers":
+          return useAppStore.getState().layers.map(({ id, name, type, visible, opacity }) => ({
+            id,
+            name,
+            type,
+            visible,
+            opacity,
+          }));
+        case "setFilter":
+          requireLayer(command.layerId);
+          useAppStore.getState().updateLayer(command.layerId, {
+            embedFilter: command.expression ?? undefined,
+          });
+          return;
+        case "getViewport": {
+          const view = controller()?.readView();
+          if (!view) throw new Error("The map is not ready yet");
+          return view;
+        }
+        case "addLayer": {
+          const state = useAppStore.getState();
+          if (state.layers.some((layer) => layer.id === command.spec.id)) {
+            throw new Error(`A layer with id "${command.spec.id}" already exists`);
+          }
+          const spec = command.spec;
+          const layer: GeoLibreLayer = {
+            id: spec.id,
+            name: spec.name,
+            type: spec.type as GeoLibreLayer["type"],
+            source: spec.source,
+            visible: spec.visible ?? true,
+            opacity: spec.opacity ?? 1,
+            style: (spec.style ?? {}) as unknown as GeoLibreLayer["style"],
+            metadata: spec.metadata ?? {},
+            ...(spec.geojson ? { geojson: spec.geojson as GeoLibreLayer["geojson"] } : {}),
+            ...(spec.beforeId ? { beforeId: spec.beforeId } : {}),
+          };
+          state.addLayer(layer);
+          return layer.id;
+        }
+        case "exportImage": {
+          const map = controller()?.getMap();
+          if (!map) throw new Error("The map is not ready yet");
+          return captureMapImage(map).image.toDataURL("image/png");
+        }
       }
     };
 
@@ -192,12 +255,14 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       // exactly this origin. ("null" is an opaque origin, only reachable under
       // the wildcard, and cannot be used as a postMessage target.)
       if (!hostOrigin && event.origin && event.origin !== "null") hostOrigin = event.origin;
+      const requestedVersion = (event.data as { v?: unknown }).v;
+      hostVersion = requestedVersion === 1 ? 1 : 2;
       if ("error" in request) {
         ack(request.requestId, false, request.error);
         return;
       }
       void runCommand(request.command).then(
-        () => ack(request.requestId, true),
+        (result) => ack(request.requestId, true, undefined, result),
         (error: unknown) => {
           ack(request.requestId, false, error instanceof Error ? error.message : String(error));
         },
@@ -302,6 +367,11 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     rafId = requestAnimationFrame(attach);
 
     emit("ready", { version: __GEOLIBRE_VERSION__ });
+    // Existing v1 hosts filter by the envelope version. Announce both versions
+    // until the first request identifies which one this host speaks.
+    hostVersion = 1;
+    emit("ready", { version: __GEOLIBRE_VERSION__ });
+    hostVersion = 2;
 
     return () => {
       disposed = true;

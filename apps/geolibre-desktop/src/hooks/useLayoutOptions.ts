@@ -19,6 +19,8 @@ export interface LayoutOptions {
   stylePanelVisible: boolean;
   toolbarLabels: boolean;
   toolbarVisible: boolean;
+  /** Read-only embed chrome with Layers and map navigation, but no authoring UI. */
+  viewer: boolean;
 }
 
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
@@ -41,6 +43,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
       panelsHidden: false,
       statusBarVisible: true,
       toolbarVisible: true,
+      viewer: false,
       ...layoutSettings,
     };
   }
@@ -54,11 +57,12 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
   // truthy value (`?maponly=true`).
   const mapOnly =
     params.has("maponly") && MAP_ONLY_VALUES.has(normalizedParam(params.get("maponly")));
+  const viewer = layout === "viewer";
   // `maponly` implies `compact` so the map fills its container (the `<main>`
   // element gets `min-h-0`). This also forces `toolbarLabels` and
   // `showProjectInfo` to false below, which is harmless since the toolbar is
   // hidden, but any other consumer of `compact` sees `true` in map-only mode.
-  const compact = mapOnly || COMPACT_LAYOUT_VALUES.has(layout);
+  const compact = mapOnly || viewer || COMPACT_LAYOUT_VALUES.has(layout);
   const panelsHidden =
     mapOnly ||
     HIDDEN_PANEL_VALUES.has(panels) ||
@@ -67,11 +71,11 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
   const showProjectInfo = compact ? false : layoutSettings.showProjectInfo;
   const layerPanelVisible = panelsHidden ? false : layoutSettings.layerPanelVisible;
-  const stylePanelVisible = panelsHidden ? false : layoutSettings.stylePanelVisible;
+  const stylePanelVisible = panelsHidden || viewer ? false : layoutSettings.stylePanelVisible;
   // The attribute table is hidden by default and opened on demand from a
   // vector layer's context menu, so it has no persisted settings toggle; it
   // only needs to be unmounted when the embed chrome is hidden.
-  const attributePanelVisible = !panelsHidden;
+  const attributePanelVisible = !panelsHidden && !viewer;
 
   return {
     attributePanelVisible,
@@ -83,6 +87,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     stylePanelVisible,
     toolbarLabels,
     toolbarVisible: !mapOnly,
+    viewer,
   };
 }
 

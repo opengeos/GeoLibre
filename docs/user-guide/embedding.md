@@ -23,7 +23,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | Parameter    | Example                                                    | Description                                                                                                                           |
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`        | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                                   |
-| `layout`     | `layout=compact`                                           | Compact embed layout: icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases.                        |
+| `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, and Help, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
 | `toolbar`    | `toolbar=icons`                                            | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases.                                        |
 | `panels`     | `panels=none`                                              | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases.                                         |
 | `hidePanels` | `hidePanels=true`                                          | Alternative way to hide those panels.                                                                                                 |
@@ -75,14 +75,29 @@ Drop the viewer into an `<iframe>`:
 ></iframe>
 ```
 
-Use `layout=compact` when you want a slim toolbar to remain (for example, so viewers can switch basemaps), or `maponly` for a pure map.
+Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
+basemap switching. Use `layout=compact` for the complete authoring toolbar in a
+smaller space, or `maponly` for a pure map.
 
 ## Talking to the map at runtime
 
 URL parameters configure the app once, at load. To keep talking to a **live**
 embed (fly to the record the user just clicked in your app, highlight it, open a
 processing tool) and to hear what the user does inside the map, use the embed
-`postMessage` API.
+`postMessage` API. The dependency-free `@geolibre/embed` package provides the
+recommended typed client and handles origin checks and request correlation:
+
+```ts
+import { connect } from "@geolibre/embed";
+
+const map = await connect(document.querySelector("iframe"), {
+  origin: "https://web.geolibre.app",
+});
+await map.setView({ center: [-95.7, 37.1], zoom: 5 });
+await map.setLayerVisibility("roads", false);
+const layers = await map.listLayers();
+map.on("selectionChanged", ({ featureIds }) => console.log(featureIds));
+```
 
 ### Enabling it
 
@@ -116,7 +131,7 @@ you can stop other sites from framing the app at all by adding
 Every message, in both directions, is versioned:
 
 ```json
-{ "v": 1, "type": "setView", "payload": { "center": [-95.7, 37.1], "zoom": 5 } }
+{ "v": 2, "type": "setView", "payload": { "center": [-95.7, 37.1], "zoom": 5 } }
 ```
 
 Messages the **app** sends also carry `"source": "geolibre"`, so you can filter
@@ -130,6 +145,12 @@ them out of the other `postMessage` traffic on your page.
 | `setView`          | `{ bbox }` or `{ center, zoom, bearing, pitch, duration }` | Fits a bounding box, or flies the camera to the properties you send.                |
 | `highlightFeature` | `{ layerId, featureId \| featureIds \| filter, fit }`      | Selects and highlights features; `filter` matches properties. `fit` zooms to them.  |
 | `openTool`         | `{ id, params }`                                           | Opens the Processing dialog on a tool, pre-filling `params`. Runtime twin of `?tool=`. |
+| `setLayerVisibility` | `{ layerId, visible }`                                   | Shows or hides a project layer.                                                       |
+| `listLayers`       | `{}`                                                       | Returns layer summaries in the acknowledgement's `result`.                           |
+| `setFilter`        | `{ layerId, expression }`                                  | Applies a MapLibre filter expression; send `null` to clear it.                        |
+| `getViewport`      | `{}`                                                       | Returns the current camera and bounds in `result`.                                    |
+| `addLayer`         | `{ spec }`                                                 | Adds a project-format layer specification at runtime.                                 |
+| `exportImage`      | `{}`                                                       | Returns the rendered map as a PNG data URL in `result`.                               |
 
 Send `{ layerId }` alone to `highlightFeature` to clear the highlight. A request
 that names features (or a filter) but matches none is rejected rather than
@@ -146,7 +167,7 @@ reporting whether it worked.
 | Type                | Payload                                                        | Fires when                                                       |
 | ------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `ready`             | `{ version }`                                                  | The app has mounted and is listening.                             |
-| `ack`               | `{ requestId, ok, error }`                                     | A message you sent with a `requestId` was applied (or rejected).  |
+| `ack`               | `{ requestId, ok, error, result }`                             | A message you sent with a `requestId` was applied (or rejected).  |
 | `projectLoaded`     | `{ url, name, layerIds }`                                      | A project finished loading, whoever started it.                   |
 | `selectionChanged`  | `{ layerId, featureIds }`                                      | The user (or your `highlightFeature`) changed the selection.      |
 | `viewChanged`       | `{ bbox, center, zoom, bearing, pitch }`                       | The camera moved (throttled to about four events a second).       |
@@ -170,12 +191,12 @@ reporting whether it worked.
   const APP_ORIGIN = "https://gis.example.com";
 
   const send = (type, payload) =>
-    frame.contentWindow.postMessage({ v: 1, type, payload }, APP_ORIGIN);
+    frame.contentWindow.postMessage({ v: 2, type, payload }, APP_ORIGIN);
 
   window.addEventListener("message", (event) => {
     if (event.origin !== APP_ORIGIN) return;
     const message = event.data;
-    if (message?.source !== "geolibre" || message.v !== 1) return;
+    if (message?.source !== "geolibre" || message.v !== 2) return;
 
     if (message.type === "ready") {
       // Safe to start sending commands.
@@ -199,6 +220,10 @@ reporting whether it worked.
 Wait for `ready` before sending: messages that arrive before the app has mounted
 are not queued. Treat `ready` as idempotent, since it is re-sent whenever the app
 remounts (a navigation inside the frame, a development hot reload).
+
+Protocol v2 is current. GeoLibre continues to accept v1 request envelopes and
+answers a v1 host with v1 events, so existing hand-written integrations remain
+compatible.
 
 ## What works in an embed
 

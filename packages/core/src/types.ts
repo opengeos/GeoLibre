@@ -881,6 +881,8 @@ export interface GeoLibreLayer {
    * activation. `undefined` means no time filter is applied.
    */
   timeFilter?: unknown[];
+  /** Transient MapLibre expression applied by the iframe embed API. */
+  embedFilter?: unknown[];
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the

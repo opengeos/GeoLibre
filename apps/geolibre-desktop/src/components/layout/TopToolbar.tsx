@@ -171,6 +171,7 @@ interface TopToolbarProps {
   // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
   // map so it can stay non-modal (the map is interactive for drawing a bbox).
   onOpenBasemapExtract: () => void;
+  viewer?: boolean;
 }
 
 export function TopToolbar({
@@ -187,6 +188,7 @@ export function TopToolbar({
   onOpenProjectHistory,
   onToggleThemeMode,
   onOpenBasemapExtract,
+  viewer = false,
 }: TopToolbarProps) {
   const { t, i18n } = useTranslation();
   // The reverse-geocode plugin lives in the framework-agnostic plugins package
@@ -1495,7 +1497,7 @@ export function TopToolbar({
         <Map className="h-4 w-4" />
         {showProjectInfo ? <span className="hidden sm:inline">{appTitle}</span> : null}
       </span>
-      {isMenuVisible(uiProfile, "project") && (
+      {!viewer && isMenuVisible(uiProfile, "project") && (
         <ProjectMenu
           chrome={chrome}
           collaborationEnabled={collaboration.enabled}
@@ -1521,7 +1523,7 @@ export function TopToolbar({
           onOpenOfflineBasemap={onOpenBasemapExtract}
         />
       )}
-      {isMenuVisible(uiProfile, "edit") && (
+      {!viewer && isMenuVisible(uiProfile, "edit") && (
         <EditMenu chrome={chrome} mapControllerRef={mapControllerRef} />
       )}
       {isMenuVisible(uiProfile, "view") && (
@@ -1565,7 +1567,7 @@ export function TopToolbar({
         onSaveCurrentProject={projectFiles.handleSave}
         onProjectCreated={resetRuntimeControlsForNewProject}
       />
-      {isMenuVisible(uiProfile, "addData") && (
+      {!viewer && isMenuVisible(uiProfile, "addData") && (
         <AddDataMenu
           chrome={chrome}
           addLayer={addLayer}
@@ -1578,7 +1580,7 @@ export function TopToolbar({
           onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
         />
       )}
-      {isMenuVisible(uiProfile, "processing") && (
+      {!viewer && isMenuVisible(uiProfile, "processing") && (
         <ProcessingMenu
           chrome={chrome}
           earthEnginePanel={panels.earthEngine}
@@ -1614,7 +1616,7 @@ export function TopToolbar({
           onOpenRecordVideo={() => setRecordVideoOpen(true)}
         />
       )}
-      {isMenuVisible(uiProfile, "plugins") && (
+      {!viewer && isMenuVisible(uiProfile, "plugins") && (
         <PluginsMenu
           chrome={chrome}
           appApi={appApi}
@@ -1629,18 +1631,20 @@ export function TopToolbar({
       {/* Top-level toolbar menus registered by built-in plugins via
           app.registerToolbarMenu(); external plugin menus render after Help
           (below). Renders nothing when none exist. */}
-      <PluginToolbarMenus chrome={chrome} placement="builtin" />
-      <SettingsDialog
-        buttonClassName={toolbarButtonClass}
-        buttonSize={toolbarButtonSize}
-        iconClassName={toolbarIconClassName}
-        mapControllerRef={mapControllerRef}
-        showLabels={showLabels}
-        onOpenManagePlugins={() => setManagePluginsOpen(true)}
-        profilePlugins={profilePlugins}
-        themeMode={themeMode}
-        onToggleThemeMode={onToggleThemeMode}
-      />
+      {!viewer ? <PluginToolbarMenus chrome={chrome} placement="builtin" /> : null}
+      {!viewer ? (
+        <SettingsDialog
+          buttonClassName={toolbarButtonClass}
+          buttonSize={toolbarButtonSize}
+          iconClassName={toolbarIconClassName}
+          mapControllerRef={mapControllerRef}
+          showLabels={showLabels}
+          onOpenManagePlugins={() => setManagePluginsOpen(true)}
+          profilePlugins={profilePlugins}
+          themeMode={themeMode}
+          onToggleThemeMode={onToggleThemeMode}
+        />
+      ) : null}
       {/* No plugin marketplace in the Mac App Store build (all its entry
           points are hidden too; this keeps the install surface out of the
           bundle). */}
@@ -1733,7 +1737,7 @@ export function TopToolbar({
       )}
       {/* External plugin toolbar menus render after Help so third-party menus
           sit at the end of the banner, past the built-in menus. */}
-      <PluginToolbarMenus chrome={chrome} placement="external" />
+      {!viewer ? <PluginToolbarMenus chrome={chrome} placement="external" /> : null}
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}

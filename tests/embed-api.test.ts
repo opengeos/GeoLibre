@@ -103,7 +103,7 @@ describe("isEmbedOriginAllowed", () => {
 describe("parseEmbedRequest envelope", () => {
   it("ignores a message without the protocol version", () => {
     assert.equal(parseEmbedRequest({ type: "setView", payload: { zoom: 4 } }), null);
-    assert.equal(parseEmbedRequest({ v: 2, type: "setView", payload: { zoom: 4 } }), null);
+    assert.equal(parseEmbedRequest({ v: 3, type: "setView", payload: { zoom: 4 } }), null);
   });
 
   it("ignores unrelated postMessage traffic sharing the window", () => {
@@ -122,6 +122,62 @@ describe("parseEmbedRequest envelope", () => {
     assert.deepEqual(parsed, {
       command: { type: "setView", target: { kind: "camera", zoom: 4 } },
       requestId: "abc",
+    });
+  });
+});
+
+describe("parseEmbedRequest: v2 commands", () => {
+  it("keeps accepting a v1 request after the protocol bump", () => {
+    assert.deepEqual(parseEmbedRequest({ v: 1, type: "getViewport", requestId: "legacy" }), {
+      command: { type: "getViewport" },
+      requestId: "legacy",
+    });
+  });
+
+  it("validates visibility, filter, query, add, and export commands", () => {
+    assert.deepEqual(
+      parseEmbedRequest(message("setLayerVisibility", { layerId: "roads", visible: false })),
+      {
+        command: { type: "setLayerVisibility", layerId: "roads", visible: false },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(parseEmbedRequest(message("listLayers")), {
+      command: { type: "listLayers" },
+      requestId: null,
+    });
+    assert.deepEqual(
+      parseEmbedRequest(message("setFilter", { layerId: "roads", expression: ["==", "x", 1] })),
+      {
+        command: {
+          type: "setFilter",
+          layerId: "roads",
+          expression: ["==", "x", 1],
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(parseEmbedRequest(message("getViewport")), {
+      command: { type: "getViewport" },
+      requestId: null,
+    });
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("addLayer", {
+          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [] } },
+        }),
+      ),
+      {
+        command: {
+          type: "addLayer",
+          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [] } },
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(parseEmbedRequest(message("exportImage")), {
+      command: { type: "exportImage" },
+      requestId: null,
     });
   });
 });

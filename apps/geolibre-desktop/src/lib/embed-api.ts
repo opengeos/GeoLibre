@@ -13,12 +13,11 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
+import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
-/** Protocol version carried by every message in both directions. */
-export const EMBED_API_VERSION = 1;
-
-/** Marks app → host messages so a host can filter its own postMessage traffic. */
-export const EMBED_API_SOURCE = "geolibre";
+export { EMBED_API_SOURCE, EMBED_API_VERSION };
+/** Versions understood by the app. V1 remains accepted for existing hosts. */
+export const SUPPORTED_EMBED_API_VERSIONS = [1, EMBED_API_VERSION] as const;
 
 /**
  * Deployment variable naming the origins allowed to drive a framed app.
@@ -136,7 +135,13 @@ export type EmbedCommand =
   | { type: "loadProject"; url: string }
   | { type: "setView"; target: EmbedViewTarget }
   | { type: "highlightFeature"; target: EmbedHighlightTarget }
-  | { type: "openTool"; id: string; params: Record<string, string> };
+  | { type: "openTool"; id: string; params: Record<string, string> }
+  | { type: "setLayerVisibility"; layerId: string; visible: boolean }
+  | { type: "listLayers" }
+  | { type: "setFilter"; layerId: string; expression: unknown[] | null }
+  | { type: "getViewport" }
+  | { type: "addLayer"; spec: AddLayerSpec }
+  | { type: "exportImage" };
 
 /** A parsed inbound message: the command plus the host's correlation id. */
 export interface EmbedRequest {
@@ -172,8 +177,9 @@ export interface EmbedEvent {
 export function buildEmbedEvent(
   type: EmbedEventType,
   payload: Record<string, unknown>,
+  version: 1 | 2 = EMBED_API_VERSION,
 ): EmbedEvent {
-  return { v: EMBED_API_VERSION, source: EMBED_API_SOURCE, type, payload };
+  return { v: version, source: EMBED_API_SOURCE, type, payload };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -282,7 +288,7 @@ export function parseEmbedRequest(
   data: unknown,
 ): EmbedRequest | { error: string; requestId: string | null } | null {
   if (!isRecord(data)) return null;
-  if (data.v !== EMBED_API_VERSION) return null;
+  if (data.v !== 1 && data.v !== EMBED_API_VERSION) return null;
   if (typeof data.type !== "string") return null;
   // Our own events echo back when the host relays them; never treat one as a
   // command.
@@ -316,6 +322,52 @@ export function parseEmbedRequest(
         requestId,
       };
     }
+    case "setLayerVisibility": {
+      const layerId = typeof payload.layerId === "string" ? payload.layerId : "";
+      if (!layerId || typeof payload.visible !== "boolean") {
+        return fail("setLayerVisibility: expected layerId and boolean visible");
+      }
+      return {
+        command: { type: "setLayerVisibility", layerId, visible: payload.visible },
+        requestId,
+      };
+    }
+    case "listLayers":
+      return { command: { type: "listLayers" }, requestId };
+    case "setFilter": {
+      const layerId = typeof payload.layerId === "string" ? payload.layerId : "";
+      const expression = payload.expression;
+      if (!layerId || (expression !== null && !Array.isArray(expression))) {
+        return fail("setFilter: expected layerId and a MapLibre expression array or null");
+      }
+      return {
+        command: { type: "setFilter", layerId, expression },
+        requestId,
+      };
+    }
+    case "getViewport":
+      return { command: { type: "getViewport" }, requestId };
+    case "addLayer": {
+      const spec = payload.spec;
+      if (
+        !isRecord(spec) ||
+        typeof spec.id !== "string" ||
+        !spec.id ||
+        typeof spec.name !== "string" ||
+        !spec.name ||
+        typeof spec.type !== "string" ||
+        !spec.type ||
+        !isRecord(spec.source)
+      ) {
+        return fail("addLayer: spec must include non-empty id, name, type, and source");
+      }
+      return {
+        command: { type: "addLayer", spec: spec as unknown as AddLayerSpec },
+        requestId,
+      };
+    }
+    case "exportImage":
+      return { command: { type: "exportImage" }, requestId };
     default:
       return null;
   }
