@@ -7,12 +7,14 @@
  * S3 entries are scoped to the known OPM dataset path prefixes (not the whole
  * shared `s3*.amazonaws.com` host) so a redirect cannot jump to another bucket.
  */
+export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/package_search";
+
 export const TILES_ALLOWED_URL_PREFIXES = [
   "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/",
   "https://s3.us-east-2.amazonaws.com/opmmarstiles/",
   "https://s3.amazonaws.com/opmbuilder/",
   "https://api.openaerialmap.org/",
-  "https://data.humdata.org/api/3/action/package_search",
+  HDX_CKAN_SEARCH_UPSTREAM,
   "https://source.coop/",
   "https://build.protomaps.com/",
   "https://planetarymaps.usgs.gov/",

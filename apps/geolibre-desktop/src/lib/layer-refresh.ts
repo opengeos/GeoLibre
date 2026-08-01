@@ -389,10 +389,11 @@ export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
 export function getLayerRefreshConfig(layer: GeoLibreLayer): LayerRefreshConfig {
   if (layer.connection) {
     const seconds = layer.connection.interval;
-    const intervalMs =
-      typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0
-        ? Math.max(MIN_REFRESH_INTERVAL_MS, seconds * 1000)
-        : 0;
+    const converted =
+      typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+    const intervalMs = Number.isFinite(converted)
+      ? Math.max(MIN_REFRESH_INTERVAL_MS, converted)
+      : 0;
     return { enabled: intervalMs > 0, intervalMs };
   }
   const refresh = layer.metadata.refresh;

@@ -369,6 +369,13 @@ describe("layer refresh helpers", () => {
       enabled: true,
       intervalMs: 300_000,
     });
+    assert.deepEqual(
+      getLayerRefreshConfig({
+        ...source,
+        connection: { ...source.connection!, interval: Number.MAX_VALUE },
+      }),
+      { enabled: false, intervalMs: 0 },
+    );
   });
 
   it("only treats HTTP GeoJSON and WFS sources as refreshable", () => {

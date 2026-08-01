@@ -35,7 +35,7 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
-import { fetchAllowlistedUpstream } from "./allowlisted-fetch";
+import { fetchAllowlistedUpstream, HDX_CKAN_SEARCH_UPSTREAM } from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
@@ -81,7 +81,6 @@ const OAM_MAX_LIMIT = 100;
 // Public CKAN catalog search proxy. HDX's API has inconsistent browser CORS
 // behavior, so GeoLibre reads this fixed upstream through a named route.
 const CKAN_SEARCH_PATH = "/ckan/search";
-const CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/package_search";
 const CKAN_MAX_ROWS = 50;
 
 // Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
@@ -329,7 +328,7 @@ const NEGATIVE_CACHE_CONTROL = "public, max-age=300";
  * `.geolibre.app` etc. are matched with a leading dot so a look-alike apex like
  * `evilgeolibre.app` cannot pass as a subdomain.
  */
-function isAllowedOamOrigin(origin: string | null): boolean {
+function isAllowedProxyOrigin(origin: string | null): boolean {
   if (!origin) return false;
   let hostname: string;
   let protocol: string;
@@ -382,7 +381,7 @@ function sourceCoopUpstream(pathname: string): string | null {
  * dropping them keeps the cache key stable.
  */
 async function handleSourceCoop(request: Request, pathname: string): Promise<Response> {
-  if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
     return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
   }
   const upstream = sourceCoopUpstream(pathname);
@@ -426,7 +425,7 @@ interface Env {}
  *
  * Unlike `/oam/meta`, this route is deliberately *not* origin-gated: the
  * Jupyter/embed builds run on arbitrary origins and legitimately need to extract
- * offline basemaps, so an `isAllowedOamOrigin`-style check would break them. The
+ * offline basemaps, so an `isAllowedProxyOrigin`-style check would break them. The
  * abuse surface is instead bounded by (a) the per-request range cap above — a
  * single request can't transfer more than a directory/tile-sized chunk — and
  * (b) Cloudflare's platform abuse detection plus any zone rate-limiting rule in
@@ -545,12 +544,12 @@ export default {
     // fixed upstream and re-emit the JSON with CORS (see OAM_META_PATH above).
     if (url.pathname === OAM_META_PATH) {
       // Abuse guard: this is a wildcard-CORS proxy to a fixed upstream, so
-      // restrict it to GeoLibre's own origins (see isAllowedOamOrigin) — every
+      // restrict it to GeoLibre's own origins (see isAllowedProxyOrigin) — every
       // cross-origin `fetch()` from the app carries an Origin header. This stops
       // a third-party site from driving arbitrary OAM queries through the
       // Worker. It is not a rate limiter — per-client throttling belongs in a
       // Cloudflare rate-limiting rule in front of tiles.geolibre.app.
-      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
         return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
       }
       const upstream = new URL(OAM_META_UPSTREAM);
@@ -593,19 +592,21 @@ export default {
     }
 
     if (url.pathname === CKAN_SEARCH_PATH) {
-      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
         return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
       }
-      const upstream = new URL(CKAN_SEARCH_UPSTREAM);
+      const upstream = new URL(HDX_CKAN_SEARCH_UPSTREAM);
       const query = url.searchParams.get("q")?.trim().slice(0, 300);
       if (!query) {
         return new Response("Missing query", { status: 400, headers: CORS_HEADERS });
       }
-      const requestedRows = Number(url.searchParams.get("rows"));
+      const rowsParam = url.searchParams.get("rows");
+      const requestedRows = rowsParam === null ? Number.NaN : Number(rowsParam);
       const rows = Number.isFinite(requestedRows)
         ? Math.min(Math.max(Math.trunc(requestedRows), 1), CKAN_MAX_ROWS)
         : 20;
-      const requestedStart = Number(url.searchParams.get("start"));
+      const startParam = url.searchParams.get("start");
+      const requestedStart = startParam === null ? Number.NaN : Number(startParam);
       const start = Number.isFinite(requestedStart)
         ? Math.min(Math.max(Math.trunc(requestedStart), 0), 10_000)
         : 0;
@@ -634,7 +635,7 @@ export default {
     }
 
     if (url.pathname === GITHUB_RAW_PATH) {
-      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
         return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
       }
       const source = url.searchParams.get("url");

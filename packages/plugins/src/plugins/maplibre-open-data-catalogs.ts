@@ -3,6 +3,11 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 export const SOCRATA_PLUGIN_ID = "maplibre-gl-socrata";
 export const CKAN_PLUGIN_ID = "maplibre-gl-ckan";
+const FETCH_TIMEOUT_MS = 30_000;
+
+function boundedSignal(signal: AbortSignal): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+}
 
 interface CatalogItem {
   id: string;
@@ -71,7 +76,7 @@ async function searchSocrata(
   url.searchParams.set("q", query);
   url.searchParams.set("limit", "20");
   url.searchParams.set("offset", String(page * 20));
-  const response = await fetch(url, { signal });
+  const response = await fetch(url, { signal: boundedSignal(signal) });
   if (!response.ok) throw new Error(`Socrata search failed (${response.status}).`);
   const payload = (await response.json()) as {
     resultSetSize?: number;
@@ -106,7 +111,7 @@ async function searchCkan(query: string, page: number, signal: AbortSignal): Pro
   url.searchParams.set("q", query);
   url.searchParams.set("rows", "20");
   url.searchParams.set("start", String(page * 20));
-  const response = await fetch(url, { signal });
+  const response = await fetch(url, { signal: boundedSignal(signal) });
   if (!response.ok) throw new Error(`CKAN search failed (${response.status}).`);
   const payload = (await response.json()) as {
     success?: boolean;
@@ -232,7 +237,7 @@ function createCatalogPlugin(options: {
                 status.textContent = labels.adding(item.title);
                 try {
                   const response = await fetch(item.dataUrl, {
-                    signal: downloadController.signal,
+                    signal: boundedSignal(downloadController.signal),
                   });
                   if (!response.ok) throw new Error(`Download failed (${response.status}).`);
                   const data = (await response.json()) as FeatureCollection;
