@@ -286,9 +286,7 @@ export function DelimitedTextSource() {
     // re-fetched URL's columns changed underneath the selection); drop any
     // that no longer exist in what was just parsed rather than handing
     // csvRowsToGeocodeRequests a column name no row has.
-    const addressColumns = delimitedTextAddressColumns.filter((column) =>
-      fields.includes(column),
-    );
+    const addressColumns = delimitedTextAddressColumns.filter((column) => fields.includes(column));
     if (addressColumns.length === 0) {
       throw new Error(t("addData.delimitedText.errorNoAddressColumns"));
     }
