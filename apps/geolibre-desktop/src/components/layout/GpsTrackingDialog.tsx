@@ -537,7 +537,6 @@ export function GpsTrackingDialog({
     });
   }, []);
 
-  /** Close the NMEA connection, if any, and clear its readout. */
   /**
    * Release the live connection and clear its readout, leaving the generation
    * alone. Split from {@link disconnectNmea} so a connect attempt can close a
