@@ -75,8 +75,11 @@ let activeTextInput: HTMLInputElement | null = null;
 // Idempotent finisher for the open text input (commits or discards once).
 let finishTextInput: ((save: boolean) => void) | null = null;
 
+/** Plugin id, exported so the read-only viewer preset can name it. */
+export const ANNOTATIONS_PLUGIN_ID = "maplibre-gl-annotations";
+
 export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-annotations",
+  id: ANNOTATIONS_PLUGIN_ID,
   name: "Annotations",
   version: "0.1.0",
   activate: (app: GeoLibreAppAPI) => {

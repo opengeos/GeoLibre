@@ -11,6 +11,7 @@ import {
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   endLayerGeometryEdit,
+  GEO_EDITOR_PLUGIN_ID,
   getGeometryEditTargetLayerId,
   openRasterLayerPanel,
   getRightPanel,
@@ -37,6 +38,7 @@ import {
   startLayerGeometryEdit,
   subscribeGeometryEdit,
   TIME_SLIDER_PLUGIN_ID,
+  VIEWER_BLOCKED_PLUGIN_IDS,
 } from "@geolibre/plugins";
 import { convertGeoTiffToCog, isTiff, readGeoTiffInfo } from "@geolibre/processing";
 import {
@@ -174,13 +176,6 @@ import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
  * roughly where the transient allocation starts to be felt.
  */
 const LARGE_RASTER_SAMPLE_LIMIT = 40_000_000;
-
-/**
- * The geometry-editing plugin. It is the one plugin the read-only viewer preset
- * must keep deactivated, because it paints drawing and editing handles onto the
- * map itself rather than into chrome the preset can hide.
- */
-const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
 
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
@@ -696,20 +691,22 @@ export function DesktopShell({
   });
   const activePanelId = useRightPanelState().activeId;
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
-  // The geo-editor paints drawing and editing handles onto the map, so it can
-  // never be active under the read-only viewer preset. This has to run more
+  // The plugins in VIEWER_BLOCKED_PLUGIN_IDS paint drawing and editing controls
+  // onto the map, which the read-only viewer preset cannot hide the way it
+  // hides React chrome, so they are deactivated outright. This has to run more
   // than once: `restoreProjectState` activates whatever a loaded project lists
   // in `projectPlugins.activePluginIds` with no viewer awareness, so every
   // project load — the initial `?url=` one and any later `loadProject` embed
-  // command — can put it back. It is a callback rather than an effect of its
+  // command — can put them back. It is a callback rather than an effect of its
   // own so the restore effect below can re-assert it *after* restoring, which
   // effect ordering alone would not guarantee.
   const enforceViewerPlugins = useCallback(() => {
     if (!layoutOptions.viewer) return;
     const manager = getPluginManager();
-    if (manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
-      manager.deactivate(GEO_EDITOR_PLUGIN_ID, createAppAPI(mapControllerRef));
-    }
+    const blocked = VIEWER_BLOCKED_PLUGIN_IDS.filter((id) => manager.isActive(id));
+    if (blocked.length === 0) return;
+    const appAPI = createAppAPI(mapControllerRef);
+    for (const id of blocked) manager.deactivate(id, appAPI);
   }, [layoutOptions.viewer, mapControllerRef]);
 
   useEffect(() => {

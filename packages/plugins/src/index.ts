@@ -332,8 +332,10 @@ export {
   DECK_VIZ_SOURCE_KIND,
   isDeckVizLayer,
 } from "./plugins/deckgl-viz/store-layer";
+export { VIEWER_BLOCKED_PLUGIN_IDS } from "./viewer-plugins";
 export {
   maplibreAnnotationsPlugin,
+  ANNOTATIONS_PLUGIN_ID,
   ANNOTATIONS_SOURCE_KIND,
   setAnnotationLabels,
   type AnnotationLabels,

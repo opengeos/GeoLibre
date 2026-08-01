@@ -84,9 +84,11 @@ Read-only covers the keyboard too: the
 project shortcuts (Ctrl/Cmd+N, +O, +S) and the command palette (Ctrl/Cmd+K) go
 with the menus they belong to, while the View shortcuts (`[`, `]`, `n`, `u`,
 `r`) keep working since the View menu stays. Dropping a file onto the map
-imports nothing, and the geometry editor cannot be active, even if the loaded
-project saved it that way — so an embed cannot be steered into authoring by a
-key press, a drag, or a project file. Use `layout=compact` for the complete authoring
+imports nothing, and the plugins that draw on the map — the geometry editor and
+Annotations — cannot be active, even if the loaded project saved them that way.
+So an embed cannot be steered into authoring by a key press, a drag, or a
+project file. Display plugins (layer control, basemaps, time slider, legend and
+colorbar components) keep working, so the project still looks as it was saved. Use `layout=compact` for the complete authoring
 toolbar in a smaller space, or `maponly` for a pure map.
 
 ## Talking to the map at runtime
