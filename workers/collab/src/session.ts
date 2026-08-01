@@ -10,6 +10,11 @@ import type {
   PresenceEntry,
   ServerMessage,
 } from "./protocol";
+import {
+  MIN_COMMENT_INTERVAL_MS,
+  validateComment,
+  validateReply,
+} from "./comment-validate";
 
 function finite(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
@@ -107,6 +112,8 @@ interface SocketAttachment {
   editOverride?: boolean;
   /** Epoch-ms of this socket's last accepted chat frame, for rate-limiting. */
   lastChatTs?: number;
+  /** Epoch-ms of this socket's last accepted comment-mutation frame. */
+  lastCommentTs?: number;
 }
 
 /** Effective edit permission: the host always edits; otherwise a host-set
@@ -671,6 +678,79 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
+    // Rate-limit: same pattern as chat to prevent storage-op exhaustion.
+    const now = Date.now();
+    if (
+      attachment.lastCommentTs !== undefined &&
+      now - attachment.lastCommentTs < MIN_COMMENT_INTERVAL_MS
+    ) {
+      return;
+    }
+    attachment.lastCommentTs = now;
+    ws.serializeAttachment(attachment);
+
+    const action = message.action;
+    if (!action || typeof action !== "object") {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Missing or invalid comment-mutation action.",
+      });
+      return;
+    }
+
+    // Validate payloads for add/reply; toggle-resolve and delete only need a
+    // string commentId and carry no untrusted object bodies.
+    let sanitizedAction = action;
+    if (action.type === "add") {
+      const validated = validateComment(action.comment);
+      if (!validated) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid comment payload.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "add", comment: validated };
+    } else if (action.type === "reply") {
+      if (typeof action.commentId !== "string" || !action.commentId) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid reply target.",
+        });
+        return;
+      }
+      const validated = validateReply(action.reply);
+      if (!validated) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid reply payload.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "reply", commentId: action.commentId, reply: validated };
+    } else if (action.type === "toggle-resolve") {
+      if (typeof action.commentId !== "string" || !action.commentId) return;
+      sanitizedAction = {
+        type: "toggle-resolve",
+        commentId: action.commentId,
+        ...(action.resolved !== undefined ? { resolved: action.resolved === true } : {}),
+      };
+    } else if (action.type === "delete") {
+      if (typeof action.commentId !== "string" || !action.commentId) return;
+      sanitizedAction = { type: "delete", commentId: action.commentId };
+    } else {
+      return;
+    }
+
+    const sanitizedMessage: Extract<ClientMessage, { type: "comment-mutation" }> = {
+      type: "comment-mutation",
+      action: sanitizedAction,
+    };
+
     const rawSnapshot = await this.ctx.storage.get<string>("snapshot");
     if (rawSnapshot) {
       try {
@@ -678,18 +758,14 @@ export class CollabSession extends DurableObject<Env> {
         const comments = Array.isArray(parsed.comments)
           ? (parsed.comments as Record<string, unknown>[])
           : [];
-        const action = message.action;
-        if (!action || typeof action !== "object") return;
         let updatedComments = comments;
 
-        if (action.type === "add") {
-          if (!action.comment || typeof action.comment !== "object") return;
-          updatedComments = [...comments, action.comment as Record<string, unknown>];
-        } else if (action.type === "reply") {
-          if (!action.reply || typeof action.reply !== "object") return;
-          const replyObj = action.reply as Record<string, unknown>;
+        if (sanitizedAction.type === "add") {
+          updatedComments = [...comments, sanitizedAction.comment as Record<string, unknown>];
+        } else if (sanitizedAction.type === "reply") {
+          const replyObj = sanitizedAction.reply as Record<string, unknown>;
           updatedComments = comments.map((c) => {
-            if (!c || typeof c !== "object" || c.id !== action.commentId) return c;
+            if (!c || typeof c !== "object" || c.id !== sanitizedAction.commentId) return c;
             const existingReplies = Array.isArray(c.replies)
               ? (c.replies as Record<string, unknown>[])
               : [];
@@ -697,27 +773,32 @@ export class CollabSession extends DurableObject<Env> {
               return c;
             return { ...c, replies: [...existingReplies, replyObj] };
           });
-        } else if (action.type === "toggle-resolve") {
+        } else if (sanitizedAction.type === "toggle-resolve") {
           updatedComments = comments.map((c) =>
-            c && typeof c === "object" && c.id === action.commentId
-              ? { ...c, resolved: action.resolved !== undefined ? action.resolved : !c.resolved }
+            c && typeof c === "object" && c.id === sanitizedAction.commentId
+              ? {
+                  ...c,
+                  resolved:
+                    sanitizedAction.resolved !== undefined
+                      ? sanitizedAction.resolved
+                      : !c.resolved,
+                }
               : c,
           );
-        } else if (action.type === "delete") {
+        } else if (sanitizedAction.type === "delete") {
           updatedComments = comments.filter(
-            (c) => c && typeof c === "object" && c.id !== action.commentId,
+            (c) => c && typeof c === "object" && c.id !== sanitizedAction.commentId,
           );
         }
 
         parsed.comments = updatedComments;
         await this.ctx.storage.put("snapshot", JSON.stringify(parsed));
       } catch {
-        // Ignore snapshot mutation update errors defensively
+        // Snapshot mutation failed; still fan out the validated action below so
+        // peers stay in sync (the next full snapshot will reconcile storage).
       }
     }
 
-    // Exclude the sender (ws) so they don't receive their own mutation back.
-    // The sender already applied the change locally before calling sendCommentMutation.
-    this.broadcast(message, ws);
+    this.broadcast(sanitizedMessage, ws);
   }
 }
