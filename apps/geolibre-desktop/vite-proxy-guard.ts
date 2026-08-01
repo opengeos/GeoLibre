@@ -2,23 +2,31 @@
  * SSRF guard for the Vite dev-server `__geolibre_*_proxy` binary proxies.
  *
  * Validates that a target URL is a public HTTP(S) address (not loopback,
- * private RFC-1918, link-local, metadata, or IPv6 ULA/loopback) and follows
- * redirects manually, re-validating each hop against the same rules.
+ * private RFC-1918, link-local, metadata, or IPv6 ULA/loopback), resolves
+ * DNS names and checks every returned address before connecting (with a
+ * custom undici lookup that pins the connection to a validated address),
+ * and follows redirects manually while re-validating each hop.
  *
  * Exported so `tests/` can import and exercise the guard without pulling in
  * the full vite.config.
  */
 
+import { lookup as dnsLookupCallback } from "node:dns";
+import { lookup as dnsLookup } from "node:dns/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { Agent, fetch as undiciFetch } from "undici";
 
-const PROXY_MAX_REDIRECT_HOPS = 5;
-const PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
+export const PROXY_MAX_REDIRECT_HOPS = 5;
+export const PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
+export const PROXY_FETCH_TIMEOUT_MS = 30_000;
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
  * Returns an error message if `urlString` is not a safe public HTTP(S) URL,
- * or `null` when it is acceptable.
+ * or `null` when it is acceptable. This only inspects the literal hostname;
+ * call {@link assertResolvedPublicHost} before connecting so DNS names that
+ * resolve to private addresses are also refused.
  */
 export function validatePublicUrl(urlString: string): string | null {
   let parsed: URL;
@@ -33,9 +41,13 @@ export function validatePublicUrl(urlString: string): string | null {
   if (parsed.username || parsed.password) {
     return "URLs with credentials are not allowed";
   }
+  // Non-default ports are remapped/ignored differently across runtimes; keep
+  // the allowlist on the default http/https ports only.
+  if (parsed.port !== "") {
+    return `Blocked non-default port: ${parsed.port}`;
+  }
   const hostname = parsed.hostname;
-  // Strip IPv6 brackets for address checks.
-  const bare = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
+  const bare = stripIpv6Brackets(hostname);
 
   if (isPrivateHost(bare)) {
     return `Blocked private/reserved address: ${hostname}`;
@@ -51,28 +63,40 @@ export function assertPublicHttpUrl(urlString: string): void {
   if (err) throw new Error(err);
 }
 
-function isPrivateHost(host: string): boolean {
-  // Loopback names
-  if (host === "localhost" || host.endsWith(".localhost")) return true;
+function stripIpv6Brackets(host: string): string {
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+}
 
-  // IPv4 checks
-  const ipv4Parts = host.split(".");
-  if (ipv4Parts.length === 4 && ipv4Parts.every((p) => /^\d{1,3}$/.test(p))) {
-    const octets = ipv4Parts.map(Number);
-    if (octets.some((o) => o > 255)) return false; // not a valid IPv4, let DNS decide
+function isIpv4Literal(host: string): boolean {
+  const parts = host.split(".");
+  return parts.length === 4 && parts.every((p) => /^\d{1,3}$/.test(p));
+}
+
+function isIpv6Literal(host: string): boolean {
+  return host.includes(":");
+}
+
+/** True when `host` is a literal IPv4/IPv6 address (not a DNS name). */
+export function isIpLiteral(host: string): boolean {
+  const bare = stripIpv6Brackets(host);
+  return isIpv4Literal(bare) || isIpv6Literal(bare);
+}
+
+export function isPrivateHost(host: string): boolean {
+  const bare = stripIpv6Brackets(host);
+  if (bare === "localhost" || bare.endsWith(".localhost")) return true;
+
+  if (isIpv4Literal(bare)) {
+    const octets = bare.split(".").map(Number);
+    if (octets.some((o) => o > 255)) return false;
     return isPrivateIPv4(octets);
   }
 
-  // IPv6 checks (bare, already stripped of brackets)
-  if (host.includes(":")) {
-    return isPrivateIPv6(host);
+  if (isIpv6Literal(bare)) {
+    return isPrivateIPv6(bare);
   }
 
-  // DNS names like "metadata.google.internal" — block if they resolve to a
-  // known cloud metadata hostname pattern (the actual resolution to 169.254.*
-  // is caught by IPv4 checks when the caller resolves, but we block the name
-  // too for defence in depth).
-  if (host === "metadata.google.internal") return true;
+  if (bare === "metadata.google.internal") return true;
 
   return false;
 }
@@ -87,6 +111,7 @@ function isPrivateIPv4(octets: number[]): boolean {
   if (a === 0) return true; // 0.0.0.0/8 "this" network
   if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGNAT
   if (a === 192 && b === 0 && octets[2] === 0) return true; // 192.0.0.0/24 IETF protocol
+  if (a === 192 && b === 0 && octets[2] === 2) return true; // 192.0.2.0/24 TEST-NET-1
   if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
   if (a === 198 && b === 51 && octets[2] === 100) return true; // 198.51.100.0/24 documentation
   if (a === 203 && b === 0 && octets[2] === 113) return true; // 203.0.113.0/24 documentation
@@ -97,13 +122,11 @@ function isPrivateIPv4(octets: number[]): boolean {
 function isPrivateIPv6(addr: string): boolean {
   const lower = addr.toLowerCase();
 
-  // Handle ::ffff:a.b.c.d mapped IPv4 (dotted-quad form)
   const mappedDotted = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(lower);
   if (mappedDotted) {
     return isPrivateIPv4(mappedDotted[1].split(".").map(Number));
   }
 
-  // Handle ::ffff:HHHH:HHHH mapped IPv4 (hex form — Node.js normalizes to this)
   const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(lower);
   if (mappedHex) {
     const hi = parseInt(mappedHex[1], 16);
@@ -113,22 +136,133 @@ function isPrivateIPv6(addr: string): boolean {
 
   if (lower === "::1") return true; // loopback
   if (lower === "::") return true; // unspecified
-  if (lower.startsWith("fe80:") || lower.startsWith("fe80::")) return true; // link-local
-  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // ULA fc00::/7
+
+  // Link-local is fe80::/10 (first hextet 0xfe80–0xfebf), not merely "fe80:".
+  const firstHextet = parseInt(lower.split(":")[0] || "", 16);
+  if (Number.isFinite(firstHextet) && (firstHextet & 0xffc0) === 0xfe80) return true;
+
+  // ULA fc00::/7
+  if (Number.isFinite(firstHextet) && (firstHextet & 0xfe00) === 0xfc00) return true;
 
   return false;
 }
 
 /**
- * Fetch `targetUrl` with manual redirect following, re-validating each hop.
- * Returns the final Response or throws on disallowed targets / too many hops.
+ * Resolve `hostname` (when it is a DNS name) and refuse if any returned
+ * address is private/reserved. IP literals are checked synchronously.
  */
-export async function fetchWithGuard(targetUrl: string, init: RequestInit = {}): Promise<Response> {
+export async function assertResolvedPublicHost(hostname: string): Promise<void> {
+  const bare = stripIpv6Brackets(hostname);
+  if (isIpLiteral(bare)) {
+    if (isPrivateHost(bare)) {
+      throw new Error(`Blocked private/reserved address: ${hostname}`);
+    }
+    return;
+  }
+  if (isPrivateHost(bare)) {
+    throw new Error(`Blocked private/reserved address: ${hostname}`);
+  }
+  const results = await dnsLookup(bare, { all: true, verbatim: true });
+  if (results.length === 0) {
+    throw new Error(`DNS lookup returned no addresses for ${hostname}`);
+  }
+  for (const { address } of results) {
+    if (isPrivateHost(address)) {
+      throw new Error(`Blocked private/reserved address: ${hostname} → ${address}`);
+    }
+  }
+}
+
+/**
+ * undici Agent whose DNS lookup validates every address and only hands the
+ * connector a previously-checked public address — closing the rebinding
+ * window between a pre-check and connect.
+ */
+const guardedDispatcher = new Agent({
+  connect: {
+    lookup(hostname, options, callback) {
+      dnsLookupCallback(hostname, { all: true, verbatim: true, ...options }, (err, addresses) => {
+        if (err) {
+          callback(err as NodeJS.ErrnoException, "", 4);
+          return;
+        }
+        const list = Array.isArray(addresses)
+          ? addresses
+          : [{ address: String(addresses), family: 4 as const }];
+        if (list.length === 0) {
+          callback(Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), { code: "ENOTFOUND" }), "", 4);
+          return;
+        }
+        for (const entry of list) {
+          if (isPrivateHost(entry.address)) {
+            callback(
+              Object.assign(
+                new Error(`Blocked private/reserved address: ${hostname} → ${entry.address}`),
+                { code: "ENOTFOUND" },
+              ),
+              "",
+              4,
+            );
+            return;
+          }
+        }
+        const chosen = list[0];
+        callback(null, chosen.address, chosen.family);
+      });
+    },
+  },
+});
+
+function mergeAbortSignals(
+  timeoutMs: number,
+  caller?: AbortSignal | null,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!caller) return timeout;
+  const any = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof any === "function") return any([timeout, caller]);
+  return timeout;
+}
+
+/**
+ * Fetch `targetUrl` with manual redirect following, DNS-resolved SSRF checks,
+ * a per-hop timeout, and (by default) a dispatcher that pins connects to
+ * validated addresses. Returns the final Response or throws on disallowed
+ * targets / too many hops.
+ *
+ * `options.fetchImpl` is for tests; production callers leave it unset so the
+ * undici agent with the validating DNS lookup is used.
+ */
+export async function fetchWithGuard(
+  targetUrl: string,
+  init: RequestInit = {},
+  options: {
+    timeoutMs?: number;
+    fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  } = {},
+): Promise<Response> {
   assertPublicHttpUrl(targetUrl);
+  const timeoutMs = options.timeoutMs ?? PROXY_FETCH_TIMEOUT_MS;
+  const fetchImpl = options.fetchImpl;
 
   let current = targetUrl;
   for (let hop = 0; hop <= PROXY_MAX_REDIRECT_HOPS; hop++) {
-    const response = await fetch(current, { ...init, redirect: "manual" });
+    // Production always resolves so DNS-rebinding hosts are refused. Injected
+    // fetchImpl (unit tests) skips the lookup so offline mocks stay offline.
+    if (!fetchImpl) {
+      await assertResolvedPublicHost(new URL(current).hostname);
+    }
+
+    const { signal: callerSignal, ...rest } = init;
+    const signal = mergeAbortSignals(timeoutMs, callerSignal ?? null);
+    const response = fetchImpl
+      ? await fetchImpl(current, { ...rest, signal, redirect: "manual" })
+      : ((await undiciFetch(current, {
+          ...rest,
+          signal,
+          redirect: "manual",
+          dispatcher: guardedDispatcher,
+        })) as unknown as Response);
     if (!REDIRECT_STATUSES.has(response.status)) {
       return response;
     }
@@ -142,9 +276,44 @@ export async function fetchWithGuard(targetUrl: string, init: RequestInit = {}):
 }
 
 /**
+ * Read an upstream body while enforcing {@link PROXY_MAX_BODY_BYTES}. Checks
+ * Content-Length early when present and aborts mid-stream if the running
+ * total exceeds the cap.
+ */
+export async function readBodyWithLimit(
+  response: Response,
+  maxBytes: number = PROXY_MAX_BODY_BYTES,
+): Promise<Buffer> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error("Upstream response exceeds size limit");
+  }
+
+  if (!response.body) {
+    return Buffer.alloc(0);
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("Upstream response exceeds size limit");
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+}
+
+/**
  * Hardened version of the Vite dev-server binary proxy handler. Validates the
- * target URL against SSRF rules, follows redirects manually, and caps the
- * response body size.
+ * target URL against SSRF rules (including DNS resolution), follows redirects
+ * manually, and caps the response body size while streaming.
  */
 export async function proxyBinaryRequestGuarded(
   req: IncomingMessage,
@@ -183,14 +352,15 @@ export async function proxyBinaryRequestGuarded(
   }
 
   const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-  const buf = await response.arrayBuffer();
-  if (buf.byteLength > PROXY_MAX_BODY_BYTES) {
+  let body: Buffer;
+  try {
+    body = await readBodyWithLimit(response);
+  } catch (err) {
     res.statusCode = 502;
     res.setHeader("content-type", "text/plain");
-    res.end("Upstream response exceeds size limit");
+    res.end(err instanceof Error ? err.message : "Upstream response exceeds size limit");
     return;
   }
-  const body = Buffer.from(buf);
 
   res.statusCode = response.status;
   res.setHeader("access-control-allow-origin", "*");

@@ -13,8 +13,11 @@ import {
 } from "../workers/tiles/src/allowlisted-fetch";
 import {
   assertPublicHttpUrl,
-  validatePublicUrl,
+  assertResolvedPublicHost,
   fetchWithGuard,
+  PROXY_MAX_BODY_BYTES,
+  readBodyWithLimit,
+  validatePublicUrl,
 } from "../apps/geolibre-desktop/vite-proxy-guard";
 
 describe("viewer proxy path sanitization", () => {
@@ -250,6 +253,11 @@ describe("Vite proxy guard — validatePublicUrl", () => {
     assert.notEqual(validatePublicUrl("https://user@example.com"), null);
   });
 
+  it("rejects non-default ports", () => {
+    assert.notEqual(validatePublicUrl("https://example.com:8443/tiles"), null);
+    assert.notEqual(validatePublicUrl("http://8.8.8.8:8080/dns"), null);
+  });
+
   it("rejects localhost and .localhost", () => {
     assert.notEqual(validatePublicUrl("http://localhost/secret"), null);
     assert.notEqual(validatePublicUrl("http://foo.localhost/bar"), null);
@@ -279,17 +287,22 @@ describe("Vite proxy guard — validatePublicUrl", () => {
     assert.notEqual(validatePublicUrl("http://255.255.255.255"), null);
   });
 
-  it("rejects CGNAT (100.64.0.0/10) and benchmarking (198.18.0.0/15)", () => {
+  it("rejects CGNAT, benchmarking, and all three TEST-NET ranges", () => {
     assert.notEqual(validatePublicUrl("http://100.64.0.1"), null);
     assert.notEqual(validatePublicUrl("http://100.127.255.254"), null);
     assert.notEqual(validatePublicUrl("http://198.18.0.1"), null);
     assert.notEqual(validatePublicUrl("http://198.19.255.254"), null);
+    assert.notEqual(validatePublicUrl("http://192.0.2.1"), null); // TEST-NET-1
+    assert.notEqual(validatePublicUrl("http://198.51.100.1"), null); // TEST-NET-2
+    assert.notEqual(validatePublicUrl("http://203.0.113.1"), null); // TEST-NET-3
   });
 
-  it("rejects IPv6 loopback, link-local, and ULA", () => {
+  it("rejects IPv6 loopback, full fe80::/10 link-local, and ULA", () => {
     assert.notEqual(validatePublicUrl("http://[::1]"), null);
     assert.notEqual(validatePublicUrl("http://[::]"), null);
     assert.notEqual(validatePublicUrl("http://[fe80::1]"), null);
+    assert.notEqual(validatePublicUrl("http://[fe90::1]"), null); // still in fe80::/10
+    assert.notEqual(validatePublicUrl("http://[febf::1]"), null); // top of fe80::/10
     assert.notEqual(validatePublicUrl("http://[fd00::1]"), null);
     assert.notEqual(validatePublicUrl("http://[fc00::1]"), null);
   });
@@ -325,57 +338,94 @@ describe("Vite proxy guard — assertPublicHttpUrl", () => {
   });
 });
 
+describe("Vite proxy guard — assertResolvedPublicHost", () => {
+  it("rejects private IP literals without DNS", async () => {
+    await assert.rejects(() => assertResolvedPublicHost("127.0.0.1"), /Blocked/);
+    await assert.rejects(() => assertResolvedPublicHost("169.254.169.254"), /Blocked/);
+  });
+
+  it("accepts a public IP literal", async () => {
+    await assertResolvedPublicHost("8.8.8.8");
+  });
+});
+
+describe("Vite proxy guard — readBodyWithLimit", () => {
+  it("rejects an oversized Content-Length before reading", async () => {
+    const response = new Response("ignored", {
+      headers: { "content-length": String(PROXY_MAX_BODY_BYTES + 1) },
+    });
+    await assert.rejects(() => readBodyWithLimit(response), /size limit/);
+  });
+
+  it("aborts when streamed bytes exceed the limit", async () => {
+    const chunk = new Uint8Array(1024).fill(1);
+    let remaining = 3;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (remaining-- > 0) {
+          controller.enqueue(chunk);
+        } else {
+          controller.close();
+        }
+      },
+    });
+    const response = new Response(stream);
+    await assert.rejects(() => readBodyWithLimit(response, 1500), /size limit/);
+  });
+
+  it("returns the full body when under the limit", async () => {
+    const response = new Response("hello", { headers: { "content-length": "5" } });
+    const buf = await readBodyWithLimit(response, 100);
+    assert.equal(buf.toString("utf8"), "hello");
+  });
+});
+
 describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
   it("follows a public redirect and refuses a private-address redirect", async () => {
-    const originalFetch = globalThis.fetch;
-    try {
-      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        assert.equal((init as Record<string, string> | undefined)?.redirect, "manual");
-        if (url === "https://example.com/a") {
-          return new Response(null, {
-            status: 302,
-            headers: { location: "https://example.com/b" },
-          });
-        }
-        if (url === "https://example.com/b") {
-          return new Response("ok", { status: 200 });
-        }
-        return new Response("unexpected", { status: 500 });
-      }) as typeof fetch;
-
-      const resp = await fetchWithGuard("https://example.com/a");
-      assert.equal(resp.status, 200);
-      assert.equal(await resp.text(), "ok");
-
-      globalThis.fetch = (async () =>
-        new Response(null, {
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      assert.equal(init?.redirect, "manual");
+      if (url === "https://example.com/a") {
+        return new Response(null, {
           status: 302,
-          headers: { location: "http://169.254.169.254/latest/meta-data/" },
-        })) as typeof fetch;
+          headers: { location: "https://example.com/b" },
+        });
+      }
+      if (url === "https://example.com/b") {
+        return new Response("ok", { status: 200 });
+      }
+      return new Response("unexpected", { status: 500 });
+    };
 
-      await assert.rejects(() => fetchWithGuard("https://example.com/evil"), /Blocked/);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    const resp = await fetchWithGuard("https://example.com/a", {}, { fetchImpl });
+    assert.equal(resp.status, 200);
+    assert.equal(await resp.text(), "ok");
+
+    const evil: typeof fetch = async () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      });
+    await assert.rejects(
+      () => fetchWithGuard("https://example.com/evil", {}, { fetchImpl: evil }),
+      /Blocked/,
+    );
   });
 
   it("caps redirect hops", async () => {
-    const originalFetch = globalThis.fetch;
     let hops = 0;
-    try {
-      globalThis.fetch = (async (input: RequestInfo | URL) => {
-        hops++;
-        return new Response(null, {
-          status: 302,
-          headers: { location: `${String(input)}?n=${hops}` },
-        });
-      }) as typeof fetch;
+    const fetchImpl: typeof fetch = async (input) => {
+      hops++;
+      return new Response(null, {
+        status: 302,
+        headers: { location: `${String(input)}?n=${hops}` },
+      });
+    };
 
-      await assert.rejects(() => fetchWithGuard("https://example.com/loop"), /Too many/);
-      assert.equal(hops, 6); // 0..5 inclusive = 6 fetches
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await assert.rejects(
+      () => fetchWithGuard("https://example.com/loop", {}, { fetchImpl }),
+      /Too many/,
+    );
+    assert.equal(hops, 6); // 0..5 inclusive = 6 fetches
   });
 });
