@@ -43,9 +43,21 @@ export function numericBounds(values: number[]): { min: number; max: number } {
 }
 
 /** Clamp a requested class count to the supported range. */
-export function clampClassCount(value: number, min: number): number {
+export function clampClassCount(value: number, min: number, max = 12): number {
   if (!Number.isFinite(value)) return min;
-  return Math.min(12, Math.max(min, Math.round(value)));
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/** Count distinct scalar values that can be used as categorized stops. */
+export function countCategorizedValues(values: unknown[]): number {
+  const categories = new Set<string>();
+  for (const value of values) {
+    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
+      continue;
+    }
+    categories.add(`${typeof value}:${String(value)}`);
+  }
+  return categories.size;
 }
 
 /** Convert a scalar numeric property value without coercing blanks or non-scalars. */
@@ -137,7 +149,7 @@ export function createCategorizedStops(
     }
   }
 
-  const count = clampClassCount(classCount, 1);
+  const count = clampClassCount(classCount, 1, Number.POSITIVE_INFINITY);
   const sortedCategories = Array.from(categories.values()).sort((a, b) => {
     if (classificationScheme === "alphabetical") {
       return String(a.value).localeCompare(String(b.value), undefined, {

@@ -96,6 +96,7 @@ import {
   clampClassCount,
   createCategorizedStops,
   createGraduatedStops,
+  countCategorizedValues,
   getPropertyValues,
   isCategoricalProperty,
   isNumericProperty,
@@ -581,7 +582,11 @@ function createDefaultStops(
 }
 
 function normalizeVectorStyleClassCount(mode: VectorStyleMode, value: number): number {
-  return clampClassCount(value, mode === "categorized" ? 1 : 2);
+  return clampClassCount(
+    value,
+    mode === "categorized" ? 1 : 2,
+    mode === "categorized" ? Number.POSITIVE_INFINITY : 12,
+  );
 }
 
 function defaultClassificationScheme(mode: VectorStyleMode): string {
@@ -2060,6 +2065,12 @@ export function StylePanel({
   const vectorClassCountOptions = VECTOR_STYLE_CLASS_COUNTS.filter((classCount) =>
     draftVectorStyleMode === "categorized" ? true : classCount >= 2,
   );
+  const categorizedValueCount =
+    draftVectorStyleMode === "categorized"
+      ? countCategorizedValues(
+          draftVectorPropertyValues ?? getPropertyValues(layer, draftVectorStyleProperty),
+        )
+      : 0;
 
   // --- Rule-based renderer (immediate writes to style.vectorRules) ---
   const currentRules = styleValue(style, "vectorRules");
@@ -2387,14 +2398,31 @@ export function StylePanel({
             <Label htmlFor="vectorStyleClassCount">{t("style.symbology.classes")}</Label>
             <Select
               id="vectorStyleClassCount"
-              value={String(draftVectorStyleClassCount)}
-              onChange={(event) => updateDraftVectorStyleClassCount(Number(event.target.value))}
+              value={
+                categorizedValueCount > 0 && draftVectorStyleClassCount === categorizedValueCount
+                  ? "all"
+                  : String(draftVectorStyleClassCount)
+              }
+              onChange={(event) =>
+                updateDraftVectorStyleClassCount(
+                  event.target.value === "all" ? categorizedValueCount : Number(event.target.value),
+                )
+              }
             >
-              {vectorClassCountOptions.map((classCount) => (
-                <option key={classCount} value={classCount}>
-                  {classCount}
+              {vectorClassCountOptions
+                .filter((classCount) => classCount !== categorizedValueCount)
+                .map((classCount) => (
+                  <option key={classCount} value={classCount}>
+                    {classCount}
+                  </option>
+                ))}
+              {draftVectorStyleMode === "categorized" && categorizedValueCount > 0 && (
+                <option value="all">
+                  {t("style.symbology.allClasses", {
+                    count: categorizedValueCount,
+                  })}
                 </option>
-              ))}
+              )}
             </Select>
           </div>
           <div className="space-y-2">
