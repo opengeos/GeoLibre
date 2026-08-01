@@ -190,7 +190,13 @@ const guardedDispatcher = new Agent({
           ? addresses
           : [{ address: String(addresses), family: 4 as const }];
         if (list.length === 0) {
-          callback(Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), { code: "ENOTFOUND" }), "", 4);
+          callback(
+            Object.assign(new Error(`DNS lookup returned no addresses for ${hostname}`), {
+              code: "ENOTFOUND",
+            }),
+            "",
+            4,
+          );
           return;
         }
         for (const entry of list) {
@@ -213,10 +219,7 @@ const guardedDispatcher = new Agent({
   },
 });
 
-function mergeAbortSignals(
-  timeoutMs: number,
-  caller?: AbortSignal | null,
-): AbortSignal {
+function mergeAbortSignals(timeoutMs: number, caller?: AbortSignal | null): AbortSignal {
   const timeout = AbortSignal.timeout(timeoutMs);
   if (!caller) return timeout;
   const any = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
