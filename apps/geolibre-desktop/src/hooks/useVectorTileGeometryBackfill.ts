@@ -1,5 +1,5 @@
 /**
- * Backfills `metadata.geometryType` for vector-tile layers that don't carry it.
+ * Backfills attributes derived from loaded features for vector-tile layers.
  *
  * A vector-tile layer has no local features, so its geometry (point / line /
  * polygon) is only known if a source set the hint — the GeoLens plugin does for
@@ -29,26 +29,37 @@ function sourceLayerOf(layer: GeoLibreLayer): string | undefined {
   return undefined;
 }
 
-/** The dominant geometry kind among a layer's loaded tile features, or null. */
-function dominantGeometry(
+function liveSourceId(layer: GeoLibreLayer): string {
+  const externalSourceId = layer.source.sourceId;
+  return typeof externalSourceId === "string" && externalSourceId
+    ? externalSourceId
+    : sourceId(layer.id);
+}
+
+/** A bounded sample of features currently loaded for a vector-tile layer. */
+export function loadedVectorTileFeatures(
   map: MapLibreMap,
   layer: GeoLibreLayer,
-): "point" | "line" | "polygon" | null {
+): ReturnType<MapLibreMap["querySourceFeatures"]> {
   const sourceLayer = sourceLayerOf(layer);
-  let features;
   try {
-    features = map.querySourceFeatures(
-      sourceId(layer.id),
-      sourceLayer ? { sourceLayer } : undefined,
-    );
+    return map
+      .querySourceFeatures(liveSourceId(layer), sourceLayer ? { sourceLayer } : undefined)
+      .slice(0, 400);
   } catch {
-    return null; // source not added yet
+    return []; // source not added yet
   }
+}
+
+/** The dominant geometry kind among sampled tile features, or null. */
+function dominantGeometry(
+  features: ReturnType<MapLibreMap["querySourceFeatures"]>,
+): "point" | "line" | "polygon" | null {
   if (!features || features.length === 0) return null;
   let polygon = 0;
   let line = 0;
   let point = 0;
-  for (const feature of features.slice(0, 400)) {
+  for (const feature of features) {
     const type = feature.geometry?.type ?? "";
     if (type.includes("Polygon")) polygon++;
     else if (type.includes("LineString")) line++;
@@ -59,6 +70,17 @@ function dominantGeometry(
   if (polygon >= line && polygon >= point) return "polygon";
   if (line >= point) return "line";
   return "point";
+}
+
+/** Sorted attribute names present in sampled tile features. */
+function attributeFields(features: ReturnType<MapLibreMap["querySourceFeatures"]>): string[] {
+  const fields = new Set<string>();
+  for (const feature of features) {
+    for (const field of Object.keys(feature.properties ?? {})) fields.add(field);
+  }
+  return Array.from(fields).sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+  );
 }
 
 /**
@@ -79,25 +101,42 @@ export function useVectorTileGeometryBackfill(
     const map = app.getMap?.();
     if (!map) return;
 
-    const needsGeometry = () =>
+    const needsBackfill = () =>
       useAppStore
         .getState()
         .layers.filter(
           (layer) =>
-            VECTOR_TILE_TYPES.has(layer.type) && typeof layer.metadata.geometryType !== "string",
+            VECTOR_TILE_TYPES.has(layer.type) &&
+            (typeof layer.metadata.geometryType !== "string" ||
+              !Array.isArray(layer.metadata.fields) ||
+              layer.metadata.fields.length === 0),
         );
 
-    if (needsGeometry().length === 0) return;
+    if (needsBackfill().length === 0) return;
 
     const backfill = (): void => {
-      for (const layer of needsGeometry()) {
-        const geometryType = dominantGeometry(map, layer);
-        if (!geometryType) continue;
+      for (const layer of needsBackfill()) {
+        const features = loadedVectorTileFeatures(map, layer);
+        if (features.length === 0) continue;
+        const geometryType = dominantGeometry(features);
+        const fields = attributeFields(features);
         const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
-        if (current && typeof current.metadata.geometryType !== "string") {
-          useAppStore
-            .getState()
-            .updateLayer(layer.id, { metadata: { ...current.metadata, geometryType } });
+        if (current) {
+          const metadata = { ...current.metadata };
+          let changed = false;
+          if (geometryType && typeof metadata.geometryType !== "string") {
+            metadata.geometryType = geometryType;
+            changed = true;
+          }
+          if (
+            (!Array.isArray(metadata.fields) || metadata.fields.length === 0) &&
+            fields.length > 0
+          ) {
+            metadata.fields = fields;
+            changed = true;
+          }
+          if (!changed) continue;
+          useAppStore.getState().updateLayer(layer.id, { metadata });
         }
       }
     };

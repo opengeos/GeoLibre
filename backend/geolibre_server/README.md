@@ -103,6 +103,33 @@ build of SedonaDB — so the Apache Sedona engine works with **no sidecar** too.
 returns rows (geometry as WKT) plus a GeoJSON FeatureCollection when the result
 has a geometry column.
 
+## PostGIS connections
+
+The optional PostGIS endpoints are disabled until their database destinations
+are explicitly allowed. Set `GEOLIBRE_POSTGIS_HOSTS` to a comma-separated list
+of exact hostnames or IP addresses before starting the sidecar:
+
+```bash
+GEOLIBRE_POSTGIS_HOSTS='db.internal,db.example.com:5433,[2001:db8::10]:5432'
+geolibre-server
+```
+
+An entry without a port allows that host on any port; include `:port` to
+restrict it. IPv6 entries must be bracketed either way (`[2001:db8::10]`),
+since an unbracketed `2001:db8::10:5432` is itself a valid address rather than
+an address and a port. Every host in a libpq failover connection string must be allowed.
+Implicit local connections, Unix sockets, `service=`, and `hostaddr=`
+connection strings are rejected so they cannot bypass the allowlist.
+
+Set it to `*` — on its own, since mixing it with hosts reads as a narrowing but
+is not one — to lift the restriction and accept any connection string. The
+**desktop app** passes `*` when it spawns its own sidecar — that one is
+loopback-bound, token-authenticated, and serves the single user who is also its
+operator. Setting the variable before launching the desktop app overrides that
+default, so a desktop user can still narrow it. A deployment where the sidecar
+is reachable by untrusted same-origin content (the bundled Docker image) leaves
+it unset, and PostGIS stays off until an operator lists the databases.
+
 ## Endpoints
 
 | Method | Path | Description |

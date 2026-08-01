@@ -419,7 +419,10 @@ export function installDiagnosticsCapture(): () => void {
     const forwarded = stripOptionalResourceHeader(input, init);
 
     try {
-      const response = await originalFetch(forwarded.input, forwarded.init);
+      const response =
+        forwarded.init !== undefined
+          ? await originalFetch(forwarded.input, forwarded.init)
+          : await originalFetch(forwarded.input);
       appendDiagnostic({
         category: "network",
         level: response.ok || optional ? "info" : "error",

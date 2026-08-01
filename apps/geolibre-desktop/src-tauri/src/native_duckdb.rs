@@ -649,6 +649,10 @@ fn duckdb_value_to_json(value: &Value) -> serde_json::Value {
             serde_json::Value::Object(object)
         }
         Value::Union(value) => duckdb_value_to_json(value),
+        // `Value` is #[non_exhaustive] as of duckdb 1.10505.0, so a variant
+        // added by a future crate release lands here: a null property, like
+        // Blob above, rather than a compile break or a failed feature read.
+        _ => serde_json::Value::Null,
     }
 }
 

@@ -22,12 +22,14 @@ import {
   setAnnotationLabels,
   setBasemapControlLabels,
   setGraticuleLabels,
+  setH3Labels,
   setMapillaryLabels,
   setEarthdataGisLabels,
   setOpenAerialMapLabels,
   setHuggingFaceLabels,
   setSourceCoopLabels,
   setReverseGeocodeLabels,
+  setStacLabels,
   setTimelapseLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -82,6 +84,7 @@ import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import { useVectorTileGeometryBackfill } from "../../hooks/useVectorTileGeometryBackfill";
 import type { ThemeMode } from "../../hooks/useThemeMode";
+import { isMobile } from "../../lib/is-mobile";
 import { isTauri } from "../../lib/tauri-io";
 import { isMaptoolkitBasemapActive } from "../../lib/maptoolkit-basemap";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
@@ -91,6 +94,8 @@ import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import {
@@ -197,12 +202,16 @@ export function TopToolbar({
     setAnnotationLabels({
       toolbar: t("annotations.toolbar"),
       layerName: t("annotations.layerName"),
+      elementsPanelTitle: t("annotations.elementsPanelTitle"),
       tools: {
         text: t("annotations.tools.text"),
         arrow: t("annotations.tools.arrow"),
         rectangle: t("annotations.tools.rectangle"),
         ellipse: t("annotations.tools.ellipse"),
         freehand: t("annotations.tools.freehand"),
+        pin: t("annotations.tools.pin"),
+        sticky_note: t("annotations.tools.sticky_note"),
+        placed_image: t("annotations.tools.placed_image"),
       },
       color: t("annotations.color"),
       width: t("annotations.width"),
@@ -214,6 +223,14 @@ export function TopToolbar({
       deleteLast: t("annotations.deleteLast"),
       clearAll: t("annotations.clearAll"),
       textPlaceholder: t("annotations.textPlaceholder"),
+      pinTitlePrompt: t("annotations.pinTitlePrompt"),
+      pinDescPrompt: t("annotations.pinDescPrompt"),
+      stickyNotePrompt: t("annotations.stickyNotePrompt"),
+      imageUrlPrompt: t("annotations.imageUrlPrompt"),
+      cancel: t("annotations.cancel"),
+      saveElement: t("annotations.saveElement"),
+      atPoint: t("annotations.atPoint"),
+      pinnedToExtent: t("annotations.pinnedToExtent"),
     });
     setMapillaryLabels({
       title: t("mapillary.title"),
@@ -522,6 +539,37 @@ export function TopToolbar({
       labelColor: t("graticule.labelColor"),
       labelSize: t("graticule.labelSize"),
     });
+    setH3Labels({
+      title: t("h3Plugin.title"),
+      getTitle: () => i18n.t("h3Plugin.title"),
+      controlTitle: t("h3Plugin.controlTitle"),
+      resolution: t("h3Plugin.resolution"),
+      cellCount: (count) => t("h3Plugin.cellCount", { count }),
+      tooManyCells: (limit) => t("h3Plugin.tooManyCells", { limit }),
+      fillColor: t("h3Plugin.fillColor"),
+      fillOpacity: t("h3Plugin.fillOpacity"),
+      lineColor: t("h3Plugin.lineColor"),
+      lineWidth: t("h3Plugin.lineWidth"),
+      showLabels: t("h3Plugin.showLabels"),
+      identifyHint: t("h3Plugin.identifyHint"),
+      selectedCell: t("h3Plugin.selectedCell"),
+      noSelection: t("h3Plugin.noSelection"),
+      copyId: t("h3Plugin.copyId"),
+      copied: t("h3Plugin.copied"),
+      parent: t("h3Plugin.parent"),
+      children: t("h3Plugin.children"),
+      neighbors: t("h3Plugin.neighbors"),
+      baseCell: t("h3Plugin.baseCell"),
+      center: t("h3Plugin.center"),
+      pentagon: t("h3Plugin.pentagon"),
+      yes: t("h3Plugin.yes"),
+      no: t("h3Plugin.no"),
+      zoomToCell: t("h3Plugin.zoomToCell"),
+      addAsLayer: t("h3Plugin.addAsLayer"),
+      exportGeoJson: t("h3Plugin.exportGeoJson"),
+      exportCsv: t("h3Plugin.exportCsv"),
+      includeNeighbors: t("h3Plugin.includeNeighbors"),
+    });
     setTimelapseLabels({
       title: t("timelapse.title"),
       provider: t("timelapse.provider"),
@@ -539,6 +587,73 @@ export function TopToolbar({
       recordingFailed: t("timelapse.recordingFailed"),
       recordingUnsupported: t("timelapse.recordingUnsupported"),
       loadingTiles: t("timelapse.loadingTiles"),
+    });
+    setStacLabels({
+      title: t("stacPlugin.title"),
+      getTitle: () => i18n.t("stacPlugin.title"),
+      footprintLayerName: t("stacPlugin.footprintLayerName"),
+      catalogSearch: t("stacPlugin.catalogSearch"),
+      catalogSearchPlaceholder: t("stacPlugin.catalogSearchPlaceholder"),
+      indexLoading: t("stacPlugin.indexLoading"),
+      indexUnavailable: t("stacPlugin.indexUnavailable"),
+      indexLoadFailed: t("stacPlugin.indexLoadFailed"),
+      urlLabel: t("stacPlugin.urlLabel"),
+      connect: t("stacPlugin.connect"),
+      connecting: t("stacPlugin.connecting"),
+      connected: t("stacPlugin.connected"),
+      connectFailed: t("stacPlugin.connectFailed"),
+      selectCatalog: t("stacPlugin.selectCatalog"),
+      noMatchingCatalogs: t("stacPlugin.noMatchingCatalogs"),
+      catalogApiSuffix: t("stacPlugin.catalogApiSuffix"),
+      catalogStaticSuffix: t("stacPlugin.catalogStaticSuffix"),
+      kindApi: t("stacPlugin.kindApi"),
+      kindStatic: t("stacPlugin.kindStatic"),
+      collectionsHint: t("stacPlugin.collectionsHint"),
+      limitToExtent: t("stacPlugin.limitToExtent"),
+      bboxLabel: t("stacPlugin.bboxLabel"),
+      bboxPlaceholder: t("stacPlugin.bboxPlaceholder"),
+      bboxInvalid: t("stacPlugin.bboxInvalid"),
+      drawBbox: t("stacPlugin.drawBbox"),
+      cancelDrawing: t("stacPlugin.cancelDrawing"),
+      clearDrawnBbox: t("stacPlugin.clearDrawnBbox"),
+      drawHint: t("stacPlugin.drawHint"),
+      drawnBbox: (bbox) => t("stacPlugin.drawnBbox", { bbox }),
+      drawnBboxCleared: t("stacPlugin.drawnBboxCleared"),
+      mapNotReady: t("stacPlugin.mapNotReady"),
+      startDate: t("stacPlugin.startDate"),
+      endDate: t("stacPlugin.endDate"),
+      additionalParams: t("stacPlugin.additionalParams"),
+      additionalInvalid: t("stacPlugin.additionalInvalid"),
+      searchItems: t("stacPlugin.searchItems"),
+      clearResults: t("stacPlugin.clearResults"),
+      resultsCleared: t("stacPlugin.resultsCleared"),
+      searching: t("stacPlugin.searching"),
+      loadingMore: t("stacPlugin.loadingMore"),
+      noResults: t("stacPlugin.noResults"),
+      searchFailed: t("stacPlugin.searchFailed"),
+      showing: (count) => t("stacPlugin.showing", { count }),
+      showingOfMatched: (count, matched) => t("stacPlugin.showingOfMatched", { count, matched }),
+      loadMore: t("stacPlugin.loadMore"),
+      renderOptions: t("stacPlugin.renderOptions"),
+      bands: t("stacPlugin.bands"),
+      bandsPlaceholder: t("stacPlugin.bandsPlaceholder"),
+      colormap: t("stacPlugin.colormap"),
+      colormapDefault: t("stacPlugin.colormapDefault"),
+      minValue: t("stacPlugin.minValue"),
+      maxValue: t("stacPlugin.maxValue"),
+      nodata: t("stacPlugin.nodata"),
+      nodataPlaceholder: t("stacPlugin.nodataPlaceholder"),
+      renderHint: t("stacPlugin.renderHint"),
+      initialStatus: t("stacPlugin.initialStatus"),
+      catalogInfo: (title, kind) => t("stacPlugin.catalogInfo", { title, kind }),
+      zoom: t("stacPlugin.zoom"),
+      add: t("stacPlugin.add"),
+      download: t("stacPlugin.download"),
+      adding: (asset) => t("stacPlugin.adding", { asset }),
+      added: (asset) => t("stacPlugin.added", { asset }),
+      addUnsupported: t("stacPlugin.addUnsupported"),
+      addFailed: t("stacPlugin.addFailed"),
+      cogUnsupported: t("stacPlugin.cogUnsupported"),
     });
   }, [t]);
 
@@ -653,7 +768,9 @@ export function TopToolbar({
   useEffect(() => {
     const onOpenAddData = (event: Event) => {
       const detail = (event as CustomEvent<OpenAddDataDetail>).detail;
-      if (detail?.kind) {
+      // Reject kinds the Mac App Store build hides so a stray event cannot
+      // open a dialog whose backing service is compiled out.
+      if (detail?.kind && !masHidesDataSource(detail.kind)) {
         setAddDataPostgres(detail.postgres);
         setAddDataKind(detail.kind);
       }
@@ -842,12 +959,16 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.addData"),
       run: () => osmPbf.setDialogOpen(true),
     },
-    ...ADD_DATA_KIND_COMMANDS.map(({ kind, titleKey }) => ({
-      id: `add.${kind}`,
-      title: t("toolbar.command.addLayer", { name: t(titleKey) }),
-      group: t("toolbar.commandGroup.addData"),
-      run: () => setAddDataKind(kind),
-    })),
+    // Sources the Mac App Store build hides in the Add Data menu must not be
+    // reachable through the palette either.
+    ...ADD_DATA_KIND_COMMANDS.filter(({ kind }) => !masHidesDataSource(kind)).map(
+      ({ kind, titleKey }) => ({
+        id: `add.${kind}`,
+        title: t("toolbar.command.addLayer", { name: t(titleKey) }),
+        group: t("toolbar.commandGroup.addData"),
+        run: () => setAddDataKind(kind),
+      }),
+    ),
     {
       id: "add.stac",
       title: t("toolbar.command.addStacLayer"),
@@ -955,14 +1076,20 @@ export function TopToolbar({
       icon: Workflow,
       run: () => setModelBuilderOpen(true),
     },
-    {
-      id: "proc.segmentation",
-      title: t("toolbar.command.segmentation"),
-      group: t("toolbar.commandGroup.processing"),
-      keywords: "segmentation samgeo sam3 ai segment imagery",
-      icon: Sparkles,
-      run: () => setSegmentationOpen(true),
-    },
+    // The Mac App Store build omits AI Segmentation: it is sidecar-only (the
+    // App Sandbox forbids the sidecar) and has no client-side fallback.
+    ...(IS_MAS_BUILD
+      ? []
+      : [
+          {
+            id: "proc.segmentation",
+            title: t("toolbar.command.segmentation"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords: "segmentation samgeo sam3 ai segment imagery",
+            icon: Sparkles,
+            run: () => setSegmentationOpen(true),
+          },
+        ]),
     {
       id: "proc.objectDetection",
       title: t("toolbar.command.objectDetection"),
@@ -1255,13 +1382,20 @@ export function TopToolbar({
         run: () => toggle(plugin.id, appApi),
       })),
     // Settings
-    {
-      id: "settings.manage-plugins",
-      title: t("toolbar.command.managePlugins"),
-      group: t("toolbar.commandGroup.settings"),
-      keywords: "install external plugin marketplace",
-      run: () => setManagePluginsOpen(true),
-    },
+    // The Mac App Store build omits the plugin marketplace: installing
+    // external plugins is not allowed there, and bundled plugins need no
+    // management. Same pattern as the Store build's update command above.
+    ...(IS_MAS_BUILD
+      ? []
+      : [
+          {
+            id: "settings.manage-plugins",
+            title: t("toolbar.command.managePlugins"),
+            group: t("toolbar.commandGroup.settings"),
+            keywords: "install external plugin marketplace",
+            run: () => setManagePluginsOpen(true),
+          },
+        ]),
     {
       id: "settings.style-manager",
       title: t("toolbar.command.styleManager"),
@@ -1286,7 +1420,11 @@ export function TopToolbar({
   // its trigger Button this class instead of `toolbarButtonClass`.
   const toolbarSecondaryButtonClass = cn(toolbarButtonClass, "hidden md:inline-flex");
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:me-1");
-  const appTitle = isTauri() ? "GeoLibre Desktop" : "GeoLibre";
+  // "GeoLibre Desktop" is the *desktop* product name. `isTauri()` alone is true
+  // on iOS and Android too — where the app is named plain "GeoLibre" (the bundle
+  // name from tauri.ios.conf.json, the home-screen icon, and the store listing),
+  // so titling it "GeoLibre Desktop" there contradicts every other surface.
+  const appTitle = isTauri() && !isMobile() ? "GeoLibre Desktop" : "GeoLibre";
   const renderToolbarLabel = (label: string) =>
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
   const chrome: ToolbarChrome = {
@@ -1319,6 +1457,7 @@ export function TopToolbar({
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
           onOpenGallery={() => setGalleryDialogOpen(true)}
+          onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
           onOpenRecent={(path) => {
             void projectFiles.handleOpenRecent(path).then((error) => {
               if (error) projectFiles.setActionError(error);
@@ -1326,6 +1465,8 @@ export function TopToolbar({
           }}
           onSave={() => void projectFiles.handleSave()}
           onSaveAs={() => void projectFiles.handleSaveAs()}
+          onDuplicate={() => projectFiles.handleDuplicate()}
+          onSaveAsTemplate={() => projectFiles.handleSaveAsTemplate()}
           onShare={() => setShareDialogOpen(true)}
           onExportHtml={() => void projectFiles.handleExportHtml()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
@@ -1453,11 +1594,16 @@ export function TopToolbar({
         themeMode={themeMode}
         onToggleThemeMode={onToggleThemeMode}
       />
-      <ManagePluginsDialog
-        open={managePluginsOpen}
-        onOpenChange={setManagePluginsOpen}
-        mapControllerRef={mapControllerRef}
-      />
+      {/* No plugin marketplace in the Mac App Store build (all its entry
+          points are hidden too; this keeps the install surface out of the
+          bundle). */}
+      {!IS_MAS_BUILD && (
+        <ManagePluginsDialog
+          open={managePluginsOpen}
+          onOpenChange={setManagePluginsOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
       <PrintLayoutDialog
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}

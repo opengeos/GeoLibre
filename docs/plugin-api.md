@@ -95,6 +95,13 @@ export interface GeoLibreAppAPI {
     layerId: string,
     selector: Record<string, number | string>,
   ) => Promise<boolean>;
+  // Click-to-value / region statistics on a Zarr layer (see "Zarr layers").
+  queryZarrLayer?: (
+    layerId: string,
+    geometry: GeoLibreZarrQueryGeometry,
+    selector?: GeoLibreZarrQuerySelector,
+    options?: GeoLibreZarrQueryOptions,
+  ) => Promise<GeoLibreZarrQueryResult | null>;
   // Register a layer the plugin added to the map itself, so it appears in the
   // Layers panel (see "Custom (WebGL) layers and paint ownership" below).
   registerExternalNativeLayer?: (
@@ -528,6 +535,58 @@ if (layerId) {
 
 `selector` picks a slice by coordinate **value**, not by index: on a `month` axis of 1-12, December is `{ month: 12 }`. The panel's Selector (JSON) field means the same thing, and editing it now re-slices the layers already on the map.
 
+### Click-to-value and region statistics
+
+`queryZarrLayer` reads the layer's values under a GeoJSON geometry: a `Point` for Identify, a `Polygon` / `MultiPolygon` for zonal statistics. It is the read counterpart of `setZarrLayerSelector`, reaching the same live renderer by layer id.
+
+```typescript
+export type GeoLibreZarrQueryGeometry =
+  | { type: "Point"; coordinates: [number, number] }        // WGS84 lng/lat
+  | { type: "Polygon"; coordinates: number[][][] }
+  | { type: "MultiPolygon"; coordinates: number[][][][] };
+
+// Dimension values to read instead of the slice on screen. A list per dimension
+// (e.g. { month: [1, 7] }) nests the returned values by that dimension.
+export type GeoLibreZarrQuerySelector = Record<
+  string,
+  number | string | number[] | string[] | { selected: number | string | number[] | string[]; type?: "index" | "value" }
+>;
+
+export interface GeoLibreZarrQueryOptions {
+  signal?: AbortSignal;                    // cancel a query the user moved past
+  includeSpatialCoordinates?: boolean;     // default true
+}
+
+// { [variable]: values, dimensions, coordinates }
+export interface GeoLibreZarrQueryResult {
+  [variable: string]: unknown;
+  dimensions: string[];
+  coordinates: { [key: string]: (number | string)[] };
+}
+```
+
+```typescript
+// Identify: read the value under a map click, for the slice on screen.
+map.on("click", async (event) => {
+  const { lng, lat } = event.lngLat;
+  const result = await app.queryZarrLayer?.(layerId, {
+    type: "Point",
+    coordinates: [lng, lat],
+  });
+  const [value] = (result?.sst as number[]) ?? [];
+  showReadout(value); // undefined outside the store's grid
+});
+
+// Zonal statistics: every pixel inside a polygon, on another time slice.
+const region = await app.queryZarrLayer?.(layerId, aoi.geometry, { time: 12 });
+```
+
+The renderer already holds the store's grid, so it does the reprojection and fill-value masking: pass a WGS84 `[lng, lat]` straight from a map click rather than opening the store again with your own zarrita point read. Note the returned `coordinates` are in the store's **source** CRS (Web Mercator meters for EPSG:3857, degrees for EPSG:4326, source units for a custom-proj4 dataset), not WGS84.
+
+Values come back **empty** rather than as an error for a geometry outside the store's grid, and for a layer whose first chunks have not loaded yet, so a query fired immediately after `addZarrLayer` resolves can be empty even though the id is live. `queryZarrLayer` itself resolves to `null` when no live Zarr layer has that id, and an aborted query **rejects** (an abort error), so guard the call if you cancel on every new click.
+
+A `selector` passed here only scopes the read: the layer keeps rendering the slice it was on, so an Identify readout for another time does not disturb the map. Use `setZarrLayerSelector` when you do want the display to move.
+
 The panel can also open a store from a folder on disk, via a **Browse folder** button next to the Zarr URL. It appears in the desktop app and in browsers with the File System Access API (Chromium), since reading a folder needs a filesystem API the plugin cannot supply; elsewhere the panel is unchanged. A local cube binds to the Time Slider like a remote one — its CF `units` are read out of the folder, because its recorded URL is an identifier rather than an address.
 
 ## Driving a layer's own time dimension from the Time Slider
@@ -567,6 +626,19 @@ Registering makes the layer **bindable**: the Layers panel's row menu gains "Bin
 Call the returned function, or `app.unregisterTemporalLayer?.(layerId)`, to drop the adapter. Removing the layer does it too.
 
 A bound cube shares the timeline with any vector bindings and dated overlays: the track spans the union of their extents, and the widest dataset sets the stepping granularity.
+
+**Closing the dock again.** A dock that a binding opened closes itself once the last temporal layer is gone, so it never lingers over a map with no timeline. Removing the bound layer is enough; if your plugin keeps the layer and only drops its binding, clear `layer.metadata.timeBinding` as well as unregistering the adapter. A dock the *user* opened from the Plugins menu is left alone, and so is one that still has raster sources of its own or a KML `<TimeSpan>` overlay to drive.
+
+## Activating and deactivating other plugins
+
+```typescript
+await app.activatePlugin?.("maplibre-gl-time-slider");
+app.deactivatePlugin?.("maplibre-gl-time-slider");
+```
+
+`activatePlugin` takes an optional second argument, a project-state patch applied once the target is active; it resolves false when the plugin is unavailable, refuses to activate, or rejects the state. `deactivatePlugin` is its counterpart and returns true when the plugin ended up inactive.
+
+Neither may target the **calling** plugin: `activatePlugin` on yourself is meaningless, and deactivating yourself would unmount the code still on the stack. Both return false in that case.
 
 ## Custom (WebGL) layers and paint ownership
 

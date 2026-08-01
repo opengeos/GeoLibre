@@ -93,6 +93,7 @@ export type GeneratedImageFactory = () =>
 // size), so a global registry is safe and shared across maps.
 const factories = new Map<string, GeneratedImageFactory>();
 const wiredMaps = new WeakSet<maplibregl.Map>();
+const activeMaps = new Set<WeakRef<maplibregl.Map>>();
 
 // Bound the registry so a long session of custom-SVG editing (each distinct
 // markup hashes to a new id) can't grow it without limit. Built-in shapes and
@@ -107,35 +108,66 @@ const MAX_GENERATED_IMAGE_FACTORIES = 512;
  * `styleimagemissing` re-fires if MapLibre later needs an evicted image.
  */
 export function registerGeneratedImage(id: string, factory: GeneratedImageFactory): void {
+  const isPlaceholder = !factories.has(id);
   if (factories.has(id)) return;
   if (factories.size >= MAX_GENERATED_IMAGE_FACTORIES) {
     const oldest = factories.keys().next().value;
     if (oldest !== undefined) factories.delete(oldest);
   }
   factories.set(id, factory);
+
+  if (isPlaceholder) {
+    for (const ref of [...activeMaps]) {
+      const map = ref.deref();
+      if (!map) {
+        activeMaps.delete(ref);
+        continue;
+      }
+      if (map.hasImage(id)) {
+        try {
+          map.removeImage(id);
+        } catch {
+          // Ignore
+        }
+        addGeneratedImage(map, id);
+      }
+    }
+  }
 }
+
+const TRANSPARENT_1X1 = new Uint8Array([0, 0, 0, 0]);
 
 function addGeneratedImage(map: maplibregl.Map, id: string): void {
   if (map.hasImage(id)) return;
   const factory = factories.get(id);
-  if (!factory) return;
+  if (!factory) {
+    map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
+    return;
+  }
   let result: ReturnType<GeneratedImageFactory>;
   try {
     result = factory();
   } catch {
+    map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
     return;
   }
-  if (!result) return;
+  if (!result) {
+    map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
+    return;
+  }
   if (result instanceof Promise) {
     result
       .then((resolved) => {
         if (resolved && !map.hasImage(id)) {
           map.addImage(id, resolved.image, { pixelRatio: resolved.pixelRatio });
+        } else if (!map.hasImage(id)) {
+          map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
         }
       })
       .catch(() => {
-        // SVG that fails to load is not fatal: the layer falls back to no
-        // pattern/marker, which is acceptable.
+        if (!map.hasImage(id)) {
+          map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
+        }
       });
     return;
   }
@@ -151,6 +183,7 @@ export function ensureGeneratedImageHandler(map: maplibregl.Map): void {
   // Guard against stub maps (unit tests) that do not implement the event API.
   if (typeof map.on !== "function") return;
   wiredMaps.add(map);
+  activeMaps.add(new WeakRef(map));
   map.on("styleimagemissing", (event) => {
     addGeneratedImage(map, event.id);
   });

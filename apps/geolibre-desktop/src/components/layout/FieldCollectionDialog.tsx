@@ -61,6 +61,7 @@ import {
 } from "../../lib/field-collection";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { getCurrentPosition } from "../../lib/geolocation";
+import { fixFromPosition, formatAccuracy, type GpsFix } from "../../lib/gps-tracking";
 import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 
 interface FieldCollectionDialogProps {
@@ -169,6 +170,7 @@ export function FieldCollectionDialog({
   const [drawing, setDrawing] = useState(false); // line/polygon: multi-vertex
   const [vertices, setVertices] = useState<Vertex[]>([]);
   const [locating, setLocating] = useState(false);
+  const [lastGpsFix, setLastGpsFix] = useState<GpsFix | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   // Running count of features saved this session, shown in the notice. A ref so
@@ -251,6 +253,7 @@ export function FieldCollectionDialog({
     setVertices([]);
     verticesRef.current = [];
     setLocating(false);
+    setLastGpsFix(null);
     setErrors({});
     setNotice(null);
     savedCountRef.current = 0;
@@ -297,6 +300,7 @@ export function FieldCollectionDialog({
       setPending([[lng, lat]]);
       setErrors({});
       setNotice(null);
+      if (!fly) setLastGpsFix(null);
       showMarker(lng, lat);
       if (fly) recenter(lng, lat);
     },
@@ -314,6 +318,7 @@ export function FieldCollectionDialog({
     if (!getMap()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setLocating(false); // its callback bails, so clear the spinner here
+    setLastGpsFix(null);
     setPicking(true);
     onOpenChange(false);
   }, [getMap, onOpenChange]);
@@ -385,6 +390,7 @@ export function FieldCollectionDialog({
     if (!getMap()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setLocating(false); // its callback bails, so clear the spinner here
+    setLastGpsFix(null);
     setVerticesSynced([]);
     setPending(null);
     setNotice(null);
@@ -413,6 +419,7 @@ export function FieldCollectionDialog({
 
   const handleCancelDrawing = useCallback(() => {
     setDrawing(false);
+    setLastGpsFix(null);
     setVerticesSynced([]);
     setNotice(null);
     const map = getMap();
@@ -436,6 +443,7 @@ export function FieldCollectionDialog({
     // and drop the extra vertex the dblclick's second click added.
     map.doubleClickZoom.disable();
     const onClick = (e: maplibregl.MapMouseEvent) => {
+      setLastGpsFix(null);
       pushVertex(e.lngLat.lng, e.lngLat.lat);
     };
     const onDblClick = (e: maplibregl.MapMouseEvent) => {
@@ -460,6 +468,7 @@ export function FieldCollectionDialog({
   }, [drawing, getMap, pushVertex, finishDrawing, handleCancelDrawing]);
 
   const handleUndoVertex = useCallback(() => {
+    setLastGpsFix(null);
     setVerticesSynced(verticesRef.current.slice(0, -1));
   }, [setVerticesSynced]);
 
@@ -480,6 +489,7 @@ export function FieldCollectionDialog({
         .then((pos) => {
           if (stale()) return;
           setLocating(false);
+          setLastGpsFix(fixFromPosition(pos));
           const { longitude, latitude } = pos.coords;
           if (asVertex) {
             pushVertex(longitude, latitude);
@@ -607,6 +617,7 @@ export function FieldCollectionDialog({
       }),
     );
     setPending(null);
+    setLastGpsFix(null);
     setValues({});
     setPhoto(null);
     setVertices([]);
@@ -669,6 +680,7 @@ export function FieldCollectionDialog({
           count={vertices.length}
           minCount={minVertices(activeGeometry)}
           locating={locating}
+          gpsFix={lastGpsFix}
           onAddGps={() => handleUseGps(true)}
           onUndo={handleUndoVertex}
           onFinish={() => finishDrawing(vertices)}
@@ -702,6 +714,7 @@ export function FieldCollectionDialog({
                   onChange={(e) => {
                     setLayerId(e.target.value);
                     setPending(null);
+                    setLastGpsFix(null);
                     setValues({});
                     setPhoto(null);
                     setVertices([]);
@@ -748,6 +761,7 @@ export function FieldCollectionDialog({
                   onPhoto={handlePhoto}
                   onRemovePhoto={() => setPhoto(null)}
                   locating={locating}
+                  gpsFix={lastGpsFix}
                   onUseGps={() => handleUseGps(false)}
                   onPickOnMap={handlePickOnMap}
                   onStartDrawing={handleStartDrawing}
@@ -782,6 +796,7 @@ interface DrawToolbarProps {
   count: number;
   minCount: number;
   locating: boolean;
+  gpsFix: GpsFix | null;
   onAddGps: () => void;
   onUndo: () => void;
   onFinish: () => void;
@@ -794,6 +809,7 @@ function DrawToolbar({
   count,
   minCount,
   locating,
+  gpsFix,
   onAddGps,
   onUndo,
   onFinish,
@@ -813,6 +829,7 @@ function DrawToolbar({
         </span>
       </div>
       <p className="text-xs text-muted-foreground">{t("fieldCollection.dblClickHint")}</p>
+      {gpsFix && <GpsMetadataReadout fix={gpsFix} />}
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={onAddGps} disabled={locating}>
           {locating ? (
@@ -1013,6 +1030,7 @@ interface CaptureStepProps {
   onPhoto: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemovePhoto: () => void;
   locating: boolean;
+  gpsFix: GpsFix | null;
   onUseGps: () => void;
   onPickOnMap: () => void;
   onStartDrawing: () => void;
@@ -1032,6 +1050,7 @@ function CaptureStep({
   onPhoto,
   onRemovePhoto,
   locating,
+  gpsFix,
   onUseGps,
   onPickOnMap,
   onStartDrawing,
@@ -1081,6 +1100,8 @@ function CaptureStep({
           {t("fieldCollection.drawOnMap")}
         </Button>
       )}
+
+      {gpsFix && <GpsMetadataReadout fix={gpsFix} />}
 
       {!pending ? (
         <p className="text-sm text-muted-foreground">
@@ -1230,6 +1251,19 @@ function CaptureStep({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function GpsMetadataReadout({ fix }: { fix: GpsFix }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted px-3 py-2 text-sm tabular-nums text-muted-foreground"
+    >
+      <span>±{formatAccuracy(fix.accuracy, t("gps.notAvailable"))}</span>
+      <span>{t("gps.satellitesValue", { value: fix.satellites ?? t("gps.notAvailable") })}</span>
     </div>
   );
 }

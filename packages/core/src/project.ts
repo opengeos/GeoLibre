@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from "uuid";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
@@ -121,16 +122,20 @@ export function parseProject(json: string): GeoLibreProject {
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
+  // Secondary panes already go through normalizeMapViewState; the primary
+  // camera must too so a hand-edited project cannot store an out-of-range
+  // view that MapLibre would silently clamp, leaving saved state wrong.
+  const mapView = normalizeMapViewState(data.mapView);
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(data.mapLayout),
     normalizeSecondaryMapViews(data.secondaryMapViews),
-    { mapView: data.mapView },
+    { mapView },
   );
   const styleLibrary = normalizeStyleLibraryEntries(data.styleLibrary);
   return {
     version: data.version,
     name: data.name,
-    mapView: data.mapView,
+    mapView,
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
@@ -189,12 +194,29 @@ function normalizeLayerGroups(value: unknown): LayerGroup[] {
     groups.push({
       id,
       name: typeof candidate.name === "string" ? candidate.name : id,
+      ...(typeof candidate.parentId === "string" && candidate.parentId.trim()
+        ? { parentId: candidate.parentId.trim() }
+        : {}),
       collapsed: candidate.collapsed === true,
       visible: candidate.visible !== false,
       opacity,
     });
   }
-  return groups;
+  const ids = new Set(groups.map((group) => group.id));
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  return groups.map((group) => {
+    if (!group.parentId || !ids.has(group.parentId) || group.parentId === group.id) {
+      return group.parentId ? { ...group, parentId: undefined } : group;
+    }
+    let id: string | undefined = group.parentId;
+    const seen = new Set([group.id]);
+    while (id) {
+      if (seen.has(id)) return { ...group, parentId: undefined };
+      seen.add(id);
+      id = byId.get(id)?.parentId;
+    }
+    return group;
+  });
 }
 
 /**
@@ -735,15 +757,25 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
 const MAX_PERSISTED_BINS = 50;
 
-const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
-  "histogram",
-  "scatter",
-  "bar",
-  "line",
-  "box",
-  "pie",
-  "indicator",
-];
+/** Upper bound for a persisted list-widget row limit, mirroring the widget
+ * editor's row-count input (`max={500}` in `WidgetEditorDialog`). */
+const MAX_PERSISTED_LIST_ROWS = 500;
+
+// Spelled as a Record so adding a member to DashboardWidgetType fails to
+// compile until it is listed here. A plain array accepted a short list
+// silently, and a type missing from it makes normalizeWidgets drop every widget
+// of that type — which is how selector widgets vanished on save and reload.
+const DASHBOARD_WIDGET_TYPES = Object.keys({
+  histogram: true,
+  scatter: true,
+  bar: true,
+  line: true,
+  box: true,
+  pie: true,
+  indicator: true,
+  selector: true,
+  list: true,
+} satisfies Record<DashboardWidgetType, true>) as readonly DashboardWidgetType[];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
   "sum",
@@ -827,6 +859,34 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
       if (prefix) widget.prefix = prefix;
       const suffix = normalizeString(candidate.suffix);
       if (suffix) widget.suffix = suffix;
+    }
+    // Selector widget fields (issue #1381). Only a selector reads the flag, and
+    // false is the default, so persist it only when it is on.
+    if (type === "selector" && candidate.multiple === true) {
+      widget.multiple = true;
+    }
+    // List widget fields (issue #1381). normalizeWidgets also runs on the save
+    // path (projectFromStore), so dropping these would blank a list widget the
+    // moment its project is saved — the renderer falls back to "no data"
+    // without listFields.
+    if (type === "list") {
+      if (Array.isArray(candidate.listFields)) {
+        const listFields = candidate.listFields
+          .map((entry) => normalizeString(entry).trim())
+          .filter((entry) => entry !== "");
+        if (listFields.length > 0) widget.listFields = listFields;
+      }
+      const sortBy = normalizeString(candidate.sortBy).trim();
+      if (sortBy) widget.sortBy = sortBy;
+      if (candidate.sortDir === "asc" || candidate.sortDir === "desc") {
+        widget.sortDir = candidate.sortDir;
+      }
+      if (typeof candidate.limit === "number" && Number.isFinite(candidate.limit)) {
+        // Clamp to the editor's range so a hand-edited 0 or 10_000 cannot reach
+        // the renderer.
+        const limit = Math.trunc(candidate.limit);
+        if (limit >= 1) widget.limit = Math.min(MAX_PERSISTED_LIST_ROWS, limit);
+      }
     }
     widgets.push(widget);
   }
@@ -1324,14 +1384,15 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const basemapOpacity = project.basemapOpacity ?? 1;
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
+  const mapView = normalizeMapViewState(project.mapView);
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(project.mapLayout),
     normalizeSecondaryMapViews(project.secondaryMapViews),
-    { mapView: project.mapView },
+    { mapView },
   );
   return {
     projectName: project.name,
-    mapView: project.mapView,
+    mapView,
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
@@ -1339,7 +1400,9 @@ export function applyProjectToStore(project: GeoLibreProject): {
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
-    legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
+    legend: normalizeLegendConfig(project.legend) ?? {
+      ...DEFAULT_LEGEND_CONFIG,
+    },
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],
@@ -1350,5 +1413,58 @@ export function applyProjectToStore(project: GeoLibreProject): {
     primaryMapLabel: normalizeString(project.primaryMapLabel),
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
     metadata: project.metadata,
+  };
+}
+
+/**
+ * Create an unlinked copy of a project, suffixed with "(copy)" by default and
+ * stripped of share-specific metadata (shareId, shareUrl, etc.).
+ */
+export function detachProjectCopy(
+  project: GeoLibreProject,
+  options: { nameSuffix?: string } = {},
+): GeoLibreProject {
+  const suffix = options.nameSuffix ?? "(copy)";
+  const rawName = project.name.trim() || DEFAULT_PROJECT_NAME;
+  const name = suffix ? (rawName.endsWith(suffix) ? rawName : `${rawName} ${suffix}`) : rawName;
+
+  const metadata = { ...(project.metadata ?? {}) };
+  for (const key of Object.keys(metadata)) {
+    if (/^share/i.test(key)) {
+      delete metadata[key];
+    }
+  }
+
+  return {
+    ...project,
+    id: uuidv4(),
+    name,
+    metadata,
+  };
+}
+
+/**
+ * Create a template snapshot of a project. Optionally strips data layers while
+ * keeping basemap, layer groups, styles, legend config, preferences, widgets, and
+ * print layout.
+ */
+export function createProjectTemplate(
+  project: GeoLibreProject,
+  options: { name?: string; stripDataLayers?: boolean } = {},
+): GeoLibreProject {
+  const detached = detachProjectCopy(project, { nameSuffix: "" });
+  const name = options.name?.trim() || detached.name;
+  const stripDataLayers = options.stripDataLayers !== false;
+
+  const layers = stripDataLayers ? [] : detached.layers;
+
+  return {
+    ...detached,
+    name,
+    layers,
+    metadata: {
+      ...detached.metadata,
+      isTemplate: true,
+    },
   };
 }

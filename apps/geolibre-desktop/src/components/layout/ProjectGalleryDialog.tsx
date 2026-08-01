@@ -51,7 +51,11 @@ interface ProjectGalleryDialogProps {
    * authorizes the fetch. Resolves on success and rejects with a descriptive
    * error the dialog surfaces inline.
    */
-  onOpenProject: (rawJsonUrl: string, authToken?: string) => Promise<void>;
+  onOpenProject: (
+    rawJsonUrl: string,
+    authToken?: string,
+    options?: { asCopy?: boolean },
+  ) => Promise<void>;
 }
 
 // Page size for each listing request. The endpoint paginates by limit + offset.
@@ -112,7 +116,9 @@ export function ProjectGalleryDialog({
   // otherwise undershoot the offset and re-deliver already-seen entries).
   const [rawOffset, setRawOffset] = useState(0);
   const [query, setQuery] = useState("");
-  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [openingState, setOpeningState] = useState<{ id: string; action: "open" | "copy" } | null>(
+    null,
+  );
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -240,7 +246,7 @@ export function ProjectGalleryDialog({
     if (open) {
       setProjects([]);
       setQuery("");
-      setOpeningId(null);
+      setOpeningState(null);
       setOpenError(null);
       setHasMore(false);
       setRawOffset(0);
@@ -251,13 +257,15 @@ export function ProjectGalleryDialog({
     }
   }, [open, loadPage]);
 
-  const handleOpen = async (project: SharedProject) => {
-    setOpeningId(project.id);
+  const handleOpen = async (project: SharedProject, options: { asCopy?: boolean } = {}) => {
+    const action = options.asCopy ? "copy" : "open";
+    setOpeningState({ id: project.id, action });
     setOpenError(null);
     try {
       await onOpenProject(
         project.rawJsonUrl,
         effectiveScope === "mine" ? projectOpenToken(project, trimmedToken) : undefined,
+        options,
       );
       onOpenChange(false);
     } catch (err) {
@@ -265,7 +273,7 @@ export function ProjectGalleryDialog({
       console.error("Failed to open gallery project", err);
       setOpenError(err instanceof Error ? err.message : t("gallery.openError"));
     } finally {
-      setOpeningId(null);
+      setOpeningState(null);
     }
   };
 
@@ -402,9 +410,10 @@ export function ProjectGalleryDialog({
                   <GalleryCard
                     key={project.id}
                     project={project}
-                    opening={openingId === project.id}
-                    disabled={openingId !== null}
+                    openingAction={openingState?.id === project.id ? openingState.action : null}
+                    disabled={openingState !== null}
                     onOpen={() => void handleOpen(project)}
+                    onOpenCopy={() => void handleOpen(project, { asCopy: true })}
                   />
                 ))}
               </div>
@@ -478,12 +487,13 @@ function VisibilityBadge({ visibility }: { visibility: string }) {
 
 interface GalleryCardProps {
   project: SharedProject;
-  opening: boolean;
+  openingAction: "open" | "copy" | null;
   disabled: boolean;
   onOpen: () => void;
+  onOpenCopy: () => void;
 }
 
-function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
+function GalleryCard({ project, openingAction, disabled, onOpen, onOpenCopy }: GalleryCardProps) {
   const { t } = useTranslation();
   const [thumbBroken, setThumbBroken] = useState(false);
 
@@ -510,7 +520,7 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
             <span className="text-xs">{t("gallery.noThumbnail")}</span>
           </span>
         )}
-        {opening ? (
+        {openingAction !== null ? (
           <span className="absolute inset-0 flex items-center justify-center bg-background/60">
             <Loader2 className="h-5 w-5 animate-spin" />
           </span>
@@ -532,15 +542,31 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
           </span>
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
           <Button size="sm" className="flex-1" disabled={disabled} onClick={onOpen}>
-            {opening ? (
+            {openingAction === "open" ? (
               <>
                 <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 {t("gallery.opening")}
               </>
             ) : (
               t("gallery.open")
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1"
+            disabled={disabled}
+            onClick={onOpenCopy}
+          >
+            {openingAction === "copy" ? (
+              <>
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                {t("gallery.openingCopy")}
+              </>
+            ) : (
+              t("gallery.openCopy")
             )}
           </Button>
           {project.projectUrl ? (

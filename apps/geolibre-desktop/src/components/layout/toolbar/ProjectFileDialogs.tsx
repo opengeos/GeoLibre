@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -11,6 +12,7 @@ import {
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
+import { SaveTemplateDialog } from "../SaveTemplateDialog";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -88,6 +90,38 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setActionError(null)}>
               {t("toolbar.item.dismiss")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={projectFiles.qgisImportWarnings !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.setQgisImportWarnings(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.qgisImportComplete")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.qgisImportWarnings", {
+                count: projectFiles.qgisImportWarnings?.length ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            {projectFiles.qgisImportWarnings?.map((warning, index) => (
+              <li key={`${warning.layerName}-${index}`}>
+                <strong>{warning.layerName}:</strong>{" "}
+                {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
+                  provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
+                })}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
+              {t("common.ok")}
             </Button>
           </div>
         </DialogContent>
@@ -201,6 +235,15 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <SaveTemplateDialog
+        open={projectFiles.saveTemplateDialogOpen}
+        onOpenChange={projectFiles.setSaveTemplateDialogOpen}
+        getProject={() => {
+          const { project } = projectFiles.buildCurrentProject();
+          const currentName = useAppStore.getState().projectName;
+          return { project, defaultProjectName: currentName };
+        }}
+      />
     </>
   );
 }

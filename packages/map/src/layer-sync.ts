@@ -1,4 +1,5 @@
 import {
+  controlRendersLayer,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type ExternalNativePaintBridge,
@@ -57,7 +58,12 @@ import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
 import { setDynamicLayoutProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { prepareLineDecoration } from "./line-decorations";
-import { markerIconSizeValue, prepareMarker } from "./markers";
+import {
+  KML_ICON_URL_PROPERTY,
+  markerIconSizeValue,
+  prepareKmlFeatureIcons,
+  prepareMarker,
+} from "./markers";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -173,6 +179,9 @@ function withFeatureFilters(
   }
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
+  if (layer.metadata?.sourceKind === "annotation") {
+    filters.push(["!=", ["get", "visible"], false]);
+  }
   if (filters.length === 0) return geometryFilter;
   return ["all", geometryFilter, ...filters] as unknown as maplibregl.FilterSpecification;
 }
@@ -448,6 +457,13 @@ function syncExternalNativeLayer(
 
     for (const nativeLayerId of nativeLayerIds) {
       moveLayer(map, nativeLayerId, beforeId);
+      // The owning control mirrors direct per-layer visibility changes from
+      // the store, but effective state such as a hidden parent group never
+      // mutates the child's stored `visible` flag. Apply the effective value
+      // to ordinary native MapLibre layers here so group visibility reaches
+      // control-rendered vectors too. MapLibre custom layers also accept the
+      // standard layout visibility property.
+      setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
       // Control-painted vector layers (e.g. Add Vector Layer's circle/fill/line
       // layers) still honor a Time Slider window and the rule-based
       // hide-unmatched filter: filtering is independent of the paint the
@@ -675,8 +691,12 @@ function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+// Delegates to core's `controlRendersLayer` so the flag this dispatch branches
+// on has exactly one definition: the Layer Library's "can this be re-added and
+// rendered?" gate reads the same predicate (issue #1520), and a change to what
+// marks a custom-render layer cannot leave the two disagreeing.
 function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
-  return typeof layer.metadata.customLayerType === "string";
+  return controlRendersLayer(layer);
 }
 
 // Opt-in for control-managed layers (`customLayerType`, the ordering-only path)
@@ -1860,6 +1880,7 @@ function applyVectorDataRenderLayers(
   ensureGeneratedImageHandler(map);
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
+  const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!, markerImageId ?? "");
   // Derived companion symbology (inverted mask, geometry generator, dedup
   // labels) is built from the raw features, so no MapLibre filter applies to
   // it. While a Time Slider window or a rule-based visibility filter is
@@ -2150,7 +2171,7 @@ function applyVectorDataRenderLayers(
       layer,
       hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
     );
-    if (markerImageId) {
+    if (markerImageId || kmlIconImage) {
       removeIfExists(map, circleLayerId(layer.id));
       ensureLayer(
         map,
@@ -2162,10 +2183,12 @@ function applyVectorDataRenderLayers(
           ...styleLayerZoomRange(layer.style),
           filter: pointFilter,
           layout: {
-            "icon-image": markerImageId,
+            "icon-image": (kmlIconImage ?? markerImageId) as string,
             // The sprite is baked at its display size, so icon-size stays 1
             // unless proportional sizing scales it per feature.
-            "icon-size": markerIconSizeValue(layer.style) as PropertyValueSpecification<number>,
+            "icon-size": (kmlIconImage
+              ? ["case", ["has", KML_ICON_URL_PROPERTY], 1, markerIconSizeValue(layer.style)]
+              : markerIconSizeValue(layer.style)) as PropertyValueSpecification<number>,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             visibility,
@@ -2174,6 +2197,27 @@ function applyVectorDataRenderLayers(
         },
         beforeId,
       );
+      if (kmlIconImage && !markerImageId) {
+        // Features without a KML icon still use the ordinary circle renderer.
+        ensureLayer(
+          map,
+          circleLayerId(layer.id),
+          {
+            id: circleLayerId(layer.id),
+            type: "circle",
+            ...sourceSpec,
+            ...styleLayerZoomRange(layer.style),
+            filter: withFeatureFilters(layer, [
+              "all",
+              hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
+              ["!", ["has", KML_ICON_URL_PROPERTY]],
+            ] as maplibregl.FilterSpecification),
+            paint: circlePaint(layer.style, opacity),
+            layout: { visibility },
+          },
+          beforeId,
+        );
+      }
     } else {
       removeIfExists(map, markerLayerId(layer.id));
       ensureLayer(
@@ -3503,6 +3547,9 @@ export function removeLayerFromMap(
   layerId: string,
   layer?: GeoLibreLayer,
 ): void {
+  // Drop cached paint-bridge state so a later layer reusing this id never
+  // skips a fresh opacity/visibility apply against a new bridge.
+  appliedBridgeState.delete(layerId);
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),

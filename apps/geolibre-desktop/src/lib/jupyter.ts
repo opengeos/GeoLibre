@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import i18next from "i18next";
+import { IS_MAS_BUILD } from "./build-flags";
 import { isTauri } from "./is-tauri";
 
 /**
@@ -52,7 +54,7 @@ function setJupyterServer(info: JupyterServerInfo | null): void {
  * embeds the self-hosted JupyterLite site instead.
  */
 export async function startJupyterServer(): Promise<JupyterServerInfo> {
-  assertTauri();
+  assertJupyterAllowed();
   const info = await invoke<JupyterServerInfo>("start_jupyter_server");
   setJupyterServer(info);
   return info;
@@ -60,12 +62,21 @@ export async function startJupyterServer(): Promise<JupyterServerInfo> {
 
 /** Stop the desktop JupyterLab server if it is running. */
 export async function stopJupyterServer(): Promise<void> {
-  assertTauri();
+  // Nothing to stop in the Mac App Store build (the server cannot be
+  // started); a silent no-op keeps callers' cleanup paths from throwing.
+  if (IS_MAS_BUILD) return;
+  assertJupyterAllowed();
   await invoke("stop_jupyter_server");
   setJupyterServer(null);
 }
 
-function assertTauri(): void {
+function assertJupyterAllowed(): void {
+  // The Mac App Store build cannot spawn the JupyterLab server (App Sandbox);
+  // the Notebook panel embeds JupyterLite instead. Fail here before invoking
+  // the stubbed Tauri command so every consumer degrades with a clear message.
+  if (IS_MAS_BUILD) {
+    throw new Error(i18next.t("masBuild.unavailable"));
+  }
   if (!isTauri()) {
     throw new Error("Running a Jupyter server requires GeoLibre Desktop.");
   }

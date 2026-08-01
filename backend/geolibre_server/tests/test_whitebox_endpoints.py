@@ -7,6 +7,10 @@ back to the client, mirroring conversion.py/raster.py.
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+
 import pytest
 from fastapi import HTTPException
 
@@ -111,3 +115,176 @@ def test_run_job_does_not_leak_error(monkeypatch):
     finally:
         with whitebox._JOBS_LOCK:
             whitebox._JOBS.pop(job_id, None)
+
+
+def test_run_rejects_when_in_flight_cap_reached(monkeypatch):
+    """A new Whitebox job is refused with 429 once in-flight work is at the cap."""
+    monkeypatch.setattr(whitebox, "MAX_IN_FLIGHT_JOBS", 1)
+    now = whitebox._utc_now()
+    with whitebox._JOBS_LOCK:
+        whitebox._JOBS.clear()
+        whitebox._JOBS["busy"] = whitebox.JobState(
+            id="busy",
+            status="running",
+            tool_id="noop",
+            created_at=now,
+            updated_at=now,
+        )
+    try:
+        with pytest.raises(HTTPException) as excinfo:
+            whitebox.whitebox_run(whitebox.WhiteboxRunRequest(tool_id="noop"))
+        assert excinfo.value.status_code == 429
+        assert "Too many Whitebox jobs" in str(excinfo.value.detail)
+    finally:
+        with whitebox._JOBS_LOCK:
+            whitebox._JOBS.clear()
+
+
+def test_run_rejects_oversized_layer_input(monkeypatch):
+    """Embedded GeoJSON layer inputs honor the shared MAX_FEATURES cap with 413."""
+    monkeypatch.setattr(whitebox, "MAX_LAYER_FEATURES", 1)
+    big = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {}, "geometry": None},
+            {"type": "Feature", "properties": {}, "geometry": None},
+        ],
+    }
+    with pytest.raises(HTTPException) as excinfo:
+        whitebox.whitebox_run(
+            whitebox.WhiteboxRunRequest(
+                tool_id="noop",
+                layer_inputs={"input": {"geojson": big}},
+            )
+        )
+    assert excinfo.value.status_code == 413
+    assert "feature limit" in str(excinfo.value.detail)
+
+
+def test_raster_output_paths_only_returns_declared_existing_rasters(tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"tiff")
+    vector = tmp_path / "result.geojson"
+    vector.write_text("{}", encoding="utf-8")
+    args = {"raster": str(raster), "vector": str(vector), "missing": str(tmp_path / "x.tif")}
+    tool = {
+        "params": [
+            {"name": "raster", "kind": "raster_out"},
+            {"name": "vector", "kind": "vector_out"},
+            {"name": "missing", "kind": "raster_out"},
+        ]
+    }
+
+    assert whitebox._raster_output_paths(args, tool) == [str(raster)]
+
+
+def test_ensure_raster_outputs_converts_striped_tiff(monkeypatch, tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"striped")
+    messages = []
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
+
+    def _run(command, **kwargs):
+        assert command[-2] == str(raster)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            whitebox.conversion._RESULT_MARKER + json.dumps({"converted": True}),
+            "",
+        )
+
+    monkeypatch.setattr(whitebox.subprocess, "run", _run)
+    temp_paths = []
+    whitebox._ensure_raster_outputs_are_cogs(
+        {"output": str(raster)},
+        {"params": [{"name": "output", "kind": "raster_out"}]},
+        messages.append,
+        temp_paths,
+    )
+
+    assert messages == ["Converted result.tif to a Cloud Optimized GeoTIFF."]
+    assert len(temp_paths) == 1
+    assert temp_paths[0].parent == tmp_path
+    assert temp_paths[0].name != "result.tif.geolibre-cog.tmp"
+
+
+def test_ensure_raster_outputs_does_not_announce_existing_cog(monkeypatch, tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"cog")
+    messages = []
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
+    monkeypatch.setattr(
+        whitebox.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            0,
+            whitebox.conversion._RESULT_MARKER + json.dumps({"converted": False}),
+            "",
+        ),
+    )
+
+    whitebox._ensure_raster_outputs_are_cogs(
+        {"output": str(raster)},
+        {"params": [{"name": "output", "kind": "raster_out"}]},
+        messages.append,
+        [],
+    )
+
+    assert messages == []
+
+
+def test_ensure_raster_outputs_surfaces_conversion_failure(monkeypatch, tmp_path):
+    raster = tmp_path / "result.tif"
+    raster.write_bytes(b"striped")
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: "/python")
+    monkeypatch.setattr(
+        whitebox.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 1, "", "conversion failed"),
+    )
+
+    with pytest.raises(RuntimeError, match=r"Could not optimize.*conversion failed"):
+        whitebox._ensure_raster_outputs_are_cogs(
+            {"output": str(raster)},
+            {"params": [{"name": "output", "kind": "raster_out"}]},
+            lambda _message: None,
+            [],
+        )
+
+
+def test_ensure_raster_outputs_converts_real_striped_geotiff(monkeypatch, tmp_path):
+    numpy = pytest.importorskip("numpy")
+    rasterio = pytest.importorskip("rasterio")
+    pytest.importorskip("rio_cogeo")
+    from rio_cogeo.cogeo import cog_validate
+
+    raster = tmp_path / "striped.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=1024,
+        height=1024,
+        count=1,
+        dtype="uint8",
+        transform=rasterio.transform.from_origin(0, 32, 1, 1),
+    ) as dataset:
+        dataset.write(numpy.zeros((1, 1024, 1024), dtype="uint8"))
+
+    assert cog_validate(raster, quiet=True)[0] is False
+    original_mode = raster.stat().st_mode
+    monkeypatch.setattr(whitebox.conversion, "_runtime_python", lambda: sys.executable)
+    messages = []
+    temp_paths = []
+    whitebox._ensure_raster_outputs_are_cogs(
+        {"output": str(raster)},
+        {"params": [{"name": "output", "kind": "raster_out"}]},
+        messages.append,
+        temp_paths,
+    )
+
+    assert cog_validate(raster, quiet=True)[0] is True
+    assert raster.stat().st_mode == original_mode
+    assert messages == ["Converted striped.tif to a Cloud Optimized GeoTIFF."]
+    assert all(not path.exists() for path in temp_paths)

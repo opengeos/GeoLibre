@@ -1,6 +1,6 @@
 {
   "name": "geolibre-desktop",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "node ../../scripts/tauri-build.mjs",
-    "tauri:build:native-duckdb": "node ../../scripts/tauri-build.mjs --native-duckdb"
+    "tauri:build:native-duckdb": "node ../../scripts/tauri-build.mjs --native-duckdb",
+    "tauri:build:mas": "node ../../scripts/tauri-build.mjs --mas"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -81,9 +82,9 @@
     "maplibre-gl-splat": "^0.2.8",
     "maplibre-gl-streetview": "^0.7.0",
     "maplibre-gl-swipe": "^0.11.1",
-    "maplibre-gl-time-slider": "^1.8.3",
+    "maplibre-gl-time-slider": "^1.8.4",
     "maplibre-gl-usgs-lidar": "^0.11.1",
-    "maplibre-gl-vector": "^0.10.2",
+    "maplibre-gl-vector": "^0.10.7",
     "openai": "^7.0.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",

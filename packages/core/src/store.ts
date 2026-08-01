@@ -16,6 +16,7 @@ import {
   createEmptyProject,
   DEFAULT_PROJECT_NAME,
 } from "./project";
+import { initialLayerStyle } from "./layer-defaults";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
@@ -38,6 +39,7 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
+  type LayerLibraryEntry,
   type AttributeFormConfig,
   type LayerJoin,
   type LayerVirtualField,
@@ -55,6 +57,7 @@ import {
   type StoryChapter,
   type StoryMap,
   type StyleLibraryEntry,
+  type ProjectTemplateEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
 import {
@@ -63,6 +66,7 @@ import {
   extractCopiedLayerStyle,
 } from "./layer-style-clipboard";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh, reapplyLayerJoins } from "./joins";
+import { MAX_LAYER_LIBRARY_ENTRIES } from "./layer-library";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -165,6 +169,8 @@ export interface GpsStatusFix {
   lat: number;
   /** Horizontal accuracy radius in meters. */
   accuracy: number;
+  /** Satellites used for the fix, or null when the provider does not report it. */
+  satellites: number | null;
   /** Ground speed in m/s, or null when the device doesn't report one. */
   speed: number | null;
   /** Fix time in epoch milliseconds. */
@@ -194,6 +200,17 @@ export interface AppState {
    * newProject/loadProject, and persisted by the desktop app (IndexedDB).
    */
   styleLibrary: StyleLibraryEntry[];
+  /**
+   * App-level Layer Library (issue #1520) — the Browser panel's My Data
+   * section. Like {@link styleLibrary} it lives outside the project lifecycle:
+   * never serialized into the project file, untouched by newProject/loadProject,
+   * and persisted by the desktop app (IndexedDB). Most recently saved first.
+   */
+  layerLibrary: LayerLibraryEntry[];
+  /**
+   * App-level Template Library. Persisted by the desktop app (IndexedDB).
+   */
+  templateLibrary: ProjectTemplateEntry[];
   /**
    * Project-scoped Style Manager entries (issue #1294), serialized into the
    * `.geolibre.json` `styleLibrary` array and replaced on project load.
@@ -425,6 +442,28 @@ export interface AppState {
    */
   deleteStyleLibraryEntry: (id: string, scope?: "app" | "project") => void;
 
+  /**
+   * Replace the app-level Layer Library wholesale. Used by the persistence
+   * layer on startup and by bundle imports.
+   */
+  setLayerLibrary: (entries: LayerLibraryEntry[]) => void;
+  /**
+   * Insert or replace (matching by `id`) a Layer Library entry. New entries go
+   * to the front so the most recently saved layer leads the My Data section.
+   */
+  saveLayerLibraryEntry: (entry: LayerLibraryEntry) => void;
+  /** Rename a Layer Library entry; a blank name is ignored. */
+  renameLayerLibraryEntry: (id: string, name: string) => void;
+  /** Remove a Layer Library entry by id. */
+  deleteLayerLibraryEntry: (id: string) => void;
+
+  /** Replace the app-level template library wholesale. */
+  setTemplateLibrary: (templates: ProjectTemplateEntry[]) => void;
+  /** Insert or replace a template in the Template Library. */
+  saveTemplateEntry: (entry: ProjectTemplateEntry) => void;
+  /** Remove a template entry by id from the Template Library. */
+  deleteTemplateEntry: (id: string) => void;
+
   /** Insert a new model or replace an existing one matching by `id`. */
   saveModel: (model: ProcessingModel) => void;
   /** Remove a saved model by id. */
@@ -439,8 +478,14 @@ export interface AppState {
 
   /** Append a new dashboard widget. */
   addWidget: (widget: DashboardWidget) => void;
-  /** Patch an existing dashboard widget by id (no-op if absent). */
+  /** Patch an existing dashboard widget by id (no-op if absent). Merges, so an
+   * omitted key keeps its current value; use replaceWidget to clear one. */
   updateWidget: (id: string, patch: Partial<Omit<DashboardWidget, "id">>) => void;
+  /** Swap an existing dashboard widget for a complete new record, keeping its
+   * id and position (no-op if absent). Unlike updateWidget this does not merge,
+   * so fields the caller omits are cleared — what the widget editor needs to
+   * persist an emptied title, color, prefix, or suffix. */
+  replaceWidget: (id: string, widget: Omit<DashboardWidget, "id">) => void;
   /** Remove a dashboard widget by id. */
   removeWidget: (id: string) => void;
   /** Move a widget to a new index, clamped into range, preserving the rest. */
@@ -575,6 +620,7 @@ export interface AppState {
     groupId: string | null,
     beforeLayerId?: string | null,
   ) => void;
+  moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
 }
 
@@ -679,6 +725,80 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
   );
 }
 
+function removedLayerIdSet(layerIds: string | Iterable<string>): Set<string> {
+  if (typeof layerIds === "string") return new Set([layerIds]);
+  if (layerIds instanceof Set) return layerIds;
+  return new Set(layerIds);
+}
+
+/**
+ * Strip storymap chapter enter/exit opacity rows that reference any of the
+ * removed layer ids. Returns the same reference when nothing changes so
+ * callers can avoid unnecessary storymap churn.
+ */
+function scrubStorymapLayerRefs(
+  storymap: StoryMap | null,
+  layerIds: string | Iterable<string>,
+): StoryMap | null {
+  if (!storymap) return null;
+  const removed = removedLayerIdSet(layerIds);
+  if (removed.size === 0) return storymap;
+  let changed = false;
+  const chapters = storymap.chapters.map((chapter) => {
+    const onChapterEnter = chapter.onChapterEnter.filter((change) => !removed.has(change.layerId));
+    const onChapterExit = chapter.onChapterExit.filter((change) => !removed.has(change.layerId));
+    if (
+      onChapterEnter.length === chapter.onChapterEnter.length &&
+      onChapterExit.length === chapter.onChapterExit.length
+    ) {
+      return chapter;
+    }
+    changed = true;
+    return { ...chapter, onChapterEnter, onChapterExit };
+  });
+  return changed ? { ...storymap, chapters } : storymap;
+}
+
+/**
+ * Drop per-pane visibility overrides for removed layer ids so stale keys do
+ * not accumulate (or serialize) in secondary panes after deletion.
+ */
+function scrubSecondaryPaneLayerVisibility(
+  panes: SecondaryMapView[],
+  layerIds: string | Iterable<string>,
+): SecondaryMapView[] {
+  const removed = removedLayerIdSet(layerIds);
+  if (removed.size === 0) return panes;
+  let anyChanged = false;
+  const next = panes.map((pane) => {
+    let changed = false;
+    const layerVisibility: Record<string, boolean> = {};
+    for (const [id, visible] of Object.entries(pane.layerVisibility)) {
+      if (removed.has(id)) {
+        changed = true;
+        continue;
+      }
+      layerVisibility[id] = visible;
+    }
+    if (!changed) return pane;
+    anyChanged = true;
+    return { ...pane, layerVisibility };
+  });
+  return anyChanged ? next : panes;
+}
+
+/** Re-derive layers whose joins consumed any of the removed sources. */
+function cascadeJoinRefreshForRemoved(
+  layers: GeoLibreLayer[],
+  layerIds: string | Iterable<string>,
+): GeoLibreLayer[] {
+  let current = layers;
+  for (const id of removedLayerIdSet(layerIds)) {
+    current = cascadeLayerJoinRefresh(current, id);
+  }
+  return current;
+}
+
 /** Clamp a requested grid row/column count into the supported [1, MAX] range. */
 function clampGridDim(value: number): number {
   if (!Number.isFinite(value)) return 1;
@@ -700,7 +820,12 @@ function clampGridDim(value: number): number {
  */
 function fitGrid(total: number, preferredCols: number): { rows: number; cols: number } {
   if (total <= 1) return { rows: 1, cols: 1 };
-  let best: { rows: number; cols: number; empty: number; score: number } | null = null;
+  let best: {
+    rows: number;
+    cols: number;
+    empty: number;
+    score: number;
+  } | null = null;
   for (let rows = 1; rows <= MAX_MAP_GRID_DIM; rows++) {
     for (let cols = 1; cols <= MAX_MAP_GRID_DIM; cols++) {
       const capacity = rows * cols;
@@ -759,6 +884,8 @@ export const useAppStore = create<AppState>()(
       storymap: null,
       models: [],
       styleLibrary: [],
+      layerLibrary: [],
+      templateLibrary: [],
       projectStyleLibrary: [],
       processingHistory: [],
       widgets: [],
@@ -1010,7 +1137,11 @@ export const useAppStore = create<AppState>()(
           isDirty: shouldMarkDirty || s.isDirty,
         })),
       selectLayer: (id) =>
-        set({ selectedLayerId: id, selectedFeatureId: null, selectedFeatureIds: [] }),
+        set({
+          selectedLayerId: id,
+          selectedFeatureId: null,
+          selectedFeatureIds: [],
+        }),
       selectFeature: (id) => set({ selectedFeatureId: id, selectedFeatureIds: id ? [id] : [] }),
       selectFeatures: (ids, anchorId) =>
         set({
@@ -1135,6 +1266,52 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
+      // The entry cap is applied on every write, not just when reading
+      // untrusted input, so ordinary use (repeated saves, importing several
+      // bundles over time) cannot grow the library past it. Mirrors
+      // `writeBrowserFavorites`, which slices to MAX_FAVORITES on each write.
+      setLayerLibrary: (entries) =>
+        set({ layerLibrary: entries.slice(0, MAX_LAYER_LIBRARY_ENTRIES) }),
+      saveLayerLibraryEntry: (entry) =>
+        set((s) => ({
+          // App-level saves don't touch the project file, so no dirty flag
+          // (mirrors saveStyleLibraryEntry's "app" scope). A new entry goes to
+          // the front, so at the cap the oldest falls off the end.
+          layerLibrary: s.layerLibrary.some((e) => e.id === entry.id)
+            ? s.layerLibrary.map((e) => (e.id === entry.id ? entry : e))
+            : [entry, ...s.layerLibrary].slice(0, MAX_LAYER_LIBRARY_ENTRIES),
+        })),
+      renameLayerLibraryEntry: (id, name) =>
+        set((s) => {
+          const trimmed = name.trim();
+          // Keep the array reference stable for a no-op rename so the
+          // IndexedDB persistence (which watches the reference) skips a write.
+          if (!trimmed || !s.layerLibrary.some((e) => e.id === id && e.name !== trimmed)) {
+            return {};
+          }
+          return {
+            layerLibrary: s.layerLibrary.map((e) => (e.id === id ? { ...e, name: trimmed } : e)),
+          };
+        }),
+      deleteLayerLibraryEntry: (id) =>
+        set((s) =>
+          s.layerLibrary.some((e) => e.id === id)
+            ? { layerLibrary: s.layerLibrary.filter((e) => e.id !== id) }
+            : {},
+        ),
+
+      setTemplateLibrary: (templates) => set({ templateLibrary: templates }),
+      saveTemplateEntry: (entry) =>
+        set((s) => ({
+          templateLibrary: s.templateLibrary.some((t) => t.id === entry.id)
+            ? s.templateLibrary.map((t) => (t.id === entry.id ? entry : t))
+            : [...s.templateLibrary, entry],
+        })),
+      deleteTemplateEntry: (id) =>
+        set((s) => ({
+          templateLibrary: s.templateLibrary.filter((t) => t.id !== id),
+        })),
+
       saveModel: (model) =>
         set((s) => {
           const exists = s.models.some((m) => m.id === model.id);
@@ -1184,6 +1361,14 @@ export const useAppStore = create<AppState>()(
           if (!exists) return s;
           return {
             widgets: s.widgets.map((w) => (w.id === id ? { ...w, ...patch, id: w.id } : w)),
+            isDirty: true,
+          };
+        }),
+      replaceWidget: (id, widget) =>
+        set((s) => {
+          if (!s.widgets.some((w) => w.id === id)) return s;
+          return {
+            widgets: s.widgets.map((w) => (w.id === id ? { ...widget, id } : w)),
             isDirty: true,
           };
         }),
@@ -1319,17 +1504,14 @@ export const useAppStore = create<AppState>()(
           // the source gone the join resolves to nothing, so its previously
           // materialized columns strip away instead of staying frozen (the
           // join definition itself stays, shown as missing in the Joins UI).
-          layers: cascadeLayerJoinRefresh(
+          layers: cascadeJoinRefreshForRemoved(
             s.layers.filter((l) => l.id !== id),
             id,
           ),
-          // Drop any per-pane visibility override for the removed layer so stale
-          // ids don't accumulate (and serialize) in secondary panes over time.
-          secondaryMapViews: s.secondaryMapViews.map((pane) => {
-            if (!(id in pane.layerVisibility)) return pane;
-            const { [id]: _removed, ...rest } = pane.layerVisibility;
-            return { ...pane, layerVisibility: rest };
-          }),
+          secondaryMapViews: scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, id),
+          // Drop storymap chapter enter/exit opacity rows that pointed at the
+          // removed layer so they do not keep a dangling id across save/reload.
+          storymap: scrubStorymapLayerRefs(s.storymap, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)
@@ -1465,10 +1647,15 @@ export const useAppStore = create<AppState>()(
           source: { type: "geojson" },
           visible: true,
           opacity: 1,
-          style: {
-            ...DEFAULT_LAYER_STYLE,
-            simpleStyleEnabled: hasSimpleStyleProperties(geojson),
-          },
+          // Its own palette color and geometry-appropriate sizing (#1519), so a
+          // stack of freshly added layers is legible without restyling each one.
+          style: initialLayerStyle({
+            geojson,
+            layers: get().layers,
+            overrides: {
+              simpleStyleEnabled: hasSimpleStyleProperties(geojson),
+            },
+          }),
           metadata: {},
           geojson,
           sourcePath,
@@ -1483,7 +1670,11 @@ export const useAppStore = create<AppState>()(
           id,
           name,
           type: "image",
-          source: { type: "image", url: source.url, coordinates: source.coordinates },
+          source: {
+            type: "image",
+            url: source.url,
+            coordinates: source.coordinates,
+          },
           visible: options?.visible ?? true,
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
@@ -1579,15 +1770,44 @@ export const useAppStore = create<AppState>()(
       removeLayerGroup: (id, options) =>
         set((s) => {
           const removeChildren = options?.removeChildren ?? false;
-          const removedIds = new Set(s.layers.filter((l) => l.groupId === id).map((l) => l.id));
-          const layers = removeChildren
-            ? s.layers.filter((l) => l.groupId !== id)
+          const removedGroup = s.layerGroups.find((g) => g.id === id);
+          if (!removedGroup) return s;
+          const groupIds = new Set([id]);
+          if (removeChildren) {
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const group of s.layerGroups) {
+                if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
+                  groupIds.add(group.id);
+                  changed = true;
+                }
+              }
+            }
+          }
+          const removedIds = new Set(
+            s.layers.filter((l) => l.groupId && groupIds.has(l.groupId)).map((l) => l.id),
+          );
+          let layers = removeChildren
+            ? s.layers.filter((l) => !l.groupId || !groupIds.has(l.groupId))
             : s.layers.map((l) => (l.groupId === id ? { ...l, groupId: undefined } : l));
+          // Match removeLayer: refreshing joins and scrubbing secondary-pane /
+          // storymap refs for every deleted child so group delete cannot leave
+          // stale joined columns or dangling visibility overrides behind.
+          if (removeChildren && removedIds.size > 0) {
+            layers = cascadeJoinRefreshForRemoved(layers, removedIds);
+          }
           const selectionRemoved =
             removeChildren && s.selectedLayerId !== null && removedIds.has(s.selectedLayerId);
           return {
             layers,
-            layerGroups: s.layerGroups.filter((g) => g.id !== id),
+            layerGroups: s.layerGroups
+              .filter((g) => !groupIds.has(g.id))
+              .map((g) => (g.parentId === id ? { ...g, parentId: removedGroup.parentId } : g)),
+            secondaryMapViews: removeChildren
+              ? scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, removedIds)
+              : s.secondaryMapViews,
+            storymap: removeChildren ? scrubStorymapLayerRefs(s.storymap, removedIds) : s.storymap,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,
@@ -1664,11 +1884,49 @@ export const useAppStore = create<AppState>()(
           return { layers: normalized, isDirty: true };
         }),
 
+      moveLayerGroupToGroup: (id, parentId) =>
+        set((s) => {
+          if (parentId === id) return s;
+          const group = s.layerGroups.find((g) => g.id === id);
+          if (!group) return s;
+          if (parentId && !s.layerGroups.some((g) => g.id === parentId)) return s;
+          // Walking upward from the proposed parent must never reach the group
+          // being moved, otherwise the assignment would create a cycle.
+          const byId = new Map(s.layerGroups.map((g) => [g.id, g]));
+          let ancestorId = parentId ?? undefined;
+          const visited = new Set<string>();
+          while (ancestorId && !visited.has(ancestorId)) {
+            if (ancestorId === id) return s;
+            visited.add(ancestorId);
+            ancestorId = byId.get(ancestorId)?.parentId;
+          }
+          const nextParentId = parentId ?? undefined;
+          if (group.parentId === nextParentId) return s;
+          return {
+            layerGroups: s.layerGroups.map((g) =>
+              g.id === id ? { ...g, parentId: nextParentId } : g,
+            ),
+            isDirty: true,
+          };
+        }),
+
       reorderLayerGroup: (id, direction) =>
         set((s) => {
+          const groupIds = new Set([id]);
+          let foundDescendant = true;
+          while (foundDescendant) {
+            foundDescendant = false;
+            for (const group of s.layerGroups) {
+              if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
+                groupIds.add(group.id);
+                foundDescendant = true;
+              }
+            }
+          }
           // Build the top-level units in store (render) order: each ungrouped
           // layer is its own unit, and a group's contiguous members form one
-          // unit. Reordering swaps the whole group block past its neighbor.
+          // unit. A nested organizer group may have no direct layers, so its
+          // block includes every unit belonging to a descendant group.
           const units: { key: string; layers: GeoLibreLayer[] }[] = [];
           for (const layer of s.layers) {
             const key = layer.groupId ?? `layer:${layer.id}`;
@@ -1676,13 +1934,21 @@ export const useAppStore = create<AppState>()(
             if (last && last.key === key) last.layers.push(layer);
             else units.push({ key, layers: [layer] });
           }
-          const unitIndex = units.findIndex((u) => u.key === id);
-          if (unitIndex < 0) return s; // empty group: nothing to move
-          const target = direction === "up" ? unitIndex + 1 : unitIndex - 1;
-          if (target < 0 || target >= units.length) return s;
-          const [unit] = units.splice(unitIndex, 1);
-          units.splice(target, 0, unit);
-          return { layers: units.flatMap((u) => u.layers), isDirty: true };
+          const matching = units
+            .map((unit, index) => (groupIds.has(unit.key) ? index : -1))
+            .filter((index) => index >= 0);
+          if (matching.length === 0) return s;
+          const first = matching[0];
+          const last = matching[matching.length - 1];
+          const neighbor = direction === "up" ? last + 1 : first - 1;
+          if (neighbor < 0 || neighbor >= units.length) return s;
+          const block = units.filter((unit) => groupIds.has(unit.key));
+          const remaining = units.filter((unit) => !groupIds.has(unit.key));
+          const neighborKey = units[neighbor].key;
+          const neighborIndex = remaining.findIndex((unit) => unit.key === neighborKey);
+          const insertAt = direction === "up" ? neighborIndex + 1 : neighborIndex;
+          remaining.splice(insertAt, 0, ...block);
+          return { layers: remaining.flatMap((u) => u.layers), isDirty: true };
         }),
 
       newProject: (options = {}) => {

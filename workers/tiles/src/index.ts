@@ -35,6 +35,7 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
+import { fetchAllowlistedUpstream } from "./allowlisted-fetch";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
@@ -104,6 +105,13 @@ const SOURCE_COOP_PRODUCTS_PATH =
   /^products\/([a-zA-Z0-9][a-zA-Z0-9-_.]{0,63})(?:\/([a-zA-Z0-9][a-zA-Z0-9-_.]{0,63}))?$/;
 // The catalog changes when products are published, so cache briefly at the edge.
 const SOURCE_COOP_CACHE_CONTROL = "public, max-age=300";
+
+// GitHub repository files are served without a usable CORS header on the
+// `github.com/<owner>/<repo>/raw/...` route. This named proxy accepts only that
+// path shape and only from GeoLibre origins, then streams the response without
+// buffering it in Worker memory.
+const GITHUB_RAW_PATH = "/github-raw";
+const GITHUB_RAW_REPOSITORY_PATH = /^\/[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}\/raw\/.+$/;
 
 // A USGS Astrogeology WMS layer to reproject. `map` and `layer` are the only
 // caller-influenced parts of the upstream request, and both come from this
@@ -268,10 +276,19 @@ async function resolveLatestBuildDate(): Promise<string> {
     // fetches next — so a later real range read could be served this 1-byte
     // body instead of its bytes. The resolved date is memoised in `latestCache`
     // already, so no edge cache is needed here.
-    const probe = await fetch(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
-      headers: { range: "bytes=0-0" },
-    });
-    if (probe.status === 206) {
+    const probe = await (async () => {
+      try {
+        return await fetchAllowlistedUpstream(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
+          headers: { range: "bytes=0-0" },
+        });
+      } catch (err) {
+        // A single day's probe must not abort the lookback — treat redirect/
+        // allowlist failures as a miss and try the previous day.
+        console.warn(`Protomaps build probe failed for ${ymd}: ${String(err)}`);
+        return null;
+      }
+    })();
+    if (probe?.status === 206) {
       latestCache = { date: ymd, at: now };
       return ymd;
     }
@@ -315,6 +332,7 @@ function isAllowedOamOrigin(origin: string | null): boolean {
   } catch {
     return false;
   }
+  if (protocol === "tauri:" && hostname === "localhost") return true;
   if (protocol === "https:") {
     if (hostname === "geolibre.app" || hostname.endsWith(".geolibre.app")) {
       return true;
@@ -367,7 +385,7 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
   }
   let originResponse: Response;
   try {
-    originResponse = await fetch(upstream, {
+    originResponse = await fetchAllowlistedUpstream(upstream, {
       // cacheEverything is required for Cloudflare to edge-cache a URL with no
       // static file extension (cacheTtl alone does not).
       cf: { cacheEverything: true, cacheTtl: 300 },
@@ -446,7 +464,7 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
     // effect on Enterprise plans (silently ignored otherwise), so we don't rely
     // on it. Without cacheEverything, Cloudflare doesn't edge-cache the 206 at
     // all; the upstream still serves range requests directly.
-    originResponse = await fetch(`${PMTILES_UPSTREAM}/${target}`, {
+    originResponse = await fetchAllowlistedUpstream(`${PMTILES_UPSTREAM}/${target}`, {
       headers: { range },
     });
   } catch {
@@ -505,6 +523,7 @@ export default {
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
+          "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
         { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
       );
@@ -543,7 +562,7 @@ export default {
       }
       let originResponse: Response;
       try {
-        originResponse = await fetch(upstream.toString(), {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
           headers: { accept: "application/json" },
           // cacheEverything is required for Cloudflare to edge-cache a URL with
           // no static file extension (cacheTtl alone does not).
@@ -570,6 +589,49 @@ export default {
     // web build reads it through here (see SOURCE_COOP_PREFIX above).
     if (url.pathname.startsWith(SOURCE_COOP_PREFIX)) {
       return handleSourceCoop(request, url.pathname);
+    }
+
+    if (url.pathname === GITHUB_RAW_PATH) {
+      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+      }
+      const source = url.searchParams.get("url");
+      let upstream: URL;
+      try {
+        upstream = new URL(source ?? "");
+      } catch {
+        return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+      }
+      if (
+        upstream.protocol !== "https:" ||
+        upstream.hostname !== "github.com" ||
+        upstream.search !== "" ||
+        !GITHUB_RAW_REPOSITORY_PATH.test(upstream.pathname)
+      ) {
+        return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+      }
+      let originResponse: Response;
+      try {
+        const parts = upstream.pathname.split("/").filter(Boolean);
+        const rawUrl = new URL(
+          `https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/${parts.slice(3).join("/")}`,
+        );
+        originResponse = await fetch(rawUrl.toString(), {
+          headers: { accept: "application/octet-stream" },
+        });
+      } catch {
+        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      for (const key of ["content-type", "content-length", "content-disposition", "etag"]) {
+        const value = originResponse.headers.get(key);
+        if (value) headers.set(key, value);
+      }
+      headers.set("cache-control", originResponse.ok ? "public, max-age=300" : "no-store");
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers,
+      });
     }
 
     const pmtilesMatch = PMTILES_PATH.exec(url.pathname);
@@ -610,7 +672,7 @@ export default {
     const upstream = `${base}/${z}/${x}/${y}.png`;
     let originResponse: Response;
     try {
-      originResponse = await fetch(upstream, {
+      originResponse = await fetchAllowlistedUpstream(upstream, {
         cf: { cacheEverything: true, cacheTtl: 86400 },
       });
     } catch {
@@ -688,7 +750,9 @@ async function handleWmsTile(
 
   let origin: Response;
   try {
-    origin = await fetch(wmsUrl, { cf: { cacheEverything: true, cacheTtl: 86400 } });
+    origin = await fetchAllowlistedUpstream(wmsUrl, {
+      cf: { cacheEverything: true, cacheTtl: 86400 },
+    });
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
   }

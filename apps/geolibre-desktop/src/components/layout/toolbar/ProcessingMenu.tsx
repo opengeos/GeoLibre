@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import type { ToolbarChrome } from "./constants";
@@ -63,7 +64,10 @@ export function ProcessingMenu({
   // agent is stable for the session, so evaluate once.
   const mobile = useMemo(() => isMobile(), []);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // The Mac App Store build hides sidecar-only items with no client fallback
+  // (AI Segmentation); composed with the profile gate like HelpMenu's
+  // IS_STORE_BUILD check.
+  const show = (id: string) => !masHidesMenuItem(id) && isMenuItemVisible(uiProfile, id);
   // The Whitebox toolbox (and its WASI/GeoLibre tool catalog) runs entirely in
   // the browser via WebAssembly, so unlike the sidecar-backed tools it stays
   // available on mobile.

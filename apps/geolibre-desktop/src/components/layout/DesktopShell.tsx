@@ -90,6 +90,7 @@ import {
   usePluginRegistry,
   useProjectPluginTrust,
   useSwipeSplitViewExclusivity,
+  useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
@@ -109,6 +110,7 @@ import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
 import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
+import { QuickAnalysisBanner } from "./QuickAnalysisBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
@@ -735,6 +737,9 @@ export function DesktopShell({
   // Keep Layer Swipe and split view mutually exclusive (#844): entering a
   // multi-pane grid turns the swipe slider off.
   useSwipeSplitViewExclusivity(mapControllerRef);
+  // Close a binding-opened Time Slider once the last temporal layer is gone
+  // (#1512), so the dock does not linger over a map with no timeline.
+  useTimeSliderAutoClose(mapControllerRef);
   // Live-collaboration session. Owned here (rather than in TopToolbar) so both
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
@@ -2025,6 +2030,7 @@ export function DesktopShell({
                 <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
+              <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}

@@ -1,6 +1,6 @@
 {
   "name": "geolibre",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
@@ -28,6 +28,7 @@
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
     "tauri:build:native-duckdb": "node scripts/tauri-build.mjs --native-duckdb",
+    "tauri:build:mas": "node scripts/tauri-build.mjs --mas",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },
@@ -37,6 +38,7 @@
     "@types/node": "^26.1.2",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "linkedom": "^0.18.13",
     "tsx": "^4.23.1",
     "typescript-eslint": "^8.65.0"
   },

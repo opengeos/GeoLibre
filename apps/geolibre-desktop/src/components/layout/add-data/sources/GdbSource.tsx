@@ -13,6 +13,7 @@ import type { FeatureCollection } from "geojson";
 import { tempDir, join } from "@tauri-apps/api/path";
 import { remove } from "@tauri-apps/plugin-fs";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
+import { IS_MAS_BUILD } from "../../../../lib/build-flags";
 import { isTauri, pickLocalDirectory, readLocalFileBytes } from "../../../../lib/tauri-io";
 import { LAST_GEODATABASE_STORAGE_KEY } from "../constants";
 import {
@@ -101,7 +102,10 @@ export function GdbSource() {
   // Bumped on every folder pick so a slow layer probe that resolves after a
   // newer one cannot overwrite the newer geodatabase's layers.
   const loadSeq = useRef(0);
-  const desktop = isTauri();
+  // File Geodatabase reading runs on the Python sidecar, which the Mac App
+  // Store build compiles out; treat that build like the web (the source is
+  // also hidden from the Add Data menu there, this is the defensive guard).
+  const desktop = isTauri() && !IS_MAS_BUILD;
   const selectedInfo = layers.find((layer) => layer.name === selectedLayer);
 
   // Shared by the folder picker and the reopen-restore effect: list the
@@ -248,6 +252,7 @@ export function GdbSource() {
             sourceCrs,
             featureCount: featureCollection.features.length,
           },
+          { geojson: featureCollection },
         ),
         geojson: featureCollection,
         sourcePath: gdbPath,

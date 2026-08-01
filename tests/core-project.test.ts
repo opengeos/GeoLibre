@@ -9,28 +9,14 @@ import {
   parseProject,
   parseStoryMapCsv,
   parseStoryMapJson,
+  applyProjectToStore,
   projectFromStore,
   serializeProject,
   serializeStoryMapCsv,
   serializeStoryMapJson,
   useAppStore,
-  type GeoLibreLayer,
 } from "@geolibre/core";
-
-function geojsonLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
-  return {
-    id: "layer-a",
-    name: "Layer A",
-    type: "geojson",
-    source: { type: "geojson" },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {},
-    geojson: { type: "FeatureCollection", features: [] },
-    ...patch,
-  };
-}
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
   it("preserves a valid selected layer and drops a dangling selection", () => {
@@ -1269,5 +1255,43 @@ describe("annotation layer persistence", () => {
       (feature) => feature.properties?.__annotation === "arrowhead",
     );
     assert.equal(head?.properties?.annotationId, "a1");
+  });
+});
+
+describe("primary mapView normalization", () => {
+  it("clamps an out-of-range primary camera on parse", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Camera",
+        mapView: {
+          center: ["x", 200],
+          zoom: -1,
+          bearing: -90,
+          pitch: 200,
+        },
+      }),
+    );
+    // Invalid lon falls back to the default camera longitude; lat clamps to 90.
+    assert.deepEqual(project.mapView.center, [-100, 90]);
+    assert.equal(project.mapView.zoom, 0);
+    assert.equal(project.mapView.pitch, 85);
+    assert.equal(project.mapView.bearing, 270);
+  });
+
+  it("normalizes an out-of-range camera through applyProjectToStore", () => {
+    const applied = applyProjectToStore({
+      ...createEmptyProject("Camera"),
+      mapView: {
+        center: ["x", 200] as unknown as [number, number],
+        zoom: -1,
+        bearing: -90,
+        pitch: 200,
+      },
+    });
+    assert.deepEqual(applied.mapView.center, [-100, 90]);
+    assert.equal(applied.mapView.zoom, 0);
+    assert.equal(applied.mapView.pitch, 85);
+    assert.equal(applied.mapView.bearing, 270);
   });
 });

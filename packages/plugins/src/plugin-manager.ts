@@ -529,7 +529,8 @@ function scopeAppToPlugin(
   const { onControlAdded } = options;
   const register = app.registerToolbarMenu;
   const activatePlugin = app.activatePlugin;
-  if (!register && !onControlAdded && !activatePlugin) return app;
+  const deactivatePlugin = app.deactivatePlugin;
+  if (!register && !onControlAdded && !activatePlugin && !deactivatePlugin) return app;
 
   const scoped: GeoLibreAppAPI = { ...app };
 
@@ -556,6 +557,14 @@ function scopeAppToPlugin(
   if (activatePlugin) {
     scoped.activatePlugin = async (targetPluginId, state) =>
       targetPluginId === pluginId ? false : activatePlugin(targetPluginId, state);
+  }
+
+  if (deactivatePlugin) {
+    // Same self-guard as activatePlugin, for a stronger reason: deactivating the
+    // caller would run its own `deactivate` from inside whichever callback is
+    // executing, unmounting the code still on the stack.
+    scoped.deactivatePlugin = (targetPluginId) =>
+      targetPluginId === pluginId ? false : deactivatePlugin(targetPluginId);
   }
 
   return scoped;

@@ -121,3 +121,54 @@ def test_run_rejects_oversized_layer(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(HTTPException) as exc:
         sql_run(SqlRunRequest(sql="SELECT 1", layers=[{"name": "big", "geojson": big}]))
     assert exc.value.status_code == 413
+
+
+@requires_sedona
+def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Query results that expand past MAX_FEATURES are refused with 413."""
+    monkeypatch.setattr(sedona_ops, "MAX_FEATURES", 1)
+    limited_to: list[int] = []
+
+    class _FakeFrame:
+        def __len__(self) -> int:
+            return 2
+
+        @property
+        def columns(self):
+            return ["n"]
+
+        def to_dict(self, orient: str):  # noqa: ARG002
+            return [{"n": 1}, {"n": 2}]
+
+    class _FakeResult:
+        def limit(self, n: int) -> "_FakeResult":
+            limited_to.append(n)
+            return self
+
+        def to_pandas(self):
+            return _FakeFrame()
+
+    class _FakeConnection:
+        def create_data_frame(self, gdf):  # noqa: ANN001, ARG002
+            class _View:
+                def to_view(self, name: str) -> None:  # noqa: ARG002
+                    return None
+
+            return _View()
+
+        def sql(self, statement: str):  # noqa: ARG002
+            return _FakeResult()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        sedona_ops,
+        "_import_sedona",
+        lambda: type("M", (), {"connect": staticmethod(lambda: _FakeConnection())})(),
+    )
+    with pytest.raises(HTTPException) as exc:
+        sql_run(SqlRunRequest(sql="SELECT 1 AS n UNION ALL SELECT 2 AS n"))
+    assert exc.value.status_code == 413
+    assert "Query result exceeds" in str(exc.value.detail)
+    assert limited_to == [sedona_ops.MAX_FEATURES + 1]

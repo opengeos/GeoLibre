@@ -12,6 +12,7 @@ import {
   type VectorToolRequest,
   type VectorToolResult,
 } from "@geolibre/processing";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { onPyodideProgress, runVectorToolInPyodide } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
@@ -97,7 +98,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     // produces a result without touching the selector; client-only tools force
     // "client". requiresSidecar is checked first so it wins even if a tool ever
     // sets it without supportsSidecar (the JSDoc says it implies supportsSidecar).
-    if (tool.requiresSidecar) setEngine("sidecar");
+    // The Mac App Store build has no sidecar, so those tools run on Pyodide
+    // (the same Python, in-browser) instead.
+    if (tool.requiresSidecar) setEngine(IS_MAS_BUILD ? "pyodide" : "sidecar");
     else if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
 
@@ -119,7 +122,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     if (rerun.toolId !== tool.id) return;
     setParams({ ...rerun.parameters });
     if (rerun.engine === "client" || rerun.engine === "sidecar" || rerun.engine === "pyodide") {
-      setEngine(rerun.engine);
+      // A history entry recorded on a sidecar run re-runs on Pyodide in the
+      // Mac App Store build, where the sidecar engine does not exist.
+      setEngine(rerun.engine === "sidecar" && IS_MAS_BUILD ? "pyodide" : rerun.engine);
     }
     setProcessingRerun(null);
     if (rerun.autoRun) setAutoRunPending(true);
@@ -154,9 +159,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, params.source, mapControllerRef]);
 
-  // Probe the sidecar's vector capability when the dialog opens.
+  // Probe the sidecar's vector capability when the dialog opens. Skipped in
+  // the Mac App Store build, which has no sidecar engine to probe.
   useEffect(() => {
-    if (!open) return;
+    if (!open || IS_MAS_BUILD) return;
     let cancelled = false;
     fetchVectorStatus()
       .then((status) => {
@@ -492,7 +498,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                   <option value="client" disabled={tool.requiresSidecar}>
                     {t("processing.vectorTools.engineClient")}
                   </option>
-                  <option value="sidecar">{t("processing.vectorTools.engineSidecar")}</option>
+                  {/* No sidecar engine in the Mac App Store build. */}
+                  {!IS_MAS_BUILD && (
+                    <option value="sidecar">{t("processing.vectorTools.engineSidecar")}</option>
+                  )}
                   <option value="pyodide">{t("processing.vectorTools.enginePyodide")}</option>
                 </Select>
                 {engine === "sidecar" && sidecarAvailable === null ? (

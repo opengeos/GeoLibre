@@ -29,6 +29,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-national-map",
   "maplibre-gl-earthdata-gis",
   "maplibre-gl-openaerialmap",
+  "geolibre-stac-catalogs",
   "maplibre-gl-source-coop",
   "maplibre-gl-natural-earth",
   "maplibre-gl-huggingface",

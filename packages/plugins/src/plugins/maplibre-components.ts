@@ -6,6 +6,13 @@ import {
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
+import type {
+  QueryGeometry,
+  QueryOptions,
+  QueryResult,
+  Selector,
+  ZarrLayer,
+} from "@carbonplan/zarr-layer";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
@@ -87,6 +94,13 @@ import {
   type ZarrDirectoryReader,
 } from "./zarr-directory-store";
 
+/**
+ * `metadata.sourceKind` marking the LiDAR point-cloud layers this plugin adds. Exported so the Layer Library's
+ * restore dispatch keys off the same value this plugin writes rather than a
+ * hand-typed copy (issue #1520).
+ */
+export const LIDAR_SOURCE_KIND = "lidar-url";
+
 type ControlGridConstructor = (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor = (typeof import("maplibre-gl-components"))["AddVectorControl"];
 type BookmarkControlConstructor = (typeof import("maplibre-gl-components"))["BookmarkControl"];
@@ -158,6 +172,8 @@ const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL = "https://flatgeobuf.org/test/data/UScounties.fgb";
+const BUILDING_COUNT_H3_PMTILES_SAMPLE_URL =
+  "https://data.source.coop/giswqs/opengeos/building_count_h3.pmtiles";
 const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-06-17.0/buildings.pmtiles";
 const ZARR_SAMPLE_URL =
@@ -262,7 +278,10 @@ const PMTILES_OPTIONS = {
   defaultLineColor: DEFAULT_LAYER_STYLE.strokeColor,
   defaultOpacity: 0.8,
   defaultPickable: false,
-  sampleData: [{ label: "Overture buildings", url: PMTILES_SAMPLE_URL }],
+  sampleData: [
+    { label: "Overture buildings", url: PMTILES_SAMPLE_URL },
+    { label: "H3 building counts", url: BUILDING_COUNT_H3_PMTILES_SAMPLE_URL },
+  ],
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies PMTilesLayerControlOptions;
 
@@ -2492,6 +2511,50 @@ export async function setZarrLayerSelector(
     });
   }
   return true;
+}
+
+/**
+ * Read the data values of a live Zarr layer under a GeoJSON geometry: a `Point`
+ * for click-to-value, a `Polygon`/`MultiPolygon` for region statistics.
+ *
+ * The read side of {@link setZarrLayerSelector}, and the reason a plugin does
+ * not need its own zarrita point reader: the renderer already holds the store's
+ * grid, so it does the CRS reprojection and fill-value masking itself. Pass a
+ * WGS84 `[lng, lat]` straight from a map click; the returned `coordinates` are
+ * in the store's **source** CRS (Web Mercator meters for EPSG:3857, degrees for
+ * EPSG:4326, source units for a custom proj4 dataset).
+ *
+ * The renderer answers with empty value arrays rather than an error when the
+ * geometry falls outside the store's grid, or when the layer has not finished
+ * loading its first chunks — so a query fired immediately after the add can
+ * come back empty even though the id is live. An aborted query rejects.
+ *
+ * `selector` scopes the read only: the layer keeps rendering the slice it is on,
+ * so an Identify readout for another time leaves the map alone. Moving the
+ * display is {@link setZarrLayerSelector}'s job.
+ *
+ * @param layerId A layer id returned by {@link addZarrRasterLayer} (or a layer
+ *   the Zarr panel added).
+ * @param geometry The query geometry, in WGS84.
+ * @param selector Dimensions to read instead of the layer's current selector,
+ *   e.g. `{ time: 12 }`. Omit to read the slice on screen.
+ * @param options `signal` to cancel the read, `includeSpatialCoordinates` to
+ *   drop the per-pixel coordinate arrays (default: included).
+ * @returns The renderer's result, or null when there is no live Zarr layer with
+ *   that id (the counterpart of {@link setZarrLayerSelector} returning false).
+ */
+export async function queryZarrLayer(
+  layerId: string,
+  geometry: QueryGeometry,
+  selector?: Selector,
+  options?: QueryOptions,
+): Promise<QueryResult | null> {
+  const instance = zarrControl?.getLayersMap().get(layerId) as
+    | Pick<ZarrLayer, "queryData">
+    | undefined;
+  if (!instance || typeof instance.queryData !== "function") return null;
+
+  return instance.queryData(geometry, selector, options);
 }
 // ----- Zarr time axis --------------------------------------------------------
 // A Zarr cube's time is an internal dimension, so the Time Slider drives it
@@ -5377,7 +5440,7 @@ function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
       identifiable: false,
       pointCount: pointCloud.pointCount,
       sourceId: pointCloud.id,
-      sourceKind: "lidar-url",
+      sourceKind: LIDAR_SOURCE_KIND,
       wkt: pointCloud.wkt,
     },
     sourcePath: pointCloud.source,
@@ -5466,7 +5529,7 @@ function isStacSearchControlLayer(layer: GeoLibreLayer): boolean {
 function isLidarControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "lidar" &&
-    layer.metadata.sourceKind === "lidar-url" &&
+    layer.metadata.sourceKind === LIDAR_SOURCE_KIND &&
     layer.metadata.externalNativeLayer === true
   );
 }

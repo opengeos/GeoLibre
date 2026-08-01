@@ -4,11 +4,13 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import {
-  addCogRasterLayer,
+  addRasterToMap,
   addZarrRasterLayer,
   buildSelectorTimeBinding,
+  queryZarrLayer,
   registerTemporalLayer,
   unregisterTemporalLayer,
+  isTimeSliderIdle,
   TIME_SLIDER_PLUGIN_ID,
   type TemporalLayerAdapter,
   setZarrLayerSelector,
@@ -34,6 +36,7 @@ import {
   maplibreNasaEarthdataPlugin,
   maplibreNationalMapPlugin,
   maplibreOpenAerialMapPlugin,
+  maplibreStacCatalogsPlugin,
   maplibreSourceCoopPlugin,
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
@@ -41,6 +44,7 @@ import {
   maplibreOvertureMapsPlugin,
   queryOvertureFeatures,
   maplibreGraticulePlugin,
+  maplibreH3Plugin,
   maplibreCloudsPlugin,
   maplibrePrecipitationPlugin,
   maplibreMapillaryPlugin,
@@ -82,6 +86,9 @@ import type {
   GeoLibreTileLayerOptions,
   GeoLibreWmsLayerOptions,
   GeoLibreZarrLayerOptions,
+  GeoLibreZarrQueryGeometry,
+  GeoLibreZarrQueryOptions,
+  GeoLibreZarrQuerySelector,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -105,6 +112,7 @@ import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-dir
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
+import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
@@ -165,6 +173,7 @@ manager.registerAll([
   maplibreNationalMapPlugin,
   maplibreEarthdataGisPlugin,
   maplibreOpenAerialMapPlugin,
+  maplibreStacCatalogsPlugin,
   maplibreSourceCoopPlugin,
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
@@ -180,6 +189,7 @@ manager.registerAll([
   maplibreElevationProfilePlugin,
   maplibreSwipePlugin,
   maplibreGraticulePlugin,
+  maplibreH3Plugin,
   maplibreCloudsPlugin,
   maplibrePrecipitationPlugin,
   maplibreEffectsPlugin,
@@ -236,6 +246,17 @@ setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
 if (zarrDirectoryPickerSupported()) {
   setZarrLocalStoreProvider(pickZarrDirectory);
 }
+
+// Forget that a binding opened the Time Slider dock as soon as the plugin goes
+// inactive by any route (#1512), so a later manual activation is not mistaken
+// for a binding-opened one and closed out from under the user.
+let timeSliderWasActive = false;
+manager.subscribe(() => {
+  const active = manager.isActive(TIME_SLIDER_PLUGIN_ID);
+  if (active === timeSliderWasActive) return;
+  timeSliderWasActive = active;
+  if (!active) setTimeSliderOpenedByBinding(false);
+});
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
@@ -702,16 +723,89 @@ export function bindTemporalLayer(
     // dialog does when it commits).
     timeFilter: undefined,
   });
-  if (!manager.isActive(TIME_SLIDER_PLUGIN_ID)) {
-    manager.toggle(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
-  }
+  activateTimeSliderForBinding(mapControllerRef);
   return true;
+}
+
+/**
+ * Open the Time Slider dock because a layer was just bound to it, and remember
+ * that the binding is what opened it so {@link useTimeSliderAutoClose} may close
+ * it again when the last binding goes away (#1512).
+ *
+ * A no-op when the dock is already showing — including when the user opened it
+ * themselves, which deliberately leaves the "opened by a binding" flag false so
+ * their dock is never taken away underneath them.
+ *
+ * Call this **after** the binding has been written to the layer's metadata, so
+ * the dock adopts it on activation.
+ *
+ * @param mapControllerRef - Used to build the app API for activation.
+ */
+export function activateTimeSliderForBinding(
+  mapControllerRef?: RefObject<MapController | null>,
+): void {
+  if (manager.isActive(TIME_SLIDER_PLUGIN_ID)) return;
+  const before = JSON.stringify(projectPluginStateSnapshot());
+  try {
+    manager.activate(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+  } catch (error) {
+    // Plugin controls are imperative MapLibre code, so a throw here would escape
+    // React's error boundaries. Contain it, exactly as usePluginRegistry.toggle
+    // does, and leave the project state unwritten.
+    reportPluginError(TIME_SLIDER_PLUGIN_ID, "toggle", error);
+    return;
+  }
+  setTimeSliderOpenedByBinding(manager.isActive(TIME_SLIDER_PLUGIN_ID));
+  persistProjectPluginState(before);
+}
+
+/**
+ * Close a binding-opened Time Slider once it has nothing left to drive (#1512).
+ *
+ * `activatePlugin` / `registerTemporalLayer({ bind: true })` open the dock when
+ * the first temporal layer appears, but nothing closed it again when the last
+ * one went away by a route other than the Layers panel's explicit "Unbind"
+ * action — removing the bound layer, or a plugin swapping a temporal dataset for
+ * a single-period one. The dock then lingered over the map, implying a timeline
+ * no layer has.
+ *
+ * Only a dock opened *by* a binding is closed; one the user opened from the
+ * Plugins menu stays put. `isTimeSliderIdle` additionally keeps it open while
+ * the dock's own raster sources or a KML `<TimeSpan>` overlay remain, since the
+ * dock is the only way to reach those.
+ *
+ * Mounted once near the app root so it covers every way a binding can
+ * disappear, not just the Layers panel.
+ */
+export function useTimeSliderAutoClose(mapControllerRef: RefObject<MapController | null>): void {
+  useEffect(() => {
+    // Subscribed rather than selected from the store so no component re-renders
+    // on every layer edit just to run this check.
+    const check = () => {
+      if (!shouldCloseTimeSliderDock(manager.isActive(TIME_SLIDER_PLUGIN_ID), isTimeSliderIdle)) {
+        return;
+      }
+      const before = JSON.stringify(projectPluginStateSnapshot());
+      try {
+        // Deactivating prunes the dock's own store layers, which re-enters this
+        // subscription; those passes find the dock already idle-and-closing and
+        // the plugin's own deactivate is a no-op once its control is gone.
+        manager.deactivate(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+      } catch (error) {
+        reportPluginError(TIME_SLIDER_PLUGIN_ID, "toggle", error);
+        return;
+      }
+      persistProjectPluginState(before);
+    };
+    check();
+    return useAppStore.subscribe(check);
+  }, [mapControllerRef]);
 }
 
 export function createAppAPI(mapControllerRef?: RefObject<MapController | null>) {
   const store = useAppStore.getState();
   // Captured so methods that delegate to plugin helpers taking the AppAPI
-  // itself (e.g. addCogLayer -> addCogRasterLayer) can pass `api`. Only read
+  // itself (e.g. addCogLayer -> addRasterToMap) can pass `api`. Only read
   // when those methods are called, which is always after assignment.
   const api = {
     setBasemap: (url: string) => store.setBasemapStyleUrl(url),
@@ -796,30 +890,36 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         beforeLayerId ?? null,
       );
     },
-    // Unlike the tile helpers above, a COG is read client-side by the maplibre
-    // raster control (band/rescale/colormap/nodata), so it delegates to the
-    // components plugin's addCogRasterLayer rather than building a store layer
-    // here. It takes the AppAPI itself (to mount the control on demand), so we
-    // hand it the captured `api`.
-    addCogLayer: (name: string, url: string, options?: GeoLibreCogLayerOptions) =>
-      addCogRasterLayer(api, {
-        url,
+    // Unlike the tile helpers above, a COG is read client-side by the shared
+    // raster control. Besides keeping every COG path on one renderer, this is
+    // what mirrors the layer as `maplibre-gl-raster`, making the full Raster
+    // symbology section available in the Style panel.
+    addCogLayer: (name: string, url: string, options?: GeoLibreCogLayerOptions) => {
+      const bands = options?.bands
+        ?.split(",")
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isInteger(value) && value > 0);
+      const range =
+        options?.rescaleMin !== undefined && options.rescaleMax !== undefined
+          ? ([options.rescaleMin, options.rescaleMax] as [number, number])
+          : undefined;
+      return addRasterToMap(api, url, {
         name,
-        ...(options?.bands !== undefined ? { bands: options.bands } : {}),
-        // The public option is a loose `string` (so JS plugins need not import
-        // the renderer's colormap union); the renderer validates the name and
-        // falls back to its default for anything it doesn't recognize.
-        ...(options?.colormap !== undefined
-          ? {
-              colormap: options.colormap as Parameters<typeof addCogRasterLayer>[1]["colormap"],
-            }
-          : {}),
-        ...(options?.rescaleMin !== undefined ? { rescaleMin: options.rescaleMin } : {}),
-        ...(options?.rescaleMax !== undefined ? { rescaleMax: options.rescaleMax } : {}),
-        ...(options?.nodata !== undefined ? { nodata: options.nodata } : {}),
-        ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
-        beforeLayerId: options?.beforeLayerId ?? null,
-      }),
+        // STAC assets are already COGs with an HTTP(S) range-readable URL.
+        // Render them directly through the GPU COG engine; the WASM tiler is
+        // intended for local files and can leave remote programmatic layers
+        // registered without producing pixels.
+        defaults: { engine: "maplibre-gl-raster" },
+        state: {
+          ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),
+          ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),
+          ...(range ? { rescale: [range] } : {}),
+          ...(options?.nodata !== undefined ? { nodata: options.nodata } : {}),
+          ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
+        },
+        ...(options?.beforeLayerId ? { beforeId: options.beforeLayerId } : {}),
+      });
+    },
     // Zarr goes through the components plugin's shared @carbonplan/zarr-layer
     // control for the same reason as addCogLayer: the host owns the renderer, so
     // a plugin does not bundle (and fail to activate) a second copy.
@@ -844,6 +944,15 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       }),
     setZarrLayerSelector: (layerId: string, selector: Record<string, number | string>) =>
       setZarrLayerSelector(layerId, selector),
+    // Click-to-value and region statistics on a natively rendered cube: the
+    // renderer owns the grid, so it reprojects the WGS84 geometry and masks fill
+    // values itself instead of every plugin re-reading the store (#1555).
+    queryZarrLayer: (
+      layerId: string,
+      geometry: GeoLibreZarrQueryGeometry,
+      selector?: GeoLibreZarrQuerySelector,
+      options?: GeoLibreZarrQueryOptions,
+    ) => queryZarrLayer(layerId, geometry, selector, options),
     // A layer whose time is an internal dimension joins the Time Slider through
     // an adapter rather than a filter or a source swap. Registering only makes
     // it bindable; `bind` writes the binding and opens the dock, which is what a
@@ -872,6 +981,23 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       if (!activated || !manager.isActive(pluginId)) return false;
       return state === undefined ? true : manager.applyPluginState(pluginId, api, state);
     },
+    // The counterpart of activatePlugin, so a plugin that opened another
+    // plugin's panel can close it again (#1512). Persisted like the toolbar's
+    // own toggle, so the project records the panel as off; a throw from the
+    // target's imperative teardown is contained rather than escaping into the
+    // caller.
+    deactivatePlugin: (pluginId: string) => {
+      if (!manager.isActive(pluginId)) return false;
+      const before = JSON.stringify(projectPluginStateSnapshot());
+      try {
+        manager.deactivate(pluginId, api);
+      } catch (error) {
+        reportPluginError(pluginId, "deactivate", error);
+        return false;
+      }
+      persistProjectPluginState(before);
+      return !manager.isActive(pluginId);
+    },
     queryOvertureFeatures,
     addLayerGroup: (name?: string, layerIds?: string[]) =>
       useAppStore.getState().addLayerGroup(name, layerIds),
@@ -885,6 +1011,35 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     // presence to auto-discover shapefile sidecars instead of forcing the user
     // to select every component, and to capture the file's path for restore.
     pickVectorFilesWithSidecars: isTauriRuntime() ? pickVectorFilesWithSidecars : undefined,
+    fetchVectorUrl: async (url: string) => {
+      if (isTauriRuntime()) {
+        try {
+          const bytes = await fetchUrlBytes(url, { context: "Add Vector Layer" });
+          const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+          return new Blob([array as Uint8Array<ArrayBuffer>]);
+        } catch {
+          // The shared native command has a short, tile-oriented timeout.
+          // Preserve the former browser path for large CORS-enabled datasets.
+          try {
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            }
+            return response.blob();
+          } catch {
+            // GitHub's /raw route rejects browser CORS, so fall through to the
+            // same guarded proxy used by the web build.
+          }
+        }
+      }
+      const proxyUrl = githubRawVectorProxyUrl(url);
+      if (!proxyUrl) return null;
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+      return response.blob();
+    },
     readLocalVectorFile: readVectorFileWithSidecars,
     exportTextFile: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => {
       const description = options?.description ?? "GeoJSON";
@@ -1152,6 +1307,27 @@ async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
 function isTauriRuntime(): boolean {
   if (typeof window === "undefined") return false;
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
+}
+
+const GITHUB_RAW_VECTOR_PROXY = "https://tiles.geolibre.app/github-raw";
+
+function githubRawVectorProxyUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "github.com" ||
+    !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/raw\/.+$/.test(url.pathname)
+  ) {
+    return null;
+  }
+  const proxy = new URL(GITHUB_RAW_VECTOR_PROXY);
+  proxy.searchParams.set("url", url.href);
+  return proxy.href;
 }
 
 function setExternalPluginsLoaded(loaded: boolean): void {

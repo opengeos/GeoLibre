@@ -1,22 +1,25 @@
 import {
   DEFAULT_PROJECT_NAME,
+  detachProjectCopy,
   projectFromStore,
   serializeProject,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { materializeEmbeddableVectorLayers } from "@geolibre/plugins";
+import { addRasterToMap, materializeEmbeddableVectorLayers } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getPluginManager } from "./usePlugins";
+import { createAppAPI, getPluginManager } from "./usePlugins";
 import { pluginManifestUrlsForIds } from "../lib/external-plugins";
 import {
   browserSaveFallsBackToDownload,
   isAbsoluteLocalPath,
   isHttpUrl,
   isTauri,
+  loadDroppedRasterPaths,
   openProjectFile,
+  openQgisProjectFile,
   openRecentProjectFile,
   RecentProjectGoneError,
   saveProjectFile,
@@ -32,6 +35,11 @@ import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import {
+  importQgisProject,
+  materializeQgisRemoteLayers,
+  type QgisProjectImportWarning,
+} from "../lib/qgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /** A pending "strip env vars before saving?" prompt. */
@@ -99,6 +107,33 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * Let React commit a newly loaded project before a plugin attaches native map
+ * sources. A project load can replace the MapLibre style (and always schedules
+ * a layer sync); adding a raster in the same tick can therefore attach it to
+ * the outgoing style. Its store entry survives, but the native raster source
+ * is removed by the pending style/layer update.
+ */
+function importedProjectMapReady(
+  mapControllerRef: MapControllerRef,
+  basemapWillChange: boolean,
+): Promise<void> {
+  const map = mapControllerRef.current?.getMap();
+  const styleReady =
+    map && basemapWillChange
+      ? new Promise<void>((resolve) => map.once("style.load", () => resolve()))
+      : Promise.resolve();
+
+  return (async () => {
+    // Let the project store update commit and its MapCanvas effects run first.
+    // Register the style listener above (before loadProject) so a fast inline
+    // style cannot finish between the store update and this wait.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await styleReady;
+  })();
+}
+
+/**
  * Bundles every project file action (open from file/URL/recent, save, save as)
  * along with the related dialog state (Open-from-URL, env-var strip prompt, and
  * the shared action-error dialog).
@@ -115,6 +150,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const markSaved = useAppStore((s) => s.markSaved);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
+    null,
+  );
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
@@ -148,6 +186,92 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
         );
       }
+    }
+  };
+
+  const handleImportQgisProject = async () => {
+    const result = await openQgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = await materializeQgisRemoteLayers(
+        importQgisProject(result.data, result.path),
+      );
+      if (!isTauri()) {
+        const unavailableLayerIds = new Set<string>();
+        for (const layer of imported.project.layers) {
+          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            unavailableLayerIds.add(layer.id);
+            imported.warnings.push({
+              layerName: layer.name,
+              reason: "browser-local-file",
+            });
+          }
+        }
+        imported.project.layers = imported.project.layers.filter(
+          (layer) => !unavailableLayerIds.has(layer.id),
+        );
+        const usedGroupIds = new Set(
+          imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+        );
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
+        for (const raster of imported.rasters) {
+          imported.warnings.push({
+            layerName: raster.name,
+            reason: "browser-local-raster",
+          });
+        }
+      }
+      const mapReady = importedProjectMapReady(
+        mapControllerRef,
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+      );
+      loadProject(imported.project, null);
+      if (isTauri()) {
+        await mapReady;
+        const app = createAppAPI(mapControllerRef);
+        for (const raster of imported.rasters) {
+          try {
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
+              qgisProjectPath: result.path,
+            });
+            if (!loaded) throw new Error("Unsupported raster path");
+            const rasterLayerId = await addRasterToMap(app, loaded.source, {
+              name: raster.name,
+              localPath: raster.sourcePath,
+              // The Tauri/WebKitGTK WASM backend can stall when its first
+              // source is created immediately after a project style load.
+              // GPU renders this local COG directly and preserves the imported
+              // QGIS ramp, so use the verified backend for project imports.
+              defaults: { engine: "maplibre-gl-raster" },
+              state: {
+                ...raster.state,
+                visible: raster.visible,
+                opacity: raster.opacity,
+              },
+              beforeId: raster.beforeId,
+              zoomTo: false,
+            });
+            if (raster.groupId) {
+              useAppStore.getState().moveLayerToGroup(rasterLayerId, raster.groupId);
+            }
+          } catch (error) {
+            console.error(`Failed to import QGIS raster "${raster.name}"`, error);
+            imported.warnings.push({
+              layerName: raster.name,
+              reason: "format",
+            });
+          }
+        }
+      }
+      useAppStore.setState({ isDirty: true });
+      setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+    } catch (error) {
+      console.error("Failed to import QGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
+      );
     }
   };
 
@@ -200,9 +324,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // might reference. Token-authenticated opens are not remembered as recent
   // (path = null), since reopening a private URL on restart would 403 without
   // the header.
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
+
   const openProjectFromShareUrl = async (
     url: string,
-    options: { authToken?: string } = {},
+    options: { authToken?: string; asCopy?: boolean } = {},
   ): Promise<void> => {
     const normalizedUrl = normalizeProjectUrl(url);
     if (!normalizedUrl) {
@@ -214,30 +340,31 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     shareUrlAbortRef.current = controller;
 
     try {
+      let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;
       if (options.authToken) {
         const fetched = await fetchProjectFromUrl(normalizedUrl, {
           signal: controller.signal,
           fetchImpl: shareAuthorizedFetch(
             options.authToken,
             resolveShareBaseUrl(),
-            // Matches fetchMyProjects: on desktop this routes the share host
-            // through Tauri's native HTTP, which is exempt from the WebView's
-            // CORS enforcement. Omitting it falls back to browser `fetch`,
-            // which is why listing a private project worked but opening it did
-            // not.
             getShareFetch(),
           ),
         });
-        const project = await resolveProjectXyzLayers(fetched, controller.signal);
-        if (controller.signal.aborted) return;
-        loadProject(project, null);
-        return;
+        project = await resolveProjectXyzLayers(fetched, controller.signal);
+      } else {
+        const result = await openRecentProjectFile(normalizedUrl, controller.signal);
+        project = await resolveProjectXyzLayers(result.project, controller.signal);
       }
 
-      const result = await openRecentProjectFile(normalizedUrl, controller.signal);
-      const project = await resolveProjectXyzLayers(result.project, controller.signal);
       if (controller.signal.aborted) return;
-      loadProject(project, result.path);
+
+      if (options.asCopy) {
+        const detached = detachProjectCopy(project, { nameSuffix: "" });
+        loadProject(detached, null);
+        useAppStore.setState({ isDirty: true });
+      } else {
+        loadProject(project, options.authToken ? null : normalizedUrl);
+      }
     } finally {
       if (shareUrlAbortRef.current === controller) {
         shareUrlAbortRef.current = null;
@@ -689,9 +816,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  const handleDuplicate = () => {
+    const { project } = buildCurrentProject();
+    const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
+    loadProject(duplicated, null);
+    useAppStore.setState({ isDirty: true });
+  };
+
   return {
     actionError,
     setActionError,
+    qgisImportWarnings,
+    setQgisImportWarnings,
     projectUrlDialogOpen,
     setProjectUrlDialogOpen,
     handleProjectUrlDialogOpenChange,
@@ -700,6 +836,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     projectUrlError,
     setProjectUrlError,
     projectUrlLoading,
+    saveTemplateDialogOpen,
+    setSaveTemplateDialogOpen,
+    handleDuplicate,
+    handleSaveAsTemplate: () => setSaveTemplateDialogOpen(true),
     envStripPrompt,
     resolveEnvStripPrompt,
     embedVectorDataPrompt,
@@ -710,6 +850,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     submitSaveNamePrompt,
     cancelSaveNamePrompt,
     handleOpenFromFile,
+    handleImportQgisProject,
     handleOpenFromUrl,
     openProjectFromShareUrl,
     handleOpenRecent,

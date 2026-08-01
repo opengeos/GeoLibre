@@ -672,3 +672,124 @@ describe("legend config mutations", () => {
     assert.deepEqual(unchanged.order, []);
   });
 });
+
+describe("buildLegend proportional size", () => {
+  it("emits a three-step size ramp for a point layer with proportional sizing", () => {
+    const legend = buildLegend([
+      makeLayer({
+        id: "apiaries",
+        name: "Apiaries",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#3b82f6",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "nb_ruches",
+          proportionalSizeMinValue: 2,
+          proportionalSizeMaxValue: 48,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 24,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend.length, 1);
+    assert.deepEqual(
+      legend[0].swatches.map((swatch) => [swatch.label, swatch.size, swatch.color]),
+      [
+        ["2", 4, "#3b82f6"],
+        ["25", 14, "#3b82f6"],
+        ["48", 24, "#3b82f6"],
+      ],
+    );
+  });
+
+  it("omits the size ramp for polygon layers", () => {
+    const legend = buildLegend([
+      makeLayer({
+        id: "zones",
+        name: "Zones",
+        metadata: { geometryType: "polygon" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#22c55e",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "area",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 100,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 24,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.deepEqual(legend[0].swatches, [{ color: "#22c55e" }]);
+  });
+
+  it("preserves sizes through applyLegendConfig", () => {
+    const base = buildLegend([
+      makeLayer({
+        id: "pts",
+        name: "Points",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#111111",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "pop",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 100,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 12,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    const applied = applyLegendConfig(base, config());
+    assert.deepEqual(
+      applied[0].swatches.map((swatch) => swatch.size),
+      [4, 8, 12],
+    );
+  });
+
+  it("pairs sampled graduated colors with sizes from the same displayed stops", () => {
+    // More than MAX_RAMP_SWATCHES (6) classes: sampling must keep each
+    // displayed color/label paired with the size for that same stop, not an
+    // index into the unsampled list.
+    const stops = Array.from({ length: 10 }, (_, index) => ({
+      value: index * 10,
+      color: `#${(index * 25).toString(16).padStart(2, "0")}0000`,
+    }));
+    const legend = buildLegend([
+      makeLayer({
+        id: "many",
+        name: "Many classes",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "graduated",
+          vectorStyleProperty: "pop",
+          vectorStyleStops: stops,
+          fillColor: "#ffffff",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "pop",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 90,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 22,
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 6);
+    // Even sample of 10 → values 0,20,40,50,70,90. Sizes use midpoints between
+    // consecutive displayed stops (open-ended top class at its lower bound).
+    const sizeAt = (value: number) => 4 + (value / 90) * 18;
+    assert.deepEqual(
+      legend[0].swatches.map((swatch) => [swatch.label, swatch.size]),
+      [
+        ["≥ 0", sizeAt(10)],
+        ["≥ 20", sizeAt(30)],
+        ["≥ 40", sizeAt(45)],
+        ["≥ 50", sizeAt(60)],
+        ["≥ 70", sizeAt(80)],
+        ["≥ 90", sizeAt(90)],
+      ],
+    );
+  });
+});

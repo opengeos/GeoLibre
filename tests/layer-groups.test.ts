@@ -116,6 +116,17 @@ describe("applyGroupEffects", () => {
     const result = applyGroupEffects(layers, [group("g")]);
     assert.equal(result[0], layers[0]);
   });
+
+  it("inherits visibility and opacity through nested groups", () => {
+    const layers = [layer("a", { groupId: "child", opacity: 0.8 })];
+    const groups = [
+      group("parent", { opacity: 0.5, visible: false }),
+      group("child", { parentId: "parent", opacity: 0.25 }),
+    ];
+    const result = applyGroupEffects(layers, groups);
+    assert.equal(result[0].visible, false);
+    assert.equal(result[0].opacity, 0.1);
+  });
 });
 
 describe("normalizeGroupContiguity", () => {
@@ -194,6 +205,42 @@ describe("layer group store actions", () => {
     assert.equal(useAppStore.getState().layers.find((l) => l.id === a)?.groupId, undefined);
   });
 
+  it("nests groups, rejects cycles, and promotes children when ungrouping", () => {
+    const parent = useAppStore.getState().addLayerGroup("Parent");
+    const child = useAppStore.getState().addLayerGroup("Child");
+    const grandchild = useAppStore.getState().addLayerGroup("Grandchild");
+    useAppStore.getState().moveLayerGroupToGroup(child, parent);
+    useAppStore.getState().moveLayerGroupToGroup(grandchild, child);
+    assert.equal(useAppStore.getState().layerGroups.find((g) => g.id === child)?.parentId, parent);
+    assert.equal(
+      useAppStore.getState().layerGroups.find((g) => g.id === grandchild)?.parentId,
+      child,
+    );
+
+    useAppStore.getState().moveLayerGroupToGroup(parent, grandchild);
+    assert.equal(
+      useAppStore.getState().layerGroups.find((g) => g.id === parent)?.parentId,
+      undefined,
+    );
+
+    useAppStore.getState().removeLayerGroup(child);
+    assert.equal(
+      useAppStore.getState().layerGroups.find((g) => g.id === grandchild)?.parentId,
+      parent,
+    );
+  });
+
+  it("deletes a nested group's full subtree and its layers", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const parent = useAppStore.getState().addLayerGroup("Parent", [a]);
+    const child = useAppStore.getState().addLayerGroup("Child", [b]);
+    useAppStore.getState().moveLayerGroupToGroup(child, parent);
+    useAppStore.getState().removeLayerGroup(parent, { removeChildren: true });
+    assert.equal(useAppStore.getState().layerGroups.length, 0);
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
   it("reorders a group block past a neighboring layer", () => {
     const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
     const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
@@ -203,6 +250,20 @@ describe("layer group store actions", () => {
     assert.deepEqual(
       useAppStore.getState().layers.map((l) => l.id),
       [b, a],
+    );
+  });
+
+  it("reorders an organizer group using its descendant layer blocks", () => {
+    const childLayer = useAppStore.getState().addGeoJsonLayer("Child", emptyFC);
+    const neighbor = useAppStore.getState().addGeoJsonLayer("Neighbor", emptyFC);
+    const parent = useAppStore.getState().addLayerGroup("Parent");
+    const child = useAppStore.getState().addLayerGroup("Child group", [childLayer]);
+    useAppStore.getState().moveLayerGroupToGroup(child, parent);
+
+    useAppStore.getState().reorderLayerGroup(parent, "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((candidate) => candidate.id),
+      [neighbor, childLayer],
     );
   });
 
@@ -267,7 +328,10 @@ describe("layer group store actions", () => {
 describe("layer group serialization", () => {
   it("round-trips groups through projectFromStore and parseProject", () => {
     const layers = [layer("a", { groupId: "g" }), layer("b")];
-    const groups = [group("g", { name: "Folder", opacity: 0.5 })];
+    const groups = [
+      group("parent", { name: "Parent" }),
+      group("g", { name: "Folder", parentId: "parent", opacity: 0.5 }),
+    ];
     const project = projectFromStore({
       projectName: "P",
       mapView: { center: [0, 0], zoom: 1, bearing: 0, pitch: 0 },
@@ -280,9 +344,10 @@ describe("layer group serialization", () => {
       metadata: {},
     });
     const parsed = parseProject(serializeProject(project));
-    assert.equal(parsed.layerGroups?.length, 1);
-    assert.equal(parsed.layerGroups?.[0].name, "Folder");
-    assert.equal(parsed.layerGroups?.[0].opacity, 0.5);
+    assert.equal(parsed.layerGroups?.length, 2);
+    assert.equal(parsed.layerGroups?.[1].name, "Folder");
+    assert.equal(parsed.layerGroups?.[1].parentId, "parent");
+    assert.equal(parsed.layerGroups?.[1].opacity, 0.5);
     assert.equal(parsed.layers.find((l) => l.id === "a")?.groupId, "g");
   });
 
