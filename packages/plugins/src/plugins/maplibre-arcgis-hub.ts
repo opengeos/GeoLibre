@@ -39,7 +39,11 @@ const styles = {
     "border-radius:6px;background:hsl(var(--muted));",
   thumbnail:
     "width:88px;height:66px;flex:0 0 88px;object-fit:cover;border-radius:4px;" +
-    "background:hsl(var(--accent));",
+    "background:hsl(var(--accent));cursor:zoom-in;",
+  thumbnailPreview:
+    "position:fixed;z-index:2147483000;max-width:360px;max-height:270px;object-fit:contain;" +
+    "pointer-events:none;border:1px solid hsl(var(--border));border-radius:8px;" +
+    "background:hsl(var(--background));box-shadow:0 12px 32px rgba(0,0,0,0.35);",
   cardBody: "display:flex;flex:1;min-width:0;flex-direction:column;gap:5px;",
   title: "font-weight:600;line-height:1.3;",
   meta: "font-size:10px;color:hsl(var(--muted-foreground));",
@@ -146,6 +150,29 @@ function buildPanel(container: HTMLElement): () => void {
   let total = 0;
   let shown = 0;
   let controller: AbortController | null = null;
+  let thumbnailPreview: HTMLImageElement | null = null;
+
+  const removeThumbnailPreview = () => {
+    thumbnailPreview?.remove();
+    thumbnailPreview = null;
+  };
+
+  const positionThumbnailPreview = (event: MouseEvent) => {
+    if (!thumbnailPreview) return;
+    const gap = 14;
+    const width = thumbnailPreview.offsetWidth || 360;
+    const height = thumbnailPreview.offsetHeight || 270;
+    const left =
+      event.clientX + gap + width <= window.innerWidth
+        ? event.clientX + gap
+        : Math.max(gap, event.clientX - gap - width);
+    const top = Math.min(
+      Math.max(gap, event.clientY - height / 2),
+      Math.max(gap, window.innerHeight - height - gap),
+    );
+    thumbnailPreview.style.left = `${left}px`;
+    thumbnailPreview.style.top = `${top}px`;
+  };
 
   const setBusy = (busy: boolean) => {
     submit.disabled = busy;
@@ -164,7 +191,27 @@ function buildPanel(container: HTMLElement): () => void {
       thumbnail.loading = "lazy";
       thumbnail.referrerPolicy = "no-referrer";
       thumbnail.style.cssText = styles.thumbnail;
-      thumbnail.addEventListener("error", () => thumbnail.remove(), { once: true });
+      thumbnail.addEventListener(
+        "error",
+        () => {
+          removeThumbnailPreview();
+          thumbnail.remove();
+        },
+        { once: true },
+      );
+      thumbnail.addEventListener("mouseenter", (event) => {
+        removeThumbnailPreview();
+        thumbnailPreview = element("img");
+        thumbnailPreview.src = thumbnailUrl;
+        thumbnailPreview.alt = "";
+        thumbnailPreview.referrerPolicy = "no-referrer";
+        thumbnailPreview.style.cssText = styles.thumbnailPreview;
+        thumbnailPreview.addEventListener("error", removeThumbnailPreview, { once: true });
+        document.body.append(thumbnailPreview);
+        positionThumbnailPreview(event);
+      });
+      thumbnail.addEventListener("mousemove", positionThumbnailPreview);
+      thumbnail.addEventListener("mouseleave", removeThumbnailPreview);
       card.append(thumbnail);
     }
     const body = element("div");
@@ -287,6 +334,7 @@ function buildPanel(container: HTMLElement): () => void {
 
   return () => {
     controller?.abort();
+    removeThumbnailPreview();
     form.removeEventListener("submit", onSubmit);
     container.replaceChildren();
   };
