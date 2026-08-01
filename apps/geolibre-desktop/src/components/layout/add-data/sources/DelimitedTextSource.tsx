@@ -424,14 +424,12 @@ export function DelimitedTextSource() {
       { fit: matchedFeatures.length > 0 },
     );
 
-    // Rows kept but flagged as unmatched are inspectable, not just present: a
-    // stale filter from a prior layer should not carry over, so this is only
-    // set (never cleared) when this run actually has unmatched rows. Applied
-    // after addAndClose so it lands on the layer it just selected, not
-    // whatever was selected before this run.
-    if (unmatchedFeatures.length > 0) {
-      useAppStore.getState().setAttributeFilter("unmatched");
-    }
+    // Rows kept but flagged as unmatched are inspectable, not just present, so
+    // filter to them when this run has any. Otherwise clear the filter rather
+    // than leaving a stale "unmatched" from a prior run hiding every row of
+    // this fully-matched layer. Applied after addAndClose so it lands on the
+    // layer it just selected, not whatever was selected before this run.
+    useAppStore.getState().setAttributeFilter(unmatchedFeatures.length > 0 ? "unmatched" : "");
   };
 
   const handleSubmit = source.runSubmit(async () => {
