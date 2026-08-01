@@ -27,6 +27,7 @@ import {
   setEarthdataGisLabels,
   setOpenAerialMapLabels,
   setArcGisHubLabels,
+  setOpenDataCatalogLabels,
   setHuggingFaceLabels,
   setSourceCoopLabels,
   setReverseGeocodeLabels,
@@ -322,6 +323,24 @@ export function TopToolbar({
         t("arcgisHub.downloadFirstLayer", { title, layerCount }),
       downloadError: t("arcgisHub.downloadError"),
       details: t("arcgisHub.details"),
+    });
+    setOpenDataCatalogLabels({
+      socrataHint: t("openDataCatalogs.socrataHint"),
+      ckanHint: t("openDataCatalogs.ckanHint"),
+      searchPlaceholder: (name) => t("openDataCatalogs.searchPlaceholder", { name }),
+      search: t("openDataCatalogs.search"),
+      enterKeyword: t("openDataCatalogs.enterKeyword"),
+      loadMore: t("openDataCatalogs.loadMore"),
+      searching: t("openDataCatalogs.searching"),
+      noResults: t("openDataCatalogs.noResults"),
+      showing: (shown, total) => t("openDataCatalogs.showing", { shown, total }),
+      noDescription: t("openDataCatalogs.noDescription"),
+      add: t("openDataCatalogs.add"),
+      details: t("openDataCatalogs.details"),
+      adding: (title) => t("openDataCatalogs.adding", { title }),
+      added: (title) => t("openDataCatalogs.added", { title }),
+      addError: t("openDataCatalogs.addError"),
+      searchError: t("openDataCatalogs.searchError"),
     });
     setEarthdataGisLabels({
       hint: t("earthdataGis.hint"),

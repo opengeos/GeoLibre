@@ -18,6 +18,49 @@ interface CatalogPage {
   total: number;
 }
 
+export interface OpenDataCatalogLabels {
+  socrataHint: string;
+  ckanHint: string;
+  searchPlaceholder: (name: string) => string;
+  search: string;
+  enterKeyword: string;
+  loadMore: string;
+  searching: string;
+  noResults: string;
+  showing: (shown: number, total: number) => string;
+  noDescription: string;
+  add: string;
+  details: string;
+  adding: (title: string) => string;
+  added: (title: string) => string;
+  addError: string;
+  searchError: string;
+}
+
+let labels: OpenDataCatalogLabels = {
+  socrataHint: "Search public Socrata open-data catalogs and add GeoJSON datasets.",
+  ckanHint:
+    "Search the Humanitarian Data Exchange CKAN catalog and add available GeoJSON resources.",
+  searchPlaceholder: (name) => `Search ${name}`,
+  search: "Search",
+  enterKeyword: "Enter a keyword to begin.",
+  loadMore: "Load more",
+  searching: "Searching…",
+  noResults: "No datasets found.",
+  showing: (shown, total) => `Showing ${shown} of ${total} datasets.`,
+  noDescription: "No description provided.",
+  add: "Add to map",
+  details: "Details",
+  adding: (title) => `Adding ${title}…`,
+  added: (title) => `Added ${title}.`,
+  addError: "Could not add dataset.",
+  searchError: "Search failed.",
+};
+
+export function setOpenDataCatalogLabels(next: Partial<OpenDataCatalogLabels>): void {
+  labels = { ...labels, ...next };
+}
+
 async function searchSocrata(
   query: string,
   page: number,
@@ -102,7 +145,7 @@ async function searchCkan(query: string, page: number, signal: AbortSignal): Pro
 function createCatalogPlugin(options: {
   id: string;
   name: string;
-  hint: string;
+  hint: () => string;
   search: (query: string, page: number, signal: AbortSignal) => Promise<CatalogPage>;
 }): GeoLibrePlugin {
   let unregister: (() => void) | null = null;
@@ -125,31 +168,31 @@ function createCatalogPlugin(options: {
             panel.style.cssText =
               "display:flex;flex-direction:column;gap:8px;padding:8px;height:100%;box-sizing:border-box;font-size:12px;color:hsl(var(--foreground))";
             const hint = document.createElement("p");
-            hint.textContent = options.hint;
+            hint.textContent = options.hint();
             hint.style.cssText = "margin:0;color:hsl(var(--muted-foreground))";
             const form = document.createElement("form");
             form.style.cssText = "display:flex;gap:6px";
             const input = document.createElement("input");
             input.type = "search";
-            input.placeholder = `Search ${options.name}`;
+            input.placeholder = labels.searchPlaceholder(options.name);
             input.ariaLabel = input.placeholder;
             input.style.cssText =
               "min-width:0;flex:1;padding:6px 8px;border:1px solid hsl(var(--border));border-radius:6px;background:hsl(var(--background));color:hsl(var(--foreground))";
             const submit = document.createElement("button");
             submit.type = "submit";
-            submit.textContent = "Search";
+            submit.textContent = labels.search;
             submit.style.cssText =
               "padding:6px 10px;border:1px solid hsl(var(--primary));border-radius:6px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));cursor:pointer";
             form.append(input, submit);
             const status = document.createElement("div");
-            status.textContent = "Enter a keyword to begin.";
+            status.textContent = labels.enterKeyword;
             status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
             const results = document.createElement("div");
             results.style.cssText =
               "display:flex;flex:1;min-height:0;overflow:auto;flex-direction:column;gap:6px";
             const more = document.createElement("button");
             more.type = "button";
-            more.textContent = "Load more";
+            more.textContent = labels.loadMore;
             more.hidden = true;
             panel.append(hint, form, status, results, more);
             container.append(panel);
@@ -159,6 +202,7 @@ function createCatalogPlugin(options: {
             let total = 0;
             let activeQuery = "";
             let controller: AbortController | null = null;
+            let generation = 0;
 
             const render = (item: CatalogItem) => {
               const card = document.createElement("article");
@@ -170,18 +214,18 @@ function createCatalogPlugin(options: {
               meta.textContent = item.organization;
               meta.style.cssText = "font-size:10px;color:hsl(var(--muted-foreground))";
               const description = document.createElement("p");
-              description.textContent = item.description || "No description provided.";
+              description.textContent = item.description || labels.noDescription;
               description.style.cssText = "margin:5px 0;font-size:11px";
               const actions = document.createElement("div");
               actions.style.cssText = "display:flex;gap:5px";
               const add = document.createElement("button");
               add.type = "button";
-              add.textContent = "Add to map";
+              add.textContent = labels.add;
               add.disabled = !item.dataUrl;
               add.addEventListener("click", async () => {
                 if (!item.dataUrl) return;
                 add.disabled = true;
-                status.textContent = `Adding ${item.title}…`;
+                status.textContent = labels.adding(item.title);
                 try {
                   const response = await fetch(item.dataUrl);
                   if (!response.ok) throw new Error(`Download failed (${response.status}).`);
@@ -190,17 +234,16 @@ function createCatalogPlugin(options: {
                     throw new Error("The resource is not GeoJSON.");
                   }
                   app.addGeoJsonLayer(item.title, data, item.dataUrl);
-                  status.textContent = `Added ${item.title}.`;
+                  status.textContent = labels.added(item.title);
                 } catch (error) {
-                  status.textContent =
-                    error instanceof Error ? error.message : "Could not add dataset.";
+                  status.textContent = error instanceof Error ? error.message : labels.addError;
                 } finally {
                   add.disabled = !item.dataUrl;
                 }
               });
               const details = document.createElement("button");
               details.type = "button";
-              details.textContent = "Details";
+              details.textContent = labels.details;
               details.addEventListener("click", () => app.openExternalUrl?.(item.pageUrl));
               actions.append(add, details);
               card.append(title, meta, description, actions);
@@ -218,24 +261,24 @@ function createCatalogPlugin(options: {
               }
               controller?.abort();
               controller = new AbortController();
+              const token = ++generation;
               submit.disabled = true;
-              status.textContent = "Searching…";
+              status.textContent = labels.searching;
               try {
                 const result = await options.search(query, page, controller.signal);
+                if (token !== generation) return;
                 result.items.forEach(render);
                 shown += result.items.length;
                 total = result.total;
                 page += 1;
-                status.textContent = shown
-                  ? `Showing ${shown} of ${total} datasets.`
-                  : "No datasets found.";
+                status.textContent = shown ? labels.showing(shown, total) : labels.noResults;
                 more.hidden = shown >= total || result.items.length === 0;
               } catch (error) {
                 if ((error as Error).name !== "AbortError") {
-                  status.textContent = error instanceof Error ? error.message : "Search failed.";
+                  status.textContent = error instanceof Error ? error.message : labels.searchError;
                 }
               } finally {
-                submit.disabled = false;
+                if (token === generation) submit.disabled = false;
               }
             };
             const onSubmit = (event: SubmitEvent) => {
@@ -267,13 +310,13 @@ function createCatalogPlugin(options: {
 export const maplibreSocrataPlugin = createCatalogPlugin({
   id: SOCRATA_PLUGIN_ID,
   name: "Socrata",
-  hint: "Search public Socrata open-data catalogs and add GeoJSON datasets.",
+  hint: () => labels.socrataHint,
   search: searchSocrata,
 });
 
 export const maplibreCkanPlugin = createCatalogPlugin({
   id: CKAN_PLUGIN_ID,
   name: "CKAN",
-  hint: "Search the Humanitarian Data Exchange CKAN catalog and add available GeoJSON resources.",
+  hint: () => labels.ckanHint,
   search: searchCkan,
 });

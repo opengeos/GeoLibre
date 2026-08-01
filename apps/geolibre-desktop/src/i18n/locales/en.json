@@ -2917,6 +2917,24 @@
     "downloadError": "Could not download this dataset.",
     "details": "Details"
   },
+  "openDataCatalogs": {
+    "socrataHint": "Search public Socrata open-data catalogs and add GeoJSON datasets.",
+    "ckanHint": "Search the Humanitarian Data Exchange CKAN catalog and add available GeoJSON resources.",
+    "searchPlaceholder": "Search {{name}}",
+    "search": "Search",
+    "enterKeyword": "Enter a keyword to begin.",
+    "loadMore": "Load more",
+    "searching": "Searching…",
+    "noResults": "No datasets found.",
+    "showing": "Showing {{shown}} of {{total}} datasets.",
+    "noDescription": "No description provided.",
+    "add": "Add to map",
+    "details": "Details",
+    "adding": "Adding {{title}}…",
+    "added": "Added {{title}}.",
+    "addError": "Could not add dataset.",
+    "searchError": "Search failed."
+  },
   "stacPlugin": {
     "title": "STAC Catalogs",
     "footprintLayerName": "STAC search footprints",

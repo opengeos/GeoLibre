@@ -699,6 +699,8 @@ export {
   SOCRATA_PLUGIN_ID,
   maplibreCkanPlugin,
   maplibreSocrataPlugin,
+  setOpenDataCatalogLabels,
+  type OpenDataCatalogLabels,
 } from "./plugins/maplibre-open-data-catalogs";
 export {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,

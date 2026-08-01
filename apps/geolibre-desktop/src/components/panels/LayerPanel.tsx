@@ -560,6 +560,7 @@ function parseCustomRefreshIntervalMs(value: string): number | null {
 
 function relativeSyncTime(iso: string, locale: string): string {
   const elapsedSeconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  if (!Number.isFinite(elapsedSeconds)) return iso;
   const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   if (Math.abs(elapsedSeconds) < 60) return formatter.format(elapsedSeconds, "second");
   const minutes = Math.round(elapsedSeconds / 60);
