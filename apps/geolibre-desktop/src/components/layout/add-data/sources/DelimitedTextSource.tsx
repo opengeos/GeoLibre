@@ -3,6 +3,7 @@ import {
   geocodeForward,
   geocodeMatchToFeature,
   geocoderMinIntervalMs,
+  geocoderNeedsApiKey,
   getGeocodingProvider,
   nextDelayMs,
   resolveGeocoderConfig,
@@ -282,6 +283,9 @@ export function DelimitedTextSource() {
     const { fields, rows } = parseDelimitedTextRows(text, delimiter);
     const config = resolveGeocoderConfig(useAppStore.getState().preferences.geocoding);
     const provider = getGeocodingProvider(config.providerId);
+    if (geocoderNeedsApiKey(config) && !config.apiKey) {
+      throw new Error(t("geocode.apiKeyRequired", { provider: provider.label }));
+    }
     const requests = csvRowsToGeocodeRequests(rows, delimitedTextAddressColumns);
     if (requests.length === 0) {
       throw new Error(t("addData.delimitedText.errorNoAddressesFound"));
@@ -377,6 +381,15 @@ export function DelimitedTextSource() {
             isTable: false,
             sourceKind: "delimited-text",
             totalRows: rows.length,
+          },
+          // No matched rows means nothing to draw, same as the coordinate-mode
+          // attribute-table branch below: stay on the flat defaults rather than
+          // reserving a palette color no map ever shows.
+          {
+            geojson:
+              matchedFeatures.length > 0
+                ? ({ type: "FeatureCollection", features } as FeatureCollection)
+                : undefined,
           },
         ),
         // Mixed Point/null geometries (matched/unmatched rows) are a legal
