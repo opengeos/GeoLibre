@@ -278,6 +278,47 @@ def test_segment_releases_slot_after_success(monkeypatch):
     assert ml._segment_in_flight == 0
 
 
+def test_segment_releases_slot_after_upstream_failure(monkeypatch):
+    """The in-flight counter is decremented even when the upstream proxy errors."""
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    class _ErrorHttpx:
+        calls: list = []
+        HTTPError = Exception
+
+        class AsyncClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, url, content=None, headers=None):
+                if hasattr(content, "__aiter__"):
+                    async for _ in content:
+                        pass
+                raise Exception("backend down")
+
+    monkeypatch.setattr(ml, "_require_httpx", lambda: _ErrorHttpx)
+    monkeypatch.setattr(ml, "_ensure_server", lambda: "http://backend:9")
+    monkeypatch.setattr(ml, "MAX_IN_FLIGHT_SEGMENT_REQUESTS", 4)
+    monkeypatch.setattr(ml, "_segment_in_flight", 0)
+
+    client = TestClient(app)
+    resp = client.post(
+        "/ml/segment/text",
+        files={"file": ("a.tif", b"bytes", "image/tiff")},
+    )
+    assert resp.status_code == 502
+    assert ml._segment_in_flight == 0
+
+
 def test_segment_rejects_oversized_body(monkeypatch):
     """A request with Content-Length above the cap is refused with 413."""
     pytest.importorskip("httpx")
@@ -296,5 +337,27 @@ def test_segment_rejects_oversized_body(monkeypatch):
             "content-type": "multipart/form-data; boundary=----",
             "content-length": str(200 * 1024 * 1024),
         },
+    )
+    assert resp.status_code == 413
+
+
+def test_segment_rejects_oversized_chunked_stream(monkeypatch):
+    """Chunked uploads without Content-Length are still rejected when they exceed the cap."""
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    monkeypatch.setattr(ml, "_MAX_SEGMENT_BODY_BYTES", 10)
+    monkeypatch.setattr(ml, "MAX_IN_FLIGHT_SEGMENT_REQUESTS", 4)
+    monkeypatch.setattr(ml, "_segment_in_flight", 0)
+    monkeypatch.setattr(ml, "_require_httpx", lambda: _FakeHttpx)
+    monkeypatch.setattr(ml, "_ensure_server", lambda: "http://backend:9")
+
+    client = TestClient(app)
+    resp = client.post(
+        "/ml/segment/text",
+        content=b"x" * 50,
+        headers={"content-type": "multipart/form-data; boundary=----"},
     )
     assert resp.status_code == 413

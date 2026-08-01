@@ -425,8 +425,15 @@ async def _forward_segment(request: Request, path: str) -> Response:
             headers["content-type"] = content_type
 
         async def _body_iter():
+            body_size = 0
             async for chunk in request.stream():
                 if chunk:
+                    body_size += len(chunk)
+                    if body_size > _MAX_SEGMENT_BODY_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Upload exceeds the 100 MiB segmentation size limit.",
+                        )
                     yield chunk
 
         try:
