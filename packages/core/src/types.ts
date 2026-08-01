@@ -1531,7 +1531,9 @@ export type DashboardWidgetType =
   | "line"
   | "box"
   | "pie"
-  | "indicator";
+  | "indicator"
+  | "selector"
+  | "list";
 
 /** How a bar widget reduces its category groups. */
 export type DashboardWidgetAggregation = "count" | "sum" | "mean";
@@ -1578,6 +1580,16 @@ export interface DashboardWidget {
   prefix?: string;
   /** Indicator widget: optional suffix (e.g. " kg", " ha"). */
   suffix?: string;
+  /** Selector widget: whether multiple values can be picked (default false). */
+  multiple?: boolean;
+  /** List widget: columns to display. */
+  listFields?: string[];
+  /** List widget: field to sort by. */
+  sortBy?: string;
+  /** List widget: sort direction (default "desc"). */
+  sortDir?: "asc" | "desc";
+  /** List widget: max rows to show (default 20). */
+  limit?: number;
 }
 
 /** Aggregation functions for indicator widgets (issue #1381). Extends the bar

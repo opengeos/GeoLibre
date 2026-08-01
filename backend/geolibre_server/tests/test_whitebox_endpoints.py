@@ -117,6 +117,50 @@ def test_run_job_does_not_leak_error(monkeypatch):
             whitebox._JOBS.pop(job_id, None)
 
 
+def test_run_rejects_when_in_flight_cap_reached(monkeypatch):
+    """A new Whitebox job is refused with 429 once in-flight work is at the cap."""
+    monkeypatch.setattr(whitebox, "MAX_IN_FLIGHT_JOBS", 1)
+    now = whitebox._utc_now()
+    with whitebox._JOBS_LOCK:
+        whitebox._JOBS.clear()
+        whitebox._JOBS["busy"] = whitebox.JobState(
+            id="busy",
+            status="running",
+            tool_id="noop",
+            created_at=now,
+            updated_at=now,
+        )
+    try:
+        with pytest.raises(HTTPException) as excinfo:
+            whitebox.whitebox_run(whitebox.WhiteboxRunRequest(tool_id="noop"))
+        assert excinfo.value.status_code == 429
+        assert "Too many Whitebox jobs" in str(excinfo.value.detail)
+    finally:
+        with whitebox._JOBS_LOCK:
+            whitebox._JOBS.clear()
+
+
+def test_run_rejects_oversized_layer_input(monkeypatch):
+    """Embedded GeoJSON layer inputs honor the shared MAX_FEATURES cap with 413."""
+    monkeypatch.setattr(whitebox, "MAX_LAYER_FEATURES", 1)
+    big = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {}, "geometry": None},
+            {"type": "Feature", "properties": {}, "geometry": None},
+        ],
+    }
+    with pytest.raises(HTTPException) as excinfo:
+        whitebox.whitebox_run(
+            whitebox.WhiteboxRunRequest(
+                tool_id="noop",
+                layer_inputs={"input": {"geojson": big}},
+            )
+        )
+    assert excinfo.value.status_code == 413
+    assert "feature limit" in str(excinfo.value.detail)
+
+
 def test_raster_output_paths_only_returns_declared_existing_rasters(tmp_path):
     raster = tmp_path / "result.tif"
     raster.write_bytes(b"tiff")

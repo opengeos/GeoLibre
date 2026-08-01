@@ -478,8 +478,14 @@ export interface AppState {
 
   /** Append a new dashboard widget. */
   addWidget: (widget: DashboardWidget) => void;
-  /** Patch an existing dashboard widget by id (no-op if absent). */
+  /** Patch an existing dashboard widget by id (no-op if absent). Merges, so an
+   * omitted key keeps its current value; use replaceWidget to clear one. */
   updateWidget: (id: string, patch: Partial<Omit<DashboardWidget, "id">>) => void;
+  /** Swap an existing dashboard widget for a complete new record, keeping its
+   * id and position (no-op if absent). Unlike updateWidget this does not merge,
+   * so fields the caller omits are cleared — what the widget editor needs to
+   * persist an emptied title, color, prefix, or suffix. */
+  replaceWidget: (id: string, widget: Omit<DashboardWidget, "id">) => void;
   /** Remove a dashboard widget by id. */
   removeWidget: (id: string) => void;
   /** Move a widget to a new index, clamped into range, preserving the rest. */
@@ -1355,6 +1361,14 @@ export const useAppStore = create<AppState>()(
           if (!exists) return s;
           return {
             widgets: s.widgets.map((w) => (w.id === id ? { ...w, ...patch, id: w.id } : w)),
+            isDirty: true,
+          };
+        }),
+      replaceWidget: (id, widget) =>
+        set((s) => {
+          if (!s.widgets.some((w) => w.id === id)) return s;
+          return {
+            widgets: s.widgets.map((w) => (w.id === id ? { ...widget, id } : w)),
             isDirty: true,
           };
         }),

@@ -757,15 +757,25 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
 const MAX_PERSISTED_BINS = 50;
 
-const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
-  "histogram",
-  "scatter",
-  "bar",
-  "line",
-  "box",
-  "pie",
-  "indicator",
-];
+/** Upper bound for a persisted list-widget row limit, mirroring the widget
+ * editor's row-count input (`max={500}` in `WidgetEditorDialog`). */
+const MAX_PERSISTED_LIST_ROWS = 500;
+
+// Spelled as a Record so adding a member to DashboardWidgetType fails to
+// compile until it is listed here. A plain array accepted a short list
+// silently, and a type missing from it makes normalizeWidgets drop every widget
+// of that type — which is how selector widgets vanished on save and reload.
+const DASHBOARD_WIDGET_TYPES = Object.keys({
+  histogram: true,
+  scatter: true,
+  bar: true,
+  line: true,
+  box: true,
+  pie: true,
+  indicator: true,
+  selector: true,
+  list: true,
+} satisfies Record<DashboardWidgetType, true>) as readonly DashboardWidgetType[];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
   "sum",
@@ -849,6 +859,34 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
       if (prefix) widget.prefix = prefix;
       const suffix = normalizeString(candidate.suffix);
       if (suffix) widget.suffix = suffix;
+    }
+    // Selector widget fields (issue #1381). Only a selector reads the flag, and
+    // false is the default, so persist it only when it is on.
+    if (type === "selector" && candidate.multiple === true) {
+      widget.multiple = true;
+    }
+    // List widget fields (issue #1381). normalizeWidgets also runs on the save
+    // path (projectFromStore), so dropping these would blank a list widget the
+    // moment its project is saved — the renderer falls back to "no data"
+    // without listFields.
+    if (type === "list") {
+      if (Array.isArray(candidate.listFields)) {
+        const listFields = candidate.listFields
+          .map((entry) => normalizeString(entry).trim())
+          .filter((entry) => entry !== "");
+        if (listFields.length > 0) widget.listFields = listFields;
+      }
+      const sortBy = normalizeString(candidate.sortBy).trim();
+      if (sortBy) widget.sortBy = sortBy;
+      if (candidate.sortDir === "asc" || candidate.sortDir === "desc") {
+        widget.sortDir = candidate.sortDir;
+      }
+      if (typeof candidate.limit === "number" && Number.isFinite(candidate.limit)) {
+        // Clamp to the editor's range so a hand-edited 0 or 10_000 cannot reach
+        // the renderer.
+        const limit = Math.trunc(candidate.limit);
+        if (limit >= 1) widget.limit = Math.min(MAX_PERSISTED_LIST_ROWS, limit);
+      }
     }
     widgets.push(widget);
   }

@@ -121,7 +121,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
         ``rows`` and as GeoJSON in ``geojson``.
 
     Raises:
-        SqlInputTooLarge: A layer exceeds :data:`MAX_FEATURES`.
+        SqlInputTooLarge: A layer or the query result exceeds :data:`MAX_FEATURES`.
         ValueError: Invalid input.
         Exception: Whatever SedonaDB raises for an invalid SQL statement.
     """
@@ -148,9 +148,18 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             connection.create_data_frame(gdf).to_view(name)
 
         result = connection.sql(sql)
+        # Cap before materializing: to_pandas() would otherwise hold an
+        # unbounded cross-join / generate_series expansion in memory. Fetch one
+        # past the limit so overflow still raises SqlInputTooLarge.
+        result = result.limit(MAX_FEATURES + 1)
         # to_pandas() returns a GeoDataFrame when the result has a geometry
         # column, otherwise a plain DataFrame.
         frame = result.to_pandas()
+        if len(frame) > MAX_FEATURES:
+            # Input registration already caps each layer, but a query can still
+            # expand rows (cross joins, generate_series, etc.). Bound the
+            # response the same way vector/PostGIS paths bound payloads.
+            raise SqlInputTooLarge(f"Query result exceeds the {MAX_FEATURES}-feature limit")
         columns = [str(column) for column in frame.columns]
 
         geometry_column: Optional[str] = None
