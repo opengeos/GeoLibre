@@ -45,6 +45,7 @@ from __future__ import annotations
 import json
 import os
 from asyncio import Future, wait_for
+from asyncio import TimeoutError as AsyncTimeoutError
 from typing import Any
 from urllib.parse import urlparse
 
@@ -59,6 +60,7 @@ __all__ = [
     "RELAY_PATH",
     "is_allowed_origin",
     "normalize_command",
+    "normalize_result",
     "relay_base_url",
 ]
 
@@ -180,8 +182,8 @@ def relay_base_url(host: str, port: int, base_url: str) -> str:
     return f"http://{host}:{port}" + url_path_join(base_url, RELAY_PATH)
 
 
-def _broadcast(message: dict[str, Any]) -> int:
-    """Send ``message`` to every open app socket; return how many received it."""
+def _broadcast(message: dict[str, Any], *, limit: int | None = None) -> int:
+    """Send ``message`` to open app sockets; return how many received it."""
     encoded = json.dumps(message)
     delivered = 0
     # Copy: write_message on a closed socket raises and we drop it from the set.
@@ -192,6 +194,8 @@ def _broadcast(message: dict[str, Any]) -> int:
             _listeners.discard(socket)
             continue
         delivered += 1
+        if limit is not None and delivered >= limit:
+            break
     return delivered
 
 
@@ -252,13 +256,16 @@ class GeoLibreRelayCommandHandler(APIHandler):
         future: Future[dict[str, Any]] = Future()
         _pending_results[request_id] = future
         try:
-            delivered = _broadcast(message)
+            # A correlated mutation must execute in only one app window; its
+            # returned layer id then always belongs to the window that handled
+            # it. Fire-and-forget commands retain the historical broadcast.
+            delivered = _broadcast(message, limit=1)
             if not delivered:
                 self.finish(json.dumps({"delivered": 0}))
                 return
             try:
                 result = await wait_for(future, RESULT_TIMEOUT_SECONDS)
-            except TimeoutError as error:
+            except (TimeoutError, AsyncTimeoutError) as error:
                 raise web.HTTPError(504, "GeoLibre did not return a result in time.") from error
             self.finish(json.dumps({"delivered": delivered, **result}))
         finally:

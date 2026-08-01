@@ -207,6 +207,19 @@ def test_broadcast_with_no_listeners_reports_zero():
     assert jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"}) == 0
 
 
+def test_limited_broadcast_reaches_only_one_listener():
+    first, second = FakeSocket(), FakeSocket()
+    jupyter_relay._listeners.update({first, second})
+
+    delivered = jupyter_relay._broadcast(
+        {"type": "geolibre:command", "method": "listLayers"},
+        limit=1,
+    )
+
+    assert delivered == 1
+    assert len(first.received) + len(second.received) == 1
+
+
 # -- extension load ----------------------------------------------------------
 
 

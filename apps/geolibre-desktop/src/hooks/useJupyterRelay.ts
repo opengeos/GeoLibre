@@ -44,46 +44,49 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
     // server can never resurrect the reconnect loop after we moved on.
     let generation = 0;
 
+    const reply = (activeSocket: WebSocket, payload: object) => {
+      if (activeSocket.readyState !== WebSocket.OPEN) return;
+      try {
+        activeSocket.send(JSON.stringify(payload));
+      } catch (error) {
+        console.warn("Jupyter relay: could not return a command result", error);
+      }
+    };
+
     const run = async (command: RelayCommand, activeSocket: WebSocket) => {
       // Own-property only, so an inherited member ("constructor", …) can never be
       // invoked as a command.
       if (!Object.hasOwn(handlers, command.method)) {
         console.warn(`Jupyter relay: unknown command "${command.method}"`);
         if (command.requestId) {
-          activeSocket.send(
-            JSON.stringify({
-              type: "geolibre:result",
-              requestId: command.requestId,
-              ok: false,
-              error: `Unknown command "${command.method}"`,
-            }),
-          );
+          reply(activeSocket, {
+            type: "geolibre:result",
+            requestId: command.requestId,
+            ok: false,
+            error: `Unknown command "${command.method}"`,
+          });
         }
         return;
       }
       try {
         const value = await handlers[command.method](command.params);
         if (command.requestId) {
-          activeSocket.send(
-            JSON.stringify({
-              type: "geolibre:result",
-              requestId: command.requestId,
-              ok: true,
-              value,
-            }),
-          );
+          reply(activeSocket, {
+            type: "geolibre:result",
+            requestId: command.requestId,
+            ok: true,
+            value,
+          });
         }
       } catch (error) {
         console.error(`Jupyter relay: command "${command.method}" failed`, error);
         if (command.requestId) {
-          activeSocket.send(
-            JSON.stringify({
-              type: "geolibre:result",
-              requestId: command.requestId,
-              ok: false,
-              error: error instanceof Error ? error.message : String(error),
-            }),
-          );
+          reply(activeSocket, {
+            type: "geolibre:result",
+            requestId: command.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
     };

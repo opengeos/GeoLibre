@@ -122,16 +122,7 @@ def _post_to_relay(url: str, message: dict[str, Any]) -> tuple[int, str | None]:
         ``(delivered, error)`` — how many app windows received the command, and a
         human-readable reason when the relay itself could not be reached.
     """
-    headers = {"Content-Type": "application/json"}
-    token = os.environ.get(_RELAY_TOKEN_ENV, "").strip()
-    if token:
-        headers["Authorization"] = f"token {token}"
-    request = urllib.request.Request(  # noqa: S310 - fixed http:// loopback URL
-        f"{url}/command",
-        data=json.dumps(message).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    request = _relay_request(url, message)
     try:
         with urllib.request.urlopen(  # noqa: S310 - see above
             request, timeout=_RELAY_TIMEOUT_SECONDS
@@ -143,6 +134,20 @@ def _post_to_relay(url: str, message: dict[str, Any]) -> tuple[int, str | None]:
     return (delivered if isinstance(delivered, int) else 0), None
 
 
+def _relay_request(url: str, message: dict[str, Any]) -> urllib.request.Request:
+    """Build an authenticated command request for the loopback relay."""
+    headers = {"Content-Type": "application/json"}
+    token = os.environ.get(_RELAY_TOKEN_ENV, "").strip()
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return urllib.request.Request(  # noqa: S310 - fixed http:// loopback URL
+        f"{url}/command",
+        data=json.dumps(message).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+
 def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = None) -> Any:
     """Run one scripting command and return its correlated result."""
     message = {
@@ -151,16 +156,7 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
         "method": method,
         "params": params or {},
     }
-    headers = {"Content-Type": "application/json"}
-    token = os.environ.get(_RELAY_TOKEN_ENV, "").strip()
-    if token:
-        headers["Authorization"] = f"token {token}"
-    request = urllib.request.Request(  # noqa: S310 - fixed http:// loopback URL
-        f"{url}/command",
-        data=json.dumps(message).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    request = _relay_request(url, message)
     try:
         with urllib.request.urlopen(  # noqa: S310 - see above
             request, timeout=_RELAY_TIMEOUT_SECONDS + 1
