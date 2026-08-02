@@ -2952,10 +2952,20 @@ fn tcp_table_port(value: u32) -> u16 {
 // case folded, because Windows paths are case-insensitive and the image path
 // the OS reports need not spell the directory the way we built it. The trailing
 // separator is what keeps `...\runtime` from matching `...\runtime-old`.
+//
+// Folding is ASCII-only on purpose. What actually varies between the path we
+// built and the one the OS reports is the drive letter and the segments we
+// wrote ourselves, all ASCII; the rest (a user's name in the profile path) is
+// byte-identical on both sides. Unicode `to_lowercase` would buy nothing there
+// and can change a string's length (Turkish dotless I, sharp S), which would
+// misalign the prefix comparison.
 #[cfg(any(all(target_os = "windows", not(feature = "mas")), test))]
 fn path_is_under(path: &Path, root: &Path) -> bool {
     fn normalize(value: &Path) -> String {
-        value.to_string_lossy().replace('/', "\\").to_lowercase()
+        value
+            .to_string_lossy()
+            .replace('/', "\\")
+            .to_ascii_lowercase()
     }
 
     let root = normalize(root);
@@ -4614,6 +4624,16 @@ mod tests {
         assert!(!path_is_under(
             std::path::Path::new(r"C:\Program Files\Python312\python.exe"),
             root
+        ));
+        // A non-ASCII profile name survives the fold: ASCII case folding leaves
+        // it byte-identical on both sides, where Unicode lowercasing could
+        // change its length and misalign the prefix.
+        let unicode_root = std::path::Path::new(r"C:\Users\İŞIL\AppData\Roaming\runtime");
+        assert!(path_is_under(
+            std::path::Path::new(
+                r"C:\Users\İŞIL\AppData\Roaming\runtime\jupyter-server\python.exe"
+            ),
+            unicode_root
         ));
         // The directory itself is not "inside" itself, and an empty root never
         // matches (which would otherwise make every listener look like ours).
