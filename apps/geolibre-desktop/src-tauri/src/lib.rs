@@ -2067,13 +2067,18 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
     // it out of the bundled backend resource into a dedicated lib dir placed on
     // the kernel's PYTHONPATH (so `import geolibre` works regardless of where the
     // notebook lives).
+    // Not fatal, unlike the notebooks root: Jupyter starts fine without this
+    // one, and losing it only costs `import geolibre` inside the notebooks. So
+    // report it rather than failing the whole panel -- but do report it, since
+    // silently discarding the result is what made #1642 so hard to read.
     let lib_dir = runtime_dir.join("notebook-lib");
-    fs::create_dir_all(&lib_dir).map_err(|error| {
-        format!(
-            "Could not create the notebook library directory {}: {error}",
+    if let Err(error) = fs::create_dir_all(&lib_dir) {
+        eprintln!(
+            "Jupyter: could not create the notebook library directory {} ({error}); \
+             `import geolibre` will not resolve in notebooks.",
             lib_dir.display()
-        )
-    })?;
+        );
+    }
     let _ = fs::copy(
         project_dir.join("notebook_client.py"),
         lib_dir.join("geolibre.py"),
@@ -2189,8 +2194,13 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
         *token = None;
     }
     // Backstop: reap anything still bound to the port (no-op when nothing of
-    // ours is listening).
-    terminate_jupyter_listeners_on_port(JUPYTER_PORT, &app_runtime_dir(&app)?)?;
+    // ours is listening). Best-effort, because the child this call exists to
+    // clean up after is already gone by now: returning an error here would
+    // leave the frontend believing the server it just stopped is still running
+    // (stopJupyterServer only clears its state once this invoke resolves).
+    if let Ok(runtime_dir) = app_runtime_dir(&app) {
+        let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+    }
     Ok(())
 }
 
