@@ -252,7 +252,12 @@ describe("NmeaAssembler", () => {
     const next = GGA.replace("174512.00", "174513.00");
     // Rebuild the checksum after mutating the payload.
     const nextGga = sentence(next.slice(1, next.lastIndexOf("*")));
-    const fixes = run([GGA, RMC, nextGga]);
+    // The second epoch gets its own RMC. An epoch resets on flush, so the date
+    // does not carry over from the first one, and a date-less epoch would be
+    // stamped against today's UTC day -- which made the assertion below pass
+    // only on the day it was written.
+    const nextRmc = sentence(RMC.slice(1, RMC.lastIndexOf("*")).replace("174512.00", "174513.00"));
+    const fixes = run([GGA, RMC, nextGga, nextRmc]);
     assert.equal(fixes.length, 2);
     assert.equal(new Date(fixes[0]!.timestamp).toISOString(), "2026-08-01T17:45:12.000Z");
     assert.equal(new Date(fixes[1]!.timestamp).toISOString(), "2026-08-01T17:45:13.000Z");
