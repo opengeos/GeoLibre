@@ -23,6 +23,14 @@ import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import type { ToolbarChrome } from "./constants";
 
+// Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple
+// App Store builds (Mac App Store and iOS) compile out so the app claims no
+// `com.apple.security.network.server` entitlement — App Review rejected it
+// otherwise. Module scope, like IS_MAS_BUILD: the build flag and user agent it
+// reads are fixed for the session, so there is nothing to recompute per render.
+// TopToolbar's command-palette gate reads the same constant.
+export const EARTH_ENGINE_AVAILABLE = isEarthEngineAvailable();
+
 interface ProcessingMenuProps {
   chrome: ToolbarChrome;
   earthEnginePanel: ToolbarPanel;
@@ -73,13 +81,7 @@ export function ProcessingMenu({
   // the browser via WebAssembly, so unlike the sidecar-backed tools it stays
   // available on mobile.
   const showWhitebox = show("processing.whitebox");
-  // Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple
-  // App Store builds (Mac App Store and iOS) compile out so the app claims no
-  // `com.apple.security.network.server` entitlement — App Review rejected it
-  // otherwise. Evaluated once alongside `mobile`: it reads the same
-  // session-stable user agent.
-  const showEarthEngine =
-    useMemo(() => isEarthEngineAvailable(), []) && show("processing.earthEngine");
+  const showEarthEngine = EARTH_ENGINE_AVAILABLE && show("processing.earthEngine");
 
   // Open the Whitebox toolbox dialog preselected to a specific tool, used by the
   // per-category submenus below. Two store writes: queue the tool, then open.
