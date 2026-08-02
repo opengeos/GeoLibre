@@ -253,6 +253,35 @@ async function addArcGISFeatureLayerAsGeoJson(
   return id;
 }
 
+/** The JSON error envelope ArcGIS returns, usually with an HTTP 200 status. */
+interface ArcGISErrorEnvelope {
+  message?: string;
+  details?: unknown;
+}
+
+/**
+ * The most specific text available from an ArcGIS error envelope.
+ *
+ * `message` is frequently an empty string, with the only useful text in
+ * `details` — asking a hosted FeatureServer for a layer id it does not have
+ * answers `{"code":400,"message":"","details":["The requested layer (layerId:
+ * 0) was not found."]}`. Reading `message` alone drops that and reports the
+ * generic fallback, which says nothing about what to correct.
+ *
+ * @param error - The `error` member of an ArcGIS JSON response.
+ * @param fallback - The message to use when the envelope carries no text.
+ */
+function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: string): string {
+  const message = typeof error?.message === "string" ? error.message.trim() : "";
+  if (message) return message;
+  const details = Array.isArray(error?.details)
+    ? error.details.filter(
+        (detail): detail is string => typeof detail === "string" && detail.trim() !== "",
+      )
+    : [];
+  return details.length > 0 ? details.join(" ").trim() : fallback;
+}
+
 /**
  * Fetch and validate a GeoJSON FeatureCollection from an ArcGIS query URL.
  *
@@ -281,7 +310,7 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
     );
   }
   let json: FeatureCollection & {
-    error?: { message?: string };
+    error?: ArcGISErrorEnvelope;
     exceededTransferLimit?: boolean;
   };
   try {
@@ -290,7 +319,7 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
   if (json.error) {
-    throw new Error(json.error.message || "ArcGIS feature query failed.");
+    throw new Error(arcgisErrorMessage(json.error, "ArcGIS feature query failed."));
   }
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
@@ -378,10 +407,10 @@ async function fetchArcGISJson<T>(
     });
   }
   const json = (await response.json()) as T & {
-    error?: { message?: string };
+    error?: ArcGISErrorEnvelope;
   };
   if (json.error) {
-    throw new Error(json.error.message || "ArcGIS service request failed.", {
+    throw new Error(arcgisErrorMessage(json.error, "ArcGIS service request failed."), {
       cause,
     });
   }

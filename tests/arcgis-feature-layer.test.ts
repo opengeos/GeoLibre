@@ -149,6 +149,32 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 
+  // ArcGIS routinely leaves `message` empty and puts the only useful text in
+  // `details` — asking a hosted FeatureServer for a layer id it does not have
+  // answers `{"code":400,"message":"","details":["The requested layer (layerId:
+  // 0) was not found."]}`. Reporting the generic fallback instead hides the one
+  // thing the user needs to correct.
+  it("surfaces error `details` when the service leaves `message` empty", async () => {
+    globalThis.fetch = (async () =>
+      jsonResponse({
+        error: {
+          code: 400,
+          message: "",
+          details: ["The requested layer (layerId: 0) was not found."],
+        },
+      })) as typeof fetch;
+
+    await assert.rejects(
+      addArcGISLayer(app, {
+        layerType: "feature",
+        sourceType: "url",
+        url: "https://example.com/arcgis/rest/services/Cities/FeatureServer/0",
+      }),
+      /The requested layer \(layerId: 0\) was not found\./,
+    );
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
   it("rejects an HTML login page returned with a 200 status", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
