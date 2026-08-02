@@ -34,8 +34,9 @@ Tools that depend on a **local desktop process** are hidden on mobile because
 iOS has no Python sidecar or local helper binaries and its sandbox forbids
 spawning subprocesses:
 
-- Processing → **Whitebox**, **Raster**, **Conversion**, **AI Segmentation**
-  (all need the Python sidecar)
+- Processing → **Raster**, **Conversion**, **AI Segmentation**
+  (all need the Python sidecar). The Whitebox geoprocessing toolbox runs in
+  WebAssembly, needs no sidecar, and stays available.
 - Add Data → **PostgreSQL** (served by the local Martin tile server)
 
 These are gated by a user-agent `isMobile()` check (which already matches

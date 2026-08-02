@@ -59,8 +59,10 @@ The portable build relies on the Microsoft Edge WebView2 Runtime, which is
 preinstalled on Windows 11 and current Windows 10. If the app does not start,
 install the
 [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-The optional Python sidecar tools (Whitebox, raster, conversion) need Python
-available just as in the installed build; everything else runs without it.
+The optional Python sidecar tools (raster, conversion, AI Segmentation) need
+Python available just as in the installed build; everything else — including the
+1,000+ tool Whitebox geoprocessing toolbox, which runs on WebAssembly — runs
+without it.
 
 ## macOS installation
 
@@ -221,9 +223,10 @@ Sideloaded builds do not update themselves, so download a newer APK to upgrade.
     Android will not upgrade one into the other. Uninstall the existing copy
     (`adb uninstall org.geolibre.app`) before switching between them.
 
-Tools that need a local desktop process — the Whitebox, Raster, Conversion, and
-AI Segmentation toolboxes, and the PostgreSQL data source — are hidden on
-Android. See [Android](android.md) for the full list and for build instructions.
+Tools that need a local desktop process — the Raster, Conversion, and AI
+Segmentation toolboxes, and the PostgreSQL data source — are hidden on Android.
+The Whitebox geoprocessing toolbox runs on WebAssembly and stays available. See
+[Android](android.md) for the full list and for build instructions.
 
 ## Build from source
 

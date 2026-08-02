@@ -156,9 +156,11 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
 - Conversion menu for Vector to GeoParquet, FlatGeobuf, and PMTiles; a generic Vector to Vector converter that translates between any supported vector formats by file extension; CSV to GeoParquet; and Raster to COG
     - In the browser build every conversion runs client-side on DuckDB-WASM, the pure-JS writers, or `geolibre-wasm` (Vector to PMTiles on a background worker)
     - The desktop app prefers the Python sidecar, whose GDAL/rio-cogeo stack reads more input formats and tiles deeper
-- Whitebox toolbox that runs entirely in the browser through a WebAssembly runtime with raster I/O — no Python sidecar required
-    - Surfaces both Whitebox tools and GeoLibre's own WASM raster tools
+- **1,000+ geoprocessing tools** in the Whitebox toolbox, running entirely in the browser through a WebAssembly runtime with raster and vector I/O — no Python sidecar required, so the full set works on the web, desktop, and Android
+    - Surfaces both the Whitebox Next Gen suite and GeoLibre's own WASM tools, filterable by source
+    - Nine categories: vector (~280 tools), raster (~230), remote sensing (~150), hydrology (~100), terrain (~100), LiDAR (~65), conversion (~50), network (~25), and projection (4)
     - Browsable by category directly in the Processing menu, with nested subcategory submenus and an offline-bundled tool catalog
+    - A **Run locally (WASM)** toggle switches any tool between the in-browser runtime and the Python sidecar, which reads native file paths for batch runs over a directory
     - Deep-linkable through a `?tool=` URL parameter that preselects a tool and pre-fills its form, with a Copy link button that builds the shareable link
     - Batch tools run against a selected input directory
 - Vector menu
@@ -247,6 +249,6 @@ See the [Plugin API](plugin-api.md) to build your own.
 - Native Android app built from the same codebase with Tauri v2 mobile, published on [Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app). See [Android](android.md)
     - A GitHub Actions workflow builds both the universal App Bundle that Play ships and signed, per-architecture sideload APKs (~40 MB)
     - A permanent `org.geolibre.app` package id, API level 36, and 16 KB page-size alignment verified in CI
-    - Tools that depend on a local desktop process (Whitebox, Raster, Conversion, AI Segmentation, PostgreSQL/Martin) are hidden on mobile, so nothing is shown that cannot run
+    - Tools that depend on a local desktop process (Raster, Conversion, AI Segmentation, PostgreSQL/Martin) are hidden on mobile, so nothing is shown that cannot run; the WebAssembly geoprocessing toolbox needs no such process and stays available
 - iOS build scaffolding on the same codebase, with Tauri iOS configuration, location permissions, and a CI workflow that signs and exports an `.ipa` when Apple signing secrets are present (bring-up: no iOS build has shipped yet). See [iOS](ios.md)
 - Installable, offline-capable Progressive Web App (PWA) build, plus a **Download Offline Area** tool that pre-caches the current map view's basemap tiles, and service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use

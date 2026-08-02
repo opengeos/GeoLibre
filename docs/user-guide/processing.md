@@ -1,6 +1,6 @@
 # Processing Tools
 
-The **Processing** menu collects GeoLibre's analysis and conversion tools: vector geometry and overlay tools, raster terrain and clipping tools, AI segmentation, format conversion, and the Whitebox toolbox. The [SQL Workspace](sql-workspace.md), [Python Console](python-console.md), [AI Assistant](ai-assistant.md), and [AI Segmentation](segmentation.md) also live here and have their own pages.
+The **Processing** menu collects GeoLibre's analysis and conversion tools: vector geometry and overlay tools, raster terrain and clipping tools, AI segmentation, format conversion, and the [geoprocessing toolbox](#geoprocessing-toolbox) of **1,000+ tools** that run in the browser. The [SQL Workspace](sql-workspace.md), [Python Console](python-console.md), [AI Assistant](ai-assistant.md), and [AI Segmentation](segmentation.md) also live here and have their own pages.
 
 !!! note "Page order"
     This page groups the tools by theme. In the menu itself the items appear in a different order: AI Assistant (top), Whitebox, SQL Workspace, Python Console, Conversion, Vector, Raster, AI Segmentation, Planetary Computer, Earth Engine.
@@ -113,9 +113,36 @@ See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 
 The conversion sidecar is hardened with a path allowlist.
 
-## Whitebox
+## Geoprocessing toolbox
 
-**Processing → Whitebox** opens the Whitebox toolbox for batch geoprocessing, backed by a managed Python sidecar. Point it at an input directory and run tools across the files in it.
+**Processing → Whitebox** opens the geoprocessing toolbox: **1,000+ tools** covering vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection analysis.
+
+![The Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)
+
+The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS) suite together with GeoLibre's own WASM tools, which the dialog mixes into the same catalog (use the **sources** dropdown to filter to one or the other).
+
+### Where the tools run
+
+They run **in the browser**, through a WebAssembly runtime with raster and vector I/O — no Python sidecar, no server, and no data leaving your machine. That means the full toolbox is available on GeoLibre Web and on Android, not just the desktop app.
+
+The **Run locally (WASM)** checkbox controls the engine:
+
+- **Checked** runs the tool in WebAssembly on the layer or file you pick. This is the default in the browser build, where no sidecar can be started. The Mac App Store build has no sidecar to switch to at all, so the checkbox does not appear there — WebAssembly is the only runtime.
+- **Unchecked** sends the job to the Python sidecar instead. This is the default on desktop, where the sidecar is available. The sidecar can read native file paths that the in-browser runner cannot fetch, and is the better choice for batch runs across a directory of files on disk.
+
+Either way the tool list is the same; only the executing engine changes.
+
+### Finding and running a tool
+
+- **Search** by name at the top of the tool list, or narrow with the **category** and **sources** dropdowns.
+- **Browse by category** without opening the dialog at all: the Processing menu has a submenu per category (Vector, Raster, Remote Sensing, Hydrology, Terrain, LiDAR, Conversion, Network, Projection) with nested subcategory submenus. Picking a tool opens the dialog with it preselected. The catalog is bundled offline, so the menu works with no network.
+- **Fill in the form** — the dialog builds it from the tool's own parameter manifest, with a file picker for path inputs and an output-format dropdown for vector outputs. Parameters that are ground distances get a metric unit picker.
+- **Run**, and the output is added to the map. Raster outputs are Cloud Optimized GeoTIFFs.
+
+!!! tip "Share a link to a tool"
+    **Copy link** builds a URL with a `?tool=` parameter that reopens the app with that tool preselected and its form pre-filled — handy for documentation, teaching, and bug reports.
+
+Every run is recorded in the **Processing History** panel, which re-runs any entry with one click and copies the equivalent Python code.
 
 ## AI Segmentation
 
@@ -127,7 +154,7 @@ The Processing menu also opens the **Planetary Computer** and **Earth Engine** p
 
 ## The Python sidecar
 
-The raster tools, the sidecar conversion tools, the Whitebox toolbox, and the optional GeoPandas vector engine all use a local FastAPI sidecar that the desktop app starts on demand. The vector tools' client engine and the browser-based conversions need no sidecar. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
+The raster tools, the sidecar conversion tools, and the optional GeoPandas vector engine use a local FastAPI sidecar that the desktop app starts on demand. The geoprocessing toolbox can *optionally* use it too, but does not need it — it runs in WebAssembly by default. The vector tools' client engine and the browser-based conversions need no sidecar either. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
 
 !!! note "Browser vs desktop"
-    The client-side vector tools and the browser conversions (Vector to Vector, Vector to GeoParquet, CSV to GeoParquet) run in the browser. Vector to Vector's full any-format output (and the other sidecar conversions, raster tools, and Whitebox) requires the desktop app and the Python sidecar.
+    The [geoprocessing toolbox](#geoprocessing-toolbox), the client-side vector tools, and the browser conversions (Vector to Vector, Vector to GeoParquet, CSV to GeoParquet) all run in the browser. Vector to Vector's full any-format output, the other sidecar conversions, and the full raster tool set require the desktop app and the Python sidecar.
