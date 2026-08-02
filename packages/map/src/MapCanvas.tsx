@@ -1114,7 +1114,6 @@ export const MapCanvas = memo(function MapCanvas({
     map.on("projectiontransition", updateProjection);
     map.on("load", () => {
       const state = useAppStore.getState();
-      mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       mc.setBasemapVisible(state.basemapVisible);
       mc.setBasemapOpacity(state.basemapOpacity);
       mc.highlightFeature(

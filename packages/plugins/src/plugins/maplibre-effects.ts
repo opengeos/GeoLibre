@@ -88,6 +88,8 @@ const STARFIELD_LNG_PERIOD_DEGREES = 360;
 const STARFIELD_LAT_PERIOD_DEGREES = 180;
 
 const HALO_SAMPLE_COUNT = 16;
+// Keep decorative canvas work from competing with MapLibre on high-refresh displays.
+const EFFECTS_FRAME_MS = 1000 / 60;
 
 // Halo radial gradient as a *shape* independent of the chosen color: each stop
 // is [offset, alpha, shade] where offset is the fraction of the gradient span
@@ -458,6 +460,7 @@ class EffectsEngine {
   private settings: EffectsSettings;
 
   private rafId: number | null = null;
+  private lastFrameTime = -Infinity;
   private destroyed = false;
 
   constructor(map: MapLibreMap, settings: EffectsSettings) {
@@ -803,9 +806,18 @@ class EffectsEngine {
     ctx.restore();
   }
 
-  private tick(): void {
+  private tick(timestamp: number): void {
     this.rafId = null;
     if (this.destroyed) return;
+
+    const elapsed = timestamp - this.lastFrameTime;
+    // Allow for rAF timestamp rounding on a nominal 60 Hz display.
+    if (elapsed + 0.1 < EFFECTS_FRAME_MS) {
+      this.start();
+      return;
+    }
+    this.lastFrameTime =
+      elapsed >= EFFECTS_FRAME_MS * 2 ? timestamp : this.lastFrameTime + EFFECTS_FRAME_MS;
 
     this.clear();
 
