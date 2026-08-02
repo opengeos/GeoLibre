@@ -278,6 +278,43 @@ describe("resolveOgcVectorTiles (Esri style URL)", () => {
       restore();
     }
   });
+
+  // A host can report a failure with a bare code and no usable `message` (498
+  // is Esri's invalid-token code), and some use string codes. Both must still
+  // be recognized as errors rather than passed on as an empty document.
+  it("reports a coded error that carries no message", async () => {
+    for (const code of [498, "NotFound"]) {
+      const { restore } = stubFetch({ [styleUrl]: { error: { code } } });
+      try {
+        await assert.rejects(
+          resolveOgcVectorTiles({ tilesUrl: "", styleUrl }),
+          new RegExp(`Service error ${code}`),
+        );
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  // `code: 0` conventionally means success, so it must not be read as a
+  // failure — only a real code or a message makes the document an error report.
+  it("does not treat a zero code or an unrelated `error` value as a failure", async () => {
+    for (const error of [{ code: 0 }, "not an envelope", ["nope"], null]) {
+      const { restore } = stubFetch({
+        [styleUrl]: {
+          error,
+          sources: { s: { type: "vector", tiles: ["https://ex.com/{z}/{x}/{y}.pbf"] } },
+          layers: [{ id: "a", source: "s", "source-layer": "roads" }],
+        },
+      });
+      try {
+        const config = await resolveOgcVectorTiles({ tilesUrl: "", styleUrl });
+        assert.deepEqual(config.sourceLayers, ["roads"]);
+      } finally {
+        restore();
+      }
+    }
+  });
 });
 
 // Exercises the full resolver against a stubbed OGC API: a TileJSON without

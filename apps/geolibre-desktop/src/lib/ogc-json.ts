@@ -90,8 +90,10 @@ async function responseStatusError(response: Response): Promise<Error> {
  * actual cause.
  *
  * The shape is checked, not just the key: a legitimate document is free to
- * carry an `error` property of some other form, so an object with a `message`
- * or a numeric `code` is required before the document is rejected.
+ * carry an `error` property of some other form, so a `message` or a reported
+ * `code` is required before the document is rejected. `code: 0` conventionally
+ * means success, so it is not on its own a failure; a string code
+ * (`{"code":"NotFound"}`) is as much a report as a numeric one.
  */
 function assertNoServiceError(doc: unknown): void {
   const error = (doc as { error?: unknown } | null | undefined)?.error;
@@ -102,12 +104,14 @@ function assertNoServiceError(doc: unknown): void {
     details?: unknown;
   };
   const hasMessage = typeof message === "string" && message.trim() !== "";
-  if (!hasMessage && typeof code !== "number") return;
+  const hasCode =
+    (typeof code === "number" && code !== 0) || (typeof code === "string" && code.trim() !== "");
+  if (!hasMessage && !hasCode) return;
   // `details` is an array of extra lines; append it when it adds anything.
   const detail = Array.isArray(details)
     ? details.filter((line): line is string => typeof line === "string" && line.trim() !== "")
     : [];
-  const text = hasMessage ? (message as string).trim() : `Service error ${String(code)}`;
+  const text = hasMessage ? message.trim() : `Service error ${String(code).trim()}`;
   throw new Error([text, ...detail].join(" ").slice(0, 300));
 }
 
