@@ -18,7 +18,8 @@ export interface ArcgisProjectImportWarning {
     | "network-path"
     | "service"
     | "browser-local-file"
-    | "map-extent";
+    | "map-extent"
+    | "nesting";
   layerType?: string;
 }
 
@@ -48,6 +49,18 @@ export interface ArcgisServiceImport {
 type CimObject = Record<string, unknown>;
 
 const MAX_CIM_BYTES = 25 * 1024 * 1024;
+/**
+ * Deepest group nesting the importer will follow.
+ *
+ * A project file is untrusted input reachable straight from Project → Import,
+ * and group children are resolved by path out of the archive's shared file map,
+ * so a corrupt or crafted project can reference an ancestor and recurse without
+ * end. The ancestor set in {@link importLayer} breaks true cycles; this cap
+ * additionally bounds a very long acyclic chain of tiny group members, which
+ * would otherwise exhaust the stack while staying under MAX_CIM_BYTES. Far
+ * deeper than any real ArcGIS Pro table of contents.
+ */
+const MAX_GROUP_DEPTH = 64;
 const SUPPORTED_VECTOR_EXTENSIONS = new Set([
   "csv",
   "dxf",
@@ -110,13 +123,21 @@ export function importArcgisProject(
       groups,
       warnings,
       usedIds,
+      new Set(),
     );
   }
 
   project.layers = layers;
+  // Rasters and services are attached to their group after the project loads
+  // (they become store layers only once the raster control and ArcGIS plugin
+  // have added them), so a group holding nothing else must survive this prune.
+  // Dropping it would make the later moveLayerToGroup call a silent no-op and
+  // strand the raster or service at the top level.
   project.layerGroups = groups.filter(
     (group) =>
       layers.some((layer) => layer.groupId === group.id) ||
+      rasters.some((raster) => raster.groupId === group.id) ||
+      services.some((service) => service.groupId === group.id) ||
       groups.some((child) => child.parentId === group.id),
   );
   project.metadata = {
@@ -236,6 +257,12 @@ function unwrapLayer(value: CimObject | undefined): CimObject | null {
   return null;
 }
 
+/**
+ * @param ancestors - Group definitions already open on this branch. Children
+ *   resolved out of the archive share object identity with the file map's
+ *   entries, so a project that references an ancestor is detected here rather
+ *   than recursing until the stack overflows.
+ */
 function importLayer(
   layer: CimObject,
   files: Map<string, CimObject>,
@@ -247,6 +274,7 @@ function importLayer(
   groups: LayerGroup[],
   warnings: ArcgisProjectImportWarning[],
   usedIds: Set<string>,
+  ancestors: ReadonlySet<CimObject>,
 ): void {
   const type = stringValue(layer.type);
   const name = stringValue(layer.name) || type || "ArcGIS layer";
@@ -259,6 +287,10 @@ function importLayer(
   const id = uniqueId(stringValue(layer.uRI) || name, usedIds);
 
   if (type.includes("CIMGroupLayer")) {
+    if (ancestors.has(layer) || ancestors.size >= MAX_GROUP_DEPTH) {
+      warnings.push({ layerName: name, reason: "nesting", layerType: type });
+      return;
+    }
     groups.push({
       id,
       name,
@@ -267,6 +299,7 @@ function importLayer(
       opacity: 1,
       ...(parentId ? { parentId } : {}),
     });
+    const branch = new Set(ancestors).add(layer);
     for (const child of resolveLayerList(layer, files)) {
       importLayer(
         child,
@@ -279,6 +312,7 @@ function importLayer(
         groups,
         warnings,
         usedIds,
+        branch,
       );
     }
     return;
@@ -286,12 +320,12 @@ function importLayer(
 
   if (type.includes("CIMRasterLayer")) {
     const connection = objectValue(layer.dataConnection);
-    const rasterPath = resolveRasterSource(connection, sourcePath);
-    if (rasterPath) {
+    const resolvedRaster = resolveRasterSource(connection, sourcePath);
+    if (resolvedRaster.path) {
       rasters.push({
         id,
         name,
-        sourcePath: rasterPath,
+        sourcePath: resolvedRaster.path,
         visible,
         opacity: numberValue(layer.opacity) ?? 1,
         ...(parentId ? { groupId: parentId } : {}),
@@ -299,7 +333,7 @@ function importLayer(
     } else {
       warnings.push({
         layerName: name,
-        reason: connection ? "format" : "missing-source",
+        reason: resolvedRaster.reason ?? "format",
         layerType: type,
       });
     }
@@ -379,16 +413,25 @@ function importLayer(
   });
 }
 
+/**
+ * Resolve a raster layer's local file path.
+ *
+ * Mirrors {@link resolveDataSource}'s result shape so a raster reports the same
+ * reason a vector layer would for the same root cause -- a UNC workspace is a
+ * "network-path", not an unsupported "format".
+ */
 function resolveRasterSource(
   connection: CimObject | undefined,
   projectPath: string,
-): string | null {
-  if (!connection) return null;
+): { path?: string; reason?: ArcgisProjectImportWarning["reason"] } {
+  if (!connection) return { reason: "missing-source" };
   const workspace = parseWorkspacePath(stringValue(connection.workspaceConnectionString));
   const dataset = stringValue(connection.dataset);
-  if (!workspace || !dataset || isNetworkPath(workspace)) return null;
+  if (!workspace && !dataset) return { reason: "missing-source" };
+  if (isNetworkPath(workspace)) return { reason: "network-path" };
+  if (!workspace || !dataset) return { reason: "missing-source" };
   const path = resolveRelativePath(joinPath(workspace, dataset), projectPath);
-  return ["tif", "tiff"].includes(extension(path)) ? path : null;
+  return ["tif", "tiff"].includes(extension(path)) ? { path } : { reason: "format" };
 }
 
 function resolveDataSource(

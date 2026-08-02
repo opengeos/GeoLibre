@@ -306,6 +306,122 @@ describe("ArcGIS Pro project import", () => {
     );
   });
 
+  it("keeps a group whose only members are a raster or a service", () => {
+    // The raster and service join the store after the project loads, so the
+    // group must survive the prune or the later moveLayerToGroup is a no-op and
+    // they strand at the top level.
+    const mapx = {
+      type: "CIMMap",
+      name: "Grouped",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          type: "CIMGroupLayer",
+          name: "Imagery",
+          layerDefinitions: [
+            {
+              type: "CIMRasterLayer",
+              name: "Elevation",
+              dataConnection: {
+                workspaceConnectionString: "DATABASE=../rasters",
+                dataset: "dem.tif",
+              },
+            },
+          ],
+        },
+        {
+          type: "CIMGroupLayer",
+          name: "Basemaps",
+          layerDefinitions: [
+            {
+              type: "CIMVectorTileLayer",
+              name: "Streets",
+              sourceURI: "79a4630cf75d49bba0d54d85030ba338",
+            },
+          ],
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "/work/projects/grouped.mapx");
+    const groupNames = result.project.layerGroups?.map((group) => group.name);
+    assert.deepEqual(groupNames, ["Imagery", "Basemaps"]);
+    const groupIds = new Map(result.project.layerGroups?.map((group) => [group.name, group.id]));
+    assert.equal(result.rasters[0].groupId, groupIds.get("Imagery"));
+    assert.equal(result.services[0].groupId, groupIds.get("Basemaps"));
+  });
+
+  it("reports a raster on a network share as a network path, not a bad format", () => {
+    const mapx = {
+      type: "CIMMap",
+      name: "Shared",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          type: "CIMRasterLayer",
+          name: "Remote DEM",
+          dataConnection: {
+            workspaceConnectionString: "DATABASE=\\\\server\\share\\rasters",
+            dataset: "dem.tif",
+          },
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "/work/projects/shared.mapx");
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Remote DEM", "network-path"]],
+    );
+    assert.deepEqual(result.rasters, []);
+  });
+
+  it("does not recurse forever when a group refers back to itself", () => {
+    // Two group members that reference each other by path -- the archive's file
+    // map hands back the same object each time, so without the ancestor guard
+    // this recurses until the stack overflows.
+    const archive = zipSync({
+      "GISProject.json": strToU8(
+        JSON.stringify({
+          projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=Maps/Main.json" }],
+        }),
+      ),
+      "Maps/Main.json": strToU8(
+        JSON.stringify({
+          type: "CIMMap",
+          name: "Loop",
+          layers: ["CIMPATH=Layers/A.lyrx"],
+        }),
+      ),
+      "Layers/A.lyrx": strToU8(
+        JSON.stringify({
+          type: "CIMGroupLayer",
+          name: "A",
+          layers: ["CIMPATH=Layers/B.lyrx"],
+        }),
+      ),
+      "Layers/B.lyrx": strToU8(
+        JSON.stringify({
+          type: "CIMGroupLayer",
+          name: "B",
+          layers: ["CIMPATH=Layers/A.lyrx"],
+        }),
+      ),
+    });
+
+    const result = importArcgisProject(archive, "C:\\projects\\loop.aprx");
+    assert.deepEqual(
+      result.warnings
+        .filter((warning) => warning.reason === "nesting")
+        .map((warning) => warning.layerName),
+      ["A"],
+    );
+    // B's only child was the cycle back to A, so it is pruned as empty; A
+    // survives because B still names it as a parent.
+    assert.deepEqual(
+      result.project.layerGroups?.map((group) => group.name),
+      ["A"],
+    );
+  });
+
   it("measures the map size in bytes, not UTF-16 code units", () => {
     // Each of these characters is 3 bytes in UTF-8 but one UTF-16 unit, so a
     // `String.length` guard would let a map far past the cap through.
