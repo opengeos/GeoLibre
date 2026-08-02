@@ -70,9 +70,11 @@ export interface RightPanelSnapshot {
   /** Whether the active panel is collapsed to its rail. */
   collapsed: boolean;
   /**
-   * Where the active panel docks, or null when none is open. Defaults to the
-   * panel's declared `dock` (the shared Style rail by default); the user steps it with the panel's
-   * move buttons (or a plugin via {@link setActiveRightPanelDock}).
+   * Where the active panel docks, or null when none is open. A panel already
+   * enabled in a rail reopens at its remembered dock ({@link panelDocks});
+   * otherwise it starts from its declared `dock` (the shared Style rail by
+   * default). The user steps it with the panel's move buttons (or a plugin via
+   * {@link setActiveRightPanelDock}).
    */
   dock: RightPanelDock | null;
   /** Panels enabled in their dock rails, including inactive displaced panels. */
@@ -219,7 +221,9 @@ export function openRightPanel(id: string): boolean {
   if (displacedId !== null) {
     runHook(displacedId, "onClose", registry.get(displacedId)?.onClose);
   }
-  // A new panel starts from its own declared dock, not the previous user move.
+  // A panel taking over restores the dock it was last at (set just above from
+  // its declared `dock` the first time it becomes visible), not the dock the
+  // panel it displaced happened to be moved to.
   if (wasInactive) activeDock = panelDocks.get(id) ?? normalizeDock(panel.dock);
   activeId = id;
   collapsed = false;

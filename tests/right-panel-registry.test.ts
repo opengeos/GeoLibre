@@ -119,6 +119,9 @@ describe("right-panel registry", () => {
     closeRightPanel("browser");
     assert.equal(getActiveRightPanel(), "comments");
     assert.deepEqual(getRightPanelSnapshot().visibleIds, ["comments"]);
+    // Closing also forgets the panel's remembered dock, so re-enabling it later
+    // starts from its declared dock rather than wherever it was last moved.
+    assert.equal("browser" in getRightPanelSnapshot().panelDocks, false);
   });
 
   it("preserves each visible panel's merged dock while another panel is active", () => {
@@ -133,6 +136,8 @@ describe("right-panel registry", () => {
     assert.equal(getActiveRightPanel(), "comments");
     assert.equal(getRightPanelSnapshot().panelDocks.comments, "replace-style");
     assert.equal(getRightPanelSnapshot().panelDocks.catalog, "replace-style");
+    // Re-activating a still-visible panel restores its remembered dock.
+    assert.equal(getActiveRightPanelDock(), "replace-style");
   });
 
   it("defaults to the shared Style rail and honors a declared dock", () => {

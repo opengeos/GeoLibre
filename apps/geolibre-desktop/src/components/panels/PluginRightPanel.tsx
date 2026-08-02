@@ -158,6 +158,13 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
       </aside>
     ) : null;
 
+  // Beside an *expanded* panel the rail exists only to reach the other panels
+  // docked here — an entry for the expanded panel itself would just repeat the
+  // header it already renders — so it is dropped when nothing else is docked.
+  const railBesideExpanded = dockPanels.some((candidate) => candidate.id !== activeId)
+    ? panelRail
+    : null;
+
   if (!matched || !panel) return panelRail;
   // When collapsed in shared-rail mode the host's single shared rail shows this
   // panel's entry, so render nothing here (no second rail beside Style).
@@ -315,7 +322,7 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
         </div>
         <div ref={contentRef} className="min-h-0 flex-1 overflow-auto" />
       </aside>
-      {panelRail}
+      {railBesideExpanded}
     </>
   );
 }
