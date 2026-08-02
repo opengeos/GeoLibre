@@ -95,10 +95,16 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
   // move buttons and no rail of its own; its collapsed entry lives in that single
   // shared rail instead.
   const isSharedRail = dock === "replace-style" || dock === "replace-layers";
+  // Every panel docked here that is not currently expanded: the displaced ones
+  // plus the active panel when it is collapsed to this rail. The expanded panel
+  // is excluded — it renders in full below, so a rail entry would duplicate it
+  // and be announced as collapsed when it is not.
   const dockPanels = isSharedRail
     ? []
     : listRightPanels().filter((candidate) =>
-        candidate.id === activeId ? activeDock === dock : panelDocks[candidate.id] === dock,
+        candidate.id === activeId
+          ? activeDock === dock && collapsed
+          : panelDocks[candidate.id] === dock,
       );
 
   // Adopt the shared content host (rendered once by the shell) into this slot
@@ -131,22 +137,14 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
             ) : (
               <PanelRight className="h-4 w-4" />
             );
-          const expanded = candidate.id === activeId && !collapsed;
           return (
             <button
               key={candidate.id}
               type="button"
-              aria-pressed={expanded}
-              title={candidate.title}
-              aria-label={candidate.title}
-              onClick={() =>
-                expanded ? collapseRightPanel(candidate.id) : openRightPanel(candidate.id)
-              }
-              className={`flex items-center gap-2 rounded px-1.5 py-1.5 md:flex-col md:px-1 md:py-2 ${
-                expanded
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-              }`}
+              title={t("sharedRail.expand", { title: candidate.title })}
+              aria-label={t("sharedRail.expand", { title: candidate.title })}
+              onClick={() => openRightPanel(candidate.id)}
+              className="flex items-center gap-2 rounded px-1.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground md:flex-col md:px-1 md:py-2"
             >
               {candidateIcon}
               <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
@@ -157,13 +155,6 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
         })}
       </aside>
     ) : null;
-
-  // Beside an *expanded* panel the rail exists only to reach the other panels
-  // docked here — an entry for the expanded panel itself would just repeat the
-  // header it already renders — so it is dropped when nothing else is docked.
-  const railBesideExpanded = dockPanels.some((candidate) => candidate.id !== activeId)
-    ? panelRail
-    : null;
 
   if (!matched || !panel) return panelRail;
   // When collapsed in shared-rail mode the host's single shared rail shows this
@@ -322,7 +313,7 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
         </div>
         <div ref={contentRef} className="min-h-0 flex-1 overflow-auto" />
       </aside>
-      {railBesideExpanded}
+      {panelRail}
     </>
   );
 }
