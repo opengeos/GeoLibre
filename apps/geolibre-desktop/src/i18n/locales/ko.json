@@ -1709,6 +1709,7 @@
       "showLayersPanel": "레이어 패널 표시",
       "showStylePanel": "스타일 패널 표시",
       "showBrowserPanel": "브라우저 패널 표시",
+      "showCommentsPanel": "댓글 패널 표시",
       "showAttributePanel": "속성 패널 표시",
       "urlParamsNote": "공유된 뷰어 링크에 URL 레이아웃 매개변수가 있으면 계속 적용됩니다."
     },
@@ -4955,6 +4956,7 @@
     "invalidKmlCoordinatesById": "좌표가 올바르지 않아 KML 내보내기에서 ID {{id}} 피처를 기록하지 못했습니다."
   },
   "comments": {
+    "title": "댓글",
     "addDialogTitle": "검토 의견 추가",
     "addDialogDescription": "팀 검토나 오프라인 참고용으로 이 프로젝트에 위치가 고정된 메모를 게시합니다.",
     "authorNameLabel": "이름 (한 번만 묻고 자동으로 저장됩니다)",

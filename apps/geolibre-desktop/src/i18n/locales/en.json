@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Show Layers panel",
       "showStylePanel": "Show Style panel",
       "showBrowserPanel": "Show Browser panel",
+      "showCommentsPanel": "Show Comments panel",
       "showAttributePanel": "Show Attribute panel",
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
     },
@@ -5046,6 +5047,7 @@
     "moreValues": "+{{total}} more values"
   },
   "comments": {
+    "title": "Comments",
     "addDialogTitle": "Add Review Comment",
     "addDialogDescription": "Post an anchored note on this project for team review or offline reference.",
     "authorNameLabel": "Your Name (Asked once, saved automatically)",

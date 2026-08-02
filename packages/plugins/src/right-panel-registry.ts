@@ -53,7 +53,7 @@ const ALL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   "replace-layers",
 ] as const);
 
-const DEFAULT_DOCK: RightPanelDock = "right-of-style";
+const DEFAULT_DOCK: RightPanelDock = "replace-style";
 
 function normalizeDock(dock: unknown): RightPanelDock {
   return ALL_DOCKS.includes(dock as RightPanelDock) ? (dock as RightPanelDock) : DEFAULT_DOCK;
@@ -70,11 +70,17 @@ export interface RightPanelSnapshot {
   /** Whether the active panel is collapsed to its rail. */
   collapsed: boolean;
   /**
-   * Where the active panel docks, or null when none is open. Defaults to the
-   * panel's declared `dock` ("far-right"); the user steps it with the panel's
-   * move buttons (or a plugin via {@link setActiveRightPanelDock}).
+   * Where the active panel docks, or null when none is open. A panel already
+   * enabled in a rail reopens at its remembered dock ({@link panelDocks});
+   * otherwise it starts from its declared `dock` (the shared Style rail by
+   * default). The user steps it with the panel's move buttons (or a plugin via
+   * {@link setActiveRightPanelDock}).
    */
   dock: RightPanelDock | null;
+  /** Panels enabled in their dock rails, including inactive displaced panels. */
+  visibleIds: readonly string[];
+  /** Last chosen dock for each visible panel. */
+  panelDocks: Readonly<Record<string, RightPanelDock>>;
   /** Monotonic counter bumped on every registry mutation. */
   version: number;
 }
@@ -92,17 +98,28 @@ let collapsed = false;
 // Where the active panel currently docks; reset when the active panel changes
 // so each panel starts from its own declared `dock`.
 let activeDock: RightPanelDock | null = null;
+const visibleIds = new Set<string>();
+const panelDocks = new Map<string, RightPanelDock>();
 let version = 0;
 let snapshot: RightPanelSnapshot = {
   activeId: null,
   collapsed: false,
   dock: null,
+  visibleIds: [],
+  panelDocks: {},
   version: 0,
 };
 
 function emit(): void {
   version += 1;
-  snapshot = { activeId, collapsed, dock: activeDock, version };
+  snapshot = {
+    activeId,
+    collapsed,
+    dock: activeDock,
+    visibleIds: [...visibleIds],
+    panelDocks: Object.fromEntries(panelDocks),
+    version,
+  };
   for (const listener of listeners) {
     listener();
   }
@@ -172,6 +189,8 @@ export function unregisterRightPanel(id: string): void {
     collapsed = false;
     activeDock = null;
   }
+  visibleIds.delete(id);
+  panelDocks.delete(id);
   registry.delete(id);
   titleResolver.delete(id);
   emit();
@@ -190,6 +209,9 @@ export function openRightPanel(id: string): boolean {
     return false;
   }
   if (activeId === id && !collapsed) return true;
+  const wasVisible = visibleIds.has(id);
+  visibleIds.add(id);
+  if (!wasVisible) panelDocks.set(id, normalizeDock(panel.dock));
   const wasInactive = activeId !== id;
   // A different panel taking over displaces the current owner; release it
   // (onClose) so a plugin can free resources allocated for its panel.
@@ -199,8 +221,10 @@ export function openRightPanel(id: string): boolean {
   if (displacedId !== null) {
     runHook(displacedId, "onClose", registry.get(displacedId)?.onClose);
   }
-  // A new panel starts from its own declared dock, not the previous user move.
-  if (wasInactive) activeDock = normalizeDock(panel.dock);
+  // A panel taking over restores the dock it was last at (set just above from
+  // its declared `dock` the first time it becomes visible), not the dock the
+  // panel it displaced happened to be moved to.
+  if (wasInactive) activeDock = panelDocks.get(id) ?? normalizeDock(panel.dock);
   activeId = id;
   collapsed = false;
   emit();
@@ -226,7 +250,12 @@ export function collapseRightPanel(id: string): void {
  * Close the active panel. No-op unless `id` is active.
  */
 export function closeRightPanel(id: string): void {
-  if (activeId !== id) return;
+  if (!visibleIds.delete(id)) return;
+  panelDocks.delete(id);
+  if (activeId !== id) {
+    emit();
+    return;
+  }
   activeId = null;
   collapsed = false;
   activeDock = null;
@@ -246,6 +275,7 @@ export function setActiveRightPanelDock(dock: RightPanelDock): void {
     return;
   }
   activeDock = dock;
+  panelDocks.set(activeId, dock);
   emit();
 }
 
@@ -262,6 +292,7 @@ export function moveActiveRightPanelDock(direction: "left" | "right"): void {
   const nextIndex = direction === "left" ? index - 1 : index + 1;
   if (nextIndex < 0 || nextIndex >= RIGHT_PANEL_DOCKS.length) return;
   activeDock = RIGHT_PANEL_DOCKS[nextIndex];
+  panelDocks.set(activeId, activeDock);
   emit();
 }
 
@@ -278,6 +309,11 @@ export function getActiveRightPanel(): string | null {
 /** Whether the active right panel is collapsed to its rail. */
 export function isRightPanelCollapsed(): boolean {
   return collapsed;
+}
+
+/** Whether a registered panel is enabled in a dock rail. */
+export function isRightPanelVisible(id: string): boolean {
+  return visibleIds.has(id);
 }
 
 /**
@@ -329,6 +365,15 @@ export function __resetRightPanelRegistryForTests(): void {
   activeId = null;
   collapsed = false;
   activeDock = null;
+  visibleIds.clear();
+  panelDocks.clear();
   version = 0;
-  snapshot = { activeId: null, collapsed: false, dock: null, version: 0 };
+  snapshot = {
+    activeId: null,
+    collapsed: false,
+    dock: null,
+    visibleIds: [],
+    panelDocks: {},
+    version: 0,
+  };
 }

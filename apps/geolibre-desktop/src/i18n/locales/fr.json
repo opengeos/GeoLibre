@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Afficher le panneau Couches",
       "showStylePanel": "Afficher le panneau Style",
       "showBrowserPanel": "Afficher le panneau Explorateur",
+      "showCommentsPanel": "Afficher le panneau Commentaires",
       "showAttributePanel": "Afficher le panneau Attributs",
       "urlParamsNote": "Les paramètres de disposition dans l'URL s'appliquent toujours lorsqu'ils sont présents dans les liens de visualisation partagés."
     },
@@ -5030,6 +5031,7 @@
     "invalidKmlCoordinatesById": "L'export KML n'a pas pu écrire l'entité d'ID {{id}} car ses coordonnées sont invalides."
   },
   "comments": {
+    "title": "Commentaires",
     "addDialogTitle": "Ajouter un commentaire de revue",
     "addDialogDescription": "Publiez une note ancrée sur ce projet pour la revue d'équipe ou comme référence hors ligne.",
     "authorNameLabel": "Votre nom (demandé une fois, enregistré automatiquement)",

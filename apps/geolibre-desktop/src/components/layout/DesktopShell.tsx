@@ -703,7 +703,14 @@ export function DesktopShell({
     el.className = "contents";
     return el;
   });
-  const activePanelId = useRightPanelState().activeId;
+  const rightPanelState = useRightPanelState();
+  const activePanelId = rightPanelState.activeId;
+  const replaceStylePanelIds = rightPanelState.visibleIds.filter(
+    (id) => rightPanelState.panelDocks[id] === "replace-style",
+  );
+  const replaceLayersPanelIds = rightPanelState.visibleIds.filter(
+    (id) => rightPanelState.panelDocks[id] === "replace-layers",
+  );
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
   // The plugins in VIEWER_BLOCKED_PLUGIN_IDS paint drawing and editing controls
   // onto the map, which the read-only viewer preset cannot hide the way it
@@ -2075,55 +2082,13 @@ export function DesktopShell({
         {/* Map-only / hidden-panels embeds show nothing but the map: skip the
             whole left side-dock (Layers, plugin panels, and the shared rail that
             hosts the Browser entry), not just the built-in Layers panel. */}
-        {layoutOptions.panelsHidden ? null : replaceLayersPanelId && !layoutOptions.viewer ? (
-          // Shared-rail mode on the Layers (left) side: the plugin panel shares
-          // the Layers sidebar surface, so a single rail lists both the workbench
-          // and Layers instead of the two positional plugin slots flanking it.
-          <SectionErrorBoundary
-            label="Shared left sidebar"
-            displayName={t("shell.section.sharedLeftSidebar")}
-          >
-            <SharedSidebar
-              key={replaceLayersPanelId}
-              side="layers"
-              pluginId={replaceLayersPanelId}
-              pluginContentEl={dockContentEl}
-              pluginWidth={pluginPanelWidth}
-              onPluginWidthChange={setPluginPanelWidth}
-              builtinVisible={layoutOptions.layerPanelVisible}
-              builtinTitle={t("sharedRail.layers")}
-              builtinIcon={<Layers className="h-4 w-4" />}
-              // The Browser docks here on by default but must not bury Layers:
-              // start with Layers expanded and Browser a collapsed rail entry.
-              // On a phone-width viewport both start collapsed (panels overlay
-              // there), matching the mobile "panels default collapsed" behavior.
-              initialBuiltinExpanded={
-                replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
-              }
-              // The story-map presentation is the only standalone Layers
-              // autoCollapse trigger (the notebook collapses Style, not Layers).
-              forceBuiltinCollapsed={storymapPresenting}
-              renderBuiltin={({ collapsed, onCollapsedChange }) => (
-                <LayerPanel
-                  mapControllerRef={mapControllerRef}
-                  onResizeStart={startLayerPanelResize}
-                  geometryEditLayerId={geometryEditLayerId}
-                  onToggleGeometryEdit={handleToggleGeometryEdit}
-                  onCancelGeometryEdit={handleCancelGeometryEdit}
-                  onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
-                  onOpenRasterStylePanel={() =>
-                    openRasterLayerPanel(createAppAPI(mapControllerRef))
-                  }
-                  onOpenRasterSubset={setRasterSubsetLayer}
-                  collapsed={collapsed}
-                  onCollapsedChange={onCollapsedChange}
-                  hideOwnRail
-                />
-              )}
-            />
-          </SectionErrorBoundary>
-        ) : (
+        {layoutOptions.panelsHidden ? null : (
           <>
+            {/* The positional plugin docks flank whichever middle surface the
+                Layers side shows (the shared rail or the standalone Layers
+                panel): a panel moved to left/right-of-layers must stay
+                reachable while a shared-rail panel such as the Browser is
+                open. */}
             {!layoutOptions.viewer ? (
               <SectionErrorBoundary
                 label="Plugin panel (left of Layers)"
@@ -2137,7 +2102,55 @@ export function DesktopShell({
                 />
               </SectionErrorBoundary>
             ) : null}
-            {layoutOptions.layerPanelVisible ? (
+            {replaceLayersPanelId && !layoutOptions.viewer ? (
+              // Shared-rail mode on the Layers (left) side: the plugin panel shares
+              // the Layers sidebar surface, so a single rail lists both the workbench
+              // and Layers instead of the built-in panel standing on its own.
+              <SectionErrorBoundary
+                label="Shared left sidebar"
+                displayName={t("shell.section.sharedLeftSidebar")}
+              >
+                <SharedSidebar
+                  key={replaceLayersPanelId}
+                  side="layers"
+                  pluginId={replaceLayersPanelId}
+                  additionalPanelIds={replaceLayersPanelIds}
+                  pluginContentEl={dockContentEl}
+                  pluginWidth={pluginPanelWidth}
+                  onPluginWidthChange={setPluginPanelWidth}
+                  builtinVisible={layoutOptions.layerPanelVisible}
+                  builtinTitle={t("sharedRail.layers")}
+                  builtinIcon={<Layers className="h-4 w-4" />}
+                  // The Browser docks here on by default but must not bury Layers:
+                  // start with Layers expanded and Browser a collapsed rail entry.
+                  // On a phone-width viewport both start collapsed (panels overlay
+                  // there), matching the mobile "panels default collapsed" behavior.
+                  initialBuiltinExpanded={
+                    replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
+                  }
+                  // The story-map presentation is the only standalone Layers
+                  // autoCollapse trigger (the notebook collapses Style, not Layers).
+                  forceBuiltinCollapsed={storymapPresenting}
+                  renderBuiltin={({ collapsed, onCollapsedChange }) => (
+                    <LayerPanel
+                      mapControllerRef={mapControllerRef}
+                      onResizeStart={startLayerPanelResize}
+                      geometryEditLayerId={geometryEditLayerId}
+                      onToggleGeometryEdit={handleToggleGeometryEdit}
+                      onCancelGeometryEdit={handleCancelGeometryEdit}
+                      onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
+                      onOpenRasterStylePanel={() =>
+                        openRasterLayerPanel(createAppAPI(mapControllerRef))
+                      }
+                      onOpenRasterSubset={setRasterSubsetLayer}
+                      collapsed={collapsed}
+                      onCollapsedChange={onCollapsedChange}
+                      hideOwnRail
+                    />
+                  )}
+                />
+              </SectionErrorBoundary>
+            ) : layoutOptions.layerPanelVisible ? (
               <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
                 {layoutOptions.viewer ? (
                   <ViewerLayerPanel />
@@ -2311,45 +2324,13 @@ export function DesktopShell({
         </main>
         {/* Same as the left dock: a map-only / hidden-panels embed skips the
             entire right side-dock (Style, plugin panels, and their shared rail). */}
-        {layoutOptions.panelsHidden || layoutOptions.viewer ? null : replaceStylePanelId ? (
-          // Shared-rail mode (issue #765): the plugin panel shares the Style
-          // sidebar surface, so a single rail lists both the workbench and Style
-          // instead of the two positional plugin slots flanking the Style panel.
-          <SectionErrorBoundary
-            label="Shared right sidebar"
-            displayName={t("shell.section.sharedRightSidebar")}
-          >
-            <SharedSidebar
-              // Key by the active panel id so switching between two replace-style
-              // plugins remounts the sidebar, resetting its per-panel local state
-              // (the Style opt-in) rather than carrying the previous plugin over.
-              key={replaceStylePanelId}
-              side="style"
-              pluginId={replaceStylePanelId}
-              pluginContentEl={dockContentEl}
-              pluginWidth={pluginPanelWidth}
-              onPluginWidthChange={setPluginPanelWidth}
-              builtinVisible={layoutOptions.stylePanelVisible}
-              builtinTitle={t("sharedRail.style")}
-              builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
-              // Mirror the standalone Style panel's autoCollapse triggers so the
-              // notebook / story-map presentation collapses Style here too.
-              // `autoCollapsedPanel` is omitted because it is always null in a
-              // shared-rail mode (the panel is the sole active one).
-              forceBuiltinCollapsed={notebookOpen || storymapPresenting}
-              renderBuiltin={({ collapsed, onCollapsedChange }) => (
-                <StylePanel
-                  mapControllerRef={mapControllerRef}
-                  onResizeStart={startStylePanelResize}
-                  collapsed={collapsed}
-                  onCollapsedChange={onCollapsedChange}
-                  hideOwnRail
-                />
-              )}
-            />
-          </SectionErrorBoundary>
-        ) : (
+        {layoutOptions.panelsHidden || layoutOptions.viewer ? null : (
           <>
+            {/* Shared-rail panels such as Comments must not remove the ordinary
+                positional docks: enabled Web Services panels still live in
+                left/right-of-style and need their vertical rail entries. Both
+                flank whichever middle surface applies, so they are rendered
+                once here rather than duplicated per branch. */}
             <SectionErrorBoundary
               label="Plugin panel (left of Style)"
               displayName={t("shell.section.pluginPanelLeftOfStyle")}
@@ -2361,11 +2342,50 @@ export function DesktopShell({
                 onWidthChange={setPluginPanelWidth}
               />
             </SectionErrorBoundary>
-            {/* The notebook claims the workspace's right half, so the Style panel
+            {replaceStylePanelId ? (
+              <SectionErrorBoundary
+                label="Shared right sidebar"
+                displayName={t("shell.section.sharedRightSidebar")}
+              >
+                <SharedSidebar
+                  // Key by the active panel id so switching between two replace-style
+                  // plugins remounts the sidebar, resetting its per-panel local state
+                  // (the Style opt-in) rather than carrying the previous plugin over.
+                  key={replaceStylePanelId}
+                  side="style"
+                  pluginId={replaceStylePanelId}
+                  additionalPanelIds={replaceStylePanelIds}
+                  pluginContentEl={dockContentEl}
+                  pluginWidth={pluginPanelWidth}
+                  onPluginWidthChange={setPluginPanelWidth}
+                  builtinVisible={layoutOptions.stylePanelVisible}
+                  builtinTitle={t("sharedRail.style")}
+                  builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
+                  // Mirror the standalone Style panel's autoCollapse triggers so the
+                  // notebook / story-map presentation collapses Style here too.
+                  // `autoCollapsedPanel` is omitted because it is always null in a
+                  // shared-rail mode (the panel is the sole active one).
+                  forceBuiltinCollapsed={notebookOpen || storymapPresenting}
+                  renderBuiltin={({ collapsed, onCollapsedChange }) => (
+                    <StylePanel
+                      mapControllerRef={mapControllerRef}
+                      onResizeStart={startStylePanelResize}
+                      collapsed={collapsed}
+                      onCollapsedChange={onCollapsedChange}
+                      // Controlled mode ignores autoCollapse for collapsing (the
+                      // rail owns that via forceBuiltinCollapsed); it is passed so
+                      // a layer selection cannot expand Style over the notebook.
+                      autoCollapse={notebookOpen || storymapPresenting}
+                      hideOwnRail
+                    />
+                  )}
+                />
+              </SectionErrorBoundary>
+            ) : /* The notebook claims the workspace's right half, so the Style panel
                 collapses to its rail while the notebook is open (Processing →
                 Jupyter Notebook) rather than unmounting; the user can re-expand it.
-                A story map presentation collapses it for the same reason. */}
-            {layoutOptions.stylePanelVisible ? (
+                A story map presentation collapses it for the same reason. */
+            layoutOptions.stylePanelVisible ? (
               <SectionErrorBoundary label="Style panel" displayName={t("shell.section.stylePanel")}>
                 <StylePanel
                   mapControllerRef={mapControllerRef}

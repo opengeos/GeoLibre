@@ -474,7 +474,7 @@ export const maplibreArcGisHubPlugin: GeoLibrePlugin = {
       app.registerRightPanel?.({
         id: PANEL_ID,
         title: "ArcGIS Hub",
-        dock: "right-of-style",
+        dock: "replace-style",
         defaultWidth: 360,
         render: (container) => {
           panelContainer = container;

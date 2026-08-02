@@ -1908,6 +1908,7 @@
       "showLayersPanel": "إظهار لوحة الطبقات",
       "showStylePanel": "إظهار لوحة النمط",
       "showBrowserPanel": "إظهار لوحة المستعرض",
+      "showCommentsPanel": "إظهار لوحة التعليقات",
       "showAttributePanel": "إظهار لوحة السمات",
       "urlParamsNote": "تظل معلمات التخطيط في عنوان URL سارية عند وجودها في روابط العارض المشتركة."
     },
@@ -5329,6 +5330,7 @@
     "invalidKmlCoordinatesById": "تعذّر على مُصدّر KML كتابة المعلم ذي المعرّف {{id}} لأن إحداثياته غير صالحة."
   },
   "comments": {
+    "title": "التعليقات",
     "addDialogTitle": "إضافة تعليق مراجعة",
     "addDialogDescription": "انشر ملاحظة مثبتة على هذا المشروع لمراجعة الفريق أو للرجوع إليها دون اتصال.",
     "authorNameLabel": "اسمك (يُطلب مرة واحدة ويُحفظ تلقائيًا)",

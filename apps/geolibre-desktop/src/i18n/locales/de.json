@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Ebenen-Bedienfeld anzeigen",
       "showStylePanel": "Stil-Bedienfeld anzeigen",
       "showBrowserPanel": "Browser-Bedienfeld anzeigen",
+      "showCommentsPanel": "Kommentar-Bedienfeld anzeigen",
       "showAttributePanel": "Attribut-Bedienfeld anzeigen",
       "urlParamsNote": "URL-Layout-Parameter gelten weiterhin, wenn sie in gemeinsam genutzten Viewer-Links vorhanden sind."
     },
@@ -5030,6 +5031,7 @@
     "invalidKmlCoordinatesById": "Der KML-Export konnte Feature-ID {{id}} nicht schreiben, da sie ungültige Koordinaten hat."
   },
   "comments": {
+    "title": "Kommentare",
     "addDialogTitle": "Prüfkommentar hinzufügen",
     "addDialogDescription": "Eine verankerte Notiz zu diesem Projekt für die Teamprüfung oder als Offline-Referenz veröffentlichen.",
     "authorNameLabel": "Ihr Name (wird einmal abgefragt und automatisch gespeichert)",

@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Katmanlar panelini göster",
       "showStylePanel": "Stil panelini göster",
       "showBrowserPanel": "Gözatıcı panelini göster",
+      "showCommentsPanel": "Yorumlar panelini göster",
       "showAttributePanel": "Öznitelik panelini göster",
       "urlParamsNote": "URL düzen parametreleri, paylaşılan görüntüleyici bağlantılarında mevcut olduğunda hâlâ geçerlidir."
     },
@@ -5030,6 +5031,7 @@
     "invalidKmlCoordinatesById": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{id}} kimlikli öğeyi yazamadı."
   },
   "comments": {
+    "title": "Yorumlar",
     "addDialogTitle": "İnceleme Yorumu Ekle",
     "addDialogDescription": "Ekip incelemesi veya çevrimdışı başvuru için bu projeye sabitlenmiş bir not gönderin.",
     "authorNameLabel": "Adınız (bir kez sorulur, otomatik kaydedilir)",

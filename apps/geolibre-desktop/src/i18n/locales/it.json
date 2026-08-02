@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Mostra pannello Livelli",
       "showStylePanel": "Mostra pannello Stile",
       "showBrowserPanel": "Mostra pannello Browser",
+      "showCommentsPanel": "Mostra pannello Commenti",
       "showAttributePanel": "Mostra pannello Attributi",
       "urlParamsNote": "I parametri di layout nell'URL si applicano comunque quando presenti nei link di visualizzazione condivisi."
     },
@@ -5030,6 +5031,7 @@
     "invalidKmlCoordinatesById": "L'esportazione KML non ha potuto scrivere l'elemento con ID {{id}} perché ha coordinate non valide."
   },
   "comments": {
+    "title": "Commenti",
     "addDialogTitle": "Aggiungi commento di revisione",
     "addDialogDescription": "Pubblica una nota ancorata su questo progetto per la revisione del team o come riferimento offline.",
     "authorNameLabel": "Il tuo nome (richiesto una volta, salvato automaticamente)",

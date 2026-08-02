@@ -83,8 +83,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
-import { isMobile } from "../../lib/is-mobile";
 import { loadedVectorTileFeatures } from "../../hooks/useVectorTileGeometryBackfill";
 import { clamp } from "../../lib/clamp";
 import {
@@ -997,14 +995,9 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  // Start collapsed on a narrow viewport *or* on a mobile platform. The viewport
-  // check alone misses the iPad: it is ~1024pt wide, so it reads as a desktop
-  // and opens Layers and Style at once, squeezing the map into a narrow strip
-  // between them. Initial state only — the user can expand the panel, and the
-  // choice sticks for the session.
-  const [internalCollapsed, setInternalCollapsed] = useState(
-    () => getIsMobileViewport() || isMobile(),
-  );
+  // Style starts on its rail on every platform. Selecting a real layer below
+  // expands it; selecting the special Background row does not.
+  const [internalCollapsed, setInternalCollapsed] = useState(true);
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
   // owner applies so every existing call site keeps working.
@@ -1017,6 +1010,23 @@ export function StylePanel({
     },
     [isControlled, onCollapsedChange],
   );
+  // Selecting a real layer expands the panel from its rail. Skipped while
+  // `autoCollapse` holds it closed (the notebook or a story-map presentation
+  // owns the workspace), so a selection made there cannot pop Style back open
+  // over them and defeat the auto-collapse below.
+  const previousSelectedLayerId = useRef(selectedLayerId);
+  useEffect(() => {
+    const previous = previousSelectedLayerId.current;
+    previousSelectedLayerId.current = selectedLayerId;
+    if (
+      !autoCollapse &&
+      selectedLayerId &&
+      selectedLayerId !== previous &&
+      layers.some((candidate) => candidate.id === selectedLayerId)
+    ) {
+      setIsCollapsed(false);
+    }
+  }, [autoCollapse, layers, selectedLayerId, setIsCollapsed]);
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the
