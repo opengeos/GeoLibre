@@ -2481,7 +2481,8 @@
         "format": "The layer's data format is not supported.",
         "network-path": "Network share paths are not loaded for security reasons.",
         "service": "ArcGIS service layers in projects are not supported yet.",
-        "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it."
+        "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it.",
+        "map-extent": "The saved map extent uses a coordinate system GeoLibre cannot convert, so the map opened at a default view."
       },
       "qgisImportComplete": "QGIS project imported",
       "qgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",

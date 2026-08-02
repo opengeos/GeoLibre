@@ -17,13 +17,32 @@ export interface ArcgisProjectImportWarning {
     | "format"
     | "network-path"
     | "service"
-    | "browser-local-file";
+    | "browser-local-file"
+    | "map-extent";
   layerType?: string;
 }
 
 export interface ArcgisProjectImportResult {
   project: GeoLibreProject;
+  rasters: ArcgisRasterImport[];
+  services: ArcgisServiceImport[];
   warnings: ArcgisProjectImportWarning[];
+}
+
+export interface ArcgisRasterImport {
+  id: string;
+  name: string;
+  sourcePath: string;
+  visible: boolean;
+  opacity: number;
+  groupId?: string;
+}
+
+export interface ArcgisServiceImport {
+  name: string;
+  itemId: string;
+  visible: boolean;
+  groupId?: string;
 }
 
 type CimObject = Record<string, unknown>;
@@ -65,17 +84,33 @@ export function importArcgisProject(
   if (!map) throw new Error("This file does not contain an ArcGIS Pro map.");
 
   const projectName = stringValue(map.name) || fileStem(sourcePath) || "Imported ArcGIS Project";
-  const project = createEmptyProject(projectName, {
-    mapView: parseMapView(map),
-  });
+  const { view: mapView, extentRestored } = parseMapView(map);
+  const project = createEmptyProject(projectName, { mapView });
   const warnings: ArcgisProjectImportWarning[] = [];
+  // Every other unsupported condition is reported, so a dropped extent is too:
+  // otherwise a project in an unsupported projection opens at a generic world
+  // view with nothing to explain why.
+  if (!extentRestored) warnings.push({ layerName: projectName, reason: "map-extent" });
   const layers: GeoLibreLayer[] = [];
+  const rasters: ArcgisRasterImport[] = [];
+  const services: ArcgisServiceImport[] = [];
   const groups: LayerGroup[] = [];
   const usedIds = new Set<string>();
 
   const definitions = resolveLayerList(map, files);
   for (const definition of definitions) {
-    importLayer(definition, files, sourcePath, undefined, true, layers, groups, warnings, usedIds);
+    importLayer(
+      definition,
+      files,
+      sourcePath,
+      undefined,
+      layers,
+      rasters,
+      services,
+      groups,
+      warnings,
+      usedIds,
+    );
   }
 
   project.layers = layers;
@@ -89,7 +124,7 @@ export function importArcgisProject(
     importedFrom: "arcgis-pro",
     arcgisProjectPath: sourcePath,
   };
-  return { project, warnings };
+  return { project, rasters, services, warnings };
 }
 
 function readCimFiles(
@@ -97,26 +132,40 @@ function readCimFiles(
   sourcePath: string,
 ): Map<string, CimObject> {
   if (typeof data === "string" || sourcePath.toLowerCase().endsWith(".mapx")) {
-    const text = typeof data === "string" ? data : strFromU8(asBytes(data));
-    if (text.length > MAX_CIM_BYTES)
+    // Measured in bytes, not `String.length`: the latter counts UTF-16 code
+    // units, so a CIM document full of multi-byte characters would slip past a
+    // byte-denominated cap. Binary input is checked before it is decoded, so an
+    // oversized map never pays for a full string decode.
+    if (typeof data !== "string") {
+      const bytes = asBytes(data);
+      if (bytes.byteLength > MAX_CIM_BYTES) {
+        throw new Error("The ArcGIS map is too large to import safely.");
+      }
+      return new Map([["map.mapx", parseCimJson(strFromU8(bytes))]]);
+    }
+    if (new TextEncoder().encode(data).byteLength > MAX_CIM_BYTES) {
       throw new Error("The ArcGIS map is too large to import safely.");
-    const parsed = parseCimJson(text);
-    return new Map([["map.mapx", parsed]]);
+    }
+    return new Map([["map.mapx", parseCimJson(data)]]);
   }
 
-  const bytes = asBytes(data);
+  const archiveBytes = asBytes(data);
   let entries: Record<string, Uint8Array>;
   try {
-    entries = unzipSync(bytes, {
+    // Capped per member *and* in total: without the running sum, an archive of
+    // many members each just under the limit would still decompress to an
+    // arbitrarily large amount of JSON held in memory at once.
+    let decompressedBytes = 0;
+    entries = unzipSync(archiveBytes, {
       filter(entry) {
         const name = normalizeEntryName(entry.name);
         const relevant = name === "gisproject.json" || /\.(mapx|lyrx|json|xml)$/i.test(name);
-        if (relevant && entry.originalSize > MAX_CIM_BYTES) {
-          throw new Error(
-            `The ArcGIS project member "${entry.name}" is too large to import safely.`,
-          );
+        if (!relevant) return false;
+        decompressedBytes += entry.originalSize;
+        if (entry.originalSize > MAX_CIM_BYTES || decompressedBytes > MAX_CIM_BYTES) {
+          throw new Error("This ArcGIS Pro project is too large to import safely.");
         }
-        return relevant;
+        return true;
       },
     });
   } catch (error) {
@@ -125,9 +174,9 @@ function readCimFiles(
   }
 
   const files = new Map<string, CimObject>();
-  for (const [name, bytes] of Object.entries(entries)) {
+  for (const [name, content] of Object.entries(entries)) {
     try {
-      files.set(normalizeEntryName(name), parseCimJson(strFromU8(bytes)));
+      files.set(normalizeEntryName(name), parseCimJson(strFromU8(content)));
     } catch {
       // Some APRX XML members are binary or non-CIM metadata. They are not maps
       // or layers, so a malformed unrelated member must not abort the project.
@@ -192,15 +241,21 @@ function importLayer(
   files: Map<string, CimObject>,
   sourcePath: string,
   parentId: string | undefined,
-  parentVisible: boolean,
   layers: GeoLibreLayer[],
+  rasters: ArcgisRasterImport[],
+  services: ArcgisServiceImport[],
   groups: LayerGroup[],
   warnings: ArcgisProjectImportWarning[],
   usedIds: Set<string>,
 ): void {
   const type = stringValue(layer.type);
   const name = stringValue(layer.name) || type || "ArcGIS layer";
-  const visible = parentVisible && layer.visibility !== false;
+  // Each item stores only its *own* ArcGIS toggle. `applyGroupEffects`
+  // (packages/core/src/layer-groups.ts) folds ancestor group visibility in at
+  // render time, so pre-cascading it here would look right on first paint but
+  // discard the item's real state -- re-enabling a hidden parent group would
+  // leave its children stuck hidden. Matches the QGIS importer's contract.
+  const visible = layer.visibility !== false;
   const id = uniqueId(stringValue(layer.uRI) || name, usedIds);
 
   if (type.includes("CIMGroupLayer")) {
@@ -213,9 +268,75 @@ function importLayer(
       ...(parentId ? { parentId } : {}),
     });
     for (const child of resolveLayerList(layer, files)) {
-      importLayer(child, files, sourcePath, id, visible, layers, groups, warnings, usedIds);
+      importLayer(
+        child,
+        files,
+        sourcePath,
+        id,
+        layers,
+        rasters,
+        services,
+        groups,
+        warnings,
+        usedIds,
+      );
     }
     return;
+  }
+
+  if (type.includes("CIMRasterLayer")) {
+    const connection = objectValue(layer.dataConnection);
+    const rasterPath = resolveRasterSource(connection, sourcePath);
+    if (rasterPath) {
+      rasters.push({
+        id,
+        name,
+        sourcePath: rasterPath,
+        visible,
+        opacity: numberValue(layer.opacity) ?? 1,
+        ...(parentId ? { groupId: parentId } : {}),
+      });
+    } else {
+      warnings.push({
+        layerName: name,
+        reason: connection ? "format" : "missing-source",
+        layerType: type,
+      });
+    }
+    return;
+  }
+
+  if (type.includes("CIMTiledServiceLayer")) {
+    const serviceConnection = objectValue(layer.serviceConnection);
+    const url = stringValue(serviceConnection?.url).replace(/\/+$/, "");
+    if (url && stringValue(serviceConnection?.objectType).toLowerCase() === "mapserver") {
+      layers.push({
+        id,
+        name,
+        type: "xyz",
+        source: { tiles: [`${url}/tile/{z}/{y}/{x}`] },
+        visible,
+        opacity: numberValue(layer.opacity) ?? 1,
+        style: structuredClone(DEFAULT_LAYER_STYLE),
+        metadata: { importedFrom: "arcgis-pro", sourceKind: "arcgis-tiled-map-service" },
+        sourcePath: url,
+        ...(parentId ? { groupId: parentId } : {}),
+      });
+      return;
+    }
+  }
+
+  if (type.includes("CIMVectorTileLayer")) {
+    const itemId = stringValue(layer.sourceURI);
+    if (/^[a-f0-9]{32}$/i.test(itemId)) {
+      services.push({
+        name,
+        itemId,
+        visible,
+        ...(parentId ? { groupId: parentId } : {}),
+      });
+      return;
+    }
   }
 
   if (!type.includes("CIMFeatureLayer")) {
@@ -232,7 +353,7 @@ function importLayer(
   if (!resolved.path) {
     warnings.push({
       layerName: name,
-      reason: resolved.reason,
+      reason: resolved.reason ?? "format",
       ...(type ? { layerType: type } : {}),
     });
     return;
@@ -258,10 +379,22 @@ function importLayer(
   });
 }
 
+function resolveRasterSource(
+  connection: CimObject | undefined,
+  projectPath: string,
+): string | null {
+  if (!connection) return null;
+  const workspace = parseWorkspacePath(stringValue(connection.workspaceConnectionString));
+  const dataset = stringValue(connection.dataset);
+  if (!workspace || !dataset || isNetworkPath(workspace)) return null;
+  const path = resolveRelativePath(joinPath(workspace, dataset), projectPath);
+  return ["tif", "tiff"].includes(extension(path)) ? path : null;
+}
+
 function resolveDataSource(
   connection: CimObject | undefined,
   projectPath: string,
-): { path?: string; reason: ArcgisProjectImportWarning["reason"] } {
+): { path?: string; reason?: ArcgisProjectImportWarning["reason"] } {
   if (!connection) return { reason: "missing-source" };
   if (stringValue(connection.url)) return { reason: "service" };
 
@@ -282,12 +415,19 @@ function resolveDataSource(
     path = workspace;
   } else if (!path && dataset) {
     path = dataset;
+  } else if (dataset && !extension(workspace)) {
+    // A workspace with no extension is a containing folder, so the dataset
+    // carries the file name -- the shape shapefile and delimited-text
+    // connections use. Joining them generically lets the other file formats in
+    // SUPPORTED_VECTOR_EXTENSIONS resolve instead of falling through to the
+    // bare folder path, which has no extension and is always rejected below.
+    path = joinPath(workspace, dataset);
   }
 
   path = resolveRelativePath(path, projectPath);
-  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(path))
-    ? { path, reason: "format" }
-    : { reason: "format" };
+  // `reason` is omitted on success so a caller that reads it unconditionally
+  // cannot mistake a supported layer for an unsupported format.
+  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(path)) ? { path } : { reason: "format" };
 }
 
 function parseStyle(layer: CimObject): LayerStyle {
@@ -324,22 +464,93 @@ function parseStyle(layer: CimObject): LayerStyle {
   return style;
 }
 
+/**
+ * Convert a CIM color to hex plus opacity.
+ *
+ * Every CIMColor subclass stores its channels in a `values` array with alpha
+ * last, but the channel meaning and scale differ per subclass, so the type has
+ * to be read before `values` can be interpreted -- treating a CMYK or HSV
+ * triple as RGB silently produces the wrong colour. Channels are per the CIM
+ * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
+ * hue 0-360, alpha 0-100. An unrecognized subclass returns null so the layer
+ * keeps GeoLibre's default style rather than an invented colour.
+ */
 function cimColor(color: CimObject | undefined): { hex: string; opacity: number } | null {
   if (!color) return null;
+  const type = stringValue(color.type);
   const values = arrayValue(color.values).map(Number);
-  if (values.length < 3 || values.slice(0, 3).some((value) => !Number.isFinite(value))) return null;
-  const [r, g, b, a = 100] = values;
-  const hex = `#${[r, g, b]
+  if (values.some((value) => !Number.isFinite(value))) return null;
+
+  let rgb: [number, number, number] | null = null;
+  let alpha = 100;
+  if (type === "CIMRGBColor" && values.length >= 3) {
+    rgb = [values[0], values[1], values[2]];
+    alpha = values[3] ?? 100;
+  } else if (type === "CIMGrayColor" && values.length >= 1) {
+    const level = (values[0] / 100) * 255;
+    rgb = [level, level, level];
+    alpha = values[1] ?? 100;
+  } else if (type === "CIMCMYKColor" && values.length >= 4) {
+    const [c, m, y, k] = values;
+    rgb = [
+      255 * (1 - c / 100) * (1 - k / 100),
+      255 * (1 - m / 100) * (1 - k / 100),
+      255 * (1 - y / 100) * (1 - k / 100),
+    ];
+    alpha = values[4] ?? 100;
+  } else if (type === "CIMHSVColor" && values.length >= 3) {
+    rgb = hsvToRgb(values[0], values[1] / 100, values[2] / 100);
+    alpha = values[3] ?? 100;
+  }
+  if (!rgb) return null;
+
+  const hex = `#${rgb
     .map((value) =>
       Math.max(0, Math.min(255, Math.round(value)))
         .toString(16)
         .padStart(2, "0"),
     )
     .join("")}`;
-  return { hex, opacity: Math.max(0, Math.min(1, a / 100)) };
+  return { hex, opacity: Math.max(0, Math.min(1, alpha / 100)) };
 }
 
-function parseMapView(map: CimObject): MapViewState {
+/**
+ * Standard HSV to RGB conversion for {@link cimColor}.
+ *
+ * @param hue - Hue in degrees; wrapped into 0-360.
+ * @param saturation - Saturation as a 0-1 fraction.
+ * @param value - Value as a 0-1 fraction.
+ * @returns Red, green, and blue channels on a 0-255 scale.
+ */
+function hsvToRgb(hue: number, saturation: number, value: number): [number, number, number] {
+  const h = (((hue % 360) + 360) % 360) / 60;
+  const s = Math.max(0, Math.min(1, saturation));
+  const v = Math.max(0, Math.min(1, value));
+  const chroma = v * s;
+  const second = chroma * (1 - Math.abs((h % 2) - 1));
+  const [r, g, b] =
+    h < 1
+      ? [chroma, second, 0]
+      : h < 2
+        ? [second, chroma, 0]
+        : h < 3
+          ? [0, chroma, second]
+          : h < 4
+            ? [0, second, chroma]
+            : h < 5
+              ? [second, 0, chroma]
+              : [chroma, 0, second];
+  const match = v - chroma;
+  return [(r + match) * 255, (g + match) * 255, (b + match) * 255];
+}
+
+/**
+ * Read the map's saved extent as a GeoLibre view.
+ *
+ * @returns The view, and whether it came from the project rather than the
+ *   generic fallback -- the caller warns when the saved extent was dropped.
+ */
+function parseMapView(map: CimObject): { view: MapViewState; extentRestored: boolean } {
   const extent = objectValue(map.defaultExtent);
   const spatialReference =
     objectValue(extent?.spatialReference) ?? objectValue(map.spatialReference);
@@ -349,7 +560,9 @@ function parseMapView(map: CimObject): MapViewState {
   const ymin = numberValue(extent?.ymin);
   const xmax = numberValue(extent?.xmax);
   const ymax = numberValue(extent?.ymax);
-  if (xmin === null || ymin === null || xmax === null || ymax === null) return defaultView();
+  if (xmin === null || ymin === null || xmax === null || ymax === null) {
+    return { view: defaultView(), extentRestored: false };
+  }
   const bounds =
     wkid === 3857 || wkid === 102100
       ? [
@@ -361,7 +574,7 @@ function parseMapView(map: CimObject): MapViewState {
       : wkid === 4326
         ? [xmin, ymin, xmax, ymax]
         : null;
-  if (!bounds) return defaultView();
+  if (!bounds) return { view: defaultView(), extentRestored: false };
   const [west, south, east, north] = bounds;
   const longitudeSpan = Math.max(1e-9, Math.min(360, Math.abs(east - west)));
   const latitudeSpan = Math.max(1e-9, Math.min(180, Math.abs(north - south)));
@@ -370,10 +583,13 @@ function parseMapView(map: CimObject): MapViewState {
     Math.min(22, Math.log2(Math.min(360 / longitudeSpan, 170 / latitudeSpan))),
   );
   return {
-    center: [(west + east) / 2, (south + north) / 2],
-    zoom,
-    bearing: 0,
-    pitch: 0,
+    view: {
+      center: [(west + east) / 2, (south + north) / 2],
+      zoom,
+      bearing: 0,
+      pitch: 0,
+    },
+    extentRestored: true,
   };
 }
 
