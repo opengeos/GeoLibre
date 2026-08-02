@@ -669,27 +669,6 @@ export class CollabSession extends DurableObject<Env> {
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "comment-mutation" }>,
   ): Promise<void> {
-    const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
-    if (!canEdit(attachment, mode)) {
-      this.send(ws, {
-        type: "error",
-        code: "forbidden",
-        message: "You are in view-only mode and cannot comment.",
-      });
-      return;
-    }
-
-    // Rate-limit: same pattern as chat to prevent storage-op exhaustion.
-    const now = Date.now();
-    if (
-      attachment.lastCommentTs !== undefined &&
-      now - attachment.lastCommentTs < MIN_COMMENT_INTERVAL_MS
-    ) {
-      return;
-    }
-    attachment.lastCommentTs = now;
-    ws.serializeAttachment(attachment);
-
     const action = message.action;
     if (!action || typeof action !== "object") {
       this.send(ws, {
@@ -701,7 +680,9 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     // Validate payloads for add/reply; toggle-resolve and delete only need a
-    // string commentId and carry no untrusted object bodies.
+    // string commentId and carry no untrusted object bodies. Do this before
+    // rate-limiting so invalid frames always get bad-message and never consume
+    // the per-socket interval.
     let sanitizedAction = action;
     if (action.type === "add") {
       const validated = validateComment(action.comment);
@@ -765,6 +746,27 @@ export class CollabSession extends DurableObject<Env> {
       });
       return;
     }
+
+    const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
+    if (!canEdit(attachment, mode)) {
+      this.send(ws, {
+        type: "error",
+        code: "forbidden",
+        message: "You are in view-only mode and cannot comment.",
+      });
+      return;
+    }
+
+    // Rate-limit accepted, authorized mutations before storage work.
+    const now = Date.now();
+    if (
+      attachment.lastCommentTs !== undefined &&
+      now - attachment.lastCommentTs < MIN_COMMENT_INTERVAL_MS
+    ) {
+      return;
+    }
+    attachment.lastCommentTs = now;
+    ws.serializeAttachment(attachment);
 
     const sanitizedMessage: Extract<ClientMessage, { type: "comment-mutation" }> = {
       type: "comment-mutation",
