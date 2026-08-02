@@ -37,6 +37,7 @@ import {
 import {
   mbtilesStyleLayerIds,
   removeLayerFromMap,
+  styleValuesEqual,
   syncLayer,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
@@ -1107,9 +1108,17 @@ export class MapController {
   }
 
   private styleLoadHandler: (() => void) | null = null;
+  private styleReloadHandler: (() => void) | null = null;
 
   waitAndSyncLayers(layers: GeoLibreLayer[]): void {
     if (!this.map) return;
+
+    if (!this.styleReloadHandler) {
+      this.styleReloadHandler = () => {
+        if (!this.styleLoadHandler) this.syncLayers(this.syncedLayers);
+      };
+      this.map.on("style.load", this.styleReloadHandler);
+    }
 
     if (this.styleLoadHandler) {
       this.map.off("style.load", this.styleLoadHandler);
@@ -1200,8 +1209,7 @@ export class MapController {
           : this.basemapOpacity;
     try {
       const current = this.map.getPaintProperty(layerId, property);
-      if (Object.is(current, opacity) || JSON.stringify(current) === JSON.stringify(opacity))
-        return;
+      if (styleValuesEqual(current, opacity)) return;
       this.map.setPaintProperty(layerId, property, opacity);
     } catch {
       // Some third-party custom style layers may not expose paint properties.

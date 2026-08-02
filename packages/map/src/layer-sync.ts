@@ -3489,7 +3489,7 @@ function ensureLayer(
   map.addLayer(addSpec, validBeforeId);
 }
 
-function styleValuesEqual(current: unknown, next: unknown): boolean {
+export function styleValuesEqual(current: unknown, next: unknown): boolean {
   return Object.is(current, next) || JSON.stringify(current) === JSON.stringify(next);
 }
 

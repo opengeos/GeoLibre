@@ -276,7 +276,7 @@ const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
 describe("MapController.syncLayers reconciliation", () => {
-  it("runs a deferred initial sync only once", () => {
+  it("runs the initial sync once and restores layers after a style reload", () => {
     const { map, fake } = makeFakeMap();
     const listeners = new Map<string, Set<() => void>>();
     Object.assign(map as object, {
@@ -302,6 +302,16 @@ describe("MapController.syncLayers reconciliation", () => {
     for (const listener of [...(listeners.get("load") ?? [])]) listener();
 
     assert.equal(fake.calls.filter((call) => call.method === "addSource").length, 1);
+
+    const styleMap = map as {
+      removeLayer: (id: string) => void;
+      removeSource: (id: string) => void;
+    };
+    styleMap.removeLayer(circleId("a"));
+    styleMap.removeSource(srcId("a"));
+    for (const listener of [...(listeners.get("style.load") ?? [])]) listener();
+
+    assert.equal(fake.calls.filter((call) => call.method === "addSource").length, 2);
   });
 
   it("does nothing until the style is ready", () => {

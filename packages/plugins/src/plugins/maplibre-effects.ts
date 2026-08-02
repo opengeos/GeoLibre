@@ -91,6 +91,10 @@ const HALO_SAMPLE_COUNT = 16;
 // Keep decorative canvas work from competing with MapLibre on high-refresh displays.
 const EFFECTS_FRAME_MS = 1000 / 60;
 
+export function nextEffectsFrameTime(timestamp: number, lastFrameTime: number): number | null {
+  return timestamp - lastFrameTime + 0.1 < EFFECTS_FRAME_MS ? null : timestamp;
+}
+
 // Halo radial gradient as a *shape* independent of the chosen color: each stop
 // is [offset, alpha, shade] where offset is the fraction of the gradient span
 // (globe edge → haloExtent × radius), alpha is the base opacity, and shade
@@ -810,14 +814,12 @@ class EffectsEngine {
     this.rafId = null;
     if (this.destroyed) return;
 
-    const elapsed = timestamp - this.lastFrameTime;
-    // Allow for rAF timestamp rounding on a nominal 60 Hz display.
-    if (elapsed + 0.1 < EFFECTS_FRAME_MS) {
+    const nextFrameTime = nextEffectsFrameTime(timestamp, this.lastFrameTime);
+    if (nextFrameTime === null) {
       this.start();
       return;
     }
-    this.lastFrameTime =
-      elapsed >= EFFECTS_FRAME_MS * 2 ? timestamp : this.lastFrameTime + EFFECTS_FRAME_MS;
+    this.lastFrameTime = nextFrameTime;
 
     this.clear();
 
