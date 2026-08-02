@@ -901,6 +901,20 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Never watch the Rust side. `tauri dev` runs this dev server as its
+      // `beforeDevCommand` and then starts cargo in the same tree, so the
+      // watcher would otherwise crawl `src-tauri/target/` while cargo is
+      // writing into it. On Windows that is fatal: chokidar's fs.watch on a
+      // build artifact cargo still holds open throws EBUSY (`errno -4082`) out
+      // of `NodeFsHandler._addToNodeFs`, which is an unhandled error — vite
+      // exits non-zero and tauri reports only `The "beforeDevCommand"
+      // terminated with a non-zero status code` (see the libsqlite3-sys
+      // `*-sqlite3.o` failure). Nothing under src-tauri feeds the frontend
+      // bundle, so there is no HMR to lose. These are appended to Vite's own
+      // defaults (node_modules, .git), not a replacement for them.
+      ignored: ["**/src-tauri/**"],
+    },
   },
   worker: {
     format: "es",
