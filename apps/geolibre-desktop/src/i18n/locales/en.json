@@ -2470,6 +2470,19 @@
       "commandPalette": "Command Palette",
       "openProjectFromUrl": "Open project from URL",
       "importQgisProjectEllipsis": "Import QGIS Project…",
+      "importArcgisProjectEllipsis": "Import ArcGIS Pro Project…",
+      "arcgisImportComplete": "ArcGIS Pro project imported",
+      "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
+      "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
+      "arcgisUnknownLayerType": "unknown",
+      "arcgisImportReason": {
+        "layer-type": "The {{layerType}} layer type is not supported.",
+        "missing-source": "The layer has no readable local data source.",
+        "format": "The layer's data format is not supported.",
+        "network-path": "Network share paths are not loaded for security reasons.",
+        "service": "ArcGIS service layers in projects are not supported yet.",
+        "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it."
+      },
       "qgisImportComplete": "QGIS project imported",
       "qgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "qgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
@@ -2595,6 +2608,7 @@
     "error": {
       "couldNotOpenProject": "Could not open project.",
       "couldNotImportQgisProject": "Could not import QGIS project.",
+      "couldNotImportArcgisProject": "Could not import ArcGIS Pro project.",
       "invalidProjectUrl": "Enter a valid HTTP or HTTPS project URL.",
       "couldNotOpenProjectUrl": "Could not open project URL.",
       "couldNotOpenRecentProject": "Could not open the recent project.",

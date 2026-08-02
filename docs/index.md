@@ -189,7 +189,8 @@ what comes next, see the [Roadmap](roadmap.md).
 
 Newest capabilities, still settling in: autosave with crash recovery and a
 browsable [project history](user-guide/projects.md#project-history-and-crash-recovery),
-[QGIS project import](user-guide/projects.md#importing-a-qgis-project), nested
+[QGIS](user-guide/projects.md#importing-a-qgis-project) and
+[ArcGIS Pro project import](user-guide/projects.md#importing-an-arcgis-pro-project), nested
 [layer groups](user-guide/layers.md#layer-groups) with multi-select moves,
 anchored [review comments](user-guide/map-controls.md#review-comments) that sync
 through a collaboration session, an

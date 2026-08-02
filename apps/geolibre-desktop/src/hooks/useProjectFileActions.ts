@@ -18,6 +18,7 @@ import {
   isHttpUrl,
   isTauri,
   loadDroppedRasterPaths,
+  openArcgisProjectFile,
   openProjectFile,
   openQgisProjectFile,
   openRecentProjectFile,
@@ -41,6 +42,7 @@ import {
   materializeQgisRemoteLayers,
   type QgisProjectImportWarning,
 } from "../lib/qgis-project-import";
+import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /** A pending "strip env vars before saving?" prompt. */
@@ -154,6 +156,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
+  const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
+    ArcgisProjectImportWarning[] | null
+  >(null);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
@@ -272,6 +277,29 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       console.error("Failed to import QGIS project", error);
       setActionError(
         error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
+      );
+    }
+  };
+
+  const handleImportArcgisProject = async () => {
+    const result = await openArcgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = importArcgisProject(result.data, result.path);
+      if (!isTauri()) {
+        for (const layer of imported.project.layers) {
+          imported.warnings.push({ layerName: layer.name, reason: "browser-local-file" });
+        }
+        imported.project.layers = [];
+        imported.project.layerGroups = [];
+      }
+      loadProject(imported.project, null);
+      useAppStore.setState({ isDirty: true });
+      setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+    } catch (error) {
+      console.error("Failed to import ArcGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportArcgisProject"),
       );
     }
   };
@@ -830,6 +858,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setActionError,
     qgisImportWarnings,
     setQgisImportWarnings,
+    arcgisImportWarnings,
+    setArcgisImportWarnings,
     projectUrlDialogOpen,
     setProjectUrlDialogOpen,
     handleProjectUrlDialogOpenChange,
@@ -853,6 +883,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     cancelSaveNamePrompt,
     handleOpenFromFile,
     handleImportQgisProject,
+    handleImportArcgisProject,
     handleOpenFromUrl,
     openProjectFromShareUrl,
     handleOpenRecent,

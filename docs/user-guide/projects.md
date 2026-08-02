@@ -52,6 +52,12 @@ Snapshots are stored per project — keyed by file path, or by name for a projec
 
 The importer targets file-based vector layers plus rasters the app can open, and it reports what it could not bring across rather than failing the whole import — you get the project plus a per-layer list of skipped layers and the reason (an unsupported data provider, an unsupported file format, a missing source, a network share path, or a remote source). In the browser build, layers that reference a local path on disk are listed as skipped because a browser cannot reopen those paths; open the same project in GeoLibre Desktop to load them.
 
+## Importing an ArcGIS Pro project
+
+**Project → Import → Import ArcGIS Pro Project…** reads an ArcGIS Pro `.aprx` project or standalone `.mapx` map. GeoLibre reads the CIM JSON stored in the file directly, so ArcGIS Pro and ArcPy do not need to be installed.
+
+An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D map. The importer preserves the saved extent, file-based feature layers, nested groups, visibility, simple symbols, and field-based labels. Shapefiles and the other vector formats supported by GeoLibre can be reopened by the desktop app. Unsupported sources such as file geodatabases, service layers, rasters, scenes, and network-share paths are listed after the rest of the project is imported. Local data paths cannot be reopened by the browser build.
+
 ## Templates
 
 **Project → Save as template...** stores the current project as a reusable template in your personal library, with a name and an optional description. Enable **Strip data layers** to keep the basemap, layer groups, styles, legend, widgets, and layout while dropping the data layer content — useful for a house-style starting point that a team applies to new maps.

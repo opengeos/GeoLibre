@@ -2505,6 +2505,20 @@ export async function openQgisProjectFile(): Promise<{
   return { data: result.data, path: result.path };
 }
 
+/** Pick an ArcGIS Pro project/map and return its raw bytes for the CIM converter. */
+export async function openArcgisProjectFile(): Promise<{
+  data: ArrayBuffer;
+  path: string;
+} | null> {
+  const result = await openLocalDataFileWithFallback({
+    filters: [{ name: "ArcGIS Pro Project", extensions: ["aprx", "mapx"] }],
+    accept: ".aprx,.mapx",
+    readBinary: true,
+  });
+  if (!result?.data) return null;
+  return { data: result.data, path: result.path };
+}
+
 /**
  * Thrown when a recent project is permanently gone (HTTP 404/410 or a local
  * file that no longer exists), signalling the caller that the entry can be

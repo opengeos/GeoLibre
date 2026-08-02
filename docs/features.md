@@ -188,6 +188,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - Per-project, per-snapshot, and total-size caps keep history from growing without limit
     - In the browser build, outside an embedded (iframe) session, a crash-recovery prompt appears when a session ends without closing cleanly and a newer autosave exists than the last explicit save
 - QGIS project import (`.qgs` and `.qgz`) that rebuilds layers, nested layer groups, group visibility, layer order, styling, and the saved map view, reporting per-layer why anything was skipped rather than failing the whole import. See [Projects](user-guide/projects.md#importing-a-qgis-project)
+- ArcGIS Pro project import (`.aprx` and `.mapx`) that reads CIM JSON without ArcPy and restores the first 2D map's extent, local vector layers, nested groups, visibility, simple symbols, and field labels, with per-layer warnings for unsupported sources. See [Projects](user-guide/projects.md#importing-an-arcgis-pro-project)
 - Reusable project templates saved to a personal library, with an option to keep the basemap, groups, styles, legend, widgets, and layout while stripping the data layer content
 
 ## Plugins

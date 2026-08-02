@@ -1551,6 +1551,7 @@ export function TopToolbar({
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
           onOpenGallery={() => setGalleryDialogOpen(true)}
           onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
+          onImportArcgisProject={() => void projectFiles.handleImportArcgisProject()}
           onOpenRecent={(path) => {
             void projectFiles.handleOpenRecent(path).then((error) => {
               if (error) projectFiles.setActionError(error);
