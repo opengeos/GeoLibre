@@ -40,6 +40,9 @@ export function projectChanged(a: AppState, b: AppState): boolean {
     a.secondaryMapViews !== b.secondaryMapViews ||
     a.primaryMapLabel !== b.primaryMapLabel ||
     a.projectStyleLibrary !== b.projectStyleLibrary ||
-    a.metadata !== b.metadata
+    a.metadata !== b.metadata ||
+    // Comments are part of the project snapshot (buildProjectSnapshot includes
+    // state.comments) so a change must trigger a broadcast to peers.
+    a.comments !== b.comments
   );
 }

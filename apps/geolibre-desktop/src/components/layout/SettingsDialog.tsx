@@ -52,6 +52,7 @@ import {
   Locate,
   MapPinned,
   LayoutPanelTop,
+  MessageSquare,
   Moon,
   Palette,
   PanelLeft,
@@ -84,6 +85,7 @@ import {
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
 import { BROWSER_PANEL_ID } from "../../hooks/useRegisterBrowserPanel";
+import { COMMENTS_PANEL_ID } from "../../hooks/useRegisterCommentsPanel";
 import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
@@ -390,7 +392,9 @@ export function SettingsDialog({
   // The Browser is a dockable right panel (open/close via the registry), not a
   // persisted layout preference, so its Layout toggle acts on the live registry
   // state directly rather than through the draft settings.
-  const browserPanelOpen = useRightPanelState().activeId === BROWSER_PANEL_ID;
+  const rightPanelState = useRightPanelState();
+  const browserPanelOpen = rightPanelState.visibleIds.includes(BROWSER_PANEL_ID);
+  const commentsPanelOpen = rightPanelState.visibleIds.includes(COMMENTS_PANEL_ID);
   // Show it collapsed on the shared Layers rail, matching its default state, so
   // re-enabling from Settings doesn't jump to an expanded panel that buries the
   // Layers panel.
@@ -400,6 +404,14 @@ export function SettingsDialog({
       collapseRightPanel(BROWSER_PANEL_ID);
     } else {
       closeRightPanel(BROWSER_PANEL_ID);
+    }
+  };
+  const toggleCommentsPanel = (show: boolean) => {
+    if (show) {
+      openRightPanel(COMMENTS_PANEL_ID);
+      collapseRightPanel(COMMENTS_PANEL_ID);
+    } else {
+      closeRightPanel(COMMENTS_PANEL_ID);
     }
   };
   // A field a deep-link asked us to focus once its section renders; cleared
@@ -1264,6 +1276,13 @@ export function SettingsDialog({
               >
                 {t("settings.layout.showBrowserPanel")}
               </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={commentsPanelOpen}
+                onCheckedChange={(checked: boolean) => toggleCommentsPanel(checked === true)}
+                onSelect={(event: Event) => event.preventDefault()}
+              >
+                {t("settings.layout.showCommentsPanel")}
+              </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
@@ -1460,11 +1479,11 @@ export function SettingsDialog({
             <DialogTitle>{t("settings.title")}</DialogTitle>
             <DialogDescription>{t("settings.description")}</DialogDescription>
           </DialogHeader>
-          <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
-            <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-e">
+          <div className="grid min-h-0 min-w-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
+            <nav className="flex min-w-0 gap-1 overflow-x-auto border-b p-3 md:flex-col md:overflow-x-visible md:border-b-0 md:border-e">
               {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(renderSectionButton)}
             </nav>
-            <div className="min-h-0 overflow-y-auto p-6">
+            <div className="min-h-0 min-w-0 overflow-y-auto p-6">
               {effectiveSection === "map" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
@@ -1737,6 +1756,16 @@ export function SettingsDialog({
                       />
                       <FolderTree className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showBrowserPanel")}</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={commentsPanelOpen}
+                        onChange={(event) => toggleCommentsPanel(event.target.checked)}
+                      />
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      <span>{t("settings.layout.showCommentsPanel")}</span>
                     </label>
                   </div>
                   {showsAdvancedNotices(desktopSettings.uiProfile) ? (

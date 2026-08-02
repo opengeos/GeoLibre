@@ -12,6 +12,7 @@ export {
   getActiveRightPanelDock,
   RIGHT_PANEL_DOCKS,
   isRightPanelCollapsed,
+  isRightPanelVisible,
   getRightPanel,
   listRightPanels,
   getRightPanelSnapshot,
@@ -187,6 +188,7 @@ export {
   restoreThreeDTilesLayers,
   THREE_D_TILES_SOURCE_KIND,
 } from "./plugins/maplibre-3d-tiles";
+export { isRecoverableNonTiledRasterError } from "./plugins/non-tiled-raster-error";
 export {
   addRasterToMap,
   prepareRasterControl,
@@ -332,8 +334,10 @@ export {
   DECK_VIZ_SOURCE_KIND,
   isDeckVizLayer,
 } from "./plugins/deckgl-viz/store-layer";
+export { VIEWER_BLOCKED_PLUGIN_IDS } from "./viewer-plugins";
 export {
   maplibreAnnotationsPlugin,
+  ANNOTATIONS_PLUGIN_ID,
   ANNOTATIONS_SOURCE_KIND,
   setAnnotationLabels,
   type AnnotationLabels,
@@ -367,7 +371,7 @@ export {
   type ViewImportExport,
   type ViewImportChangeCounts,
 } from "./plugins/geo-editor-view-import";
-export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
+export { maplibreGeoAgentPlugin, GEOAGENT_PLUGIN_ID } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export {
@@ -395,6 +399,27 @@ export {
   setOpenAerialMapLabels,
   type OpenAerialMapLabels,
 } from "./plugins/maplibre-openaerialmap";
+export {
+  ARCGIS_HUB_PLUGIN_ID,
+  DEFAULT_ARCGIS_HUB_LABELS,
+  maplibreArcGisHubPlugin,
+  setArcGisHubLabels,
+  type ArcGisHubLabels,
+} from "./plugins/maplibre-arcgis-hub";
+export {
+  ARCGIS_HUB_PAGE_URL,
+  ARCGIS_HUB_PORTAL_URL,
+  arcGisHubItemDataUrl,
+  arcGisHubItemPageUrl,
+  arcGisHubItemThumbnailUrl,
+  buildArcGisHubSearchUrl,
+  fetchFeatureServiceGeoJson,
+  itemBounds as arcGisHubItemBounds,
+  sanitizeArcGisHubSearchText,
+  searchArcGisHub,
+  type ArcGisHubItem,
+  type ArcGisHubSearchResult,
+} from "./plugins/arcgis-hub-api";
 export {
   buildSearchUrl,
   buildTitilerTemplate,
@@ -673,6 +698,14 @@ export {
   type TileSampleStyle,
 } from "./plugins/time-slider-tile-sample";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";
+export {
+  CKAN_PLUGIN_ID,
+  SOCRATA_PLUGIN_ID,
+  maplibreCkanPlugin,
+  maplibreSocrataPlugin,
+  setOpenDataCatalogLabels,
+  type OpenDataCatalogLabels,
+} from "./plugins/maplibre-open-data-catalogs";
 export {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,
   ROUTE_ANIM_SPEED_MAX,

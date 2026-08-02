@@ -59,14 +59,51 @@ function fromPlugin(p: PluginPosition): GeolocationPosition {
  * The browser's `PositionOptions` are all optional; the plugin's require every
  * field. Fill in browser-equivalent defaults (accuracy off, no cached fix). The
  * `timeout` default is finite because the plugin can't take the browser's
- * `Infinity`; it's ignored on Android for a one-shot read and only bounds the
- * per-update wait for a watch.
+ * `Infinity`; it's ignored on Android for a one-shot read.
  */
 function toPluginOptions(o?: PositionOptions): PluginPositionOptions {
   return {
     enableHighAccuracy: o?.enableHighAccuracy ?? false,
     timeout: o?.timeout ?? 30000,
     maximumAge: o?.maximumAge ?? 0,
+  };
+}
+
+/** Extra knobs {@link watchPosition} accepts on top of the browser options. */
+export interface WatchOptions extends PositionOptions {
+  /**
+   * Android only: how often, in milliseconds, to ask the fused location
+   * provider for a new fix. Defaults to {@link NATIVE_WATCH_INTERVAL_MS}.
+   */
+  nativeIntervalMs?: number;
+}
+
+/**
+ * Requested interval between native watch fixes. 1 s is the rate a GNSS
+ * receiver produces fixes at, so a live tracker moves smoothly rather than in
+ * jumps.
+ */
+export const NATIVE_WATCH_INTERVAL_MS = 1000;
+
+/**
+ * Options for a *native watch*, where `timeout` means something different from
+ * the browser's.
+ *
+ * The Android bridge feeds `timeout` straight into `LocationRequest.Builder`
+ * as the update interval (and as the min interval / max batching delay), so
+ * leaving it at the one-shot default asks the fused provider for one fix every
+ * 30 s — the live position freezes between updates and "keep map centered"
+ * looks like it does nothing. The browser meaning of `timeout` (how long to
+ * wait before erroring) is unrelated, so it is deliberately not reused here:
+ * the update interval comes from `nativeIntervalMs` alone. Ignored on iOS,
+ * which streams from `CLLocationManager`.
+ *
+ * Exported for tests; the native path can't run under `node --test`.
+ */
+export function nativeWatchOptions(o?: WatchOptions): PluginPositionOptions {
+  return {
+    ...toPluginOptions(o),
+    timeout: o?.nativeIntervalMs ?? NATIVE_WATCH_INTERVAL_MS,
   };
 }
 
@@ -118,13 +155,13 @@ export async function getCurrentPosition(options?: PositionOptions): Promise<Geo
 export async function watchPosition(
   onFix: (pos: GeolocationPosition) => void,
   onError: (err: GeolocationError) => void,
-  options?: PositionOptions,
+  options?: WatchOptions,
 ): Promise<() => void> {
   if (nativeGeolocationAvailable()) {
     await ensureNativePermission();
     const { watchPosition: nativeWatch, clearWatch } =
       await import("@tauri-apps/plugin-geolocation");
-    const id = await nativeWatch(toPluginOptions(options), (pos, err) => {
+    const id = await nativeWatch(nativeWatchOptions(options), (pos, err) => {
       if (pos) onFix(fromPlugin(pos));
       // A watch error after start is treated as transient (signal loss): keep
       // watching. Up-front permission refusal already rejected above.

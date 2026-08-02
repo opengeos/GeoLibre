@@ -460,13 +460,14 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
 /// Add one GeoTIFF to the asset-protocol scope. The filesystem and asset scopes
 /// are separate in Tauri; dialogs and native drops grant the former, but
 /// maplibre-gl-raster fetches through the latter for range reads. A GeoTIFF
-/// referenced by an imported QGIS project is also accepted when that project
-/// file itself was explicitly selected by the user.
+/// referenced by an imported project -- QGIS (`.qgs`/`.qgz`) or ArcGIS Pro
+/// (`.aprx`/`.mapx`) -- is also accepted when that project file itself was
+/// explicitly selected by the user.
 #[tauri::command]
 fn allow_raster_asset(
     app: tauri::AppHandle,
     path: String,
-    qgis_project_path: Option<String>,
+    import_project_path: Option<String>,
 ) -> Result<(), String> {
     let lower = path.to_ascii_lowercase();
     if !is_safe_absolute_path(&path) || !(lower.ends_with(".tif") || lower.ends_with(".tiff")) {
@@ -474,15 +475,18 @@ fn allow_raster_asset(
             "Refusing to expose \"{path}\": not an absolute GeoTIFF path"
         ));
     }
-    let selected_qgis_project = qgis_project_path.is_some_and(|project_path| {
+    let selected_import_project = import_project_path.is_some_and(|project_path| {
         let lower = project_path.to_ascii_lowercase();
         is_safe_absolute_path(&project_path)
-            && (lower.ends_with(".qgs") || lower.ends_with(".qgz"))
+            && (lower.ends_with(".qgs")
+                || lower.ends_with(".qgz")
+                || lower.ends_with(".aprx")
+                || lower.ends_with(".mapx"))
             && app.fs_scope().is_allowed(&project_path)
     });
-    if !app.fs_scope().is_allowed(&path) && !selected_qgis_project {
+    if !app.fs_scope().is_allowed(&path) && !selected_import_project {
         return Err(format!(
-            "Refusing to expose \"{path}\": neither the file nor its QGIS project was selected by the user"
+            "Refusing to expose \"{path}\": neither the file nor its imported project was selected by the user"
         ));
     }
     app.asset_protocol_scope()
@@ -1854,11 +1858,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
 
     let uv = ensure_managed_uv(&app)?;
     let project_dir = sidecar_project_dir(&app)?;
-    let runtime_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
-        .join("runtime");
+    let runtime_dir = app_runtime_dir(&app)?;
     // A value already in the environment wins, so a desktop user who does want
     // the allowlist can narrow it by launching the app with it set.
     let postgis_hosts = env::var(POSTGIS_HOSTS_ENV)
@@ -2026,12 +2026,14 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         }
     }
 
+    let runtime_dir = app_runtime_dir(&app)?;
+
     // A Jupyter server from a previous app session may still hold the port. We
     // can't reuse it (its per-launch token is unknown to us), and because we
     // spawn with `--ServerApp.port_retries=0`, a new server would fail to bind
     // and exit 1 ("exited before it was ready") while the orphan lingers. Clear
     // any stale listener and wait for the port to free before spawning.
-    let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT);
+    let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
     // Best-effort here: if the port never frees, the spawn below fails with
     // Jupyter's own bind error, which is already reported to the user.
     let _ = wait_for_port_free(JUPYTER_PORT);
@@ -2039,14 +2041,19 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
     let uv = ensure_managed_uv(&app)?;
     let project_dir = sidecar_project_dir(&app)?;
     let config_path = project_dir.join("jupyter_server_config.py");
-    let runtime_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
-        .join("runtime");
-    // Notebooks are saved here (the JupyterLab file browser root).
+    // Notebooks are saved here (the JupyterLab file browser root). Jupyter is
+    // launched with `--ServerApp.root_dir` pointing at this directory and
+    // refuses to start when it is missing, so a creation failure has to surface
+    // here. Swallowing it reached the user several steps later as an opaque
+    // "Bad config encountered during initialization: No such directory"
+    // (issue #1642).
     let notebooks_dir = runtime_dir.join("notebooks");
-    let _ = fs::create_dir_all(&notebooks_dir);
+    fs::create_dir_all(&notebooks_dir).map_err(|error| {
+        format!(
+            "Could not create the notebooks directory {}: {error}",
+            notebooks_dir.display()
+        )
+    })?;
     // Seed the starter Welcome notebook (the same one bundled into JupyterLite on
     // web) on first run only, so we never clobber a user's edits.
     let welcome_dest = notebooks_dir.join("Welcome.ipynb");
@@ -2060,8 +2067,18 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
     // it out of the bundled backend resource into a dedicated lib dir placed on
     // the kernel's PYTHONPATH (so `import geolibre` works regardless of where the
     // notebook lives).
+    // Not fatal, unlike the notebooks root: Jupyter starts fine without this
+    // one, and losing it only costs `import geolibre` inside the notebooks. So
+    // report it rather than failing the whole panel -- but do report it, since
+    // silently discarding the result is what made #1642 so hard to read.
     let lib_dir = runtime_dir.join("notebook-lib");
-    let _ = fs::create_dir_all(&lib_dir);
+    if let Err(error) = fs::create_dir_all(&lib_dir) {
+        eprintln!(
+            "Jupyter: could not create the notebook library directory {} ({error}); \
+             `import geolibre` will not resolve in notebooks.",
+            lib_dir.display()
+        );
+    }
     let _ = fs::copy(
         project_dir.join("notebook_client.py"),
         lib_dir.join("geolibre.py"),
@@ -2176,10 +2193,32 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     if let Ok(mut token) = state.token.lock() {
         *token = None;
     }
-    // Backstop: reap anything still bound to the port (no-op on non-unix and
-    // when nothing is listening).
-    terminate_jupyter_listeners_on_port(JUPYTER_PORT)?;
+    // Backstop: reap anything still bound to the port (no-op when nothing of
+    // ours is listening). Best-effort, because the child this call exists to
+    // clean up after is already gone by now: returning an error here would
+    // leave the frontend believing the server it just stopped is still running
+    // (stopJupyterServer only clears its state once this invoke resolves).
+    // Best-effort, but not silent: skipping the backstop is what a later
+    // "stale Jupyter still holding the port" report would trace back to.
+    match app_runtime_dir(&app) {
+        Ok(runtime_dir) => {
+            let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+        }
+        Err(error) => eprintln!("Jupyter: skipping the port {JUPYTER_PORT} backstop ({error})."),
+    }
     Ok(())
+}
+
+/// Directory holding everything the app installs at runtime (the managed uv, its
+/// caches and project environments, and the notebook root). Lives under the
+/// per-user app data directory, so nothing outside it belongs to us.
+#[cfg(not(feature = "mas"))]
+fn app_runtime_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("runtime"))
 }
 
 #[cfg(not(feature = "mas"))]
@@ -2636,7 +2675,30 @@ fn configure_sidecar_process_impl(command: &mut Command) {
 }
 
 #[cfg(all(not(unix), not(feature = "mas")))]
-fn configure_sidecar_process_impl(_command: &mut Command) {}
+fn configure_sidecar_process_impl(command: &mut Command) {
+    hide_console_window(command);
+}
+
+/// Keep a spawned console program from opening a console window.
+///
+/// Release builds are GUI-subsystem (`windows_subsystem = "windows"`), so they
+/// have no console of their own. Spawning `uv.exe` (a console program) then
+/// makes Windows allocate a fresh console *window* for it, which appears on the
+/// user's desktop and stays for as long as the child runs -- for the Notebook
+/// panel that is the whole session. `CREATE_NO_WINDOW` runs the child without
+/// one. Output is unaffected: every caller already pipes stdout/stderr and
+/// drains them (see CapturedOutput).
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(all(not(target_os = "windows"), not(feature = "mas")))]
+fn hide_console_window(_command: &mut Command) {}
 
 #[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
@@ -2674,19 +2736,272 @@ fn terminate_sidecar_listeners_on_port(port: u16) -> Result<(), String> {
 // non-graceful exit of a previous app session). Recognized by its cmdline so we
 // never touch an unrelated jupyter (the user's own JupyterHub, etc.).
 #[cfg(all(target_os = "linux", not(feature = "mas")))]
-fn terminate_jupyter_listeners_on_port(port: u16) -> Result<(), String> {
+fn terminate_jupyter_listeners_on_port(
+    port: u16,
+    _runtime_dir: &std::path::Path,
+) -> Result<(), String> {
     terminate_listeners_on_port(port, is_geolibre_jupyter_process)
 }
 
-// Known gap: this is a no-op on macOS/Windows (the /proc-based listener lookup is
-// Linux-only). The current session's child is still reaped on exit via
-// JupyterProcess::Drop, but an orphan left by a *previous* crashed session can
-// keep holding the port there, in which case the next launch fails to bind and
-// surfaces "exited before it was ready". A cross-platform port-owner lookup
-// (e.g. lsof on macOS) would be needed to close this.
-#[cfg(all(not(target_os = "linux"), not(feature = "mas")))]
-fn terminate_jupyter_listeners_on_port(_port: u16) -> Result<(), String> {
+// Known gap: still a no-op on macOS (there is no /proc, and the Windows IP
+// Helper route below does not exist either). The current session's child is
+// reaped on exit via JupyterProcess::Drop, but an orphan left by a *previous*
+// crashed session can keep holding the port, in which case the next launch
+// fails to bind and surfaces "exited before it was ready". An lsof-based
+// port-owner lookup would be needed to close this.
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "windows"),
+    not(feature = "mas")
+))]
+fn terminate_jupyter_listeners_on_port(
+    _port: u16,
+    _runtime_dir: &std::path::Path,
+) -> Result<(), String> {
     Ok(())
+}
+
+// Windows equivalent of the Linux reaper (issue #1643): an orphaned Jupyter
+// server from a crashed session keeps holding 8766, and every later launch dies
+// with "the port 8766 is already in use" until the user kills it by hand.
+//
+// There is no /proc here, so the owner of the listening socket comes from the IP
+// Helper TCP table, and "is it ours?" is answered by the process image path: we
+// only ever terminate a listener whose executable lives inside this user's own
+// GeoLibre runtime directory (the uv-managed environment under
+// `%APPDATA%\org.geolibre.desktop\runtime\`). A Jupyter the user installed
+// themselves lives outside it and is left alone. The sidecar's port keeps its
+// no-op: unlike Jupyter it already reports an actionable message of its own
+// when the port stays busy (see start_geolibre_sidecar_blocking).
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn terminate_jupyter_listeners_on_port(
+    port: u16,
+    runtime_dir: &std::path::Path,
+) -> Result<(), String> {
+    for pid in listening_tcp_pids(port) {
+        terminate_listener_under(pid, runtime_dir);
+    }
+    Ok(())
+}
+
+// PIDs of the processes listening on `port`, over both IPv4 and IPv6. The two
+// families are read independently: a machine with IPv6 disabled outright can
+// fail the second read, and letting that discard the IPv4 result would drop the
+// orphan we are here to reclaim (Jupyter binds 127.0.0.1, so it is nearly
+// always the IPv4 table that holds it).
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn listening_tcp_pids(port: u16) -> HashSet<u32> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        MIB_TCP6ROW_OWNER_PID, MIB_TCPROW_OWNER_PID,
+    };
+
+    // The address families as GetExtendedTcpTable wants them: a plain u32, not
+    // the u16 `ADDRESS_FAMILY` the WinSock module exports.
+    const AF_INET: u32 = 2;
+    const AF_INET6: u32 = 23;
+
+    let mut pids = HashSet::new();
+    match extended_tcp_table(AF_INET) {
+        Ok(table) => collect_owner_pids::<MIB_TCPROW_OWNER_PID>(
+            &table,
+            port,
+            |row| (row.dwLocalPort, row.dwOwningPid),
+            &mut pids,
+        ),
+        Err(error) => eprintln!("Jupyter: {error}"),
+    }
+    match extended_tcp_table(AF_INET6) {
+        Ok(table) => collect_owner_pids::<MIB_TCP6ROW_OWNER_PID>(
+            &table,
+            port,
+            |row| (row.dwLocalPort, row.dwOwningPid),
+            &mut pids,
+        ),
+        Err(error) => eprintln!("Jupyter: {error}"),
+    }
+    pids
+}
+
+// Walk one MIB_TCP*TABLE_OWNER_PID and collect the PIDs listening on `port`.
+// Both the IPv4 and IPv6 tables have the same shape -- a DWORD entry count
+// followed by the rows -- so the row type and the two fields we need are the
+// only things that differ.
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn collect_owner_pids<Row>(
+    buffer: &[u32],
+    port: u16,
+    fields: fn(&Row) -> (u32, u32),
+    pids: &mut HashSet<u32>,
+) {
+    use std::mem::{size_of, size_of_val};
+
+    if buffer.is_empty() {
+        return;
+    }
+    let base = buffer.as_ptr();
+    // SAFETY: `buffer` is a u32-aligned allocation that GetExtendedTcpTable
+    // filled for this table class, and it holds at least the leading entry
+    // count. Every row type here has 4-byte alignment, so the rows -- which
+    // start one DWORD in -- are aligned too. The walk is capped at the number
+    // of rows the allocation can actually hold, so an entry count that
+    // disagrees with the reported size cannot read past the end.
+    let count = unsafe { *base } as usize;
+    let capacity = (size_of_val(buffer) - size_of::<u32>()) / size_of::<Row>();
+    let rows = unsafe { base.add(1) }.cast::<Row>();
+    for index in 0..count.min(capacity) {
+        let (local_port, owning_pid) = fields(unsafe { &*rows.add(index) });
+        if tcp_table_port(local_port) == port {
+            pids.insert(owning_pid);
+        }
+    }
+}
+
+// Read the TCP listener table for one address family into a u32-aligned buffer.
+// GetExtendedTcpTable reports the size it needs on the first (null) call, but
+// the table can grow between that call and the read, so retry a bounded number
+// of times rather than trusting the first answer.
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn extended_tcp_table(family: u32) -> Result<Vec<u32>, String> {
+    use std::mem::size_of;
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GetExtendedTcpTable, TCP_TABLE_OWNER_PID_LISTENER,
+    };
+
+    const NO_ERROR: u32 = 0;
+    const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const ATTEMPTS: usize = 8;
+
+    let mut size: u32 = 0;
+    let mut buffer: Vec<u32> = Vec::new();
+    for _ in 0..ATTEMPTS {
+        // SAFETY: the pointer and `size` describe the same allocation (null and
+        // zero on the sizing call, which is what the API asks for), and the API
+        // only writes within `size` bytes.
+        let result = unsafe {
+            GetExtendedTcpTable(
+                if buffer.is_empty() {
+                    std::ptr::null_mut()
+                } else {
+                    buffer.as_mut_ptr().cast()
+                },
+                &mut size,
+                0, // unsorted: we look up a single port
+                family,
+                TCP_TABLE_OWNER_PID_LISTENER,
+                0,
+            )
+        };
+        match result {
+            NO_ERROR => return Ok(buffer),
+            ERROR_INSUFFICIENT_BUFFER => {
+                if size == 0 {
+                    return Ok(Vec::new());
+                }
+                buffer = vec![0u32; (size as usize).div_ceil(size_of::<u32>())];
+            }
+            other => {
+                return Err(format!(
+                    "Could not read the TCP listener table for address family {family}: \
+                     Windows error {other}."
+                ))
+            }
+        }
+    }
+    Err("Could not read the TCP listener table: it kept growing between calls.".to_string())
+}
+
+// Terminate `pid`, but only if its executable lives inside `runtime_dir`. Does
+// nothing when the process has already exited or we may not touch it.
+//
+// The image check and the kill deliberately share ONE handle. An open handle
+// pins the process object, so the PID cannot be recycled onto some unrelated
+// process in between -- re-opening by PID to terminate would leave exactly that
+// window, and the whole point of the image check is that we never kill a
+// process that is not ours.
+//
+// Windows has no SIGTERM, so unlike the Linux path there is no graceful step to
+// try first: an orphan from a previous session has no channel we can ask it to
+// shut down through.
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn terminate_listener_under(pid: u32, runtime_dir: &Path) {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, TerminateProcess, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    };
+
+    // SAFETY: one handle for both the query and the kill; closed on every path.
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+            0,
+            pid,
+        )
+    };
+    if process.is_null() {
+        return;
+    }
+    // Sized for an extended-length path rather than MAX_PATH, so a deeply
+    // nested app-data directory is not silently truncated into a non-match.
+    let mut buffer = vec![0u16; 32_768];
+    let mut length = buffer.len() as u32;
+    // SAFETY: `buffer` holds `length` u16s; on success the API sets `length` to
+    // the number it wrote, which is never more than the value passed in.
+    let queried = unsafe {
+        QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            buffer.as_mut_ptr(),
+            &mut length,
+        )
+    };
+    if queried != 0 {
+        let image = PathBuf::from(OsString::from_wide(
+            &buffer[..(length as usize).min(buffer.len())],
+        ));
+        if path_is_under(&image, runtime_dir) {
+            // SAFETY: the same handle, opened with PROCESS_TERMINATE above.
+            let _ = unsafe { TerminateProcess(process, 1) };
+        }
+    }
+    let _ = unsafe { CloseHandle(process) };
+}
+
+// MIB_TCP*ROW_OWNER_PID keeps the local port in the low word of a DWORD, in
+// network byte order.
+#[cfg(any(all(target_os = "windows", not(feature = "mas")), test))]
+fn tcp_table_port(value: u32) -> u16 {
+    u16::from_be((value & 0xFFFF) as u16)
+}
+
+// Whether `path` sits inside `root`. Compared with separators normalized and
+// case folded, because Windows paths are case-insensitive and the image path
+// the OS reports need not spell the directory the way we built it. The trailing
+// separator is what keeps `...\runtime` from matching `...\runtime-old`.
+//
+// Folding is ASCII-only on purpose. What actually varies between the path we
+// built and the one the OS reports is the drive letter and the segments we
+// wrote ourselves, all ASCII; the rest (a user's name in the profile path) is
+// byte-identical on both sides. Unicode `to_lowercase` would buy nothing there
+// and can change a string's length (Turkish dotless I, sharp S), which would
+// misalign the prefix comparison.
+#[cfg(any(all(target_os = "windows", not(feature = "mas")), test))]
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    fn normalize(value: &Path) -> String {
+        value
+            .to_string_lossy()
+            .replace('/', "\\")
+            .to_ascii_lowercase()
+    }
+
+    let root = normalize(root);
+    let root = root.trim_end_matches('\\');
+    if root.is_empty() {
+        return false;
+    }
+    normalize(path).starts_with(&format!("{root}\\"))
 }
 
 // Kill the processes listening on `port` that `is_ours` recognizes (SIGTERM then
@@ -2900,12 +3215,7 @@ fn ensure_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 #[cfg(not(feature = "mas"))]
 fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let uv_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
-        .join("runtime")
-        .join("uv-bin");
+    let uv_dir = app_runtime_dir(app)?.join("uv-bin");
     let uv = uv_dir.join(uv_executable_name());
     if uv.exists() {
         return Ok(uv);
@@ -2928,6 +3238,9 @@ fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         command.arg(&script);
         command
     };
+    // First run only, but it is the one that would flash a PowerShell window
+    // across the user's desktop while uv installs.
+    hide_console_window(&mut command);
     let output = command
         .env("UV_UNMANAGED_INSTALL", &uv_dir)
         .output()
@@ -3240,6 +3553,10 @@ fn spawn_martin_server(
     {
         command.env("DEFAULT_SRID", default_srid);
     }
+
+    // Martin is a console program too, and it runs for as long as the PostGIS
+    // connection is open.
+    hide_console_window(&mut command);
 
     drop(listener);
     let mut child = command
@@ -3652,7 +3969,7 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_safe_absolute_path,
+        is_safe_absolute_path, path_is_under, tcp_table_port,
     };
     #[cfg(target_os = "linux")]
     use super::{linux_uses_nvidia_renderer, nvidia_is_primary_gpu};
@@ -4295,5 +4612,70 @@ mod tests {
             "settle blocked for {:?}",
             started.elapsed()
         );
+    }
+
+    // The Windows reaper reads the local port out of a DWORD that holds it in
+    // network byte order in its low word. Getting this wrong would match the
+    // wrong listener (or none), so pin the decoding here -- these are pure
+    // functions, so the check runs on every platform even though their only
+    // caller is Windows-only.
+    #[test]
+    fn decodes_a_network_order_port_from_the_tcp_table() {
+        // 8766 = 0x223E; network byte order puts 0x22 first, so the DWORD's low
+        // word reads 0x3E22, and the high word is padding the API does not use.
+        assert_eq!(tcp_table_port(0x0000_3E22), 8766);
+        assert_eq!(tcp_table_port(0xDEAD_3E22), 8766);
+        assert_eq!(tcp_table_port(0x0000_223E), 0x3E22);
+    }
+
+    // The image-path guard is what keeps the reaper from killing a Jupyter the
+    // user installed themselves: only executables under our own runtime
+    // directory are ours to terminate.
+    #[test]
+    fn recognizes_only_paths_inside_the_runtime_directory() {
+        let root =
+            std::path::Path::new(r"C:\Users\me\AppData\Roaming\org.geolibre.desktop\runtime");
+        assert!(path_is_under(
+            std::path::Path::new(
+                r"C:\Users\me\AppData\Roaming\org.geolibre.desktop\runtime\jupyter-server\Scripts\python.exe"
+            ),
+            root
+        ));
+        // Case and separator differences are not a mismatch on Windows.
+        assert!(path_is_under(
+            std::path::Path::new(
+                r"c:\users\me\appdata\roaming\org.geolibre.desktop\RUNTIME/uv-bin/uv.exe"
+            ),
+            root
+        ));
+        // A sibling directory sharing the prefix is not inside it.
+        assert!(!path_is_under(
+            std::path::Path::new(
+                r"C:\Users\me\AppData\Roaming\org.geolibre.desktop\runtime-old\jupyter-server\python.exe"
+            ),
+            root
+        ));
+        // The user's own Python is left alone.
+        assert!(!path_is_under(
+            std::path::Path::new(r"C:\Program Files\Python312\python.exe"),
+            root
+        ));
+        // A non-ASCII profile name survives the fold: ASCII case folding leaves
+        // it byte-identical on both sides, where Unicode lowercasing could
+        // change its length and misalign the prefix.
+        let unicode_root = std::path::Path::new(r"C:\Users\İŞIL\AppData\Roaming\runtime");
+        assert!(path_is_under(
+            std::path::Path::new(
+                r"C:\Users\İŞIL\AppData\Roaming\runtime\jupyter-server\python.exe"
+            ),
+            unicode_root
+        ));
+        // The directory itself is not "inside" itself, and an empty root never
+        // matches (which would otherwise make every listener look like ours).
+        assert!(!path_is_under(root, root));
+        assert!(!path_is_under(
+            std::path::Path::new(r"C:\anything"),
+            std::path::Path::new("")
+        ));
     }
 }

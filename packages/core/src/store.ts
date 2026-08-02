@@ -58,7 +58,17 @@ import {
   type StoryMap,
   type StyleLibraryEntry,
   type ProjectTemplateEntry,
+  type CommentAnchor,
+  type CommentAuthor,
+  type CommentReply,
+  type ProjectComment,
 } from "./types";
+import {
+  removedLayerIdSet,
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
 import { hasSimpleStyleProperties } from "./vector-color";
 import {
   applyCopiedLayerStyle,
@@ -249,6 +259,8 @@ export interface AppState {
   pointerCoords: [number, number] | null;
   /** Live GPS fix for the status bar, or null while GPS tracking is off. */
   gpsStatus: GpsStatusFix | null;
+  /** Anchored review comments on map points or features (issue #1518). */
+  comments: ProjectComment[];
   metadata: Record<string, unknown>;
   recentProjects: RecentProjectEntry[];
   attributeFilter: string;
@@ -567,6 +579,11 @@ export interface AppState {
   setLayerVirtualFields: (id: string, fields: LayerVirtualField[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
+  moveLayersRelative: (
+    layerIds: string[],
+    targetLayerId: string,
+    position: "above" | "below",
+  ) => void;
   addGeoJsonLayer: (
     name: string,
     geojson: FeatureCollection,
@@ -620,8 +637,19 @@ export interface AppState {
     groupId: string | null,
     beforeLayerId?: string | null,
   ) => void;
+  moveLayersToGroup: (
+    layerIds: string[],
+    groupId: string | null,
+    beforeLayerId?: string | null,
+  ) => void;
   moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
+
+  addComment: (comment: ProjectComment) => void;
+  replyToComment: (commentId: string, reply: CommentReply) => void;
+  toggleResolveComment: (commentId: string, resolved?: boolean) => void;
+  deleteComment: (commentId: string) => void;
+  setComments: (comments: ProjectComment[]) => void;
 }
 
 const MAX_RECENT_PROJECTS = 10;
@@ -723,12 +751,6 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
     a.bearing === b.bearing &&
     a.pitch === b.pitch
   );
-}
-
-function removedLayerIdSet(layerIds: string | Iterable<string>): Set<string> {
-  if (typeof layerIds === "string") return new Set([layerIds]);
-  if (layerIds instanceof Set) return layerIds;
-  return new Set(layerIds);
 }
 
 /**
@@ -946,6 +968,7 @@ export const useAppStore = create<AppState>()(
       identifyLayerId: null,
       pointerCoords: null,
       gpsStatus: null,
+      comments: [],
       metadata: {},
       recentProjects: [],
       attributeFilter: "",
@@ -989,6 +1012,43 @@ export const useAppStore = create<AppState>()(
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
       setGpsStatus: (fix) => set({ gpsStatus: fix }),
+
+      addComment: (comment) =>
+        set((s) => {
+          // Ignore a duplicate id: the WebSocket relay echoes our own
+          // comment-mutation back to the sender, and a reconnect can replay
+          // recent history, so de-dupe defensively (mirrors addCollaborationChat).
+          if (s.comments.some((c) => c.id === comment.id)) return s;
+          return { comments: [...s.comments, comment], isDirty: true };
+        }),
+      replyToComment: (commentId, reply) =>
+        set((s) => {
+          let appended = false;
+          const nextComments = s.comments.map((c) => {
+            if (c.id !== commentId) return c;
+            if (c.replies.some((r) => r.id === reply.id)) return c;
+            appended = true;
+            return { ...c, replies: [...c.replies, reply] };
+          });
+          if (!appended) return s;
+          return { comments: nextComments, isDirty: true };
+        }),
+      toggleResolveComment: (commentId, resolved) =>
+        set((s) => ({
+          comments: s.comments.map((c) =>
+            c.id === commentId
+              ? { ...c, resolved: resolved !== undefined ? resolved : !c.resolved }
+              : c,
+          ),
+          isDirty: true,
+        })),
+      deleteComment: (commentId) =>
+        set((s) => ({
+          comments: s.comments.filter((c) => c.id !== commentId),
+          isDirty: true,
+        })),
+      setComments: (comments) => set({ comments, isDirty: true }),
+
       setCollaboration: (patch) =>
         set((s) => ({ collaboration: { ...s.collaboration, ...patch } })),
       // Add or remove a single remote participant's presence without rebuilding
@@ -1558,6 +1618,9 @@ export const useAppStore = create<AppState>()(
           // Drop storymap chapter enter/exit opacity rows that pointed at the
           // removed layer so they do not keep a dangling id across save/reload.
           storymap: scrubStorymapLayerRefs(s.storymap, id),
+          widgets: scrubWidgetsForRemovedLayers(s.widgets, id),
+          comments: scrubCommentsForRemovedLayers(s.comments, id),
+          legend: scrubLegendForRemovedLayers(s.legend, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)
@@ -1565,6 +1628,15 @@ export const useAppStore = create<AppState>()(
           selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
           selectedFeatureIds: s.selectedLayerId === id ? [] : s.selectedFeatureIds,
           identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
+          ui: {
+            ...s.ui,
+            selectByExpressionLayerId:
+              s.ui.selectByExpressionLayerId === id ? null : s.ui.selectByExpressionLayerId,
+            selectByLocationLayerId:
+              s.ui.selectByLocationLayerId === id ? null : s.ui.selectByLocationLayerId,
+            loadEditorFeaturesLayerId:
+              s.ui.loadEditorFeaturesLayerId === id ? null : s.ui.loadEditorFeaturesLayerId,
+          },
           isDirty: true,
         })),
 
@@ -1682,6 +1754,36 @@ export const useAppStore = create<AppState>()(
             return s;
           }
           return { layers: next, isDirty: true };
+        }),
+
+      moveLayersRelative: (layerIds, targetLayerId, position) =>
+        set((s) => {
+          const requestedIds = new Set(layerIds);
+          if (requestedIds.has(targetLayerId)) return s;
+          const target = s.layers.find((layer) => layer.id === targetLayerId);
+          if (!target) return s;
+          const targetGroupId = target.groupId ?? null;
+          // This is a pure reorder — `groupId` is never touched — so a requested
+          // layer from another group can only be lifted out of its own block,
+          // and `normalizeGroupContiguity` would then drag that group's
+          // untouched members along to reunite it. Move only the layers that
+          // already sit in the target's group.
+          const moving = s.layers.filter(
+            (layer) => requestedIds.has(layer.id) && (layer.groupId ?? null) === targetGroupId,
+          );
+          if (moving.length === 0) return s;
+          const movingIds = new Set(moving.map((layer) => layer.id));
+          const without = s.layers.filter((layer) => !movingIds.has(layer.id));
+          const targetIndex = without.findIndex((layer) => layer.id === targetLayerId);
+          if (targetIndex < 0) return s;
+          // Store order is the reverse of panel display order, so "above" is
+          // immediately after the target in this array.
+          const insertIndex = position === "above" ? targetIndex + 1 : targetIndex;
+          const next = [...without];
+          next.splice(insertIndex, 0, ...moving);
+          const normalized = normalizeGroupContiguity(next);
+          if (normalized.every((layer, index) => layer.id === s.layers[index]?.id)) return s;
+          return { layers: normalized, isDirty: true };
         }),
 
       addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {
@@ -1854,6 +1956,13 @@ export const useAppStore = create<AppState>()(
               ? scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, removedIds)
               : s.secondaryMapViews,
             storymap: removeChildren ? scrubStorymapLayerRefs(s.storymap, removedIds) : s.storymap,
+            widgets: removeChildren
+              ? scrubWidgetsForRemovedLayers(s.widgets, removedIds)
+              : s.widgets,
+            comments: removeChildren
+              ? scrubCommentsForRemovedLayers(s.comments, removedIds)
+              : s.comments,
+            legend: removeChildren ? scrubLegendForRemovedLayers(s.legend, removedIds) : s.legend,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,
@@ -1863,6 +1972,26 @@ export const useAppStore = create<AppState>()(
               s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
                 ? null
                 : s.identifyLayerId,
+            ui: removeChildren
+              ? {
+                  ...s.ui,
+                  selectByExpressionLayerId:
+                    s.ui.selectByExpressionLayerId !== null &&
+                    removedIds.has(s.ui.selectByExpressionLayerId)
+                      ? null
+                      : s.ui.selectByExpressionLayerId,
+                  selectByLocationLayerId:
+                    s.ui.selectByLocationLayerId !== null &&
+                    removedIds.has(s.ui.selectByLocationLayerId)
+                      ? null
+                      : s.ui.selectByLocationLayerId,
+                  loadEditorFeaturesLayerId:
+                    s.ui.loadEditorFeaturesLayerId !== null &&
+                    removedIds.has(s.ui.loadEditorFeaturesLayerId)
+                      ? null
+                      : s.ui.loadEditorFeaturesLayerId,
+                }
+              : s.ui,
             isDirty: true,
           };
         }),
@@ -1899,32 +2028,44 @@ export const useAppStore = create<AppState>()(
         })),
 
       moveLayerToGroup: (layerId, groupId, beforeLayerId = null) =>
+        get().moveLayersToGroup([layerId], groupId, beforeLayerId),
+
+      moveLayersToGroup: (layerIds, groupId, beforeLayerId = null) =>
         set((s) => {
-          const current = s.layers.find((l) => l.id === layerId);
-          if (!current) return s;
           if (groupId && !s.layerGroups.some((g) => g.id === groupId)) return s;
-          const updated = { ...current, groupId: groupId ?? undefined };
-          const without = s.layers.filter((l) => l.id !== layerId);
+          const requestedIds = new Set(layerIds);
+          const moving = s.layers.filter(
+            (layer) =>
+              requestedIds.has(layer.id) &&
+              (beforeLayerId !== null || (layer.groupId ?? null) !== groupId),
+          );
+          if (moving.length === 0) return s;
+          const movingIds = new Set(moving.map((layer) => layer.id));
+          const without = s.layers.filter((layer) => !movingIds.has(layer.id));
+          const updated = moving.map((layer) => ({
+            ...layer,
+            groupId: groupId ?? undefined,
+          }));
           let index: number;
-          if (beforeLayerId) {
-            const at = without.findIndex((l) => l.id === beforeLayerId);
+          if (beforeLayerId && !movingIds.has(beforeLayerId)) {
+            const at = without.findIndex((layer) => layer.id === beforeLayerId);
             index = at < 0 ? without.length : at;
           } else if (groupId) {
-            // Append to the end of the target group's block (top of the group
-            // in the panel); fall back to the array end for an empty group.
             let last = -1;
-            without.forEach((l, i) => {
-              if (l.groupId === groupId) last = i;
+            without.forEach((layer, layerIndex) => {
+              if (layer.groupId === groupId) last = layerIndex;
             });
             index = last < 0 ? without.length : last + 1;
           } else {
             index = without.length;
           }
           const next = [...without];
-          next.splice(index, 0, updated);
+          next.splice(index, 0, ...updated);
           const normalized = normalizeGroupContiguity(next);
           const unchanged = normalized.every(
-            (l, i) => l.id === s.layers[i]?.id && l.groupId === s.layers[i]?.groupId,
+            (layer, layerIndex) =>
+              layer.id === s.layers[layerIndex]?.id &&
+              layer.groupId === s.layers[layerIndex]?.groupId,
           );
           if (unchanged) return s;
           return { layers: normalized, isDirty: true };
@@ -2027,6 +2168,8 @@ export const useAppStore = create<AppState>()(
             selectByExpressionLayerId: null,
             selectByLocationOpen: false,
             selectByLocationLayerId: null,
+            loadEditorFeaturesOpen: false,
+            loadEditorFeaturesLayerId: null,
           },
         }));
         clearHistory();
@@ -2078,6 +2221,8 @@ export const useAppStore = create<AppState>()(
             selectByExpressionLayerId: null,
             selectByLocationOpen: false,
             selectByLocationLayerId: null,
+            loadEditorFeaturesOpen: false,
+            loadEditorFeaturesLayerId: null,
           },
         }));
         clearHistory();
@@ -2101,6 +2246,7 @@ export const useAppStore = create<AppState>()(
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
         storymap: s.storymap,
+        comments: s.comments,
       }),
       // Records a history entry only when the tracked slice really changed.
       // Basemap fields compare with ===; `layers` is compared element-by-element
@@ -2111,12 +2257,14 @@ export const useAppStore = create<AppState>()(
       // new object, so real edits differ while an unchanged null stays equal.
       // `layerGroups` is compared ignoring `collapsed`, which is a UI preference
       // excluded from undo (see toggleLayerGroupCollapsed).
+      // `comments` is compared shallowly by reference.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
         a.storymap === b.storymap &&
         shallow(a.layers, b.layers) &&
+        shallow(a.comments, b.comments) &&
         layerGroupsEqualForHistory(a.layerGroups, b.layerGroups),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.

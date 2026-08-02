@@ -44,6 +44,7 @@ export function buildProjectSnapshot(
     secondaryMapViews: state.secondaryMapViews,
     primaryMapLabel: state.primaryMapLabel,
     styleLibrary: state.projectStyleLibrary,
+    comments: state.comments,
     metadata: state.metadata,
   });
 }

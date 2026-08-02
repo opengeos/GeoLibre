@@ -83,7 +83,17 @@ import {
   invertLayerSelection,
   zoomToSelection,
 } from "../../lib/selection-actions";
-import { activeInterfaceProfile } from "../../lib/ui-profile";
+import { isMobile } from "../../lib/is-mobile";
+import { masHidesDataSource } from "../../lib/mas-build";
+import {
+  DATA_SOURCE_CATALOG,
+  type DataSourceCatalogEntry,
+  activeInterfaceProfile,
+  isDataSourceVisible,
+} from "../../lib/ui-profile";
+import type { AddDataKind } from "../layout/add-data/types";
+import { KIND_I18N_KEY } from "../layout/add-data/constants";
+import { openAddData } from "../layout/add-data/open-add-data";
 import {
   Button,
   Dialog,
@@ -162,7 +172,9 @@ import {
   isVectorControlRefreshLayer,
   MIN_REFRESH_INTERVAL_MS,
   refreshGeoJsonLayer,
+  setLayerConnectionResult,
   setLayerRefreshConfig,
+  supportsRefreshFailurePolicy,
 } from "../../lib/layer-refresh";
 import {
   getLayerWatchConfig,
@@ -267,6 +279,20 @@ const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+/** How often the durable "Last synced …" labels are recomputed. */
+const SYNC_CLOCK_TICK_MS = 60_000;
+
+/**
+ * The Add Data sources a group's "Add data to group" submenu can offer, in Add
+ * Data menu order. `openAddData` scopes the layers a source creates to a group,
+ * so only the sources the Add Data *dialog* owns qualify — `KIND_I18N_KEY` is
+ * keyed by `AddDataKind`, so membership in it is that test. The rest of the
+ * catalog (vector/raster file pickers, STAC, PMTiles, …) never routes through
+ * the dialog and so has no group-scoped open.
+ */
+const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
+  (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } => entry.id in KIND_I18N_KEY,
+);
 
 /** Menu labels for the planet switcher, keyed by celestial body. */
 const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
@@ -535,6 +561,18 @@ function parseCustomRefreshIntervalMs(value: string): number | null {
   return Math.max(MIN_REFRESH_INTERVAL_MS, Math.round(seconds * 1000));
 }
 
+function relativeSyncTime(iso: string, locale: string): string {
+  const elapsedSeconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  if (!Number.isFinite(elapsedSeconds)) return iso;
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  if (Math.abs(elapsedSeconds) < 60) return formatter.format(elapsedSeconds, "second");
+  const minutes = Math.round(elapsedSeconds / 60);
+  if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return formatter.format(hours, "hour");
+  return formatter.format(Math.round(hours / 24), "day");
+}
+
 function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   if (layer.metadata.identifiable === false) return false;
 
@@ -559,6 +597,21 @@ export function LayerPanel({
   const isBeginnerProfile = useDesktopSettingsStore(
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  // Same visibility rules the Add Data menu applies (profile, Mac App Store,
+  // and the mobile-only postgres rule); the user agent is stable for the
+  // session, so evaluate it once.
+  const mobile = useMemo(() => isMobile(), []);
+  const addDataGroupSources = useMemo(
+    () =>
+      ADD_DATA_DIALOG_SOURCES.filter(
+        (entry) =>
+          isDataSourceVisible(uiProfile, entry.id) &&
+          !(entry.id === "postgres" && mobile) &&
+          !masHidesDataSource(entry.id),
+      ),
+    [uiProfile, mobile],
+  );
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
@@ -567,10 +620,11 @@ export function LayerPanel({
   const setLayerGroupVisibility = useAppStore((s) => s.setLayerGroupVisibility);
   const setLayerGroupOpacity = useAppStore((s) => s.setLayerGroupOpacity);
   const toggleLayerGroupCollapsed = useAppStore((s) => s.toggleLayerGroupCollapsed);
-  const moveLayerToGroup = useAppStore((s) => s.moveLayerToGroup);
+  const moveLayersToGroup = useAppStore((s) => s.moveLayersToGroup);
   const moveLayerGroupToGroup = useAppStore((s) => s.moveLayerGroupToGroup);
   const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
   const selectLayer = useAppStore((s) => s.selectLayer);
   const selectedFeatureCount = useAppStore((s) => s.selectedFeatureIds.length);
   // Select by Location needs a second layer to compare against (see EditMenu).
@@ -609,6 +663,7 @@ export function LayerPanel({
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
+  const moveLayersRelative = useAppStore((s) => s.moveLayersRelative);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const copyLayerStyle = useAppStore((s) => s.copyLayerStyle);
@@ -645,6 +700,11 @@ export function LayerPanel({
   const [layerPendingRemoval, setLayerPendingRemoval] = useState<GeoLibreLayer | null>(null);
   const [refreshSettingsLayerId, setRefreshSettingsLayerId] = useState<string | null>(null);
   const [refreshStatuses, setRefreshStatuses] = useState<Record<string, LayerRefreshStatus>>({});
+  // "Last synced <relative time>" is derived from the clock, not from store
+  // state, so without a tick the label would keep reading "a few seconds ago"
+  // until an unrelated re-render happened to recompute it. Tick once a minute
+  // while the panel is open and at least one layer carries a sync timestamp.
+  const [, setSyncClockTick] = useState(0);
   const [refreshIntervalChoice, setRefreshIntervalChoice] = useState("0");
   const [customRefreshSeconds, setCustomRefreshSeconds] = useState("");
   // Time Slider binding dialog: the target layer, the detected timestamp
@@ -686,6 +746,15 @@ export function LayerPanel({
   // owner applies so every existing call site keeps working.
   const isControlled = controlledCollapsed !== undefined;
   const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
+  const hasSyncTimestamps = layers.some((layer) => Boolean(layer.connection?.lastSyncedAt));
+  useEffect(() => {
+    if (isCollapsed || !hasSyncTimestamps) return;
+    const timer = window.setInterval(
+      () => setSyncClockTick((tick) => tick + 1),
+      SYNC_CLOCK_TICK_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [isCollapsed, hasSyncTimestamps]);
   // Quick analysis (#1523): run an existing vector tool over a whole layer from
   // its actions menu, with defaults filled in. No new algorithms — each entry
   // dispatches the same tool the Processing dialog would, so the run shows up in
@@ -741,6 +810,10 @@ export function LayerPanel({
     }
   }, [autoCollapse, internalCollapsed, isControlled]);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
+  const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(
+    () => new Set(selectedLayerId ? [selectedLayerId] : []),
+  );
+  const selectionAnchorRef = useRef<string | null>(selectedLayerId);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
   const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -767,6 +840,24 @@ export function LayerPanel({
   // still resolving — see the watch-lifecycle effect below).
   const watchUnsubsRef = useRef(new Map<string, { path: string; unwatch: () => void }>());
   const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
+  useEffect(() => {
+    const existingIds = new Set(layers.map((layer) => layer.id));
+    setSelectedLayerIds((current) => {
+      const next = new Set([...current].filter((id) => existingIds.has(id)));
+      if (next.size === current.size) return current;
+      return next;
+    });
+    if (selectionAnchorRef.current && !existingIds.has(selectionAnchorRef.current)) {
+      selectionAnchorRef.current = null;
+    }
+  }, [layers]);
+  useEffect(() => {
+    if (!selectedLayerId) return;
+    setSelectedLayerIds((current) =>
+      current.has(selectedLayerId) ? current : new Set([selectedLayerId]),
+    );
+    selectionAnchorRef.current = selectedLayerId;
+  }, [selectedLayerId]);
   // Group lookup + the top-most member of each group in display order. Members
   // are kept contiguous in `layers`, so the first occurrence walking the
   // reversed list is where the group's header is drawn inline. Memoized so they
@@ -990,6 +1081,37 @@ export function LayerPanel({
     setDraggedLayerId(null);
     setDropTargetLayerId(null);
     setDropTargetGroupId(null);
+  };
+
+  const selectedMoveIds = (layerId: string) =>
+    selectedLayerIds.has(layerId) && selectedLayerIds.size > 1
+      ? layers.filter((layer) => selectedLayerIds.has(layer.id)).map((layer) => layer.id)
+      : [layerId];
+
+  const handleLayerSelection = (event: ReactMouseEvent<HTMLDivElement>, layerId: string) => {
+    if (event.shiftKey && selectionAnchorRef.current) {
+      const anchorIndex = visibleLayers.findIndex(
+        (layer) => layer.id === selectionAnchorRef.current,
+      );
+      const layerIndex = visibleLayers.findIndex((layer) => layer.id === layerId);
+      if (anchorIndex >= 0 && layerIndex >= 0) {
+        const start = Math.min(anchorIndex, layerIndex);
+        const end = Math.max(anchorIndex, layerIndex);
+        setSelectedLayerIds(new Set(visibleLayers.slice(start, end + 1).map((layer) => layer.id)));
+      }
+    } else if (event.ctrlKey || event.metaKey) {
+      const next = new Set(selectedLayerIds);
+      if (next.has(layerId) && next.size > 1) next.delete(layerId);
+      else next.add(layerId);
+      setSelectedLayerIds(next);
+      selectionAnchorRef.current = layerId;
+      selectLayer(next.has(layerId) ? layerId : [...next][0]);
+      return;
+    } else {
+      setSelectedLayerIds(new Set([layerId]));
+      selectionAnchorRef.current = layerId;
+    }
+    selectLayer(layerId);
   };
 
   const beginGroupRename = (group: LayerGroup) => {
@@ -1230,6 +1352,10 @@ export function LayerPanel({
 
           updateLayer(layer.id, {
             geojson,
+            ...setLayerConnectionResult(latest, {
+              syncedAt: new Date().toISOString(),
+              error: null,
+            }),
             metadata: {
               ...latest.metadata,
               featureCount,
@@ -1259,6 +1385,10 @@ export function LayerPanel({
 
           updateLayer(layer.id, {
             geojson,
+            ...setLayerConnectionResult(latest, {
+              syncedAt: new Date().toISOString(),
+              error: null,
+            }),
             metadata: {
               ...latest.metadata,
               featureCount,
@@ -1303,6 +1433,18 @@ export function LayerPanel({
           // write would risk clobbering the synced values. `info` feeds only
           // the toast below.
           const featureCount = typeof info.featureCount === "number" ? info.featureCount : null;
+          const latest = useAppStore
+            .getState()
+            .layers.find((candidate) => candidate.id === layer.id);
+          if (latest) {
+            updateLayer(
+              layer.id,
+              setLayerConnectionResult(latest, {
+                syncedAt: new Date().toISOString(),
+                error: null,
+              }),
+            );
+          }
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: {
@@ -1328,6 +1470,10 @@ export function LayerPanel({
 
         updateLayer(layer.id, {
           geojson,
+          ...setLayerConnectionResult(latest, {
+            syncedAt: new Date().toISOString(),
+            error: null,
+          }),
           metadata: {
             ...latest.metadata,
             featureCount,
@@ -1349,6 +1495,15 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       } catch (error) {
         const message = error instanceof Error ? error.message : t("layers.refreshError");
+        const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
+        if (latest) {
+          updateLayer(layer.id, {
+            ...setLayerConnectionResult(latest, { error: message }),
+            ...(latest.connection?.onFailure === "clear" && latest.geojson
+              ? { geojson: { type: "FeatureCollection" as const, features: [] } }
+              : {}),
+          });
+        }
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: {
@@ -2126,6 +2281,7 @@ export function LayerPanel({
 
       if (existing) window.clearInterval(existing.timer);
       const timer = window.setInterval(() => {
+        if (document.hidden) return;
         const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
         if (!latest) return;
 
@@ -2146,6 +2302,28 @@ export function LayerPanel({
       refreshTimersRef.current.delete(id);
     }
   }, [layers]);
+
+  // Timers pause while the tab is hidden. On return, immediately catch up any
+  // connection whose last successful sync is older than its configured cadence.
+  useEffect(() => {
+    const catchUp = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      for (const layer of useAppStore.getState().layers) {
+        const config = getLayerRefreshConfig(layer);
+        if (!config.enabled || !isRefreshableLayer(layer)) continue;
+        const lastSynced = layer.connection?.lastSyncedAt
+          ? new Date(layer.connection.lastSyncedAt).getTime()
+          : 0;
+        if (!Number.isFinite(lastSynced) || now - lastSynced >= config.intervalMs) {
+          void handleRefreshLayerRef.current(layer, true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", catchUp);
+    catchUp();
+    return () => document.removeEventListener("visibilitychange", catchUp);
+  }, [projectGeneration]);
 
   // Watch-mode lifecycle: for each local-file layer with watch enabled, register
   // a debounced filesystem watcher that reloads the layer when the file changes.
@@ -2272,6 +2450,25 @@ export function LayerPanel({
     [updateLayer],
   );
 
+  const setRefreshFailurePolicy = useCallback(
+    (layer: GeoLibreLayer, onFailure: "keep-last" | "clear") => {
+      const latest =
+        useAppStore.getState().layers.find((candidate) => candidate.id === layer.id) ?? layer;
+      const config = getLayerRefreshConfig(latest);
+      updateLayer(layer.id, {
+        ...setLayerRefreshConfig(latest, config),
+        connection: {
+          layerId: layer.id,
+          interval: config.enabled ? config.intervalMs / 1000 : null,
+          lastSyncedAt: latest.connection?.lastSyncedAt ?? null,
+          lastError: latest.connection?.lastError ?? null,
+          onFailure,
+        },
+      });
+    },
+    [updateLayer],
+  );
+
   const toggleWatchLayer = useCallback(
     (layer: GeoLibreLayer, enabled: boolean) => {
       // Read the latest layer so a concurrent reload's metadata is not
@@ -2287,6 +2484,11 @@ export function LayerPanel({
     event.stopPropagation();
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", layerId);
+    if (!selectedLayerIds.has(layerId)) {
+      setSelectedLayerIds(new Set([layerId]));
+      selectionAnchorRef.current = layerId;
+      selectLayer(layerId);
+    }
     setDraggedLayerId(layerId);
   };
 
@@ -2315,11 +2517,20 @@ export function LayerPanel({
     const draggedGroupId = dragged?.groupId ?? null;
     const targetGroupId = target?.groupId ?? null;
     if (draggedGroupId === targetGroupId) {
-      // Same group (or both top-level): a plain reorder keeps contiguity.
-      moveLayer(draggedLayerId, layers.length - 1 - displayIndex);
+      const moveIds = selectedMoveIds(draggedLayerId);
+      if (moveIds.length > 1) {
+        moveLayersRelative(
+          moveIds,
+          layerId,
+          draggedDisplayIndex > displayIndex ? "above" : "below",
+        );
+      } else {
+        // Same group (or both top-level): a plain reorder keeps contiguity.
+        moveLayer(draggedLayerId, layers.length - 1 - displayIndex);
+      }
     } else {
       // Crossing a group boundary: adopt the target's group and land next to it.
-      moveLayerToGroup(draggedLayerId, targetGroupId, layerId);
+      moveLayersToGroup(selectedMoveIds(draggedLayerId), targetGroupId, layerId);
     }
     resetDragState();
   };
@@ -2340,7 +2551,7 @@ export function LayerPanel({
     }
     event.preventDefault();
     event.stopPropagation();
-    moveLayerToGroup(draggedLayerId, groupId);
+    moveLayersToGroup(selectedMoveIds(draggedLayerId), groupId);
     resetDragState();
   };
 
@@ -2463,6 +2674,24 @@ export function LayerPanel({
                 <Pencil className="me-2 h-3.5 w-3.5" />
                 {t("layers.renameGroup")}
               </DropdownMenuItem>
+              {addDataGroupSources.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    {t("layers.addDataToGroup")}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {addDataGroupSources.map((entry) => (
+                      <DropdownMenuItem
+                        key={entry.id}
+                        onSelect={() => openAddData(entry.id, { groupId: group.id })}
+                      >
+                        {t(entry.labelKey)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               {moveTargets.length > 0 && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
@@ -2827,8 +3056,26 @@ export function LayerPanel({
             // and watched for changes instead of the URL-based refresh above.
             const canWatchLocalFile = isTauri() && isLocalFileLayer(layer);
             const watchConfig = getLayerWatchConfig(layer);
-            const refreshStatus = refreshStatuses[layer.id];
+            const transientRefreshStatus = refreshStatuses[layer.id];
+            const refreshStatus: LayerRefreshStatus | undefined =
+              transientRefreshStatus ??
+              (layer.connection?.lastError
+                ? {
+                    type: "error",
+                    message: t("layers.syncErrorStatus", {
+                      message: layer.connection.lastError,
+                    }),
+                  }
+                : layer.connection?.lastSyncedAt
+                  ? {
+                      type: "success",
+                      message: t("layers.lastSynced", {
+                        time: relativeSyncTime(layer.connection.lastSyncedAt, i18n.language),
+                      }),
+                    }
+                  : undefined);
             const isRefreshing = refreshStatus?.type === "refreshing";
+            const moveIds = selectedMoveIds(layer.id);
             return (
               <Fragment key={layer.id}>
                 {isFirstOfGroup &&
@@ -2845,7 +3092,7 @@ export function LayerPanel({
                     data-testid="layer-row"
                     data-layer-name={layer.name}
                     className={`relative min-w-0 max-w-full rounded-md border p-2 transition-colors ${
-                      selectedLayerId === layer.id
+                      selectedLayerIds.has(layer.id)
                         ? "border-primary bg-primary/5"
                         : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
                     } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
@@ -2864,9 +3111,15 @@ export function LayerPanel({
                     onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                     onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                     onDragEnd={resetDragState}
-                    onClick={() => selectLayer(layer.id)}
+                    aria-pressed={selectedLayerIds.has(layer.id)}
+                    onClick={(e) => handleLayerSelection(e, layer.id)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") selectLayer(layer.id);
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedLayerIds(new Set([layer.id]));
+                        selectionAnchorRef.current = layer.id;
+                        selectLayer(layer.id);
+                      }
                     }}
                     role="button"
                     tabIndex={0}
@@ -2962,6 +3215,7 @@ export function LayerPanel({
                     )}
                     {refreshStatus && (
                       <p
+                        title={layer.connection?.lastError ?? layer.connection?.lastSyncedAt ?? ""}
                         className={`mt-1 text-[10px] ${
                           refreshStatus.type === "error"
                             ? "text-destructive"
@@ -3119,25 +3373,32 @@ export function LayerPanel({
                           leaving it pinned open. */}
                           <DropdownMenuItem
                             onSelect={() => {
-                              addLayerGroup(undefined, [layer.id]);
+                              addLayerGroup(undefined, moveIds);
                             }}
                           >
                             <FolderPlus className="me-2 h-3.5 w-3.5" />
-                            {t("layers.newGroupFromLayer")}
+                            {moveIds.length > 1
+                              ? t("layers.newGroupFromSelectedLayers")
+                              : t("layers.newGroupFromLayer")}
                           </DropdownMenuItem>
                           {layerGroups.length > 0 && (
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>
                                 <Folder className="h-3.5 w-3.5" />
-                                {t("layers.moveToGroup")}
+                                {moveIds.length > 1
+                                  ? t("layers.moveSelectedToGroup")
+                                  : t("layers.moveToGroup")}
                               </DropdownMenuSubTrigger>
                               <DropdownMenuSubContent>
                                 {layerGroups.map((g) => (
                                   <DropdownMenuItem
                                     key={g.id}
-                                    disabled={layer.groupId === g.id}
+                                    disabled={moveIds.every(
+                                      (id) =>
+                                        layers.find((item) => item.id === id)?.groupId === g.id,
+                                    )}
                                     onSelect={() => {
-                                      moveLayerToGroup(layer.id, g.id);
+                                      moveLayersToGroup(moveIds, g.id);
                                     }}
                                   >
                                     {g.name}
@@ -3149,7 +3410,7 @@ export function LayerPanel({
                           {layer.groupId && (
                             <DropdownMenuItem
                               onSelect={() => {
-                                moveLayerToGroup(layer.id, null);
+                                moveLayersToGroup(moveIds, null);
                               }}
                             >
                               <FolderMinus className="me-2 h-3.5 w-3.5" />
@@ -3965,6 +4226,30 @@ export function LayerPanel({
                     <p className="text-xs text-destructive">{t("layers.enterPositiveSeconds")}</p>
                   )}
                 </div>
+              )}
+              {/* Vector-control layers keep their features in the external
+                  control, so "clear the layer" cannot be honored for them and
+                  the whole policy picker is hidden rather than offering a
+                  setting that silently does nothing. */}
+              {supportsRefreshFailurePolicy(refreshSettingsLayer) && (
+                <>
+                  <Label htmlFor="layer-refresh-failure-policy">
+                    {t("layers.refreshFailurePolicy")}
+                  </Label>
+                  <Select
+                    id="layer-refresh-failure-policy"
+                    value={refreshSettingsLayer.connection?.onFailure ?? "keep-last"}
+                    onChange={(event) =>
+                      setRefreshFailurePolicy(
+                        refreshSettingsLayer,
+                        event.target.value === "clear" ? "clear" : "keep-last",
+                      )
+                    }
+                  >
+                    <option value="keep-last">{t("layers.refreshFailureKeepLast")}</option>
+                    <option value="clear">{t("layers.refreshFailureClear")}</option>
+                  </Select>
+                </>
               )}
             </div>
           )}

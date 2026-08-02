@@ -1655,6 +1655,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-persisted-scope",
  "webkit2gtk-sys",
+ "windows-sys 0.61.2",
  "zip 8.6.0",
 ]
 

@@ -6,7 +6,12 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { addRasterToMap, materializeEmbeddableVectorLayers } from "@geolibre/plugins";
+import {
+  addArcGISLayer,
+  addRasterToMap,
+  isRecoverableNonTiledRasterError,
+  materializeEmbeddableVectorLayers,
+} from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +23,7 @@ import {
   isHttpUrl,
   isTauri,
   loadDroppedRasterPaths,
+  openArcgisProjectFile,
   openProjectFile,
   openQgisProjectFile,
   openRecentProjectFile,
@@ -41,6 +47,7 @@ import {
   materializeQgisRemoteLayers,
   type QgisProjectImportWarning,
 } from "../lib/qgis-project-import";
+import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /** A pending "strip env vars before saving?" prompt. */
@@ -135,6 +142,58 @@ function importedProjectMapReady(
 }
 
 /**
+ * Adds one raster from an imported QGIS/ArcGIS Pro project, cleaning up after
+ * itself when the raster cannot be loaded.
+ *
+ * `addRasterToMap` resolves only once the GeoTIFF header has been read, but the
+ * control creates the store layer earlier (its `rasteradd` fires before that
+ * await). A rejection therefore leaves the layer behind, so importers that
+ * simply caught the error listed a raster as unsupported while it was still
+ * sitting in the layer list -- see the NLCD case in GeoLibre#1637. Rolling the
+ * layer back keeps the warning dialog and the layer list telling the same story.
+ *
+ * The striped "not tiled" rejection is deliberately not a failure: that layer
+ * stays on the map while the registered non-tiled handler offers to convert it
+ * to a COG, so it is neither rolled back nor reported.
+ *
+ * @param app - The app API for the live map.
+ * @param source - Raster source resolved from the project's layer path.
+ * @param options - Passed through to {@link addRasterToMap}.
+ * @param groupId - Imported layer group to move the raster into, if any.
+ * @throws The original load error, after the partial layer has been removed.
+ */
+async function addImportedProjectRaster(
+  app: ReturnType<typeof createAppAPI>,
+  source: Parameters<typeof addRasterToMap>[1],
+  options: Parameters<typeof addRasterToMap>[2],
+  groupId: string | undefined,
+): Promise<void> {
+  const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
+  try {
+    const layerId = await addRasterToMap(app, source, options);
+    if (groupId) useAppStore.getState().moveLayerToGroup(layerId, groupId);
+  } catch (error) {
+    if (isRecoverableNonTiledRasterError(error)) {
+      // The rejection carried no layer id, but the control already created the
+      // store layer and is keeping it while the COG conversion is offered, so
+      // it still has to be placed in its imported group -- otherwise a raster
+      // that converts successfully ends up at the top level.
+      if (groupId) {
+        const { layers, moveLayerToGroup } = useAppStore.getState();
+        const created = layers.find((layer) => !before.has(layer.id));
+        if (created) moveLayerToGroup(created.id, groupId);
+      }
+      return;
+    }
+    const { layers, removeLayer } = useAppStore.getState();
+    for (const layer of layers) {
+      if (!before.has(layer.id)) removeLayer(layer.id);
+    }
+    throw error;
+  }
+}
+
+/**
  * Bundles every project file action (open from file/URL/recent, save, save as)
  * along with the related dialog state (Open-from-URL, env-var strip prompt, and
  * the shared action-error dialog).
@@ -154,6 +213,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
+  const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
+    ArcgisProjectImportWarning[] | null
+  >(null);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
@@ -235,28 +297,30 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         for (const raster of imported.rasters) {
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
-              qgisProjectPath: result.path,
+              importProjectPath: result.path,
             });
             if (!loaded) throw new Error("Unsupported raster path");
-            const rasterLayerId = await addRasterToMap(app, loaded.source, {
-              name: raster.name,
-              localPath: raster.sourcePath,
-              // The Tauri/WebKitGTK WASM backend can stall when its first
-              // source is created immediately after a project style load.
-              // GPU renders this local COG directly and preserves the imported
-              // QGIS ramp, so use the verified backend for project imports.
-              defaults: { engine: "maplibre-gl-raster" },
-              state: {
-                ...raster.state,
-                visible: raster.visible,
-                opacity: raster.opacity,
+            await addImportedProjectRaster(
+              app,
+              loaded.source,
+              {
+                name: raster.name,
+                localPath: raster.sourcePath,
+                // The Tauri/WebKitGTK WASM backend can stall when its first
+                // source is created immediately after a project style load.
+                // GPU renders this local COG directly and preserves the imported
+                // QGIS ramp, so use the verified backend for project imports.
+                defaults: { engine: "maplibre-gl-raster" },
+                state: {
+                  ...raster.state,
+                  visible: raster.visible,
+                  opacity: raster.opacity,
+                },
+                beforeId: raster.beforeId,
+                zoomTo: false,
               },
-              beforeId: raster.beforeId,
-              zoomTo: false,
-            });
-            if (raster.groupId) {
-              useAppStore.getState().moveLayerToGroup(rasterLayerId, raster.groupId);
-            }
+              raster.groupId,
+            );
           } catch (error) {
             console.error(`Failed to import QGIS raster "${raster.name}"`, error);
             imported.warnings.push({
@@ -272,6 +336,117 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       console.error("Failed to import QGIS project", error);
       setActionError(
         error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
+      );
+    }
+  };
+
+  const handleImportArcgisProject = async () => {
+    const result = await openArcgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = importArcgisProject(result.data, result.path);
+      if (!isTauri()) {
+        const unavailableLayerIds = new Set<string>();
+        for (const layer of imported.project.layers) {
+          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            unavailableLayerIds.add(layer.id);
+            imported.warnings.push({ layerName: layer.name, reason: "browser-local-file" });
+          }
+        }
+        imported.project.layers = imported.project.layers.filter(
+          (layer) => !unavailableLayerIds.has(layer.id),
+        );
+        for (const raster of imported.rasters) {
+          imported.warnings.push({ layerName: raster.name, reason: "browser-local-file" });
+        }
+        // Rasters never load in the browser build, so drop them before the
+        // group prune below rather than letting them keep a group alive that
+        // will stay empty. Services still load, so they still count.
+        imported.rasters = [];
+        // Re-prune the groups: dropping the local-file layers can empty a group
+        // that the importer kept, and an empty group left behind shows up as a
+        // dangling entry in the layer panel.
+        const usedGroupIds = new Set<string>([
+          ...imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+          ...imported.services.flatMap((service) => (service.groupId ? [service.groupId] : [])),
+        ]);
+        // A parent group stays as long as a surviving group still names it, so
+        // walk up the chain before filtering.
+        const groupById = new Map(
+          (imported.project.layerGroups ?? []).map((group) => [group.id, group]),
+        );
+        for (const id of [...usedGroupIds]) {
+          let parentId = groupById.get(id)?.parentId;
+          while (parentId && !usedGroupIds.has(parentId)) {
+            usedGroupIds.add(parentId);
+            parentId = groupById.get(parentId)?.parentId;
+          }
+        }
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
+      }
+      const mapReady = importedProjectMapReady(
+        mapControllerRef,
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+      );
+      loadProject(imported.project, null);
+      await mapReady;
+      const app = createAppAPI(mapControllerRef);
+      if (isTauri()) {
+        for (const raster of imported.rasters) {
+          try {
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
+              importProjectPath: result.path,
+            });
+            if (!loaded) throw new Error("Unsupported raster path");
+            await addImportedProjectRaster(
+              app,
+              loaded.source,
+              {
+                name: raster.name,
+                localPath: raster.sourcePath,
+                defaults: { engine: "maplibre-gl-raster" },
+                state: { visible: raster.visible, opacity: raster.opacity },
+                zoomTo: false,
+              },
+              raster.groupId,
+            );
+          } catch (error) {
+            console.error(`Failed to import ArcGIS raster "${raster.name}"`, error);
+            imported.warnings.push({ layerName: raster.name, reason: "format" });
+          }
+        }
+      }
+      for (const service of imported.services) {
+        try {
+          const serviceLayerId = await addArcGISLayer(app, {
+            itemId: service.itemId,
+            layerType: "vector-tile",
+            name: service.name,
+            sourceType: "portal-item",
+            // The project's saved extent was applied by loadProject above, and
+            // this runs after it. Without the opt-out, each imported service
+            // would fit the map to its own bounds and throw that extent away.
+            zoomTo: false,
+          });
+          if (service.groupId) {
+            useAppStore.getState().moveLayerToGroup(serviceLayerId, service.groupId);
+          }
+          if (!service.visible) {
+            useAppStore.getState().setLayerVisibility(serviceLayerId, false);
+          }
+        } catch (error) {
+          console.error(`Failed to import ArcGIS service "${service.name}"`, error);
+          imported.warnings.push({ layerName: service.name, reason: "service" });
+        }
+      }
+      useAppStore.setState({ isDirty: true });
+      setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+    } catch (error) {
+      console.error("Failed to import ArcGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportArcgisProject"),
       );
     }
   };
@@ -830,6 +1005,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setActionError,
     qgisImportWarnings,
     setQgisImportWarnings,
+    arcgisImportWarnings,
+    setArcgisImportWarnings,
     projectUrlDialogOpen,
     setProjectUrlDialogOpen,
     handleProjectUrlDialogOpenChange,
@@ -853,6 +1030,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     cancelSaveNamePrompt,
     handleOpenFromFile,
     handleImportQgisProject,
+    handleImportArcgisProject,
     handleOpenFromUrl,
     openProjectFromShareUrl,
     handleOpenRecent,

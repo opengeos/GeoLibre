@@ -28,6 +28,7 @@ import {
   projectValue as earthEngineProjectValue,
   shouldUseTauriEarthEngineOAuth,
 } from "./earth-engine-auth";
+import { GEOAGENT_PLUGIN_ID } from "../plugin-ids";
 
 const STORAGE_PREFIX = "geolibre.geoagent";
 
@@ -82,8 +83,10 @@ let earthEngineTokenTypeOverride = "Bearer";
 let earthEngineTokenExpiresInOverride = 3600;
 let geoAgentEarthEngineFunctionInfo: unknown;
 
+export { GEOAGENT_PLUGIN_ID };
+
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-geoagent",
+  id: GEOAGENT_PLUGIN_ID,
   name: "GeoAgent",
   version: "0.4.2",
   activate: (app: GeoLibreAppAPI) => {

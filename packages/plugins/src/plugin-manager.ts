@@ -106,6 +106,25 @@ export class PluginManager {
     return this.active.has(id);
   }
 
+  /**
+   * The in-flight activation for a plugin whose `activate()` returned a
+   * promise, or undefined when it has settled (or was synchronous).
+   *
+   * {@link isActive} turns true the moment activation starts, before an async
+   * plugin's control has mounted, which is the right answer for the Plugins
+   * menu but the wrong one for a caller that wants to *undo* the activation:
+   * `deactivate` in that window tears down nothing and the mount lands
+   * afterwards. Await this first. The read-only viewer preset is the caller
+   * this exists for (see `VIEWER_BLOCKED_PLUGIN_IDS`).
+   *
+   * @param id - The plugin id.
+   * @returns The activation promise, resolving false if the mount failed and
+   *   was rolled back.
+   */
+  pendingActivation(id: string): Promise<boolean> | undefined {
+    return this.activationResults.get(id);
+  }
+
   getProjectState(): ProjectPluginState {
     const mapControlPositions: ProjectPluginState["mapControlPositions"] = {};
     const settings: ProjectPluginState["settings"] = {};

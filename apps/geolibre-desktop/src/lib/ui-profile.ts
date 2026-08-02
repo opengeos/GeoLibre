@@ -182,6 +182,7 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-gl-nasa-earthdata": "advanced",
   "maplibre-gl-enviroatlas": "advanced",
   "maplibre-gl-national-map": "advanced",
+  "maplibre-gl-arcgis-hub": "advanced",
   "maplibre-gl-source-coop": "advanced",
   "maplibre-gl-huggingface": "advanced",
   "maplibre-gl-esri-wayback": "advanced",

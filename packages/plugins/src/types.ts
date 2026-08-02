@@ -859,8 +859,8 @@ export interface GeoLibreRightPanelRegistration {
   title: string | (() => string);
   /**
    * Where the panel docks initially: one of the four positional docks
-   * (`left-of-layers`, `right-of-layers`, `left-of-style`, or `right-of-style`,
-   * the default), or a shared-rail mode (`replace-style` / `replace-layers`).
+   * (`left-of-layers`, `right-of-layers`, `left-of-style`, or `right-of-style`),
+   * or a shared-rail mode (`replace-style`, the default, or `replace-layers`).
    * With a positional dock the built-in panel on the docked side (Layers on the
    * left, Style on the right) collapses to its rail while the plugin panel is
    * expanded next to it, and the user can move the panel between positions at

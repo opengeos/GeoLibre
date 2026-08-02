@@ -189,8 +189,8 @@ export type GeoLibreRightPanelDock =
   | "left-of-layers" // left of the Layers panel
   | "right-of-layers" // between the Layers panel and the map
   | "left-of-style" // between the map and the Style panel
-  | "right-of-style" // right of the Style panel (default)
-  | "replace-style" // share the Style sidebar's single rail (shared-rail mode)
+  | "right-of-style" // right of the Style panel
+  | "replace-style" // share the Style sidebar's single rail (shared-rail mode, default)
   | "replace-layers"; // share the Layers sidebar's single rail (shared-rail mode)
 
 export interface GeoLibreRightPanelRegistration {
@@ -206,7 +206,7 @@ export interface GeoLibreRightPanelRegistration {
   // the next registry mutation, and must re-read the panel itself on language
   // change. A plain string is frozen at registration time.
   title: string | (() => string);
-  /** Initial dock position; "right-of-style" (default). */
+  /** Initial dock position; "replace-style" (default). */
   dock?: GeoLibreRightPanelDock;
   /** Optional rail icon: a URL or data: URI rendered as an image. */
   icon?: string;

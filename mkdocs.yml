@@ -78,6 +78,7 @@ nav:
       - Mac App Store: mac-app-store.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
+      - Collaboration: collaboration.md
       - UI Profiles: ui-profiles.md
       - Internationalization: i18n.md
       - Python Package: python.md

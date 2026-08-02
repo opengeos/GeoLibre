@@ -93,13 +93,25 @@ export interface ChatSendMessage {
   coordinate?: CollabCursor | null;
 }
 
+export type CommentMutationAction =
+  | { type: "add"; comment: unknown }
+  | { type: "reply"; commentId: string; reply: unknown }
+  | { type: "toggle-resolve"; commentId: string; resolved?: boolean }
+  | { type: "delete"; commentId: string };
+
+export interface CommentMutationMessage {
+  type: "comment-mutation";
+  action: CommentMutationAction;
+}
+
 export type ClientMessage =
   | JoinMessage
   | ClientSnapshotMessage
   | ClientPresenceMessage
   | SetModeMessage
   | SetParticipantModeMessage
-  | ChatSendMessage;
+  | ChatSendMessage
+  | CommentMutationMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -167,4 +179,5 @@ export type ServerMessage =
   | ParticipantsMessage
   | ModeMessage
   | ChatBroadcastMessage
+  | CommentMutationMessage
   | ErrorMessage;

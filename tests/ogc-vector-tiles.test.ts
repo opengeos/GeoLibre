@@ -4,11 +4,33 @@ import { describe, it } from "node:test";
 import {
   firstVectorSource,
   hasTilePlaceholders,
+  resolveDocumentUrl,
   resolveOgcVectorTiles,
   styleSourceLayers,
   tileJsonConfig,
   unionCollectionBounds,
 } from "../apps/geolibre-desktop/src/lib/ogc-vector-tiles";
+
+/**
+ * Installs a `globalThis.fetch` stub answering from a URL → document map, and
+ * returns the URLs requested plus a restore function.
+ */
+function stubFetch(responses: Record<string, unknown>) {
+  const original = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = ((input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    const body = responses[url];
+    return Promise.resolve({
+      ok: body !== undefined,
+      status: body !== undefined ? 200 : 404,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => body ?? {},
+    } as Response);
+  }) as typeof fetch;
+  return { calls, restore: () => void (globalThis.fetch = original) };
+}
 
 describe("hasTilePlaceholders", () => {
   it("recognizes a MapLibre {z}/{x}/{y} template", () => {
@@ -136,6 +158,162 @@ describe("resolveOgcVectorTiles (template path)", () => {
     });
     assert.ok(Array.isArray(config.sourceLayers));
     assert.equal(config.sourceLayers.length, 0);
+  });
+});
+
+describe("resolveDocumentUrl", () => {
+  const style =
+    "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/resources/styles/root.json";
+
+  it("resolves an Esri style's relative source url against the style URL", () => {
+    assert.equal(
+      resolveDocumentUrl("../../", style),
+      "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/",
+    );
+  });
+
+  it("keeps {z}/{y}/{x} braces unescaped so MapLibre can substitute them", () => {
+    assert.equal(
+      resolveDocumentUrl(
+        "tile/{z}/{y}/{x}.pbf",
+        "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/",
+      ),
+      "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/tile/{z}/{y}/{x}.pbf",
+    );
+  });
+
+  it("leaves an absolute URL and passes through when there is no base", () => {
+    assert.equal(resolveDocumentUrl("https://ex.com/a.json", style), "https://ex.com/a.json");
+    assert.equal(resolveDocumentUrl("../../", undefined), "../../");
+  });
+});
+
+// An Esri `VectorTileServer` document is not conforming TileJSON: its `tiles`
+// are relative to the service. MapLibre would resolve them against the app
+// origin, so the resolver must emit absolute templates instead (GeoLibre#1639).
+describe("tileJsonConfig (relative tiles)", () => {
+  const serviceUrl =
+    "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/";
+
+  it("emits absolute tiles and drops the document url", () => {
+    const config = tileJsonConfig(
+      { name: "Svc", maxzoom: 22, tiles: ["tile/{z}/{y}/{x}.pbf"] },
+      serviceUrl,
+    );
+    assert.deepEqual(config.tiles, [`${serviceUrl}tile/{z}/{y}/{x}.pbf`]);
+    assert.equal(config.url, undefined);
+    assert.equal(config.maxzoom, 22);
+  });
+
+  it("leaves a conforming TileJSON to be loaded by MapLibre itself", () => {
+    const config = tileJsonConfig(
+      { tilejson: "3.0.0", tiles: ["https://ex.com/{z}/{x}/{y}.pbf"] },
+      "https://ex.com/tiles.json",
+    );
+    assert.equal(config.url, "https://ex.com/tiles.json");
+    assert.equal(config.tiles, undefined);
+  });
+});
+
+// The reported failure: an Esri vector tile service added by its style URL was
+// handed MapLibre the style's verbatim relative `"url": "../../"`, which
+// resolves against the app origin — the layer was added and rendered nothing.
+describe("resolveOgcVectorTiles (Esri style URL)", () => {
+  const styleUrl =
+    "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/resources/styles/root.json";
+  const serviceUrl =
+    "https://tiles.arcgis.com/tiles/org/arcgis/rest/services/Svc/VectorTileServer/";
+
+  it("resolves the relative source url and reads the service's tiles", async () => {
+    const { calls, restore } = stubFetch({
+      [styleUrl]: {
+        name: "Svc",
+        sources: { esri: { type: "vector", url: "../../" } },
+        layers: [{ id: "a", source: "esri", "source-layer": "Boundaries" }],
+      },
+      [serviceUrl]: { name: "Service", maxzoom: 16, tiles: ["tile/{z}/{y}/{x}.pbf"] },
+    });
+    try {
+      const config = await resolveOgcVectorTiles({ tilesUrl: "", styleUrl });
+      assert.deepEqual(config.tiles, [`${serviceUrl}tile/{z}/{y}/{x}.pbf`]);
+      // A vector source with both `url` and `tiles` is invalid in MapLibre.
+      assert.equal(config.url, undefined);
+      assert.deepEqual(config.sourceLayers, ["Boundaries"]);
+      assert.equal(config.maxzoom, 16);
+      // The style's own name wins over the service's (manual > style > TileJSON).
+      assert.equal(config.name, "Svc");
+      assert.ok(calls.includes(serviceUrl));
+    } finally {
+      restore();
+    }
+  });
+
+  it("still adds the layer when the tileset document cannot be read", async () => {
+    const { restore } = stubFetch({
+      [styleUrl]: {
+        sources: { esri: { type: "vector", url: "../../" } },
+        layers: [{ id: "a", source: "esri", "source-layer": "Boundaries" }],
+      },
+    });
+    try {
+      const config = await resolveOgcVectorTiles({ tilesUrl: "", styleUrl });
+      // Falls back to the resolved absolute service URL rather than "../../".
+      assert.equal(config.url, serviceUrl);
+      assert.deepEqual(config.sourceLayers, ["Boundaries"]);
+    } finally {
+      restore();
+    }
+  });
+
+  it("surfaces an Esri HTTP 200 error body instead of a bare 'no layers'", async () => {
+    const { restore } = stubFetch({
+      [styleUrl]: { error: { code: 404, message: "Requested Service not available." } },
+    });
+    try {
+      await assert.rejects(
+        resolveOgcVectorTiles({ tilesUrl: "", styleUrl }),
+        /Requested Service not available/,
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  // A host can report a failure with a bare code and no usable `message` (498
+  // is Esri's invalid-token code), and some use string codes. Both must still
+  // be recognized as errors rather than passed on as an empty document.
+  it("reports a coded error that carries no message", async () => {
+    for (const code of [498, "NotFound"]) {
+      const { restore } = stubFetch({ [styleUrl]: { error: { code } } });
+      try {
+        await assert.rejects(
+          resolveOgcVectorTiles({ tilesUrl: "", styleUrl }),
+          new RegExp(`Service error ${code}`),
+        );
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  // `code: 0` conventionally means success, so it must not be read as a
+  // failure — only a real code or a message makes the document an error report.
+  it("does not treat a zero code or an unrelated `error` value as a failure", async () => {
+    for (const error of [{ code: 0 }, "not an envelope", ["nope"], null]) {
+      const { restore } = stubFetch({
+        [styleUrl]: {
+          error,
+          sources: { s: { type: "vector", tiles: ["https://ex.com/{z}/{x}/{y}.pbf"] } },
+          layers: [{ id: "a", source: "s", "source-layer": "roads" }],
+        },
+      });
+      try {
+        const config = await resolveOgcVectorTiles({ tilesUrl: "", styleUrl });
+        assert.deepEqual(config.sourceLayers, ["roads"]);
+      } finally {
+        restore();
+      }
+    }
   });
 });
 

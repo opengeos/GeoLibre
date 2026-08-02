@@ -279,6 +279,9 @@ export class CollabSession extends DurableObject<Env> {
       case "chat":
         await this.handleChat(ws, attachment, message);
         break;
+      case "comment-mutation":
+        await this.handleCommentMutation(ws, attachment, message);
+        break;
     }
   }
 
@@ -651,5 +654,70 @@ export class CollabSession extends DurableObject<Env> {
         // Skip a dead socket.
       }
     }
+  }
+
+  private async handleCommentMutation(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "comment-mutation" }>,
+  ): Promise<void> {
+    const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
+    if (!canEdit(attachment, mode)) {
+      this.send(ws, {
+        type: "error",
+        code: "forbidden",
+        message: "You are in view-only mode and cannot comment.",
+      });
+      return;
+    }
+
+    const rawSnapshot = await this.ctx.storage.get<string>("snapshot");
+    if (rawSnapshot) {
+      try {
+        const parsed = JSON.parse(rawSnapshot) as Record<string, unknown>;
+        const comments = Array.isArray(parsed.comments)
+          ? (parsed.comments as Record<string, unknown>[])
+          : [];
+        const action = message.action;
+        if (!action || typeof action !== "object") return;
+        let updatedComments = comments;
+
+        if (action.type === "add") {
+          if (!action.comment || typeof action.comment !== "object") return;
+          updatedComments = [...comments, action.comment as Record<string, unknown>];
+        } else if (action.type === "reply") {
+          if (!action.reply || typeof action.reply !== "object") return;
+          const replyObj = action.reply as Record<string, unknown>;
+          updatedComments = comments.map((c) => {
+            if (!c || typeof c !== "object" || c.id !== action.commentId) return c;
+            const existingReplies = Array.isArray(c.replies)
+              ? (c.replies as Record<string, unknown>[])
+              : [];
+            if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
+              return c;
+            return { ...c, replies: [...existingReplies, replyObj] };
+          });
+        } else if (action.type === "toggle-resolve") {
+          updatedComments = comments.map((c) =>
+            c && typeof c === "object" && c.id === action.commentId
+              ? { ...c, resolved: action.resolved !== undefined ? action.resolved : !c.resolved }
+              : c,
+          );
+        } else if (action.type === "delete") {
+          updatedComments = comments.filter(
+            (c) => c && typeof c === "object" && c.id !== action.commentId,
+          );
+        }
+
+        parsed.comments = updatedComments;
+        await this.ctx.storage.put("snapshot", JSON.stringify(parsed));
+      } catch {
+        // Ignore snapshot mutation update errors defensively
+      }
+    }
+
+    // Exclude the sender (ws) so they don't receive their own mutation back.
+    // The sender already applied the change locally before calling sendCommentMutation.
+    this.broadcast(message, ws);
   }
 }

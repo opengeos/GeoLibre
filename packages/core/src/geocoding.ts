@@ -47,6 +47,10 @@ export const GEOCODE_LAT_KEY = "geocode_lat";
 export const GEOCODE_LON_KEY = "geocode_lon";
 export const GEOCODE_DISPLAY_NAME_KEY = "geocode_display_name";
 export const GEOCODE_SCORE_KEY = "geocode_importance";
+/** Provider id that produced (or failed to produce) a match, when stamped. */
+export const GEOCODE_PROVIDER_KEY = "geocode_provider";
+/** Whether a row matched, when stamped. See {@link GeocodeStatus}. */
+export const GEOCODE_STATUS_KEY = "geocode_status";
 
 /** Identifier of a selectable geocoding backend. */
 export type GeocodingProviderId = "nominatim" | "pelias" | "arcgis" | "mapbox" | "google";
@@ -175,6 +179,9 @@ export interface ReverseGeocodeDisplay {
   parts: Record<string, string>;
 }
 
+/** Whether a row matched during batch geocoding, stamped as {@link GEOCODE_STATUS_KEY}. */
+export type GeocodeStatus = "matched" | "unmatched";
+
 function coerceScore(value: number | string | undefined | null): number | null {
   if (value === undefined || value === null || value === "") return null;
   const num = Number(value);
@@ -265,10 +272,15 @@ function nominatimForwardResultToMatch(result: NominatimForwardResult): GeocodeM
  * against the original columns so an existing `geocode_lat` is not clobbered.
  * Geometry coordinates are `[lon, lat]`. Returns null when the match has no
  * finite coordinates.
+ *
+ * `extra.providerId`, when passed, also stamps `geocode_provider` and
+ * `geocode_status: "matched"` (dropped when omitted, so the existing
+ * `GeocodeDialog` call site keeps its current output unchanged).
  */
 export function geocodeMatchToFeature(
   match: GeocodeMatch,
   originalRow: Record<string, string> = {},
+  extra?: { providerId?: GeocodingProviderId },
 ): Feature<Point> | null {
   if (!Number.isFinite(match.lat) || !Number.isFinite(match.lon)) return null;
 
@@ -279,6 +291,10 @@ export function geocodeMatchToFeature(
     [GEOCODE_DISPLAY_NAME_KEY]: match.displayName ?? "",
     [GEOCODE_SCORE_KEY]: match.score,
   };
+  if (extra?.providerId) {
+    added[GEOCODE_PROVIDER_KEY] = extra.providerId;
+    added[GEOCODE_STATUS_KEY] = "matched" satisfies GeocodeStatus;
+  }
   for (const [key, value] of Object.entries(added)) {
     properties[uniqueKey(key, properties)] = value;
   }
@@ -288,6 +304,30 @@ export function geocodeMatchToFeature(
     geometry: { type: "Point", coordinates: [match.lon, match.lat] },
     properties,
   };
+}
+
+/**
+ * Build a null-geometry Feature for a CSV row that could not be geocoded, so
+ * it is kept (not silently dropped) alongside the matched point features.
+ * Mirrors the null-geometry shape {@link parseDelimitedTextLayer} already uses
+ * for a non-spatial attribute table. Stamps `geocode_status: "unmatched"` and
+ * `geocode_provider`, de-duplicated against the original columns the same way
+ * {@link geocodeMatchToFeature} does.
+ */
+export function unmatchedGeocodeFeature(
+  originalRow: Record<string, string>,
+  providerId: GeocodingProviderId,
+): Feature<null> {
+  const properties: Record<string, unknown> = { ...originalRow };
+  const added: Record<string, unknown> = {
+    [GEOCODE_STATUS_KEY]: "unmatched" satisfies GeocodeStatus,
+    [GEOCODE_PROVIDER_KEY]: providerId,
+  };
+  for (const [key, value] of Object.entries(added)) {
+    properties[uniqueKey(key, properties)] = value;
+  }
+
+  return { type: "Feature", geometry: null, properties };
 }
 
 /**

@@ -8,6 +8,7 @@ environment it publishes to kernels, and the broadcast bookkeeping itself.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
@@ -34,12 +35,20 @@ class FakeSocket:
 
 @pytest.fixture(autouse=True)
 def _isolate_listeners():
-    """Keep each test's listener set independent of the module-level one."""
-    saved = set(jupyter_relay._listeners)
+    """Keep each test's listener list independent of the module-level one."""
+    saved = list(jupyter_relay._listeners)
+    saved_pending = dict(jupyter_relay._pending_results)
+    saved_owners = dict(jupyter_relay._pending_owners)
     jupyter_relay._listeners.clear()
+    jupyter_relay._pending_results.clear()
+    jupyter_relay._pending_owners.clear()
     yield
     jupyter_relay._listeners.clear()
-    jupyter_relay._listeners.update(saved)
+    jupyter_relay._listeners.extend(saved)
+    jupyter_relay._pending_results.clear()
+    jupyter_relay._pending_results.update(saved_pending)
+    jupyter_relay._pending_owners.clear()
+    jupyter_relay._pending_owners.update(saved_owners)
 
 
 # -- the command envelope ----------------------------------------------------
@@ -62,6 +71,59 @@ def test_normalize_command_keeps_a_string_request_id():
 
 def test_normalize_command_defaults_missing_params_to_an_empty_object():
     assert jupyter_relay.normalize_command({"method": "getView"})["params"] == {}
+
+
+def test_normalize_result_keeps_a_success_value():
+    assert jupyter_relay.normalize_result(
+        {
+            "type": "geolibre:result",
+            "requestId": "abc",
+            "ok": True,
+            "value": [{"id": "layer-1"}],
+        }
+    ) == {
+        "requestId": "abc",
+        "ok": True,
+        "value": [{"id": "layer-1"}],
+    }
+
+
+def test_normalize_result_keeps_an_error_message():
+    assert jupyter_relay.normalize_result(
+        {
+            "type": "geolibre:result",
+            "requestId": "abc",
+            "ok": False,
+            "error": "No layer",
+        }
+    ) == {"requestId": "abc", "ok": False, "error": "No layer"}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"type": "geolibre:result", "requestId": "", "ok": True},
+        {"type": "geolibre:result", "requestId": "abc", "ok": "yes"},
+    ],
+)
+def test_normalize_result_rejects_malformed_payloads(payload):
+    with pytest.raises(ValueError):
+        jupyter_relay.normalize_result(payload)
+
+
+def test_the_client_outwaits_this_modules_result_timeout():
+    # notebook_client's read-back waits _RELAY_TIMEOUT_SECONDS + 1 (see
+    # _request_from_relay). That has to stay above the budget here, or the
+    # kernel's own socket gives up first and the precise 504 -> GeoLibreTimeoutError
+    # ("still running in the app") degrades into GeoLibreNotConnectedError
+    # ("could not be reached"), which is both wrong and differently handled.
+    # The two constants live in separate modules, so pin their ordering here.
+    notebook_client = pytest.importorskip(
+        "notebook_client", reason="the notebook client renders IPython displays"
+    )
+
+    assert notebook_client._RELAY_TIMEOUT_SECONDS + 1 > jupyter_relay.RESULT_TIMEOUT_SECONDS
 
 
 @pytest.mark.parametrize(
@@ -88,6 +150,9 @@ def test_normalize_command_rejects_malformed_payloads(payload):
         None,
         "",
         "tauri://localhost",
+        # Windows: http is the real scheme (Tauri v2's useHttpsScheme defaults
+        # to false); https covers it being turned on.
+        "http://tauri.localhost",
         "https://tauri.localhost",
         "http://localhost:5173",
         "http://127.0.0.1:8766",
@@ -138,7 +203,7 @@ def test_relay_base_url_falls_back_to_loopback(host):
 
 def test_broadcast_reaches_every_listener_and_counts_them():
     first, second = FakeSocket(), FakeSocket()
-    jupyter_relay._listeners.update({first, second})
+    jupyter_relay._listeners.extend([first, second])
 
     delivered = jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"})
 
@@ -149,7 +214,7 @@ def test_broadcast_reaches_every_listener_and_counts_them():
 
 def test_broadcast_drops_a_dead_listener_instead_of_failing():
     alive, dead = FakeSocket(), FakeSocket(fails=True)
-    jupyter_relay._listeners.update({alive, dead})
+    jupyter_relay._listeners.extend([alive, dead])
 
     delivered = jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"})
 
@@ -162,6 +227,94 @@ def test_broadcast_with_no_listeners_reports_zero():
     # This zero is what the kernel client turns into a "nothing is listening"
     # warning rather than a silent no-op.
     assert jupyter_relay._broadcast({"type": "geolibre:command", "method": "flyTo"}) == 0
+
+
+# -- single-window dispatch (correlated read-back) ---------------------------
+
+
+def test_dispatch_one_reaches_only_one_listener():
+    first, second = FakeSocket(), FakeSocket()
+    jupyter_relay._listeners.extend([first, second])
+
+    owner = jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"})
+
+    assert owner is first
+    assert len(first.received) + len(second.received) == 1
+
+
+def test_dispatch_one_keeps_picking_the_same_window():
+    # A mutation and the read-back that follows it must reach the same map, so
+    # the single-window pick has to be the oldest connection every time — not
+    # whichever one an unordered set happened to yield.
+    first, second = FakeSocket(), FakeSocket()
+    jupyter_relay._listeners.extend([first, second])
+
+    for method in ("addGeoJsonLayer", "listLayers"):
+        jupyter_relay._dispatch_one({"type": "geolibre:command", "method": method})
+
+    assert len(first.received) == 2
+    assert second.received == []
+
+
+def test_dispatch_one_falls_through_a_dead_first_window():
+    dead, alive = FakeSocket(fails=True), FakeSocket()
+    jupyter_relay._listeners.extend([dead, alive])
+
+    owner = jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"})
+
+    assert owner is alive
+    assert len(alive.received) == 1
+    assert jupyter_relay._listeners == [alive]
+
+
+def test_dispatch_one_reports_no_window():
+    assert jupyter_relay._dispatch_one({"type": "geolibre:command", "method": "listLayers"}) is None
+
+
+def test_only_the_owning_window_may_answer_a_request():
+    loop = asyncio.new_event_loop()
+    try:
+        owner, other = FakeSocket(), FakeSocket()
+        future = loop.create_future()
+        jupyter_relay._listeners.extend([owner, other])
+        jupyter_relay._pending_results["mine"] = future
+        jupyter_relay._pending_owners["mine"] = owner
+        reply = json.dumps(
+            {"type": "geolibre:result", "requestId": "mine", "ok": True, "value": "layer-1"}
+        )
+
+        jupyter_relay.GeoLibreRelaySocket.on_message(other, reply)
+        assert not future.done()
+
+        jupyter_relay.GeoLibreRelaySocket.on_message(owner, reply)
+        assert future.result()["value"] == "layer-1"
+    finally:
+        loop.close()
+
+
+def test_closing_the_owning_window_fails_its_request_at_once():
+    # Without this the kernel would sit out the full RESULT_TIMEOUT_SECONDS for
+    # an answer the relay already knows can never arrive.
+    loop = asyncio.new_event_loop()
+    try:
+        socket, other = FakeSocket(), FakeSocket()
+        future, untouched = loop.create_future(), loop.create_future()
+        jupyter_relay._listeners.extend([socket, other])
+        jupyter_relay._pending_results.update({"mine": future, "theirs": untouched})
+        jupyter_relay._pending_owners.update({"mine": socket, "theirs": other})
+
+        jupyter_relay.GeoLibreRelaySocket.on_close(socket)
+
+        assert jupyter_relay._listeners == [other]
+        assert future.result() == {
+            "requestId": "mine",
+            "ok": False,
+            "error": "The GeoLibre window running this command closed.",
+        }
+        # Another window's in-flight request is none of this socket's business.
+        assert not untouched.done()
+    finally:
+        loop.close()
 
 
 # -- extension load ----------------------------------------------------------

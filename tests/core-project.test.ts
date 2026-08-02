@@ -229,6 +229,37 @@ describe("project parsing", () => {
     ]);
   });
 
+  it("strips the transient per-feature filters when saving", () => {
+    // `timeFilter` (Time Slider) and `embedFilter` (the embed API's runtime
+    // `setFilter`, set by whatever host page framed the app) are both session
+    // state, not project state. A leaked `embedFilter` would silently bake one
+    // host's runtime filter into the shared `.geolibre.json` — the next person
+    // to open it would see a filtered map with nothing in the UI explaining it.
+    const layer = {
+      ...geojsonLayer({ id: "roads" }),
+      timeFilter: ["<=", ["get", "t"], 5],
+      embedFilter: ["==", ["get", "kind"], "road"],
+    } as unknown as Parameters<typeof projectFromStore>[0]["layers"][number];
+    const project = projectFromStore({
+      projectName: "Filters",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+    const saved = project.layers[0] as Record<string, unknown>;
+    assert.ok(!("timeFilter" in saved), "timeFilter must not be saved");
+    assert.ok(!("embedFilter" in saved), "embedFilter must not be saved");
+    // Everything else about the layer survives.
+    assert.equal(saved.id, "roads");
+
+    const reparsed = parseProject(serializeProject(project)).layers[0] as Record<string, unknown>;
+    assert.ok(!("embedFilter" in reparsed));
+  });
+
   it("round-trips a legend config through projectFromStore", () => {
     const legend = {
       title: "Custom",

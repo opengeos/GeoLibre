@@ -1046,7 +1046,7 @@ export const maplibreStacCatalogsPlugin: GeoLibrePlugin = {
       app.registerRightPanel?.({
         id: PANEL_ID,
         title: () => labels.getTitle?.() ?? labels.title,
-        dock: "right-of-style",
+        dock: "replace-style",
         defaultWidth: 380,
         render(container) {
           mountPanel(container);

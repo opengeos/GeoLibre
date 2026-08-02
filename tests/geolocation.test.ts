@@ -3,7 +3,9 @@ import { afterEach, describe, it } from "node:test";
 import {
   GeolocationError,
   getCurrentPosition,
+  NATIVE_WATCH_INTERVAL_MS,
   nativeGeolocationAvailable,
+  nativeWatchOptions,
   watchPosition,
 } from "../apps/geolibre-desktop/src/lib/geolocation";
 
@@ -69,6 +71,33 @@ describe("nativeGeolocationAvailable", () => {
     setWindow(true);
     setNavigator(undefined, "Mozilla/5.0 (X11; Linux x86_64)");
     assert.equal(nativeGeolocationAvailable(), false);
+  });
+});
+
+// The Android bridge feeds the plugin's `timeout` into LocationRequest as the
+// update interval, so a watch that inherits the one-shot 30 s default only gets
+// a fix twice a minute (the live position and "keep map centered" both freeze
+// in between). These lock the watch to a GNSS-rate interval.
+describe("nativeWatchOptions", () => {
+  it("asks for a fix every second, not at the one-shot timeout", () => {
+    const opts = nativeWatchOptions({ enableHighAccuracy: true, maximumAge: 0 });
+    // A literal, not NATIVE_WATCH_INTERVAL_MS: comparing the constant with
+    // itself would hold however far the default drifted from a GNSS fix rate.
+    assert.equal(opts.timeout, 1000);
+  });
+
+  it("ignores the browser timeout, which means something else entirely", () => {
+    const opts = nativeWatchOptions({ timeout: 30000, enableHighAccuracy: true, maximumAge: 0 });
+    assert.equal(opts.timeout, NATIVE_WATCH_INTERVAL_MS);
+  });
+
+  it("honors an explicit native interval and preserves the other options", () => {
+    const opts = nativeWatchOptions({
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      nativeIntervalMs: 250,
+    });
+    assert.deepEqual(opts, { enableHighAccuracy: true, maximumAge: 5000, timeout: 250 });
   });
 });
 
@@ -151,6 +180,25 @@ describe("watchPosition (browser path)", () => {
       },
     );
     assert.equal(denied, true);
+  });
+
+  it("keeps the caller's browser timeout, which is unrelated to the native interval", async () => {
+    setWindow(false);
+    let seen: PositionOptions | undefined;
+    setNavigator({
+      getCurrentPosition: () => {},
+      watchPosition: (_ok, _err, opts) => {
+        seen = opts;
+        return 1;
+      },
+      clearWatch: () => {},
+    });
+    await watchPosition(
+      () => {},
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+    );
+    assert.equal(seen?.timeout, 20000);
   });
 
   it("rejects when starting a watch with no geolocation source", async () => {

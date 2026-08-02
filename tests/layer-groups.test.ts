@@ -205,6 +205,94 @@ describe("layer group store actions", () => {
     assert.equal(useAppStore.getState().layers.find((l) => l.id === a)?.groupId, undefined);
   });
 
+  it("moves multiple layers into a group atomically and preserves their order", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G");
+    useAppStore.temporal.getState().clear();
+
+    useAppStore.getState().moveLayersToGroup([c, a], gid);
+
+    const grouped = useAppStore
+      .getState()
+      .layers.filter((item) => item.groupId === gid)
+      .map((item) => item.id);
+    assert.deepEqual(grouped, [a, c]);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+    assert.equal(useAppStore.getState().layers.find((item) => item.id === b)?.groupId, undefined);
+  });
+
+  it("leaves already-targeted layers in place during a mixed bulk move", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G", [b]);
+
+    useAppStore.getState().moveLayersToGroup([a, b], gid);
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [b, a, c],
+    );
+    assert.equal(useAppStore.getState().layers.find((item) => item.id === a)?.groupId, gid);
+  });
+
+  it("reorders selected top-level layers as one block", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const d = useAppStore.getState().addGeoJsonLayer("D", emptyFC);
+    useAppStore.temporal.getState().clear();
+
+    useAppStore.getState().moveLayersRelative([a, b], d, "above");
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [c, d, a, b],
+    );
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+  });
+
+  it("reorders selected grouped layers as one block", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G", [a, b, c]);
+
+    useAppStore.getState().moveLayersRelative([b, c], a, "below");
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [b, c, a],
+    );
+    assert.ok(useAppStore.getState().layers.every((item) => item.groupId === gid));
+  });
+
+  it("skips selected layers outside the target's group when reordering", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    const c = useAppStore.getState().addGeoJsonLayer("C", emptyFC);
+    const d = useAppStore.getState().addGeoJsonLayer("D", emptyFC);
+    const gid = useAppStore.getState().addLayerGroup("G", [b, c]);
+
+    // C belongs to G but A does not, so lifting C out of G's block would make
+    // normalizeGroupContiguity drag the never-selected B along with it.
+    useAppStore.getState().moveLayersRelative([c, d], a, "below");
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((item) => item.id),
+      [d, a, b, c],
+    );
+    assert.deepEqual(
+      useAppStore
+        .getState()
+        .layers.filter((item) => item.groupId === gid)
+        .map((item) => item.id),
+      [b, c],
+    );
+  });
+
   it("nests groups, rejects cycles, and promotes children when ungrouping", () => {
     const parent = useAppStore.getState().addLayerGroup("Parent");
     const child = useAppStore.getState().addLayerGroup("Child");

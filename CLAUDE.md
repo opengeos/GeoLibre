@@ -75,7 +75,7 @@ The app is **store-driven**. `@geolibre/core` holds the Zustand store, domain ty
 
 Rendering is MapLibre GL JS in the webview, with **deck.gl** for raster/point-cloud/3D overlays.
 
-**Packages:** `@geolibre/core` (types, project format, store) · `@geolibre/map` (MapLibre lifecycle + layer sync) · `@geolibre/ui` (shadcn-style primitives) · `@geolibre/processing` (client-side algorithm registry) · `@geolibre/plugins` (plugin interface + built-in plugins) · `geolibre-desktop` (shell layout, Tauri I/O, composition).
+**Packages:** `@geolibre/core` (types, project format, store) · `@geolibre/map` (MapLibre lifecycle + layer sync) · `@geolibre/ui` (shadcn-style primitives) · `@geolibre/processing` (client-side algorithm registry) · `@geolibre/plugins` (plugin interface + built-in plugins) · `@geolibre/embed` (typed iframe embed client, the one package published to npm — `.github/workflows/publish-embed.yml` publishes it on each GitHub Release, skipping a version already there) · `geolibre-desktop` (shell layout, Tauri I/O, composition).
 
 **Plugins:** Built-in plugins live in `packages/plugins/src/plugins/`, are exported from that package's `index.ts`, and registered in `apps/geolibre-desktop/src/hooks/usePlugins.ts`. External plugins load from zips or a `plugin.json` manifest; bundled drop-ins under `apps/geolibre-desktop/public/plugins/<id>/` bake into both web and desktop builds. See `docs/plugin-api.md`.
 

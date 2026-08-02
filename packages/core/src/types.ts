@@ -838,6 +838,20 @@ export interface LayerVirtualField {
   errorCount?: number;
 }
 
+/** Persisted refresh policy and most recent synchronization result for a layer. */
+export interface LayerConnection {
+  /** Owning layer id. Repeated here so records remain self-describing when exported. */
+  layerId: string;
+  /** Automatic refresh cadence in seconds, or null for manual synchronization only. */
+  interval: number | null;
+  /** ISO timestamp of the most recent successful synchronization. */
+  lastSyncedAt: string | null;
+  /** Most recent synchronization error. Cleared by a successful synchronization. */
+  lastError: string | null;
+  /** Whether a failed synchronization retains the last good data or clears it. */
+  onFailure: "keep-last" | "clear";
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -881,6 +895,8 @@ export interface GeoLibreLayer {
    * activation. `undefined` means no time filter is applied.
    */
   timeFilter?: unknown[];
+  /** Transient MapLibre expression applied by the iframe embed API. */
+  embedFilter?: unknown[];
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the
@@ -889,6 +905,11 @@ export interface GeoLibreLayer {
    * as one block; see `@geolibre/core`'s `layer-groups` helpers.
    */
   groupId?: string;
+  /**
+   * Project-persisted connection policy for reloadable layers. Runtime timers
+   * are reconstructed from this record when a project opens.
+   */
+  connection?: LayerConnection;
 }
 
 /**
@@ -1741,7 +1762,35 @@ export interface GeoLibreProject {
    * library is persisted outside the project file and never serialized here.
    */
   styleLibrary?: StyleLibraryEntry[];
+  /** Anchored review comments on map points or features (issue #1518). */
+  comments?: ProjectComment[];
   metadata: Record<string, unknown>;
+}
+
+export type CommentAnchor =
+  | { type: "point"; lngLat: [number, number] }
+  | { type: "feature"; layerId: string; featureId: string | number; lngLat?: [number, number] };
+
+export interface CommentAuthor {
+  name: string;
+  color: string;
+}
+
+export interface CommentReply {
+  id: string;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+}
+
+export interface ProjectComment {
+  id: string;
+  anchor: CommentAnchor;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+  resolved: boolean;
+  replies: CommentReply[];
 }
 
 export interface RecentProjectEntry {

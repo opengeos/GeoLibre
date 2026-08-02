@@ -46,6 +46,7 @@ interface ProjectMenuProps {
   onOpenFromUrl: () => void;
   onOpenGallery: () => void;
   onImportQgisProject: () => void;
+  onImportArcgisProject: () => void;
   onOpenRecent: (path: string) => void;
   onOpenHistory: () => void;
   onSave: () => void;
@@ -68,6 +69,7 @@ export function ProjectMenu({
   onOpenFromUrl,
   onOpenGallery,
   onImportQgisProject,
+  onImportArcgisProject,
   onOpenRecent,
   onOpenHistory,
   onSave,
@@ -221,6 +223,10 @@ export function ProjectMenu({
               <DropdownMenuItem onSelect={onImportQgisProject}>
                 <FileInput className="me-2 h-3.5 w-3.5" />
                 {t("toolbar.item.importQgisProjectEllipsis")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onImportArcgisProject}>
+                <FileInput className="me-2 h-3.5 w-3.5" />
+                {t("toolbar.item.importArcgisProjectEllipsis")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

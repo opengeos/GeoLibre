@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   createCategorizedStops,
   createGraduatedStops,
+  countCategorizedValues,
+  MAX_MANUAL_CATEGORIZED_VALUES,
   proportionalSizeBounds,
 } from "../apps/geolibre-desktop/src/lib/vector-style-classification";
 
@@ -78,6 +80,41 @@ describe("vector style classification", () => {
       stops.map((stop) => stop.value),
       [1, 2],
     );
+  });
+
+  it("counts distinct categorized values by scalar type", () => {
+    assert.equal(countCategorizedValues(["1", 1, "1", null, Number.NaN, {}]), 2);
+  });
+
+  it("creates more than twelve categorized stops when all values are requested", () => {
+    const values = Array.from({ length: 14 }, (_, index) => `category-${index + 1}`);
+    const stops = createCategorizedStops(
+      tiledLayer,
+      "category",
+      values.length,
+      "viridis",
+      "alphabetical",
+      values,
+    );
+
+    assert.equal(stops.length, 14);
+  });
+
+  it("bounds manual categorized stops to the editor safety limit", () => {
+    const values = Array.from(
+      { length: MAX_MANUAL_CATEGORIZED_VALUES + 10 },
+      (_, index) => `category-${index + 1}`,
+    );
+    const stops = createCategorizedStops(
+      tiledLayer,
+      "category",
+      values.length,
+      "viridis",
+      "first-values",
+      values,
+    );
+
+    assert.equal(stops.length, MAX_MANUAL_CATEGORIZED_VALUES);
   });
 
   it("keeps adjacent high-magnitude breaks distinct", () => {

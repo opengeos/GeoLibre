@@ -23,6 +23,11 @@ export * from "./layer-style-clipboard";
 export * from "./layer-groups";
 export { createSampleStoryMap } from "./storymap-sample";
 export {
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
+export {
   serializeStoryMapJson,
   parseStoryMapJson,
   serializeStoryMapCsv,
@@ -64,6 +69,8 @@ export {
   GEOCODE_LON_KEY,
   GEOCODE_DISPLAY_NAME_KEY,
   GEOCODE_SCORE_KEY,
+  GEOCODE_PROVIDER_KEY,
+  GEOCODE_STATUS_KEY,
   DEFAULT_GEOCODING_PROVIDER_ID,
   GEOCODING_PROVIDERS,
   getGeocoderConfig,
@@ -78,6 +85,7 @@ export {
   buildForwardGeocodeUrl,
   buildReverseGeocodeUrl,
   geocodeMatchToFeature,
+  unmatchedGeocodeFeature,
   nominatimResultToFeature,
   nominatimReverseResultToDisplay,
   csvRowsToGeocodeRequests,
@@ -89,6 +97,7 @@ export {
   type GeocodingProviderId,
   type GeocodingPreferenceInput,
   type GeocodeMatch,
+  type GeocodeStatus,
   type NominatimForwardResult,
   type NominatimReverseResult,
   type GeocodeRequest,

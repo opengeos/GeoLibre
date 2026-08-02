@@ -146,10 +146,12 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
 /**
  * Combine a sub-layer's geometry filter with the layer's per-feature filters:
  * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
- * only renders features inside the current timeline window) and the rule-based
- * visibility filter (a rule-based layer whose else rule is switched off hides
- * features matching no rule — see {@link ruleBasedVisibilityFilter}). Returns
- * the geometry filter unchanged when neither applies, so the common path
+ * only renders features inside the current timeline window), the transient
+ * {@link GeoLibreLayer.embedFilter} (the embed API's `setFilter`, set by the
+ * host page that frames the app), and the rule-based visibility filter (a
+ * rule-based layer whose else rule is switched off hides features matching no
+ * rule — see {@link ruleBasedVisibilityFilter}). Returns the geometry filter
+ * unchanged when none applies, so the common path
  * produces an identical spec and `ensureLayer` performs no filter update.
  *
  * Aggregate cluster layers (the bubble and its count) intentionally do not pass
@@ -176,6 +178,9 @@ function withFeatureFilters(
   const timeFilter = layer.timeFilter;
   if (Array.isArray(timeFilter) && timeFilter.length > 0) {
     filters.push(timeFilter);
+  }
+  if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
+    filters.push(layer.embedFilter);
   }
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) filters.push(ruleFilter);
@@ -228,15 +233,18 @@ function nativeLayerSupportsFilter(type: string): boolean {
 
 /**
  * The active per-feature filters GeoLibre applies on top of an external
- * layer's own filters: the transient Time-Slider window and the rule-based
- * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}). Empty when
- * neither applies.
+ * layer's own filters: the transient Time-Slider window, the embed API's
+ * host-set `setFilter` expression, and the rule-based hide-unmatched filter
+ * (see {@link ruleBasedVisibilityFilter}). Empty when none applies.
  */
 function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
   const extras: unknown[] = [];
   const timeFilter = layer.timeFilter;
   if (Array.isArray(timeFilter) && timeFilter.length > 0) {
     extras.push(timeFilter);
+  }
+  if (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) {
+    extras.push(layer.embedFilter);
   }
   const ruleFilter = ruleBasedVisibilityFilter(layer.style);
   if (ruleFilter) extras.push(ruleFilter);
@@ -261,8 +269,10 @@ function combineExternalFilters(
 }
 
 /**
- * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window and
- * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter})
+ * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window, the
+ * embed API's host-set `setFilter` expression, and the rule-based
+ * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}, and
+ * {@link externalFeatureFilterExtras} for the set this reads)
  * — on an external-native vector layer that a control owns and paints itself
  * (e.g. the Add Vector Layer control). The control segregates geometry across
  * its own native layers with a base filter such as
@@ -273,7 +283,8 @@ function combineExternalFilters(
  *
  * @param map - The MapLibre map.
  * @param nativeLayerId - A control-owned native layer id.
- * @param layer - The store layer (reads `timeFilter` and the rule filter).
+ * @param layer - The store layer (reads `timeFilter`, `embedFilter`, and the
+ *   rule filter).
  */
 function applyExternalNativeFeatureFilters(
   map: maplibregl.Map,
@@ -1888,6 +1899,7 @@ function applyVectorDataRenderLayers(
   // them for the duration, mirroring the dedup-label behavior.
   const hasFeatureFilter =
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
     ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {

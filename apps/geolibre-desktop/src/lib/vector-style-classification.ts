@@ -22,6 +22,9 @@ const CLASSIFICATION_FALLBACK_COLORS = [
   "#0891b2",
 ];
 
+/** Maximum categorized rows the manual Style panel may render at once. */
+export const MAX_MANUAL_CATEGORIZED_VALUES = 256;
+
 /** Return the non-null values of a GeoJSON property. */
 export function getPropertyValues(layer: ClassifiableLayer, property: string): unknown[] {
   if (!property) return [];
@@ -43,9 +46,21 @@ export function numericBounds(values: number[]): { min: number; max: number } {
 }
 
 /** Clamp a requested class count to the supported range. */
-export function clampClassCount(value: number, min: number): number {
+export function clampClassCount(value: number, min: number, max = 12): number {
   if (!Number.isFinite(value)) return min;
-  return Math.min(12, Math.max(min, Math.round(value)));
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/** Return the stable identity of a scalar that can be used as a categorized stop. */
+function categorizedValueKey(value: unknown): string | null {
+  if (typeof value === "string") return `string:${value}`;
+  if (typeof value === "number" && Number.isFinite(value)) return `number:${String(value)}`;
+  return null;
+}
+
+/** Count distinct scalar values that can be used as categorized stops. */
+export function countCategorizedValues(values: unknown[]): number {
+  return new Set(values.map(categorizedValueKey).filter((key) => key !== null)).size;
 }
 
 /** Convert a scalar numeric property value without coercing blanks or non-scalars. */
@@ -103,6 +118,10 @@ export function createGraduatedStops(
 
 /**
  * Create categorized color stops from GeoJSON or separately loaded property values.
+ *
+ * Automatic style suggestions intentionally recognize at most
+ * {@link MAX_CATEGORICAL_VALUES} distinct values so suggested legends stay
+ * compact. Manual categorized styling can request every distinct value.
  */
 export function createCategorizedStops(
   layer: ClassifiableLayer,
@@ -121,23 +140,21 @@ export function createCategorizedStops(
     }
   >();
   for (const value of propertyValues ?? getPropertyValues(layer, property)) {
-    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
-      continue;
-    }
-    const key = `${typeof value}:${String(value)}`;
+    const key = categorizedValueKey(value);
+    if (key === null) continue;
     const category = categories.get(key);
     if (category) {
       category.count += 1;
     } else {
       categories.set(key, {
-        value,
+        value: value as string | number,
         count: 1,
         firstSeen: categories.size,
       });
     }
   }
 
-  const count = clampClassCount(classCount, 1);
+  const count = clampClassCount(classCount, 1, MAX_MANUAL_CATEGORIZED_VALUES);
   const sortedCategories = Array.from(categories.values()).sort((a, b) => {
     if (classificationScheme === "alphabetical") {
       return String(a.value).localeCompare(String(b.value), undefined, {

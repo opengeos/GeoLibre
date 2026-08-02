@@ -15,12 +15,19 @@ below to status codes. SedonaDB is imported lazily so ``/sql/status`` can report
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import math
 import re
 from typing import Any, Optional
 
 WGS84 = "EPSG:4326"
+
+# Wall-clock budget for a single SQL statement (execute + materialise). Mirrors
+# the PostGIS ``_STATEMENT_TIMEOUT_MS`` so both engines expose a consistent cap.
+# Uses ``concurrent.futures`` rather than SedonaDB/DataFusion session config
+# because the Rust engine exposes no timeout knob to Python today.
+_STATEMENT_TIMEOUT_MS = 60_000
 
 # Layer/view names must be plain SQL identifiers. The frontend already sanitises
 # them, but `/sql/run` is an HTTP boundary that can be called directly, so the
@@ -39,6 +46,10 @@ class SqlInputTooLarge(ValueError):
     A :class:`ValueError` subclass so generic callers treat it as bad input,
     while the sidecar can catch it specifically to return HTTP 413.
     """
+
+
+class SqlTimeout(Exception):
+    """Raised when a SQL statement exceeds :data:`_STATEMENT_TIMEOUT_MS`."""
 
 
 def _import_sedona() -> Any:
@@ -147,14 +158,30 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             gdf = gpd.GeoDataFrame.from_features(features, crs=WGS84)
             connection.create_data_frame(gdf).to_view(name)
 
-        result = connection.sql(sql)
-        # Cap before materializing: to_pandas() would otherwise hold an
-        # unbounded cross-join / generate_series expansion in memory. Fetch one
-        # past the limit so overflow still raises SqlInputTooLarge.
-        result = result.limit(MAX_FEATURES + 1)
-        # to_pandas() returns a GeoDataFrame when the result has a geometry
-        # column, otherwise a plain DataFrame.
-        frame = result.to_pandas()
+        timeout_secs = _STATEMENT_TIMEOUT_MS / 1000
+
+        def _execute():
+            r = connection.sql(sql)
+            r = r.limit(MAX_FEATURES + 1)
+            return r.to_pandas()
+
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
+            future = pool.submit(_execute)
+            try:
+                frame = future.result(timeout=timeout_secs)
+            except concurrent.futures.TimeoutError:
+                close = getattr(connection, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                raise SqlTimeout(
+                    f"Spatial SQL timed out after {int(timeout_secs)} seconds"
+                ) from None
+        finally:
+            pool.shutdown(wait=False)
         if len(frame) > MAX_FEATURES:
             # Input registration already caps each layer, but a query can still
             # expand rows (cross joins, generate_series, etc.). Bound the

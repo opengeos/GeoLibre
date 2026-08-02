@@ -761,7 +761,7 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
       app.registerRightPanel?.({
         id: PANEL_ID,
         title: () => labels.getTitle?.() ?? labels.title,
-        dock: "right-of-style",
+        dock: "replace-style",
         defaultWidth: 340,
         render: (container) => renderPanel(container),
       }) ?? null;

@@ -14,7 +14,9 @@ being *displayed*, only on which server the kernel belongs to:
 ``POST {base_url}geolibre/relay/command``
     Send one scripting command (the kernel side). Responds with
     ``{"delivered": n}`` — the number of connected app windows it reached, so the
-    client can warn instead of failing silently.
+    client can warn instead of failing silently. When the command carries a
+    non-empty request id, the response also waits for and includes the app's
+    correlated ``ok``/``value`` or ``ok``/``error`` result.
 ``GET {base_url}geolibre/relay/socket`` (WebSocket)
     Subscribe to commands (the app side). Every posted command is broadcast to
     all open sockets.
@@ -42,6 +44,8 @@ from __future__ import annotations
 
 import json
 import os
+from asyncio import Future, wait_for
+from asyncio import TimeoutError as AsyncTimeoutError
 from typing import Any
 from urllib.parse import urlparse
 
@@ -56,6 +60,7 @@ __all__ = [
     "RELAY_PATH",
     "is_allowed_origin",
     "normalize_command",
+    "normalize_result",
     "relay_base_url",
 ]
 
@@ -71,16 +76,37 @@ ENV_RELAY_TOKEN = "GEOLIBRE_RELAY_TOKEN"
 COMMAND_TYPE = "geolibre:command"
 
 # Origins allowed to open the relay WebSocket: the Tauri webview (tauri:// on
-# macOS/Linux, https://tauri.localhost on Windows) and any loopback dev origin.
+# macOS/Linux, http://tauri.localhost on Windows, or https:// there if
+# useHttpsScheme is ever turned on) and any loopback dev origin. Matching is on
+# host and scheme separately, so both Windows schemes are already covered.
 # This mirrors the `frame-ancestors` list in jupyter_server_config.py — the app
 # that may embed this server is exactly the app that may drive the map.
 _ALLOWED_ORIGIN_HOSTS = frozenset({"localhost", "127.0.0.1", "tauri.localhost"})
 _ALLOWED_ORIGIN_SCHEMES = frozenset({"http", "https", "tauri"})
 
-# Open app-side sockets. Module level (not per-handler) because every handler
-# instance is created per request: the POST handler needs the set the WebSocket
-# handlers registered themselves in.
-_listeners: set[GeoLibreRelaySocket] = set()
+# Open app-side sockets, oldest connection first. Module level (not per-handler)
+# because every handler instance is created per request: the POST handler needs
+# the list the WebSocket handlers registered themselves in. Ordered (a list, not
+# a set) because single-window dispatch below takes the first entry: with a set
+# that would be whatever the hash table happens to yield, so a correlated
+# read-back could land in a different window than the mutation it follows up on
+# once a second window connects.
+_listeners: list[GeoLibreRelaySocket] = []
+
+# Correlated read-back requests waiting for the app-side socket to execute a
+# scripting handler. Fire-and-forget commands keep an empty requestId and never
+# enter this mapping.
+_pending_results: dict[str, Future[dict[str, Any]]] = {}
+
+# Which window each in-flight correlated request was dispatched to, so closing
+# that window can fail its requests at once instead of waiting out the timeout.
+_pending_owners: dict[str, GeoLibreRelaySocket] = {}
+
+#: How long a correlated POST waits for the app's result before answering 504.
+#: The kernel client's own socket timeout (``_RELAY_TIMEOUT_SECONDS + 1`` in
+#: ``notebook_client.py``) must stay longer than this, so the precise 504 message
+#: reaches the notebook instead of the client's generic "could not be reached".
+RESULT_TIMEOUT_SECONDS = 5.0
 
 
 def is_allowed_origin(origin: str | None) -> bool:
@@ -132,6 +158,27 @@ def normalize_command(payload: Any) -> dict[str, Any]:
     }
 
 
+def normalize_result(payload: Any) -> dict[str, Any]:
+    """Validate an app-side scripting result sent over the relay socket."""
+    if not isinstance(payload, dict) or payload.get("type") != "geolibre:result":
+        raise ValueError("Expected a GeoLibre result object.")
+    request_id = payload.get("requestId")
+    if not isinstance(request_id, str) or not request_id:
+        raise ValueError("Missing a non-empty 'requestId'.")
+    ok = payload.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError("Missing boolean 'ok'.")
+    result: dict[str, Any] = {
+        "requestId": request_id,
+        "ok": ok,
+    }
+    if ok:
+        result["value"] = payload.get("value")
+    else:
+        result["error"] = str(payload.get("error") or "GeoLibre command failed.")
+    return result
+
+
 def relay_base_url(host: str, port: int, base_url: str) -> str:
     """Build the ``…/geolibre/relay`` URL kernels post commands to.
 
@@ -149,19 +196,41 @@ def relay_base_url(host: str, port: int, base_url: str) -> str:
     return f"http://{host}:{port}" + url_path_join(base_url, RELAY_PATH)
 
 
+def _drop_listener(socket: GeoLibreRelaySocket) -> None:
+    """Unregister a socket, tolerating one that is already gone."""
+    if socket in _listeners:
+        _listeners.remove(socket)
+
+
+def _try_write(socket: GeoLibreRelaySocket, encoded: str) -> bool:
+    """Write to one app socket, dropping it if the peer is gone."""
+    try:
+        socket.write_message(encoded)
+    except Exception:  # noqa: BLE001 - a dead peer must not fail the request
+        _drop_listener(socket)
+        return False
+    return True
+
+
 def _broadcast(message: dict[str, Any]) -> int:
     """Send ``message`` to every open app socket; return how many received it."""
     encoded = json.dumps(message)
-    delivered = 0
-    # Copy: write_message on a closed socket raises and we drop it from the set.
+    # Copy: _try_write drops a dead socket from the list we are walking.
+    return sum(_try_write(socket, encoded) for socket in list(_listeners))
+
+
+def _dispatch_one(message: dict[str, Any]) -> GeoLibreRelaySocket | None:
+    """Send ``message`` to exactly one app window; return the one that took it.
+
+    That is the oldest still-open window, a choice that is stable for as long as
+    it stays open, so a mutation and the read-back that follows it reach the same
+    map. Returns None when no window could be written to.
+    """
+    encoded = json.dumps(message)
     for socket in list(_listeners):
-        try:
-            socket.write_message(encoded)
-        except Exception:  # noqa: BLE001 - a dead peer must not fail the request
-            _listeners.discard(socket)
-            continue
-        delivered += 1
-    return delivered
+        if _try_write(socket, encoded):
+            return socket
+    return None
 
 
 class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHandler):
@@ -183,28 +252,83 @@ class GeoLibreRelaySocket(WebSocketMixin, websocket.WebSocketHandler, JupyterHan
 
     def open(self, *args: Any, **kwargs: Any) -> None:
         """Register this app window as a command listener."""
-        _listeners.add(self)
+        if self not in _listeners:
+            _listeners.append(self)
         self.write_message(json.dumps({"type": "geolibre:relay-ready"}))
 
     def on_message(self, message: str) -> None:
-        """Ignore app→relay traffic: commands are fire-and-forget today."""
+        """Resolve a correlated kernel request with the app's command result."""
+        try:
+            result = normalize_result(json.loads(message))
+        except (ValueError, json.JSONDecodeError):
+            return
+        # Only the window a request was dispatched to may answer it. Nothing else
+        # can learn the id today, but the single-authoritative-window guarantee
+        # this file builds up is worth enforcing where it is actually consumed.
+        if _pending_owners.get(result["requestId"]) is not self:
+            return
+        future = _pending_results.get(result["requestId"])
+        if future is not None and not future.done():
+            future.set_result(result)
 
     def on_close(self) -> None:
-        """Unregister this app window."""
-        _listeners.discard(self)
+        """Unregister this app window and fail anything it still owed."""
+        _drop_listener(self)
+        # A correlated command runs in exactly one window. When that window is
+        # this one, nothing can answer it any more, so say so now rather than
+        # making the kernel sit out RESULT_TIMEOUT_SECONDS for a certain 504.
+        for request_id, owner in list(_pending_owners.items()):
+            if owner is not self:
+                continue
+            future = _pending_results.get(request_id)
+            if future is not None and not future.done():
+                future.set_result(
+                    {
+                        "requestId": request_id,
+                        "ok": False,
+                        "error": "The GeoLibre window running this command closed.",
+                    }
+                )
 
 
 class GeoLibreRelayCommandHandler(APIHandler):
     """The kernel side: posts one command to every connected app window."""
 
     @web.authenticated
-    def post(self) -> None:
+    async def post(self) -> None:
         """Relay the posted command and report how many windows received it."""
         try:
             message = normalize_command(json.loads(self.request.body or b"{}"))
         except (ValueError, json.JSONDecodeError) as error:
             raise web.HTTPError(400, str(error)) from error
-        self.finish(json.dumps({"delivered": _broadcast(message)}))
+        request_id = message["requestId"]
+        if not request_id:
+            self.finish(json.dumps({"delivered": _broadcast(message)}))
+            return
+
+        if request_id in _pending_results:
+            raise web.HTTPError(409, "Duplicate requestId.")
+        future: Future[dict[str, Any]] = Future()
+        _pending_results[request_id] = future
+        try:
+            # A correlated mutation must execute in only one app window; its
+            # returned layer id then always belongs to the window that handled
+            # it. Fire-and-forget commands retain the historical broadcast.
+            owner = _dispatch_one(message)
+            if owner is None:
+                self.finish(json.dumps({"delivered": 0}))
+                return
+            # No await between the dispatch and this record, so the window's
+            # on_close can never miss the request it is now responsible for.
+            _pending_owners[request_id] = owner
+            try:
+                result = await wait_for(future, RESULT_TIMEOUT_SECONDS)
+            except (TimeoutError, AsyncTimeoutError) as error:
+                raise web.HTTPError(504, "GeoLibre did not return a result in time.") from error
+            self.finish(json.dumps({"delivered": 1, **result}))
+        finally:
+            _pending_results.pop(request_id, None)
+            _pending_owners.pop(request_id, None)
 
 
 class GeoLibreRelayStatusHandler(APIHandler):

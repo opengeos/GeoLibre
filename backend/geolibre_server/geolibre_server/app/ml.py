@@ -85,7 +85,7 @@ def _require_httpx():
         import httpx  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover - exercised via status path
         raise RuntimeBootstrapError(
-            "The 'ml' extra is not installed. Install with: pip install geolibre-server[ml]"
+            "The 'ml' extra is not installed. Install with: pip install \"geolibre-server[ml]\""
         ) from exc
     return httpx
 
@@ -186,7 +186,7 @@ def _ensure_server() -> str:
             if command is None:
                 raise RuntimeBootstrapError(
                     "samgeo-api was not found on PATH. Install the segmentation "
-                    "stack with: pip install segment-geospatial[api,samgeo3], or set "
+                    'stack with: pip install "segment-geospatial[api,samgeo3]", or set '
                     "GEOLIBRE_ML_SAMGEO_URL to an existing samgeo-api server."
                 )
 
@@ -332,7 +332,7 @@ def ml_status():
 
     payload["message"] = (
         "Segmentation backend is unavailable. Install it with: "
-        "pip install segment-geospatial[api,samgeo3], or set "
+        'pip install "segment-geospatial[api,samgeo3]", or set '
         "GEOLIBRE_ML_SAMGEO_URL to an existing samgeo-api server."
     )
     return payload

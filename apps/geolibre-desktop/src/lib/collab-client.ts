@@ -41,10 +41,7 @@ export function resolveCollabBaseUrl(
     if (
       url.protocol === "wss:" ||
       (url.protocol === "ws:" &&
-        (url.hostname === "localhost" ||
-          url.hostname === "127.0.0.1" ||
-          // WHATWG URL keeps the brackets on an IPv6 host.
-          url.hostname === "[::1]"))
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]"))
     ) {
       return trimmed;
     }
@@ -64,21 +61,13 @@ export function sessionWsUrl(wsBase: string, sessionId: string): string {
   return `${wsBase}/sessions/${encodeURIComponent(sessionId)}/ws`;
 }
 
-/**
- * Create a new session on the relay and return its shareable code plus the host
- * token (which only the creator ever sees, so a guest can't claim host).
- *
- * @param mode - Initial session mode (view-only or co-edit).
- * @param baseUrl - Override the relay base; defaults to the configured env value.
- * @param fetchImpl - Injected for testing; defaults to the global fetch.
- */
 export async function createSession(
   mode: CollaborationMode,
   baseUrl: string | null = resolveCollabBaseUrl(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<CreateSessionResult> {
   if (!baseUrl) {
-    throw new Error("Live collaboration is not configured.");
+    throw new Error("Collaboration is not configured. Set VITE_GEOLIBRE_COLLAB_URL.");
   }
   const httpBase = httpBaseFromWs(baseUrl);
   let response: Response;
@@ -93,7 +82,9 @@ export async function createSession(
     if (error instanceof DOMException && error.name === "TimeoutError") {
       throw new Error("Timed out creating the session. Please try again.");
     }
-    throw new Error("Could not reach the collaboration server.");
+    throw new Error(
+      "Could not reach the collaboration server. Check your connection and try again.",
+    );
   }
   if (!response.ok) {
     throw new Error(`Could not create the session (HTTP ${response.status}).`);

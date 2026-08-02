@@ -77,6 +77,38 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={projectFiles.arcgisImportWarnings !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.setArcgisImportWarnings(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.arcgisImportComplete")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.arcgisImportWarnings", {
+                count: projectFiles.arcgisImportWarnings?.length ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            {projectFiles.arcgisImportWarnings?.map((warning, index) => (
+              <li key={`${warning.layerName}-${index}`}>
+                <strong>{warning.layerName}:</strong>{" "}
+                {t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
+                  layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
+                })}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <Button onClick={() => projectFiles.setArcgisImportWarnings(null)}>
+              {t("common.ok")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={projectFiles.actionError !== null}
         onOpenChange={(open: boolean) => {
           if (!open) projectFiles.setActionError(null);

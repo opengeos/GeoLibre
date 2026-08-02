@@ -3,9 +3,12 @@ import type { MapController } from "@geolibre/map";
 import { subscribeJupyterServer } from "../lib/jupyter";
 import {
   type RelayCommand,
+  type RelayResult,
+  encodeRelayResult,
   parseRelayMessage,
   relayReconnectDelay,
   relaySocketUrl,
+  runRelayCommand,
 } from "../lib/jupyter-relay";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 
@@ -44,18 +47,18 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
     // server can never resurrect the reconnect loop after we moved on.
     let generation = 0;
 
-    const run = async (command: RelayCommand) => {
-      // Own-property only, so an inherited member ("constructor", …) can never be
-      // invoked as a command.
-      if (!Object.hasOwn(handlers, command.method)) {
-        console.warn(`Jupyter relay: unknown command "${command.method}"`);
-        return;
-      }
+    const reply = (activeSocket: WebSocket, payload: RelayResult) => {
+      if (activeSocket.readyState !== WebSocket.OPEN) return;
       try {
-        await handlers[command.method](command.params);
+        activeSocket.send(encodeRelayResult(payload));
       } catch (error) {
-        console.error(`Jupyter relay: command "${command.method}" failed`, error);
+        console.warn("Jupyter relay: could not return a command result", error);
       }
+    };
+
+    const run = async (command: RelayCommand, activeSocket: WebSocket) => {
+      const result = await runRelayCommand(handlers, command);
+      if (result) reply(activeSocket, result);
     };
 
     const close = () => {
@@ -96,7 +99,7 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapController | null
         };
         next.onmessage = (event: MessageEvent) => {
           const command = parseRelayMessage(event.data);
-          if (command) void run(command);
+          if (command) void run(command, next);
         };
         next.onclose = () => {
           if (generation !== mine) return;

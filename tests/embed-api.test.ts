@@ -1,22 +1,59 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature } from "geojson";
+import type { GeoLibreLayer } from "@geolibre/core";
+import type { AddLayerSpec } from "@geolibre/embed";
 import {
   EMBED_API_SOURCE,
   EMBED_API_VERSION,
   EMBED_ORIGINS_ENV,
   buildEmbedEvent,
+  buildEmbedLayer,
+  embedEventTargets,
+  embedEventVersions,
+  embedLayerSummaries,
+  embedRequestVersion,
   isEmbedOriginAllowed,
   parseEmbedOrigins,
   parseEmbedRequest,
   readEmbedOrigins,
+  requireEmbedLayer,
   resolveHighlightIds,
   type EmbedHighlightTarget,
 } from "../apps/geolibre-desktop/src/lib/embed-api";
 
+/** A tile template that satisfies the addLayer renderable-source check. */
+const XYZ_TILE_URL = "https://tiles.example.com/{z}/{x}/{y}.png";
+
 /** Build an inbound host message with the right envelope by default. */
 function message(type: string, payload?: unknown, extra: Record<string, unknown> = {}) {
   return { v: EMBED_API_VERSION, type, payload, ...extra };
+}
+
+/** A minimal store layer, enough for the layer-facing command helpers. */
+function layer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+  return {
+    id: "roads",
+    name: "Roads",
+    type: "xyz",
+    source: { tiles: [XYZ_TILE_URL] },
+    visible: true,
+    opacity: 1,
+    style: {} as GeoLibreLayer["style"],
+    metadata: {},
+    ...patch,
+  } as GeoLibreLayer;
+}
+
+/** A valid `addLayer` spec, as `parseEmbedRequest` would have accepted it. */
+function addLayerSpec(patch: Partial<AddLayerSpec> = {}): AddLayerSpec {
+  return {
+    id: "runtime",
+    name: "Runtime",
+    type: "xyz",
+    source: { tiles: [XYZ_TILE_URL] },
+    ...patch,
+  };
 }
 
 function highlightTarget(patch: Partial<EmbedHighlightTarget> = {}): EmbedHighlightTarget {
@@ -103,7 +140,7 @@ describe("isEmbedOriginAllowed", () => {
 describe("parseEmbedRequest envelope", () => {
   it("ignores a message without the protocol version", () => {
     assert.equal(parseEmbedRequest({ type: "setView", payload: { zoom: 4 } }), null);
-    assert.equal(parseEmbedRequest({ v: 2, type: "setView", payload: { zoom: 4 } }), null);
+    assert.equal(parseEmbedRequest({ v: 3, type: "setView", payload: { zoom: 4 } }), null);
   });
 
   it("ignores unrelated postMessage traffic sharing the window", () => {
@@ -123,6 +160,295 @@ describe("parseEmbedRequest envelope", () => {
       command: { type: "setView", target: { kind: "camera", zoom: 4 } },
       requestId: "abc",
     });
+  });
+});
+
+describe("parseEmbedRequest: v2 commands", () => {
+  it("keeps accepting a v1 request after the protocol bump", () => {
+    assert.deepEqual(parseEmbedRequest({ v: 1, type: "getViewport", requestId: "legacy" }), {
+      command: { type: "getViewport" },
+      requestId: "legacy",
+    });
+  });
+
+  it("validates visibility, filter, query, add, and export commands", () => {
+    assert.deepEqual(
+      parseEmbedRequest(message("setLayerVisibility", { layerId: "roads", visible: false })),
+      {
+        command: { type: "setLayerVisibility", layerId: "roads", visible: false },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(parseEmbedRequest(message("listLayers")), {
+      command: { type: "listLayers" },
+      requestId: null,
+    });
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("setFilter", { layerId: "roads", expression: ["==", ["get", "x"], 1] }),
+      ),
+      {
+        command: {
+          type: "setFilter",
+          layerId: "roads",
+          expression: ["==", ["get", "x"], 1],
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(parseEmbedRequest(message("getViewport")), {
+      command: { type: "getViewport" },
+      requestId: null,
+    });
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("addLayer", {
+          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [XYZ_TILE_URL] } },
+        }),
+      ),
+      {
+        command: {
+          type: "addLayer",
+          spec: { id: "runtime", name: "Runtime", type: "xyz", source: { tiles: [XYZ_TILE_URL] } },
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(parseEmbedRequest(message("exportImage")), {
+      command: { type: "exportImage" },
+      requestId: null,
+    });
+  });
+});
+
+describe("parseEmbedRequest: setFilter", () => {
+  it("accepts a compiling filter expression and a null clear", () => {
+    for (const expression of [
+      ["==", ["get", "kind"], "road"],
+      ["all", [">", ["get", "pop"], 1000], ["!", ["has", "hidden"]]],
+      null,
+    ]) {
+      const parsed = parseEmbedRequest(message("setFilter", { layerId: "roads", expression }));
+      assert.deepEqual(parsed, {
+        command: { type: "setFilter", layerId: "roads", expression },
+        requestId: null,
+      });
+    }
+  });
+
+  it("rejects an expression the style spec cannot compile", () => {
+    // Acked `ok` before: the store write always succeeds, and the failure only
+    // showed up later inside layer-sync, where the host could never see it.
+    const unknownOperator = parseEmbedRequest(
+      message("setFilter", { layerId: "roads", expression: ["nonsense", 1] }),
+    );
+    assert.ok(unknownOperator && "error" in unknownOperator);
+    assert.match(unknownOperator.error, /^setFilter: .*Unknown expression "nonsense"/);
+
+    const mistyped = parseEmbedRequest(
+      message("setFilter", { layerId: "roads", expression: ["==", "x", 1] }),
+    );
+    assert.ok(mistyped && "error" in mistyped);
+    assert.match(mistyped.error, /Cannot compare types/);
+  });
+
+  it("stores the expression the style spec compiled, not the raw one", () => {
+    // `undefined`, `NaN`, and `Infinity` survive a structured clone but become
+    // `null` in the JSON the compile sees. layer-sync has to get the array that
+    // was actually checked, or the `ok` ack covers a value nothing validated.
+    const parsed = parseEmbedRequest(
+      message("setFilter", { layerId: "roads", expression: ["==", ["get", "x"], undefined] }),
+    );
+    assert.ok(parsed && !("error" in parsed));
+    assert.deepEqual(parsed.command, {
+      type: "setFilter",
+      layerId: "roads",
+      expression: ["==", ["get", "x"], null],
+    });
+  });
+
+  it("rejects an empty expression rather than storing a filter that does nothing", () => {
+    const parsed = parseEmbedRequest(message("setFilter", { layerId: "roads", expression: [] }));
+    assert.ok(parsed && "error" in parsed);
+    assert.equal(parsed.error, "setFilter: not a MapLibre filter expression");
+  });
+
+  it("still requires a layerId and an array or null", () => {
+    for (const payload of [
+      { layerId: "", expression: null },
+      { layerId: "roads", expression: "kind = road" },
+    ]) {
+      assert.deepEqual(parseEmbedRequest(message("setFilter", payload)), {
+        error: "setFilter: expected layerId and a MapLibre expression array or null",
+        requestId: null,
+      });
+    }
+  });
+});
+
+describe("parseEmbedRequest: addLayer", () => {
+  it("rejects a spec whose source carries nothing renderable", () => {
+    // An `xyz` layer whose source has no usable tile template would be acked as
+    // a success and then render nothing, so it is refused up front instead.
+    for (const source of [{ tiles: [] }, { minzoom: 0 }]) {
+      assert.deepEqual(parseEmbedRequest(message("addLayer", { spec: addLayerSpec({ source }) })), {
+        error: 'addLayer: a "xyz" layer needs a source with a url or tiles',
+        requestId: null,
+      });
+    }
+  });
+
+  it("does not let inline features stand in for a URL- or tile-backed source", () => {
+    // Only `geojson` and `deckgl-viz` render from inline features; every other
+    // renderer reads a URL or tiles and ignores the blob, so accepting these
+    // would be the same silent no-op in a different shape.
+    const empty = { type: "FeatureCollection", features: [] };
+    for (const spec of [
+      addLayerSpec({ geojson: empty, source: {} }),
+      addLayerSpec({ source: { data: empty } }),
+      addLayerSpec({ type: "vector-tiles", source: { data: empty } }),
+      addLayerSpec({ type: "pmtiles", geojson: empty, source: {} }),
+      addLayerSpec({ type: "image", geojson: empty, source: { coordinates: [] } }),
+      addLayerSpec({ type: "video", geojson: empty, source: {} }),
+      addLayerSpec({ type: "cog", source: { data: empty } }),
+    ]) {
+      const parsed = parseEmbedRequest(message("addLayer", { spec }));
+      assert.ok(parsed && "error" in parsed, `expected ${spec.type} to be rejected`);
+      assert.match(parsed.error, /needs a source with a url or tiles$/);
+    }
+  });
+
+  it("accepts inline features on the spec or on the source for a data-backed type", () => {
+    const empty = { type: "FeatureCollection", features: [] };
+    for (const spec of [
+      addLayerSpec({ type: "geojson", source: {}, geojson: empty }),
+      addLayerSpec({ type: "geojson", source: { type: "geojson", data: empty } }),
+      addLayerSpec({ type: "deckgl-viz", source: {}, geojson: empty }),
+      addLayerSpec({ type: "cog", source: { url: "https://x/y.tif" } }),
+      // A string `data` is a URL, which counts for a tile-backed type too.
+      addLayerSpec({ source: { data: "https://x/features.json" } }),
+      // A custom map protocol is a legitimate layer source, unlike loadProject.
+      addLayerSpec({ type: "pmtiles", source: { url: "pmtiles://https://x/y.pmtiles" } }),
+    ]) {
+      const parsed = parseEmbedRequest(message("addLayer", { spec }));
+      assert.ok(parsed && !("error" in parsed), `expected ${spec.type} to parse`);
+    }
+  });
+
+  it("refuses a script-capable or local URL scheme on any source field", () => {
+    for (const [field, spec] of [
+      ["source.url", addLayerSpec({ source: { url: "javascript:alert(1)" } })],
+      ["source.tiles", addLayerSpec({ source: { tiles: [" JavaScript:alert(1)"] } })],
+      ["source.data", addLayerSpec({ type: "geojson", source: { data: "data:text/html,x" } })],
+      ["metadata.originalUrl", addLayerSpec({ metadata: { originalUrl: "file:///etc/passwd" } })],
+      ["blob", addLayerSpec({ source: { url: "blob:https://host/abc" } })],
+      // A browser strips tab/newline/carriage return from anywhere in a URL,
+      // so these name the blocked schemes too.
+      ["split scheme", addLayerSpec({ source: { url: "java\tscript:alert(1)" } })],
+      ["newline in scheme", addLayerSpec({ type: "geojson", source: { data: "da\nta:x" } })],
+      ["carriage return", addLayerSpec({ source: { tiles: ["file\r:///etc/passwd"] } })],
+    ] as const) {
+      const parsed = parseEmbedRequest(message("addLayer", { spec }));
+      assert.ok(parsed && "error" in parsed, `expected ${field} to be rejected`);
+      assert.match(parsed.error, /^addLayer: unsupported URL scheme/);
+    }
+  });
+
+  it("names the normalized scheme in the error, not the split-up raw one", () => {
+    const parsed = parseEmbedRequest(
+      message("addLayer", { spec: addLayerSpec({ source: { url: "java\tscript:alert(1)" } }) }),
+    );
+    assert.ok(parsed && "error" in parsed);
+    assert.equal(parsed.error, 'addLayer: unsupported URL scheme in "javascript:"');
+  });
+});
+
+describe("requireEmbedLayer", () => {
+  it("returns the named layer", () => {
+    const roads = layer();
+    assert.equal(requireEmbedLayer([layer({ id: "parcels" }), roads], "roads"), roads);
+  });
+
+  it("throws the ack message a host sees for an unknown layer", () => {
+    // The failure `setLayerVisibility`, `setFilter`, and `highlightFeature` all
+    // report when the host names a layer the project no longer has.
+    assert.throws(() => requireEmbedLayer([layer()], "missing"), /No layer with id "missing"/);
+    assert.throws(() => requireEmbedLayer([], "roads"), /No layer with id "roads"/);
+  });
+});
+
+describe("embedLayerSummaries", () => {
+  it("projects only the fields listLayers publishes", () => {
+    assert.deepEqual(
+      embedLayerSummaries([
+        layer({ opacity: 0.5, geojson: { type: "FeatureCollection", features: [] } }),
+        layer({ id: "parcels", name: "Parcels", type: "geojson", visible: false }),
+      ]),
+      [
+        { id: "roads", name: "Roads", type: "xyz", visible: true, opacity: 0.5 },
+        { id: "parcels", name: "Parcels", type: "geojson", visible: false, opacity: 1 },
+      ],
+    );
+  });
+});
+
+describe("buildEmbedLayer", () => {
+  it("fills the store defaults a spec left out", () => {
+    assert.deepEqual(buildEmbedLayer(addLayerSpec(), []), {
+      id: "runtime",
+      name: "Runtime",
+      type: "xyz",
+      source: { tiles: [XYZ_TILE_URL] },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: {},
+    });
+  });
+
+  it("keeps the optional blocks a spec did supply", () => {
+    const geojson = { type: "FeatureCollection", features: [] };
+    assert.deepEqual(
+      buildEmbedLayer(
+        addLayerSpec({
+          visible: false,
+          opacity: 0.25,
+          style: { color: "#ff0000" },
+          metadata: { note: "from the host" },
+          geojson,
+          beforeId: "basemap",
+        }),
+        [],
+      ),
+      {
+        id: "runtime",
+        name: "Runtime",
+        type: "xyz",
+        source: { tiles: [XYZ_TILE_URL] },
+        visible: false,
+        opacity: 0.25,
+        style: { color: "#ff0000" },
+        metadata: { note: "from the host" },
+        geojson,
+        beforeId: "basemap",
+      },
+    );
+  });
+
+  it("refuses an id already in the project", () => {
+    assert.throws(
+      () => buildEmbedLayer(addLayerSpec({ id: "roads" }), [layer()]),
+      /A layer with id "roads" already exists/,
+    );
+  });
+
+  it("refuses a type no renderer knows", () => {
+    // A made-up type would be added to the store and listed by `listLayers`,
+    // but `layer-sync` has no branch for it, so nothing would ever draw.
+    assert.throws(
+      () => buildEmbedLayer(addLayerSpec({ type: "wobble" }), []),
+      /Unsupported layer type "wobble"/,
+    );
   });
 });
 
@@ -332,6 +658,63 @@ describe("resolveHighlightIds", () => {
       highlightTarget({ featureIds: ["f1"], filter: { parcel: "A-1" } }),
     );
     assert.deepEqual(ids, ["f1", "f3"]);
+  });
+});
+
+describe("embedEventTargets", () => {
+  const allowed = ["https://erp.example.com", "https://portal.example.com"];
+
+  it("broadcasts to every configured origin until the host has spoken", () => {
+    // Otherwise a host would have to send a request just to hear `ready`.
+    assert.deepEqual(embedEventTargets(null, allowed), allowed);
+  });
+
+  it("scopes to the host's exact origin once it is known", () => {
+    // Keeps later payloads off any other frame that shares the allowlist.
+    assert.deepEqual(embedEventTargets("https://erp.example.com", allowed), [
+      "https://erp.example.com",
+    ]);
+  });
+
+  it("collapses a wildcard allowlist to the wildcard target", () => {
+    assert.deepEqual(embedEventTargets(null, ["*", "https://erp.example.com"]), ["*"]);
+  });
+
+  it("still prefers a learned origin over the wildcard", () => {
+    assert.deepEqual(embedEventTargets("https://erp.example.com", ["*"]), [
+      "https://erp.example.com",
+    ]);
+  });
+});
+
+describe("embedEventVersions", () => {
+  it("sends both versions before a host has sent a request", () => {
+    // A listen-only v1 host never sends one, so it would otherwise be pinned to
+    // nothing and hear only v2 — which a strict `message.v !== 1` filter drops.
+    assert.deepEqual(embedEventVersions(undefined, null), [2, 1]);
+  });
+
+  it("pins broadcasts to the version the host's first request used", () => {
+    assert.deepEqual(embedEventVersions(undefined, 1), [1]);
+    assert.deepEqual(embedEventVersions(undefined, 2), [2]);
+  });
+
+  it("answers a request in its own version, whatever the host was pinned to", () => {
+    assert.deepEqual(embedEventVersions(1, 2), [1]);
+    assert.deepEqual(embedEventVersions(2, 1), [2]);
+    assert.deepEqual(embedEventVersions(1, null), [1]);
+  });
+});
+
+describe("embedRequestVersion", () => {
+  it("reads a v1 envelope as v1 and anything else as the current version", () => {
+    assert.equal(embedRequestVersion({ v: 1, type: "getViewport" }), 1);
+    assert.equal(embedRequestVersion({ v: EMBED_API_VERSION, type: "getViewport" }), 2);
+    // parseEmbedRequest has already rejected an unsupported version, so the
+    // remaining values are only reachable when it accepted the message.
+    assert.equal(embedRequestVersion({ type: "getViewport" }), 2);
+    assert.equal(embedRequestVersion({ v: "1" }), 2);
+    assert.equal(embedRequestVersion(null), 2);
   });
 });
 
