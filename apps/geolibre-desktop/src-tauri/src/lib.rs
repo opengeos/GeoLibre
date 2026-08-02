@@ -2750,20 +2750,19 @@ fn terminate_jupyter_listeners_on_port(
     port: u16,
     runtime_dir: &std::path::Path,
 ) -> Result<(), String> {
-    for pid in listening_tcp_pids(port)? {
-        let Some(image) = process_image_path(pid) else {
-            continue;
-        };
-        if path_is_under(&image, runtime_dir) {
-            terminate_windows_pid(pid);
-        }
+    for pid in listening_tcp_pids(port) {
+        terminate_listener_under(pid, runtime_dir);
     }
     Ok(())
 }
 
-// PIDs of the processes listening on `port`, over both IPv4 and IPv6.
+// PIDs of the processes listening on `port`, over both IPv4 and IPv6. The two
+// families are read independently: a machine with IPv6 disabled outright can
+// fail the second read, and letting that discard the IPv4 result would drop the
+// orphan we are here to reclaim (Jupyter binds 127.0.0.1, so it is nearly
+// always the IPv4 table that holds it).
 #[cfg(all(target_os = "windows", not(feature = "mas")))]
-fn listening_tcp_pids(port: u16) -> Result<HashSet<u32>, String> {
+fn listening_tcp_pids(port: u16) -> HashSet<u32> {
     use windows_sys::Win32::NetworkManagement::IpHelper::{
         MIB_TCP6ROW_OWNER_PID, MIB_TCPROW_OWNER_PID,
     };
@@ -2774,19 +2773,25 @@ fn listening_tcp_pids(port: u16) -> Result<HashSet<u32>, String> {
     const AF_INET6: u32 = 23;
 
     let mut pids = HashSet::new();
-    collect_owner_pids::<MIB_TCPROW_OWNER_PID>(
-        &extended_tcp_table(AF_INET)?,
-        port,
-        |row| (row.dwLocalPort, row.dwOwningPid),
-        &mut pids,
-    );
-    collect_owner_pids::<MIB_TCP6ROW_OWNER_PID>(
-        &extended_tcp_table(AF_INET6)?,
-        port,
-        |row| (row.dwLocalPort, row.dwOwningPid),
-        &mut pids,
-    );
-    Ok(pids)
+    match extended_tcp_table(AF_INET) {
+        Ok(table) => collect_owner_pids::<MIB_TCPROW_OWNER_PID>(
+            &table,
+            port,
+            |row| (row.dwLocalPort, row.dwOwningPid),
+            &mut pids,
+        ),
+        Err(error) => eprintln!("Jupyter: {error}"),
+    }
+    match extended_tcp_table(AF_INET6) {
+        Ok(table) => collect_owner_pids::<MIB_TCP6ROW_OWNER_PID>(
+            &table,
+            port,
+            |row| (row.dwLocalPort, row.dwOwningPid),
+            &mut pids,
+        ),
+        Err(error) => eprintln!("Jupyter: {error}"),
+    }
+    pids
 }
 
 // Walk one MIB_TCP*TABLE_OWNER_PID and collect the PIDs listening on `port`.
@@ -2877,22 +2882,38 @@ fn extended_tcp_table(family: u32) -> Result<Vec<u32>, String> {
     Err("Could not read the TCP listener table: it kept growing between calls.".to_string())
 }
 
-// Full path of the executable backing `pid`, or None when the process has
-// already exited or we may not inspect it.
+// Terminate `pid`, but only if its executable lives inside `runtime_dir`. Does
+// nothing when the process has already exited or we may not touch it.
+//
+// The image check and the kill deliberately share ONE handle. An open handle
+// pins the process object, so the PID cannot be recycled onto some unrelated
+// process in between -- re-opening by PID to terminate would leave exactly that
+// window, and the whole point of the image check is that we never kill a
+// process that is not ours.
+//
+// Windows has no SIGTERM, so unlike the Linux path there is no graceful step to
+// try first: an orphan from a previous session has no channel we can ask it to
+// shut down through.
 #[cfg(all(target_os = "windows", not(feature = "mas")))]
-fn process_image_path(pid: u32) -> Option<PathBuf> {
+fn terminate_listener_under(pid: u32, runtime_dir: &Path) {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-        PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, QueryFullProcessImageNameW, TerminateProcess, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
     };
 
-    // SAFETY: a query-only handle, closed on every path below.
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    // SAFETY: one handle for both the query and the kill; closed on every path.
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+            0,
+            pid,
+        )
+    };
     if process.is_null() {
-        return None;
+        return;
     }
     // Sized for an extended-length path rather than MAX_PATH, so a deeply
     // nested app-data directory is not silently truncated into a non-match.
@@ -2908,28 +2929,15 @@ fn process_image_path(pid: u32) -> Option<PathBuf> {
             &mut length,
         )
     };
-    let _ = unsafe { CloseHandle(process) };
-    if queried == 0 {
-        return None;
+    if queried != 0 {
+        let image = PathBuf::from(OsString::from_wide(
+            &buffer[..(length as usize).min(buffer.len())],
+        ));
+        if path_is_under(&image, runtime_dir) {
+            // SAFETY: the same handle, opened with PROCESS_TERMINATE above.
+            let _ = unsafe { TerminateProcess(process, 1) };
+        }
     }
-    Some(PathBuf::from(OsString::from_wide(
-        &buffer[..(length as usize).min(buffer.len())],
-    )))
-}
-
-// Windows has no SIGTERM, so there is no graceful step to try first: an orphan
-// from a previous session has no channel we can ask it to shut down through.
-#[cfg(all(target_os = "windows", not(feature = "mas")))]
-fn terminate_windows_pid(pid: u32) {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
-
-    // SAFETY: a terminate-only handle, closed immediately after use.
-    let process = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
-    if process.is_null() {
-        return;
-    }
-    let _ = unsafe { TerminateProcess(process, 1) };
     let _ = unsafe { CloseHandle(process) };
 }
 
