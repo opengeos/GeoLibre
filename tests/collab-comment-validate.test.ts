@@ -297,10 +297,7 @@ describe("validateComment", () => {
   });
 
   it("rejects an oversized id", () => {
-    assert.equal(
-      validateComment({ ...validComment, id: "c".repeat(MAX_ID_LENGTH + 1) }),
-      null,
-    );
+    assert.equal(validateComment({ ...validComment, id: "c".repeat(MAX_ID_LENGTH + 1) }), null);
   });
 
   it("rejects an invalid anchor", () => {
