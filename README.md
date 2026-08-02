@@ -27,38 +27,6 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - **[Get started](https://geolibre.app/getting-started/)** — install, run from source, and configure
 - **[Features](https://geolibre.app/features/)** — the complete feature list
 
-## Geoprocessing: 1,000+ tools, zero install
-
-[![The GeoLibre Whitebox toolbox running locally with WebAssembly, listing all 1,009 tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)](https://files.opengeos.org/whitebox.webp)
-
-**Processing → Whitebox** opens a toolbox of **1,000+ geoprocessing tools** that
-execute in the browser through a WebAssembly runtime with native raster and
-vector I/O. There is no Python sidecar to install and no server to call — the
-tools, your data, and the results all stay on your machine, so the full toolbox
-is available on [GeoLibre Web](https://web.geolibre.app/), on the desktop app,
-and on Android alike.
-
-The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS)
-suite plus GeoLibre's own WASM tools, and are browsable by category straight from
-the Processing menu:
-
-| Category | Tools | Examples |
-| --- | --- | --- |
-| **Vector** | 280 | overlays, buffers, joins, cleaning, topology, generalization |
-| **Raster** | 232 | algebra, filters, reclassification, zonal and focal statistics |
-| **Remote sensing** | 154 | spectral indices, band math, classification, change detection |
-| **Hydrology** | 100 | flow accumulation, watersheds, stream networks, depression filling |
-| **Terrain** | 99 | slope, aspect, hillshade, curvature, ruggedness, viewsheds |
-| **LiDAR** | 65 | point-cloud filtering, ground classification, DEM/DSM generation |
-| **Conversion** | 49 | format translation to cloud-native GeoParquet, PMTiles, and COG |
-| **Network** | 26 | connectivity, cost distance, and routing analysis |
-| **Projection** | 4 | reprojection for raster and vector data |
-
-Any tool is deep-linkable with a `?tool=` URL parameter that preselects it and
-pre-fills its form. See the [Processing Tools guide](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)
-for details, and [Geoprocessing in the Browser](https://youtu.be/W32bIQO_nG8) for
-a video walkthrough.
-
 ## Demos
 
 **Click any screenshot to open it at full resolution, or any animation to play the full-quality video.**
@@ -114,6 +82,38 @@ Switch bodies from the planet switcher in the Layers panel. See [Demos](https://
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+
+## Geoprocessing: 1,000+ tools, zero install
+
+[![The GeoLibre Whitebox toolbox running locally with WebAssembly, listing all 1,009 tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)](https://files.opengeos.org/whitebox.webp)
+
+**Processing → Whitebox** opens a toolbox of **1,000+ geoprocessing tools** that
+execute in the browser through a WebAssembly runtime with native raster and
+vector I/O. There is no Python sidecar to install and no server to call — the
+tools, your data, and the results all stay on your machine, so the full toolbox
+is available on [GeoLibre Web](https://web.geolibre.app/), on the desktop app,
+and on Android alike.
+
+The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS)
+suite plus GeoLibre's own WASM tools, and are browsable by category straight from
+the Processing menu:
+
+| Category | Tools | Examples |
+| --- | --- | --- |
+| **Vector** | 280 | overlays, buffers, joins, cleaning, topology, generalization |
+| **Raster** | 232 | algebra, filters, reclassification, zonal and focal statistics |
+| **Remote sensing** | 154 | spectral indices, band math, classification, change detection |
+| **Hydrology** | 100 | flow accumulation, watersheds, stream networks, depression filling |
+| **Terrain** | 99 | slope, aspect, hillshade, curvature, ruggedness, viewsheds |
+| **LiDAR** | 65 | point-cloud filtering, ground classification, DEM/DSM generation |
+| **Conversion** | 49 | format translation to cloud-native GeoParquet, PMTiles, and COG |
+| **Network** | 26 | connectivity, cost distance, and routing analysis |
+| **Projection** | 4 | reprojection for raster and vector data |
+
+Any tool is deep-linkable with a `?tool=` URL parameter that preselects it and
+pre-fills its form. See the [Processing Tools guide](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)
+for details, and [Geoprocessing in the Browser](https://youtu.be/W32bIQO_nG8) for
+a video walkthrough.
 
 ## Documentation
 
