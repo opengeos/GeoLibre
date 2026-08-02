@@ -229,6 +229,11 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
                 status_code=404,
                 detail=f"Layer '{layer}' not found in {target.name}",
             )
+        if layer not in spatial:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Layer '{layer}' is an aspatial table and cannot be written",
+            )
         target_layer = layer
     elif spatial:
         # Match the reader's "first feature layer" default (gpkg-reader.ts

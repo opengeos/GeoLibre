@@ -1197,6 +1197,39 @@ def test_fix_geometries_no_op_on_valid_layer() -> None:
 
 
 @requires_geopandas
+def test_fix_geometries_leaves_unfixable_unchanged(monkeypatch) -> None:
+    # A degenerate polygon (e.g., <3 distinct points) that make_valid cannot repair
+    # into a valid polygonal area will either raise or return empty. The tool should
+    # leave the original unchanged and increment the unfixable count.
+    import shapely.validation
+    
+    def mock_make_valid(geom):
+        raise ValueError("Simulated unfixable geometry")
+        
+    monkeypatch.setattr(shapely.validation, "make_valid", mock_make_valid)
+
+    degenerate = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "degenerate"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 1], [0, 0]]],
+                },
+            }
+        ],
+    }
+    geojson, messages = run_vector_tool("fix-geometries", degenerate)
+    assert len(geojson["features"]) == 1
+    # GeoPandas pads the LinearRing to 4 coordinates when loading/dumping
+    coords = geojson["features"][0]["geometry"]["coordinates"]
+    assert coords == [[[0.0, 0.0], [1.0, 1.0], [0.0, 0.0], [0.0, 0.0]]]
+    assert any("1 could not be repaired" in m for m in messages)
+
+
+@requires_geopandas
 def test_validity_anchor_parses_scientific_notation() -> None:
     anchor = vector_ops._validity_anchor("Self-intersection[1.5e-10 -2.3e-05]", None)
     assert anchor == (1.5e-10, -2.3e-05)
