@@ -80,3 +80,15 @@ reqwest = { version = "0.12", default-features = false, features = ["native-tls"
 # Runtime WebKitGTK version check (already an indirect dep via tauri/wry).
 [target."cfg(target_os = \"linux\")".dependencies]
 webkit2gtk-sys = "2"
+
+# Reclaiming port 8766 from a Jupyter server orphaned by a previous session
+# (issue #1643): the IP Helper TCP table names the process that owns the
+# listening socket, and the process APIs let us check its image path before
+# terminating it. Windows has no /proc, so the Linux path cannot be reused.
+# Already an indirect dep via tauri, so this adds no new crate to the build.
+[target."cfg(target_os = \"windows\")".dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_System_Threading",
+] }
