@@ -18,6 +18,16 @@ export interface ArcGISLayerOptions {
   sourceType: ArcGISSourceType;
   token?: string;
   url?: string;
+  /**
+   * Whether to fit the map to the layer once its bounds are known. Defaults to
+   * true, which is what an interactive Add Data flow wants.
+   *
+   * Project import sets it false: the view has already been restored from the
+   * project file, and fitting each imported service in turn would pan the map
+   * away from the extent the project saved. Mirrors `addRasterToMap`'s option
+   * of the same name.
+   */
+  zoomTo?: boolean;
 }
 
 interface ArcGISFeatureLayerInfo {
@@ -110,7 +120,7 @@ export async function addArcGISLayer(
   });
   const store = useAppStore.getState();
   store.addLayer(layer, options.beforeLayerId);
-  if (bounds) app.fitBounds?.(bounds);
+  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
   return id;
 }
 
@@ -239,7 +249,7 @@ async function addArcGISFeatureLayerAsGeoJson(
   }
 
   const bounds = arcgisExtentToBounds(layerInfo.extent);
-  if (bounds) app.fitBounds?.(bounds);
+  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
   return id;
 }
 

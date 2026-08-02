@@ -296,7 +296,7 @@ function importLayer(
       name,
       visible,
       collapsed: false,
-      opacity: 1,
+      opacity: layerOpacity(layer),
       ...(parentId ? { parentId } : {}),
     });
     const branch = new Set(ancestors).add(layer);
@@ -327,7 +327,7 @@ function importLayer(
         name,
         sourcePath: resolvedRaster.path,
         visible,
-        opacity: numberValue(layer.opacity) ?? 1,
+        opacity: layerOpacity(layer),
         ...(parentId ? { groupId: parentId } : {}),
       });
     } else {
@@ -350,7 +350,7 @@ function importLayer(
         type: "xyz",
         source: { tiles: [`${url}/tile/{z}/{y}/{x}`] },
         visible,
-        opacity: numberValue(layer.opacity) ?? 1,
+        opacity: layerOpacity(layer),
         style: structuredClone(DEFAULT_LAYER_STYLE),
         metadata: { importedFrom: "arcgis-pro", sourceKind: "arcgis-tiled-map-service" },
         sourcePath: url,
@@ -399,7 +399,7 @@ function importLayer(
     type: "geojson",
     source: { type: "geojson" },
     visible,
-    opacity: 1,
+    opacity: layerOpacity(layer),
     style: parseStyle(layer),
     sourcePath: resolved.path,
     metadata: {
@@ -420,6 +420,22 @@ function importLayer(
  * reason a vector layer would for the same root cause -- a UNC workspace is a
  * "network-path", not an unsupported "format".
  */
+/**
+ * A layer's opacity, from the CIM transparency it was saved with.
+ *
+ * `CIMBaseLayer` records `transparency` as a 0-100 percentage where 0 is fully
+ * opaque -- the inverse of GeoLibre's 0-1 opacity. ArcGIS omits the property
+ * entirely at the default, so a missing value means opaque. `opacity` is read
+ * as a fallback only because it costs nothing; the CIM spec does not define it.
+ */
+function layerOpacity(layer: CimObject): number {
+  const transparency = numberValue(layer.transparency);
+  if (transparency === null) return numberValue(layer.opacity) ?? 1;
+  // Rounded because `1 - 80 / 100` is 0.19999999999999996 in binary floating
+  // point, and that would be written verbatim into the saved project.
+  return Math.max(0, Math.min(1, Math.round((1 - transparency / 100) * 10000) / 10000));
+}
+
 function resolveRasterSource(
   connection: CimObject | undefined,
   projectPath: string,

@@ -298,12 +298,63 @@ describe("ArcGIS Pro project import", () => {
     // Pure cyan in CMYK is red-free; read as RGB it would wrongly be near-black.
     assert.equal(fillColor({ type: "CIMCMYKColor", values: [100, 0, 0, 0, 100] }), "#00ffff");
     assert.equal(fillColor({ type: "CIMGrayColor", values: [50, 100] }), "#808080");
+    // Asymmetric, so the assertion pins the scale direction: a level read as
+    // ink coverage rather than lightness would give #bfbfbf here.
+    assert.equal(fillColor({ type: "CIMGrayColor", values: [25, 100] }), "#404040");
     assert.equal(fillColor({ type: "CIMHSVColor", values: [120, 100, 100, 100] }), "#00ff00");
     // An unrecognized subclass keeps the default style instead of inventing one.
     assert.equal(
       fillColor({ type: "CIMSomeFutureColor", values: [1, 2, 3, 4] }),
       DEFAULT_LAYER_STYLE.fillColor,
     );
+  });
+
+  it("converts CIM transparency into opacity", () => {
+    // CIM records transparency as a 0-100 percentage where 0 is opaque, the
+    // inverse of GeoLibre's opacity. Reading the wrong field leaves every
+    // imported layer fully opaque.
+    const mapx = {
+      type: "CIMMap",
+      name: "Faded",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          type: "CIMGroupLayer",
+          name: "Faded group",
+          transparency: 50,
+          layerDefinitions: [
+            {
+              type: "CIMRasterLayer",
+              name: "Elevation",
+              transparency: 25,
+              dataConnection: {
+                workspaceConnectionString: "DATABASE=../rasters",
+                dataset: "dem.tif",
+              },
+            },
+          ],
+        },
+        { ...featureLayer("Cities", "../data"), transparency: 80 },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "/work/projects/faded.mapx");
+    assert.equal(result.rasters[0].opacity, 0.75);
+    assert.equal(result.project.layerGroups?.[0].opacity, 0.5);
+    assert.equal(result.project.layers[0].name, "Cities");
+    assert.equal(result.project.layers[0].opacity, 0.2);
+  });
+
+  it("treats a layer with no transparency as fully opaque", () => {
+    // ArcGIS omits the property at the default, so absence must not be read as
+    // transparent.
+    const mapx = {
+      type: "CIMMap",
+      name: "Opaque",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [featureLayer("Cities", "../data")],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "/work/projects/opaque.mapx");
+    assert.equal(result.project.layers[0].opacity, 1);
   });
 
   it("keeps a group whose only members are a raster or a service", () => {

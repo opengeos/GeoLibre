@@ -2849,14 +2849,22 @@ export function loadDroppedRasterFiles(droppedFiles: FileList | File[]): Dropped
  */
 export async function loadDroppedRasterPaths(
   paths: string[],
-  options?: { qgisProjectPath?: string },
+  options?: {
+    /**
+     * The project file the raster paths came from, when they were read out of
+     * an imported project rather than picked directly. Accepts QGIS
+     * (`.qgs`/`.qgz`) and ArcGIS Pro (`.aprx`/`.mapx`); the Rust side grants
+     * the asset scope only because the user selected that project themselves.
+     */
+    importProjectPath?: string;
+  },
 ): Promise<DroppedRaster[]> {
   const rasterPaths = paths.filter(isRasterFileName);
   await Promise.all(
     rasterPaths.map((path) =>
       invoke("allow_raster_asset", {
         path,
-        ...(options?.qgisProjectPath ? { qgisProjectPath: options.qgisProjectPath } : {}),
+        ...(options?.importProjectPath ? { importProjectPath: options.importProjectPath } : {}),
       }),
     ),
   );

@@ -173,7 +173,18 @@ async function addImportedProjectRaster(
     const layerId = await addRasterToMap(app, source, options);
     if (groupId) useAppStore.getState().moveLayerToGroup(layerId, groupId);
   } catch (error) {
-    if (isRecoverableNonTiledRasterError(error)) return;
+    if (isRecoverableNonTiledRasterError(error)) {
+      // The rejection carried no layer id, but the control already created the
+      // store layer and is keeping it while the COG conversion is offered, so
+      // it still has to be placed in its imported group -- otherwise a raster
+      // that converts successfully ends up at the top level.
+      if (groupId) {
+        const { layers, moveLayerToGroup } = useAppStore.getState();
+        const created = layers.find((layer) => !before.has(layer.id));
+        if (created) moveLayerToGroup(created.id, groupId);
+      }
+      return;
+    }
     const { layers, removeLayer } = useAppStore.getState();
     for (const layer of layers) {
       if (!before.has(layer.id)) removeLayer(layer.id);
@@ -286,7 +297,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         for (const raster of imported.rasters) {
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
-              qgisProjectPath: result.path,
+              importProjectPath: result.path,
             });
             if (!loaded) throw new Error("Unsupported raster path");
             await addImportedProjectRaster(
@@ -348,6 +359,32 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         for (const raster of imported.rasters) {
           imported.warnings.push({ layerName: raster.name, reason: "browser-local-file" });
         }
+        // Rasters never load in the browser build, so drop them before the
+        // group prune below rather than letting them keep a group alive that
+        // will stay empty. Services still load, so they still count.
+        imported.rasters = [];
+        // Re-prune the groups: dropping the local-file layers can empty a group
+        // that the importer kept, and an empty group left behind shows up as a
+        // dangling entry in the layer panel.
+        const usedGroupIds = new Set<string>([
+          ...imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+          ...imported.services.flatMap((service) => (service.groupId ? [service.groupId] : [])),
+        ]);
+        // A parent group stays as long as a surviving group still names it, so
+        // walk up the chain before filtering.
+        const groupById = new Map(
+          (imported.project.layerGroups ?? []).map((group) => [group.id, group]),
+        );
+        for (const id of [...usedGroupIds]) {
+          let parentId = groupById.get(id)?.parentId;
+          while (parentId && !usedGroupIds.has(parentId)) {
+            usedGroupIds.add(parentId);
+            parentId = groupById.get(parentId)?.parentId;
+          }
+        }
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
       }
       const mapReady = importedProjectMapReady(
         mapControllerRef,
@@ -360,7 +397,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         for (const raster of imported.rasters) {
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
-              qgisProjectPath: result.path,
+              importProjectPath: result.path,
             });
             if (!loaded) throw new Error("Unsupported raster path");
             await addImportedProjectRaster(
@@ -388,6 +425,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             layerType: "vector-tile",
             name: service.name,
             sourceType: "portal-item",
+            // The project's saved extent was applied by loadProject above, and
+            // this runs after it. Without the opt-out, each imported service
+            // would fit the map to its own bounds and throw that extent away.
+            zoomTo: false,
           });
           if (service.groupId) {
             useAppStore.getState().moveLayerToGroup(serviceLayerId, service.groupId);
