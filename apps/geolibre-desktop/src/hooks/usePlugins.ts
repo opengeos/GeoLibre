@@ -26,6 +26,7 @@ import {
   setEffectsSettings,
   type EffectsSettings,
   maplibreEarthdataGisPlugin,
+  SKETCHES_SOURCE_KIND,
   setEarthdataCogSaver,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
@@ -93,6 +94,7 @@ import type {
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
+  GeoLibreSelection,
   GeoLibreTileLayerOptions,
   GeoLibreWmsLayerOptions,
   GeoLibreZarrLayerOptions,
@@ -829,6 +831,19 @@ export function useTimeSliderAutoClose(mapControllerRef: RefObject<MapController
   }, [mapControllerRef]);
 }
 
+function readPluginSelection(): GeoLibreSelection {
+  const state = useAppStore.getState();
+  const layer = state.layers.find((item) => item.id === state.selectedLayerId);
+  if (!layer || state.selectedFeatureIds.length === 0) {
+    return { layerId: state.selectedLayerId, features: [] };
+  }
+  const selected = new Set(state.selectedFeatureIds);
+  const features = (layer.geojson?.features ?? []).filter((feature, index) =>
+    selected.has(String(feature.id ?? index)),
+  );
+  return { layerId: state.selectedLayerId, features };
+}
+
 export function createAppAPI(mapControllerRef?: RefObject<MapController | null>) {
   const store = useAppStore.getState();
   // Captured so methods that delegate to plugin helpers taking the AppAPI
@@ -840,6 +855,34 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       const id = store.addGeoJsonLayer(name, data, sourcePath);
       return id;
     },
+    listLayers: () =>
+      useAppStore.getState().layers.map(({ id, name, type, visible, opacity }) => ({
+        id,
+        name,
+        type,
+        visible,
+        opacity,
+      })),
+    getLayerFeatures: (layerId: string) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      if (!layer) throw new Error(`No layer with id "${layerId}"`);
+      return layer.geojson?.features ?? [];
+    },
+    getSelectedFeatures: () => readPluginSelection().features,
+    getSelectedLayerId: () => useAppStore.getState().selectedLayerId,
+    getDrawnFeatures: () =>
+      useAppStore.getState().layers.flatMap((layer) =>
+        layer.metadata.sourceKind === SKETCHES_SOURCE_KIND ? (layer.geojson?.features ?? []) : [],
+      ),
+    onSelectionChange: (callback: (selection: GeoLibreSelection) => void) =>
+      useAppStore.subscribe((state, previous) => {
+        if (
+          state.selectedLayerId !== previous.selectedLayerId ||
+          state.selectedFeatureIds !== previous.selectedFeatureIds
+        ) {
+          callback(readPluginSelection());
+        }
+      }),
     addTileLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(
         name,
