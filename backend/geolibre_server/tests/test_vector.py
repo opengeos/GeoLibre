@@ -326,10 +326,10 @@ def test_write_geopackage_rejects_aspatial_layer(tmp_path, monkeypatch) -> None:
     )
 
     def mock_list_layers(path):
-        return pd.DataFrame({
-            "name": ["places", "aspatial_data"],
-            "geometry_type": ["Polygon", None]
-        })
+        return pd.DataFrame(
+            {"name": ["places", "aspatial_data"], "geometry_type": ["Polygon", None]}
+        )
+
     monkeypatch.setattr(gpd, "list_layers", mock_list_layers)
 
     with pytest.raises(HTTPException) as exc:

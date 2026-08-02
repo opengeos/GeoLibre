@@ -1202,10 +1202,10 @@ def test_fix_geometries_leaves_unfixable_unchanged(monkeypatch) -> None:
     # into a valid polygonal area will either raise or return empty. The tool should
     # leave the original unchanged and increment the unfixable count.
     import shapely.validation
-    
+
     def mock_make_valid(geom):
         raise ValueError("Simulated unfixable geometry")
-        
+
     monkeypatch.setattr(shapely.validation, "make_valid", mock_make_valid)
 
     degenerate = {
