@@ -222,8 +222,8 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      # Record the time before the push so the verify step can tell a Pages
-      # build that includes this deploy from one that predates it.
+      # Fallback reference point for the verify step, used only when the commit
+      # the deploy pushed cannot be read back (see below).
       - name: Note the deploy start time
         id: started
         run: echo "at=$(date -u +%s)" >> "$GITHUB_OUTPUT"
@@ -265,30 +265,74 @@ jobs:
       # commit is already on gh-pages, so the very next build publishes it --
       # historically within about a minute. So rather than trusting the action's
       # outcome, wait for a Pages build that both succeeded and started after
-      # this deploy pushed (any such build necessarily contains it), then
-      # confirm the URL serves. Only if neither holds is the preview broken.
+      # this deploy's commit landed (any such build necessarily contains it),
+      # then confirm the URL serves. Only if neither holds is the preview broken.
+      #
+      # `deployed-commit-sha` is what separates the two failure modes. The
+      # action sets it by reading gh-pages HEAD back *after* pushing, in a step
+      # that only runs once the push step itself succeeded -- so an empty value
+      # means nothing was ever pushed (bad or expired token, network error),
+      # not a superseded build. Neither the URL nor the build list can tell
+      # that apart on its own: a previous preview for this PR keeps serving 200,
+      # and this Pages site is shared and busy enough that some other
+      # repository's build almost always completes inside the poll window. So
+      # report it immediately -- waiting ten minutes would only delay a genuine
+      # outage.
       - name: Verify the preview published
         id: verify
         if: needs.resolve.outputs.action == 'deploy'
         env:
           GH_TOKEN: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
           STARTED_AT: ${{ steps.started.outputs.at }}
+          PAGES_OUTCOME: ${{ steps.pages.outcome }}
+          DEPLOYED_SHA: ${{ steps.pages.outputs.deployed-commit-sha }}
           PREVIEW_URL: ${{ steps.pages.outputs.preview-url || format('https://opengeos.org/pages-preview/GeoLibre/pr-{0}/', needs.resolve.outputs.number) }}
         run: |
           echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
-          echo "Verifying $PREVIEW_URL"
-          for attempt in $(seq 1 20); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$PREVIEW_URL" || echo 000)
+          if [ -z "$DEPLOYED_SHA" ] && [ "$PAGES_OUTCOME" != "success" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::error::The preview was never pushed to opengeos/pages-preview -- the deploy failed before it reached gh-pages. See the deploy step's log."
+            exit 1
+          fi
+
+          # A build only contains this deploy if it started after the deploy's
+          # commit landed, so prefer that commit's timestamp over the pre-push
+          # one recorded above; a build can start between the two and carry
+          # none of this deploy.
+          ref_at="$STARTED_AT"
+          if [ -n "$DEPLOYED_SHA" ] &&
+             commit_date=$(gh api "repos/opengeos/pages-preview/commits/${DEPLOYED_SHA}" \
+               --jq '.commit.committer.date' 2>/dev/null); then
+            commit_at=$(date -u -d "$commit_date" +%s 2>/dev/null || echo 0)
+            if [ "$commit_at" -gt "$ref_at" ]; then
+              ref_at="$commit_at"
+            fi
+          fi
+          echo "Verifying $PREVIEW_URL (deployed commit ${DEPLOYED_SHA:-unknown})"
+
+          # Bound the whole poll by wall clock rather than by attempt count, so
+          # the ten minutes reported on failure is the time actually spent
+          # rather than 20 sleeps plus 20 unbounded API round trips.
+          deadline=$(( $(date -u +%s) + 600 ))
+          attempt=0
+          while :; do
+            attempt=$((attempt + 1))
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$PREVIEW_URL" || echo 000)
 
             # A 200 alone could still be the previous deploy of this same PR, so
             # also require a successful Pages build that started after the push.
+            # per_page=100 because the default page of this shared, frequently
+            # built site can fill with other repositories' builds; the list is
+            # used rather than /builds/latest because the newest build is often
+            # another repository's, still in flight, while the build that
+            # published this deploy has already finished.
             # If the builds API is not readable with this token, do not block on
             # it -- fall back to the URL check rather than failing every run.
-            if builds=$(gh api repos/opengeos/pages-preview/pages/builds 2>/dev/null); then
+            if builds=$(gh api 'repos/opengeos/pages-preview/pages/builds?per_page=100' 2>/dev/null); then
               built_at=$(printf '%s' "$builds" |
                 jq -r '[.[] | select(.status == "built")] | max_by(.created_at) | .created_at // empty')
               if [ -n "$built_at" ] &&
-                 [ "$(date -u -d "$built_at" +%s 2>/dev/null || echo 0)" -ge "$STARTED_AT" ]; then
+                 [ "$(date -u -d "$built_at" +%s 2>/dev/null || echo 0)" -ge "$ref_at" ]; then
                 fresh=yes
               else
                 fresh=no
@@ -303,6 +347,7 @@ jobs:
               echo "published=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
+            [ "$(date -u +%s)" -lt "$deadline" ] || break
             sleep 30
           done
           echo "published=false" >> "$GITHUB_OUTPUT"
