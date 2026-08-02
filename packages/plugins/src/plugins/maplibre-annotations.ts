@@ -103,7 +103,7 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
       unregisterRightPanelDisposer = app.registerRightPanel({
         id: "geolibre-elements-panel",
         title: () => labels.elementsPanelTitle || "Elements",
-        dock: "right-of-style",
+        dock: "replace-style",
         render: (container) => renderElementsPanel(container),
       });
     }

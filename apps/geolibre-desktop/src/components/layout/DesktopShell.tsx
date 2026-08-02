@@ -703,7 +703,14 @@ export function DesktopShell({
     el.className = "contents";
     return el;
   });
-  const activePanelId = useRightPanelState().activeId;
+  const rightPanelState = useRightPanelState();
+  const activePanelId = rightPanelState.activeId;
+  const replaceStylePanelIds = rightPanelState.visibleIds.filter(
+    (id) => rightPanelState.panelDocks[id] === "replace-style",
+  );
+  const replaceLayersPanelIds = rightPanelState.visibleIds.filter(
+    (id) => rightPanelState.panelDocks[id] === "replace-layers",
+  );
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
   // The plugins in VIEWER_BLOCKED_PLUGIN_IDS paint drawing and editing controls
   // onto the map, which the read-only viewer preset cannot hide the way it
@@ -2087,6 +2094,7 @@ export function DesktopShell({
               key={replaceLayersPanelId}
               side="layers"
               pluginId={replaceLayersPanelId}
+              additionalPanelIds={replaceLayersPanelIds}
               pluginContentEl={dockContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
@@ -2312,45 +2320,67 @@ export function DesktopShell({
         {/* Same as the left dock: a map-only / hidden-panels embed skips the
             entire right side-dock (Style, plugin panels, and their shared rail). */}
         {layoutOptions.panelsHidden || layoutOptions.viewer ? null : replaceStylePanelId ? (
-          // Shared-rail mode (issue #765): the plugin panel shares the Style
-          // sidebar surface, so a single rail lists both the workbench and Style
-          // instead of the two positional plugin slots flanking the Style panel.
-          <SectionErrorBoundary
-            label="Shared right sidebar"
-            displayName={t("shell.section.sharedRightSidebar")}
-          >
-            <SharedSidebar
-              // Key by the active panel id so switching between two replace-style
-              // plugins remounts the sidebar, resetting its per-panel local state
-              // (the Style opt-in) rather than carrying the previous plugin over.
-              key={replaceStylePanelId}
-              side="style"
-              pluginId={replaceStylePanelId}
-              pluginContentEl={dockContentEl}
-              pluginWidth={pluginPanelWidth}
-              onPluginWidthChange={setPluginPanelWidth}
-              builtinVisible={layoutOptions.stylePanelVisible}
-              builtinTitle={t("sharedRail.style")}
-              builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
-              // Enabling Comments from Settings adds it as a collapsed rail
-              // entry without hiding the Style workspace.
-              initialBuiltinExpanded={replaceStylePanelId === COMMENTS_PANEL_ID}
-              // Mirror the standalone Style panel's autoCollapse triggers so the
-              // notebook / story-map presentation collapses Style here too.
-              // `autoCollapsedPanel` is omitted because it is always null in a
-              // shared-rail mode (the panel is the sole active one).
-              forceBuiltinCollapsed={notebookOpen || storymapPresenting}
-              renderBuiltin={({ collapsed, onCollapsedChange }) => (
-                <StylePanel
-                  mapControllerRef={mapControllerRef}
-                  onResizeStart={startStylePanelResize}
-                  collapsed={collapsed}
-                  onCollapsedChange={onCollapsedChange}
-                  hideOwnRail
-                />
-              )}
-            />
-          </SectionErrorBoundary>
+          <>
+            {/* Shared-rail panels such as Comments must not remove the ordinary
+                positional docks: enabled Web Services panels still live in
+                left/right-of-style and need their vertical rail entries. */}
+            <SectionErrorBoundary
+              label="Plugin panel (left of Style)"
+              displayName={t("shell.section.pluginPanelLeftOfStyle")}
+            >
+              <PluginRightPanel
+                dock="left-of-style"
+                contentEl={dockContentEl}
+                width={pluginPanelWidth}
+                onWidthChange={setPluginPanelWidth}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary
+              label="Shared right sidebar"
+              displayName={t("shell.section.sharedRightSidebar")}
+            >
+              <SharedSidebar
+                // Key by the active panel id so switching between two replace-style
+                // plugins remounts the sidebar, resetting its per-panel local state
+                // (the Style opt-in) rather than carrying the previous plugin over.
+                key={replaceStylePanelId}
+                side="style"
+                pluginId={replaceStylePanelId}
+                additionalPanelIds={replaceStylePanelIds}
+                pluginContentEl={dockContentEl}
+                pluginWidth={pluginPanelWidth}
+                onPluginWidthChange={setPluginPanelWidth}
+                builtinVisible={layoutOptions.stylePanelVisible}
+                builtinTitle={t("sharedRail.style")}
+                builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
+                // Mirror the standalone Style panel's autoCollapse triggers so the
+                // notebook / story-map presentation collapses Style here too.
+                // `autoCollapsedPanel` is omitted because it is always null in a
+                // shared-rail mode (the panel is the sole active one).
+                forceBuiltinCollapsed={notebookOpen || storymapPresenting}
+                renderBuiltin={({ collapsed, onCollapsedChange }) => (
+                  <StylePanel
+                    mapControllerRef={mapControllerRef}
+                    onResizeStart={startStylePanelResize}
+                    collapsed={collapsed}
+                    onCollapsedChange={onCollapsedChange}
+                    hideOwnRail
+                  />
+                )}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary
+              label="Plugin panel (right of Style)"
+              displayName={t("shell.section.pluginPanelRightOfStyle")}
+            >
+              <PluginRightPanel
+                dock="right-of-style"
+                contentEl={dockContentEl}
+                width={pluginPanelWidth}
+                onWidthChange={setPluginPanelWidth}
+              />
+            </SectionErrorBoundary>
+          </>
         ) : (
           <>
             <SectionErrorBoundary

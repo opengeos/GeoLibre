@@ -12,6 +12,7 @@ export {
   getActiveRightPanelDock,
   RIGHT_PANEL_DOCKS,
   isRightPanelCollapsed,
+  isRightPanelVisible,
   getRightPanel,
   listRightPanels,
   getRightPanelSnapshot,

@@ -202,7 +202,7 @@ function createCatalogPlugin(options: {
         app.registerRightPanel?.({
           id: options.id,
           title: options.name,
-          dock: "right-of-style",
+          dock: "replace-style",
           defaultWidth: 360,
           render(container) {
             container.replaceChildren();

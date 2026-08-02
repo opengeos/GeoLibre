@@ -392,8 +392,9 @@ export function SettingsDialog({
   // The Browser is a dockable right panel (open/close via the registry), not a
   // persisted layout preference, so its Layout toggle acts on the live registry
   // state directly rather than through the draft settings.
-  const browserPanelOpen = useRightPanelState().activeId === BROWSER_PANEL_ID;
-  const commentsPanelOpen = useRightPanelState().activeId === COMMENTS_PANEL_ID;
+  const rightPanelState = useRightPanelState();
+  const browserPanelOpen = rightPanelState.visibleIds.includes(BROWSER_PANEL_ID);
+  const commentsPanelOpen = rightPanelState.visibleIds.includes(COMMENTS_PANEL_ID);
   // Show it collapsed on the shared Layers rail, matching its default state, so
   // re-enabling from Settings doesn't jump to an expanded panel that buries the
   // Layers panel.

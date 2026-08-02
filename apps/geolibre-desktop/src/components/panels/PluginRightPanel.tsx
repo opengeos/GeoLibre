@@ -82,7 +82,7 @@ interface PluginRightPanelProps {
  */
 export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: PluginRightPanelProps) {
   const { t } = useTranslation();
-  const { activeId, collapsed, dock: activeDock } = useRightPanelState();
+  const { activeId, collapsed, dock: activeDock, panelDocks } = useRightPanelState();
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   const panel = activeId ? getRightPanel(activeId) : undefined;
@@ -100,7 +100,7 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
   const dockPanels = isSharedRail
     ? []
     : listRightPanels().filter((candidate) =>
-        candidate.id === activeId ? activeDock === dock : candidate.dock === dock,
+        candidate.id === activeId ? activeDock === dock : panelDocks[candidate.id] === dock,
       );
 
   // Adopt the shared content host (rendered once by the shell) into this slot

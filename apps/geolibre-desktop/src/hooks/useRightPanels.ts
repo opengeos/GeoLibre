@@ -54,7 +54,8 @@ export function useAutoCollapsedPanel(): AutoCollapsedPanel {
 
 const selectReplaceStylePanelId = (): string | null => {
   const snapshot = getRightPanelSnapshot();
-  return snapshot.dock === "replace-style" ? snapshot.activeId : null;
+  if (snapshot.dock === "replace-style") return snapshot.activeId;
+  return snapshot.visibleIds.find((id) => snapshot.panelDocks[id] === "replace-style") ?? null;
 };
 
 /**
@@ -77,7 +78,8 @@ export function useReplaceStylePanelId(): string | null {
 
 const selectReplaceLayersPanelId = (): string | null => {
   const snapshot = getRightPanelSnapshot();
-  return snapshot.dock === "replace-layers" ? snapshot.activeId : null;
+  if (snapshot.dock === "replace-layers") return snapshot.activeId;
+  return snapshot.visibleIds.find((id) => snapshot.panelDocks[id] === "replace-layers") ?? null;
 };
 
 /**
