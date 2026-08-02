@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Paneel Lagen weergeven",
       "showStylePanel": "Paneel Stijl weergeven",
       "showBrowserPanel": "Paneel Browser weergeven",
+      "showCommentsPanel": "Paneel Opmerkingen weergeven",
       "showAttributePanel": "Paneel Attributen weergeven",
       "urlParamsNote": "URL-lay-outparameters blijven van toepassing wanneer aanwezig in gedeelde viewerlinks."
     },

@@ -1709,6 +1709,7 @@
       "showLayersPanel": "Tampilkan panel Layer",
       "showStylePanel": "Tampilkan panel Gaya",
       "showBrowserPanel": "Tampilkan panel Browser",
+      "showCommentsPanel": "Tampilkan panel Komentar",
       "showAttributePanel": "Tampilkan panel Atribut",
       "urlParamsNote": "Parameter tata letak URL tetap berlaku jika ada pada tautan penampil yang dibagikan."
     },

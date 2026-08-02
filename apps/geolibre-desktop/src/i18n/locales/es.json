@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Mostrar panel de capas",
       "showStylePanel": "Mostrar panel de estilo",
       "showBrowserPanel": "Mostrar panel del explorador",
+      "showCommentsPanel": "Mostrar panel de comentarios",
       "showAttributePanel": "Mostrar panel de atributos",
       "urlParamsNote": "Los parámetros de diseño de la URL siguen aplicándose cuando están presentes en los enlaces de visor compartidos."
     },

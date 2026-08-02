@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Afficher le panneau Couches",
       "showStylePanel": "Afficher le panneau Style",
       "showBrowserPanel": "Afficher le panneau Explorateur",
+      "showCommentsPanel": "Afficher le panneau Commentaires",
       "showAttributePanel": "Afficher le panneau Attributs",
       "urlParamsNote": "Les paramètres de disposition dans l'URL s'appliquent toujours lorsqu'ils sont présents dans les liens de visualisation partagés."
     },

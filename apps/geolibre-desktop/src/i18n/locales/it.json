@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Mostra pannello Livelli",
       "showStylePanel": "Mostra pannello Stile",
       "showBrowserPanel": "Mostra pannello Browser",
+      "showCommentsPanel": "Mostra pannello Commenti",
       "showAttributePanel": "Mostra pannello Attributi",
       "urlParamsNote": "I parametri di layout nell'URL si applicano comunque quando presenti nei link di visualizzazione condivisi."
     },

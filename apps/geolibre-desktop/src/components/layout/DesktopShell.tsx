@@ -2332,6 +2332,9 @@ export function DesktopShell({
               builtinVisible={layoutOptions.stylePanelVisible}
               builtinTitle={t("sharedRail.style")}
               builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
+              // Enabling Comments from Settings adds it as a collapsed rail
+              // entry without hiding the Style workspace.
+              initialBuiltinExpanded={replaceStylePanelId === COMMENTS_PANEL_ID}
               // Mirror the standalone Style panel's autoCollapse triggers so the
               // notebook / story-map presentation collapses Style here too.
               // `autoCollapsedPanel` is omitted because it is always null in a

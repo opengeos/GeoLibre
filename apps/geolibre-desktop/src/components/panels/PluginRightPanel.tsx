@@ -2,6 +2,7 @@ import {
   closeRightPanel,
   collapseRightPanel,
   getRightPanel,
+  listRightPanels,
   moveActiveRightPanelDock,
   openRightPanel,
   type RightPanelDock,
@@ -96,6 +97,11 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
   // move buttons and no rail of its own; its collapsed entry lives in that single
   // shared rail instead.
   const isSharedRail = dock === "replace-style" || dock === "replace-layers";
+  const dockPanels = isSharedRail
+    ? []
+    : listRightPanels().filter((candidate) =>
+        candidate.id === activeId ? activeDock === dock : candidate.dock === dock,
+      );
 
   // Adopt the shared content host (rendered once by the shell) into this slot
   // while it owns the panel. appendChild moves the element, so stepping the
@@ -112,10 +118,53 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
     wrapper.appendChild(contentEl);
   }, [matched, contentEl, collapsed]);
 
-  if (!matched || !panel) return null;
+  const panelRail =
+    dockPanels.length > 0 ? (
+      <aside
+        aria-label={t("pluginPanel.collapsedLabel", { title: t("toolbar.menu.plugins") })}
+        className={`flex h-11 w-full shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:overflow-x-visible md:overflow-y-auto md:border-t-0 md:px-0 md:py-2 ${isLayersSide ? "md:border-e" : "md:border-s"}`}
+      >
+        {dockPanels.map((candidate) => {
+          const candidateIcon =
+            candidate.icon && isImageSource(candidate.icon) ? (
+              <img src={candidate.icon} alt="" className="h-4 w-4 object-contain" />
+            ) : isLayersSide ? (
+              <PanelLeft className="h-4 w-4" />
+            ) : (
+              <PanelRight className="h-4 w-4" />
+            );
+          const expanded = candidate.id === activeId && !collapsed;
+          return (
+            <button
+              key={candidate.id}
+              type="button"
+              aria-pressed={expanded}
+              title={candidate.title}
+              aria-label={candidate.title}
+              onClick={() =>
+                expanded ? collapseRightPanel(candidate.id) : openRightPanel(candidate.id)
+              }
+              className={`flex items-center gap-2 rounded px-1.5 py-1.5 md:flex-col md:px-1 md:py-2 ${
+                expanded
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              }`}
+            >
+              {candidateIcon}
+              <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
+                {candidate.title}
+              </span>
+            </button>
+          );
+        })}
+      </aside>
+    ) : null;
+
+  if (!matched || !panel) return panelRail;
   // When collapsed in shared-rail mode the host's single shared rail shows this
   // panel's entry, so render nothing here (no second rail beside Style).
   if (isSharedRail && collapsed) return null;
+  if (collapsed) return panelRail;
 
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -164,145 +213,150 @@ export function PluginRightPanel({ dock, contentEl, width, onWidthChange }: Plug
   const canMoveRight = activeDock !== (isRtl ? "left-of-layers" : "right-of-style");
 
   return (
-    <aside
-      aria-label={collapsed ? t("pluginPanel.collapsedLabel", { title: panel.title }) : panel.title}
-      style={{ "--plugin-right-panel-width": `${width}px` } as CSSProperties}
-      className={
-        collapsed
-          ? `flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-t-0 md:py-2 ${borderSide}`
-          : `relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--plugin-right-panel-width)] md:border-t-0 ${borderSide}`
-      }
-    >
-      {!collapsed ? (
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t("pluginPanel.resize")}
-          className={`absolute ${isLayersSide ? "-end-1 border-e" : "-start-1 border-s"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
-          onPointerDown={handleResizeStart}
-        />
-      ) : null}
-      {collapsed ? (
-        <>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            title={t("pluginPanel.expand")}
-            aria-label={t("pluginPanel.expand")}
-            onClick={() => openRightPanel(activeId)}
-          >
-            {isLayersSide ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelRightOpen className="h-4 w-4" />
-            )}
-          </Button>
-          <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
-            {railIcon}
-            <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
-              {panel.title}
-            </span>
-          </div>
-        </>
-      ) : (
-        <div className="flex items-center justify-between border-b px-3 py-1.5">
-          <span className="truncate text-sm font-semibold">{panel.title}</span>
-          <div className="flex items-center gap-1">
-            {!isSharedRail ? (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  title={t("pluginPanel.moveLeft")}
-                  aria-label={t("pluginPanel.moveLeft")}
-                  disabled={!canMoveLeft}
-                  onClick={() => moveActiveRightPanelDock(isRtl ? "right" : "left")}
-                >
-                  <ArrowLeftToLine className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  title={t("pluginPanel.moveRight")}
-                  aria-label={t("pluginPanel.moveRight")}
-                  disabled={!canMoveRight}
-                  onClick={() => moveActiveRightPanelDock(isRtl ? "left" : "right")}
-                >
-                  <ArrowRightToLine className="h-4 w-4" />
-                </Button>
-              </>
-            ) : null}
-            {isSharedRail ? (
-              // Pop the panel out of the shared rail back to a movable positional
-              // panel on the same side (where the move buttons return).
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                title={t("pluginPanel.detach")}
-                aria-label={t("pluginPanel.detach")}
-                onClick={() =>
-                  setActiveRightPanelDock(isLayersSide ? "right-of-layers" : "right-of-style")
-                }
-              >
-                <Columns2 className="h-4 w-4" />
-              </Button>
-            ) : (
-              // Merge the movable panel into the shared rail on its current side:
-              // a layers-side panel joins the Layers rail, a style-side panel the
-              // Style rail.
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                title={
-                  isLayersSide
-                    ? t("pluginPanel.mergeIntoLayersRail")
-                    : t("pluginPanel.mergeIntoStyleRail")
-                }
-                aria-label={
-                  isLayersSide
-                    ? t("pluginPanel.mergeIntoLayersRail")
-                    : t("pluginPanel.mergeIntoStyleRail")
-                }
-                onClick={() =>
-                  setActiveRightPanelDock(isLayersSide ? "replace-layers" : "replace-style")
-                }
-              >
-                <Combine className="h-4 w-4" />
-              </Button>
-            )}
+    <>
+      <aside
+        aria-label={
+          collapsed ? t("pluginPanel.collapsedLabel", { title: panel.title }) : panel.title
+        }
+        style={{ "--plugin-right-panel-width": `${width}px` } as CSSProperties}
+        className={
+          collapsed
+            ? `flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-t-0 md:py-2 ${borderSide}`
+            : `relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--plugin-right-panel-width)] md:border-t-0 ${borderSide}`
+        }
+      >
+        {!collapsed ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("pluginPanel.resize")}
+            className={`absolute ${isLayersSide ? "-end-1 border-e" : "-start-1 border-s"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
+            onPointerDown={handleResizeStart}
+          />
+        ) : null}
+        {collapsed ? (
+          <>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
-              title={t("pluginPanel.collapse")}
-              aria-label={t("pluginPanel.collapse")}
-              onClick={() => collapseRightPanel(activeId)}
+              className="h-8 w-8"
+              title={t("pluginPanel.expand")}
+              aria-label={t("pluginPanel.expand")}
+              onClick={() => openRightPanel(activeId)}
             >
               {isLayersSide ? (
-                <PanelLeftClose className="h-4 w-4" />
+                <PanelLeftOpen className="h-4 w-4" />
               ) : (
-                <PanelRightClose className="h-4 w-4" />
+                <PanelRightOpen className="h-4 w-4" />
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title={t("pluginPanel.close")}
-              aria-label={t("pluginPanel.close")}
-              onClick={() => closeRightPanel(activeId)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
+              {railIcon}
+              <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
+                {panel.title}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-between border-b px-3 py-1.5">
+            <span className="truncate text-sm font-semibold">{panel.title}</span>
+            <div className="flex items-center gap-1">
+              {!isSharedRail ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    title={t("pluginPanel.moveLeft")}
+                    aria-label={t("pluginPanel.moveLeft")}
+                    disabled={!canMoveLeft}
+                    onClick={() => moveActiveRightPanelDock(isRtl ? "right" : "left")}
+                  >
+                    <ArrowLeftToLine className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    title={t("pluginPanel.moveRight")}
+                    aria-label={t("pluginPanel.moveRight")}
+                    disabled={!canMoveRight}
+                    onClick={() => moveActiveRightPanelDock(isRtl ? "left" : "right")}
+                  >
+                    <ArrowRightToLine className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : null}
+              {isSharedRail ? (
+                // Pop the panel out of the shared rail back to a movable positional
+                // panel on the same side (where the move buttons return).
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={t("pluginPanel.detach")}
+                  aria-label={t("pluginPanel.detach")}
+                  onClick={() =>
+                    setActiveRightPanelDock(isLayersSide ? "right-of-layers" : "right-of-style")
+                  }
+                >
+                  <Columns2 className="h-4 w-4" />
+                </Button>
+              ) : (
+                // Merge the movable panel into the shared rail on its current side:
+                // a layers-side panel joins the Layers rail, a style-side panel the
+                // Style rail.
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={
+                    isLayersSide
+                      ? t("pluginPanel.mergeIntoLayersRail")
+                      : t("pluginPanel.mergeIntoStyleRail")
+                  }
+                  aria-label={
+                    isLayersSide
+                      ? t("pluginPanel.mergeIntoLayersRail")
+                      : t("pluginPanel.mergeIntoStyleRail")
+                  }
+                  onClick={() =>
+                    setActiveRightPanelDock(isLayersSide ? "replace-layers" : "replace-style")
+                  }
+                >
+                  <Combine className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("pluginPanel.collapse")}
+                aria-label={t("pluginPanel.collapse")}
+                onClick={() => collapseRightPanel(activeId)}
+              >
+                {isLayersSide ? (
+                  <PanelLeftClose className="h-4 w-4" />
+                ) : (
+                  <PanelRightClose className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("pluginPanel.close")}
+                aria-label={t("pluginPanel.close")}
+                onClick={() => closeRightPanel(activeId)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
-      <div ref={contentRef} className={collapsed ? "hidden" : "min-h-0 flex-1 overflow-auto"} />
-    </aside>
+        )}
+        <div ref={contentRef} className={collapsed ? "hidden" : "min-h-0 flex-1 overflow-auto"} />
+      </aside>
+      {panelRail}
+    </>
   );
 }

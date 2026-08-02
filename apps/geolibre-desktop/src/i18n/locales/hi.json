@@ -1749,6 +1749,7 @@
       "showLayersPanel": "लेयर पैनल दिखाएँ",
       "showStylePanel": "स्टाइल पैनल दिखाएँ",
       "showBrowserPanel": "ब्राउज़र पैनल दिखाएँ",
+      "showCommentsPanel": "टिप्पणियाँ पैनल दिखाएँ",
       "showAttributePanel": "एट्रिब्यूट पैनल दिखाएँ",
       "urlParamsNote": "साझा किए गए व्यूअर लिंक में मौजूद होने पर URL लेआउट पैरामीटर अभी भी लागू होते हैं।"
     },

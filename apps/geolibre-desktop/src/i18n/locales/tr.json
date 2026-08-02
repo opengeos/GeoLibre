@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Katmanlar panelini göster",
       "showStylePanel": "Stil panelini göster",
       "showBrowserPanel": "Gözatıcı panelini göster",
+      "showCommentsPanel": "Yorumlar panelini göster",
       "showAttributePanel": "Öznitelik panelini göster",
       "urlParamsNote": "URL düzen parametreleri, paylaşılan görüntüleyici bağlantılarında mevcut olduğunda hâlâ geçerlidir."
     },

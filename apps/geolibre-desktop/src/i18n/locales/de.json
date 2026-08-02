@@ -1749,6 +1749,7 @@
       "showLayersPanel": "Ebenen-Bedienfeld anzeigen",
       "showStylePanel": "Stil-Bedienfeld anzeigen",
       "showBrowserPanel": "Browser-Bedienfeld anzeigen",
+      "showCommentsPanel": "Kommentar-Bedienfeld anzeigen",
       "showAttributePanel": "Attribut-Bedienfeld anzeigen",
       "urlParamsNote": "URL-Layout-Parameter gelten weiterhin, wenn sie in gemeinsam genutzten Viewer-Links vorhanden sind."
     },

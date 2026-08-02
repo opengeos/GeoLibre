@@ -1908,6 +1908,7 @@
       "showLayersPanel": "إظهار لوحة الطبقات",
       "showStylePanel": "إظهار لوحة النمط",
       "showBrowserPanel": "إظهار لوحة المستعرض",
+      "showCommentsPanel": "إظهار لوحة التعليقات",
       "showAttributePanel": "إظهار لوحة السمات",
       "urlParamsNote": "تظل معلمات التخطيط في عنوان URL سارية عند وجودها في روابط العارض المشتركة."
     },
