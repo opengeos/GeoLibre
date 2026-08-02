@@ -199,10 +199,7 @@ function wrapLongitude(lng: number): number {
  * 0, but precision 0 is not a valid geohash, so we raise the floor to 1.)
  */
 export function geohashResolutionForZoom(zoom: number): number {
-  return Math.min(
-    MAX_GEOHASH_PRECISION,
-    Math.max(MIN_GEOHASH_PRECISION, Math.floor(zoom * 0.45)),
-  );
+  return Math.min(MAX_GEOHASH_PRECISION, Math.max(MIN_GEOHASH_PRECISION, Math.floor(zoom * 0.45)));
 }
 
 /** The precision actually rendered: zoom-derived when automatic, else manual. */
@@ -766,16 +763,12 @@ function renderPanel(container: HTMLElement): void {
     button(
       labels.exportCsv,
       () => {
-        appRef?.exportTextFile?.(
-          `geohash-p${effectiveResolution()}.csv`,
-          gridCsv(currentGrid),
-          {
-            description: "CSV",
-            extensions: ["csv"],
-            mimeType: "text/csv",
-            promptName: true,
-          },
-        );
+        appRef?.exportTextFile?.(`geohash-p${effectiveResolution()}.csv`, gridCsv(currentGrid), {
+          description: "CSV",
+          extensions: ["csv"],
+          mimeType: "text/csv",
+          promptName: true,
+        });
       },
       currentGrid.features.length === 0,
     ),

@@ -405,11 +405,7 @@ export function olcChildCount(cell: string): number {
   const index = OLC_CODE_LENGTHS.indexOf(area.codeLength as OlcCodeLength);
   if (index < 0 || index >= OLC_CODE_LENGTHS.length - 1) return 0;
   const child = OpenLocationCode.decode(
-    OpenLocationCode.encode(
-      area.latitudeCenter,
-      area.longitudeCenter,
-      OLC_CODE_LENGTHS[index + 1],
-    ),
+    OpenLocationCode.encode(area.latitudeCenter, area.longitudeCenter, OLC_CODE_LENGTHS[index + 1]),
   );
   return Math.round(
     (area.getLatitudeHeight() / child.getLatitudeHeight()) *

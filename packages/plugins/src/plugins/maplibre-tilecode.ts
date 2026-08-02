@@ -326,7 +326,9 @@ export function setTilecodeGridSettings(patch: Partial<TilecodeGridSettings>): v
     const tile = tilecodeToTile(selectedCell);
     if (tile) {
       const [west, south, east, north] = tileBounds(tile);
-      selectedCell = tileToTilecode(pointToTile((south + north) / 2, (west + east) / 2, resolution));
+      selectedCell = tileToTilecode(
+        pointToTile((south + north) / 2, (west + east) / 2, resolution),
+      );
     }
   }
   // Only the rendered tile zoom changes the geometry, so a paint/layout-only
@@ -723,9 +725,7 @@ function renderPanel(container: HTMLElement): void {
     input.step = String(step);
     input.value = String(settings[key]);
     input.style.width = "72px";
-    input.addEventListener("change", () =>
-      setTilecodeGridSettings({ [key]: Number(input.value) }),
-    );
+    input.addEventListener("change", () => setTilecodeGridSettings({ [key]: Number(input.value) }));
     row(text, input);
   }
   for (const [text, key] of [
@@ -777,7 +777,7 @@ function renderPanel(container: HTMLElement): void {
     addDetail(labels.resolution, String(selectedTile[2]));
     addDetail(
       labels.center,
-      `${(((south + north) / 2)).toFixed(6)}, ${(((west + east) / 2)).toFixed(6)}`,
+      `${((south + north) / 2).toFixed(6)}, ${((west + east) / 2).toFixed(6)}`,
     );
     const parent = tilecodeParentCell(selectedCell);
     if (parent) addDetail(labels.parent, parent);
@@ -834,16 +834,12 @@ function renderPanel(container: HTMLElement): void {
     button(
       labels.exportCsv,
       () => {
-        appRef?.exportTextFile?.(
-          `tilecode-z${effectiveResolution()}.csv`,
-          gridCsv(currentGrid),
-          {
-            description: "CSV",
-            extensions: ["csv"],
-            mimeType: "text/csv",
-            promptName: true,
-          },
-        );
+        appRef?.exportTextFile?.(`tilecode-z${effectiveResolution()}.csv`, gridCsv(currentGrid), {
+          description: "CSV",
+          extensions: ["csv"],
+          mimeType: "text/csv",
+          promptName: true,
+        });
       },
       currentGrid.features.length === 0,
     ),

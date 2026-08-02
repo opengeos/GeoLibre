@@ -360,7 +360,7 @@ export function s2GridForBounds(
   // in-range chunks (also the antimeridian handling: a crossing view becomes
   // one chunk ending at 180 and another starting at -180).
   const chunks: Array<[number, number]> = [];
-  let cursor = ((west % 360) + 540) % 360 - 180;
+  let cursor = (((west % 360) + 540) % 360) - 180;
   let remaining = span;
   while (remaining > 1e-9) {
     const step = Math.min(remaining, MAX_COVER_SPAN_DEGREES, 180 - cursor);

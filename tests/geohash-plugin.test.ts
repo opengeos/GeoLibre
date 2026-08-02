@@ -43,10 +43,7 @@ describe("Geohash plugin helpers", () => {
         includeParent: true,
       },
     );
-    assert.equal(
-      normalizeGeohashGridSettings({ resolution: 0 }).resolution,
-      MIN_GEOHASH_PRECISION,
-    );
+    assert.equal(normalizeGeohashGridSettings({ resolution: 0 }).resolution, MIN_GEOHASH_PRECISION);
   });
 
   it("maps map zoom to a precision like vgrid-maplibre", () => {
@@ -87,9 +84,7 @@ describe("Geohash plugin helpers", () => {
       grid.features.some((f) => {
         const [w, s] = f.geometry.coordinates[0][0];
         const [e, n] = f.geometry.coordinates[0][2];
-        return (
-          lng >= w - epsilon && lng <= e + epsilon && lat >= s - epsilon && lat <= n + epsilon
-        );
+        return lng >= w - epsilon && lng <= e + epsilon && lat >= s - epsilon && lat <= n + epsilon;
       });
     assert.ok(covers(37.7, -122.52));
     assert.ok(covers(37.82, -122.35));

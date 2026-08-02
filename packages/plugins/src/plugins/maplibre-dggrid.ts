@@ -333,12 +333,7 @@ export function normalizeDggridGridSettings(value: unknown): DggridGridSettings 
       ),
     ),
     fillColor: color(candidate.fillColor, DEFAULT_DGGRID_GRID_SETTINGS.fillColor),
-    fillOpacity: clampNumber(
-      candidate.fillOpacity,
-      0,
-      1,
-      DEFAULT_DGGRID_GRID_SETTINGS.fillOpacity,
-    ),
+    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_DGGRID_GRID_SETTINGS.fillOpacity),
     lineColor: color(candidate.lineColor, DEFAULT_DGGRID_GRID_SETTINGS.lineColor),
     lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_DGGRID_GRID_SETTINGS.lineWidth),
     showLabels:
@@ -443,8 +438,7 @@ function pointInRing(lon: number, lat: number, ring: Position[]): boolean {
     const xj = ring[j][0];
     const yj = ring[j][1];
     if (yj - yi === 0) continue;
-    const intersect =
-      yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    const intersect = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
   return inside;
@@ -653,7 +647,10 @@ export function dggridGridForBounds(
   // hard cap below remains the final guard.
   const radians = Math.PI / 180;
   const areaKm2 =
-    6371.0088 ** 2 * span * radians * Math.abs(Math.sin(north * radians) - Math.sin(south * radians));
+    6371.0088 ** 2 *
+    span *
+    radians *
+    Math.abs(Math.sin(north * radians) - Math.sin(south * radians));
   engine.setDggs({ ...config }, resolution);
   if (areaKm2 / engine.cellAreaKM(resolution) > limit * 1.2) {
     throw new RangeError(`DGGRID cell limit exceeded: ${limit}`);
@@ -827,9 +824,7 @@ function refresh(): void {
   } catch (error) {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError =
-      error instanceof RangeError
-        ? labels.tooManyCells(DGGRID_VIEWPORT_CELL_LIMIT)
-        : String(error);
+      error instanceof RangeError ? labels.tooManyCells(DGGRID_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
@@ -1161,10 +1156,7 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(
-            `DGGRID grid (resolution ${effectiveResolution()})`,
-            currentGrid,
-          );
+          appRef?.addGeoJsonLayer(`DGGRID grid (resolution ${effectiveResolution()})`, currentGrid);
         }
       },
       currentGrid.features.length === 0,

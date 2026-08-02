@@ -118,7 +118,10 @@ describe("DGGRID plugin helpers", () => {
       { ...base, topology: "TRIANGLE", projection: "ISEA", aperture: 4 },
     ] as const) {
       const grid = dggridGridForBounds(engine, bounds, 8, undefined, config);
-      assert.ok(grid.features.length > 0, `${config.topology}/${config.projection}/${config.aperture}`);
+      assert.ok(
+        grid.features.length > 0,
+        `${config.topology}/${config.projection}/${config.aperture}`,
+      );
       const ids = grid.features.map((feature) => feature.properties?.dggrid as string);
       assert.equal(new Set(ids).size, ids.length);
     }

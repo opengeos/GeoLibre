@@ -206,9 +206,7 @@ export function a5ResolutionForZoom(zoom: number): number {
 
 /** The resolution actually rendered: zoom-derived when automatic, else manual. */
 function effectiveResolution(): number {
-  return settings.autoResolution && map
-    ? a5ResolutionForZoom(map.getZoom())
-    : settings.resolution;
+  return settings.autoResolution && map ? a5ResolutionForZoom(map.getZoom()) : settings.resolution;
 }
 
 export function normalizeA5GridSettings(value: unknown): A5GridSettings {

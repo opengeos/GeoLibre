@@ -608,9 +608,7 @@ function refresh(): void {
   } catch (error) {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError =
-      error instanceof RangeError
-        ? labels.tooManyCells(DGGAL_VIEWPORT_CELL_LIMIT)
-        : String(error);
+      error instanceof RangeError ? labels.tooManyCells(DGGAL_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
