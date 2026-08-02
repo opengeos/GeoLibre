@@ -2198,8 +2198,13 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     // clean up after is already gone by now: returning an error here would
     // leave the frontend believing the server it just stopped is still running
     // (stopJupyterServer only clears its state once this invoke resolves).
-    if let Ok(runtime_dir) = app_runtime_dir(&app) {
-        let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+    // Best-effort, but not silent: skipping the backstop is what a later
+    // "stale Jupyter still holding the port" report would trace back to.
+    match app_runtime_dir(&app) {
+        Ok(runtime_dir) => {
+            let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+        }
+        Err(error) => eprintln!("Jupyter: skipping the port {JUPYTER_PORT} backstop ({error})."),
     }
     Ok(())
 }
