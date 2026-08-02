@@ -85,7 +85,7 @@ Switch bodies from the planet switcher in the Layers panel. See [Demos](https://
 
 ## Geoprocessing: 1,000+ tools, zero install
 
-[![The GeoLibre Whitebox toolbox running locally with WebAssembly, listing all 1,009 tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)](https://files.opengeos.org/whitebox.webp)
+[![The GeoLibre Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)](https://files.opengeos.org/whitebox.webp)
 
 **Processing → Whitebox** opens a toolbox of **1,000+ geoprocessing tools** that
 execute in the browser through a WebAssembly runtime with native raster and

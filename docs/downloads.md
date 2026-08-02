@@ -59,9 +59,10 @@ The portable build relies on the Microsoft Edge WebView2 Runtime, which is
 preinstalled on Windows 11 and current Windows 10. If the app does not start,
 install the
 [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-The optional Python sidecar tools (raster, conversion) need Python available
-just as in the installed build; everything else — including the 1,000+ tool
-Whitebox geoprocessing toolbox, which runs on WebAssembly — runs without it.
+The optional Python sidecar tools (raster, conversion, AI Segmentation) need
+Python available just as in the installed build; everything else — including the
+1,000+ tool Whitebox geoprocessing toolbox, which runs on WebAssembly — runs
+without it.
 
 ## macOS installation
 

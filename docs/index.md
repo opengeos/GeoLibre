@@ -58,7 +58,7 @@ Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, Flat
 <div class="feature-card" markdown>
 ### 1,000+ geoprocessing tools
 
-Run **1,000+ geoprocessing tools** — vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection — from the Whitebox toolbox, browsable by category in the Processing menu. They execute in the browser on a WebAssembly runtime with raster and vector I/O, so there is no Python sidecar to install and the full set works on the web, desktop, and Android. Convert data to cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG from the Conversion menu.
+Run **1,000+ geoprocessing tools** — vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection — from the Whitebox toolbox, browsable by category in the Processing menu. They execute in the browser on a WebAssembly runtime with raster and vector I/O, so there is no Python sidecar to install and the full set works on the web, desktop, and Android. The Conversion menu writes cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG, client-side in the browser build or through the Python sidecar on desktop, whose GDAL stack reads more input formats and tiles deeper.
 </div>
 
 <div class="feature-card" markdown>

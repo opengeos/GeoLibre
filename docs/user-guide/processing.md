@@ -117,7 +117,7 @@ The conversion sidecar is hardened with a path allowlist.
 
 **Processing → Whitebox** opens the geoprocessing toolbox: **1,000+ tools** covering vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection analysis.
 
-![The Whitebox toolbox running locally with WebAssembly, listing all 1,009 tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)
+![The Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)
 
 The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS) suite together with GeoLibre's own WASM tools, which the dialog mixes into the same catalog (use the **sources** dropdown to filter to one or the other).
 
@@ -127,7 +127,7 @@ They run **in the browser**, through a WebAssembly runtime with raster and vecto
 
 The **Run locally (WASM)** checkbox controls the engine:
 
-- **Checked** runs the tool in WebAssembly on the layer or file you pick. This is the default wherever no sidecar can be started — the browser build, and the Mac App Store build, whose App Sandbox forbids the sidecar process.
+- **Checked** runs the tool in WebAssembly on the layer or file you pick. This is the default in the browser build, where no sidecar can be started. The Mac App Store build has no sidecar to switch to at all, so the checkbox does not appear there — WebAssembly is the only runtime.
 - **Unchecked** sends the job to the Python sidecar instead. This is the default on desktop, where the sidecar is available. The sidecar can read native file paths that the in-browser runner cannot fetch, and is the better choice for batch runs across a directory of files on disk.
 
 Either way the tool list is the same; only the executing engine changes.
