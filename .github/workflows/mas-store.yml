@@ -131,8 +131,20 @@ jobs:
           [[ -d "$app" ]] || { echo "::error::No app bundle at $app"; exit 1; }
           # Confirm the sandbox entitlement made it into the signature before
           # packaging; an unsandboxed binary is an automatic App Review reject.
-          codesign -d --entitlements - --xml "$app" | grep -q "com.apple.security.app-sandbox" \
+          entitlements="$(codesign -d --entitlements - --xml "$app")" \
+            || { echo "::error::codesign could not read entitlements from $app"; exit 1; }
+          grep -q "com.apple.security.app-sandbox" <<<"$entitlements" \
             || { echo "::error::App bundle is missing the app-sandbox entitlement"; exit 1; }
+          # App Review rejected 2.4.0 (guideline 2.4.5) for shipping
+          # network.server without matching functionality. The app now makes
+          # only outgoing connections — the Earth Engine OAuth loopback listener
+          # is compiled out of the `mas` build — so this entitlement must stay
+          # gone. If a future feature genuinely needs to accept an inbound
+          # connection, re-add it here AND justify it in App Review Information.
+          if grep -q "com.apple.security.network.server" <<<"$entitlements"; then
+            echo "::error::App bundle carries com.apple.security.network.server; App Review rejects it without an inbound-connection feature (see mas/Entitlements.mas.plist.template)"
+            exit 1
+          fi
           version="$(node -p "require('./apps/geolibre-desktop/src-tauri/tauri.conf.json').version")"
           pkg="GeoLibre.Desktop_${version}_universal_mas.pkg"
           xcrun productbuild --sign "$APPLE_MAS_INSTALLER_IDENTITY" \

@@ -131,7 +131,7 @@ import { HelpMenu } from "./toolbar/HelpMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
-import { ProcessingMenu } from "./toolbar/ProcessingMenu";
+import { EARTH_ENGINE_AVAILABLE, ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
 import { ProjectMenu } from "./toolbar/ProjectMenu";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
@@ -1201,12 +1201,21 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.processing"),
       run: handleOpenPlanetaryComputer,
     },
-    {
-      id: "proc.earth-engine",
-      title: t("toolbar.command.earthEngine"),
-      group: t("toolbar.commandGroup.processing"),
-      run: panels.earthEngine.toggle,
-    },
+    // Earth Engine sign-in needs the Rust loopback OAuth listener, which the
+    // Apple App Store builds (Mac App Store and iOS) compile out so the app
+    // claims no `com.apple.security.network.server` entitlement. Shares the
+    // ProcessingMenu gate's module-level constant rather than recomputing it in
+    // this array, which is rebuilt on every render.
+    ...(EARTH_ENGINE_AVAILABLE
+      ? [
+          {
+            id: "proc.earth-engine",
+            title: t("toolbar.command.earthEngine"),
+            group: t("toolbar.commandGroup.processing"),
+            run: panels.earthEngine.toggle,
+          },
+        ]
+      : []),
     // Controls
     ...MAP_CONTROL_ITEMS.map((control) => ({
       id: `control.${control.id}`,
