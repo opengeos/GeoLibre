@@ -16,10 +16,18 @@
 
   - network.client: map tiles, basemap styles, remote GeoJSON/COG/PMTiles,
     collab websocket.
-  - network.server: the Earth Engine OAuth flow listens on a loopback port for
-    the redirect callback.
   - files.user-selected.read-write: open/save project files and datasets picked
     through the file dialogs.
+
+  There is deliberately NO network.server entitlement. The app makes only
+  outgoing connections. The one feature that listened for an inbound connection
+  was Earth Engine sign-in (Google's OAuth loopback-redirect flow binds
+  127.0.0.1 to receive the browser redirect); App Review rejected the 2.4.0
+  submission over it (guideline 2.4.5, submission 76036eca), so the `mas` build
+  compiles that flow out entirely and hides its UI. If you ever add a feature
+  that accepts an inbound connection, adding the entitlement back is not enough
+  — it has to be justified in App Review Information, and mas-store.yml's
+  "no server entitlement" check will fail until this comment is revisited.
 -->
 <plist version="1.0">
 <dict>
@@ -30,8 +38,6 @@
   <key>com.apple.developer.team-identifier</key>
   <string>${APPLE_TEAM_ID}</string>
   <key>com.apple.security.network.client</key>
-  <true/>
-  <key>com.apple.security.network.server</key>
   <true/>
   <key>com.apple.security.files.user-selected.read-write</key>
   <true/>

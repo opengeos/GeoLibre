@@ -40,6 +40,7 @@ import {
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
+  isEarthEngineAvailable,
   openRightPanel,
 } from "@geolibre/plugins";
 import { Button, cn, Input } from "@geolibre/ui";
@@ -1201,12 +1202,20 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.processing"),
       run: handleOpenPlanetaryComputer,
     },
-    {
-      id: "proc.earth-engine",
-      title: t("toolbar.command.earthEngine"),
-      group: t("toolbar.commandGroup.processing"),
-      run: panels.earthEngine.toggle,
-    },
+    // Earth Engine sign-in needs the Rust loopback OAuth listener, which the
+    // Apple App Store builds (Mac App Store and iOS) compile out so the app
+    // claims no `com.apple.security.network.server` entitlement. Mirrors the
+    // ProcessingMenu gate.
+    ...(isEarthEngineAvailable()
+      ? [
+          {
+            id: "proc.earth-engine",
+            title: t("toolbar.command.earthEngine"),
+            group: t("toolbar.commandGroup.processing"),
+            run: panels.earthEngine.toggle,
+          },
+        ]
+      : []),
     // Controls
     ...MAP_CONTROL_ITEMS.map((control) => ({
       id: `control.${control.id}`,

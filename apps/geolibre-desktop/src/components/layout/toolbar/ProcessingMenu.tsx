@@ -1,4 +1,5 @@
 import { type NetworkToolKind, useAppStore } from "@geolibre/core";
+import { isEarthEngineAvailable } from "@geolibre/plugins";
 import {
   Button,
   DropdownMenu,
@@ -72,6 +73,13 @@ export function ProcessingMenu({
   // the browser via WebAssembly, so unlike the sidecar-backed tools it stays
   // available on mobile.
   const showWhitebox = show("processing.whitebox");
+  // Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple
+  // App Store builds (Mac App Store and iOS) compile out so the app claims no
+  // `com.apple.security.network.server` entitlement — App Review rejected it
+  // otherwise. Evaluated once alongside `mobile`: it reads the same
+  // session-stable user agent.
+  const showEarthEngine =
+    useMemo(() => isEarthEngineAvailable(), []) && show("processing.earthEngine");
 
   // Open the Whitebox toolbox dialog preselected to a specific tool, used by the
   // per-category submenus below. Two store writes: queue the tool, then open.
@@ -104,7 +112,7 @@ export function ProcessingMenu({
     show("processing.notebook") ||
     show("processing.dashboard") ||
     show("processing.planetaryComputer") ||
-    show("processing.earthEngine");
+    showEarthEngine;
 
   return (
     <DropdownMenu>
@@ -530,7 +538,7 @@ export function ProcessingMenu({
             {t("toolbar.command.planetaryComputer")}
           </DropdownMenuItem>
         )}
-        {show("processing.earthEngine") && (
+        {showEarthEngine && (
           <DropdownMenuItem onSelect={earthEnginePanel.toggle}>
             {t("toolbar.command.earthEngine")}
             {earthEnginePanel.visible ? " ✓" : ""}

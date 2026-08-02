@@ -38,6 +38,45 @@ Tauri commands with stubs, and `GEOLIBRE_MAS_BUILD=1` hides the matching UI:
   Built-in and bundled drop-in plugins keep working.
 - **In-app update checks** (`GEOLIBRE_STORE_BUILD=1`, same as the Microsoft
   Store MSIX build): a Store app updates only through the Store.
+- **Earth Engine sign-in** (Processing → Earth Engine, and the GeoAgent
+  plugin's Earth Engine overlay). Unlike the items above this is not a sandbox
+  limit but an *entitlement* one — see below.
+
+### Earth Engine and the `network.server` entitlement
+
+Earth Engine sign-in uses Google's OAuth **loopback-redirect** flow for native
+apps: `src-tauri/src/earth_engine_oauth.rs` binds a listener on `127.0.0.1`,
+opens the consent page in the system browser, and accepts the browser's inbound
+redirect to receive the token. Accepting an inbound connection requires
+`com.apple.security.network.server`.
+
+App Review **rejected GeoLibre Desktop 2.4.0** over exactly this (guideline
+2.4.5, submission `76036eca-dc21-45d3-873e-39b015d37036`): an automated analysis
+flags the server entitlement when it cannot find matching functionality, and the
+bind happens lazily inside a Tauri command, so nothing static points at it.
+
+Rather than defend the entitlement in App Review Information, both Apple targets
+drop the feature: the module is gated
+`#[cfg(not(any(feature = "mas", target_os = "ios")))]` and replaced with stub
+commands that bind nothing, so **neither the Mac App Store build nor the iOS app
+ever opens a listening socket**. The entitlement is gone from
+`mas/Entitlements.mas.plist.template`, and `mas-store.yml` fails the build if it
+reappears in the signature. (iOS has no entitlements file — those sandbox keys
+are macOS-only — but it ships through the same review pipeline, so it gets the
+same treatment.)
+
+On the UI side, `isEarthEngineAvailable()`
+(`packages/plugins/src/plugins/earth-engine-auth.ts`) hides the Processing menu
+item and the command-palette entry, and `authenticateEarthEngine` throws early
+if anything else reaches it. It detects the macOS build from the
+`__GEOLIBRE_MAS_BUILD__` define and iOS from the user agent, and only applies
+inside the packaged app — the **web build keeps Earth Engine everywhere**,
+including Safari on iOS, because a browser uses Google's popup/redirect flow and
+binds nothing.
+
+If a future feature genuinely needs to accept an inbound connection, re-adding
+the entitlement is not sufficient on its own: describe the functionality in **App
+Review Information** before submitting, or the automated check rejects it again.
 
 Everything client-side is unchanged and fully functional: MapLibre/deck.gl
 rendering, Add Data for local and remote files, DuckDB-WASM vector reading,
@@ -93,7 +132,8 @@ native code at runtime).
 
 The sandboxed app can be smoke-tested by running the built
 `GeoLibre Desktop.app` directly; `codesign -d --entitlements - --xml` on the
-bundle should show `com.apple.security.app-sandbox`.
+bundle should show `com.apple.security.app-sandbox`, and must **not** show
+`com.apple.security.network.server`.
 
 ## CI: the `mas-store.yml` workflow
 
