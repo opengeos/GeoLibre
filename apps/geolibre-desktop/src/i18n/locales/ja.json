@@ -4956,6 +4956,7 @@
     "invalidKmlCoordinatesById": "座標が不正なため、KML エクスポートで ID {{id}} のフィーチャを書き出せませんでした。"
   },
   "comments": {
+    "title": "コメント",
     "addDialogTitle": "レビューコメントを追加",
     "addDialogDescription": "チームレビューやオフラインでの参照用に、このプロジェクトへ位置を固定したメモを投稿します。",
     "authorNameLabel": "お名前（初回のみ入力、自動的に保存されます）",

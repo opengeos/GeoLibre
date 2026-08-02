@@ -1010,18 +1010,23 @@ export function StylePanel({
     },
     [isControlled, onCollapsedChange],
   );
+  // Selecting a real layer expands the panel from its rail. Skipped while
+  // `autoCollapse` holds it closed (the notebook or a story-map presentation
+  // owns the workspace), so a selection made there cannot pop Style back open
+  // over them and defeat the auto-collapse below.
   const previousSelectedLayerId = useRef(selectedLayerId);
   useEffect(() => {
     const previous = previousSelectedLayerId.current;
     previousSelectedLayerId.current = selectedLayerId;
     if (
+      !autoCollapse &&
       selectedLayerId &&
       selectedLayerId !== previous &&
       layers.some((candidate) => candidate.id === selectedLayerId)
     ) {
       setIsCollapsed(false);
     }
-  }, [layers, selectedLayerId, setIsCollapsed]);
+  }, [autoCollapse, layers, selectedLayerId, setIsCollapsed]);
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the

@@ -5031,6 +5031,7 @@
     "invalidKmlCoordinatesById": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{id}} kimlikli öğeyi yazamadı."
   },
   "comments": {
+    "title": "Yorumlar",
     "addDialogTitle": "İnceleme Yorumu Ekle",
     "addDialogDescription": "Ekip incelemesi veya çevrimdışı başvuru için bu projeye sabitlenmiş bir not gönderin.",
     "authorNameLabel": "Adınız (bir kez sorulur, otomatik kaydedilir)",

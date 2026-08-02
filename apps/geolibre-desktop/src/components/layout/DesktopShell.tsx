@@ -2364,6 +2364,10 @@ export function DesktopShell({
                     onResizeStart={startStylePanelResize}
                     collapsed={collapsed}
                     onCollapsedChange={onCollapsedChange}
+                    // Controlled mode ignores autoCollapse for collapsing (the
+                    // rail owns that via forceBuiltinCollapsed); it is passed so
+                    // a layer selection cannot expand Style over the notebook.
+                    autoCollapse={notebookOpen || storymapPresenting}
                     hideOwnRail
                   />
                 )}

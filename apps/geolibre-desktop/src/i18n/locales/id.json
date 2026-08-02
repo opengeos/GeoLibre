@@ -4956,6 +4956,7 @@
     "invalidKmlCoordinatesById": "Ekspor KML tidak dapat menulis fitur dengan ID {{id}} karena koordinatnya tidak valid."
   },
   "comments": {
+    "title": "Komentar",
     "addDialogTitle": "Tambah Komentar Tinjauan",
     "addDialogDescription": "Kirim catatan yang tertambat pada proyek ini untuk tinjauan tim atau rujukan luring.",
     "authorNameLabel": "Nama Anda (ditanyakan sekali, tersimpan otomatis)",

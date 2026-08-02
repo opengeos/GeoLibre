@@ -1,5 +1,6 @@
 import { registerRightPanel } from "@geolibre/plugins";
 import { useEffect } from "react";
+import i18n from "../i18n";
 
 /** Stable id of the Comments right panel. */
 export const COMMENTS_PANEL_ID = "comments";
@@ -13,9 +14,11 @@ export const COMMENTS_PANEL_ID = "comments";
  */
 export function useRegisterCommentsPanel(): void {
   useEffect(() => {
+    // i18n.t (not the useTranslation hook) so registration carries no
+    // render-time dependency; the rail entry re-resolves the getter on render.
     const dispose = registerRightPanel({
       id: COMMENTS_PANEL_ID,
-      title: "Comments",
+      title: () => i18n.t("comments.title"),
       dock: "replace-style",
       render: () => {},
     });

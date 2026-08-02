@@ -4956,6 +4956,7 @@
     "invalidKmlCoordinatesById": "KML 导出无法写入 ID 为 {{id}} 的要素，因为它的坐标无效。"
   },
   "comments": {
+    "title": "评论",
     "addDialogTitle": "添加审阅意见",
     "addDialogDescription": "在此项目上发布一条锚定的批注，供团队审阅或离线参考。",
     "authorNameLabel": "您的姓名（仅询问一次，自动保存）",

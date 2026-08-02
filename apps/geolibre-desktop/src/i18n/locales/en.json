@@ -5031,6 +5031,7 @@
     "moreValues": "+{{total}} more values"
   },
   "comments": {
+    "title": "Comments",
     "addDialogTitle": "Add Review Comment",
     "addDialogDescription": "Post an anchored note on this project for team review or offline reference.",
     "authorNameLabel": "Your Name (Asked once, saved automatically)",

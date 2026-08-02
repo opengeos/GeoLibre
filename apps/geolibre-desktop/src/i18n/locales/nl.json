@@ -5031,6 +5031,7 @@
     "invalidKmlCoordinatesById": "De KML-export kon object met ID {{id}} niet wegschrijven omdat het ongeldige coördinaten heeft."
   },
   "comments": {
+    "title": "Opmerkingen",
     "addDialogTitle": "Revisieopmerking toevoegen",
     "addDialogDescription": "Plaats een verankerde notitie bij dit project voor teamrevisie of offline naslag.",
     "authorNameLabel": "Je naam (eenmalig gevraagd, automatisch opgeslagen)",
