@@ -193,6 +193,18 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.found == 'true'
     runs-on: ubuntu-latest
+    # opengeos/pages-preview is a single GitHub Pages site, and Pages builds one
+    # commit at a time per repository. Two preview deploys landing together make
+    # the older build report `errored` even though its push succeeded, which the
+    # action's wait step treats as fatal. The workflow-level group above is keyed
+    # per branch and so only serializes reruns of the same PR; this one holds
+    # every Pages deploy in this repository to one at a time. It cannot cover
+    # deploys from the other repositories that share the site (Actions
+    # concurrency is per repository), which is why the verify step below still
+    # has to tell a superseded build apart from a real failure.
+    concurrency:
+      group: pages-preview-deploy
+      cancel-in-progress: false
     steps:
       # The Pages deploy action needs a git repository in the workspace. This
       # is the DEFAULT BRANCH -- never the PR head. Do not add a `ref:` here.
@@ -210,8 +222,19 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
+      # Record the time before the push so the verify step can tell a Pages
+      # build that includes this deploy from one that predates it.
+      - name: Note the deploy start time
+        id: started
+        run: echo "at=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Deploy preview to GitHub Pages
         id: pages
+        # A superseded Pages build is reported as `errored`, which fails this
+        # action's wait step even though the push landed and the next build
+        # publishes it. Never fail the job here -- the verify step below decides,
+        # by checking whether the preview actually came up.
+        continue-on-error: true
         # Pinned rather than tracking the v1 tag: this is a third-party action
         # and it receives PREVIEW_DEPLOY_TOKEN.
         uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
@@ -237,12 +260,70 @@ jobs:
           wait-for-pages-deployment: true
           comment: false
 
+      # Decides whether the deploy really failed. A Pages build that another
+      # repository's deploy superseded reports `errored`, but this deploy's
+      # commit is already on gh-pages, so the very next build publishes it --
+      # historically within about a minute. So rather than trusting the action's
+      # outcome, wait for a Pages build that both succeeded and started after
+      # this deploy pushed (any such build necessarily contains it), then
+      # confirm the URL serves. Only if neither holds is the preview broken.
+      - name: Verify the preview published
+        id: verify
+        if: needs.resolve.outputs.action == 'deploy'
+        env:
+          GH_TOKEN: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
+          STARTED_AT: ${{ steps.started.outputs.at }}
+          PREVIEW_URL: ${{ steps.pages.outputs.preview-url || format('https://opengeos.org/pages-preview/GeoLibre/pr-{0}/', needs.resolve.outputs.number) }}
+        run: |
+          echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          echo "Verifying $PREVIEW_URL"
+          for attempt in $(seq 1 20); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$PREVIEW_URL" || echo 000)
+
+            # A 200 alone could still be the previous deploy of this same PR, so
+            # also require a successful Pages build that started after the push.
+            # If the builds API is not readable with this token, do not block on
+            # it -- fall back to the URL check rather than failing every run.
+            if builds=$(gh api repos/opengeos/pages-preview/pages/builds 2>/dev/null); then
+              built_at=$(printf '%s' "$builds" |
+                jq -r '[.[] | select(.status == "built")] | max_by(.created_at) | .created_at // empty')
+              if [ -n "$built_at" ] &&
+                 [ "$(date -u -d "$built_at" +%s 2>/dev/null || echo 0)" -ge "$STARTED_AT" ]; then
+                fresh=yes
+              else
+                fresh=no
+              fi
+              echo "Attempt $attempt: HTTP $code, latest successful build $built_at (fresh: $fresh)"
+            else
+              fresh=unknown
+              echo "Attempt $attempt: HTTP $code, Pages builds API unreadable -- relying on the URL"
+            fi
+
+            if [ "$code" = "200" ] && [ "$fresh" != "no" ]; then
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "published=false" >> "$GITHUB_OUTPUT"
+          echo "::error::The preview at $PREVIEW_URL did not publish within 10 minutes."
+          exit 1
+
+      # `continue-on-error` on the deploy step also swallows a failed *removal*,
+      # which the verify step does not cover -- there is no URL to poll, since a
+      # removal is meant to take the preview away. Surface that here instead.
+      - name: Fail if the preview removal failed
+        if: needs.resolve.outputs.action == 'remove' && steps.pages.outcome == 'failure'
+        run: |
+          echo "::error::Removing the preview for PR ${{ needs.resolve.outputs.number }} failed."
+          exit 1
+
       - name: Comment GitHub Pages preview status
         if: always() && needs.resolve.outputs.action == 'deploy'
         uses: actions/github-script@v9
         env:
-          PAGES_URL: ${{ steps.pages.outputs.preview-url }}
-          PAGES_OUTCOME: ${{ steps.pages.outcome }}
+          PAGES_URL: ${{ steps.verify.outputs.url }}
+          PAGES_OUTCOME: ${{ steps.verify.outputs.published == 'true' && 'success' || 'failure' }}
           PR_NUMBER: ${{ needs.resolve.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
