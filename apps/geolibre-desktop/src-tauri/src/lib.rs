@@ -474,15 +474,18 @@ fn allow_raster_asset(
             "Refusing to expose \"{path}\": not an absolute GeoTIFF path"
         ));
     }
-    let selected_qgis_project = qgis_project_path.is_some_and(|project_path| {
+    let selected_import_project = qgis_project_path.is_some_and(|project_path| {
         let lower = project_path.to_ascii_lowercase();
         is_safe_absolute_path(&project_path)
-            && (lower.ends_with(".qgs") || lower.ends_with(".qgz"))
+            && (lower.ends_with(".qgs")
+                || lower.ends_with(".qgz")
+                || lower.ends_with(".aprx")
+                || lower.ends_with(".mapx"))
             && app.fs_scope().is_allowed(&project_path)
     });
-    if !app.fs_scope().is_allowed(&path) && !selected_qgis_project {
+    if !app.fs_scope().is_allowed(&path) && !selected_import_project {
         return Err(format!(
-            "Refusing to expose \"{path}\": neither the file nor its QGIS project was selected by the user"
+            "Refusing to expose \"{path}\": neither the file nor its imported project was selected by the user"
         ));
     }
     app.asset_protocol_scope()

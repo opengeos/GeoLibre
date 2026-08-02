@@ -56,7 +56,7 @@ The importer targets file-based vector layers plus rasters the app can open, and
 
 **Project → Import → Import ArcGIS Pro Project…** reads an ArcGIS Pro `.aprx` project or standalone `.mapx` map. GeoLibre reads the CIM JSON stored in the file directly, so ArcGIS Pro and ArcPy do not need to be installed.
 
-An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D map. The importer preserves the saved extent, file-based feature layers, nested groups, visibility, simple symbols, and field-based labels. Shapefiles and the other vector formats supported by GeoLibre can be reopened by the desktop app. Unsupported sources such as file geodatabases, service layers, rasters, scenes, and network-share paths are listed after the rest of the project is imported. Local data paths cannot be reopened by the browser build.
+An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D map. The importer preserves the saved extent, file-based feature layers and GeoTIFF rasters, nested groups, visibility, simple symbols, field-based labels, ArcGIS vector-tile portal items, and cached map services. Unsupported sources such as file geodatabases, scenes, and network-share paths are listed after the rest of the project is imported. Local data paths cannot be reopened by the browser build.
 
 ## Templates
 
