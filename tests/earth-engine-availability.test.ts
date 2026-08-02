@@ -26,7 +26,9 @@ describe("isEarthEngineAvailable", () => {
   });
 
   it("defaults to available under plain Node, where no Apple runtime is detected", () => {
-    // Both defaults resolve to false without a `navigator` or the Vite define.
+    // Both defaults resolve to false. Node does expose a global `navigator`
+    // (userAgent "Node.js/<major>"), but it matches none of the Apple UA
+    // patterns, and the Vite define is absent outside a bundled build.
     assert.equal(isEarthEngineAvailable(), true);
   });
 });
