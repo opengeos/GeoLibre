@@ -80,6 +80,38 @@ async function responseStatusError(response: Response): Promise<Error> {
 }
 
 /**
+ * Throws when a 2xx JSON document is really an Esri error report.
+ *
+ * ArcGIS answers a missing, renamed, or token-protected service with HTTP
+ * **200** and `{"error":{"code":404,"message":"Requested Service not
+ * available."}}`, so `response.ok` is true and the body parses cleanly. Left
+ * undetected it reaches the caller as a valid-but-empty document and surfaces
+ * as a misleading downstream complaint ("no source layers") instead of the
+ * actual cause.
+ *
+ * The shape is checked, not just the key: a legitimate document is free to
+ * carry an `error` property of some other form, so an object with a `message`
+ * or a numeric `code` is required before the document is rejected.
+ */
+function assertNoServiceError(doc: unknown): void {
+  const error = (doc as { error?: unknown } | null | undefined)?.error;
+  if (!error || typeof error !== "object" || Array.isArray(error)) return;
+  const { message, code, details } = error as {
+    message?: unknown;
+    code?: unknown;
+    details?: unknown;
+  };
+  const hasMessage = typeof message === "string" && message.trim() !== "";
+  if (!hasMessage && typeof code !== "number") return;
+  // `details` is an array of extra lines; append it when it adds anything.
+  const detail = Array.isArray(details)
+    ? details.filter((line): line is string => typeof line === "string" && line.trim() !== "")
+    : [];
+  const text = hasMessage ? (message as string).trim() : `Service error ${String(code)}`;
+  throw new Error([text, ...detail].join(" ").slice(0, 300));
+}
+
+/**
  * Fetches and parses a remote JSON document, working around cross-origin limits
  * (see the module comment). When the caller passes a `signal` it owns the
  * deadline (callers that issue several requests share one across them);
@@ -106,7 +138,11 @@ export async function fetchOgcJson(
     try {
       const bytes = await Promise.race([bytesPromise, rejectOnAbort(abort)]);
       const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      return JSON.parse(new TextDecoder().decode(array));
+      const doc = JSON.parse(new TextDecoder().decode(array));
+      // `normalizeFetchError` passes an Error through unchanged, so the service
+      // error message survives the catch below.
+      assertNoServiceError(doc);
+      return doc;
     } catch (error) {
       throw normalizeFetchError(error);
     }
@@ -122,5 +158,7 @@ export async function fetchOgcJson(
   if (!response.ok) {
     throw await responseStatusError(response);
   }
-  return response.json();
+  const doc = await response.json();
+  assertNoServiceError(doc);
+  return doc;
 }
