@@ -1,50 +1,90 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
-import {
-  cellToBoundary,
-  cellToChildren,
-  cellToLatLng,
-  cellToParent,
-  getBaseCellNumber,
-  getHexagonAreaAvg,
-  getResolution,
-  gridDisk,
-  isPentagon,
-  latLngToCell,
-  polygonToCells,
-} from "h3-js";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-/**
- * The icosahedron H3 projects onto, as densified great-circle edge lines.
- * Fetched by MapLibre when the layer is first added; the Tauri CSP's blanket
- * `https:` connect-src already allows the host. Offline, the overlay simply
- * stays empty.
- */
-const ICOSAHEDRON_GEOJSON_URL =
-  "https://raw.githubusercontent.com/opengeoshub/vgrid-maplibre/main/H3/icosahedron.geojson";
+export const DGGAL_PLUGIN_ID = "maplibre-dggal";
 
-export const H3_PLUGIN_ID = "maplibre-h3-grid";
-
-const PANEL_ID = "geolibre-h3-panel";
-const SOURCE_ID = "geolibre-h3-grid-source";
-const FILL_LAYER_ID = "geolibre-h3-grid-fill";
-const LINE_LAYER_ID = "geolibre-h3-grid-line";
-const LABEL_LAYER_ID = "geolibre-h3-grid-label";
-const SELECTED_SOURCE_ID = "geolibre-h3-selected-source";
-const SELECTED_FILL_LAYER_ID = "geolibre-h3-selected-fill";
-const SELECTED_LINE_LAYER_ID = "geolibre-h3-selected-line";
-const PARENTS_SOURCE_ID = "geolibre-h3-parents-source";
-const PARENTS_LINE_LAYER_ID = "geolibre-h3-parents-line";
-const ICOSAHEDRON_SOURCE_ID = "geolibre-h3-icosahedron-source";
-const ICOSAHEDRON_LINE_LAYER_ID = "geolibre-h3-icosahedron-line";
+const PANEL_ID = "geolibre-dggal-panel";
+const SOURCE_ID = "geolibre-dggal-grid-source";
+const FILL_LAYER_ID = "geolibre-dggal-grid-fill";
+const LINE_LAYER_ID = "geolibre-dggal-grid-line";
+const LABEL_LAYER_ID = "geolibre-dggal-grid-label";
+const SELECTED_SOURCE_ID = "geolibre-dggal-selected-source";
+const SELECTED_FILL_LAYER_ID = "geolibre-dggal-selected-fill";
+const SELECTED_LINE_LAYER_ID = "geolibre-dggal-selected-line";
+const PARENTS_SOURCE_ID = "geolibre-dggal-parents-source";
+const PARENTS_LINE_LAYER_ID = "geolibre-dggal-parents-line";
 
 const SELECTED_LINE_WIDTH = 3;
 
 /** Prevent a fine resolution over a large viewport from freezing the browser. */
-export const H3_VIEWPORT_CELL_LIMIT = 20_000;
+export const DGGAL_VIEWPORT_CELL_LIMIT = 20_000;
 
-export interface H3GridSettings {
+/**
+ * The DGGRSs vgrid-maplibre's DGGALGrid exposes, with its per-type maximum
+ * resolutions (each at or under the engine's own zone-level limit).
+ */
+export const DGGAL_TYPES = {
+  GNOSISGlobalGrid: 28,
+  ISEA4R: 20,
+  ISEA9R: 16,
+  ISEA3H: 33,
+  ISEA7H: 19,
+  ISEA7H_Z7: 19,
+  IVEA4R: 20,
+  IVEA9R: 16,
+  IVEA3H: 33,
+  IVEA7H: 19,
+  IVEA7H_Z7: 19,
+  RTEA4R: 20,
+  RTEA9R: 16,
+  RTEA3H: 33,
+  RTEA7H: 19,
+  RTEA7H_Z7: 19,
+  HEALPix: 26,
+  rHEALPix: 16,
+} as const;
+
+export type DggalType = keyof typeof DGGAL_TYPES;
+
+export const DGGAL_TYPE_NAMES = Object.keys(DGGAL_TYPES) as DggalType[];
+
+/** A geographic point in radians, DGGAL's native unit. */
+interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+/**
+ * The subset of a DGGAL `DGGRS` instance this plugin uses (dggal ships full
+ * TypeScript declarations; this mirror just keeps the type-only surface in
+ * one place next to the quirks documented on the helpers below).
+ */
+export interface DggalDggrs {
+  getZoneFromTextID(zoneId: string): bigint;
+  getZoneTextID(zone: bigint): string;
+  getZoneLevel(zone: bigint): number;
+  getZoneParents(zone: bigint): bigint[];
+  getZoneChildren(zone: bigint): bigint[];
+  getZoneNeighbors(zone: bigint): Array<{ zone: bigint; type: number }>;
+  getZoneWGS84Centroid(zone: bigint): GeoPoint;
+  getZoneRefinedWGS84Vertices(zone: bigint, edgeRefinement: number): GeoPoint[];
+  listZones(level: number, bbox: { ll: GeoPoint; ur: GeoPoint }): bigint[];
+  getZoneFromWGS84Centroid(level: number, geoPoint: GeoPoint): bigint;
+  countZones(level: number): bigint;
+  getMaxDGGRSZoneLevel(): number;
+  delete(): void;
+}
+
+/** The DGGAL API handle returned by `DGGAL.init()`. */
+export interface DggalEngine {
+  createDGGRS(name: string): DggalDggrs;
+  listDGGRS(): string[];
+}
+
+export interface DggalGridSettings {
+  /** Which DGGRS to render ("DGGS type" in the panel). */
+  dggrsType: DggalType;
   /** Derive the resolution from the map zoom instead of the manual slider. */
   autoResolution: boolean;
   resolution: number;
@@ -55,28 +95,28 @@ export interface H3GridSettings {
   showLabels: boolean;
   includeNeighbors: boolean;
   includeParents: boolean;
-  showIcosahedron: boolean;
 }
 
-export const DEFAULT_H3_GRID_SETTINGS: H3GridSettings = {
+export const DEFAULT_DGGAL_GRID_SETTINGS: DggalGridSettings = {
+  dggrsType: "ISEA3H",
   autoResolution: true,
-  // Useful immediately at GeoLibre's default world view (resolution 3 would
-  // already exceed the viewport safety cap).
+  // Useful immediately at GeoLibre's default world view: ISEA3H resolution 2
+  // tiles the globe with 92 hexagons/pentagons.
   resolution: 2,
-  fillColor: "#2563eb",
+  fillColor: "#0d9488",
   fillOpacity: 0.08,
-  lineColor: "#2563eb",
+  lineColor: "#0d9488",
   lineWidth: 1,
   showLabels: true,
   includeNeighbors: false,
   includeParents: false,
-  showIcosahedron: false,
 };
 
-export interface H3Labels {
+export interface DggalLabels {
   title: string;
   getTitle?: () => string;
   controlTitle: string;
+  gridType: string;
   autoResolution: string;
   resolution: string;
   cellCount: (count: number) => string;
@@ -90,27 +130,22 @@ export interface H3Labels {
   selectedCell: string;
   noSelection: string;
   copyId: string;
-  copied: string;
   parent: string;
   children: string;
   neighbors: string;
-  baseCell: string;
   center: string;
-  pentagon: string;
-  yes: string;
-  no: string;
   zoomToCell: string;
   addAsLayer: string;
   exportGeoJson: string;
   exportCsv: string;
   includeNeighbors: string;
   includeParents: string;
-  showIcosahedron: string;
 }
 
-export const DEFAULT_H3_LABELS: H3Labels = {
-  title: "H3 Grid",
-  controlTitle: "H3 grid settings",
+export const DEFAULT_DGGAL_LABELS: DggalLabels = {
+  title: "DGGAL",
+  controlTitle: "DGGAL settings",
+  gridType: "DGGS type",
   autoResolution: "Automatic resolution",
   resolution: "Resolution",
   cellCount: (count) => `${count.toLocaleString()} cells in view`,
@@ -121,37 +156,38 @@ export const DEFAULT_H3_LABELS: H3Labels = {
   lineColor: "Outline color",
   lineWidth: "Outline width",
   showLabels: "Show cell IDs",
-  identifyHint: "Click the map to identify an H3 cell.",
+  identifyHint: "Click the map to identify a DGGAL cell.",
   selectedCell: "Selected cell",
   noSelection: "No cell selected",
   copyId: "Copy ID",
-  copied: "Copied",
   parent: "Parent(s)",
   children: "Children",
   neighbors: "Neighbors",
-  baseCell: "Base cell",
   center: "Center",
-  pentagon: "Pentagon",
-  yes: "Yes",
-  no: "No",
   zoomToCell: "Zoom to cell",
   addAsLayer: "Add grid as layer",
   exportGeoJson: "Export GeoJSON",
   exportCsv: "Export CSV",
   includeNeighbors: "Include selected cell neighbors",
   includeParents: "Include selected cell parent(s)",
-  showIcosahedron: "Show icosahedron",
 };
 
-let labels: H3Labels = { ...DEFAULT_H3_LABELS };
-let settings: H3GridSettings = { ...DEFAULT_H3_GRID_SETTINGS };
+const DEG_PER_RAD = 180 / Math.PI;
+const RAD_PER_DEG = Math.PI / 180;
+
+let labels: DggalLabels = { ...DEFAULT_DGGAL_LABELS };
+let settings: DggalGridSettings = { ...DEFAULT_DGGAL_GRID_SETTINGS };
 let map: MapLibreMap | null = null;
 let appRef: GeoLibreAppAPI | null = null;
+let dggal: DggalEngine | null = null;
+let dggrs: DggalDggrs | null = null;
+let dggrsType: DggalType | null = null;
 let unregisterPanel: (() => void) | null = null;
 let moveHandler: (() => void) | null = null;
 let clickHandler: ((event: MapMouseEvent) => void) | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
+/** The selected zone's text ID (it encodes the zone's level, unlike DGGRID). */
 let selectedCell: string | null = null;
 
 let currentGrid: FeatureCollection<Polygon> = { type: "FeatureCollection", features: [] };
@@ -159,9 +195,35 @@ let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
 let pendingRefresh: number | null = null;
 
+let dggalPromise: Promise<DggalEngine> | null = null;
+
+/**
+ * Load the DGGAL WASM module once and reuse the handle. Imported dynamically
+ * so the ~1 MB module stays out of the main bundle until the plugin is
+ * activated.
+ */
+export function loadDggal(): Promise<DggalEngine> {
+  dggalPromise ??= import("dggal").then(
+    (module) => module.DGGAL.init() as unknown as Promise<DggalEngine>,
+  );
+  return dggalPromise;
+}
+
+/** The DGGRS instance for the active grid type, recreated when it changes. */
+function activeDggrs(): DggalDggrs | null {
+  if (!dggal) return null;
+  if (!dggrs || dggrsType !== settings.dggrsType) {
+    dggrs?.delete();
+    dggrs = dggal.createDGGRS(settings.dggrsType);
+    dggrsType = settings.dggrsType;
+  }
+  return dggrs;
+}
+
 /**
  * Coalesce viewport-driven rebuilds. Inertial pans emit `moveend` in bursts,
- * and each rebuild walks up to H3_VIEWPORT_CELL_LIMIT cells on the main thread.
+ * and each rebuild materializes up to DGGAL_VIEWPORT_CELL_LIMIT zones on the
+ * main thread.
  */
 function scheduleRefresh(): void {
   if (pendingRefresh !== null) return;
@@ -191,12 +253,12 @@ function pickTextFont(activeMap: MapLibreMap): string[] {
   return (cachedTextFont = fallback ?? ["Open Sans Regular", "Arial Unicode MS Regular"]);
 }
 
-export function setH3Labels(next: Partial<H3Labels>): void {
+export function setDggalLabels(next: Partial<DggalLabels>): void {
   labels = { ...labels, ...next };
   if (panelContainer) renderPanel(panelContainer);
 }
 
-export function getH3GridSettings(): H3GridSettings {
+export function getDggalGridSettings(): DggalGridSettings {
   return { ...settings };
 }
 
@@ -212,79 +274,136 @@ function color(value: unknown, fallback: string): string {
 }
 
 /**
- * The automatic zoom→resolution rule, adapted from vgrid-maplibre's H3Grid
- * getResolution (https://www.npmjs.com/package/vgrid-maplibre): H3 cell area
- * shrinks ~7x per resolution step versus 4x per zoom level, so resolution
- * advances at a fraction of a step per zoom level (0.9 here, tuned up from
- * vgrid's 0.8 for a denser grid), offset so the world view starts at 0,
- * clamped to the valid range.
+ * The automatic zoom→resolution rule, mirroring vgrid-maplibre's DGGALGrid
+ * (https://www.npmjs.com/package/vgrid-maplibre): the factor depends on the
+ * DGGRS refinement — aperture-3 hexagons subdivide slowest (1.15/zoom),
+ * 9-fold rhombuses and rHEALPix fastest (0.6/zoom) — clamped to the type's
+ * resolution range.
  */
-export function h3ResolutionForZoom(zoom: number): number {
-  return Math.min(15, Math.max(0, Math.floor((zoom - 3) * 0.9)));
+export function dggalResolutionForZoom(zoom: number, type: DggalType): number {
+  let factor: number;
+  switch (type) {
+    case "ISEA3H":
+    case "IVEA3H":
+    case "RTEA3H":
+      factor = 1.15;
+      break;
+    case "ISEA4R":
+    case "IVEA4R":
+    case "RTEA4R":
+    case "HEALPix":
+      factor = 0.95;
+      break;
+    case "ISEA7H":
+    case "ISEA7H_Z7":
+    case "IVEA7H":
+    case "IVEA7H_Z7":
+    case "RTEA7H":
+    case "RTEA7H_Z7":
+      factor = 0.65;
+      break;
+    case "ISEA9R":
+    case "IVEA9R":
+    case "RTEA9R":
+    case "rHEALPix":
+      factor = 0.6;
+      break;
+    default:
+      // GNOSISGlobalGrid: one resolution per zoom level.
+      factor = 1;
+      break;
+  }
+  return Math.min(DGGAL_TYPES[type], Math.max(0, Math.floor(zoom * factor)));
 }
 
 /** The resolution actually rendered: zoom-derived when automatic, else manual. */
 function effectiveResolution(): number {
-  return settings.autoResolution && map ? h3ResolutionForZoom(map.getZoom()) : settings.resolution;
+  return settings.autoResolution && map
+    ? dggalResolutionForZoom(map.getZoom(), settings.dggrsType)
+    : Math.min(settings.resolution, DGGAL_TYPES[settings.dggrsType]);
 }
 
-export function normalizeH3GridSettings(value: unknown): H3GridSettings {
-  const candidate = (value ?? {}) as Partial<H3GridSettings>;
+export function normalizeDggalGridSettings(value: unknown): DggalGridSettings {
+  const candidate = (value ?? {}) as Partial<DggalGridSettings>;
+  const dggrsType =
+    typeof candidate.dggrsType === "string" && candidate.dggrsType in DGGAL_TYPES
+      ? (candidate.dggrsType as DggalType)
+      : DEFAULT_DGGAL_GRID_SETTINGS.dggrsType;
   return {
+    dggrsType,
     autoResolution:
       typeof candidate.autoResolution === "boolean"
         ? candidate.autoResolution
-        : DEFAULT_H3_GRID_SETTINGS.autoResolution,
+        : DEFAULT_DGGAL_GRID_SETTINGS.autoResolution,
     resolution: Math.round(
-      clampNumber(candidate.resolution, 0, 15, DEFAULT_H3_GRID_SETTINGS.resolution),
+      clampNumber(
+        candidate.resolution,
+        0,
+        DGGAL_TYPES[dggrsType],
+        Math.min(DEFAULT_DGGAL_GRID_SETTINGS.resolution, DGGAL_TYPES[dggrsType]),
+      ),
     ),
-    fillColor: color(candidate.fillColor, DEFAULT_H3_GRID_SETTINGS.fillColor),
-    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_H3_GRID_SETTINGS.fillOpacity),
-    lineColor: color(candidate.lineColor, DEFAULT_H3_GRID_SETTINGS.lineColor),
-    lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_H3_GRID_SETTINGS.lineWidth),
+    fillColor: color(candidate.fillColor, DEFAULT_DGGAL_GRID_SETTINGS.fillColor),
+    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_DGGAL_GRID_SETTINGS.fillOpacity),
+    lineColor: color(candidate.lineColor, DEFAULT_DGGAL_GRID_SETTINGS.lineColor),
+    lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_DGGAL_GRID_SETTINGS.lineWidth),
     showLabels:
       typeof candidate.showLabels === "boolean"
         ? candidate.showLabels
-        : DEFAULT_H3_GRID_SETTINGS.showLabels,
+        : DEFAULT_DGGAL_GRID_SETTINGS.showLabels,
     includeNeighbors:
       typeof candidate.includeNeighbors === "boolean"
         ? candidate.includeNeighbors
-        : DEFAULT_H3_GRID_SETTINGS.includeNeighbors,
+        : DEFAULT_DGGAL_GRID_SETTINGS.includeNeighbors,
     includeParents:
       typeof candidate.includeParents === "boolean"
         ? candidate.includeParents
-        : DEFAULT_H3_GRID_SETTINGS.includeParents,
-    showIcosahedron:
-      typeof candidate.showIcosahedron === "boolean"
-        ? candidate.showIcosahedron
-        : DEFAULT_H3_GRID_SETTINGS.showIcosahedron,
+        : DEFAULT_DGGAL_GRID_SETTINGS.includeParents,
   };
 }
 
-/** Avoid thousands of overlapping IDs when the grid is viewed globally. */
-export function h3LabelMinZoom(resolution: number): number {
-  return Math.min(18, Math.max(3, Math.round(resolution) + 3));
+/**
+ * Avoid thousands of overlapping IDs when the grid is viewed globally. Zone
+ * area shrinks with each resolution step, so roughly one zoom level per
+ * resolution keeps the on-screen label density steady.
+ */
+export function dggalLabelMinZoom(resolution: number): number {
+  return Math.min(18, Math.max(2, Math.round(resolution) + 1));
 }
 
-export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
+export function setDggalGridSettings(patch: Partial<DggalGridSettings>): void {
   const previousResolution = effectiveResolution();
   // Leaving automatic mode adopts the current zoom-derived resolution as the
   // fixed one, so the grid stays put instead of jumping to the stale slider.
   if (settings.autoResolution && patch.autoResolution === false && patch.resolution === undefined) {
     patch = { ...patch, resolution: previousResolution };
   }
-  settings = normalizeH3GridSettings({ ...settings, ...patch });
-  const resolution = effectiveResolution();
-  // Re-derive the selection only for an explicit slider change; toggling
-  // automatic resolution (like zooming in automatic mode) keeps the clicked
-  // cell and its neighbors/parents as they are.
-  if (selectedCell && patch.resolution !== undefined && resolution !== previousResolution) {
-    const [lat, lng] = cellToLatLng(selectedCell);
-    selectedCell = latLngToCell(lat, lng, resolution);
+  const next = normalizeDggalGridSettings({ ...settings, ...patch });
+  const typeChanged = next.dggrsType !== settings.dggrsType;
+  const engine = activeDggrs();
+  // Grid type changes the lattice entirely — drop the selection and its
+  // neighbor/parent overlays rather than re-mapping a meaningless zone id.
+  if (typeChanged) {
+    selectedCell = null;
   }
-  // Only the rendered resolution changes the geometry, so a paint/layout-only
-  // edit skips rebuilding up to H3_VIEWPORT_CELL_LIMIT features.
-  if (resolution !== previousResolution) {
+  settings = next;
+  const resolution = effectiveResolution();
+  if (
+    engine &&
+    selectedCell &&
+    patch.resolution !== undefined &&
+    resolution !== previousResolution
+  ) {
+    // Re-derive the selection only for an explicit slider change; toggling
+    // automatic resolution (like zooming in automatic mode) keeps the clicked
+    // zone and its neighbors/parents as they are.
+    const center = engine.getZoneWGS84Centroid(engine.getZoneFromTextID(selectedCell));
+    selectedCell = engine.getZoneTextID(engine.getZoneFromWGS84Centroid(resolution, center));
+  }
+  // Only the rendered type/resolution changes the geometry, so a
+  // paint/layout-only edit skips rebuilding up to DGGAL_VIEWPORT_CELL_LIMIT
+  // features.
+  if (typeChanged || resolution !== previousResolution) {
     refresh();
   } else {
     applyStyle();
@@ -294,98 +413,78 @@ export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
 }
 
 /**
- * Keep a cell boundary contiguous across the antimeridian, mirroring
- * vgrid-maplibre's H3Grid (https://www.npmjs.com/package/vgrid-maplibre):
- * when a ring carries a vertex west of -130°, every positive longitude is
- * shifted down by 360°. A cell straddling the seam mixes ~+179 and ~-179
- * values, so the shift makes the ring contiguous around -180; MapLibre
- * renders longitudes past -180 in the adjacent world copy. Rings entirely
- * away from the seam never match the -130 test and pass through unchanged.
+ * A zone boundary as a closed lon/lat ring in degrees. DGGAL's refined
+ * vertices already keep antimeridian-crossing zones contiguous (longitudes
+ * may pass ±180, which MapLibre renders in the adjacent world copy).
  */
-export function h3FixTransmeridianBoundary(ring: [number, number][]): [number, number][] {
-  if (!ring.some(([longitude]) => longitude < -130)) return ring;
-  return ring.map(([longitude, latitude]) =>
-    longitude > 0 ? [longitude - 360, latitude] : [longitude, latitude],
-  );
+function zoneRing(engine: DggalDggrs, zone: bigint): [number, number][] {
+  const ring = engine
+    .getZoneRefinedWGS84Vertices(zone, 0)
+    .map(({ lat, lon }): [number, number] => [lon * DEG_PER_RAD, lat * DEG_PER_RAD]);
+  if (ring.length > 0) {
+    const [firstLng, firstLat] = ring[0];
+    const [lastLng, lastLat] = ring[ring.length - 1];
+    if (firstLng !== lastLng || firstLat !== lastLat) ring.push([firstLng, firstLat]);
+  }
+  return ring;
 }
 
-/** Convert an H3 cell to a GeoJSON polygon with useful export attributes. */
-export function h3CellFeature(cell: string): Feature<Polygon> {
-  const [lat, lng] = cellToLatLng(cell);
-  const boundary = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
+/** Convert a DGGAL zone (text ID) to a GeoJSON polygon with export attributes. */
+export function dggalZoneFeature(engine: DggalDggrs, cell: string): Feature<Polygon> {
+  const zone = engine.getZoneFromTextID(cell);
+  const centroid = engine.getZoneWGS84Centroid(zone);
   return {
     type: "Feature",
     id: cell,
     properties: {
-      h3: cell,
-      resolution: getResolution(cell),
-      base_cell: getBaseCellNumber(cell),
-      center_lat: lat,
-      center_lng: lng,
-      is_pentagon: isPentagon(cell),
+      dggal: cell,
+      resolution: engine.getZoneLevel(zone),
+      center_lat: centroid.lat * DEG_PER_RAD,
+      center_lng: centroid.lon * DEG_PER_RAD,
     },
-    geometry: { type: "Polygon", coordinates: [boundary] },
+    geometry: { type: "Polygon", coordinates: [zoneRing(engine, zone)] },
   };
 }
 
 /**
- * Fill a WGS84 bounding box with H3 cells. Bounds that cross the antimeridian
- * are split into two polygons because H3 expects longitudes in [-180, 180].
+ * Fill a WGS84 bounding box with DGGAL zones, mirroring vgrid-maplibre's
+ * DGGALGrid: the engine's `listZones` does the viewport query natively.
  */
-export function h3GridForBounds(
+export function dggalGridForBounds(
+  engine: DggalDggrs,
   bounds: [number, number, number, number],
   resolution: number,
-  limit = H3_VIEWPORT_CELL_LIMIT,
+  limit = DGGAL_VIEWPORT_CELL_LIMIT,
 ): FeatureCollection<Polygon> {
-  const [west, southRaw, east, northRaw] = bounds;
-  const south = Math.max(-89.999999, Math.min(89.999999, southRaw));
-  const north = Math.max(-89.999999, Math.min(89.999999, northRaw));
-  const span = east >= west ? east - west : east + 360 - west;
-  const ranges: Array<[number, number]> =
-    span >= 359.999
-      ? [
-          [-180, 0],
-          [0, 180],
-        ]
-      : east < west
-        ? [
-            [west, 180],
-            [-180, east],
-          ]
-        : [[Math.max(-180, west), Math.min(180, east)]];
-  // Reject obviously oversized requests before polygonToCells allocates the
-  // full result. This spherical rectangle estimate is deliberately a little
-  // conservative; the exact hard cap below remains the final guard.
+  let [west, south, east, north] = bounds;
+  south = Math.max(-90, Math.min(90, south));
+  north = Math.max(-90, Math.min(90, north));
+  if (east - west >= 360) {
+    west = -180;
+    east = 180;
+  }
+  // Reject obviously oversized requests before materializing the zone list.
+  // The global zone count is exact per type, so the spherical rectangle
+  // estimate is close; the hard cap below remains the final guard.
   const radians = Math.PI / 180;
-  const areaKm2 = ranges.reduce(
-    (sum, [left, right]) =>
-      sum +
-      6371.0088 ** 2 *
-        Math.abs((right - left) * radians) *
-        Math.abs(Math.sin(north * radians) - Math.sin(south * radians)),
-    0,
-  );
-  if (areaKm2 / getHexagonAreaAvg(resolution, "km2") > limit * 1.2) {
-    throw new RangeError(`H3 cell limit exceeded: ${limit}`);
+  const areaFraction =
+    ((east - west) * radians * Math.abs(Math.sin(north * radians) - Math.sin(south * radians))) /
+    (4 * Math.PI);
+  if (Number(engine.countZones(resolution)) * areaFraction > limit * 1.2) {
+    throw new RangeError(`DGGAL zone limit exceeded: ${limit}`);
   }
-  const cells = new Set<string>();
 
-  for (const [left, right] of ranges) {
-    const polygon = [
-      [south, left],
-      [south, right],
-      [north, right],
-      [north, left],
-      [south, left],
-    ];
-    for (const cell of polygonToCells(polygon, resolution)) {
-      cells.add(cell);
-      if (cells.size > limit) {
-        throw new RangeError(`H3 cell limit exceeded: ${limit}`);
-      }
-    }
+  const zones = engine.listZones(resolution, {
+    ll: { lat: south * RAD_PER_DEG, lon: west * RAD_PER_DEG },
+    ur: { lat: north * RAD_PER_DEG, lon: east * RAD_PER_DEG },
+  });
+  if (zones.length > limit) {
+    throw new RangeError(`DGGAL zone limit exceeded: ${limit}`);
   }
-  return { type: "FeatureCollection", features: [...cells].map(h3CellFeature) };
+  return {
+    type: "FeatureCollection",
+    features: zones.map((zone) => dggalZoneFeature(engine, engine.getZoneTextID(zone))),
+  };
 }
 
 function removeLayers(activeMap: MapLibreMap): void {
@@ -393,14 +492,13 @@ function removeLayers(activeMap: MapLibreMap): void {
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
-    ICOSAHEDRON_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
     FILL_LAYER_ID,
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, ICOSAHEDRON_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -425,9 +523,9 @@ function ensureLayers(): void {
       id: LABEL_LAYER_ID,
       type: "symbol",
       source: SOURCE_ID,
-      minzoom: h3LabelMinZoom(effectiveResolution()),
+      minzoom: dggalLabelMinZoom(effectiveResolution()),
       layout: {
-        "text-field": ["get", "h3"],
+        "text-field": ["get", "dggal"],
         "text-font": pickTextFont(map),
         "text-size": 10,
         visibility: settings.showLabels ? "visible" : "none",
@@ -439,24 +537,7 @@ function ensureLayers(): void {
       },
     });
   }
-  if (!map.getSource(ICOSAHEDRON_SOURCE_ID)) {
-    map.addSource(ICOSAHEDRON_SOURCE_ID, {
-      type: "geojson",
-      data: ICOSAHEDRON_GEOJSON_URL,
-    });
-    map.addLayer({
-      id: ICOSAHEDRON_LINE_LAYER_ID,
-      type: "line",
-      source: ICOSAHEDRON_SOURCE_ID,
-      layout: { visibility: settings.showIcosahedron ? "visible" : "none" },
-      paint: {
-        "line-color": "#dc2626",
-        "line-width": 1.5,
-        "line-dasharray": [2, 2],
-      },
-    });
-  }
-  // Added before the selected layers so the selected cell stays on top of its
+  // Added before the selected layers so the selected zone stays on top of its
   // (larger, overlapping) parents.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
@@ -503,25 +584,23 @@ function applyStyle(): void {
   map.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
   map.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.lineColor);
   map.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
-  map.setLayerZoomRange(LABEL_LAYER_ID, h3LabelMinZoom(effectiveResolution()), 24);
-  map.setLayoutProperty(
-    ICOSAHEDRON_LINE_LAYER_ID,
-    "visibility",
-    settings.showIcosahedron ? "visible" : "none",
-  );
+  map.setLayerZoomRange(LABEL_LAYER_ID, dggalLabelMinZoom(effectiveResolution()), 24);
 }
 
 function refresh(): void {
   if (!map) return;
+  const engine = activeDggrs();
+  if (!engine) return;
   const resolution = effectiveResolution();
-  // The selected cell (and its neighbors/parents) deliberately stays at the
+  // The selected zone (and its neighbors/parents) deliberately stays at the
   // resolution it was clicked at: in automatic mode a zoom or pan changes the
   // rendered grid, but re-deriving the selection would silently replace the
-  // cell the user identified. Only an explicit settings change re-indexes it
-  // (see setH3GridSettings).
+  // zone the user identified. Only an explicit settings change re-indexes it
+  // (see setDggalGridSettings).
   try {
     const bounds = map.getBounds();
-    currentGrid = h3GridForBounds(
+    currentGrid = dggalGridForBounds(
+      engine,
       [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
       resolution,
     );
@@ -529,7 +608,9 @@ function refresh(): void {
   } catch (error) {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError =
-      error instanceof RangeError ? labels.tooManyCells(H3_VIEWPORT_CELL_LIMIT) : String(error);
+      error instanceof RangeError
+        ? labels.tooManyCells(DGGAL_VIEWPORT_CELL_LIMIT)
+        : String(error);
   }
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
@@ -537,67 +618,102 @@ function refresh(): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? gridDisk(selectedCell, 1) : [selectedCell];
-}
-
 /**
- * Every resolution r-1 cell the selected cell overlaps. H3's hierarchy is
- * approximate — a child hexagon is not perfectly contained in cellToParent,
- * its corners can spill into the parent's neighbors. Any overlapping coarser
- * cell is larger than the cell itself, so it must cover part of the boundary:
- * sampling the boundary vertices, nudged slightly toward the center so parents
- * that merely touch the edge are excluded, finds them all.
+ * Every direct parent of a zone, one level up. The JS binding pads the
+ * result out to the DGGRS's maximum parent count with uninitialized zone
+ * handles, so entries are filtered to the expected level.
  */
-function parentCells(cell: string): string[] {
-  const resolution = getResolution(cell);
-  if (resolution <= 0) return [];
-  const [centerLat, centerLng] = cellToLatLng(cell);
-  const parents = new Set<string>([cellToParent(cell, resolution - 1)]);
-  // The unwrapped ring keeps vertex longitudes adjacent to the center for
-  // dateline cells; latLngToCell accepts longitudes outside [-180, 180].
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
-  const ringCenterLng =
-    centerLng > 0 && ring.some(([lng]) => lng < -130) ? centerLng - 360 : centerLng;
-  for (const [lng, lat] of ring) {
-    parents.add(
-      latLngToCell(
-        centerLat + (lat - centerLat) * 0.999,
-        ringCenterLng + (lng - ringCenterLng) * 0.999,
-        resolution - 1,
-      ),
-    );
+export function dggalParentZones(engine: DggalDggrs, cell: string): string[] {
+  const zone = engine.getZoneFromTextID(cell);
+  const level = engine.getZoneLevel(zone);
+  if (level <= 0) return [];
+  const parents = new Set<string>();
+  for (const parent of engine.getZoneParents(zone)) {
+    try {
+      if (engine.getZoneLevel(parent) === level - 1) {
+        parents.add(engine.getZoneTextID(parent));
+      }
+    } catch {
+      // Garbage padding entry — skip.
+    }
   }
   return [...parents];
 }
 
+/** Direct children one level down, filtered like {@link dggalParentZones}. */
+function childZones(engine: DggalDggrs, cell: string): string[] {
+  const zone = engine.getZoneFromTextID(cell);
+  const level = engine.getZoneLevel(zone);
+  const children = new Set<string>();
+  for (const child of engine.getZoneChildren(zone)) {
+    try {
+      if (engine.getZoneLevel(child) === level + 1) {
+        children.add(engine.getZoneTextID(child));
+      }
+    } catch {
+      // Garbage padding entry — skip.
+    }
+  }
+  return [...children];
+}
+
+/** The zone plus its edge/vertex neighbors at the same level. */
+function neighborCells(cell: string): string[] {
+  const engine = activeDggrs();
+  if (!engine) return [cell];
+  const zone = engine.getZoneFromTextID(cell);
+  const level = engine.getZoneLevel(zone);
+  const ids = new Set<string>([cell]);
+  for (const { zone: neighbor } of engine.getZoneNeighbors(zone)) {
+    try {
+      if (engine.getZoneLevel(neighbor) === level) {
+        ids.add(engine.getZoneTextID(neighbor));
+      }
+    } catch {
+      // Garbage padding entry — skip.
+    }
+  }
+  return [...ids];
+}
+
+function selectedCells(): string[] {
+  if (!selectedCell) return [];
+  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
+}
+
 function updateSelectedSource(): void {
+  const engine = activeDggrs();
+  if (!engine) return;
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map(h3CellFeature),
+    features: selectedCells().map((cell) => dggalZoneFeature(engine, cell)),
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
     type: "FeatureCollection",
     features:
-      settings.includeParents && selectedCell ? parentCells(selectedCell).map(h3CellFeature) : [],
+      settings.includeParents && selectedCell
+        ? dggalParentZones(engine, selectedCell).map((cell) => dggalZoneFeature(engine, cell))
+        : [],
   });
 }
 
 function gridCsv(grid: FeatureCollection<Polygon>): string {
-  const header = "h3,resolution,base_cell,center_lat,center_lng,is_pentagon";
+  const header = "dggal,resolution,center_lat,center_lng";
   const rows = grid.features.map((feature) => {
     const p = feature.properties!;
-    return [p.h3, p.resolution, p.base_cell, p.center_lat, p.center_lng, p.is_pentagon].join(",");
+    return [p.dggal, p.resolution, p.center_lat, p.center_lng].join(",");
   });
   return [header, ...rows].join("\n");
 }
 
 function fitSelected(): void {
-  if (!selectedCell || !appRef) return;
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(selectedCell, true) as [number, number][]);
+  const engine = activeDggrs();
+  if (!selectedCell || !appRef || !engine) return;
+  // The ring stays contiguous across the antimeridian, so min/max longitudes
+  // never span the world.
+  const ring = zoneRing(engine, engine.getZoneFromTextID(selectedCell));
   const lons = ring.map(([lng]) => lng);
   const lats = ring.map(([, lat]) => lat);
   appRef.fitBounds?.([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
@@ -648,11 +764,29 @@ function renderPanel(container: HTMLElement): void {
     return element;
   };
 
+  const typeSelect = document.createElement("select");
+  for (const name of DGGAL_TYPE_NAMES) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    typeSelect.appendChild(option);
+  }
+  typeSelect.value = settings.dggrsType;
+  typeSelect.style.padding = "4px 6px";
+  typeSelect.style.border = "1px solid hsl(var(--border))";
+  typeSelect.style.borderRadius = "6px";
+  typeSelect.style.background = "hsl(var(--background))";
+  typeSelect.style.color = "inherit";
+  typeSelect.addEventListener("change", () =>
+    setDggalGridSettings({ dggrsType: typeSelect.value as DggalType }),
+  );
+  row(labels.gridType, typeSelect);
+
   const autoResolution = document.createElement("input");
   autoResolution.type = "checkbox";
   autoResolution.checked = settings.autoResolution;
   autoResolution.addEventListener("change", () =>
-    setH3GridSettings({ autoResolution: autoResolution.checked }),
+    setDggalGridSettings({ autoResolution: autoResolution.checked }),
   );
   row(labels.autoResolution, autoResolution);
 
@@ -663,7 +797,7 @@ function renderPanel(container: HTMLElement): void {
   const resolution = document.createElement("input");
   resolution.type = "range";
   resolution.min = "0";
-  resolution.max = "15";
+  resolution.max = String(DGGAL_TYPES[settings.dggrsType]);
   resolution.value = String(shownResolution);
   resolution.title = String(shownResolution);
   resolution.disabled = settings.autoResolution;
@@ -671,7 +805,7 @@ function renderPanel(container: HTMLElement): void {
     resolution.title = resolution.value;
   });
   resolution.addEventListener("change", () =>
-    setH3GridSettings({ resolution: Number(resolution.value) }),
+    setDggalGridSettings({ resolution: Number(resolution.value) }),
   );
   const resolutionWrap = document.createElement("span");
   resolutionWrap.style.display = "flex";
@@ -693,9 +827,9 @@ function renderPanel(container: HTMLElement): void {
     const input = document.createElement("input");
     input.type = "color";
     input.value = settings[key];
-    // `change` (not `input`): setH3GridSettings re-renders the panel, which
-    // would destroy the picker mid-drag.
-    input.addEventListener("change", () => setH3GridSettings({ [key]: input.value }));
+    // `change` (not `input`): setDggalGridSettings re-renders the panel,
+    // which would destroy the picker mid-drag.
+    input.addEventListener("change", () => setDggalGridSettings({ [key]: input.value }));
     row(text, input);
   }
   for (const [text, key, min, max, step] of [
@@ -709,19 +843,18 @@ function renderPanel(container: HTMLElement): void {
     input.step = String(step);
     input.value = String(settings[key]);
     input.style.width = "72px";
-    input.addEventListener("change", () => setH3GridSettings({ [key]: Number(input.value) }));
+    input.addEventListener("change", () => setDggalGridSettings({ [key]: Number(input.value) }));
     row(text, input);
   }
   for (const [text, key] of [
     [labels.showLabels, "showLabels"],
     [labels.includeNeighbors, "includeNeighbors"],
     [labels.includeParents, "includeParents"],
-    [labels.showIcosahedron, "showIcosahedron"],
   ] as const) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = settings[key];
-    input.addEventListener("change", () => setH3GridSettings({ [key]: input.checked }));
+    input.addEventListener("change", () => setDggalGridSettings({ [key]: input.checked }));
     row(text, input);
   }
 
@@ -739,8 +872,11 @@ function renderPanel(container: HTMLElement): void {
   selectedHeading.textContent = labels.selectedCell;
   section.appendChild(selectedHeading);
 
-  if (selectedCell) {
-    const [lat, lng] = cellToLatLng(selectedCell);
+  const engine = activeDggrs();
+  if (selectedCell && engine) {
+    const zone = engine.getZoneFromTextID(selectedCell);
+    const level = engine.getZoneLevel(zone);
+    const centroid = engine.getZoneWGS84Centroid(zone);
     const details = document.createElement("dl");
     details.style.margin = "0";
     details.style.display = "grid";
@@ -759,22 +895,20 @@ function renderPanel(container: HTMLElement): void {
       details.append(dt, dd);
     };
     addDetail("ID", selectedCell);
-    addDetail(labels.resolution, String(getResolution(selectedCell)));
-    addDetail(labels.baseCell, String(getBaseCellNumber(selectedCell)));
-    addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    addDetail(labels.pentagon, isPentagon(selectedCell) ? labels.yes : labels.no);
-    if (getResolution(selectedCell) > 0) {
-      // Every overlapping r-1 cell (canonical cellToParent first), matching
-      // the dashed parent outlines on the map.
-      addDetail(labels.parent, parentCells(selectedCell).join("\n"));
+    addDetail(labels.resolution, String(level));
+    addDetail(
+      labels.center,
+      `${(centroid.lat * DEG_PER_RAD).toFixed(6)}, ${(centroid.lon * DEG_PER_RAD).toFixed(6)}`,
+    );
+    if (level > 0) {
+      // Every overlapping parent one level up, matching the dashed parent
+      // outlines on the map.
+      addDetail(labels.parent, dggalParentZones(engine, selectedCell).join("\n"));
     }
-    if (getResolution(selectedCell) < 15) {
-      addDetail(
-        labels.children,
-        String(cellToChildren(selectedCell, getResolution(selectedCell) + 1).length),
-      );
+    if (level < DGGAL_TYPES[settings.dggrsType]) {
+      addDetail(labels.children, String(childZones(engine, selectedCell).length));
     }
-    addDetail(labels.neighbors, String(gridDisk(selectedCell, 1).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");
@@ -800,7 +934,10 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(`H3 grid (resolution ${effectiveResolution()})`, currentGrid);
+          appRef?.addGeoJsonLayer(
+            `DGGAL ${settings.dggrsType} (resolution ${effectiveResolution()})`,
+            currentGrid,
+          );
         }
       },
       currentGrid.features.length === 0,
@@ -809,7 +946,7 @@ function renderPanel(container: HTMLElement): void {
       labels.exportGeoJson,
       () => {
         appRef?.exportTextFile?.(
-          `h3-grid-r${effectiveResolution()}.geojson`,
+          `dggal-${settings.dggrsType.toLowerCase()}-r${effectiveResolution()}.geojson`,
           JSON.stringify(currentGrid, null, 2),
           {
             description: "GeoJSON",
@@ -824,12 +961,16 @@ function renderPanel(container: HTMLElement): void {
     button(
       labels.exportCsv,
       () => {
-        appRef?.exportTextFile?.(`h3-grid-r${effectiveResolution()}.csv`, gridCsv(currentGrid), {
-          description: "CSV",
-          extensions: ["csv"],
-          mimeType: "text/csv",
-          promptName: true,
-        });
+        appRef?.exportTextFile?.(
+          `dggal-${settings.dggrsType.toLowerCase()}-r${effectiveResolution()}.csv`,
+          gridCsv(currentGrid),
+          {
+            description: "CSV",
+            extensions: ["csv"],
+            mimeType: "text/csv",
+            promptName: true,
+          },
+        );
       },
       currentGrid.features.length === 0,
     ),
@@ -837,24 +978,31 @@ function renderPanel(container: HTMLElement): void {
   section.appendChild(actions);
 }
 
-function settingsEqual(a: H3GridSettings, b: H3GridSettings): boolean {
+function settingsEqual(a: DggalGridSettings, b: DggalGridSettings): boolean {
   return Object.keys(a).every(
-    (key) => a[key as keyof H3GridSettings] === b[key as keyof H3GridSettings],
+    (key) => a[key as keyof DggalGridSettings] === b[key as keyof DggalGridSettings],
   );
 }
 
-export const maplibreH3Plugin: GeoLibrePlugin = {
-  id: H3_PLUGIN_ID,
-  name: "H3 Grid",
+export const maplibreDggalPlugin: GeoLibrePlugin = {
+  id: DGGAL_PLUGIN_ID,
+  name: "DGGAL",
   version: "1.0.0",
-  activate: (app) => {
+  activate: async (app) => {
     const activeMap = app.getMap?.();
     if (!activeMap) return false;
+    dggal = await loadDggal();
     map = activeMap;
     appRef = app;
     moveHandler = () => scheduleRefresh();
     clickHandler = (event) => {
-      selectedCell = latLngToCell(event.lngLat.lat, event.lngLat.lng, effectiveResolution());
+      const engine = activeDggrs();
+      if (!engine) return;
+      const zone = engine.getZoneFromWGS84Centroid(effectiveResolution(), {
+        lat: event.lngLat.lat * RAD_PER_DEG,
+        lon: event.lngLat.lng * RAD_PER_DEG,
+      });
+      selectedCell = engine.getZoneTextID(zone);
       updateSelectedSource();
       if (panelContainer) renderPanel(panelContainer);
     };
@@ -871,7 +1019,7 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
         dock: "right-of-style",
         defaultWidth: 340,
         render: (container) => renderPanel(container),
-        // Closing the panel ends the identify session: drop the clicked cell
+        // Closing the panel ends the identify session: drop the clicked zone
         // and, with it, the neighbor/parent overlays derived from it.
         onClose: () => {
           selectedCell = null;
@@ -895,6 +1043,9 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     unregisterPanel = null;
     panelContainer = null;
     selectedCell = null;
+    dggrs?.delete();
+    dggrs = null;
+    dggrsType = null;
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError = null;
     cachedTextFont = null;
@@ -903,10 +1054,15 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     app.closeRightPanel?.(PANEL_ID);
   },
   getProjectState: () =>
-    settingsEqual(settings, DEFAULT_H3_GRID_SETTINGS) ? undefined : { ...settings },
+    settingsEqual(settings, DEFAULT_DGGAL_GRID_SETTINGS) ? undefined : { ...settings },
   applyProjectState: (_app, state) => {
-    const next = normalizeH3GridSettings(state);
+    const next = normalizeDggalGridSettings(state);
     if (settingsEqual(settings, next)) return false;
+    // A selection's zone ID is meaningless under another DGGRS, so a project
+    // switching grid type drops it.
+    if (next.dggrsType !== settings.dggrsType) {
+      selectedCell = null;
+    }
     settings = next;
     refresh();
   },
