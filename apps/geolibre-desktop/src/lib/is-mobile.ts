@@ -1,3 +1,5 @@
+import { isIpadDesktopUserAgent } from "@geolibre/core";
+
 /**
  * Whether the app is running on a mobile operating system (Android or iOS).
  *
@@ -27,7 +29,8 @@ export function isMobile(
   maxTouchPoints: number = typeof navigator !== "undefined" ? navigator.maxTouchPoints : 0,
 ): boolean {
   if (MOBILE_UA_PATTERN.test(userAgent)) return true;
-  // iPadOS 13+ requests desktop sites by default and spoofs a macOS UA; a real
-  // Mac reports maxTouchPoints 0/1, an iPad reports >1.
-  return /Macintosh/.test(userAgent) && maxTouchPoints > 1;
+  // iPadOS 13+ requests desktop sites by default and spoofs a macOS UA. Shared
+  // with @geolibre/plugins' Earth Engine availability check so a future
+  // correction to the heuristic lands in both.
+  return isIpadDesktopUserAgent(userAgent, maxTouchPoints);
 }

@@ -1,5 +1,6 @@
 /// <reference path="../earthengine.d.ts" />
 
+import { isIpadDesktopUserAgent } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
@@ -248,7 +249,7 @@ function isAppleAppStoreRuntime(userAgent?: string, maxTouchPoints?: number): bo
   const ua = userAgent ?? navigator.userAgent;
   const touch = maxTouchPoints ?? navigator.maxTouchPoints;
   if (/iPhone|iPad|iPod/i.test(ua)) return true;
-  return /Macintosh/.test(ua) && touch > 1;
+  return isIpadDesktopUserAgent(ua, touch);
 }
 
 /**

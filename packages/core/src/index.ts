@@ -112,6 +112,7 @@ export {
   getRuntimeEnvironment,
   getSpatialExtensionPath,
 } from "./runtime-env";
+export { isIpadDesktopUserAgent } from "./platform";
 export {
   GOOGLE_MAPS_API_KEY_HEADER,
   googleMapsApiKeyHeaderValue,
