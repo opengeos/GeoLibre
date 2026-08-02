@@ -11,6 +11,7 @@ import type {
   ServerMessage,
 } from "./protocol";
 import {
+  isBoundedId,
   MAX_REPLIES_PER_COMMENT,
   MIN_COMMENT_INTERVAL_MS,
   validateComment,
@@ -696,7 +697,7 @@ export class CollabSession extends DurableObject<Env> {
       }
       sanitizedAction = { type: "add", comment: validated };
     } else if (action.type === "reply") {
-      if (typeof action.commentId !== "string" || !action.commentId) {
+      if (!isBoundedId(action.commentId)) {
         this.send(ws, {
           type: "error",
           code: "bad-message",
@@ -715,7 +716,7 @@ export class CollabSession extends DurableObject<Env> {
       }
       sanitizedAction = { type: "reply", commentId: action.commentId, reply: validated };
     } else if (action.type === "toggle-resolve") {
-      if (typeof action.commentId !== "string" || !action.commentId) {
+      if (!isBoundedId(action.commentId)) {
         this.send(ws, {
           type: "error",
           code: "bad-message",
@@ -729,7 +730,7 @@ export class CollabSession extends DurableObject<Env> {
         ...(action.resolved !== undefined ? { resolved: action.resolved === true } : {}),
       };
     } else if (action.type === "delete") {
-      if (typeof action.commentId !== "string" || !action.commentId) {
+      if (!isBoundedId(action.commentId)) {
         this.send(ws, {
           type: "error",
           code: "bad-message",
@@ -773,68 +774,86 @@ export class CollabSession extends DurableObject<Env> {
       action: sanitizedAction,
     };
 
+    // Persist even when no full project snapshot has been written yet, so early
+    // comments survive late joiners / reconnects. Seed an empty object when
+    // storage is empty or corrupt — the relay never inspects other project fields.
     const rawSnapshot = await this.ctx.storage.get<string>("snapshot");
+    let parsed: Record<string, unknown> = { comments: [] };
     if (rawSnapshot) {
       try {
-        const parsed = JSON.parse(rawSnapshot) as Record<string, unknown>;
-        const comments = Array.isArray(parsed.comments)
-          ? (parsed.comments as Record<string, unknown>[])
-          : [];
-        let updatedComments = comments;
-
-        if (sanitizedAction.type === "add") {
-          const newComment = sanitizedAction.comment as Record<string, unknown>;
-          const exists = comments.some((c) => c && typeof c === "object" && c.id === newComment.id);
-          updatedComments = exists ? comments : [...comments, newComment];
-        } else if (sanitizedAction.type === "reply") {
-          const replyObj = sanitizedAction.reply as Record<string, unknown>;
-          const target = comments.find(
-            (c) => c && typeof c === "object" && c.id === sanitizedAction.commentId,
-          );
-          if (target) {
-            const targetReplies = Array.isArray(target.replies)
-              ? (target.replies as Record<string, unknown>[])
-              : [];
-            if (targetReplies.length >= MAX_REPLIES_PER_COMMENT) {
-              this.send(ws, {
-                type: "error",
-                code: "bad-message",
-                message: "Reply limit reached for this comment.",
-              });
-              return;
-            }
-          }
-          updatedComments = comments.map((c) => {
-            if (!c || typeof c !== "object" || c.id !== sanitizedAction.commentId) return c;
-            const existingReplies = Array.isArray(c.replies)
-              ? (c.replies as Record<string, unknown>[])
-              : [];
-            if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
-              return c;
-            return { ...c, replies: [...existingReplies, replyObj] };
-          });
-        } else if (sanitizedAction.type === "toggle-resolve") {
-          updatedComments = comments.map((c) =>
-            c && typeof c === "object" && c.id === sanitizedAction.commentId
-              ? {
-                  ...c,
-                  resolved:
-                    sanitizedAction.resolved !== undefined ? sanitizedAction.resolved : !c.resolved,
-                }
-              : c,
-          );
-        } else if (sanitizedAction.type === "delete") {
-          updatedComments = comments.filter(
-            (c) => c && typeof c === "object" && c.id !== sanitizedAction.commentId,
-          );
+        const value = JSON.parse(rawSnapshot) as unknown;
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          parsed = value as Record<string, unknown>;
         }
-
-        parsed.comments = updatedComments;
-        await this.ctx.storage.put("snapshot", JSON.stringify(parsed));
       } catch {
-        // Snapshot mutation failed; still fan out the validated action below so
-        // peers stay in sync (the next full snapshot will reconcile storage).
+        // Fall through with the empty seed; still fan out below.
       }
+    }
+
+    try {
+      const comments = Array.isArray(parsed.comments)
+        ? (parsed.comments as Record<string, unknown>[])
+        : [];
+      let updatedComments = comments;
+
+      if (sanitizedAction.type === "add") {
+        const newComment = sanitizedAction.comment as Record<string, unknown>;
+        const exists = comments.some((c) => c && typeof c === "object" && c.id === newComment.id);
+        updatedComments = exists ? comments : [...comments, newComment];
+      } else if (sanitizedAction.type === "reply") {
+        const replyObj = sanitizedAction.reply as Record<string, unknown>;
+        const target = comments.find(
+          (c) => c && typeof c === "object" && c.id === sanitizedAction.commentId,
+        );
+        if (!target) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Invalid reply target.",
+          });
+          return;
+        }
+        const targetReplies = Array.isArray(target.replies)
+          ? (target.replies as Record<string, unknown>[])
+          : [];
+        if (targetReplies.length >= MAX_REPLIES_PER_COMMENT) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Reply limit reached for this comment.",
+          });
+          return;
+        }
+        updatedComments = comments.map((c) => {
+          if (!c || typeof c !== "object" || c.id !== sanitizedAction.commentId) return c;
+          const existingReplies = Array.isArray(c.replies)
+            ? (c.replies as Record<string, unknown>[])
+            : [];
+          if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
+            return c;
+          return { ...c, replies: [...existingReplies, replyObj] };
+        });
+      } else if (sanitizedAction.type === "toggle-resolve") {
+        updatedComments = comments.map((c) =>
+          c && typeof c === "object" && c.id === sanitizedAction.commentId
+            ? {
+                ...c,
+                resolved:
+                  sanitizedAction.resolved !== undefined ? sanitizedAction.resolved : !c.resolved,
+              }
+            : c,
+        );
+      } else if (sanitizedAction.type === "delete") {
+        updatedComments = comments.filter(
+          (c) => c && typeof c === "object" && c.id !== sanitizedAction.commentId,
+        );
+      }
+
+      parsed.comments = updatedComments;
+      await this.ctx.storage.put("snapshot", JSON.stringify(parsed));
+    } catch {
+      // Snapshot mutation failed; still fan out the validated action below so
+      // peers stay in sync (the next full snapshot will reconcile storage).
     }
 
     this.broadcast(sanitizedMessage, ws);

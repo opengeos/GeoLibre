@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   MAX_COMMENT_BODY_LENGTH,
   MAX_COMMENT_AUTHOR_LENGTH,
+  MAX_ID_LENGTH,
   MAX_REPLIES_PER_COMMENT,
   MIN_COMMENT_INTERVAL_MS,
   validateAnchor,
@@ -17,6 +18,7 @@ describe("comment-validate constants", () => {
   it("exports expected limits", () => {
     assert.equal(MAX_COMMENT_BODY_LENGTH, 2000);
     assert.equal(MAX_COMMENT_AUTHOR_LENGTH, 120);
+    assert.equal(MAX_ID_LENGTH, 200);
     assert.equal(MIN_COMMENT_INTERVAL_MS, 250);
   });
 });
@@ -119,6 +121,12 @@ describe("validateAnchor", () => {
     assert.equal(validateAnchor({ type: "feature", layerId: "L", featureId: Infinity }), null);
   });
 
+  it("rejects a feature anchor with oversized layerId or featureId", () => {
+    const long = "x".repeat(MAX_ID_LENGTH + 1);
+    assert.equal(validateAnchor({ type: "feature", layerId: long, featureId: "f" }), null);
+    assert.equal(validateAnchor({ type: "feature", layerId: "L", featureId: long }), null);
+  });
+
   it("rejects unknown anchor types", () => {
     assert.equal(validateAnchor({ type: "polygon", coords: [] }), null);
   });
@@ -216,6 +224,10 @@ describe("validateReply", () => {
     assert.equal(validateReply({ ...validReply, id: 42 }), null);
   });
 
+  it("rejects an oversized id", () => {
+    assert.equal(validateReply({ ...validReply, id: "r".repeat(MAX_ID_LENGTH + 1) }), null);
+  });
+
   it("rejects an invalid author", () => {
     assert.equal(validateReply({ ...validReply, author: { name: "", color: "#000" } }), null);
     assert.equal(validateReply({ ...validReply, author: null }), null);
@@ -282,6 +294,13 @@ describe("validateComment", () => {
 
   it("rejects a non-string id", () => {
     assert.equal(validateComment({ ...validComment, id: 99 }), null);
+  });
+
+  it("rejects an oversized id", () => {
+    assert.equal(
+      validateComment({ ...validComment, id: "c".repeat(MAX_ID_LENGTH + 1) }),
+      null,
+    );
   });
 
   it("rejects an invalid anchor", () => {

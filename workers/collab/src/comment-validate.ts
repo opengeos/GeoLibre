@@ -8,11 +8,19 @@ export const MAX_COMMENT_BODY_LENGTH = 2000;
 /** Author name length cap — generous for display names but bounded. */
 export const MAX_COMMENT_AUTHOR_LENGTH = 120;
 
+/** Identifier length cap for comment/reply ids, layerId, and string featureId. */
+export const MAX_ID_LENGTH = 200;
+
 /** Minimum gap between a socket's comment-mutation frames (ms). */
 export const MIN_COMMENT_INTERVAL_MS = 250;
 
 /** Maximum number of replies stored per comment. */
 export const MAX_REPLIES_PER_COMMENT = 100;
+
+/** True when `value` is a non-empty string within {@link MAX_ID_LENGTH}. */
+export function isBoundedId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_ID_LENGTH;
+}
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
@@ -48,9 +56,9 @@ export function validateAnchor(raw: unknown): ValidatedAnchor | null {
   }
 
   if (o.type === "feature") {
-    if (typeof o.layerId !== "string" || !o.layerId) return null;
+    if (!isBoundedId(o.layerId)) return null;
     if (typeof o.featureId !== "string" && typeof o.featureId !== "number") return null;
-    if (typeof o.featureId === "string" && !o.featureId) return null;
+    if (typeof o.featureId === "string" && !isBoundedId(o.featureId)) return null;
     if (typeof o.featureId === "number" && !finite(o.featureId)) return null;
     const anchor: FeatureAnchor = {
       type: "feature",
@@ -102,7 +110,7 @@ export function validateComment(raw: unknown): ValidatedComment | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
 
-  if (typeof o.id !== "string" || !o.id) return null;
+  if (!isBoundedId(o.id)) return null;
 
   const anchor = validateAnchor(o.anchor);
   if (!anchor) return null;
@@ -151,7 +159,7 @@ export function validateReply(raw: unknown): ValidatedReply | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
 
-  if (typeof o.id !== "string" || !o.id) return null;
+  if (!isBoundedId(o.id)) return null;
 
   const author = validateAuthor(o.author);
   if (!author) return null;
