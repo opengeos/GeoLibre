@@ -150,6 +150,9 @@ def test_normalize_command_rejects_malformed_payloads(payload):
         None,
         "",
         "tauri://localhost",
+        # Windows: http is the real scheme (Tauri v2's useHttpsScheme defaults
+        # to false); https covers it being turned on.
+        "http://tauri.localhost",
         "https://tauri.localhost",
         "http://localhost:5173",
         "http://127.0.0.1:8766",

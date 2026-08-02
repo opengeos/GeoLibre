@@ -2675,7 +2675,30 @@ fn configure_sidecar_process_impl(command: &mut Command) {
 }
 
 #[cfg(all(not(unix), not(feature = "mas")))]
-fn configure_sidecar_process_impl(_command: &mut Command) {}
+fn configure_sidecar_process_impl(command: &mut Command) {
+    hide_console_window(command);
+}
+
+/// Keep a spawned console program from opening a console window.
+///
+/// Release builds are GUI-subsystem (`windows_subsystem = "windows"`), so they
+/// have no console of their own. Spawning `uv.exe` (a console program) then
+/// makes Windows allocate a fresh console *window* for it, which appears on the
+/// user's desktop and stays for as long as the child runs -- for the Notebook
+/// panel that is the whole session. `CREATE_NO_WINDOW` runs the child without
+/// one. Output is unaffected: every caller already pipes stdout/stderr and
+/// drains them (see CapturedOutput).
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(all(not(target_os = "windows"), not(feature = "mas")))]
+fn hide_console_window(_command: &mut Command) {}
 
 #[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
@@ -3215,6 +3238,9 @@ fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         command.arg(&script);
         command
     };
+    // First run only, but it is the one that would flash a PowerShell window
+    // across the user's desktop while uv installs.
+    hide_console_window(&mut command);
     let output = command
         .env("UV_UNMANAGED_INSTALL", &uv_dir)
         .output()
@@ -3527,6 +3553,10 @@ fn spawn_martin_server(
     {
         command.env("DEFAULT_SRID", default_srid);
     }
+
+    // Martin is a console program too, and it runs for as long as the PostGIS
+    // connection is open.
+    hide_console_window(&mut command);
 
     drop(listener);
     let mut child = command

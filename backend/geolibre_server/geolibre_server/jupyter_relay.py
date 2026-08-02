@@ -76,7 +76,9 @@ ENV_RELAY_TOKEN = "GEOLIBRE_RELAY_TOKEN"
 COMMAND_TYPE = "geolibre:command"
 
 # Origins allowed to open the relay WebSocket: the Tauri webview (tauri:// on
-# macOS/Linux, https://tauri.localhost on Windows) and any loopback dev origin.
+# macOS/Linux, http://tauri.localhost on Windows, or https:// there if
+# useHttpsScheme is ever turned on) and any loopback dev origin. Matching is on
+# host and scheme separately, so both Windows schemes are already covered.
 # This mirrors the `frame-ancestors` list in jupyter_server_config.py — the app
 # that may embed this server is exactly the app that may drive the map.
 _ALLOWED_ORIGIN_HOSTS = frozenset({"localhost", "127.0.0.1", "tauri.localhost"})
