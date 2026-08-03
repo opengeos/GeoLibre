@@ -1823,12 +1823,11 @@ export function DesktopShell({
   // has the same effect. The result is an overlay covering the map until the
   // user happens to drag another file across the window.
   //
-  // Rather than guess at every way the OS can swallow an event, recover on two
-  // signals that cannot occur while a real drag is in progress: a key press and
-  // a pointer button. Neither fires during an HTML5 drag (the spec suppresses
-  // mouse events for the duration) nor during a native one (the OS holds a
-  // pointer grab), so this can never dismiss the overlay out from under a drag
-  // the user is actually performing.
+  // Rather than guess at every way the OS can swallow an event, recover on a
+  // pointer button, which cannot occur while a real drag is in progress: HTML
+  // drag-and-drop suppresses mouse events and a native drag holds an OS pointer
+  // grab. Escape is a separate, conventional request to cancel either the
+  // stranded overlay or a genuine drag.
   useEffect(() => {
     if (!isDraggingFiles) return;
 

@@ -64,7 +64,7 @@ test("a press on a control that stops propagation still dismisses the overlay", 
   // The panel resize handles call stopPropagation() on pointerdown, so a bubble
   // phase listener on window would never see this press. The recovery listens
   // in the capture phase precisely so it does.
-  await page.locator('[aria-label="Resize Layers panel"]').first().dispatchEvent("pointerdown");
+  await page.locator('[aria-label="Resize Layers panel"]').first().click();
   await expect(page.locator(OVERLAY)).toBeHidden();
 });
 
