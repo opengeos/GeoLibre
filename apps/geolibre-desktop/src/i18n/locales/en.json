@@ -2891,7 +2891,7 @@
     "selectedCell": "Selected cell",
     "noSelection": "No cell selected",
     "copyId": "Copy ID",
-    "parent": "Parent",
+    "parent": "Parent(s)",
     "children": "Children",
     "neighbors": "Neighbors",
     "center": "Center",
@@ -2900,7 +2900,7 @@
     "exportGeoJson": "Export GeoJSON",
     "exportCsv": "Export CSV",
     "includeNeighbors": "Include selected cell neighbors",
-    "includeParents": "Include selected cell parent"
+    "includeParents": "Include selected cell parent(s)"
   },
   "a5Plugin": {
     "title": "A5 Grid",
