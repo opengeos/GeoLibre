@@ -4,11 +4,11 @@ import {
   DEFAULT_H3_GRID_SETTINGS,
   H3_VIEWPORT_CELL_LIMIT,
   h3CellFeature,
-  h3BoundaryGeometry,
+  h3FixTransmeridianBoundary,
   h3GridForBounds,
   h3LabelMinZoom,
+  h3ResolutionForZoom,
   normalizeH3GridSettings,
-  unwrapH3Boundary,
 } from "../packages/plugins/src/plugins/maplibre-h3";
 
 describe("H3 grid plugin helpers", () => {
@@ -16,6 +16,7 @@ describe("H3 grid plugin helpers", () => {
     assert.deepEqual(normalizeH3GridSettings(undefined), DEFAULT_H3_GRID_SETTINGS);
     assert.deepEqual(
       normalizeH3GridSettings({
+        autoResolution: true,
         resolution: 99,
         fillColor: "#ABCDEF",
         fillOpacity: -1,
@@ -23,8 +24,11 @@ describe("H3 grid plugin helpers", () => {
         lineWidth: 100,
         showLabels: false,
         includeNeighbors: true,
+        includeParents: true,
+        showIcosahedron: true,
       }),
       {
+        autoResolution: true,
         resolution: 15,
         fillColor: "#abcdef",
         fillOpacity: 0,
@@ -32,8 +36,19 @@ describe("H3 grid plugin helpers", () => {
         lineWidth: 8,
         showLabels: false,
         includeNeighbors: true,
+        includeParents: true,
+        showIcosahedron: true,
       },
     );
+  });
+
+  it("derives the automatic resolution from the map zoom (vgrid-maplibre rule)", () => {
+    assert.equal(h3ResolutionForZoom(0), 0);
+    assert.equal(h3ResolutionForZoom(3), 0);
+    assert.equal(h3ResolutionForZoom(5), 1);
+    assert.equal(h3ResolutionForZoom(10), 6);
+    assert.equal(h3ResolutionForZoom(20), 15);
+    assert.equal(h3ResolutionForZoom(30), 15);
   });
 
   it("only displays labels once the grid has enough screen space", () => {
@@ -68,47 +83,37 @@ describe("H3 grid plugin helpers", () => {
     assert.ok(grid.features.length < 100);
   });
 
-  it("unwraps dateline cell boundaries instead of drawing across the world", () => {
+  it("keeps dateline cell boundaries contiguous instead of drawing across the world", () => {
+    // vgrid-maplibre's fix: a straddling ring becomes one contiguous Polygon
+    // around -180, with the eastern vertices shifted into the adjacent world
+    // copy (longitudes just below -180) rather than clipped at the seam.
     const feature = h3CellFeature("824797fffffffff");
-    assert.equal(feature.geometry.type, "MultiPolygon");
-    const coordinates = feature.geometry.coordinates.flat(2);
-    assert.ok(coordinates.every(([longitude]) => longitude >= -180 && longitude <= 180));
-    for (const polygon of feature.geometry.coordinates) {
-      const longitudes = polygon[0].map(([longitude]) => longitude);
-      // A side that clips to nothing must be dropped, never emitted as an
-      // empty or unclosed linear ring.
-      assert.ok(polygon[0].length >= 4);
-      assert.deepEqual(polygon[0].at(0), polygon[0].at(-1));
-      assert.ok(Math.max(...longitudes) - Math.min(...longitudes) < 10);
-    }
+    assert.equal(feature.geometry.type, "Polygon");
+    const ring = feature.geometry.coordinates[0];
+    assert.ok(ring.length >= 4);
+    assert.deepEqual(ring.at(0), ring.at(-1));
+    const longitudes = ring.map(([longitude]) => longitude);
+    assert.ok(Math.max(...longitudes) - Math.min(...longitudes) < 10);
 
     assert.deepEqual(
-      unwrapH3Boundary(
-        [
-          [179, 0],
-          [-179, 1],
-          [179, 0],
-        ],
-        179.5,
-      ),
+      h3FixTransmeridianBoundary([
+        [179, 0],
+        [-179, 1],
+        [179, 0],
+      ]),
       [
-        [179, 0],
-        [181, 1],
-        [179, 0],
+        [-181, 0],
+        [-179, 1],
+        [-181, 0],
       ],
     );
-    assert.equal(
-      h3BoundaryGeometry(
-        [
-          [179, 0],
-          [-179, 1],
-          [-179, -1],
-          [179, 0],
-        ],
-        179.5,
-      ).type,
-      "MultiPolygon",
-    );
+    // Rings away from the seam pass through untouched.
+    const plain: [number, number][] = [
+      [-122.5, 37.7],
+      [-122.4, 37.8],
+      [-122.5, 37.7],
+    ];
+    assert.deepEqual(h3FixTransmeridianBoundary(plain), plain);
   });
 
   it("does not collapse full-world bounds onto the antimeridian", () => {
