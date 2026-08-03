@@ -65,6 +65,18 @@ describe("A5 grid plugin helpers", () => {
     assert.equal(feature.properties?.a5, cell);
     assert.equal(feature.properties?.resolution, 12);
     assert.equal(feature.geometry.coordinates[0][0].length, 2);
+    // Closed ring: the last vertex repeats the first.
+    const ring = feature.geometry.coordinates[0];
+    assert.deepEqual(ring[0], ring[ring.length - 1]);
+  });
+
+  it("keeps antimeridian-crossing rings contiguous", () => {
+    const grid = a5GridForBounds([170, 50, 190, 65], 7);
+    assert.ok(grid.features.length > 0);
+    for (const feature of grid.features) {
+      const lons = feature.geometry.coordinates[0].map(([lng]) => lng);
+      assert.ok(Math.max(...lons) - Math.min(...lons) < 90, `ring spans ${lons.join(", ")}`);
+    }
   });
 
   it("fills a viewport with unique cells at the requested resolution", () => {
