@@ -143,6 +143,11 @@ describe("OLC plugin helpers", () => {
     assert.equal(parent, OpenLocationCode.encode(10.78, 106.7, 6));
     // Level-2 cells are the roots.
     assert.equal(olcParentCell(OpenLocationCode.encode(10.78, 106.7, 2)), null);
+    // Grid-refinement lengths step back to the previous valid length.
+    assert.equal(
+      olcParentCell(OpenLocationCode.encode(10.78, 106.7, 11)),
+      OpenLocationCode.encode(10.78, 106.7, 10),
+    );
 
     // Pair levels subdivide 20×20, grid-refinement levels 4×5.
     assert.equal(olcChildCount(cell), 400);
