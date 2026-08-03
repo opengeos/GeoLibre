@@ -140,6 +140,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     import geopandas as gpd  # noqa: PLC0415
 
     connection = sedona_db.connect()
+    future = None
     try:
         for layer in layers or []:
             name = str(layer.get("name") or "").strip()
@@ -171,12 +172,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             try:
                 frame = future.result(timeout=timeout_secs)
             except concurrent.futures.TimeoutError:
-                close = getattr(connection, "close", None)
-                if callable(close):
-                    try:
-                        close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                future.cancel()
                 raise SqlTimeout(
                     f"Spatial SQL timed out after {int(timeout_secs)} seconds"
                 ) from None
@@ -226,9 +222,15 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     finally:
         # SedonaDB connections are Rust-backed; release promptly rather than
         # waiting on GC. Tolerate bindings that expose no close().
-        close = getattr(connection, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:  # noqa: BLE001 - best-effort cleanup
-                pass
+        def _close_connection(*_args: Any) -> None:
+            close = getattr(connection, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+
+        if future is not None and not future.done():
+            future.add_done_callback(_close_connection)
+        else:
+            _close_connection()
