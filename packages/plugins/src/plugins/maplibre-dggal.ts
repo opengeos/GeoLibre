@@ -326,7 +326,8 @@ function effectiveResolution(): number {
 export function normalizeDggalGridSettings(value: unknown): DggalGridSettings {
   const candidate = (value ?? {}) as Partial<DggalGridSettings>;
   const dggrsType =
-    typeof candidate.dggrsType === "string" && candidate.dggrsType in DGGAL_TYPES
+    typeof candidate.dggrsType === "string" &&
+    Object.hasOwn(DGGAL_TYPES, candidate.dggrsType)
       ? (candidate.dggrsType as DggalType)
       : DEFAULT_DGGAL_GRID_SETTINGS.dggrsType;
   return {
