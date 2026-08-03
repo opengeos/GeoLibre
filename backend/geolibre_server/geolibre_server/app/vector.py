@@ -214,8 +214,8 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
         A ``(feature_count, layer_name)`` tuple.
 
     Raises:
-        HTTPException: The named layer is absent, or the file has several feature
-            layers and none was specified.
+        HTTPException: The named layer is absent, the named layer is an aspatial
+            attribute table, or the file holds no feature layer at all.
     """
     gpd = vector_ops._import_geopandas()
     layers = gpd.list_layers(str(target))
@@ -241,9 +241,10 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
         # it too. Explicit per-layer targeting for a multi-layer GeoPackage is a
         # follow-up (issue #1070).
         target_layer = spatial[0]
-    elif len(names) == 1:
-        target_layer = names[0]
     else:
+        # Only aspatial tables (or nothing) left: there is no writable target, and
+        # falling back to names[0] here would hand OGR the very aspatial table the
+        # explicit-layer branch above rejects.
         raise HTTPException(
             status_code=400,
             detail=f"No feature layer to write in {target.name}",

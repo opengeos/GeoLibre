@@ -7,6 +7,7 @@ bad input, and :func:`run_vector_tool_json` round-trips through JSON strings.
 """
 
 import json
+from typing import NoReturn
 
 import pytest
 
@@ -1197,16 +1198,26 @@ def test_fix_geometries_no_op_on_valid_layer() -> None:
 
 
 @requires_geopandas
-def test_fix_geometries_leaves_unfixable_unchanged(monkeypatch) -> None:
+@pytest.mark.parametrize("failure", ["raises", "returns_empty"])
+def test_fix_geometries_leaves_unfixable_unchanged(monkeypatch, failure: str) -> None:
     # A degenerate polygon (e.g., <3 distinct points) that make_valid cannot repair
-    # into a valid polygonal area will either raise or return empty. The tool should
-    # leave the original unchanged and increment the unfixable count.
+    # into a valid polygonal area will either raise or return empty. Both are
+    # separate branches of _repair; each leaves the original unchanged and
+    # increments the unfixable count.
     import shapely.validation
+    from shapely.geometry import Polygon
 
-    def mock_make_valid(geom):
-        raise ValueError("Simulated unfixable geometry")
+    def raising_make_valid(_geom: object) -> NoReturn:
+        raise ValueError
 
-    monkeypatch.setattr(shapely.validation, "make_valid", mock_make_valid)
+    def emptying_make_valid(_geom: object) -> Polygon:
+        return Polygon()
+
+    monkeypatch.setattr(
+        shapely.validation,
+        "make_valid",
+        raising_make_valid if failure == "raises" else emptying_make_valid,
+    )
 
     degenerate = {
         "type": "FeatureCollection",
