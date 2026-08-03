@@ -48,6 +48,12 @@ describe("DGGAL plugin helpers", () => {
       normalizeDggalGridSettings({ dggrsType: "NotAGrid" }).dggrsType,
       DEFAULT_DGGAL_GRID_SETTINGS.dggrsType,
     );
+    // Inherited Object.prototype keys must not pass as a grid type.
+    for (const key of ["constructor", "toString", "valueOf"]) {
+      const normalized = normalizeDggalGridSettings({ dggrsType: key });
+      assert.equal(normalized.dggrsType, DEFAULT_DGGAL_GRID_SETTINGS.dggrsType, key);
+      assert.ok(Number.isInteger(normalized.resolution), key);
+    }
   });
 
   it("maps map zoom to a resolution like vgrid-maplibre's per-type rules", () => {
