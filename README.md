@@ -76,6 +76,16 @@ GeoLibre is not limited to Earth. Planetary basemaps from OpenPlanetaryMap and U
     <td align="center"><b>Pluto</b></td>
     <td align="center"><b>Venus</b></td>
   </tr>
+  <tr>
+    <td width="33%"><a href="https://files.opengeos.org/europa.webp"><img src="https://files.opengeos.org/europa.webp" alt="GeoLibre globe view of Europa over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://files.opengeos.org/callisto.webp"><img src="https://files.opengeos.org/callisto.webp" alt="GeoLibre globe view of Callisto over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://files.opengeos.org/charon.webp"><img src="https://files.opengeos.org/charon.webp" alt="GeoLibre globe view of Charon over a starfield backdrop"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Europa</b></td>
+    <td align="center"><b>Callisto</b></td>
+    <td align="center"><b>Charon</b></td>
+  </tr>
 </table>
 
 Switch bodies from the planet switcher in the Layers panel. See [Demos](https://geolibre.app/demos/) for more.
