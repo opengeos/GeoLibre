@@ -20,7 +20,7 @@ export async function openExternalLink(url: string): Promise<void> {
     try {
       await openUrl(url);
     } catch (error) {
-      console.warn("[GeoLibre] failed to open external link", url, error);
+      console.warn("[GeoLibre] failed to open external link", error);
     }
     return;
   }
@@ -29,6 +29,6 @@ export async function openExternalLink(url: string): Promise<void> {
   // debuggable rather than silent.
   const opened = window.open(url, "_blank", "noopener,noreferrer");
   if (!opened) {
-    console.warn("[GeoLibre] failed to open external link (popup blocked?)", url);
+    console.warn("[GeoLibre] failed to open external link (popup blocked?)");
   }
 }

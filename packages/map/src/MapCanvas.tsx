@@ -1114,7 +1114,6 @@ export const MapCanvas = memo(function MapCanvas({
     map.on("projectiontransition", updateProjection);
     map.on("load", () => {
       const state = useAppStore.getState();
-      mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       mc.setBasemapVisible(state.basemapVisible);
       mc.setBasemapOpacity(state.basemapOpacity);
       mc.highlightFeature(
@@ -1186,7 +1185,6 @@ export const MapCanvas = memo(function MapCanvas({
     prevBasemap.current = basemapStyleUrl;
     map.once("style.load", () => {
       const state = useAppStore.getState();
-      controller.current?.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       controller.current?.setBasemapVisible(state.basemapVisible);
       controller.current?.setBasemapOpacity(state.basemapOpacity);
       controller.current?.highlightFeature(

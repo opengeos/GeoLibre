@@ -16,12 +16,19 @@
  * whenever the property name *is* a literal; reach for these only when it is not.
  */
 
-/** The slice of a MapLibre `Map` these helpers reach through. */
+/**
+ * The slice of a MapLibre `Map` these helpers reach through.
+ *
+ * The getters are optional: they are read to skip no-op writes, and some
+ * external-control and test map objects implement only the setters. A missing
+ * getter must degrade to "unknown current value" (write anyway), never throw.
+ * The setters are required — silently dropping a write would be a real bug.
+ */
 interface DynamicStyleTarget {
   setPaintProperty: (layerId: string, property: string, value: unknown) => void;
-  getPaintProperty: (layerId: string, property: string) => unknown;
+  getPaintProperty?: (layerId: string, property: string) => unknown;
   setLayoutProperty: (layerId: string, property: string, value: unknown) => void;
-  getLayoutProperty: (layerId: string, property: string) => unknown;
+  getLayoutProperty?: (layerId: string, property: string) => unknown;
 }
 
 export function setDynamicPaintProperty(
@@ -34,7 +41,7 @@ export function setDynamicPaintProperty(
 }
 
 export function getDynamicPaintProperty(map: object, layerId: string, property: string): unknown {
-  return (map as DynamicStyleTarget).getPaintProperty(layerId, property);
+  return (map as DynamicStyleTarget).getPaintProperty?.(layerId, property);
 }
 
 export function setDynamicLayoutProperty(
@@ -47,5 +54,5 @@ export function setDynamicLayoutProperty(
 }
 
 export function getDynamicLayoutProperty(map: object, layerId: string, property: string): unknown {
-  return (map as DynamicStyleTarget).getLayoutProperty(layerId, property);
+  return (map as DynamicStyleTarget).getLayoutProperty?.(layerId, property);
 }

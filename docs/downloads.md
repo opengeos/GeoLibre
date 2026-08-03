@@ -59,8 +59,10 @@ The portable build relies on the Microsoft Edge WebView2 Runtime, which is
 preinstalled on Windows 11 and current Windows 10. If the app does not start,
 install the
 [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-The optional Python sidecar tools (Whitebox, raster, conversion) need Python
-available just as in the installed build; everything else runs without it.
+The optional Python sidecar tools (raster, conversion, AI Segmentation) need
+Python available just as in the installed build; everything else — including the
+1,000+ tool Whitebox geoprocessing toolbox, which runs on WebAssembly — runs
+without it.
 
 ## macOS installation
 
@@ -71,6 +73,10 @@ after each upgrade:
 ```bash
 xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
 ```
+
+macOS has two builds to choose from. The **Homebrew / DMG** build is the full
+app; the **Mac App Store** build is sandboxed and drops the features Apple's
+rules do not allow (see [below](#mac-app-store)).
 
 ### Homebrew (recommended)
 
@@ -105,6 +111,60 @@ by Apple, so Gatekeeper allows them to open without any extra steps:
    Intel).
 2. Open the DMG and drag **GeoLibre Desktop** into **Applications**.
 3. Launch GeoLibre Desktop from Applications.
+
+### Mac App Store
+
+GeoLibre Desktop is also on the
+[Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769), which
+installs and updates it like any other Store app, with no Terminal and no
+Gatekeeper prompt:
+
+[Get GeoLibre Desktop on the Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769){ .md-button .md-button--primary }
+
+#### What the Store build leaves out
+
+The App Store requires the App Sandbox and forbids downloading or running
+executable code that changes an app's features (guideline 2.5.2). GeoLibre's
+optional Python sidecar, Jupyter server, and martin tile server are all runtime
+downloads of executable code, so the Store build compiles them out rather than
+shipping them broken. Here is how the two macOS builds compare:
+
+| Feature | Homebrew / DMG | Mac App Store |
+| --- | --- | --- |
+| Whitebox toolbox (1,000+ WebAssembly tools) | Yes | Yes |
+| Processing → Vector, browser-engine Conversion, client raster tools | Yes | Yes |
+| SQL Workspace (DuckDB-WASM, PGlite/PostGIS, in-browser Apache Sedona on CereusDB) | Yes | Yes |
+| Python sidecar engines (GeoPandas vector, rasterio raster, GDAL conversion, SamGeo segmentation, the SedonaDB sidecar behind the Apache Sedona engine) | Yes | No |
+| Add Data → PostgreSQL / PostGIS (martin tile server) | Yes | No |
+| Notebook panel on a local JupyterLab server | Yes | JupyterLite only |
+| Installing external plugins from a zip or the registry | Yes | Built-in and bundled plugins only |
+| Earth Engine sign-in | Yes | No |
+| In-app update checks | Yes | Updates come from the Store |
+
+Everything client-side is unchanged: MapLibre and deck.gl rendering, Add Data for
+local and remote files, DuckDB-WASM vector reading, the Whitebox WASM toolbox,
+Turf/Pyodide vector tools, browser-engine conversions, client raster tools, the
+SQL Workspace, the Python console, in-browser detection and segmentation,
+geocoding, and collaboration. All three SQL engines still run, Apache Sedona
+included: without a sidecar it uses its in-browser CereusDB build, which carries
+the [attribute-SQL limitation](user-guide/sql-workspace.md#choosing-a-sql-engine)
+that engine has everywhere else.
+
+The sandbox also changes three behaviors:
+
+- **Loose shapefiles**: the app can only read files you picked in the dialog, so
+  select **every** shapefile part (`.shp`, `.dbf`, `.prj`, ...) at once, or load
+  a zipped shapefile. A `.shp` picked alone loads without attributes or CRS.
+- **API keys from the shell environment**: a sandboxed app does not inherit a
+  login shell, so enter keys in Settings instead.
+- **Reopening projects that reference local files**: the file grant ends with the
+  process, so after a relaunch a layer backed by a local path outside the app
+  container needs to be re-added.
+
+If you need the Python sidecar engines, Add Data → PostgreSQL/PostGIS through
+martin, a local Jupyter server, Earth Engine, or external plugins, install the
+Homebrew / DMG build instead. See [Mac App Store](mac-app-store.md) for the full
+technical detail.
 
 ## Linux installation
 
@@ -221,9 +281,10 @@ Sideloaded builds do not update themselves, so download a newer APK to upgrade.
     Android will not upgrade one into the other. Uninstall the existing copy
     (`adb uninstall org.geolibre.app`) before switching between them.
 
-Tools that need a local desktop process — the Whitebox, Raster, Conversion, and
-AI Segmentation toolboxes, and the PostgreSQL data source — are hidden on
-Android. See [Android](android.md) for the full list and for build instructions.
+Tools that need a local desktop process — the Raster, Conversion, and AI
+Segmentation toolboxes, and the PostgreSQL data source — are hidden on Android.
+The Whitebox geoprocessing toolbox runs on WebAssembly and stays available. See
+[Android](android.md) for the full list and for build instructions.
 
 ## Build from source
 

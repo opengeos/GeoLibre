@@ -88,6 +88,12 @@ const STARFIELD_LNG_PERIOD_DEGREES = 360;
 const STARFIELD_LAT_PERIOD_DEGREES = 180;
 
 const HALO_SAMPLE_COUNT = 16;
+// Keep decorative canvas work from competing with MapLibre on high-refresh displays.
+const EFFECTS_FRAME_MS = 1000 / 60;
+
+export function nextEffectsFrameTime(timestamp: number, lastFrameTime: number): number | null {
+  return timestamp - lastFrameTime + 0.1 < EFFECTS_FRAME_MS ? null : timestamp;
+}
 
 // Halo radial gradient as a *shape* independent of the chosen color: each stop
 // is [offset, alpha, shade] where offset is the fraction of the gradient span
@@ -458,6 +464,7 @@ class EffectsEngine {
   private settings: EffectsSettings;
 
   private rafId: number | null = null;
+  private lastFrameTime = -Infinity;
   private destroyed = false;
 
   constructor(map: MapLibreMap, settings: EffectsSettings) {
@@ -700,18 +707,19 @@ class EffectsEngine {
     ctx.drawImage(field, wrappedX - this.width, wrappedY - this.height, this.width, this.height);
   }
 
-  private updateAndDrawComets(): void {
-    // One comet at a time, spawned with ~0.5% probability per frame.
-    if (this.comets.length === 0 && Math.random() < 0.005) {
+  private updateAndDrawComets(frameScale: number): void {
+    // Preserve the original ~0.5% chance per 60 Hz frame when frames are skipped.
+    const spawnChance = 1 - Math.pow(1 - 0.005, frameScale);
+    if (this.comets.length === 0 && Math.random() < spawnChance) {
       this.comets.push(this.spawnComet());
     }
 
     const ctx = this.cometCtx;
     const survivors: Comet[] = [];
     for (const comet of this.comets) {
-      comet.life += 1;
-      comet.x += Math.cos(comet.angle) * comet.speed;
-      comet.y += Math.sin(comet.angle) * comet.speed;
+      comet.life += frameScale;
+      comet.x += Math.cos(comet.angle) * comet.speed * frameScale;
+      comet.y += Math.sin(comet.angle) * comet.speed * frameScale;
       comet.alpha = 1 - comet.life / comet.maxLife;
 
       const offscreen =
@@ -803,9 +811,19 @@ class EffectsEngine {
     ctx.restore();
   }
 
-  private tick(): void {
+  private tick(timestamp: number): void {
     this.rafId = null;
     if (this.destroyed) return;
+
+    const nextFrameTime = nextEffectsFrameTime(timestamp, this.lastFrameTime);
+    if (nextFrameTime === null) {
+      this.start();
+      return;
+    }
+    const elapsed = Number.isFinite(this.lastFrameTime)
+      ? Math.min(nextFrameTime - this.lastFrameTime, EFFECTS_FRAME_MS * 2)
+      : EFFECTS_FRAME_MS;
+    this.lastFrameTime = nextFrameTime;
 
     this.clear();
 
@@ -821,7 +839,7 @@ class EffectsEngine {
       this.drawStarfield();
       this.starsDirty = false;
     }
-    this.updateAndDrawComets();
+    this.updateAndDrawComets(elapsed / EFFECTS_FRAME_MS);
     // The atmospheric halo is Earth-only — other celestial bodies (Moon, Mars,
     // Pluto, …) are airless or don't share Earth's blue glow, so we keep the
     // space backdrop, starfield, and comets but skip the halo for them.

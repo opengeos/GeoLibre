@@ -37,6 +37,7 @@ import {
 import {
   mbtilesStyleLayerIds,
   removeLayerFromMap,
+  styleValuesEqual,
   syncLayer,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
@@ -1087,13 +1088,11 @@ export class MapController {
     const map = this.map;
 
     const nextIds = layers.map((l) => l.id);
+    const nextIdSet = new Set(nextIds);
+    const previousLayers = new Map(this.syncedLayers.map((layer) => [layer.id, layer]));
     for (const id of this.layerIds) {
-      if (!nextIds.includes(id)) {
-        removeLayerFromMap(
-          map,
-          id,
-          this.syncedLayers.find((layer) => layer.id === id),
-        );
+      if (!nextIdSet.has(id)) {
+        removeLayerFromMap(map, id, previousLayers.get(id));
       }
     }
 
@@ -1121,9 +1120,17 @@ export class MapController {
   }
 
   private styleLoadHandler: (() => void) | null = null;
+  private styleReloadHandler: (() => void) | null = null;
 
   waitAndSyncLayers(layers: GeoLibreLayer[]): void {
     if (!this.map) return;
+
+    if (!this.styleReloadHandler) {
+      this.styleReloadHandler = () => {
+        if (!this.styleLoadHandler) this.syncLayers(this.syncedLayers);
+      };
+      this.map.on("style.load", this.styleReloadHandler);
+    }
 
     if (this.styleLoadHandler) {
       this.map.off("style.load", this.styleLoadHandler);
@@ -1132,6 +1139,9 @@ export class MapController {
 
     const run = () => {
       if (this.styleLoadHandler !== run) return;
+      this.map?.off("load", run);
+      this.map?.off("style.load", run);
+      this.styleLoadHandler = null;
       this.syncLayers(layers);
     };
     this.styleLoadHandler = run;
@@ -1140,17 +1150,21 @@ export class MapController {
       run();
     } else {
       this.map.once("load", run);
+      this.map.once("style.load", run);
     }
-    this.map.on("style.load", run);
   }
 
   private applyBasemapVisibility(): void {
     if (!this.isStyleReady() || !this.map) return;
     const map = this.map;
+    const visibility = this.basemapVisible ? "visible" : "none";
 
     for (const layer of this.getBasemapStyleLayers()) {
       try {
-        map.setLayoutProperty(layer.id, "visibility", this.basemapVisible ? "visible" : "none");
+        const current = map.getLayoutProperty(layer.id, "visibility");
+        if (current !== visibility && !(current === undefined && visibility === "visible")) {
+          map.setLayoutProperty(layer.id, "visibility", visibility);
+        }
       } catch {
         // Some third-party custom style layers may not expose layout properties.
       }
@@ -1206,6 +1220,8 @@ export class MapController {
           ? original * this.basemapOpacity
           : this.basemapOpacity;
     try {
+      const current = getDynamicPaintProperty(this.map, layerId, property);
+      if (styleValuesEqual(current, opacity)) return;
       setDynamicPaintProperty(this.map, layerId, property, opacity);
     } catch {
       // Some third-party custom style layers may not expose paint properties.

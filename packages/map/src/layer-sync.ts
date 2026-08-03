@@ -14,6 +14,7 @@ import {
   validateMapExpression,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
+import type { GeoJSON } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import type { PropertyValueSpecification } from "maplibre-gl";
 import { FileSource, PMTiles, Protocol } from "pmtiles";
@@ -56,7 +57,12 @@ import {
 } from "./derived-geometry";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
-import { setDynamicLayoutProperty, setDynamicPaintProperty } from "./dynamic-style-property";
+import {
+  getDynamicLayoutProperty,
+  getDynamicPaintProperty,
+  setDynamicLayoutProperty,
+  setDynamicPaintProperty,
+} from "./dynamic-style-property";
 import { prepareLineDecoration } from "./line-decorations";
 import {
   KML_ICON_URL_PROPERTY,
@@ -329,6 +335,18 @@ function applyExternalNativeFeatureFilters(
 // range we keep applying the style range on every sync, including a later reset
 // back to the full [0, 24] window.
 const managedZoomRangeLayerIds = new Set<string>();
+const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
+
+function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSON): void {
+  const source = map.getSource(sourceId);
+  if (source?.type === "geojson") geoJsonSourceData.set(source as maplibregl.GeoJSONSource, data);
+}
+
+function setGeoJsonData(source: maplibregl.GeoJSONSource, data: GeoJSON): void {
+  if (geoJsonSourceData.get(source) === data) return;
+  source.setData(data);
+  geoJsonSourceData.set(source, data);
+}
 
 function clampLayerZoom(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -599,8 +617,9 @@ function ensureExternalGeoJsonNativeLayer(
       type: "geojson",
       data: layer.geojson,
     });
+    rememberGeoJsonData(map, nativeSourceId, layer.geojson);
   } else {
-    (map.getSource(nativeSourceId) as maplibregl.GeoJSONSource).setData(layer.geojson);
+    setGeoJsonData(map.getSource(nativeSourceId) as maplibregl.GeoJSONSource, layer.geojson);
   }
 
   if (nativeLayerIds.every((id) => map.getLayer(id))) return;
@@ -1439,6 +1458,10 @@ function setNativeLayerVisibility(
   visibility: "visible" | "none",
 ): void {
   try {
+    const canRead = typeof map.getLayoutProperty === "function";
+    const current = canRead ? map.getLayoutProperty(nativeLayerId, "visibility") : undefined;
+    if (current === visibility || (canRead && current === undefined && visibility === "visible"))
+      return;
     map.setLayoutProperty(nativeLayerId, "visibility", visibility);
   } catch {
     // Custom layers from external controls may not accept layout updates.
@@ -1667,7 +1690,9 @@ function syncVectorControlPointSymbology(
   // of the other rule-based paint overrides apply to control-owned layers.
   const radius = proportionalRadiusExpression(layer.style);
   if (radius) {
-    setDynamicPaintProperty(map, circleNativeId, "circle-radius", radius);
+    if (!styleValuesEqual(getDynamicPaintProperty(map, circleNativeId, "circle-radius"), radius)) {
+      setDynamicPaintProperty(map, circleNativeId, "circle-radius", radius);
+    }
     overriddenRadiusIdsFor(map).add(circleNativeId);
   } else {
     restoreOverriddenCircleRadius(map, circleNativeId, layer);
@@ -1722,7 +1747,9 @@ function setExternalNativeLayerPaint(
 
   for (const [property, value] of Object.entries(paint)) {
     try {
-      setDynamicPaintProperty(map, nativeLayerId, property, value);
+      if (!styleValuesEqual(getDynamicPaintProperty(map, nativeLayerId, property), value)) {
+        setDynamicPaintProperty(map, nativeLayerId, property, value);
+      }
     } catch {
       // External controls can create heterogeneous style layers. Ignore paint
       // properties that do not apply to a specific native layer type.
@@ -1808,8 +1835,9 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
             ...(attribution ? { attribution } : {}),
           },
     );
+    rememberGeoJsonData(map, src, layer.geojson!);
   } else {
-    (map.getSource(src) as maplibregl.GeoJSONSource).setData(layer.geojson!);
+    setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, layer.geojson!);
   }
 
   applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId);
@@ -3404,12 +3432,16 @@ function ensureLayer(
   if (map.getLayer(id)) {
     if (spec.paint) {
       for (const [key, value] of Object.entries(spec.paint)) {
-        setDynamicPaintProperty(map, id, key, value);
+        if (!styleValuesEqual(getDynamicPaintProperty(map, id, key), value)) {
+          setDynamicPaintProperty(map, id, key, value);
+        }
       }
     }
     if (spec.layout) {
       for (const [key, value] of Object.entries(spec.layout)) {
-        setDynamicLayoutProperty(map, id, key, value);
+        if (!styleValuesEqual(getDynamicLayoutProperty(map, id, key), value)) {
+          setDynamicLayoutProperty(map, id, key, value);
+        }
       }
     }
     if ("filter" in spec) {
@@ -3461,6 +3493,10 @@ function ensureLayer(
     return;
   }
   map.addLayer(addSpec, validBeforeId);
+}
+
+export function styleValuesEqual(current: unknown, next: unknown): boolean {
+  return Object.is(current, next) || JSON.stringify(current) === JSON.stringify(next);
 }
 
 function setLayerZoomRange(

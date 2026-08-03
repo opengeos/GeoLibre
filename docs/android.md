@@ -19,15 +19,16 @@ The rest of this page is for developers building the app themselves.
 
 ## What works on Android vs desktop
 
-The Android build ships the full map workspace, Add Data, the Vector tools
-(Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace (DuckDB-WASM and
-the in-browser PGlite/PostGIS engine), the Python Console (Pyodide), geocoding,
-statistics, the AI assistant, story maps, and plugins.
+The Android build ships the full map workspace, Add Data, the Whitebox
+geoprocessing toolbox (1,000+ tools, run in the browser on WebAssembly), the
+Vector tools (Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace
+(DuckDB-WASM and the in-browser PGlite/PostGIS engine), the Python Console
+(Pyodide), geocoding, statistics, the AI assistant, story maps, and plugins.
 
 Tools that depend on a **local desktop process** are hidden on mobile, because
 Android has no Python sidecar or local helper binaries:
 
-- Processing → **Whitebox**, **Raster**, **Conversion**, **AI Segmentation**
+- Processing → **Raster**, **Conversion**, **AI Segmentation**
   (all need the Python sidecar)
 - Add Data → **PostgreSQL** (served by the local Martin tile server)
 
