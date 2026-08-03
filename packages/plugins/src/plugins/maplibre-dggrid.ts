@@ -204,6 +204,8 @@ let currentGrid: FeatureCollection<Polygon> = { type: "FeatureCollection", featu
 let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
 let pendingRefresh: number | null = null;
+/** Bumped on every activate/deactivate so an in-flight WASM load cannot attach after teardown. */
+let activationGeneration = 0;
 
 let dggsPromise: Promise<DggridEngine> | null = null;
 
@@ -211,14 +213,20 @@ let dggsPromise: Promise<DggridEngine> | null = null;
  * Load the webdggrid WASM module once and reuse the instance. Imported
  * dynamically so the ~270 kB module stays out of the main bundle until the
  * plugin is activated. `Webdggrid.load()` is typed as returning the class but
- * resolves to an instance, hence the cast.
+ * resolves to an instance, hence the cast. A failed load clears the cache so
+ * the next activate can retry.
  */
 export function loadDggrid(): Promise<DggridEngine> {
-  dggsPromise ??= import("webdggrid").then(async (module) => {
-    const instance = (await module.Webdggrid.load()) as unknown as DggridEngine;
-    instance.setDggs({ ...DGGRID_CONFIG }, DEFAULT_DGGRID_GRID_SETTINGS.resolution);
-    return instance;
-  });
+  dggsPromise ??= import("webdggrid")
+    .then(async (module) => {
+      const instance = (await module.Webdggrid.load()) as unknown as DggridEngine;
+      instance.setDggs({ ...DGGRID_CONFIG }, DEFAULT_DGGRID_GRID_SETTINGS.resolution);
+      return instance;
+    })
+    .catch((error) => {
+      dggsPromise = null;
+      throw error;
+    });
   return dggsPromise;
 }
 
@@ -496,13 +504,32 @@ function ringIntersectsBounds(
   north: number,
 ): boolean {
   if (!ring?.length) return false;
-  const last = ring.length - 1;
-  const closed = ring[0][0] === ring[last][0] && ring[0][1] === ring[last][1];
-  const count = closed ? ring.length - 1 : ring.length;
+  // Unwrap for continuity, then shift into the rect's longitude window so
+  // vertex / containment / segment tests share one frame (raw ±180 mixes break
+  // antimeridian cells).
+  const framed: Position[] = [];
+  for (const [rawLon, lat] of ring) {
+    let lon = rawLon;
+    if (framed.length > 0) {
+      const reference = framed[0][0];
+      while (lon - reference > 180) lon -= 360;
+      while (lon - reference < -180) lon += 360;
+    }
+    framed.push([lon, lat]);
+  }
+  const mid = (west + east) / 2;
+  const shift = Math.round((mid - framed[0][0]) / 360) * 360;
+  const normalized =
+    shift === 0 ? framed : framed.map(([lon, lat]) => [lon + shift, lat] as Position);
+
+  const last = normalized.length - 1;
+  const closed =
+    normalized[0][0] === normalized[last][0] && normalized[0][1] === normalized[last][1];
+  const count = closed ? normalized.length - 1 : normalized.length;
 
   for (let i = 0; i < count; i += 1) {
-    const lon = normalizeLon(ring[i][0]);
-    const lat = ring[i][1];
+    const lon = normalized[i][0];
+    const lat = normalized[i][1];
     if (lon >= west && lon <= east && lat >= south && lat <= north) return true;
   }
   for (const [lon, lat] of [
@@ -512,16 +539,16 @@ function ringIntersectsBounds(
     [east, north],
     [(west + east) / 2, (south + north) / 2],
   ]) {
-    if (pointInRing(lon, lat, ring)) return true;
+    if (pointInRing(lon, lat, normalized)) return true;
   }
   for (let i = 0; i < count; i += 1) {
     const j = (i + 1) % count;
     if (
       segmentCrossesLonLatRect(
-        normalizeLon(ring[i][0]),
-        ring[i][1],
-        normalizeLon(ring[j][0]),
-        ring[j][1],
+        normalized[i][0],
+        normalized[i][1],
+        normalized[j][0],
+        normalized[j][1],
         west,
         south,
         east,
@@ -833,7 +860,20 @@ function refresh(): void {
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
   updateSelectedSource();
-  if (panelContainer) renderPanel(panelContainer);
+  // Pan/zoom only changes the cell count status — rebuild the whole panel and
+  // the open color picker / focused inputs are destroyed mid-gesture.
+  updatePanelStatus();
+}
+
+/** Update the status line without recreating the rest of the panel controls. */
+function updatePanelStatus(): void {
+  const status = panelContainer?.querySelector<HTMLElement>("[data-dggrid-status]");
+  if (!status) {
+    if (panelContainer) renderPanel(panelContainer);
+    return;
+  }
+  status.textContent = currentError ?? labels.cellCount(currentGrid.features.length);
+  status.style.color = currentError ? "#dc2626" : "";
 }
 
 /**
@@ -1085,6 +1125,7 @@ function renderPanel(container: HTMLElement): void {
   }
 
   const status = document.createElement("div");
+  status.dataset.dggridStatus = "";
   status.textContent = currentError ?? labels.cellCount(currentGrid.features.length);
   status.style.color = currentError ? "#dc2626" : "";
   section.appendChild(status);
@@ -1210,7 +1251,12 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
   activate: async (app) => {
     const activeMap = app.getMap?.();
     if (!activeMap) return false;
-    dggs = await loadDggrid();
+    const generation = (activationGeneration += 1);
+    // Await WASM before mutating map/panel state so a deactivate during the
+    // load cannot race a late attach (leaked listeners / panels / layers).
+    const engine = await loadDggrid();
+    if (generation !== activationGeneration) return false;
+    dggs = engine;
     map = activeMap;
     appRef = app;
     moveHandler = () => scheduleRefresh();
@@ -1249,6 +1295,7 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
     app.openRightPanel?.(PANEL_ID);
   },
   deactivate: (app) => {
+    activationGeneration += 1;
     cancelScheduledRefresh();
     if (map && moveHandler) map.off("moveend", moveHandler);
     if (map && clickHandler) map.off("click", clickHandler);
@@ -1265,6 +1312,7 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError = null;
     cachedTextFont = null;
+    dggs = null;
     map = null;
     appRef = null;
     app.closeRightPanel?.(PANEL_ID);

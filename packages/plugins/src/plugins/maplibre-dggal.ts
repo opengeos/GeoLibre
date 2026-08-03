@@ -194,18 +194,23 @@ let currentGrid: FeatureCollection<Polygon> = { type: "FeatureCollection", featu
 let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
 let pendingRefresh: number | null = null;
+/** Bumped on every activate/deactivate so an in-flight WASM load cannot attach after teardown. */
+let activationGeneration = 0;
 
 let dggalPromise: Promise<DggalEngine> | null = null;
 
 /**
  * Load the DGGAL WASM module once and reuse the handle. Imported dynamically
  * so the ~1 MB module stays out of the main bundle until the plugin is
- * activated.
+ * activated. A failed load clears the cache so the next activate can retry.
  */
 export function loadDggal(): Promise<DggalEngine> {
-  dggalPromise ??= import("dggal").then(
-    (module) => module.DGGAL.init() as unknown as Promise<DggalEngine>,
-  );
+  dggalPromise ??= import("dggal")
+    .then((module) => module.DGGAL.init() as unknown as Promise<DggalEngine>)
+    .catch((error) => {
+      dggalPromise = null;
+      throw error;
+    });
   return dggalPromise;
 }
 
@@ -459,6 +464,24 @@ export function dggalGridForBounds(
   let [west, south, east, north] = bounds;
   south = Math.max(-90, Math.min(90, south));
   north = Math.max(-90, Math.min(90, north));
+  // Wrapped antimeridian bounds (west > east) must be split — a negative span
+  // undercounts area and feeds listZones an inverted bbox.
+  if (east < west) {
+    const left = dggalGridForBounds(engine, [west, south, 180, north], resolution, limit);
+    const right = dggalGridForBounds(engine, [-180, south, east, north], resolution, limit);
+    const seen = new Set<string>();
+    const features: Feature<Polygon>[] = [];
+    for (const feature of [...left.features, ...right.features]) {
+      const id = String(feature.properties?.dggal ?? feature.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      features.push(feature);
+      if (features.length > limit) {
+        throw new RangeError(`DGGAL zone limit exceeded: ${limit}`);
+      }
+    }
+    return { type: "FeatureCollection", features };
+  }
   if (east - west >= 360) {
     west = -180;
     east = 180;
@@ -613,7 +636,20 @@ function refresh(): void {
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
   updateSelectedSource();
-  if (panelContainer) renderPanel(panelContainer);
+  // Pan/zoom only changes the cell count status — rebuild the whole panel and
+  // the open color picker / focused inputs are destroyed mid-gesture.
+  updatePanelStatus();
+}
+
+/** Update the status line without recreating the rest of the panel controls. */
+function updatePanelStatus(): void {
+  const status = panelContainer?.querySelector<HTMLElement>("[data-dggal-status]");
+  if (!status) {
+    if (panelContainer) renderPanel(panelContainer);
+    return;
+  }
+  status.textContent = currentError ?? labels.cellCount(currentGrid.features.length);
+  status.style.color = currentError ? "#dc2626" : "";
 }
 
 /**
@@ -857,6 +893,7 @@ function renderPanel(container: HTMLElement): void {
   }
 
   const status = document.createElement("div");
+  status.dataset.dggalStatus = "";
   status.textContent = currentError ?? labels.cellCount(currentGrid.features.length);
   status.style.color = currentError ? "#dc2626" : "";
   section.appendChild(status);
@@ -989,7 +1026,12 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
   activate: async (app) => {
     const activeMap = app.getMap?.();
     if (!activeMap) return false;
-    dggal = await loadDggal();
+    const generation = (activationGeneration += 1);
+    // Await WASM before mutating map/panel state so a deactivate during the
+    // load cannot race a late attach (leaked listeners / panels / layers).
+    const engine = await loadDggal();
+    if (generation !== activationGeneration) return false;
+    dggal = engine;
     map = activeMap;
     appRef = app;
     moveHandler = () => scheduleRefresh();
@@ -1029,6 +1071,7 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
     app.openRightPanel?.(PANEL_ID);
   },
   deactivate: (app) => {
+    activationGeneration += 1;
     cancelScheduledRefresh();
     if (map && moveHandler) map.off("moveend", moveHandler);
     if (map && clickHandler) map.off("click", clickHandler);
@@ -1047,6 +1090,7 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError = null;
     cachedTextFont = null;
+    dggal = null;
     map = null;
     appRef = null;
     app.closeRightPanel?.(PANEL_ID);

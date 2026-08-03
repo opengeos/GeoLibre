@@ -274,11 +274,30 @@ export function setA5GridSettings(patch: Partial<A5GridSettings>): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
+/**
+ * Unwrap antimeridian-crossing A5 rings so longitudes stay contiguous.
+ * a5-js returns raw ±180 jumps; MapLibre needs the adjacent world copy.
+ */
+export function a5UnwrapBoundary(ring: [number, number][]): [number, number][] {
+  if (ring.length === 0) return ring;
+  const out: [number, number][] = [];
+  for (const [lng, lat] of ring) {
+    let lon = lng;
+    if (out.length > 0) {
+      const reference = out[0][0];
+      if (lon - reference > 180) lon -= 360;
+      if (lon - reference < -180) lon += 360;
+    }
+    out.push([lon, lat]);
+  }
+  return out;
+}
+
 /** Convert an A5 cell (hex identifier) to a GeoJSON polygon with export attributes. */
 export function a5CellFeature(cell: string): Feature<Polygon> {
   const id = hexToU64(cell);
   const [lng, lat] = cellToLonLat(id);
-  const boundary = cellToBoundary(id) as [number, number][];
+  const boundary = a5UnwrapBoundary(cellToBoundary(id) as [number, number][]);
   return {
     type: "Feature",
     id: cell,
@@ -559,9 +578,9 @@ function gridCsv(grid: FeatureCollection<Polygon>): string {
 
 function fitSelected(): void {
   if (!selectedCell || !appRef) return;
-  // The ring is contiguous even across the antimeridian, so min/max longitudes
-  // never span the world.
-  const ring = cellToBoundary(hexToU64(selectedCell));
+  // The ring is unwrapped to stay contiguous across the antimeridian, so
+  // min/max longitudes never span the world.
+  const ring = a5UnwrapBoundary(cellToBoundary(hexToU64(selectedCell)) as [number, number][]);
   const lons = ring.map(([lng]) => lng);
   const lats = ring.map(([, lat]) => lat);
   appRef.fitBounds?.([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);

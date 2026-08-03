@@ -368,6 +368,10 @@ export function olcGridForBounds(
   const startLat = Math.max(-90, Math.floor((south + 90) / latHeight) * latHeight - 90);
 
   const features: Feature<Polygon>[] = [];
+  // Floating-point walks of the grid can land on the same cell twice near
+  // cell boundaries; key by (id, world copy) so a dateline-crossing view can
+  // still draw the same code in two adjacent copies.
+  const seen = new Set<string>();
   for (let lng = startLng; lng < east; lng += lngWidth) {
     for (let lat = startLat; lat < north && lat < 90; lat += latHeight) {
       const centerLng = lng + lngWidth / 2;
@@ -375,6 +379,9 @@ export function olcGridForBounds(
       // 360° multiple between the drawn column and the normalized cell.
       const lngOffset =
         Math.round((centerLng - OpenLocationCode.decode(cell).longitudeCenter) / 360) * 360;
+      const key = `${cell}@${lngOffset}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       features.push(olcCellFeature(cell, lngOffset));
       if (features.length > limit) {
         throw new RangeError(`OLC cell limit exceeded: ${limit}`);
