@@ -133,8 +133,8 @@ shipping them broken. Here is how the two macOS builds compare:
 | --- | --- | --- |
 | Whitebox toolbox (1,000+ WebAssembly tools) | Yes | Yes |
 | Processing → Vector, browser-engine Conversion, client raster tools | Yes | Yes |
-| SQL Workspace (DuckDB-WASM, PGlite/PostGIS) | Yes | Yes |
-| Python sidecar engines (GeoPandas vector, rasterio raster, GDAL conversion, SamGeo segmentation, SedonaDB SQL) | Yes | No |
+| SQL Workspace (DuckDB-WASM, PGlite/PostGIS, in-browser Apache Sedona on CereusDB) | Yes | Yes |
+| Python sidecar engines (GeoPandas vector, rasterio raster, GDAL conversion, SamGeo segmentation, the SedonaDB sidecar behind the Apache Sedona engine) | Yes | No |
 | Add Data → PostgreSQL / PostGIS (martin tile server) | Yes | No |
 | Notebook panel on a local JupyterLab server | Yes | JupyterLite only |
 | Installing external plugins from a zip or the registry | Yes | Built-in and bundled plugins only |
@@ -145,7 +145,10 @@ Everything client-side is unchanged: MapLibre and deck.gl rendering, Add Data fo
 local and remote files, DuckDB-WASM vector reading, the Whitebox WASM toolbox,
 Turf/Pyodide vector tools, browser-engine conversions, client raster tools, the
 SQL Workspace, the Python console, in-browser detection and segmentation,
-geocoding, and collaboration.
+geocoding, and collaboration. All three SQL engines still run, Apache Sedona
+included: without a sidecar it uses its in-browser CereusDB build, which carries
+the [attribute-SQL limitation](user-guide/sql-workspace.md#choosing-a-sql-engine)
+that engine has everywhere else.
 
 The sandbox also changes three behaviors:
 
@@ -158,9 +161,10 @@ The sandbox also changes three behaviors:
   process, so after a relaunch a layer backed by a local path outside the app
   container needs to be re-added.
 
-If you need the Python sidecar engines, PostGIS, a local Jupyter server, Earth
-Engine, or external plugins, install the Homebrew / DMG build instead. See
-[Mac App Store](mac-app-store.md) for the full technical detail.
+If you need the Python sidecar engines, Add Data → PostgreSQL/PostGIS through
+martin, a local Jupyter server, Earth Engine, or external plugins, install the
+Homebrew / DMG build instead. See [Mac App Store](mac-app-store.md) for the full
+technical detail.
 
 ## Linux installation
 
