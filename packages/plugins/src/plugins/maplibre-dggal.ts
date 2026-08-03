@@ -469,10 +469,17 @@ export function dggalGridForBounds(
   limit = DGGAL_VIEWPORT_CELL_LIMIT,
 ): FeatureCollection<Polygon> {
   let [west, south, east, north] = bounds;
-  west = normalizeLon(west);
-  east = normalizeLon(east);
   south = Math.max(-90, Math.min(90, south));
   north = Math.max(-90, Math.min(90, north));
+  // Measure the raw span before wrapping endpoints into [-180, 180]. Otherwise
+  // [0, …, 360, …] collapses to a zero-width box and listZones returns nothing.
+  if (east - west >= 360) {
+    west = -180;
+    east = 180;
+  } else {
+    west = normalizeLon(west);
+    east = normalizeLon(east);
+  }
   // Wrapped antimeridian bounds (west > east) must be split — a negative span
   // undercounts area and feeds listZones an inverted bbox.
   if (east < west) {
@@ -490,10 +497,6 @@ export function dggalGridForBounds(
       }
     }
     return { type: "FeatureCollection", features };
-  }
-  if (east - west >= 360) {
-    west = -180;
-    east = 180;
   }
   // Reject obviously oversized requests before materializing the zone list.
   // The global zone count is exact per type, so the spherical rectangle

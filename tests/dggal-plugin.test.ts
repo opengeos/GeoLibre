@@ -133,6 +133,16 @@ describe("DGGAL plugin helpers", () => {
     dggrs.delete();
   });
 
+  it("preserves unwrapped full-world longitude spans", async () => {
+    const dggal = await loadDggal();
+    const dggrs = dggal.createDGGRS("ISEA3H");
+    // [0, 360] must not collapse to a zero-width box after normalizeLon.
+    const grid = dggalGridForBounds(dggrs, [0, -85, 360, 85], 4);
+    const global = Number(dggrs.countZones(4));
+    assert.equal(grid.features.length, global);
+    dggrs.delete();
+  });
+
   it("rejects viewports that would exceed the zone limit", async () => {
     const dggal = await loadDggal();
     const dggrs = dggal.createDGGRS("ISEA3H");
