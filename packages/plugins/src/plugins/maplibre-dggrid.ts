@@ -672,12 +672,12 @@ export function dggridGridForBounds(
     const covered = new Set<string>();
     const queue: bigint[] = [seed];
     let head = 0;
+    // Guard against pathological loops; generous next to the cell limit
+    // because the frontier also visits cells that only touch the bounds.
+    const maxPops = Math.max(100_000, limit * 20);
+    let pops = 0;
+
     while (head < queue.length && pops < maxPops) {
-      // ...
-    }
-    if (head < queue.length) {
-      throw new RangeError(`DGGRID traversal limit exceeded: ${maxPops}`);
-    }
       pops += 1;
       const id = queue[head++];
       const key = id.toString();
@@ -695,6 +695,9 @@ export function dggridGridForBounds(
       for (const neighbor of engine.sequenceNumNeighbors([id], resolution)[0] ?? []) {
         if (!covered.has(neighbor.toString())) queue.push(neighbor);
       }
+    }
+    if (head < queue.length) {
+      throw new RangeError(`DGGRID traversal limit exceeded: ${maxPops}`);
     }
   }
 
