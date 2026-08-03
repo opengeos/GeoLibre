@@ -96,8 +96,9 @@ if (probe.status !== 0) {
   }
   console.warn(
     "[build-jupyterlite] `jupyter lite` is not available — skipping the " +
-      "JupyterLite build. The Notebook panel will fail to load on the web " +
-      "build. To enable it, install the build deps:\n" +
+      "JupyterLite build. Any build that embeds the site (web, embed) will " +
+      "have a Notebook panel that cannot load. To enable it, install the " +
+      "build deps:\n" +
       install,
   );
   process.exit(0);

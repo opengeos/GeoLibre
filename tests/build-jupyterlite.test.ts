@@ -24,13 +24,17 @@ interface Run {
  * Run the script with `jupyter` unreachable (empty PATH), so it always stops at
  * the CLI probe instead of spending a minute building the real site. What is
  * under test is the decision it makes before that point.
+ *
+ * Both build-flavor variables are cleared first so a caller that already has
+ * them set (running the suite from inside a Tauri build, say) cannot flip a
+ * case onto the wrong branch; each test opts back in through `env`.
  */
 function run(env: Record<string, string>): Run {
   // The script reports on both streams (console.log for the skip, console.warn
   // / console.error for the missing CLI), so read them together.
   const result = spawnSync(process.execPath, [script], {
     cwd: repoRoot,
-    env: { ...process.env, PATH: "", GEOLIBRE_MAS_BUILD: "", ...env },
+    env: { ...process.env, PATH: "", TAURI_ENV_PLATFORM: "", GEOLIBRE_MAS_BUILD: "", ...env },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
