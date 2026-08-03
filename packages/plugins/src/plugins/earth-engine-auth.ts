@@ -1,5 +1,6 @@
 /// <reference path="../earthengine.d.ts" />
 
+import { isIpadDesktopUserAgent } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
@@ -178,6 +179,13 @@ export async function ensureEarthEngineAuthLibraryLoaded(): Promise<void> {
 export async function authenticateEarthEngine(
   oauthClientId: string,
 ): Promise<TauriEarthEngineOAuthToken | null> {
+  // Defence in depth: the UI is hidden in these builds, but a restored panel
+  // state or an external plugin could still reach here, and the Rust command is
+  // a stub that binds nothing.
+  if (!isEarthEngineAvailable()) {
+    throw new Error(EARTH_ENGINE_UNAVAILABLE_MESSAGE);
+  }
+
   if (shouldUseTauriEarthEngineOAuth()) {
     return authenticateEarthEngineViaTauri(oauthClientId);
   }
@@ -219,6 +227,56 @@ export function isTauriProductionOrigin(): boolean {
 export function shouldUseTauriEarthEngineOAuth(): boolean {
   return isTauriProductionOrigin();
 }
+
+// Injected by vite.config.ts; declared locally (module scope, so it does not
+// collide with the app's global declaration in vite-env.d.ts) because this
+// package must stay importable from a plain Node test where the define is
+// absent.
+declare const __GEOLIBRE_MAS_BUILD__: boolean;
+
+/**
+ * Whether this build is one of the Apple App Store targets, which ship without
+ * the Earth Engine OAuth loopback listener.
+ *
+ * The macOS App Store build is identified by its Vite define; iOS by its user
+ * agent, since no define distinguishes it. iPadOS 13+ reports a desktop
+ * "Macintosh" UA, disambiguated from a real Mac by multi-touch — the same rule
+ * as the app's `isMobile`.
+ */
+function isAppleAppStoreRuntime(userAgent?: string, maxTouchPoints?: number): boolean {
+  if (typeof __GEOLIBRE_MAS_BUILD__ !== "undefined" && __GEOLIBRE_MAS_BUILD__) return true;
+  if (typeof navigator === "undefined") return false;
+  const ua = userAgent ?? navigator.userAgent;
+  const touch = maxTouchPoints ?? navigator.maxTouchPoints;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return isIpadDesktopUserAgent(ua, touch);
+}
+
+/**
+ * Whether Earth Engine sign-in is available in this build.
+ *
+ * Signing in from a packaged app needs the Rust loopback OAuth listener, which
+ * the Apple App Store builds compile out (see the module gate in
+ * `src-tauri/src/lib.rs`) so the app claims no `network.server` entitlement.
+ * A browser — including Safari on iOS — still uses Google's popup/redirect flow
+ * and keeps Earth Engine, so the check is scoped to the packaged app via
+ * `isTauriProductionOrigin`.
+ *
+ * @param appleAppStore - Override for testing; defaults to the runtime check.
+ * @param packagedApp - Override for testing; defaults to
+ *   `isTauriProductionOrigin()`.
+ * @returns True when the Earth Engine UI and sign-in should be offered.
+ */
+export function isEarthEngineAvailable(
+  appleAppStore: boolean = isAppleAppStoreRuntime(),
+  packagedApp: boolean = isTauriProductionOrigin(),
+): boolean {
+  return !(packagedApp && appleAppStore);
+}
+
+/** The message shown where Earth Engine is compiled out. */
+export const EARTH_ENGINE_UNAVAILABLE_MESSAGE =
+  "Earth Engine sign-in is not available in the App Store build of GeoLibre.";
 
 async function authenticateEarthEngineViaBrowser(oauthClientId: string): Promise<void> {
   const earthEngine = await loadEarthEngine();

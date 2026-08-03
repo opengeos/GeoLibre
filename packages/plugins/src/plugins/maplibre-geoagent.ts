@@ -23,6 +23,7 @@ import {
   errorMessage,
   importMetaEnv,
   installEarthEngineFunctionInfoFallback,
+  isEarthEngineAvailable,
   oauthClientIdValue,
   preloadEarthEngineAuthLibrary,
   projectValue as earthEngineProjectValue,
@@ -377,6 +378,15 @@ function enhanceEarthEngineSignIn(): void {
   const status = details?.querySelector<HTMLElement>(".geoagent-earth-engine-status");
   const clientIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-client-id");
   const projectIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-project-id");
+  // The Apple App Store builds ship without the loopback OAuth listener that
+  // Earth Engine sign-in needs, so hide the whole section rather than render a
+  // Sign in button that can only throw. Everything inside it is Earth
+  // Engine-specific (status line, OAuth client id, project id), and this is the
+  // GeoAgent counterpart of the ProcessingMenu/TopToolbar gates.
+  if (details && !isEarthEngineAvailable()) {
+    details.hidden = true;
+    return;
+  }
   if (
     !details ||
     !status ||

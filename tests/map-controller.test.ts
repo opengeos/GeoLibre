@@ -36,6 +36,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   fake: FakeMap;
 } {
   const sources = new Map<string, Record<string, unknown>>();
+  const sourceHandles = new Map<string, Record<string, unknown>>();
   const layers = new Map<string, Record<string, unknown>>();
   const order: string[] = [];
   const calls: { method: string; args: unknown[] }[] = [];
@@ -67,28 +68,32 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       layers: order.map((id) => ({ id, ...layers.get(id) })),
       sources: Object.fromEntries(sources),
     }),
-    getSource: (id: string) =>
-      sources.has(id)
-        ? {
-            type: (sources.get(id)?.type as string) ?? "geojson",
-            bounds: sources.get(id)?.bounds,
-            // Mirrors RasterTileSource.serialize(): a copy of the original
-            // source spec, used by getLayerRasterSource.
-            serialize: () => ({ ...sources.get(id) }),
-            setData: (data: unknown) => {
-              const spec = sources.get(id);
-              if (spec) spec.data = data;
-              setDataCalls.push({ id, data });
-              calls.push({ method: "setData", args: [id, data] });
-            },
-          }
-        : undefined,
+    getSource: (id: string) => {
+      if (!sources.has(id)) return undefined;
+      if (!sourceHandles.has(id)) {
+        sourceHandles.set(id, {
+          type: (sources.get(id)?.type as string) ?? "geojson",
+          bounds: sources.get(id)?.bounds,
+          // Mirrors RasterTileSource.serialize(): a copy of the original
+          // source spec, used by getLayerRasterSource.
+          serialize: () => ({ ...sources.get(id) }),
+          setData: (data: unknown) => {
+            const spec = sources.get(id);
+            if (spec) spec.data = data;
+            setDataCalls.push({ id, data });
+            calls.push({ method: "setData", args: [id, data] });
+          },
+        });
+      }
+      return sourceHandles.get(id);
+    },
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
       calls.push({ method: "addSource", args: [id, spec] });
     },
     removeSource: (id: string) => {
       sources.delete(id);
+      sourceHandles.delete(id);
       calls.push({ method: "removeSource", args: [id] });
     },
     getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
@@ -133,6 +138,8 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       }
       calls.push({ method: "setLayoutProperty", args: [id, key, value] });
     },
+    getLayoutProperty: (id: string, key: string) =>
+      (layers.get(id)?.layout as Record<string, unknown> | undefined)?.[key],
     setLayerZoomRange: record("setLayerZoomRange"),
     // Camera + query helpers used by the controller's public methods.
     project: (lngLat: [number, number]) => ({ x: lngLat[0], y: lngLat[1] }),
@@ -269,6 +276,44 @@ const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
 describe("MapController.syncLayers reconciliation", () => {
+  it("runs the initial sync once and restores layers after a style reload", () => {
+    const { map, fake } = makeFakeMap();
+    const listeners = new Map<string, Set<() => void>>();
+    Object.assign(map as object, {
+      on: (event: string, listener: () => void) => {
+        const eventListeners = listeners.get(event) ?? new Set();
+        eventListeners.add(listener);
+        listeners.set(event, eventListeners);
+      },
+      once: (event: string, listener: () => void) => {
+        const eventListeners = listeners.get(event) ?? new Set();
+        eventListeners.add(listener);
+        listeners.set(event, eventListeners);
+      },
+      off: (event: string, listener: () => void) => listeners.get(event)?.delete(listener),
+    });
+    const controller = createMapController();
+    const internal = internals(controller);
+    internal.map = map;
+
+    controller.waitAndSyncLayers([pointLayer("a")]);
+    internal.styleReady = true;
+    for (const listener of [...(listeners.get("style.load") ?? [])]) listener();
+    for (const listener of [...(listeners.get("load") ?? [])]) listener();
+
+    assert.equal(fake.calls.filter((call) => call.method === "addSource").length, 1);
+
+    const styleMap = map as {
+      removeLayer: (id: string) => void;
+      removeSource: (id: string) => void;
+    };
+    styleMap.removeLayer(circleId("a"));
+    styleMap.removeSource(srcId("a"));
+    for (const listener of [...(listeners.get("style.load") ?? [])]) listener();
+
+    assert.equal(fake.calls.filter((call) => call.method === "addSource").length, 2);
+  });
+
   it("does nothing until the style is ready", () => {
     const { map, fake } = makeFakeMap();
     const controller = createMapController();
@@ -377,6 +422,27 @@ describe("MapController.syncLayers reconciliation", () => {
     assert.equal(addSourceCalls(), 1, "source is not re-added");
     assert.equal(fake.setDataCalls.length, 1, "data refreshed via setData");
     assert.equal(fake.setDataCalls[0].id, srcId("a"));
+  });
+
+  it("does not resend unchanged data or style values", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const layer = pointLayer("a");
+
+    controller.syncLayers([layer]);
+    const writes = fake.calls.filter((call) =>
+      ["setData", "setPaintProperty", "setLayoutProperty"].includes(call.method),
+    ).length;
+
+    controller.syncLayers([layer]);
+
+    assert.equal(fake.setDataCalls.length, 0);
+    assert.equal(
+      fake.calls.filter((call) =>
+        ["setData", "setPaintProperty", "setLayoutProperty"].includes(call.method),
+      ).length,
+      writes,
+    );
   });
 
   it("recreates the source when a layer-level change demands it (clustering)", () => {

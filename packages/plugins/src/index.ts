@@ -183,6 +183,10 @@ export {
   toggleEarthEnginePanel,
 } from "./plugins/maplibre-earth-engine";
 export {
+  EARTH_ENGINE_UNAVAILABLE_MESSAGE,
+  isEarthEngineAvailable,
+} from "./plugins/earth-engine-auth";
+export {
   closeThreeDTilesLayerPanel,
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
