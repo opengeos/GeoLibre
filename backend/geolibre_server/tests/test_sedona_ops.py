@@ -1,5 +1,4 @@
 import time
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,7 +29,7 @@ def test_sql_timeout_graceful_shutdown(
 
     # Mock the execute method to block longer than the timeout
     # We must patch the connection's sql method to block
-    def _slow_sql(*_args: Any, **_kwargs: Any) -> MagicMock:
+    def _slow_sql(*_args: object, **_kwargs: object) -> MagicMock:
         time.sleep(0.3)  # Blocks longer than the 0.1s timeout
         mock_df = MagicMock()
         mock_df.limit.return_value.to_pandas.return_value = MagicMock(columns=[])
@@ -46,8 +45,12 @@ def test_sql_timeout_graceful_shutdown(
     # We must assert that the connection has NOT been closed yet!
     mock_sedona_db.close.assert_not_called()
 
-    # Wait for the background thread to finish
-    time.sleep(0.4)
+    # Wait for the background thread to finish. Poll instead of sleeping a fixed
+    # interval: on a loaded CI host the 0.3s sleep can overrun any margin we
+    # would pick, which would make the assertion below flaky.
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline and not mock_sedona_db.close.called:
+        time.sleep(0.01)
 
     # Now the callback should have fired and closed the connection
     mock_sedona_db.close.assert_called_once()
