@@ -103,6 +103,13 @@ describe("DGGRID plugin helpers", () => {
     const engine = await loadDggrid();
     const grid = dggridGridForBounds(engine, [179.6, -0.3, -179.6, 0.3], 8);
     assert.ok(grid.features.length > 0);
+    // A cell that only clips the 0.8° x 0.6° box must stay contiguous.
+    for (const feature of grid.features) {
+      const lons = feature.geometry.coordinates[0].map(([lng]) => lng);
+      assert.ok(Math.max(...lons) - Math.min(...lons) < 180);
+    }
+    // The box is tiny, so a normalization bug that collects distant cells fails here.
+    assert.ok(grid.features.length < 200, String(grid.features.length));
   });
 
   it("fills bounds for the other cell types and projections", async () => {
