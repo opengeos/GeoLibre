@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  COLLAB_URL_ENV,
   CollabConnection,
   createSession,
   httpBaseFromWs,
@@ -42,6 +43,20 @@ describe("resolveCollabBaseUrl", () => {
   it("returns null when unset", () => {
     assert.equal(resolveCollabBaseUrl(undefined), null);
     assert.equal(resolveCollabBaseUrl(""), null);
+  });
+
+  // The Docker entrypoint writes this at container startup, so a prebuilt image
+  // can point at a self-hosted relay without a rebuild (GeoLibre#1684).
+  it("prefers the deployment env over the build-time env", () => {
+    assert.equal(
+      resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "wss://collab.example.org" }),
+      "wss://collab.example.org",
+    );
+  });
+
+  it("still validates a deployment-provided value", () => {
+    assert.equal(resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "ws://relay.corp" }), null);
+    assert.equal(resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "  " }), null);
   });
 });
 

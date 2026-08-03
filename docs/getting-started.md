@@ -273,6 +273,42 @@ by whoever frames it. See
 [Talking to the map at runtime](user-guide/embedding.md#talking-to-the-map-at-runtime)
 for the message reference and a host-page example.
 
+#### Self-hosted sharing and collaboration servers
+
+Project **Share** and the **Project Gallery** talk to `share.geolibre.app` by
+default. Point them at your own server instead, or turn the feature off:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_SHARE_URL=https://maps.example.org \
+  -e GEOLIBRE_COLLAB_URL=wss://collab.example.org \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+| Variable | Effect |
+| --- | --- |
+| `GEOLIBRE_SHARE_URL` | Base URL of the project sharing server. Unset uses `share.geolibre.app`. Set it to `off` to remove Share and the Project Gallery from the UI entirely. |
+| `GEOLIBRE_COLLAB_URL` | Base URL of the [collaboration](collaboration.md) relay. Unset leaves live collaboration disabled. |
+
+Both are read at container startup, so a prebuilt image can be repointed by
+restarting it with different values — no rebuild. (The equivalent build
+arguments, `VITE_GEOLIBRE_SHARE_URL` and `VITE_GEOLIBRE_COLLAB_URL`, exist for
+baking a default into your own image.)
+
+Both must use TLS — `https://` for the share server, `wss://` for the relay —
+because the app sends your API token to the share server with every request.
+Plaintext is accepted only on `localhost` / `127.0.0.1` for local development, so
+put a self-hosted server behind a reverse proxy that terminates TLS. A value that
+does not satisfy this **fails the container boot** with an error naming the
+variable, rather than starting up and quietly using the public hosted service
+with your users' projects.
+
+> There is no open-source implementation of the sharing server API yet
+> ([#1685](https://github.com/opengeos/GeoLibre/issues/1685)), so today
+> `GEOLIBRE_SHARE_URL` is for pointing at a compatible or staging deployment you
+> already run. `GEOLIBRE_COLLAB_URL` can point at your own deployment of
+> `workers/collab`.
+
 ### Run the desktop app
 
 ```bash

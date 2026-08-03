@@ -54,15 +54,23 @@ function requestHost(input: RequestInfo | URL): string | null {
  *
  * The host is resolved from {@link resolveShareBaseUrl} (the configured or
  * production share URL) at install time, so a `VITE_GEOLIBRE_SHARE_URL` override
- * is honored.
+ * is honored. When it resolves to null — sharing disabled, or a configured host
+ * that was rejected — no override is installed and every request keeps the
+ * browser `fetch`.
+ *
+ * Note that a self-hosted host still has to be listed in the Tauri `http:default`
+ * capability scope to be reachable from the desktop build; the web build (where
+ * self-hosting is configured) has no such constraint.
  *
  * Loaded lazily and only in the desktop build so the web/embedded bundles never
  * pull in `@tauri-apps/plugin-http`.
  */
 export async function installNativeShareFetch(): Promise<void> {
+  const baseUrl = resolveShareBaseUrl();
+  if (!baseUrl) return;
   let shareHost: string | null;
   try {
-    shareHost = new URL(resolveShareBaseUrl()).host;
+    shareHost = new URL(baseUrl).host;
   } catch {
     shareHost = null;
   }

@@ -165,11 +165,63 @@ for entry in os.environ.get("GEOLIBRE_EMBED_ORIGINS", "").replace(",", " ").spli
 if origins:
     deployment["VITE_GEOLIBRE_EMBED_ORIGINS"] = ",".join(origins)
 
+
+def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
+    """Validate a self-hosted service URL, or exit with an explanation.
+
+    Both of these carry a Bearer token, so a plaintext scheme is only allowed on
+    loopback (development). The app applies the same rule and *refuses* a value it
+    rejects rather than falling back to the public hosted service — so a value
+    that reaches the app unvalidated becomes a silently disabled feature. Failing
+    the boot instead puts the error where an operator will actually see it.
+    """
+    parsed = urlsplit(value)
+    if parsed.scheme in loopback_schemes and parsed.hostname in loopback_hosts:
+        return value
+    if parsed.scheme not in schemes or not parsed.netloc:
+        raise SystemExit(
+            f"ERROR: {name} must be a {schemes[0]}:// URL "
+            f"(or {loopback_schemes[0]}:// on {'/'.join(loopback_hosts)}), not {value!r}."
+        )
+    if parsed.username or parsed.password:
+        raise SystemExit(f"ERROR: {name} must not embed credentials.")
+    return value
+
+
+# Project sharing server. Unset means the public hosted service; "off" removes
+# Share and the Project Gallery from the UI entirely.
+share_url = os.environ.get("GEOLIBRE_SHARE_URL", "").strip()
+if share_url:
+    if share_url.lower() == "off":
+        deployment["VITE_GEOLIBRE_SHARE_URL"] = "off"
+    else:
+        deployment["VITE_GEOLIBRE_SHARE_URL"] = service_url(
+            "GEOLIBRE_SHARE_URL", share_url, ("https",), ("http",), ("localhost", "127.0.0.1")
+        )
+
+# Live collaboration relay. Unset leaves collaboration dark.
+collab_url = os.environ.get("GEOLIBRE_COLLAB_URL", "").strip()
+if collab_url:
+    deployment["VITE_GEOLIBRE_COLLAB_URL"] = service_url(
+        "GEOLIBRE_COLLAB_URL", collab_url, ("wss",), ("ws",), ("localhost", "127.0.0.1", "::1")
+    )
+
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
     json.dump(deployment, output, separators=(",", ":"))
     output.write(";\n")
 '
+
+if [ -n "${GEOLIBRE_SHARE_URL:-}" ]; then
+  case "$GEOLIBRE_SHARE_URL" in
+    off | OFF | Off) echo "Project sharing disabled (GEOLIBRE_SHARE_URL=off)." ;;
+    *) echo "Project sharing server: $GEOLIBRE_SHARE_URL" ;;
+  esac
+fi
+
+if [ -n "${GEOLIBRE_COLLAB_URL:-}" ]; then
+  echo "Collaboration relay: $GEOLIBRE_COLLAB_URL"
+fi
 
 if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
   echo "Embed postMessage API enabled for: $GEOLIBRE_EMBED_ORIGINS"

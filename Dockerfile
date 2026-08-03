@@ -31,11 +31,21 @@ ARG VITE_WELCOME_DISABLED=
 # postMessage API. Usually set at RUN time instead (-e GEOLIBRE_EMBED_ORIGINS=…),
 # which the entrypoint writes into the runtime config without a rebuild.
 ARG VITE_GEOLIBRE_EMBED_ORIGINS=
+# Self-hosted project sharing server (https://…, or "off" to remove Share and the
+# Project Gallery). Unset uses the public hosted service. Like the embed origins,
+# normally set at RUN time instead (-e GEOLIBRE_SHARE_URL=…) so a prebuilt image
+# can be repointed without a rebuild.
+ARG VITE_GEOLIBRE_SHARE_URL=
+# Self-hosted collaboration relay (wss://…). Unset leaves collaboration dark.
+# Also settable at RUN time (-e GEOLIBRE_COLLAB_URL=…).
+ARG VITE_GEOLIBRE_COLLAB_URL=
 ENV GEOLIBRE_APP_BASE=${GEOLIBRE_APP_BASE}
 ENV VITE_GEE_OAUTH_CLIENT_ID=${VITE_GEE_OAUTH_CLIENT_ID}
 ENV VITE_MAPILLARY_ACCESS_TOKEN=${VITE_MAPILLARY_ACCESS_TOKEN}
 ENV VITE_WELCOME_DISABLED=${VITE_WELCOME_DISABLED}
 ENV VITE_GEOLIBRE_EMBED_ORIGINS=${VITE_GEOLIBRE_EMBED_ORIGINS}
+ENV VITE_GEOLIBRE_SHARE_URL=${VITE_GEOLIBRE_SHARE_URL}
+ENV VITE_GEOLIBRE_COLLAB_URL=${VITE_GEOLIBRE_COLLAB_URL}
 
 RUN npm run build
 

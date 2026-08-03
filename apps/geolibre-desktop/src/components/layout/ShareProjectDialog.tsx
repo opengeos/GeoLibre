@@ -18,6 +18,7 @@ import {
   isShareableTitle,
   MAX_PROJECT_TITLE_LENGTH,
   resolveShareBaseUrl,
+  shareHostLabel,
   ShareUploadError,
   uploadProjectToShare,
   type ShareUploadErrorCode,
@@ -38,9 +39,18 @@ interface ShareProjectDialogProps {
   getProject: (title: string) => Promise<{ content: string; filename: string }>;
 }
 
-// The website's account settings page, where the user both creates API tokens
-// and sets the username required for sharing.
-const ACCOUNT_SETTINGS_URL = `${resolveShareBaseUrl()}/settings`;
+/**
+ * The share host's account settings page, where the user both creates API tokens
+ * and sets the username required for sharing.
+ *
+ * Derived from the resolved host rather than hardcoded, so a self-hosted
+ * deployment sends its users to its own settings page. Null when no share host is
+ * configured, in which case the dialog does not render the link.
+ */
+function accountSettingsUrl(): string | null {
+  const base = resolveShareBaseUrl();
+  return base ? `${base}/settings` : null;
+}
 
 export function ShareProjectDialog({
   open,
@@ -49,6 +59,11 @@ export function ShareProjectDialog({
   getProject,
 }: ShareProjectDialogProps) {
   const { t } = useTranslation();
+  // Resolved per render rather than at module load so a deployment env written
+  // after this module was imported is still honored.
+  const settingsUrl = accountSettingsUrl();
+  // Named in the copy below, so a self-hosted deployment reads its own host.
+  const shareHost = shareHostLabel();
   const shareToken = useDesktopSettingsStore((s) => s.desktopSettings.shareToken);
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<ShareVisibility>("unlisted");
@@ -166,24 +181,28 @@ export function ShareProjectDialog({
             <Share2 className="h-4 w-4" />
             {t("share.title")}
           </DialogTitle>
-          <DialogDescription>{t("share.description")}</DialogDescription>
+          <DialogDescription>{t("share.description", { shareHost })}</DialogDescription>
         </DialogHeader>
 
         {!hasToken ? (
           <div className="space-y-4 text-sm">
-            <p className="text-muted-foreground">{t("share.setupIntro")}</p>
+            <p className="text-muted-foreground">{t("share.setupIntro", { shareHost })}</p>
             <ol className="space-y-3">
               <li className="space-y-2 rounded-md border p-3">
                 <p className="font-medium">{t("share.step1Title")}</p>
-                <p className="text-muted-foreground">{t("share.step1Description")}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void openExternalLink(ACCOUNT_SETTINGS_URL)}
-                >
-                  <ExternalLink className="me-2 h-3.5 w-3.5" />
-                  {t("share.getToken")}
-                </Button>
+                <p className="text-muted-foreground">
+                  {t("share.step1Description", { shareHost })}
+                </p>
+                {settingsUrl && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void openExternalLink(settingsUrl)}
+                  >
+                    <ExternalLink className="me-2 h-3.5 w-3.5" />
+                    {t("share.getToken")}
+                  </Button>
+                )}
               </li>
               <li className="space-y-2 rounded-md border p-3">
                 <p className="font-medium">{t("share.step2Title")}</p>
@@ -259,16 +278,18 @@ export function ShareProjectDialog({
                 role="alert"
                 className="space-y-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
               >
-                <p>{t("share.usernameRequired")}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void openExternalLink(ACCOUNT_SETTINGS_URL)}
-                >
-                  <ExternalLink className="me-2 h-3.5 w-3.5" />
-                  {t("share.openAccountSettings")}
-                </Button>
+                <p>{t("share.usernameRequired", { shareHost })}</p>
+                {settingsUrl && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void openExternalLink(settingsUrl)}
+                  >
+                    <ExternalLink className="me-2 h-3.5 w-3.5" />
+                    {t("share.openAccountSettings")}
+                  </Button>
+                )}
               </div>
             ) : error ? (
               <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">

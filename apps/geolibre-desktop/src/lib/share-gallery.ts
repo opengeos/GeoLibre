@@ -21,7 +21,9 @@ export type GalleryErrorCode =
   | "http"
   | "invalid-response"
   | "unauthorized"
-  | "username-required";
+  | "username-required"
+  /** The deployment disabled sharing, or named a share host that was rejected. */
+  | "not-configured";
 
 /** Error thrown by the gallery fetchers, carrying a translatable {@link GalleryErrorCode}. */
 export class GalleryError extends Error {
@@ -40,7 +42,20 @@ export class GalleryError extends Error {
   }
 }
 
-/** A public project as returned by share.geolibre.app's listing endpoint. */
+/**
+ * The share host for a gallery request, with a trailing slash stripped.
+ *
+ * @throws {GalleryError} `not-configured` when the deployment disabled sharing or
+ *   named a host that was rejected — the gallery must surface that rather than
+ *   quietly listing the hosted service's projects instead.
+ */
+function requireShareBase(override?: string): string {
+  const base = override ?? resolveShareBaseUrl();
+  if (!base) throw new GalleryError("not-configured");
+  return base.replace(/\/+$/, "");
+}
+
+/** A project as returned by the share host's listing endpoint. */
 export interface SharedProject {
   id: string;
   username: string;
@@ -182,7 +197,7 @@ function normalizeProject(raw: RawSharedProject, base: string): SharedProject | 
 export async function fetchSharedProjects(
   options: FetchSharedProjectsOptions = {},
 ): Promise<FetchSharedProjectsResult> {
-  const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
+  const base = requireShareBase(options.baseUrl);
   // See share-fetch.ts: on desktop this routes the share host through Tauri's
   // native HTTP client so the gallery listing isn't blocked by WebView CORS.
   const fetchImpl = options.fetchImpl ?? getShareFetch();
@@ -310,7 +325,7 @@ export function shareAuthorizedFetch(
  *   caller-initiated abort propagates as `AbortError`.
  */
 export async function fetchMyProjects(options: FetchMyProjectsOptions): Promise<SharedProject[]> {
-  const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
+  const base = requireShareBase(options.baseUrl);
   // One auth path for both production and tests: the injected fetch (or the
   // share fetch, which the desktop build routes natively to bypass CORS — see
   // share-fetch.ts) flows through the same same-origin token gating.

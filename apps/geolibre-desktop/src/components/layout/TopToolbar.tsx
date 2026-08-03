@@ -112,6 +112,7 @@ import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ProjectGalleryDialog } from "./ProjectGalleryDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
+import { resolveShareHost } from "../../lib/share-geolibre";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { SetViewDialog } from "./SetViewDialog";
@@ -854,6 +855,11 @@ export function TopToolbar({
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
+  // Whether this deployment has a usable share host. Read once per render (the
+  // deployment env does not change while the app is running) and passed down so
+  // the menu, the command palette, and the dialogs agree.
+  const shareHost = resolveShareHost();
+  const shareAvailable = shareHost.baseUrl != null;
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
@@ -980,13 +986,19 @@ export function TopToolbar({
       shortcut: { key: "s", mod: true, shift: true },
       run: () => void projectFiles.handleSaveAs(),
     },
-    {
-      id: "project.share",
-      title: t("toolbar.command.projectShare"),
-      group: t("toolbar.commandGroup.project"),
-      icon: Share2,
-      run: () => setShareDialogOpen(true),
-    },
+    // Only when the deployment has a usable share host; a command that always
+    // failed would be worse than an absent one.
+    ...(shareAvailable
+      ? [
+          {
+            id: "project.share",
+            title: t("toolbar.command.projectShare"),
+            group: t("toolbar.commandGroup.project"),
+            icon: Share2,
+            run: () => setShareDialogOpen(true),
+          },
+        ]
+      : []),
     // Only surfaced when live collaboration is configured (env flag).
     ...(collaboration.enabled
       ? [
@@ -1555,6 +1567,7 @@ export function TopToolbar({
         <ProjectMenu
           chrome={chrome}
           collaborationEnabled={collaboration.enabled}
+          shareHostStatus={shareHost.status}
           onNewProject={() => setNewProjectDialogOpen(true)}
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}

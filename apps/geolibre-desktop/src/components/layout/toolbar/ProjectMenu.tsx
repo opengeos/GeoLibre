@@ -36,11 +36,19 @@ import {
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
+import type { ShareHostStatus } from "../../../lib/share-geolibre";
 import { formatRecentProjectTime, type ToolbarChrome } from "./constants";
 
 interface ProjectMenuProps {
   chrome: ToolbarChrome;
   collaborationEnabled: boolean;
+  /**
+   * Availability of the configured share host. `disabled` hides Share and the
+   * Project Gallery (the deployment turned sharing off); `invalid` leaves them
+   * visible but disabled with a reason, so a broken configuration is discoverable
+   * rather than silently missing.
+   */
+  shareHostStatus: ShareHostStatus;
   onNewProject: () => void;
   onOpenFromFile: () => void;
   onOpenFromUrl: () => void;
@@ -64,6 +72,7 @@ interface ProjectMenuProps {
 export function ProjectMenu({
   chrome,
   collaborationEnabled,
+  shareHostStatus,
   onNewProject,
   onOpenFromFile,
   onOpenFromUrl,
@@ -90,6 +99,11 @@ export function ProjectMenu({
   const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // A deployment that turned sharing off should not advertise it; one that named
+  // a host we rejected should say so rather than leave the user wondering.
+  const shareHidden = shareHostStatus === "disabled";
+  const shareBroken = shareHostStatus === "invalid";
+  const shareBrokenReason = shareBroken ? t("toolbar.item.shareHostUnavailable") : undefined;
   // Group-visibility flags so the separators between groups aren't left orphaned
   // when a whole group is hidden by the active profile.
   const showSaveGroup =
@@ -139,10 +153,16 @@ export function ProjectMenu({
                 <Link2 className="me-2 h-3.5 w-3.5" />
                 {t("toolbar.item.urlEllipsis")}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onOpenGallery}>
-                <LayoutGrid className="me-2 h-3.5 w-3.5" />
-                {t("toolbar.item.galleryEllipsis")}
-              </DropdownMenuItem>
+              {!shareHidden && (
+                <DropdownMenuItem
+                  onSelect={onOpenGallery}
+                  disabled={shareBroken}
+                  title={shareBrokenReason}
+                >
+                  <LayoutGrid className="me-2 h-3.5 w-3.5" />
+                  {t("toolbar.item.galleryEllipsis")}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
@@ -256,8 +276,8 @@ export function ProjectMenu({
             {t("toolbar.item.saveAsTemplateEllipsis")}
           </DropdownMenuItem>
         )}
-        {show("project.share") && (
-          <DropdownMenuItem onSelect={onShare}>
+        {show("project.share") && !shareHidden && (
+          <DropdownMenuItem onSelect={onShare} disabled={shareBroken} title={shareBrokenReason}>
             <Share2 className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.shareEllipsis")}
           </DropdownMenuItem>

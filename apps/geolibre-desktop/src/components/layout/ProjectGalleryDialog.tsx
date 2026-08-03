@@ -38,6 +38,7 @@ import {
   projectOpenToken,
   type SharedProject,
 } from "../../lib/share-gallery";
+import { shareHostLabel } from "../../lib/share-geolibre";
 import type { TFunction } from "i18next";
 
 type GalleryScope = "featured" | "all" | "mine";
@@ -77,13 +78,15 @@ function galleryErrorMessage(error: unknown, t: TFunction): string {
       case "timeout":
         return t("gallery.errorTimeout");
       case "network":
-        return t("gallery.errorNetwork");
+        return t("gallery.errorNetwork", { shareHost: shareHostLabel() });
       case "invalid-response":
         return t("gallery.errorInvalidResponse");
       case "unauthorized":
-        return t("gallery.errorUnauthorized");
+        return t("gallery.errorUnauthorized", { shareHost: shareHostLabel() });
       case "username-required":
-        return t("gallery.errorUsernameRequired");
+        return t("gallery.errorUsernameRequired", { shareHost: shareHostLabel() });
+      case "not-configured":
+        return t("gallery.errorNotConfigured");
       case "http":
         return t("gallery.errorHttp", { status: error.status ?? 0 });
     }
@@ -92,7 +95,8 @@ function galleryErrorMessage(error: unknown, t: TFunction): string {
 }
 
 /**
- * Browse public projects shared on share.geolibre.app and open one in GeoLibre.
+ * Browse public projects shared on the configured share host and open one in
+ * GeoLibre.
  *
  * The listing endpoint only paginates (no server-side search), so this loads
  * pages on demand via "Load more" and filters the already-loaded set in the
@@ -322,7 +326,9 @@ export function ProjectGalleryDialog({
       >
         <DialogHeader>
           <DialogTitle>{t("gallery.title")}</DialogTitle>
-          <DialogDescription>{t("gallery.description")}</DialogDescription>
+          <DialogDescription>
+            {t("gallery.description", { shareHost: shareHostLabel() })}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex w-full gap-1 rounded-md bg-muted p-1 sm:w-auto sm:self-start">
@@ -360,7 +366,9 @@ export function ProjectGalleryDialog({
         </div>
 
         {!hasToken ? (
-          <p className="text-xs text-muted-foreground">{t("gallery.signedOutHint")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("gallery.signedOutHint", { shareHost: shareHostLabel() })}
+          </p>
         ) : null}
 
         {openError ? (
