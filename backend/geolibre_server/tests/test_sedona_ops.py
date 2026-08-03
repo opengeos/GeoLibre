@@ -1,10 +1,11 @@
-import pytest
-from unittest.mock import MagicMock, patch
-import concurrent.futures
 import time
 from typing import Any
+from unittest.mock import MagicMock, patch
 
-from geolibre_server.sedona_ops import run_sql, SqlTimeout
+import pytest
+
+from geolibre_server.sedona_ops import SqlTimeout, run_sql
+
 
 @pytest.fixture
 def mock_sedona_db() -> MagicMock:
@@ -15,7 +16,10 @@ def mock_sedona_db() -> MagicMock:
         mock_import.return_value = mock_sedona
         yield mock_conn
 
-def test_sql_timeout_graceful_shutdown(mock_sedona_db: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_sql_timeout_graceful_shutdown(
+    mock_sedona_db: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Test that a SQL query exceeding the timeout raises SqlTimeout,
     but does NOT immediately close the database connection.
@@ -36,7 +40,7 @@ def test_sql_timeout_graceful_shutdown(mock_sedona_db: MagicMock, monkeypatch: p
 
     with pytest.raises(SqlTimeout, match="timed out"):
         run_sql("SELECT 1")
-    
+
     # At this exact moment, the TimeoutError was caught and SqlTimeout raised.
     # The background thread is still sleeping (for another 0.2 seconds).
     # We must assert that the connection has NOT been closed yet!
