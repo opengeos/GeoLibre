@@ -69,14 +69,21 @@ _PROXY_TIMEOUT_SECS = 1800  # model inference on large rasters can be slow
 
 # Cap concurrent segmentation proxy requests so a burst of large uploads cannot
 # exhaust sidecar memory or starve the event loop. Mirrors the conversion
-# engine's MAX_IN_FLIGHT_JOBS pattern.
+# engine's MAX_IN_FLIGHT_JOBS pattern, with one difference worth knowing: those
+# endpoints enqueue a background job and return immediately, whereas this is a
+# streaming proxy, so a slot is held for the whole call — the samgeo-api launch
+# (_HEALTH_TIMEOUT_SECS) plus inference (_PROXY_TIMEOUT_SECS). That is
+# deliberate: the resource being rationed is the held connection and the
+# in-flight upload, not a queue position.
 MAX_IN_FLIGHT_SEGMENT_REQUESTS = 4
 _segment_lock = threading.Lock()
 _segment_in_flight = 0
 
-# Reject uploads whose Content-Length exceeds this (100 MiB). When the header
-# is missing (chunked transfer) the limit is not enforced — the backend's own
-# size handling applies.
+# Reject uploads larger than this (100 MiB). Enforced twice: once up front on
+# Content-Length so an oversized upload is refused before any bytes are read,
+# and again on the cumulative bytes seen in ``_body_iter``, which is what
+# actually covers a client that omits the header (chunked transfer) or sends a
+# non-numeric one.
 _MAX_SEGMENT_BODY_BYTES = 100 * 1024 * 1024
 
 # Guards the launch-or-reuse decision for the child process.

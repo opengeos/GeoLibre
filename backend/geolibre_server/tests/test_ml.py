@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+from collections.abc import Iterator
+from typing import ClassVar
 
 import pytest
 
@@ -62,7 +64,7 @@ class _FakeHTTPError(Exception):
 class _FakeHttpx:
     """Minimal stand-in for the httpx module used by ml.py."""
 
-    calls: list = []
+    calls: ClassVar[list] = []
     HTTPError = _FakeHTTPError
     AsyncClient = _FakeAsyncClient
 
@@ -290,7 +292,7 @@ def test_segment_releases_slot_after_upstream_failure(monkeypatch):
     from geolibre_server.app.main import app
 
     class _ErrorHttpx:
-        calls: list = []
+        calls: ClassVar[list] = []
         HTTPError = Exception
 
         class AsyncClient:
@@ -358,7 +360,7 @@ def test_segment_rejects_oversized_chunked_stream(monkeypatch):
     monkeypatch.setattr(ml, "_require_httpx", lambda: _FakeHttpx)
     monkeypatch.setattr(ml, "_ensure_server", lambda: "http://backend:9")
 
-    def _oversized_body():
+    def _oversized_body() -> Iterator[bytes]:
         yield b"x" * 50
 
     client = TestClient(app)
