@@ -1811,6 +1811,46 @@ export function DesktopShell({
     ],
   );
 
+  // Escape hatch for a drop overlay that outlived its drag (issue #1664).
+  //
+  // The overlay is driven by one boolean fed from two places: the webview drag
+  // handlers above (balanced by dragDepthRef) and, on desktop, Tauri's native
+  // onDragDropEvent (no counter at all, since the OS reports enter/leave/drop
+  // directly). Either feed can strand it. A native "leave" that never arrives
+  // — which is what a modal native file dialog opening mid-drag produces on
+  // WebKitGTK — leaves the flag set with nothing left to clear it, and an
+  // unbalanced webview enter/leave pair leaves dragDepthRef above zero, which
+  // has the same effect. The result is an overlay covering the map until the
+  // user happens to drag another file across the window.
+  //
+  // Rather than guess at every way the OS can swallow an event, recover on two
+  // signals that cannot occur while a real drag is in progress: a key press and
+  // a pointer button. Neither fires during an HTML5 drag (the spec suppresses
+  // mouse events for the duration) nor during a native one (the OS holds a
+  // pointer grab), so this can never dismiss the overlay out from under a drag
+  // the user is actually performing.
+  useEffect(() => {
+    if (!isDraggingFiles) return;
+
+    const clear = () => {
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Escape is the one the reporter reached for first; any key would do, but
+      // limiting it keeps typing in a panel from silently cancelling feedback
+      // for a drag that is genuinely still running.
+      if (event.key === "Escape") clear();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", clear);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", clear);
+    };
+  }, [isDraggingFiles]);
+
   const startLayerPanelResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -2569,7 +2609,10 @@ export function DesktopShell({
         className="pointer-events-none fixed bottom-7 top-11 z-50 hidden w-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
       />
       {isDraggingFiles ? (
-        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+        <div
+          data-testid="file-drop-overlay"
+          className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm"
+        >
           <div className="max-w-sm rounded-md border bg-background px-4 py-3 text-center shadow-lg">
             <p className="text-sm font-medium">{t("toolbar.fileDrop.overlayTitle")}</p>
             <p className="mt-1 text-xs text-muted-foreground">
