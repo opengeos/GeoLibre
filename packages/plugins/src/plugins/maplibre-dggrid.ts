@@ -1354,5 +1354,6 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
     }
     settings = next;
     refresh();
+    if (panelContainer) renderPanel(panelContainer);
   },
 };

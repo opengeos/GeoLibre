@@ -123,6 +123,16 @@ describe("DGGAL plugin helpers", () => {
     dggrs.delete();
   });
 
+  it("supports wrapped antimeridian bounds (east < west) without duplicates", async () => {
+    const dggal = await loadDggal();
+    const dggrs = dggal.createDGGRS("ISEA3H");
+    const grid = dggalGridForBounds(dggrs, [179.6, -0.3, -179.6, 0.3], 8);
+    assert.ok(grid.features.length > 0);
+    const ids = grid.features.map((feature) => feature.properties?.dggal as string);
+    assert.equal(new Set(ids).size, ids.length);
+    dggrs.delete();
+  });
+
   it("rejects viewports that would exceed the zone limit", async () => {
     const dggal = await loadDggal();
     const dggrs = dggal.createDGGRS("ISEA3H");

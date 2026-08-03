@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_DGGRID_GRID_SETTINGS,
+  DGGRID_CONFIG,
   DGGRID_VIEWPORT_CELL_LIMIT,
   MAX_DGGRID_RESOLUTION,
   dggridCellFeature,
@@ -144,6 +145,7 @@ describe("DGGRID plugin helpers", () => {
 
   it("returns every overlapping direct parent, canonical first", async () => {
     const engine = await loadDggrid();
+    engine.setDggs({ ...DGGRID_CONFIG }, 5);
     const [cell] = engine.geoToSequenceNum([[106.6, 10.8]], 5);
     const parents = engine.sequenceNumAllParents([cell], 5)[0];
     assert.ok(parents.length >= 1);

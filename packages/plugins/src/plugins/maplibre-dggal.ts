@@ -451,6 +451,13 @@ export function dggalZoneFeature(engine: DggalDggrs, cell: string): Feature<Poly
   };
 }
 
+function normalizeLon(lon: number): number {
+  let x = lon;
+  while (x > 180) x -= 360;
+  while (x < -180) x += 360;
+  return x;
+}
+
 /**
  * Fill a WGS84 bounding box with DGGAL zones, mirroring vgrid-maplibre's
  * DGGALGrid: the engine's `listZones` does the viewport query natively.
@@ -462,6 +469,8 @@ export function dggalGridForBounds(
   limit = DGGAL_VIEWPORT_CELL_LIMIT,
 ): FeatureCollection<Polygon> {
   let [west, south, east, north] = bounds;
+  west = normalizeLon(west);
+  east = normalizeLon(east);
   south = Math.max(-90, Math.min(90, south));
   north = Math.max(-90, Math.min(90, north));
   // Wrapped antimeridian bounds (west > east) must be split — a negative span
@@ -1128,5 +1137,6 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
     }
     settings = next;
     refresh();
+    if (panelContainer) renderPanel(panelContainer);
   },
 };
