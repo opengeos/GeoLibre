@@ -1,5 +1,14 @@
 # Mac App Store
 
+GeoLibre Desktop is published on the
+[Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769):
+
+[Get GeoLibre Desktop on the Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769){ .md-button .md-button--primary }
+
+For the user-facing comparison of the two macOS builds, see
+[Downloads](downloads.md#mac-app-store). This page documents how the Store build
+is produced and why it differs.
+
 GeoLibre Desktop ships on macOS two ways:
 
 - **Developer ID** (the default): the notarized `.dmg` published by
@@ -167,7 +176,8 @@ Creating the inputs (Apple Developer account required):
 
 1. Create the app record in App Store Connect for `org.geolibre.desktop`
    (the same team as the iOS `org.geolibre.app` record; the two are separate
-   apps).
+   apps). This is already done for GeoLibre Desktop, Apple ID `6796848769`, so
+   later releases start at step 2.
 2. Download the `geolibre-mas-pkg` artifact and upload the `.pkg` with the
    **Transporter** app (or `xcrun altool --upload-app -f <pkg> -t macos`).
 3. Fill in screenshots, description, and the privacy questionnaire
