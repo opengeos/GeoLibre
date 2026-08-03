@@ -1843,11 +1843,16 @@ export function DesktopShell({
       if (event.key === "Escape") clear();
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("pointerdown", clear);
+    // Capture phase, not bubble: several controls in the app stop propagation
+    // on these events before they reach window (startLayerPanelResize below is
+    // one, and a focused Radix dialog handles its own Escape), which would
+    // silently defeat the recovery for exactly the interaction the user is most
+    // likely to try first. Capturing on window runs before any of them.
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("pointerdown", clear, true);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", clear);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", clear, true);
     };
   }, [isDraggingFiles]);
 

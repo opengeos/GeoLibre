@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { waitForMap } from "./helpers";
+import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 /**
  * Regression cover for GeoLibre#1664: the drag-and-drop overlay could outlive
@@ -55,11 +55,35 @@ test("a pointer press dismisses a drop overlay that outlived its drag", async ({
   await expect(page.locator(OVERLAY)).toBeHidden();
 });
 
+test("a press on a control that stops propagation still dismisses the overlay", async ({
+  page,
+}) => {
+  await waitForMap(page);
+  await strandOverlay(page);
+
+  // The panel resize handles call stopPropagation() on pointerdown, so a bubble
+  // phase listener on window would never see this press. The recovery listens
+  // in the capture phase precisely so it does.
+  await page.locator('[aria-label="Resize Layers panel"]').first().dispatchEvent("pointerdown");
+  await expect(page.locator(OVERLAY)).toBeHidden();
+});
+
 test("a balanced drag still shows and hides the overlay", async ({ page }) => {
   await waitForMap(page);
 
   await fireFileDrag(page, "dragenter");
   await expect(page.locator(OVERLAY)).toBeVisible();
   await fireFileDrag(page, "dragleave");
+  await expect(page.locator(OVERLAY)).toBeHidden();
+});
+
+test("a real file drop still imports a layer and clears the overlay", async ({ page }) => {
+  await waitForMap(page);
+
+  // The recovery listeners are only mounted while the overlay is up, so guard
+  // that they cannot swallow the drop that the overlay exists to invite.
+  await dropGeoJson(page, "dropped", readFixture("smoke.geojson"));
+
+  await expect(layerRow(page, "dropped")).toBeVisible();
   await expect(page.locator(OVERLAY)).toBeHidden();
 });
