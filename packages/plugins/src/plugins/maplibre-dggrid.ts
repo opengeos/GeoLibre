@@ -671,14 +671,15 @@ export function dggridGridForBounds(
     collected = [];
     const covered = new Set<string>();
     const queue: bigint[] = [seed];
+    let head = 0;
     // Guard against pathological loops; generous next to the cell limit
     // because the frontier also visits cells that only touch the bounds.
     const maxPops = Math.max(100_000, limit * 20);
     let pops = 0;
 
-    while (queue.length > 0 && pops < maxPops) {
+    while (head < queue.length && pops < maxPops) {
       pops += 1;
-      const id = queue.shift()!;
+      const id = queue[head++];
       const key = id.toString();
       if (covered.has(key)) continue;
       covered.add(key);
