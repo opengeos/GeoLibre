@@ -44,7 +44,7 @@
   },
   "overrides": {
     "brace-expansion": "^5.0.8",
-    "fast-uri": "3.1.4",
+    "fast-uri": "^3.1.5",
     "filelist": "^2.0.2",
     "sweepline-intersections": "^1.5.0",
     "uuid": "^14.0.0"

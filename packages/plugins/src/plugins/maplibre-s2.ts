@@ -1,52 +1,33 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
-import {
-  cellToBoundary,
-  cellToChildren,
-  cellToLatLng,
-  cellToParent,
-  getBaseCellNumber,
-  getHexagonAreaAvg,
-  getResolution,
-  gridDisk,
-  isPentagon,
-  latLngToCell,
-  polygonToCells,
-} from "h3-js";
+import { geojson as s2geojson, s1, s2 } from "s2js";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-/**
- * The icosahedron H3 projects onto, as densified great-circle edge lines.
- * Fetched by MapLibre when the layer is first added; the Tauri CSP's blanket
- * `https:` connect-src already allows the host. Offline, the overlay simply
- * stays empty.
- */
-const ICOSAHEDRON_GEOJSON_URL =
-  "https://raw.githubusercontent.com/opengeoshub/vgrid-maplibre/main/H3/icosahedron.geojson";
+export const S2_PLUGIN_ID = "maplibre-s2-grid";
 
-export const H3_PLUGIN_ID = "maplibre-h3-grid";
-
-const PANEL_ID = "geolibre-h3-panel";
-const SOURCE_ID = "geolibre-h3-grid-source";
-const FILL_LAYER_ID = "geolibre-h3-grid-fill";
-const LINE_LAYER_ID = "geolibre-h3-grid-line";
-const LABEL_LAYER_ID = "geolibre-h3-grid-label";
-const SELECTED_SOURCE_ID = "geolibre-h3-selected-source";
-const SELECTED_FILL_LAYER_ID = "geolibre-h3-selected-fill";
-const SELECTED_LINE_LAYER_ID = "geolibre-h3-selected-line";
-const PARENTS_SOURCE_ID = "geolibre-h3-parents-source";
-const PARENTS_LINE_LAYER_ID = "geolibre-h3-parents-line";
-const ICOSAHEDRON_SOURCE_ID = "geolibre-h3-icosahedron-source";
-const ICOSAHEDRON_LINE_LAYER_ID = "geolibre-h3-icosahedron-line";
+const PANEL_ID = "geolibre-s2-panel";
+const SOURCE_ID = "geolibre-s2-grid-source";
+const FILL_LAYER_ID = "geolibre-s2-grid-fill";
+const LINE_LAYER_ID = "geolibre-s2-grid-line";
+const LABEL_LAYER_ID = "geolibre-s2-grid-label";
+const SELECTED_SOURCE_ID = "geolibre-s2-selected-source";
+const SELECTED_FILL_LAYER_ID = "geolibre-s2-selected-fill";
+const SELECTED_LINE_LAYER_ID = "geolibre-s2-selected-line";
+const PARENTS_SOURCE_ID = "geolibre-s2-parents-source";
+const PARENTS_LINE_LAYER_ID = "geolibre-s2-parents-line";
 
 const SELECTED_LINE_WIDTH = 3;
 
-/** Prevent a fine resolution over a large viewport from freezing the browser. */
-export const H3_VIEWPORT_CELL_LIMIT = 20_000;
+/** S2's finest subdivision (leaf cells). */
+export const MAX_S2_LEVEL = 30;
 
-export interface H3GridSettings {
-  /** Derive the resolution from the map zoom instead of the manual slider. */
+/** Prevent a fine level over a large viewport from freezing the browser. */
+export const S2_VIEWPORT_CELL_LIMIT = 20_000;
+
+export interface S2GridSettings {
+  /** Derive the level from the map zoom instead of the manual slider. */
   autoResolution: boolean;
+  /** S2 level (0-30). Named `resolution` for parity with the H3/A5 plugins. */
   resolution: number;
   fillColor: string;
   fillOpacity: number;
@@ -55,14 +36,14 @@ export interface H3GridSettings {
   showLabels: boolean;
   includeNeighbors: boolean;
   includeParents: boolean;
-  showIcosahedron: boolean;
 }
 
-export const DEFAULT_H3_GRID_SETTINGS: H3GridSettings = {
+export const DEFAULT_S2_GRID_SETTINGS: S2GridSettings = {
   autoResolution: true,
-  // Useful immediately at GeoLibre's default world view (resolution 3 would
-  // already exceed the viewport safety cap).
-  resolution: 2,
+  // Useful immediately at GeoLibre's default world view: level 4 tiles the
+  // globe with 1,536 cells (level 6's 24,576 would already exceed the
+  // viewport safety cap).
+  resolution: 4,
   fillColor: "#2563eb",
   fillOpacity: 0.08,
   lineColor: "#2563eb",
@@ -70,10 +51,9 @@ export const DEFAULT_H3_GRID_SETTINGS: H3GridSettings = {
   showLabels: true,
   includeNeighbors: false,
   includeParents: false,
-  showIcosahedron: false,
 };
 
-export interface H3Labels {
+export interface S2Labels {
   title: string;
   getTitle?: () => string;
   controlTitle: string;
@@ -90,27 +70,21 @@ export interface H3Labels {
   selectedCell: string;
   noSelection: string;
   copyId: string;
-  copied: string;
   parent: string;
   children: string;
   neighbors: string;
-  baseCell: string;
   center: string;
-  pentagon: string;
-  yes: string;
-  no: string;
   zoomToCell: string;
   addAsLayer: string;
   exportGeoJson: string;
   exportCsv: string;
   includeNeighbors: string;
   includeParents: string;
-  showIcosahedron: string;
 }
 
-export const DEFAULT_H3_LABELS: H3Labels = {
-  title: "H3 Grid",
-  controlTitle: "H3 grid settings",
+export const DEFAULT_S2_LABELS: S2Labels = {
+  title: "S2 Grid",
+  controlTitle: "S2 grid settings",
   autoResolution: "Automatic resolution",
   resolution: "Resolution",
   cellCount: (count) => `${count.toLocaleString()} cells in view`,
@@ -121,30 +95,24 @@ export const DEFAULT_H3_LABELS: H3Labels = {
   lineColor: "Outline color",
   lineWidth: "Outline width",
   showLabels: "Show cell IDs",
-  identifyHint: "Click the map to identify an H3 cell.",
+  identifyHint: "Click the map to identify an S2 cell.",
   selectedCell: "Selected cell",
   noSelection: "No cell selected",
   copyId: "Copy ID",
-  copied: "Copied",
-  parent: "Parent(s)",
+  parent: "Parent",
   children: "Children",
   neighbors: "Neighbors",
-  baseCell: "Base cell",
   center: "Center",
-  pentagon: "Pentagon",
-  yes: "Yes",
-  no: "No",
   zoomToCell: "Zoom to cell",
   addAsLayer: "Add grid as layer",
   exportGeoJson: "Export GeoJSON",
   exportCsv: "Export CSV",
   includeNeighbors: "Include selected cell neighbors",
-  includeParents: "Include selected cell parent(s)",
-  showIcosahedron: "Show icosahedron",
+  includeParents: "Include selected cell parent",
 };
 
-let labels: H3Labels = { ...DEFAULT_H3_LABELS };
-let settings: H3GridSettings = { ...DEFAULT_H3_GRID_SETTINGS };
+let labels: S2Labels = { ...DEFAULT_S2_LABELS };
+let settings: S2GridSettings = { ...DEFAULT_S2_GRID_SETTINGS };
 let map: MapLibreMap | null = null;
 let appRef: GeoLibreAppAPI | null = null;
 let unregisterPanel: (() => void) | null = null;
@@ -161,7 +129,7 @@ let pendingRefresh: number | null = null;
 
 /**
  * Coalesce viewport-driven rebuilds. Inertial pans emit `moveend` in bursts,
- * and each rebuild walks up to H3_VIEWPORT_CELL_LIMIT cells on the main thread.
+ * and each rebuild walks up to S2_VIEWPORT_CELL_LIMIT cells on the main thread.
  */
 function scheduleRefresh(): void {
   if (pendingRefresh !== null) return;
@@ -191,12 +159,12 @@ function pickTextFont(activeMap: MapLibreMap): string[] {
   return (cachedTextFont = fallback ?? ["Open Sans Regular", "Arial Unicode MS Regular"]);
 }
 
-export function setH3Labels(next: Partial<H3Labels>): void {
+export function setS2Labels(next: Partial<S2Labels>): void {
   labels = { ...labels, ...next };
   if (panelContainer) renderPanel(panelContainer);
 }
 
-export function getH3GridSettings(): H3GridSettings {
+export function getS2GridSettings(): S2GridSettings {
   return { ...settings };
 }
 
@@ -212,79 +180,75 @@ function color(value: unknown, fallback: string): string {
 }
 
 /**
- * The automatic zoom→resolution rule, adapted from vgrid-maplibre's H3Grid
- * getResolution (https://www.npmjs.com/package/vgrid-maplibre): H3 cell area
- * shrinks ~7x per resolution step versus 4x per zoom level, so resolution
- * advances at a fraction of a step per zoom level (0.9 here, tuned up from
- * vgrid's 0.8 for a denser grid), offset so the world view starts at 0,
- * clamped to the valid range.
+ * The automatic zoom→level rule, mirroring vgrid-maplibre's S2Grid
+ * (https://www.npmjs.com/package/vgrid-maplibre): one S2 level per zoom
+ * level, clamped to the valid range.
  */
-export function h3ResolutionForZoom(zoom: number): number {
-  return Math.min(15, Math.max(0, Math.floor((zoom - 3) * 0.9)));
+export function s2LevelForZoom(zoom: number): number {
+  return Math.min(MAX_S2_LEVEL, Math.max(0, Math.floor(zoom)));
 }
 
-/** The resolution actually rendered: zoom-derived when automatic, else manual. */
-function effectiveResolution(): number {
-  return settings.autoResolution && map ? h3ResolutionForZoom(map.getZoom()) : settings.resolution;
+/** The level actually rendered: zoom-derived when automatic, else manual. */
+function effectiveLevel(): number {
+  return settings.autoResolution && map ? s2LevelForZoom(map.getZoom()) : settings.resolution;
 }
 
-export function normalizeH3GridSettings(value: unknown): H3GridSettings {
-  const candidate = (value ?? {}) as Partial<H3GridSettings>;
+export function normalizeS2GridSettings(value: unknown): S2GridSettings {
+  const candidate = (value ?? {}) as Partial<S2GridSettings>;
   return {
     autoResolution:
       typeof candidate.autoResolution === "boolean"
         ? candidate.autoResolution
-        : DEFAULT_H3_GRID_SETTINGS.autoResolution,
+        : DEFAULT_S2_GRID_SETTINGS.autoResolution,
     resolution: Math.round(
-      clampNumber(candidate.resolution, 0, 15, DEFAULT_H3_GRID_SETTINGS.resolution),
+      clampNumber(candidate.resolution, 0, MAX_S2_LEVEL, DEFAULT_S2_GRID_SETTINGS.resolution),
     ),
-    fillColor: color(candidate.fillColor, DEFAULT_H3_GRID_SETTINGS.fillColor),
-    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_H3_GRID_SETTINGS.fillOpacity),
-    lineColor: color(candidate.lineColor, DEFAULT_H3_GRID_SETTINGS.lineColor),
-    lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_H3_GRID_SETTINGS.lineWidth),
+    fillColor: color(candidate.fillColor, DEFAULT_S2_GRID_SETTINGS.fillColor),
+    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_S2_GRID_SETTINGS.fillOpacity),
+    lineColor: color(candidate.lineColor, DEFAULT_S2_GRID_SETTINGS.lineColor),
+    lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_S2_GRID_SETTINGS.lineWidth),
     showLabels:
       typeof candidate.showLabels === "boolean"
         ? candidate.showLabels
-        : DEFAULT_H3_GRID_SETTINGS.showLabels,
+        : DEFAULT_S2_GRID_SETTINGS.showLabels,
     includeNeighbors:
       typeof candidate.includeNeighbors === "boolean"
         ? candidate.includeNeighbors
-        : DEFAULT_H3_GRID_SETTINGS.includeNeighbors,
+        : DEFAULT_S2_GRID_SETTINGS.includeNeighbors,
     includeParents:
       typeof candidate.includeParents === "boolean"
         ? candidate.includeParents
-        : DEFAULT_H3_GRID_SETTINGS.includeParents,
-    showIcosahedron:
-      typeof candidate.showIcosahedron === "boolean"
-        ? candidate.showIcosahedron
-        : DEFAULT_H3_GRID_SETTINGS.showIcosahedron,
+        : DEFAULT_S2_GRID_SETTINGS.includeParents,
   };
 }
 
-/** Avoid thousands of overlapping IDs when the grid is viewed globally. */
-export function h3LabelMinZoom(resolution: number): number {
-  return Math.min(18, Math.max(3, Math.round(resolution) + 3));
+/**
+ * Avoid thousands of overlapping IDs when the grid is viewed globally. S2 cell
+ * area shrinks 4x per level (2x linearly), so one zoom level per S2 level
+ * keeps the on-screen label density roughly constant.
+ */
+export function s2LabelMinZoom(level: number): number {
+  return Math.min(18, Math.max(2, Math.round(level) + 1));
 }
 
-export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
-  const previousResolution = effectiveResolution();
-  // Leaving automatic mode adopts the current zoom-derived resolution as the
-  // fixed one, so the grid stays put instead of jumping to the stale slider.
+export function setS2GridSettings(patch: Partial<S2GridSettings>): void {
+  const previousLevel = effectiveLevel();
+  // Leaving automatic mode adopts the current zoom-derived level as the fixed
+  // one, so the grid stays put instead of jumping to the stale slider.
   if (settings.autoResolution && patch.autoResolution === false && patch.resolution === undefined) {
-    patch = { ...patch, resolution: previousResolution };
+    patch = { ...patch, resolution: previousLevel };
   }
-  settings = normalizeH3GridSettings({ ...settings, ...patch });
-  const resolution = effectiveResolution();
+  settings = normalizeS2GridSettings({ ...settings, ...patch });
+  const level = effectiveLevel();
   // Re-derive the selection only for an explicit slider change; toggling
   // automatic resolution (like zooming in automatic mode) keeps the clicked
   // cell and its neighbors/parents as they are.
-  if (selectedCell && patch.resolution !== undefined && resolution !== previousResolution) {
-    const [lat, lng] = cellToLatLng(selectedCell);
-    selectedCell = latLngToCell(lat, lng, resolution);
+  if (selectedCell && patch.resolution !== undefined && level !== previousLevel) {
+    selectedCell = reindexCell(selectedCell, level);
   }
-  // Only the rendered resolution changes the geometry, so a paint/layout-only
-  // edit skips rebuilding up to H3_VIEWPORT_CELL_LIMIT features.
-  if (resolution !== previousResolution) {
+  // Only the rendered level changes the geometry, so a paint/layout-only edit
+  // skips rebuilding up to S2_VIEWPORT_CELL_LIMIT features.
+  if (level !== previousLevel) {
     refresh();
   } else {
     applyStyle();
@@ -293,99 +257,144 @@ export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
-/**
- * Keep a cell boundary contiguous across the antimeridian, mirroring
- * vgrid-maplibre's H3Grid (https://www.npmjs.com/package/vgrid-maplibre):
- * when a ring carries a vertex west of -130°, every positive longitude is
- * shifted down by 360°. A cell straddling the seam mixes ~+179 and ~-179
- * values, so the shift makes the ring contiguous around -180; MapLibre
- * renders longitudes past -180 in the adjacent world copy. Rings entirely
- * away from the seam never match the -130 test and pass through unchanged.
- */
-export function h3FixTransmeridianBoundary(ring: [number, number][]): [number, number][] {
-  if (!ring.some(([longitude]) => longitude < -130)) return ring;
-  return ring.map(([longitude, latitude]) =>
-    longitude > 0 ? [longitude - 360, latitude] : [longitude, latitude],
-  );
+function cellIdFromToken(token: string): bigint {
+  return s2.cellid.fromToken(token);
 }
 
-/** Convert an H3 cell to a GeoJSON polygon with useful export attributes. */
-export function h3CellFeature(cell: string): Feature<Polygon> {
-  const [lat, lng] = cellToLatLng(cell);
-  const boundary = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
+function cellCenter(id: bigint): [number, number] {
+  const latLng = s2.cellid.latLng(id);
+  return [s1.angle.degrees(latLng.lng), s1.angle.degrees(latLng.lat)];
+}
+
+function cellAtLonLat(lng: number, lat: number, level: number): string {
+  const leaf = s2.cellid.fromLatLng(s2.LatLng.fromDegrees(lat, lng));
+  return s2.cellid.toToken(s2.cellid.parent(leaf, level));
+}
+
+function reindexCell(token: string, level: number): string {
+  const [lng, lat] = cellCenter(cellIdFromToken(token));
+  return cellAtLonLat(lng, lat, level);
+}
+
+/**
+ * The cell's four corners as a closed lon/lat ring. Cells crossing the
+ * antimeridian are unwrapped relative to their first vertex so the ring stays
+ * contiguous (MapLibre renders longitudes past ±180 in the adjacent world
+ * copy).
+ */
+function cellRing(id: bigint): [number, number][] {
+  const cell = s2.Cell.fromCellID(id);
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= 4; i += 1) {
+    const vertex = s2.LatLng.fromPoint(cell.vertex(i % 4));
+    let lng = s1.angle.degrees(vertex.lng);
+    const lat = s1.angle.degrees(vertex.lat);
+    if (ring.length > 0) {
+      const reference = ring[0][0];
+      if (lng - reference > 180) lng -= 360;
+      if (lng - reference < -180) lng += 360;
+    }
+    ring.push([lng, lat]);
+  }
+  return ring;
+}
+
+/** Convert an S2 cell (token) to a GeoJSON polygon with export attributes. */
+export function s2CellFeature(cell: string): Feature<Polygon> {
+  const id = cellIdFromToken(cell);
+  const [lng, lat] = cellCenter(id);
   return {
     type: "Feature",
     id: cell,
     properties: {
-      h3: cell,
-      resolution: getResolution(cell),
-      base_cell: getBaseCellNumber(cell),
+      s2: cell,
+      // S2 calls this "level"; exported as `resolution` so attribute tables
+      // and CSVs read the same across the H3/S2/A5 plugins.
+      resolution: s2.cellid.level(id),
       center_lat: lat,
       center_lng: lng,
-      is_pentagon: isPentagon(cell),
     },
-    geometry: { type: "Polygon", coordinates: [boundary] },
+    geometry: { type: "Polygon", coordinates: [cellRing(id)] },
   };
 }
 
+const EARTH_AREA_M2 = 4 * Math.PI * 6371008.8 ** 2;
+
+/** Average S2 cell area: six level-0 faces, each subdividing 4x per level. */
+function avgCellAreaM2(level: number): number {
+  return EARTH_AREA_M2 / (6 * 4 ** level);
+}
+
 /**
- * Fill a WGS84 bounding box with H3 cells. Bounds that cross the antimeridian
- * are split into two polygons because H3 expects longitudes in [-180, 180].
+ * s2js's GeoJSON reader expects longitudes in [-180, 180] and a loop wider
+ * than 180° is ambiguous (either side could be the interior), so bounds are
+ * cut into chunks of at most this many degrees before covering. Cells
+ * straddling a cut are returned by both chunks and deduplicated by token.
  */
-export function h3GridForBounds(
+const MAX_COVER_SPAN_DEGREES = 120;
+
+/** Fill a WGS84 bounding box with S2 cells at one level. */
+export function s2GridForBounds(
   bounds: [number, number, number, number],
-  resolution: number,
-  limit = H3_VIEWPORT_CELL_LIMIT,
+  level: number,
+  limit = S2_VIEWPORT_CELL_LIMIT,
 ): FeatureCollection<Polygon> {
   const [west, southRaw, east, northRaw] = bounds;
   const south = Math.max(-89.999999, Math.min(89.999999, southRaw));
   const north = Math.max(-89.999999, Math.min(89.999999, northRaw));
-  const span = east >= west ? east - west : east + 360 - west;
-  const ranges: Array<[number, number]> =
-    span >= 359.999
-      ? [
-          [-180, 0],
-          [0, 180],
-        ]
-      : east < west
-        ? [
-            [west, 180],
-            [-180, east],
-          ]
-        : [[Math.max(-180, west), Math.min(180, east)]];
-  // Reject obviously oversized requests before polygonToCells allocates the
-  // full result. This spherical rectangle estimate is deliberately a little
-  // conservative; the exact hard cap below remains the final guard.
+  const span = Math.min(360, east >= west ? east - west : east + 360 - west);
+  // Reject obviously oversized requests before materializing the full result.
+  // This spherical rectangle estimate is deliberately a little conservative;
+  // the exact hard cap below remains the final guard.
   const radians = Math.PI / 180;
-  const areaKm2 = ranges.reduce(
-    (sum, [left, right]) =>
-      sum +
-      6371.0088 ** 2 *
-        Math.abs((right - left) * radians) *
-        Math.abs(Math.sin(north * radians) - Math.sin(south * radians)),
-    0,
-  );
-  if (areaKm2 / getHexagonAreaAvg(resolution, "km2") > limit * 1.2) {
-    throw new RangeError(`H3 cell limit exceeded: ${limit}`);
+  const areaM2 =
+    6371008.8 ** 2 *
+    span *
+    radians *
+    Math.abs(Math.sin(north * radians) - Math.sin(south * radians));
+  if (areaM2 / avgCellAreaM2(level) > limit * 1.2) {
+    throw new RangeError(`S2 cell limit exceeded: ${limit}`);
   }
-  const cells = new Set<string>();
 
-  for (const [left, right] of ranges) {
-    const polygon = [
-      [south, left],
-      [south, right],
-      [north, right],
-      [north, left],
-      [south, left],
-    ];
-    for (const cell of polygonToCells(polygon, resolution)) {
-      cells.add(cell);
+  // Normalize the west edge into [-180, 180) and split the longitude span into
+  // in-range chunks (also the antimeridian handling: a crossing view becomes
+  // one chunk ending at 180 and another starting at -180).
+  const chunks: Array<[number, number]> = [];
+  let cursor = (((west % 360) + 540) % 360) - 180;
+  let remaining = span;
+  while (remaining > 1e-9) {
+    const step = Math.min(remaining, MAX_COVER_SPAN_DEGREES, 180 - cursor);
+    chunks.push([cursor, cursor + step]);
+    cursor = cursor + step >= 180 ? -180 : cursor + step;
+    remaining -= step;
+  }
+
+  const coverer = new s2geojson.RegionCoverer({ minLevel: level, maxLevel: level });
+  const cells = new Set<string>();
+  for (const [left, right] of chunks) {
+    const polygon: Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [left, south],
+          [right, south],
+          [right, north],
+          [left, north],
+          [left, south],
+        ],
+      ],
+    };
+    for (const id of coverer.covering(polygon)) {
+      cells.add(s2.cellid.toToken(id));
       if (cells.size > limit) {
-        throw new RangeError(`H3 cell limit exceeded: ${limit}`);
+        throw new RangeError(`S2 cell limit exceeded: ${limit}`);
       }
     }
   }
-  return { type: "FeatureCollection", features: [...cells].map(h3CellFeature) };
+  return {
+    type: "FeatureCollection",
+    features: [...cells].map(s2CellFeature),
+  };
 }
 
 function removeLayers(activeMap: MapLibreMap): void {
@@ -393,14 +402,13 @@ function removeLayers(activeMap: MapLibreMap): void {
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
-    ICOSAHEDRON_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
     FILL_LAYER_ID,
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, ICOSAHEDRON_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -425,9 +433,9 @@ function ensureLayers(): void {
       id: LABEL_LAYER_ID,
       type: "symbol",
       source: SOURCE_ID,
-      minzoom: h3LabelMinZoom(effectiveResolution()),
+      minzoom: s2LabelMinZoom(effectiveLevel()),
       layout: {
-        "text-field": ["get", "h3"],
+        "text-field": ["get", "s2"],
         "text-font": pickTextFont(map),
         "text-size": 10,
         visibility: settings.showLabels ? "visible" : "none",
@@ -439,25 +447,8 @@ function ensureLayers(): void {
       },
     });
   }
-  if (!map.getSource(ICOSAHEDRON_SOURCE_ID)) {
-    map.addSource(ICOSAHEDRON_SOURCE_ID, {
-      type: "geojson",
-      data: ICOSAHEDRON_GEOJSON_URL,
-    });
-    map.addLayer({
-      id: ICOSAHEDRON_LINE_LAYER_ID,
-      type: "line",
-      source: ICOSAHEDRON_SOURCE_ID,
-      layout: { visibility: settings.showIcosahedron ? "visible" : "none" },
-      paint: {
-        "line-color": "#dc2626",
-        "line-width": 1.5,
-        "line-dasharray": [2, 2],
-      },
-    });
-  }
   // Added before the selected layers so the selected cell stays on top of its
-  // (larger, overlapping) parents.
+  // (larger, overlapping) parent.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -503,33 +494,28 @@ function applyStyle(): void {
   map.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
   map.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.lineColor);
   map.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
-  map.setLayerZoomRange(LABEL_LAYER_ID, h3LabelMinZoom(effectiveResolution()), 24);
-  map.setLayoutProperty(
-    ICOSAHEDRON_LINE_LAYER_ID,
-    "visibility",
-    settings.showIcosahedron ? "visible" : "none",
-  );
+  map.setLayerZoomRange(LABEL_LAYER_ID, s2LabelMinZoom(effectiveLevel()), 24);
 }
 
 function refresh(): void {
   if (!map) return;
-  const resolution = effectiveResolution();
+  const level = effectiveLevel();
   // The selected cell (and its neighbors/parents) deliberately stays at the
-  // resolution it was clicked at: in automatic mode a zoom or pan changes the
+  // level it was clicked at: in automatic mode a zoom or pan changes the
   // rendered grid, but re-deriving the selection would silently replace the
   // cell the user identified. Only an explicit settings change re-indexes it
-  // (see setH3GridSettings).
+  // (see setS2GridSettings).
   try {
     const bounds = map.getBounds();
-    currentGrid = h3GridForBounds(
+    currentGrid = s2GridForBounds(
       [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-      resolution,
+      level,
     );
     currentError = null;
   } catch (error) {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError =
-      error instanceof RangeError ? labels.tooManyCells(H3_VIEWPORT_CELL_LIMIT) : String(error);
+      error instanceof RangeError ? labels.tooManyCells(S2_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
@@ -537,67 +523,60 @@ function refresh(): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
+/** The cell plus its edge and vertex neighbors at the same level. */
+function neighborCells(cell: string): string[] {
+  const id = cellIdFromToken(cell);
+  const level = s2.cellid.level(id);
+  const tokens = new Set<string>([cell]);
+  for (const neighbor of s2.cellid.allNeighbors(id, level)) {
+    tokens.add(s2.cellid.toToken(neighbor));
+  }
+  return [...tokens];
+}
+
 function selectedCells(): string[] {
   if (!selectedCell) return [];
-  return settings.includeNeighbors ? gridDisk(selectedCell, 1) : [selectedCell];
+  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
 }
 
 /**
- * Every resolution r-1 cell the selected cell overlaps. H3's hierarchy is
- * approximate — a child hexagon is not perfectly contained in cellToParent,
- * its corners can spill into the parent's neighbors. Any overlapping coarser
- * cell is larger than the cell itself, so it must cover part of the boundary:
- * sampling the boundary vertices, nudged slightly toward the center so parents
- * that merely touch the edge are excluded, finds them all.
+ * The direct parent, or none for a level-0 (face) cell. Unlike A5, S2 cells
+ * nest exactly, so a cell always has a single parent.
  */
 function parentCells(cell: string): string[] {
-  const resolution = getResolution(cell);
-  if (resolution <= 0) return [];
-  const [centerLat, centerLng] = cellToLatLng(cell);
-  const parents = new Set<string>([cellToParent(cell, resolution - 1)]);
-  // The unwrapped ring keeps vertex longitudes adjacent to the center for
-  // dateline cells; latLngToCell accepts longitudes outside [-180, 180].
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
-  const ringCenterLng =
-    centerLng > 0 && ring.some(([lng]) => lng < -130) ? centerLng - 360 : centerLng;
-  for (const [lng, lat] of ring) {
-    parents.add(
-      latLngToCell(
-        centerLat + (lat - centerLat) * 0.999,
-        ringCenterLng + (lng - ringCenterLng) * 0.999,
-        resolution - 1,
-      ),
-    );
-  }
-  return [...parents];
+  const id = cellIdFromToken(cell);
+  const level = s2.cellid.level(id);
+  return level > 0 ? [s2.cellid.toToken(s2.cellid.parent(id, level - 1))] : [];
 }
 
 function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map(h3CellFeature),
+    features: selectedCells().map(s2CellFeature),
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
     type: "FeatureCollection",
     features:
-      settings.includeParents && selectedCell ? parentCells(selectedCell).map(h3CellFeature) : [],
+      settings.includeParents && selectedCell ? parentCells(selectedCell).map(s2CellFeature) : [],
   });
 }
 
 function gridCsv(grid: FeatureCollection<Polygon>): string {
-  const header = "h3,resolution,base_cell,center_lat,center_lng,is_pentagon";
+  const header = "s2,resolution,center_lat,center_lng";
   const rows = grid.features.map((feature) => {
     const p = feature.properties!;
-    return [p.h3, p.resolution, p.base_cell, p.center_lat, p.center_lng, p.is_pentagon].join(",");
+    return [p.s2, p.resolution, p.center_lat, p.center_lng].join(",");
   });
   return [header, ...rows].join("\n");
 }
 
 function fitSelected(): void {
   if (!selectedCell || !appRef) return;
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(selectedCell, true) as [number, number][]);
+  // The ring is unwrapped to stay contiguous across the antimeridian, so
+  // min/max longitudes never span the world.
+  const ring = cellRing(cellIdFromToken(selectedCell));
   const lons = ring.map(([lng]) => lng);
   const lats = ring.map(([, lat]) => lat);
   appRef.fitBounds?.([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
@@ -652,26 +631,26 @@ function renderPanel(container: HTMLElement): void {
   autoResolution.type = "checkbox";
   autoResolution.checked = settings.autoResolution;
   autoResolution.addEventListener("change", () =>
-    setH3GridSettings({ autoResolution: autoResolution.checked }),
+    setS2GridSettings({ autoResolution: autoResolution.checked }),
   );
   row(labels.autoResolution, autoResolution);
 
   // In automatic mode the slider becomes a read-only indicator of the
-  // zoom-derived resolution; refresh() re-renders the panel on every moveend,
-  // so it tracks zoom gestures.
-  const shownResolution = effectiveResolution();
+  // zoom-derived level; refresh() re-renders the panel on every moveend, so it
+  // tracks zoom gestures.
+  const shownLevel = effectiveLevel();
   const resolution = document.createElement("input");
   resolution.type = "range";
   resolution.min = "0";
-  resolution.max = "15";
-  resolution.value = String(shownResolution);
-  resolution.title = String(shownResolution);
+  resolution.max = String(MAX_S2_LEVEL);
+  resolution.value = String(shownLevel);
+  resolution.title = String(shownLevel);
   resolution.disabled = settings.autoResolution;
   resolution.addEventListener("input", () => {
     resolution.title = resolution.value;
   });
   resolution.addEventListener("change", () =>
-    setH3GridSettings({ resolution: Number(resolution.value) }),
+    setS2GridSettings({ resolution: Number(resolution.value) }),
   );
   const resolutionWrap = document.createElement("span");
   resolutionWrap.style.display = "flex";
@@ -679,7 +658,7 @@ function renderPanel(container: HTMLElement): void {
   resolutionWrap.style.gap = "6px";
   resolutionWrap.style.opacity = settings.autoResolution ? "0.6" : "1";
   const resolutionValue = document.createElement("strong");
-  resolutionValue.textContent = String(shownResolution);
+  resolutionValue.textContent = String(shownLevel);
   resolution.addEventListener("input", () => {
     resolutionValue.textContent = resolution.value;
   });
@@ -693,9 +672,9 @@ function renderPanel(container: HTMLElement): void {
     const input = document.createElement("input");
     input.type = "color";
     input.value = settings[key];
-    // `change` (not `input`): setH3GridSettings re-renders the panel, which
+    // `change` (not `input`): setS2GridSettings re-renders the panel, which
     // would destroy the picker mid-drag.
-    input.addEventListener("change", () => setH3GridSettings({ [key]: input.value }));
+    input.addEventListener("change", () => setS2GridSettings({ [key]: input.value }));
     row(text, input);
   }
   for (const [text, key, min, max, step] of [
@@ -709,19 +688,18 @@ function renderPanel(container: HTMLElement): void {
     input.step = String(step);
     input.value = String(settings[key]);
     input.style.width = "72px";
-    input.addEventListener("change", () => setH3GridSettings({ [key]: Number(input.value) }));
+    input.addEventListener("change", () => setS2GridSettings({ [key]: Number(input.value) }));
     row(text, input);
   }
   for (const [text, key] of [
     [labels.showLabels, "showLabels"],
     [labels.includeNeighbors, "includeNeighbors"],
     [labels.includeParents, "includeParents"],
-    [labels.showIcosahedron, "showIcosahedron"],
   ] as const) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = settings[key];
-    input.addEventListener("change", () => setH3GridSettings({ [key]: input.checked }));
+    input.addEventListener("change", () => setS2GridSettings({ [key]: input.checked }));
     row(text, input);
   }
 
@@ -740,7 +718,9 @@ function renderPanel(container: HTMLElement): void {
   section.appendChild(selectedHeading);
 
   if (selectedCell) {
-    const [lat, lng] = cellToLatLng(selectedCell);
+    const id = cellIdFromToken(selectedCell);
+    const cellLevel = s2.cellid.level(id);
+    const [lng, lat] = cellCenter(id);
     const details = document.createElement("dl");
     details.style.margin = "0";
     details.style.display = "grid";
@@ -754,27 +734,18 @@ function renderPanel(container: HTMLElement): void {
       dd.textContent = value;
       dd.style.margin = "0";
       dd.style.overflowWrap = "anywhere";
-      // Multi-line values (one overlapping parent per line) keep their breaks.
-      dd.style.whiteSpace = "pre-line";
       details.append(dt, dd);
     };
     addDetail("ID", selectedCell);
-    addDetail(labels.resolution, String(getResolution(selectedCell)));
-    addDetail(labels.baseCell, String(getBaseCellNumber(selectedCell)));
+    addDetail(labels.resolution, String(cellLevel));
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    addDetail(labels.pentagon, isPentagon(selectedCell) ? labels.yes : labels.no);
-    if (getResolution(selectedCell) > 0) {
-      // Every overlapping r-1 cell (canonical cellToParent first), matching
-      // the dashed parent outlines on the map.
-      addDetail(labels.parent, parentCells(selectedCell).join("\n"));
+    if (cellLevel > 0) {
+      addDetail(labels.parent, s2.cellid.toToken(s2.cellid.parent(id, cellLevel - 1)));
     }
-    if (getResolution(selectedCell) < 15) {
-      addDetail(
-        labels.children,
-        String(cellToChildren(selectedCell, getResolution(selectedCell) + 1).length),
-      );
+    if (cellLevel < MAX_S2_LEVEL) {
+      addDetail(labels.children, String(s2.cellid.children(id).length));
     }
-    addDetail(labels.neighbors, String(gridDisk(selectedCell, 1).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");
@@ -800,7 +771,7 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(`H3 grid (resolution ${effectiveResolution()})`, currentGrid);
+          appRef?.addGeoJsonLayer(`S2 grid (resolution ${effectiveLevel()})`, currentGrid);
         }
       },
       currentGrid.features.length === 0,
@@ -809,7 +780,7 @@ function renderPanel(container: HTMLElement): void {
       labels.exportGeoJson,
       () => {
         appRef?.exportTextFile?.(
-          `h3-grid-r${effectiveResolution()}.geojson`,
+          `s2-grid-r${effectiveLevel()}.geojson`,
           JSON.stringify(currentGrid, null, 2),
           {
             description: "GeoJSON",
@@ -824,7 +795,7 @@ function renderPanel(container: HTMLElement): void {
     button(
       labels.exportCsv,
       () => {
-        appRef?.exportTextFile?.(`h3-grid-r${effectiveResolution()}.csv`, gridCsv(currentGrid), {
+        appRef?.exportTextFile?.(`s2-grid-r${effectiveLevel()}.csv`, gridCsv(currentGrid), {
           description: "CSV",
           extensions: ["csv"],
           mimeType: "text/csv",
@@ -837,15 +808,15 @@ function renderPanel(container: HTMLElement): void {
   section.appendChild(actions);
 }
 
-function settingsEqual(a: H3GridSettings, b: H3GridSettings): boolean {
+function settingsEqual(a: S2GridSettings, b: S2GridSettings): boolean {
   return Object.keys(a).every(
-    (key) => a[key as keyof H3GridSettings] === b[key as keyof H3GridSettings],
+    (key) => a[key as keyof S2GridSettings] === b[key as keyof S2GridSettings],
   );
 }
 
-export const maplibreH3Plugin: GeoLibrePlugin = {
-  id: H3_PLUGIN_ID,
-  name: "H3 Grid",
+export const maplibreS2Plugin: GeoLibrePlugin = {
+  id: S2_PLUGIN_ID,
+  name: "S2 Grid",
   version: "1.0.0",
   activate: (app) => {
     const activeMap = app.getMap?.();
@@ -854,7 +825,7 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     appRef = app;
     moveHandler = () => scheduleRefresh();
     clickHandler = (event) => {
-      selectedCell = latLngToCell(event.lngLat.lat, event.lngLat.lng, effectiveResolution());
+      selectedCell = cellAtLonLat(event.lngLat.lng, event.lngLat.lat, effectiveLevel());
       updateSelectedSource();
       if (panelContainer) renderPanel(panelContainer);
     };
@@ -903,9 +874,9 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     app.closeRightPanel?.(PANEL_ID);
   },
   getProjectState: () =>
-    settingsEqual(settings, DEFAULT_H3_GRID_SETTINGS) ? undefined : { ...settings },
+    settingsEqual(settings, DEFAULT_S2_GRID_SETTINGS) ? undefined : { ...settings },
   applyProjectState: (_app, state) => {
-    const next = normalizeH3GridSettings(state);
+    const next = normalizeS2GridSettings(state);
     if (settingsEqual(settings, next)) return false;
     settings = next;
     refresh();

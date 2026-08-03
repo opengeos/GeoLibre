@@ -1,50 +1,47 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import {
+  MAX_RESOLUTION,
+  cellArea,
   cellToBoundary,
   cellToChildren,
-  cellToLatLng,
+  cellToLonLat,
   cellToParent,
-  getBaseCellNumber,
-  getHexagonAreaAvg,
+  getNumCells,
+  getRes0Cells,
   getResolution,
   gridDisk,
-  isPentagon,
-  latLngToCell,
+  hexToU64,
+  lonLatToCell,
   polygonToCells,
-} from "h3-js";
+  u64ToHex,
+  uncompact,
+} from "a5-js";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-/**
- * The icosahedron H3 projects onto, as densified great-circle edge lines.
- * Fetched by MapLibre when the layer is first added; the Tauri CSP's blanket
- * `https:` connect-src already allows the host. Offline, the overlay simply
- * stays empty.
- */
-const ICOSAHEDRON_GEOJSON_URL =
-  "https://raw.githubusercontent.com/opengeoshub/vgrid-maplibre/main/H3/icosahedron.geojson";
+export const A5_PLUGIN_ID = "maplibre-a5-grid";
 
-export const H3_PLUGIN_ID = "maplibre-h3-grid";
-
-const PANEL_ID = "geolibre-h3-panel";
-const SOURCE_ID = "geolibre-h3-grid-source";
-const FILL_LAYER_ID = "geolibre-h3-grid-fill";
-const LINE_LAYER_ID = "geolibre-h3-grid-line";
-const LABEL_LAYER_ID = "geolibre-h3-grid-label";
-const SELECTED_SOURCE_ID = "geolibre-h3-selected-source";
-const SELECTED_FILL_LAYER_ID = "geolibre-h3-selected-fill";
-const SELECTED_LINE_LAYER_ID = "geolibre-h3-selected-line";
-const PARENTS_SOURCE_ID = "geolibre-h3-parents-source";
-const PARENTS_LINE_LAYER_ID = "geolibre-h3-parents-line";
-const ICOSAHEDRON_SOURCE_ID = "geolibre-h3-icosahedron-source";
-const ICOSAHEDRON_LINE_LAYER_ID = "geolibre-h3-icosahedron-line";
+const PANEL_ID = "geolibre-a5-panel";
+const SOURCE_ID = "geolibre-a5-grid-source";
+const FILL_LAYER_ID = "geolibre-a5-grid-fill";
+const LINE_LAYER_ID = "geolibre-a5-grid-line";
+const LABEL_LAYER_ID = "geolibre-a5-grid-label";
+const SELECTED_SOURCE_ID = "geolibre-a5-selected-source";
+const SELECTED_FILL_LAYER_ID = "geolibre-a5-selected-fill";
+const SELECTED_LINE_LAYER_ID = "geolibre-a5-selected-line";
+const PARENTS_SOURCE_ID = "geolibre-a5-parents-source";
+const PARENTS_LINE_LAYER_ID = "geolibre-a5-parents-line";
 
 const SELECTED_LINE_WIDTH = 3;
 
 /** Prevent a fine resolution over a large viewport from freezing the browser. */
-export const H3_VIEWPORT_CELL_LIMIT = 20_000;
+export const A5_VIEWPORT_CELL_LIMIT = 20_000;
 
-export interface H3GridSettings {
+// a5-js brands its coordinate tuples; the brand is not exported, so it is
+// recovered from the function signatures at the two casting boundaries below.
+type A5LonLat = Parameters<typeof lonLatToCell>[0];
+
+export interface A5GridSettings {
   /** Derive the resolution from the map zoom instead of the manual slider. */
   autoResolution: boolean;
   resolution: number;
@@ -55,25 +52,24 @@ export interface H3GridSettings {
   showLabels: boolean;
   includeNeighbors: boolean;
   includeParents: boolean;
-  showIcosahedron: boolean;
 }
 
-export const DEFAULT_H3_GRID_SETTINGS: H3GridSettings = {
+export const DEFAULT_A5_GRID_SETTINGS: A5GridSettings = {
   autoResolution: true,
-  // Useful immediately at GeoLibre's default world view (resolution 3 would
-  // already exceed the viewport safety cap).
-  resolution: 2,
-  fillColor: "#2563eb",
+  // Useful immediately at GeoLibre's default world view: resolution 4 fills it
+  // with 3,840 pentagons (resolution 6's 61,440 would already exceed the
+  // viewport safety cap).
+  resolution: 4,
+  fillColor: "#16a34a",
   fillOpacity: 0.08,
-  lineColor: "#2563eb",
+  lineColor: "#16a34a",
   lineWidth: 1,
   showLabels: true,
   includeNeighbors: false,
   includeParents: false,
-  showIcosahedron: false,
 };
 
-export interface H3Labels {
+export interface A5Labels {
   title: string;
   getTitle?: () => string;
   controlTitle: string;
@@ -90,27 +86,21 @@ export interface H3Labels {
   selectedCell: string;
   noSelection: string;
   copyId: string;
-  copied: string;
   parent: string;
   children: string;
   neighbors: string;
-  baseCell: string;
   center: string;
-  pentagon: string;
-  yes: string;
-  no: string;
   zoomToCell: string;
   addAsLayer: string;
   exportGeoJson: string;
   exportCsv: string;
   includeNeighbors: string;
   includeParents: string;
-  showIcosahedron: string;
 }
 
-export const DEFAULT_H3_LABELS: H3Labels = {
-  title: "H3 Grid",
-  controlTitle: "H3 grid settings",
+export const DEFAULT_A5_LABELS: A5Labels = {
+  title: "A5 Grid",
+  controlTitle: "A5 grid settings",
   autoResolution: "Automatic resolution",
   resolution: "Resolution",
   cellCount: (count) => `${count.toLocaleString()} cells in view`,
@@ -121,30 +111,24 @@ export const DEFAULT_H3_LABELS: H3Labels = {
   lineColor: "Outline color",
   lineWidth: "Outline width",
   showLabels: "Show cell IDs",
-  identifyHint: "Click the map to identify an H3 cell.",
+  identifyHint: "Click the map to identify an A5 cell.",
   selectedCell: "Selected cell",
   noSelection: "No cell selected",
   copyId: "Copy ID",
-  copied: "Copied",
   parent: "Parent(s)",
   children: "Children",
   neighbors: "Neighbors",
-  baseCell: "Base cell",
   center: "Center",
-  pentagon: "Pentagon",
-  yes: "Yes",
-  no: "No",
   zoomToCell: "Zoom to cell",
   addAsLayer: "Add grid as layer",
   exportGeoJson: "Export GeoJSON",
   exportCsv: "Export CSV",
   includeNeighbors: "Include selected cell neighbors",
   includeParents: "Include selected cell parent(s)",
-  showIcosahedron: "Show icosahedron",
 };
 
-let labels: H3Labels = { ...DEFAULT_H3_LABELS };
-let settings: H3GridSettings = { ...DEFAULT_H3_GRID_SETTINGS };
+let labels: A5Labels = { ...DEFAULT_A5_LABELS };
+let settings: A5GridSettings = { ...DEFAULT_A5_GRID_SETTINGS };
 let map: MapLibreMap | null = null;
 let appRef: GeoLibreAppAPI | null = null;
 let unregisterPanel: (() => void) | null = null;
@@ -161,7 +145,7 @@ let pendingRefresh: number | null = null;
 
 /**
  * Coalesce viewport-driven rebuilds. Inertial pans emit `moveend` in bursts,
- * and each rebuild walks up to H3_VIEWPORT_CELL_LIMIT cells on the main thread.
+ * and each rebuild walks up to A5_VIEWPORT_CELL_LIMIT cells on the main thread.
  */
 function scheduleRefresh(): void {
   if (pendingRefresh !== null) return;
@@ -191,12 +175,12 @@ function pickTextFont(activeMap: MapLibreMap): string[] {
   return (cachedTextFont = fallback ?? ["Open Sans Regular", "Arial Unicode MS Regular"]);
 }
 
-export function setH3Labels(next: Partial<H3Labels>): void {
+export function setA5Labels(next: Partial<A5Labels>): void {
   labels = { ...labels, ...next };
   if (panelContainer) renderPanel(panelContainer);
 }
 
-export function getH3GridSettings(): H3GridSettings {
+export function getA5GridSettings(): A5GridSettings {
   return { ...settings };
 }
 
@@ -212,78 +196,75 @@ function color(value: unknown, fallback: string): string {
 }
 
 /**
- * The automatic zoom→resolution rule, adapted from vgrid-maplibre's H3Grid
- * getResolution (https://www.npmjs.com/package/vgrid-maplibre): H3 cell area
- * shrinks ~7x per resolution step versus 4x per zoom level, so resolution
- * advances at a fraction of a step per zoom level (0.9 here, tuned up from
- * vgrid's 0.8 for a denser grid), offset so the world view starts at 0,
- * clamped to the valid range.
+ * The automatic zoom→resolution rule, mirroring vgrid-maplibre's A5Grid
+ * (https://www.npmjs.com/package/vgrid-maplibre): one A5 resolution per zoom
+ * level, clamped to the valid range.
  */
-export function h3ResolutionForZoom(zoom: number): number {
-  return Math.min(15, Math.max(0, Math.floor((zoom - 3) * 0.9)));
+export function a5ResolutionForZoom(zoom: number): number {
+  return Math.min(MAX_RESOLUTION, Math.max(0, Math.floor(zoom)));
 }
 
 /** The resolution actually rendered: zoom-derived when automatic, else manual. */
 function effectiveResolution(): number {
-  return settings.autoResolution && map ? h3ResolutionForZoom(map.getZoom()) : settings.resolution;
+  return settings.autoResolution && map ? a5ResolutionForZoom(map.getZoom()) : settings.resolution;
 }
 
-export function normalizeH3GridSettings(value: unknown): H3GridSettings {
-  const candidate = (value ?? {}) as Partial<H3GridSettings>;
+export function normalizeA5GridSettings(value: unknown): A5GridSettings {
+  const candidate = (value ?? {}) as Partial<A5GridSettings>;
   return {
     autoResolution:
       typeof candidate.autoResolution === "boolean"
         ? candidate.autoResolution
-        : DEFAULT_H3_GRID_SETTINGS.autoResolution,
+        : DEFAULT_A5_GRID_SETTINGS.autoResolution,
     resolution: Math.round(
-      clampNumber(candidate.resolution, 0, 15, DEFAULT_H3_GRID_SETTINGS.resolution),
+      clampNumber(candidate.resolution, 0, MAX_RESOLUTION, DEFAULT_A5_GRID_SETTINGS.resolution),
     ),
-    fillColor: color(candidate.fillColor, DEFAULT_H3_GRID_SETTINGS.fillColor),
-    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_H3_GRID_SETTINGS.fillOpacity),
-    lineColor: color(candidate.lineColor, DEFAULT_H3_GRID_SETTINGS.lineColor),
-    lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_H3_GRID_SETTINGS.lineWidth),
+    fillColor: color(candidate.fillColor, DEFAULT_A5_GRID_SETTINGS.fillColor),
+    fillOpacity: clampNumber(candidate.fillOpacity, 0, 1, DEFAULT_A5_GRID_SETTINGS.fillOpacity),
+    lineColor: color(candidate.lineColor, DEFAULT_A5_GRID_SETTINGS.lineColor),
+    lineWidth: clampNumber(candidate.lineWidth, 0.1, 8, DEFAULT_A5_GRID_SETTINGS.lineWidth),
     showLabels:
       typeof candidate.showLabels === "boolean"
         ? candidate.showLabels
-        : DEFAULT_H3_GRID_SETTINGS.showLabels,
+        : DEFAULT_A5_GRID_SETTINGS.showLabels,
     includeNeighbors:
       typeof candidate.includeNeighbors === "boolean"
         ? candidate.includeNeighbors
-        : DEFAULT_H3_GRID_SETTINGS.includeNeighbors,
+        : DEFAULT_A5_GRID_SETTINGS.includeNeighbors,
     includeParents:
       typeof candidate.includeParents === "boolean"
         ? candidate.includeParents
-        : DEFAULT_H3_GRID_SETTINGS.includeParents,
-    showIcosahedron:
-      typeof candidate.showIcosahedron === "boolean"
-        ? candidate.showIcosahedron
-        : DEFAULT_H3_GRID_SETTINGS.showIcosahedron,
+        : DEFAULT_A5_GRID_SETTINGS.includeParents,
   };
 }
 
-/** Avoid thousands of overlapping IDs when the grid is viewed globally. */
-export function h3LabelMinZoom(resolution: number): number {
-  return Math.min(18, Math.max(3, Math.round(resolution) + 3));
+/**
+ * Avoid thousands of overlapping IDs when the grid is viewed globally. A5 cell
+ * area shrinks 4x per resolution step (2x linearly), so one zoom level per
+ * resolution keeps the on-screen label density roughly constant.
+ */
+export function a5LabelMinZoom(resolution: number): number {
+  return Math.min(18, Math.max(2, Math.round(resolution) + 1));
 }
 
-export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
+export function setA5GridSettings(patch: Partial<A5GridSettings>): void {
   const previousResolution = effectiveResolution();
   // Leaving automatic mode adopts the current zoom-derived resolution as the
   // fixed one, so the grid stays put instead of jumping to the stale slider.
   if (settings.autoResolution && patch.autoResolution === false && patch.resolution === undefined) {
     patch = { ...patch, resolution: previousResolution };
   }
-  settings = normalizeH3GridSettings({ ...settings, ...patch });
+  settings = normalizeA5GridSettings({ ...settings, ...patch });
   const resolution = effectiveResolution();
   // Re-derive the selection only for an explicit slider change; toggling
   // automatic resolution (like zooming in automatic mode) keeps the clicked
   // cell and its neighbors/parents as they are.
   if (selectedCell && patch.resolution !== undefined && resolution !== previousResolution) {
-    const [lat, lng] = cellToLatLng(selectedCell);
-    selectedCell = latLngToCell(lat, lng, resolution);
+    const center = cellToLonLat(hexToU64(selectedCell));
+    selectedCell = u64ToHex(lonLatToCell(center, resolution));
   }
   // Only the rendered resolution changes the geometry, so a paint/layout-only
-  // edit skips rebuilding up to H3_VIEWPORT_CELL_LIMIT features.
+  // edit skips rebuilding up to A5_VIEWPORT_CELL_LIMIT features.
   if (resolution !== previousResolution) {
     refresh();
   } else {
@@ -294,98 +275,120 @@ export function setH3GridSettings(patch: Partial<H3GridSettings>): void {
 }
 
 /**
- * Keep a cell boundary contiguous across the antimeridian, mirroring
- * vgrid-maplibre's H3Grid (https://www.npmjs.com/package/vgrid-maplibre):
- * when a ring carries a vertex west of -130°, every positive longitude is
- * shifted down by 360°. A cell straddling the seam mixes ~+179 and ~-179
- * values, so the shift makes the ring contiguous around -180; MapLibre
- * renders longitudes past -180 in the adjacent world copy. Rings entirely
- * away from the seam never match the -130 test and pass through unchanged.
+ * Unwrap antimeridian-crossing A5 rings so longitudes stay contiguous.
+ * a5-js returns raw ±180 jumps; MapLibre needs the adjacent world copy.
  */
-export function h3FixTransmeridianBoundary(ring: [number, number][]): [number, number][] {
-  if (!ring.some(([longitude]) => longitude < -130)) return ring;
-  return ring.map(([longitude, latitude]) =>
-    longitude > 0 ? [longitude - 360, latitude] : [longitude, latitude],
-  );
+export function a5UnwrapBoundary(ring: [number, number][]): [number, number][] {
+  if (ring.length === 0) return ring;
+  const out: [number, number][] = [];
+  for (const [lng, lat] of ring) {
+    let lon = lng;
+    if (out.length > 0) {
+      const reference = out[0][0];
+      if (lon - reference > 180) lon -= 360;
+      if (lon - reference < -180) lon += 360;
+    }
+    out.push([lon, lat]);
+  }
+  return out;
 }
 
-/** Convert an H3 cell to a GeoJSON polygon with useful export attributes. */
-export function h3CellFeature(cell: string): Feature<Polygon> {
-  const [lat, lng] = cellToLatLng(cell);
-  const boundary = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
+/** Convert an A5 cell (hex identifier) to a GeoJSON polygon with export attributes. */
+export function a5CellFeature(cell: string): Feature<Polygon> {
+  const id = hexToU64(cell);
+  const [lng, lat] = cellToLonLat(id);
+  const boundary = a5UnwrapBoundary(cellToBoundary(id) as [number, number][]);
   return {
     type: "Feature",
     id: cell,
     properties: {
-      h3: cell,
-      resolution: getResolution(cell),
-      base_cell: getBaseCellNumber(cell),
+      a5: cell,
+      resolution: getResolution(id),
       center_lat: lat,
       center_lng: lng,
-      is_pentagon: isPentagon(cell),
     },
     geometry: { type: "Polygon", coordinates: [boundary] },
   };
 }
 
+const EARTH_AREA_M2 = 4 * Math.PI * 6371008.8 ** 2;
+
 /**
- * Fill a WGS84 bounding box with H3 cells. Bounds that cross the antimeridian
- * are split into two polygons because H3 expects longitudes in [-180, 180].
+ * polygonToCells is reliable for viewport-sized polygons, but once a polygon
+ * approaches hemisphere scale it starts missing interior cells (observed above
+ * roughly 20% of the sphere), and a ring spanning the full 360° of longitude is
+ * degenerate. Views larger than this fraction switch to enumerating every cell
+ * at the resolution and filtering by center — exact, and only reachable at
+ * coarse resolutions (the cell-limit guard rejects large views at fine ones),
+ * where the enumeration is cheap.
  */
-export function h3GridForBounds(
+const POLYGON_FILL_MAX_EARTH_FRACTION = 0.15;
+
+/** Fill a WGS84 bounding box with A5 cells. */
+export function a5GridForBounds(
   bounds: [number, number, number, number],
   resolution: number,
-  limit = H3_VIEWPORT_CELL_LIMIT,
+  limit = A5_VIEWPORT_CELL_LIMIT,
 ): FeatureCollection<Polygon> {
   const [west, southRaw, east, northRaw] = bounds;
-  const south = Math.max(-89.999999, Math.min(89.999999, southRaw));
-  const north = Math.max(-89.999999, Math.min(89.999999, northRaw));
-  const span = east >= west ? east - west : east + 360 - west;
-  const ranges: Array<[number, number]> =
-    span >= 359.999
-      ? [
-          [-180, 0],
-          [0, 180],
-        ]
-      : east < west
-        ? [
-            [west, 180],
-            [-180, east],
-          ]
-        : [[Math.max(-180, west), Math.min(180, east)]];
-  // Reject obviously oversized requests before polygonToCells allocates the
-  // full result. This spherical rectangle estimate is deliberately a little
-  // conservative; the exact hard cap below remains the final guard.
+  const south = Math.max(-90, Math.min(90, southRaw));
+  const north = Math.max(-90, Math.min(90, northRaw));
+  const span = Math.min(360, east >= west ? east - west : east + 360 - west);
+  // Reject obviously oversized requests before materializing the full result.
+  // This spherical rectangle estimate is deliberately a little conservative;
+  // the exact hard cap below remains the final guard. A5 cells are exactly
+  // equal-area, so cellArea is not an average but the true size.
   const radians = Math.PI / 180;
-  const areaKm2 = ranges.reduce(
-    (sum, [left, right]) =>
-      sum +
-      6371.0088 ** 2 *
-        Math.abs((right - left) * radians) *
-        Math.abs(Math.sin(north * radians) - Math.sin(south * radians)),
-    0,
-  );
-  if (areaKm2 / getHexagonAreaAvg(resolution, "km2") > limit * 1.2) {
-    throw new RangeError(`H3 cell limit exceeded: ${limit}`);
+  const areaM2 =
+    6371008.8 ** 2 *
+    span *
+    radians *
+    Math.abs(Math.sin(north * radians) - Math.sin(south * radians));
+  if (areaM2 / cellArea(resolution) > limit * 1.2) {
+    throw new RangeError(`A5 cell limit exceeded: ${limit}`);
   }
-  const cells = new Set<string>();
 
-  for (const [left, right] of ranges) {
-    const polygon = [
-      [south, left],
-      [south, right],
-      [north, right],
-      [north, left],
-      [south, left],
-    ];
-    for (const cell of polygonToCells(polygon, resolution)) {
-      cells.add(cell);
-      if (cells.size > limit) {
-        throw new RangeError(`H3 cell limit exceeded: ${limit}`);
-      }
+  const cells: bigint[] = [];
+  const push = (cell: bigint): void => {
+    cells.push(cell);
+    if (cells.length > limit) {
+      throw new RangeError(`A5 cell limit exceeded: ${limit}`);
+    }
+  };
+  const enumerable = getNumCells(resolution) <= limit * 4;
+  if (enumerable && (span >= 359.999 || areaM2 > EARTH_AREA_M2 * POLYGON_FILL_MAX_EARTH_FRACTION)) {
+    for (const cell of uncompact(getRes0Cells(), resolution)) {
+      const [lng, lat] = cellToLonLat(cell);
+      if (lat < south || lat > north) continue;
+      // Modulo keeps antimeridian-crossing and unwrapped west values working.
+      const offset = (((lng - west) % 360) + 360) % 360;
+      if (offset <= span || span >= 360) push(cell);
+    }
+  } else {
+    // A5 works on the sphere, so the ring may cross the antimeridian or carry
+    // unwrapped longitudes as-is — no splitting needed. polygonToCells compacts
+    // its result; uncompact back to one resolution, as mixed-resolution
+    // pentagons do not nest and would render gaps/overlaps.
+    // Known tradeoff (accepted): on the sphere the top/bottom edges of this
+    // plain rectangle are great-circle arcs, not parallels, so high-latitude
+    // views (e.g. Svalbard, Antarctica) omit some cells near the poleward
+    // edge. Densifying those edges would restore them.
+    const eastEdge = west + Math.min(span, 359.999);
+    const ring = [
+      [west, south],
+      [eastEdge, south],
+      [eastEdge, north],
+      [west, north],
+      [west, south],
+    ] as A5LonLat[];
+    for (const cell of uncompact(polygonToCells(ring, resolution), resolution)) {
+      push(cell);
     }
   }
-  return { type: "FeatureCollection", features: [...cells].map(h3CellFeature) };
+  return {
+    type: "FeatureCollection",
+    features: cells.map((cell) => a5CellFeature(u64ToHex(cell))),
+  };
 }
 
 function removeLayers(activeMap: MapLibreMap): void {
@@ -393,14 +396,13 @@ function removeLayers(activeMap: MapLibreMap): void {
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
-    ICOSAHEDRON_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
     FILL_LAYER_ID,
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, ICOSAHEDRON_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -425,9 +427,9 @@ function ensureLayers(): void {
       id: LABEL_LAYER_ID,
       type: "symbol",
       source: SOURCE_ID,
-      minzoom: h3LabelMinZoom(effectiveResolution()),
+      minzoom: a5LabelMinZoom(effectiveResolution()),
       layout: {
-        "text-field": ["get", "h3"],
+        "text-field": ["get", "a5"],
         "text-font": pickTextFont(map),
         "text-size": 10,
         visibility: settings.showLabels ? "visible" : "none",
@@ -439,25 +441,8 @@ function ensureLayers(): void {
       },
     });
   }
-  if (!map.getSource(ICOSAHEDRON_SOURCE_ID)) {
-    map.addSource(ICOSAHEDRON_SOURCE_ID, {
-      type: "geojson",
-      data: ICOSAHEDRON_GEOJSON_URL,
-    });
-    map.addLayer({
-      id: ICOSAHEDRON_LINE_LAYER_ID,
-      type: "line",
-      source: ICOSAHEDRON_SOURCE_ID,
-      layout: { visibility: settings.showIcosahedron ? "visible" : "none" },
-      paint: {
-        "line-color": "#dc2626",
-        "line-width": 1.5,
-        "line-dasharray": [2, 2],
-      },
-    });
-  }
   // Added before the selected layers so the selected cell stays on top of its
-  // (larger, overlapping) parents.
+  // (larger, overlapping) ancestors.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -503,12 +488,7 @@ function applyStyle(): void {
   map.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
   map.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.lineColor);
   map.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
-  map.setLayerZoomRange(LABEL_LAYER_ID, h3LabelMinZoom(effectiveResolution()), 24);
-  map.setLayoutProperty(
-    ICOSAHEDRON_LINE_LAYER_ID,
-    "visibility",
-    settings.showIcosahedron ? "visible" : "none",
-  );
+  map.setLayerZoomRange(LABEL_LAYER_ID, a5LabelMinZoom(effectiveResolution()), 24);
 }
 
 function refresh(): void {
@@ -518,10 +498,10 @@ function refresh(): void {
   // resolution it was clicked at: in automatic mode a zoom or pan changes the
   // rendered grid, but re-deriving the selection would silently replace the
   // cell the user identified. Only an explicit settings change re-indexes it
-  // (see setH3GridSettings).
+  // (see setA5GridSettings).
   try {
     const bounds = map.getBounds();
-    currentGrid = h3GridForBounds(
+    currentGrid = a5GridForBounds(
       [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
       resolution,
     );
@@ -529,7 +509,7 @@ function refresh(): void {
   } catch (error) {
     currentGrid = { type: "FeatureCollection", features: [] };
     currentError =
-      error instanceof RangeError ? labels.tooManyCells(H3_VIEWPORT_CELL_LIMIT) : String(error);
+      error instanceof RangeError ? labels.tooManyCells(A5_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
@@ -537,37 +517,38 @@ function refresh(): void {
   if (panelContainer) renderPanel(panelContainer);
 }
 
+function neighborCells(cell: string): string[] {
+  const id = hexToU64(cell);
+  // gridDisk compacts its result, so expand back to the cell's resolution.
+  return [...uncompact(gridDisk(id, 1), getResolution(id))].map(u64ToHex);
+}
+
 function selectedCells(): string[] {
   if (!selectedCell) return [];
-  return settings.includeNeighbors ? gridDisk(selectedCell, 1) : [selectedCell];
+  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
 }
 
 /**
- * Every resolution r-1 cell the selected cell overlaps. H3's hierarchy is
- * approximate — a child hexagon is not perfectly contained in cellToParent,
- * its corners can spill into the parent's neighbors. Any overlapping coarser
- * cell is larger than the cell itself, so it must cover part of the boundary:
- * sampling the boundary vertices, nudged slightly toward the center so parents
- * that merely touch the edge are excluded, finds them all.
+ * Every resolution r-1 cell the selected cell overlaps. A5 pentagons do not
+ * nest, so a cell can spill across several coarser cells beyond its canonical
+ * cellToParent (sampled across the sphere, ~half of all cells overlap 2–3).
+ * Any overlapping coarser cell is larger than the cell itself, so it must
+ * cover part of the boundary: sampling a densified boundary, nudged slightly
+ * toward the center so parents that merely touch the edge are excluded, finds
+ * them all.
  */
 function parentCells(cell: string): string[] {
-  const resolution = getResolution(cell);
+  const id = hexToU64(cell);
+  const resolution = getResolution(id);
   if (resolution <= 0) return [];
-  const [centerLat, centerLng] = cellToLatLng(cell);
-  const parents = new Set<string>([cellToParent(cell, resolution - 1)]);
-  // The unwrapped ring keeps vertex longitudes adjacent to the center for
-  // dateline cells; latLngToCell accepts longitudes outside [-180, 180].
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(cell, true) as [number, number][]);
-  const ringCenterLng =
-    centerLng > 0 && ring.some(([lng]) => lng < -130) ? centerLng - 360 : centerLng;
-  for (const [lng, lat] of ring) {
-    parents.add(
-      latLngToCell(
-        centerLat + (lat - centerLat) * 0.999,
-        ringCenterLng + (lng - ringCenterLng) * 0.999,
-        resolution - 1,
-      ),
-    );
+  const [centerLng, centerLat] = cellToLonLat(id);
+  const parents = new Set<string>([u64ToHex(cellToParent(id))]);
+  for (const [lng, lat] of cellToBoundary(id, { closedRing: false, segments: 12 })) {
+    const inset = [
+      centerLng + (lng - centerLng) * 0.999,
+      centerLat + (lat - centerLat) * 0.999,
+    ] as A5LonLat;
+    parents.add(u64ToHex(lonLatToCell(inset, resolution - 1)));
   }
   return [...parents];
 }
@@ -576,28 +557,30 @@ function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map(h3CellFeature),
+    features: selectedCells().map(a5CellFeature),
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
     type: "FeatureCollection",
     features:
-      settings.includeParents && selectedCell ? parentCells(selectedCell).map(h3CellFeature) : [],
+      settings.includeParents && selectedCell ? parentCells(selectedCell).map(a5CellFeature) : [],
   });
 }
 
 function gridCsv(grid: FeatureCollection<Polygon>): string {
-  const header = "h3,resolution,base_cell,center_lat,center_lng,is_pentagon";
+  const header = "a5,resolution,center_lat,center_lng";
   const rows = grid.features.map((feature) => {
     const p = feature.properties!;
-    return [p.h3, p.resolution, p.base_cell, p.center_lat, p.center_lng, p.is_pentagon].join(",");
+    return [p.a5, p.resolution, p.center_lat, p.center_lng].join(",");
   });
   return [header, ...rows].join("\n");
 }
 
 function fitSelected(): void {
   if (!selectedCell || !appRef) return;
-  const ring = h3FixTransmeridianBoundary(cellToBoundary(selectedCell, true) as [number, number][]);
+  // The ring is unwrapped to stay contiguous across the antimeridian, so
+  // min/max longitudes never span the world.
+  const ring = a5UnwrapBoundary(cellToBoundary(hexToU64(selectedCell)) as [number, number][]);
   const lons = ring.map(([lng]) => lng);
   const lats = ring.map(([, lat]) => lat);
   appRef.fitBounds?.([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
@@ -652,7 +635,7 @@ function renderPanel(container: HTMLElement): void {
   autoResolution.type = "checkbox";
   autoResolution.checked = settings.autoResolution;
   autoResolution.addEventListener("change", () =>
-    setH3GridSettings({ autoResolution: autoResolution.checked }),
+    setA5GridSettings({ autoResolution: autoResolution.checked }),
   );
   row(labels.autoResolution, autoResolution);
 
@@ -663,7 +646,7 @@ function renderPanel(container: HTMLElement): void {
   const resolution = document.createElement("input");
   resolution.type = "range";
   resolution.min = "0";
-  resolution.max = "15";
+  resolution.max = String(MAX_RESOLUTION);
   resolution.value = String(shownResolution);
   resolution.title = String(shownResolution);
   resolution.disabled = settings.autoResolution;
@@ -671,7 +654,7 @@ function renderPanel(container: HTMLElement): void {
     resolution.title = resolution.value;
   });
   resolution.addEventListener("change", () =>
-    setH3GridSettings({ resolution: Number(resolution.value) }),
+    setA5GridSettings({ resolution: Number(resolution.value) }),
   );
   const resolutionWrap = document.createElement("span");
   resolutionWrap.style.display = "flex";
@@ -693,9 +676,9 @@ function renderPanel(container: HTMLElement): void {
     const input = document.createElement("input");
     input.type = "color";
     input.value = settings[key];
-    // `change` (not `input`): setH3GridSettings re-renders the panel, which
+    // `change` (not `input`): setA5GridSettings re-renders the panel, which
     // would destroy the picker mid-drag.
-    input.addEventListener("change", () => setH3GridSettings({ [key]: input.value }));
+    input.addEventListener("change", () => setA5GridSettings({ [key]: input.value }));
     row(text, input);
   }
   for (const [text, key, min, max, step] of [
@@ -709,19 +692,18 @@ function renderPanel(container: HTMLElement): void {
     input.step = String(step);
     input.value = String(settings[key]);
     input.style.width = "72px";
-    input.addEventListener("change", () => setH3GridSettings({ [key]: Number(input.value) }));
+    input.addEventListener("change", () => setA5GridSettings({ [key]: Number(input.value) }));
     row(text, input);
   }
   for (const [text, key] of [
     [labels.showLabels, "showLabels"],
     [labels.includeNeighbors, "includeNeighbors"],
     [labels.includeParents, "includeParents"],
-    [labels.showIcosahedron, "showIcosahedron"],
   ] as const) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = settings[key];
-    input.addEventListener("change", () => setH3GridSettings({ [key]: input.checked }));
+    input.addEventListener("change", () => setA5GridSettings({ [key]: input.checked }));
     row(text, input);
   }
 
@@ -740,7 +722,9 @@ function renderPanel(container: HTMLElement): void {
   section.appendChild(selectedHeading);
 
   if (selectedCell) {
-    const [lat, lng] = cellToLatLng(selectedCell);
+    const id = hexToU64(selectedCell);
+    const cellResolution = getResolution(id);
+    const [lng, lat] = cellToLonLat(id);
     const details = document.createElement("dl");
     details.style.margin = "0";
     details.style.display = "grid";
@@ -759,22 +743,17 @@ function renderPanel(container: HTMLElement): void {
       details.append(dt, dd);
     };
     addDetail("ID", selectedCell);
-    addDetail(labels.resolution, String(getResolution(selectedCell)));
-    addDetail(labels.baseCell, String(getBaseCellNumber(selectedCell)));
+    addDetail(labels.resolution, String(cellResolution));
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    addDetail(labels.pentagon, isPentagon(selectedCell) ? labels.yes : labels.no);
-    if (getResolution(selectedCell) > 0) {
+    if (cellResolution > 0) {
       // Every overlapping r-1 cell (canonical cellToParent first), matching
       // the dashed parent outlines on the map.
       addDetail(labels.parent, parentCells(selectedCell).join("\n"));
     }
-    if (getResolution(selectedCell) < 15) {
-      addDetail(
-        labels.children,
-        String(cellToChildren(selectedCell, getResolution(selectedCell) + 1).length),
-      );
+    if (cellResolution < MAX_RESOLUTION) {
+      addDetail(labels.children, String(cellToChildren(id).length));
     }
-    addDetail(labels.neighbors, String(gridDisk(selectedCell, 1).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");
@@ -800,7 +779,7 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(`H3 grid (resolution ${effectiveResolution()})`, currentGrid);
+          appRef?.addGeoJsonLayer(`A5 grid (resolution ${effectiveResolution()})`, currentGrid);
         }
       },
       currentGrid.features.length === 0,
@@ -809,7 +788,7 @@ function renderPanel(container: HTMLElement): void {
       labels.exportGeoJson,
       () => {
         appRef?.exportTextFile?.(
-          `h3-grid-r${effectiveResolution()}.geojson`,
+          `a5-grid-r${effectiveResolution()}.geojson`,
           JSON.stringify(currentGrid, null, 2),
           {
             description: "GeoJSON",
@@ -824,7 +803,7 @@ function renderPanel(container: HTMLElement): void {
     button(
       labels.exportCsv,
       () => {
-        appRef?.exportTextFile?.(`h3-grid-r${effectiveResolution()}.csv`, gridCsv(currentGrid), {
+        appRef?.exportTextFile?.(`a5-grid-r${effectiveResolution()}.csv`, gridCsv(currentGrid), {
           description: "CSV",
           extensions: ["csv"],
           mimeType: "text/csv",
@@ -837,15 +816,15 @@ function renderPanel(container: HTMLElement): void {
   section.appendChild(actions);
 }
 
-function settingsEqual(a: H3GridSettings, b: H3GridSettings): boolean {
+function settingsEqual(a: A5GridSettings, b: A5GridSettings): boolean {
   return Object.keys(a).every(
-    (key) => a[key as keyof H3GridSettings] === b[key as keyof H3GridSettings],
+    (key) => a[key as keyof A5GridSettings] === b[key as keyof A5GridSettings],
   );
 }
 
-export const maplibreH3Plugin: GeoLibrePlugin = {
-  id: H3_PLUGIN_ID,
-  name: "H3 Grid",
+export const maplibreA5Plugin: GeoLibrePlugin = {
+  id: A5_PLUGIN_ID,
+  name: "A5 Grid",
   version: "1.0.0",
   activate: (app) => {
     const activeMap = app.getMap?.();
@@ -854,7 +833,9 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     appRef = app;
     moveHandler = () => scheduleRefresh();
     clickHandler = (event) => {
-      selectedCell = latLngToCell(event.lngLat.lat, event.lngLat.lng, effectiveResolution());
+      selectedCell = u64ToHex(
+        lonLatToCell([event.lngLat.lng, event.lngLat.lat] as A5LonLat, effectiveResolution()),
+      );
       updateSelectedSource();
       if (panelContainer) renderPanel(panelContainer);
     };
@@ -903,9 +884,9 @@ export const maplibreH3Plugin: GeoLibrePlugin = {
     app.closeRightPanel?.(PANEL_ID);
   },
   getProjectState: () =>
-    settingsEqual(settings, DEFAULT_H3_GRID_SETTINGS) ? undefined : { ...settings },
+    settingsEqual(settings, DEFAULT_A5_GRID_SETTINGS) ? undefined : { ...settings },
   applyProjectState: (_app, state) => {
-    const next = normalizeH3GridSettings(state);
+    const next = normalizeA5GridSettings(state);
     if (settingsEqual(settings, next)) return false;
     settings = next;
     refresh();
