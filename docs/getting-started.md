@@ -8,6 +8,7 @@
 [![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
 [![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-GeoLibre-0078D4?logo=windows)](https://apps.microsoft.com/detail/9nwt67rv531x)
+[![Mac App Store](https://img.shields.io/badge/Mac%20App%20Store-GeoLibre-000000?logo=apple&logoColor=white)](https://apps.apple.com/app/geolibre-desktop/id6796848769)
 [![Google Play](https://img.shields.io/badge/Google%20Play-GeoLibre-01875F?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=org.geolibre.app)
 [![AUR version](https://img.shields.io/aur/version/geolibre-bin?logo=archlinux&label=AUR)](https://aur.archlinux.org/packages/geolibre-bin)
 [![FlatPark](https://img.shields.io/badge/FlatPark-GeoLibre-4A90D9?logo=flatpak)](https://flatpark.org/apps/app.geolibre.GeoLibre/)
@@ -32,9 +33,11 @@ You can load browser-selected vector data supported by DuckDB-WASM Spatial, drag
 
 ### On the desktop
 
-The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, Homebrew, winget, the AUR, COPR, and Flatpak.
+The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, the Mac App Store, Homebrew, winget, the AUR, COPR, and Flatpak.
 
 [Download the desktop app](downloads.md){ .md-button .md-button--primary }
+
+On macOS, prefer the Homebrew or DMG build: the [Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769) build is sandboxed, so it drops the Python sidecar engines, Add Data → PostgreSQL/PostGIS via martin, the local Jupyter server, Earth Engine sign-in, and external plugin installs. See [what the Store build leaves out](downloads.md#what-the-store-build-leaves-out).
 
 ### In Jupyter
 

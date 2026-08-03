@@ -10,6 +10,15 @@ import type {
   PresenceEntry,
   ServerMessage,
 } from "./protocol";
+import {
+  isBoundedId,
+  MAX_COMMENTS_PER_SESSION,
+  MAX_REPLIES_PER_COMMENT,
+  MIN_COMMENT_INTERVAL_MS,
+  preserveStoredComments,
+  validateComment,
+  validateReply,
+} from "./comment-validate";
 
 function finite(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
@@ -107,6 +116,8 @@ interface SocketAttachment {
   editOverride?: boolean;
   /** Epoch-ms of this socket's last accepted chat frame, for rate-limiting. */
   lastChatTs?: number;
+  /** Epoch-ms of this socket's last accepted comment-mutation frame. */
+  lastCommentTs?: number;
 }
 
 /** Effective edit permission: the host always edits; otherwise a host-set
@@ -415,9 +426,15 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     // The project was parsed in webSocketMessage; re-serialize it only to
-    // persist a string for storage and forward the object verbatim. The relay
-    // never reads any field inside the project.
-    const project = message.project ?? null;
+    // persist a string for storage and forward the object verbatim. `comments`
+    // is the one field the relay touches (it also writes it directly in
+    // `handleCommentMutation`), so preserve the stored list when this snapshot
+    // doesn't carry one — see `preserveStoredComments`. Peers get the merged
+    // project below, which heals a sender that had drifted.
+    const project = preserveStoredComments(
+      message.project ?? null,
+      parseStoredSnapshot(await this.ctx.storage.get<string>("snapshot")),
+    );
     // `rev` is written during /init before any socket can join, so the stored
     // value is always present; the `?? 0` is a defensive floor, never the
     // client's counter (a server-owned monotonic value must not trust input).
@@ -661,6 +678,84 @@ export class CollabSession extends DurableObject<Env> {
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "comment-mutation" }>,
   ): Promise<void> {
+    const action = message.action;
+    if (!action || typeof action !== "object") {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Missing or invalid comment-mutation action.",
+      });
+      return;
+    }
+
+    // Validate payloads for add/reply; toggle-resolve and delete only need a
+    // string commentId and carry no untrusted object bodies. Do this before
+    // rate-limiting so invalid frames always get bad-message and never consume
+    // the per-socket interval.
+    let sanitizedAction = action;
+    if (action.type === "add") {
+      const validated = validateComment(action.comment);
+      if (!validated) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid comment payload.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "add", comment: validated };
+    } else if (action.type === "reply") {
+      if (!isBoundedId(action.commentId)) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid reply target.",
+        });
+        return;
+      }
+      const validated = validateReply(action.reply);
+      if (!validated) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid reply payload.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "reply", commentId: action.commentId, reply: validated };
+    } else if (action.type === "toggle-resolve") {
+      if (!isBoundedId(action.commentId)) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid toggle-resolve target.",
+        });
+        return;
+      }
+      sanitizedAction = {
+        type: "toggle-resolve",
+        commentId: action.commentId,
+        ...(action.resolved !== undefined ? { resolved: action.resolved === true } : {}),
+      };
+    } else if (action.type === "delete") {
+      if (!isBoundedId(action.commentId)) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid delete target.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "delete", commentId: action.commentId };
+    } else {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Unsupported comment-mutation action type.",
+      });
+      return;
+    }
+
     const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
     if (!canEdit(attachment, mode)) {
       this.send(ws, {
@@ -671,53 +766,132 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
+    // Rate-limit accepted, authorized mutations before storage work.
+    const now = Date.now();
+    if (
+      attachment.lastCommentTs !== undefined &&
+      now - attachment.lastCommentTs < MIN_COMMENT_INTERVAL_MS
+    ) {
+      return;
+    }
+    attachment.lastCommentTs = now;
+    ws.serializeAttachment(attachment);
+
+    const sanitizedMessage: Extract<ClientMessage, { type: "comment-mutation" }> = {
+      type: "comment-mutation",
+      action: sanitizedAction,
+    };
+
+    // Persist even when no full project snapshot has been written yet, so early
+    // comments survive late joiners / reconnects. Seed an empty object when
+    // storage is empty or corrupt — the relay never inspects other project fields.
     const rawSnapshot = await this.ctx.storage.get<string>("snapshot");
+    let parsed: Record<string, unknown> = { comments: [] };
     if (rawSnapshot) {
       try {
-        const parsed = JSON.parse(rawSnapshot) as Record<string, unknown>;
-        const comments = Array.isArray(parsed.comments)
-          ? (parsed.comments as Record<string, unknown>[])
-          : [];
-        const action = message.action;
-        if (!action || typeof action !== "object") return;
-        let updatedComments = comments;
-
-        if (action.type === "add") {
-          if (!action.comment || typeof action.comment !== "object") return;
-          updatedComments = [...comments, action.comment as Record<string, unknown>];
-        } else if (action.type === "reply") {
-          if (!action.reply || typeof action.reply !== "object") return;
-          const replyObj = action.reply as Record<string, unknown>;
-          updatedComments = comments.map((c) => {
-            if (!c || typeof c !== "object" || c.id !== action.commentId) return c;
-            const existingReplies = Array.isArray(c.replies)
-              ? (c.replies as Record<string, unknown>[])
-              : [];
-            if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
-              return c;
-            return { ...c, replies: [...existingReplies, replyObj] };
-          });
-        } else if (action.type === "toggle-resolve") {
-          updatedComments = comments.map((c) =>
-            c && typeof c === "object" && c.id === action.commentId
-              ? { ...c, resolved: action.resolved !== undefined ? action.resolved : !c.resolved }
-              : c,
-          );
-        } else if (action.type === "delete") {
-          updatedComments = comments.filter(
-            (c) => c && typeof c === "object" && c.id !== action.commentId,
-          );
+        const value = JSON.parse(rawSnapshot) as unknown;
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          parsed = value as Record<string, unknown>;
         }
-
-        parsed.comments = updatedComments;
-        await this.ctx.storage.put("snapshot", JSON.stringify(parsed));
       } catch {
-        // Ignore snapshot mutation update errors defensively
+        // Fall through with the empty seed; still fan out below.
       }
     }
 
-    // Exclude the sender (ws) so they don't receive their own mutation back.
-    // The sender already applied the change locally before calling sendCommentMutation.
-    this.broadcast(message, ws);
+    try {
+      const comments = Array.isArray(parsed.comments)
+        ? (parsed.comments as Record<string, unknown>[])
+        : [];
+      let updatedComments = comments;
+
+      if (sanitizedAction.type === "add") {
+        const newComment = sanitizedAction.comment as Record<string, unknown>;
+        const exists = comments.some((c) => c && typeof c === "object" && c.id === newComment.id);
+        if (!exists && comments.length >= MAX_COMMENTS_PER_SESSION) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Comment limit reached for this session.",
+          });
+          return;
+        }
+        updatedComments = exists ? comments : [...comments, newComment];
+      } else if (sanitizedAction.type === "reply") {
+        const replyObj = sanitizedAction.reply as Record<string, unknown>;
+        const target = comments.find(
+          (c) => c && typeof c === "object" && c.id === sanitizedAction.commentId,
+        );
+        if (!target) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Invalid reply target.",
+          });
+          return;
+        }
+        const targetReplies = Array.isArray(target.replies)
+          ? (target.replies as Record<string, unknown>[])
+          : [];
+        if (targetReplies.length >= MAX_REPLIES_PER_COMMENT) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Reply limit reached for this comment.",
+          });
+          return;
+        }
+        updatedComments = comments.map((c) => {
+          if (!c || typeof c !== "object" || c.id !== sanitizedAction.commentId) return c;
+          const existingReplies = Array.isArray(c.replies)
+            ? (c.replies as Record<string, unknown>[])
+            : [];
+          if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
+            return c;
+          return { ...c, replies: [...existingReplies, replyObj] };
+        });
+      } else if (sanitizedAction.type === "toggle-resolve") {
+        updatedComments = comments.map((c) =>
+          c && typeof c === "object" && c.id === sanitizedAction.commentId
+            ? {
+                ...c,
+                resolved:
+                  sanitizedAction.resolved !== undefined ? sanitizedAction.resolved : !c.resolved,
+              }
+            : c,
+        );
+      } else if (sanitizedAction.type === "delete") {
+        updatedComments = comments.filter(
+          (c) => c && typeof c === "object" && c.id !== sanitizedAction.commentId,
+        );
+      }
+
+      parsed.comments = updatedComments;
+      const serialized = JSON.stringify(parsed);
+      // `handleSnapshot` bounds a full project the same way. Check before the
+      // put so an oversized value surfaces as an error the sender can see
+      // rather than a throw the catch below would have to guess at.
+      if (ENCODER.encode(serialized).length > MAX_SNAPSHOT_BYTES) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Project is too large to store this comment.",
+        });
+        return;
+      }
+      await this.ctx.storage.put("snapshot", serialized);
+    } catch {
+      // The mutation never reached storage, so a late joiner or a reconnect
+      // (both of which read from storage) would not see it. Tell the sender and
+      // skip the fan-out rather than leaving connected peers holding a comment
+      // that isn't persisted anywhere.
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Could not save the comment. Try again.",
+      });
+      return;
+    }
+
+    this.broadcast(sanitizedMessage, ws);
   }
 }

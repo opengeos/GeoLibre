@@ -244,7 +244,8 @@ See the [Plugin API](plugin-api.md) to build your own.
     - A guided update workflow with a startup update check and update preferences
 - Desktop packaging and distribution
     - MSIX packaging support, Windows Package Manager (winget) distribution as `OpenGeos.GeoLibre`, and a Windows portable zip build that runs without installation
-    - macOS installers signed with an Apple Developer ID certificate and notarized by Apple, so they open without a Gatekeeper workaround
+    - macOS installers signed with an Apple Developer ID certificate and notarized by Apple, so they open without a Gatekeeper workaround. An official [Homebrew Cask](https://github.com/Homebrew/homebrew-cask/blob/main/Casks/g/geolibre.rb) installs and upgrades them with no tap or trust step
+    - A sandboxed [Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769) build of the same app, which trades the Python sidecar engines, server-backed PostgreSQL/PostGIS layers via martin, the local Jupyter server, Earth Engine sign-in, and external plugin installs for Store installation and updates. The in-browser SQL engines, including PGlite/PostGIS, still run. See [Downloads](downloads.md#mac-app-store)
     - Linux AppImages that carry embedded update information and a published `.zsync`, so AppImageUpdate, AppImageLauncher, AppManager, and AM can update the app by transferring only the blocks that changed
 - Native Android app built from the same codebase with Tauri v2 mobile, published on [Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app). See [Android](android.md)
     - A GitHub Actions workflow builds both the universal App Bundle that Play ships and signed, per-architecture sideload APKs (~40 MB)

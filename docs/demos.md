@@ -67,6 +67,16 @@ The deep-space starfield behind each globe comes from the
     <td align="center"><b>Pluto</b><br>New Horizons Mosaic (NASA / JHU APL / SwRI)</td>
     <td align="center"><b>Venus</b><br>Magellan C3-MDIR Colour (NASA / JPL)</td>
   </tr>
+  <tr>
+    <td width="33%"><a href="https://files.opengeos.org/europa.webp"><img src="https://files.opengeos.org/europa.webp" alt="GeoLibre globe view of Europa over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://files.opengeos.org/callisto.webp"><img src="https://files.opengeos.org/callisto.webp" alt="GeoLibre globe view of Callisto over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://files.opengeos.org/charon.webp"><img src="https://files.opengeos.org/charon.webp" alt="GeoLibre globe view of Charon over a starfield backdrop"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Europa</b><br>Galileo / Voyager (NASA / JPL)</td>
+    <td align="center"><b>Callisto</b><br>Galileo / Voyager (NASA / JPL)</td>
+    <td align="center"><b>Charon</b><br>New Horizons Mosaic (NASA / JHU APL / SwRI)</td>
+  </tr>
 </table>
 
 ## SQL Workspace

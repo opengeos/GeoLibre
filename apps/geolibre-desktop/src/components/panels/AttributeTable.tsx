@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import {
+  attributeLinkUrl,
   coerceAttributeFormValue,
   isDuckDBQueryLayer,
   useAppStore,
@@ -125,6 +126,7 @@ import {
   type VectorExportFormat,
 } from "../../lib/vector-export";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
+import { openExternalLink } from "../../lib/open-external";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
@@ -1835,6 +1837,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             : "h-7 min-w-0 px-2 text-xs";
                         const config = formFields.get(col);
                         const current = draft ?? formatAttributeValue(value);
+                        const isEditableCell = isEditing && !derivedColumns.has(col);
+                        const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
                             ? formErrorText(formError)
@@ -1859,7 +1863,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   : undefined
                             }
                           >
-                            {isEditing && !derivedColumns.has(col) ? (
+                            {isEditableCell ? (
                               config?.widget === "valueMap" && config.valueMap?.length ? (
                                 <Select
                                   className={inputClassName}
@@ -1918,6 +1922,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   onChange={(event) => commitDraft(event.target.value)}
                                 />
                               )
+                            ) : linkUrl ? (
+                              <a
+                                href={linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={linkUrl}
+                                className="inline-block max-w-full truncate align-bottom text-primary underline underline-offset-2"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void openExternalLink(linkUrl);
+                                }}
+                              >
+                                {linkUrl}
+                              </a>
                             ) : (
                               formatAttributeValue(value)
                             )}

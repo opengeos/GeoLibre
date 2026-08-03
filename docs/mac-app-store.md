@@ -1,5 +1,14 @@
 # Mac App Store
 
+GeoLibre Desktop is published on the
+[Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769):
+
+[Get GeoLibre Desktop on the Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769){ .md-button .md-button--primary }
+
+For the user-facing comparison of the two macOS builds, see
+[Downloads](downloads.md#mac-app-store). This page documents how the Store build
+is produced and why it differs.
+
 GeoLibre Desktop ships on macOS two ways:
 
 - **Developer ID** (the default): the notarized `.dmg` published by
@@ -105,6 +114,18 @@ onnxruntime-web detection/segment-everything, geocoding, and collaboration.
 
 ## Building locally
 
+Unlike the other desktop builds, this one **embeds the JupyterLite site**, so
+the `jupyter lite` CLI has to be installed before you build:
+
+```bash
+pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+```
+
+Without it the build fails with an explicit error rather than producing an app
+whose Notebook panel loads the wrong thing (Tauri answers a missing asset with
+`index.html`, so a MAS build with no JupyterLite renders a second copy of
+GeoLibre inside the panel).
+
 ```bash
 # One-time: render the entitlements with your team id.
 APPLE_TEAM_ID=XXXXXXXXXX scripts/render-mas-entitlements.sh
@@ -167,7 +188,9 @@ Creating the inputs (Apple Developer account required):
 
 1. Create the app record in App Store Connect for `org.geolibre.desktop`
    (the same team as the iOS `org.geolibre.app` record; the two are separate
-   apps).
+   apps). This is already done for GeoLibre Desktop, App Store ID `6796848769`
+   (the numeric listing identifier App Store Connect labels "Apple ID" on the App
+   Information page), so later releases start at step 2.
 2. Download the `geolibre-mas-pkg` artifact and upload the `.pkg` with the
    **Transporter** app (or `xcrun altool --upload-app -f <pkg> -t macos`).
 3. Fill in screenshots, description, and the privacy questionnaire
