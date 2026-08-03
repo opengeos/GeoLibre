@@ -16,6 +16,7 @@ describe("attributeLinkUrl", () => {
     assert.equal(attributeLinkUrl("file:///etc/passwd"), null);
     assert.equal(attributeLinkUrl("data:text/html,hello"), null);
     assert.equal(attributeLinkUrl("mailto:someone@example.com"), null);
+    assert.equal(attributeLinkUrl("https://example.com/\u202eevil.test"), null);
     assert.equal(attributeLinkUrl("https:"), null);
     assert.equal(attributeLinkUrl("https://"), null);
     assert.equal(attributeLinkUrl("www.example.com"), null);

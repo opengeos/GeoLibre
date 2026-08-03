@@ -1837,7 +1837,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             : "h-7 min-w-0 px-2 text-xs";
                         const config = formFields.get(col);
                         const current = draft ?? formatAttributeValue(value);
-                        const linkUrl = attributeLinkUrl(value);
+                        const isEditableCell = isEditing && !derivedColumns.has(col);
+                        const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
                             ? formErrorText(formError)
@@ -1862,7 +1863,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   : undefined
                             }
                           >
-                            {isEditing && !derivedColumns.has(col) ? (
+                            {isEditableCell ? (
                               config?.widget === "valueMap" && config.valueMap?.length ? (
                                 <Select
                                   className={inputClassName}
