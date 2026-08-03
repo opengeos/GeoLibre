@@ -1343,7 +1343,11 @@ function githubRawVectorProxyUrl(value: string): string | null {
   if (
     url.protocol !== "https:" ||
     url.hostname !== "github.com" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    (url.port !== "" && url.port !== "443") ||
     url.search !== "" ||
+    url.hash !== "" ||
     !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/raw\/.+$/.test(url.pathname)
   ) {
     return null;

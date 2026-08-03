@@ -138,8 +138,9 @@ describe("DGGAL plugin helpers", () => {
     const dggrs = dggal.createDGGRS("ISEA3H");
     // [0, 360] must not collapse to a zero-width box after normalizeLon.
     const grid = dggalGridForBounds(dggrs, [0, -85, 360, 85], 4);
-    const global = Number(dggrs.countZones(4));
-    assert.equal(grid.features.length, global);
+    const ids = grid.features.map((feature) => feature.properties?.dggal as string);
+    assert.equal(new Set(ids).size, ids.length);
+    assert.equal(ids.length, Number(dggrs.countZones(4)));
     dggrs.delete();
   });
 
