@@ -23,6 +23,13 @@ import {
   setBasemapControlLabels,
   setGraticuleLabels,
   setH3Labels,
+  setS2Labels,
+  setA5Labels,
+  setDggridLabels,
+  setDggalLabels,
+  setOlcLabels,
+  setGeohashLabels,
+  setTilecodeLabels,
   setMapillaryLabels,
   setEarthdataGisLabels,
   setOpenAerialMapLabels,
@@ -596,6 +603,7 @@ export function TopToolbar({
       title: t("h3Plugin.title"),
       getTitle: () => i18n.t("h3Plugin.title"),
       controlTitle: t("h3Plugin.controlTitle"),
+      autoResolution: t("h3Plugin.autoResolution"),
       resolution: t("h3Plugin.resolution"),
       cellCount: (count) => t("h3Plugin.cellCount", { count }),
       tooManyCells: (limit) => t("h3Plugin.tooManyCells", { limit }),
@@ -622,6 +630,212 @@ export function TopToolbar({
       exportGeoJson: t("h3Plugin.exportGeoJson"),
       exportCsv: t("h3Plugin.exportCsv"),
       includeNeighbors: t("h3Plugin.includeNeighbors"),
+      includeParents: t("h3Plugin.includeParents"),
+      showIcosahedron: t("h3Plugin.showIcosahedron"),
+    });
+    setS2Labels({
+      title: t("s2Plugin.title"),
+      getTitle: () => i18n.t("s2Plugin.title"),
+      controlTitle: t("s2Plugin.controlTitle"),
+      autoResolution: t("s2Plugin.autoResolution"),
+      resolution: t("s2Plugin.resolution"),
+      cellCount: (count) => t("s2Plugin.cellCount", { count }),
+      tooManyCells: (limit) => t("s2Plugin.tooManyCells", { limit }),
+      fillColor: t("s2Plugin.fillColor"),
+      fillOpacity: t("s2Plugin.fillOpacity"),
+      lineColor: t("s2Plugin.lineColor"),
+      lineWidth: t("s2Plugin.lineWidth"),
+      showLabels: t("s2Plugin.showLabels"),
+      identifyHint: t("s2Plugin.identifyHint"),
+      selectedCell: t("s2Plugin.selectedCell"),
+      noSelection: t("s2Plugin.noSelection"),
+      copyId: t("s2Plugin.copyId"),
+      parent: t("s2Plugin.parent"),
+      children: t("s2Plugin.children"),
+      neighbors: t("s2Plugin.neighbors"),
+      center: t("s2Plugin.center"),
+      zoomToCell: t("s2Plugin.zoomToCell"),
+      addAsLayer: t("s2Plugin.addAsLayer"),
+      exportGeoJson: t("s2Plugin.exportGeoJson"),
+      exportCsv: t("s2Plugin.exportCsv"),
+      includeNeighbors: t("s2Plugin.includeNeighbors"),
+      includeParents: t("s2Plugin.includeParents"),
+    });
+    setA5Labels({
+      title: t("a5Plugin.title"),
+      getTitle: () => i18n.t("a5Plugin.title"),
+      controlTitle: t("a5Plugin.controlTitle"),
+      autoResolution: t("a5Plugin.autoResolution"),
+      resolution: t("a5Plugin.resolution"),
+      cellCount: (count) => t("a5Plugin.cellCount", { count }),
+      tooManyCells: (limit) => t("a5Plugin.tooManyCells", { limit }),
+      fillColor: t("a5Plugin.fillColor"),
+      fillOpacity: t("a5Plugin.fillOpacity"),
+      lineColor: t("a5Plugin.lineColor"),
+      lineWidth: t("a5Plugin.lineWidth"),
+      showLabels: t("a5Plugin.showLabels"),
+      identifyHint: t("a5Plugin.identifyHint"),
+      selectedCell: t("a5Plugin.selectedCell"),
+      noSelection: t("a5Plugin.noSelection"),
+      copyId: t("a5Plugin.copyId"),
+      parent: t("a5Plugin.parent"),
+      children: t("a5Plugin.children"),
+      neighbors: t("a5Plugin.neighbors"),
+      center: t("a5Plugin.center"),
+      zoomToCell: t("a5Plugin.zoomToCell"),
+      addAsLayer: t("a5Plugin.addAsLayer"),
+      exportGeoJson: t("a5Plugin.exportGeoJson"),
+      exportCsv: t("a5Plugin.exportCsv"),
+      includeNeighbors: t("a5Plugin.includeNeighbors"),
+      includeParents: t("a5Plugin.includeParents"),
+    });
+    setDggridLabels({
+      title: t("dggridPlugin.title"),
+      getTitle: () => i18n.t("dggridPlugin.title"),
+      controlTitle: t("dggridPlugin.controlTitle"),
+      cellType: t("dggridPlugin.cellType"),
+      topologyHexagon: t("dggridPlugin.topologyHexagon"),
+      topologyDiamond: t("dggridPlugin.topologyDiamond"),
+      topologyTriangle: t("dggridPlugin.topologyTriangle"),
+      projection: t("dggridPlugin.projection"),
+      aperture: t("dggridPlugin.aperture"),
+      autoResolution: t("dggridPlugin.autoResolution"),
+      resolution: t("dggridPlugin.resolution"),
+      cellCount: (count) => t("dggridPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("dggridPlugin.tooManyCells", { limit }),
+      fillColor: t("dggridPlugin.fillColor"),
+      fillOpacity: t("dggridPlugin.fillOpacity"),
+      lineColor: t("dggridPlugin.lineColor"),
+      lineWidth: t("dggridPlugin.lineWidth"),
+      showLabels: t("dggridPlugin.showLabels"),
+      identifyHint: t("dggridPlugin.identifyHint"),
+      selectedCell: t("dggridPlugin.selectedCell"),
+      noSelection: t("dggridPlugin.noSelection"),
+      copyId: t("dggridPlugin.copyId"),
+      parent: t("dggridPlugin.parent"),
+      children: t("dggridPlugin.children"),
+      neighbors: t("dggridPlugin.neighbors"),
+      center: t("dggridPlugin.center"),
+      zoomToCell: t("dggridPlugin.zoomToCell"),
+      addAsLayer: t("dggridPlugin.addAsLayer"),
+      exportGeoJson: t("dggridPlugin.exportGeoJson"),
+      exportCsv: t("dggridPlugin.exportCsv"),
+      includeNeighbors: t("dggridPlugin.includeNeighbors"),
+      includeParents: t("dggridPlugin.includeParents"),
+    });
+    setDggalLabels({
+      title: t("dggalPlugin.title"),
+      getTitle: () => i18n.t("dggalPlugin.title"),
+      controlTitle: t("dggalPlugin.controlTitle"),
+      gridType: t("dggalPlugin.gridType"),
+      autoResolution: t("dggalPlugin.autoResolution"),
+      resolution: t("dggalPlugin.resolution"),
+      cellCount: (count) => t("dggalPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("dggalPlugin.tooManyCells", { limit }),
+      fillColor: t("dggalPlugin.fillColor"),
+      fillOpacity: t("dggalPlugin.fillOpacity"),
+      lineColor: t("dggalPlugin.lineColor"),
+      lineWidth: t("dggalPlugin.lineWidth"),
+      showLabels: t("dggalPlugin.showLabels"),
+      identifyHint: t("dggalPlugin.identifyHint"),
+      selectedCell: t("dggalPlugin.selectedCell"),
+      noSelection: t("dggalPlugin.noSelection"),
+      copyId: t("dggalPlugin.copyId"),
+      parent: t("dggalPlugin.parent"),
+      children: t("dggalPlugin.children"),
+      neighbors: t("dggalPlugin.neighbors"),
+      center: t("dggalPlugin.center"),
+      zoomToCell: t("dggalPlugin.zoomToCell"),
+      addAsLayer: t("dggalPlugin.addAsLayer"),
+      exportGeoJson: t("dggalPlugin.exportGeoJson"),
+      exportCsv: t("dggalPlugin.exportCsv"),
+      includeNeighbors: t("dggalPlugin.includeNeighbors"),
+      includeParents: t("dggalPlugin.includeParents"),
+    });
+    setOlcLabels({
+      title: t("olcPlugin.title"),
+      getTitle: () => i18n.t("olcPlugin.title"),
+      controlTitle: t("olcPlugin.controlTitle"),
+      autoResolution: t("olcPlugin.autoResolution"),
+      resolution: t("olcPlugin.resolution"),
+      cellCount: (count) => t("olcPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("olcPlugin.tooManyCells", { limit }),
+      fillColor: t("olcPlugin.fillColor"),
+      fillOpacity: t("olcPlugin.fillOpacity"),
+      lineColor: t("olcPlugin.lineColor"),
+      lineWidth: t("olcPlugin.lineWidth"),
+      showLabels: t("olcPlugin.showLabels"),
+      identifyHint: t("olcPlugin.identifyHint"),
+      selectedCell: t("olcPlugin.selectedCell"),
+      noSelection: t("olcPlugin.noSelection"),
+      copyId: t("olcPlugin.copyId"),
+      parent: t("olcPlugin.parent"),
+      children: t("olcPlugin.children"),
+      neighbors: t("olcPlugin.neighbors"),
+      center: t("olcPlugin.center"),
+      zoomToCell: t("olcPlugin.zoomToCell"),
+      addAsLayer: t("olcPlugin.addAsLayer"),
+      exportGeoJson: t("olcPlugin.exportGeoJson"),
+      exportCsv: t("olcPlugin.exportCsv"),
+      includeNeighbors: t("olcPlugin.includeNeighbors"),
+      includeParent: t("olcPlugin.includeParent"),
+    });
+    setGeohashLabels({
+      title: t("geohashPlugin.title"),
+      getTitle: () => i18n.t("geohashPlugin.title"),
+      controlTitle: t("geohashPlugin.controlTitle"),
+      autoResolution: t("geohashPlugin.autoResolution"),
+      resolution: t("geohashPlugin.resolution"),
+      cellCount: (count) => t("geohashPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("geohashPlugin.tooManyCells", { limit }),
+      fillColor: t("geohashPlugin.fillColor"),
+      fillOpacity: t("geohashPlugin.fillOpacity"),
+      lineColor: t("geohashPlugin.lineColor"),
+      lineWidth: t("geohashPlugin.lineWidth"),
+      showLabels: t("geohashPlugin.showLabels"),
+      identifyHint: t("geohashPlugin.identifyHint"),
+      selectedCell: t("geohashPlugin.selectedCell"),
+      noSelection: t("geohashPlugin.noSelection"),
+      copyId: t("geohashPlugin.copyId"),
+      parent: t("geohashPlugin.parent"),
+      children: t("geohashPlugin.children"),
+      neighbors: t("geohashPlugin.neighbors"),
+      center: t("geohashPlugin.center"),
+      zoomToCell: t("geohashPlugin.zoomToCell"),
+      addAsLayer: t("geohashPlugin.addAsLayer"),
+      exportGeoJson: t("geohashPlugin.exportGeoJson"),
+      exportCsv: t("geohashPlugin.exportCsv"),
+      includeNeighbors: t("geohashPlugin.includeNeighbors"),
+      includeParent: t("geohashPlugin.includeParent"),
+    });
+    setTilecodeLabels({
+      title: t("tilecodePlugin.title"),
+      getTitle: () => i18n.t("tilecodePlugin.title"),
+      controlTitle: t("tilecodePlugin.controlTitle"),
+      autoResolution: t("tilecodePlugin.autoResolution"),
+      resolution: t("tilecodePlugin.resolution"),
+      cellCount: (count) => t("tilecodePlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("tilecodePlugin.tooManyCells", { limit }),
+      fillColor: t("tilecodePlugin.fillColor"),
+      fillOpacity: t("tilecodePlugin.fillOpacity"),
+      lineColor: t("tilecodePlugin.lineColor"),
+      lineWidth: t("tilecodePlugin.lineWidth"),
+      showLabels: t("tilecodePlugin.showLabels"),
+      identifyHint: t("tilecodePlugin.identifyHint"),
+      selectedCell: t("tilecodePlugin.selectedCell"),
+      noSelection: t("tilecodePlugin.noSelection"),
+      copyId: t("tilecodePlugin.copyId"),
+      quadkey: t("tilecodePlugin.quadkey"),
+      parent: t("tilecodePlugin.parent"),
+      children: t("tilecodePlugin.children"),
+      neighbors: t("tilecodePlugin.neighbors"),
+      center: t("tilecodePlugin.center"),
+      zoomToCell: t("tilecodePlugin.zoomToCell"),
+      addAsLayer: t("tilecodePlugin.addAsLayer"),
+      exportGeoJson: t("tilecodePlugin.exportGeoJson"),
+      exportCsv: t("tilecodePlugin.exportCsv"),
+      includeNeighbors: t("tilecodePlugin.includeNeighbors"),
+      includeParent: t("tilecodePlugin.includeParent"),
     });
     setTimelapseLabels({
       title: t("timelapse.title"),
@@ -831,6 +1045,8 @@ export function TopToolbar({
   // openSettingsSection. This toolbar owns the dialog + its kind state.
   useEffect(() => {
     const onOpenAddData = (event: Event) => {
+      // Read-only embeds must not open Add Data via the Browser panel event.
+      if (viewer) return;
       const detail = (event as CustomEvent<OpenAddDataDetail>).detail;
       // Reject kinds the Mac App Store build hides so a stray event cannot
       // open a dialog whose backing service is compiled out.
@@ -845,7 +1061,7 @@ export function TopToolbar({
     };
     window.addEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
     return () => window.removeEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
-  }, []);
+  }, [viewer]);
   // Deck.gl Layer kind the Add Data dialog opens on (e.g. the 3D-model entry
   // jumps straight to the scenegraph layer type).
   const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<string | undefined>(undefined);
@@ -1365,7 +1581,7 @@ export function TopToolbar({
     },
     {
       id: "view.comments",
-      title: "View Comments",
+      title: t("toolbar.command.viewComments"),
       group: t("toolbar.commandGroup.view"),
       keywords: "comments review threads notes annotations pins",
       icon: MessageSquare,
@@ -1879,7 +2095,11 @@ export function TopToolbar({
               aria-label={t("toolbar.item.projectName")}
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
+              readOnly={viewer}
+              onChange={(event) => {
+                if (viewer) return;
+                setProjectName(event.target.value);
+              }}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
@@ -1896,6 +2116,7 @@ export function TopToolbar({
                 projectNameComposingRef.current = false;
               }}
               onBlur={(event) => {
+                if (viewer) return;
                 const nextName = event.target.value.trim();
                 // Persist the canonical, locale-independent default name; a
                 // translated string would otherwise be written into the saved
