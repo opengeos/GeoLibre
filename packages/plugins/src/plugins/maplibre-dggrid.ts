@@ -865,7 +865,7 @@ function refresh(): void {
   updatePanelStatus();
 }
 
-/** Update the status line without recreating the rest of the panel controls. */
+/** Update the status line (and auto-resolution readout) without recreating controls. */
 function updatePanelStatus(): void {
   const status = panelContainer?.querySelector<HTMLElement>("[data-dggrid-status]");
   if (!status) {
@@ -874,6 +874,16 @@ function updatePanelStatus(): void {
   }
   status.textContent = currentError ?? labels.cellCount(currentGrid.features.length);
   status.style.color = currentError ? "#dc2626" : "";
+  if (settings.autoResolution) {
+    const shown = String(effectiveResolution());
+    const resolution = panelContainer?.querySelector<HTMLInputElement>("[data-dggrid-resolution]");
+    const resolutionValue = panelContainer?.querySelector<HTMLElement>("[data-dggrid-resolution-value]");
+    if (resolution) {
+      resolution.value = shown;
+      resolution.title = shown;
+    }
+    if (resolutionValue) resolutionValue.textContent = shown;
+  }
 }
 
 /**
@@ -1054,11 +1064,11 @@ function renderPanel(container: HTMLElement): void {
   );
   row(labels.autoResolution, autoResolution);
 
-  // In automatic mode the slider becomes a read-only indicator of the
-  // zoom-derived resolution; refresh() re-renders the panel on every moveend,
-  // so it tracks zoom gestures.
+  // In automatic mode the slider is a read-only indicator of the zoom-derived
+  // resolution; updatePanelStatus() keeps it in sync on every moveend.
   const shownResolution = effectiveResolution();
   const resolution = document.createElement("input");
+  resolution.dataset.dggridResolution = "";
   resolution.type = "range";
   resolution.min = "0";
   resolution.max = String(MAX_DGGRID_RESOLUTION);
@@ -1077,6 +1087,7 @@ function renderPanel(container: HTMLElement): void {
   resolutionWrap.style.gap = "6px";
   resolutionWrap.style.opacity = settings.autoResolution ? "0.6" : "1";
   const resolutionValue = document.createElement("strong");
+  resolutionValue.dataset.dggridResolutionValue = "";
   resolutionValue.textContent = String(shownResolution);
   resolution.addEventListener("input", () => {
     resolutionValue.textContent = resolution.value;

@@ -1045,6 +1045,8 @@ export function TopToolbar({
   // openSettingsSection. This toolbar owns the dialog + its kind state.
   useEffect(() => {
     const onOpenAddData = (event: Event) => {
+      // Read-only embeds must not open Add Data via the Browser panel event.
+      if (viewer) return;
       const detail = (event as CustomEvent<OpenAddDataDetail>).detail;
       // Reject kinds the Mac App Store build hides so a stray event cannot
       // open a dialog whose backing service is compiled out.
@@ -1059,7 +1061,7 @@ export function TopToolbar({
     };
     window.addEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
     return () => window.removeEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
-  }, []);
+  }, [viewer]);
   // Deck.gl Layer kind the Add Data dialog opens on (e.g. the 3D-model entry
   // jumps straight to the scenegraph layer type).
   const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<string | undefined>(undefined);
@@ -1579,7 +1581,7 @@ export function TopToolbar({
     },
     {
       id: "view.comments",
-      title: "View Comments",
+      title: t("toolbar.command.viewComments"),
       group: t("toolbar.commandGroup.view"),
       keywords: "comments review threads notes annotations pins",
       icon: MessageSquare,
@@ -2093,7 +2095,11 @@ export function TopToolbar({
               aria-label={t("toolbar.item.projectName")}
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
+              readOnly={viewer}
+              onChange={(event) => {
+                if (viewer) return;
+                setProjectName(event.target.value);
+              }}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
@@ -2110,6 +2116,7 @@ export function TopToolbar({
                 projectNameComposingRef.current = false;
               }}
               onBlur={(event) => {
+                if (viewer) return;
                 const nextName = event.target.value.trim();
                 // Persist the canonical, locale-independent default name; a
                 // translated string would otherwise be written into the saved

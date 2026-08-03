@@ -2095,6 +2095,7 @@
       "resetPitch": "Reset Pitch",
       "resetPitchBearing": "Reset Pitch & Bearing",
       "setView": "Set View",
+      "viewComments": "View Comments",
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out",
       "switchToLight": "Switch to Light Mode",
