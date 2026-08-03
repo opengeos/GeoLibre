@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import {
   MAX_COMMENT_BODY_LENGTH,
   MAX_COMMENT_AUTHOR_LENGTH,
+  MAX_COMMENTS_PER_SESSION,
   MAX_ID_LENGTH,
   MAX_REPLIES_PER_COMMENT,
   MIN_COMMENT_INTERVAL_MS,
+  preserveStoredComments,
   validateAnchor,
   validateAuthor,
   validateComment,
@@ -20,6 +22,43 @@ describe("comment-validate constants", () => {
     assert.equal(MAX_COMMENT_AUTHOR_LENGTH, 120);
     assert.equal(MAX_ID_LENGTH, 200);
     assert.equal(MIN_COMMENT_INTERVAL_MS, 250);
+    assert.equal(MAX_REPLIES_PER_COMMENT, 100);
+    assert.equal(MAX_COMMENTS_PER_SESSION, 500);
+  });
+});
+
+// -- preserveStoredComments ---------------------------------------------------
+
+describe("preserveStoredComments", () => {
+  const stored = { comments: [{ id: "c1", body: "Persisted" }] };
+
+  it("carries stored comments into a project that omits the key", () => {
+    const result = preserveStoredComments({ layers: [] }, stored) as Record<string, unknown>;
+    assert.deepEqual(result.comments, stored.comments);
+    assert.deepEqual(result.layers, []);
+  });
+
+  it("keeps the incoming comments when the project supplies its own", () => {
+    const incoming = { layers: [], comments: [{ id: "c2" }] };
+    assert.deepEqual(preserveStoredComments(incoming, stored), incoming);
+  });
+
+  it("does not resurrect comments the sender explicitly cleared", () => {
+    const incoming = { layers: [], comments: [] };
+    const result = preserveStoredComments(incoming, stored) as Record<string, unknown>;
+    assert.deepEqual(result.comments, []);
+  });
+
+  it("leaves the project alone when storage is empty or corrupt", () => {
+    assert.deepEqual(preserveStoredComments({ layers: [] }, null), { layers: [] });
+    assert.deepEqual(preserveStoredComments({ layers: [] }, "not an object"), { layers: [] });
+    assert.deepEqual(preserveStoredComments({ layers: [] }, { comments: [] }), { layers: [] });
+    assert.deepEqual(preserveStoredComments({ layers: [] }, { comments: "nope" }), { layers: [] });
+  });
+
+  it("passes a null or non-object project through untouched", () => {
+    assert.equal(preserveStoredComments(null, stored), null);
+    assert.deepEqual(preserveStoredComments([1, 2], stored), [1, 2]);
   });
 });
 

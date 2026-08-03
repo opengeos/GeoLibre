@@ -12,8 +12,10 @@ import type {
 } from "./protocol";
 import {
   isBoundedId,
+  MAX_COMMENTS_PER_SESSION,
   MAX_REPLIES_PER_COMMENT,
   MIN_COMMENT_INTERVAL_MS,
+  preserveStoredComments,
   validateComment,
   validateReply,
 } from "./comment-validate";
@@ -424,9 +426,15 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     // The project was parsed in webSocketMessage; re-serialize it only to
-    // persist a string for storage and forward the object verbatim. The relay
-    // never reads any field inside the project.
-    const project = message.project ?? null;
+    // persist a string for storage and forward the object verbatim. `comments`
+    // is the one field the relay touches (it also writes it directly in
+    // `handleCommentMutation`), so preserve the stored list when this snapshot
+    // doesn't carry one — see `preserveStoredComments`. Peers get the merged
+    // project below, which heals a sender that had drifted.
+    const project = preserveStoredComments(
+      message.project ?? null,
+      parseStoredSnapshot(await this.ctx.storage.get<string>("snapshot")),
+    );
     // `rev` is written during /init before any socket can join, so the stored
     // value is always present; the `?? 0` is a defensive floor, never the
     // client's counter (a server-owned monotonic value must not trust input).
@@ -799,6 +807,14 @@ export class CollabSession extends DurableObject<Env> {
       if (sanitizedAction.type === "add") {
         const newComment = sanitizedAction.comment as Record<string, unknown>;
         const exists = comments.some((c) => c && typeof c === "object" && c.id === newComment.id);
+        if (!exists && comments.length >= MAX_COMMENTS_PER_SESSION) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Comment limit reached for this session.",
+          });
+          return;
+        }
         updatedComments = exists ? comments : [...comments, newComment];
       } else if (sanitizedAction.type === "reply") {
         const replyObj = sanitizedAction.reply as Record<string, unknown>;
@@ -850,10 +866,30 @@ export class CollabSession extends DurableObject<Env> {
       }
 
       parsed.comments = updatedComments;
-      await this.ctx.storage.put("snapshot", JSON.stringify(parsed));
+      const serialized = JSON.stringify(parsed);
+      // `handleSnapshot` bounds a full project the same way. Check before the
+      // put so an oversized value surfaces as an error the sender can see
+      // rather than a throw the catch below would have to guess at.
+      if (ENCODER.encode(serialized).length > MAX_SNAPSHOT_BYTES) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Project is too large to store this comment.",
+        });
+        return;
+      }
+      await this.ctx.storage.put("snapshot", serialized);
     } catch {
-      // Snapshot mutation failed; still fan out the validated action below so
-      // peers stay in sync (the next full snapshot will reconcile storage).
+      // The mutation never reached storage, so a late joiner or a reconnect
+      // (both of which read from storage) would not see it. Tell the sender and
+      // skip the fan-out rather than leaving connected peers holding a comment
+      // that isn't persisted anywhere.
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Could not save the comment. Try again.",
+      });
+      return;
     }
 
     this.broadcast(sanitizedMessage, ws);

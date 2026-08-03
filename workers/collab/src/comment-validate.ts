@@ -17,9 +17,35 @@ export const MIN_COMMENT_INTERVAL_MS = 250;
 /** Maximum number of replies stored per comment. */
 export const MAX_REPLIES_PER_COMMENT = 100;
 
+/** Maximum number of comments stored per session. Bounds the snapshot growth a
+ *  sustained stream of "add" mutations can cause, the way `CHAT_HISTORY_LIMIT`
+ *  bounds the chat log. */
+export const MAX_COMMENTS_PER_SESSION = 500;
+
 /** True when `value` is a non-empty string within {@link MAX_ID_LENGTH}. */
 export function isBoundedId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= MAX_ID_LENGTH;
+}
+
+/** Carry the stored `comments` list into an incoming full-project snapshot that
+ *  doesn't supply one of its own.
+ *
+ *  The relay writes comments straight into the stored snapshot (see
+ *  `handleCommentMutation`), but `serializeProject` omits the key entirely when
+ *  a peer holds none — so a peer that hasn't merged those broadcasts yet (a race
+ *  with its debounced snapshot, or a client that joined before them) would
+ *  otherwise replace the persisted comments with nothing. A project that carries
+ *  its own `comments` still wins, so a delete is never resurrected.
+ *
+ *  `stored` is the already-parsed stored snapshot, or `null` when absent/corrupt.
+ */
+export function preserveStoredComments(project: unknown, stored: unknown): unknown {
+  if (!project || typeof project !== "object" || Array.isArray(project)) return project;
+  if ("comments" in project) return project;
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return project;
+  const comments = (stored as Record<string, unknown>).comments;
+  if (!Array.isArray(comments) || comments.length === 0) return project;
+  return { ...(project as Record<string, unknown>), comments };
 }
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
