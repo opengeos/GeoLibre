@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -584,8 +584,22 @@ function removeJupyterLiteFromTauriDistPlugin(): Plugin {
       if (!IS_TAURI_BUILD) return;
       // The MAS build keeps JupyterLite: the Jupyter server is compiled out
       // there and the Notebook panel falls back to the JupyterLite site
-      // (Pyodide runs inside WebKit, which App Review permits).
-      if (IS_MAS_BUILD) return;
+      // (Pyodide runs inside WebKit, which App Review permits). Assert it is
+      // actually in the bundle: Tauri's asset resolver answers a missing asset
+      // with index.html, so a MAS build without the site renders a second copy
+      // of GeoLibre inside the Notebook panel instead of a notebook.
+      if (IS_MAS_BUILD) {
+        const entry = path.resolve(__dirname, "dist/jupyterlite/lab/index.html");
+        if (!existsSync(entry)) {
+          throw new Error(
+            "The Mac App Store build embeds the JupyterLite site, but " +
+              `${path.relative(__dirname, entry)} is missing. Run ` +
+              "`npm run build:jupyterlite` (it needs the `jupyter lite` CLI from " +
+              "apps/geolibre-desktop/jupyterlite/requirements.txt).",
+          );
+        }
+        return;
+      }
       rmSync(path.resolve(__dirname, "dist/jupyterlite"), {
         recursive: true,
         force: true,

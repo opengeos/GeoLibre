@@ -114,6 +114,18 @@ onnxruntime-web detection/segment-everything, geocoding, and collaboration.
 
 ## Building locally
 
+Unlike the other desktop builds, this one **embeds the JupyterLite site**, so
+the `jupyter lite` CLI has to be installed before you build:
+
+```bash
+pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+```
+
+Without it the build fails with an explicit error rather than producing an app
+whose Notebook panel loads the wrong thing (Tauri answers a missing asset with
+`index.html`, so a MAS build with no JupyterLite renders a second copy of
+GeoLibre inside the panel).
+
 ```bash
 # One-time: render the entitlements with your team id.
 APPLE_TEAM_ID=XXXXXXXXXX scripts/render-mas-entitlements.sh

@@ -74,6 +74,21 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/geolibre-desktop/jupyterlite/requirements.txt
+
+      - name: Install JupyterLite build dependencies
+        # Unlike the other desktop builds, the sandboxed Store build cannot
+        # spawn a JupyterLab server, so its Notebook panel embeds the
+        # self-hosted JupyterLite site and the `prebuild` hook must be able to
+        # generate it. Without these the build fails at that guard rather than
+        # shipping a Notebook panel that renders a second copy of the app.
+        run: python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+
       - name: Install Rust stable
         # Pinned to a commit SHA (not the moving `stable` branch) because this
         # job later holds the App Store signing certificates in its keychain.
