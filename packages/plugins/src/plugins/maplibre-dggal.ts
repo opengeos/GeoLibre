@@ -636,8 +636,8 @@ function refresh(): void {
   applyStyle();
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
   updateSelectedSource();
-  // Pan/zoom only changes the cell count status — rebuild the whole panel and
-  // the open color picker / focused inputs are destroyed mid-gesture.
+  // Pan/zoom only updates the status line (and auto-resolution readout) —
+  // rebuilding the whole panel would destroy open color pickers / focused inputs.
   updatePanelStatus();
 }
 
@@ -1042,7 +1042,15 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
     const generation = (activationGeneration += 1);
     // Await WASM before mutating map/panel state so a deactivate during the
     // load cannot race a late attach (leaked listeners / panels / layers).
-    const engine = await loadDggal();
+    let engine: DggalEngine;
+    try {
+      engine = await loadDggal();
+    } catch (error) {
+      if (generation === activationGeneration) {
+        currentError = error instanceof Error ? error.message : String(error);
+      }
+      return false;
+    }
     if (generation !== activationGeneration) return false;
     dggal = engine;
     map = activeMap;
