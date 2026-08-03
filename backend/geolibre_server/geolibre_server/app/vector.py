@@ -222,7 +222,7 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
     names = list(layers["name"])
     # Layers with a geometry type are the writable feature tables; aspatial
     # attribute tables (geometry_type is None) are never a write target.
-    spatial = [name for name, geom in zip(names, layers["geometry_type"]) if geom is not None]
+    spatial = layers[layers["geometry_type"].notna()]["name"].tolist()
     if layer:
         if layer not in names:
             raise HTTPException(
