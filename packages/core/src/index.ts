@@ -4,6 +4,7 @@ export * from "./marker-shape";
 export * from "./photo";
 export * from "./ellipsoids";
 export * from "./geojson-z";
+export * from "./hyperlink";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";

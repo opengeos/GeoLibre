@@ -33,6 +33,7 @@ import "./lib/lidar-style";
 // created. See https://github.com/hyperknot/openfreemap/issues/118.
 import "./lib/rtl-text";
 import "./lib/swipe-style";
+import { installExternalLinkInterceptor } from "./lib/external-link-interceptor";
 import { registerSW } from "virtual:pwa-register";
 import { TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
@@ -107,6 +108,10 @@ installStaleChunkReload();
 // stale lazy chunk 404s (cooldown-guarded; if sessionStorage is blocked it
 // skips the reload and lets the preload error surface instead). That keeps
 // the user's session/map state intact and removes the self-refresh loop.
+// Hand outbound links to the system browser on the desktop build, where the
+// webview would otherwise swallow them or navigate away from the app.
+installExternalLinkInterceptor();
+
 registerSW({
   immediate: true,
   onNeedReload() {

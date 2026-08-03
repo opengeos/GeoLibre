@@ -1947,6 +1947,17 @@ body,
   text-decoration: underline;
 }
 
+/* URL-valued attributes rendered as links by the Identify popup, styled to
+   match the anchors a KML description carries. `anywhere` rather than the
+   cell's `break-words`: a long query string has no break opportunity, so
+   without it the URL widens the popup instead of wrapping. */
+.geolibre-attribute-link {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
 .geolibre-identify-popup .maplibregl-popup-close-button {
   color: hsl(var(--muted-foreground));
 }

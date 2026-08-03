@@ -1,5 +1,6 @@
 import {
   applyGroupEffects,
+  attributeLinkUrl,
   isDuckDBQueryLayer,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
@@ -125,6 +126,7 @@ function createIdentifyPopupElement(
 
     const valueCell = document.createElement("div");
     valueCell.className = "break-words text-foreground";
+    const linkUrl = attributeLinkUrl(value);
     // Render known KML description structures as sanitized markup. Requiring a
     // supported tag keeps ordinary text such as "Elevation <500m>" intact.
     if (
@@ -144,6 +146,16 @@ function createIdentifyPopupElement(
       image.loading = "lazy";
       image.className = "max-h-40 max-w-full rounded";
       valueCell.appendChild(image);
+    } else if (linkUrl) {
+      // A value that is entirely a web address is worth clicking; rendering it
+      // as text leaves the user copying it out by hand (GeoLibre#1655).
+      const link = document.createElement("a");
+      link.href = linkUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "geolibre-attribute-link";
+      link.textContent = linkUrl;
+      valueCell.appendChild(link);
     } else {
       valueCell.textContent = stringifyIdentifyValue(value);
     }
