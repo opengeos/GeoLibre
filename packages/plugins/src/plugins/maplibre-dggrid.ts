@@ -877,7 +877,9 @@ function updatePanelStatus(): void {
   if (settings.autoResolution) {
     const shown = String(effectiveResolution());
     const resolution = panelContainer?.querySelector<HTMLInputElement>("[data-dggrid-resolution]");
-    const resolutionValue = panelContainer?.querySelector<HTMLElement>("[data-dggrid-resolution-value]");
+    const resolutionValue = panelContainer?.querySelector<HTMLElement>(
+      "[data-dggrid-resolution-value]",
+    );
     if (resolution) {
       resolution.value = shown;
       resolution.title = shown;
