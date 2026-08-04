@@ -739,7 +739,14 @@ function isGeoJsonPayload(value: Record<string, unknown>): boolean {
  */
 function redactSourceValue(value: unknown, depth = 0): unknown {
   if (typeof value === "string") return redactUrlCredentials(value);
-  if (depth >= MAX_REDACT_DEPTH) return value;
+  if (depth >= MAX_REDACT_DEPTH) {
+    // Fail closed, matching `redactConfigurationValue` in credentials.ts: no
+    // built-in layer needs configuration nested this deep to be re-addable, and
+    // handing the value back unswept would let a credential ride out of the
+    // bundle merely by sitting past the traversal cap. Only the exported bundle
+    // loses it; the local IndexedDB entry is untouched.
+    return undefined;
+  }
   if (Array.isArray(value)) {
     const redacted = value.map((item) => redactSourceValue(item, depth + 1));
     return redacted.some((item, index) => item !== value[index]) ? redacted : value;

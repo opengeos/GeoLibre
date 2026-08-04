@@ -121,6 +121,19 @@ m2.load_project("my-map.geolibre.json")
 m2
 ```
 
+`to_project()`, `save_project()`, and `to_html()` redact credentials — API keys,
+tokens, authenticated request headers, environment variables, geocoder keys, and
+credential URL parameters — so anything you serialize, commit, or share is safe
+by default. Pass `keep_credentials=True` to `to_project()` or `save_project()`
+for a trusted local file that must keep working without re-entering them:
+
+```python
+m.save_project("private.geolibre.json", keep_credentials=True)
+```
+
+The `project` trait itself is unredacted, so live two-way sync with the widget
+keeps authenticated layers rendering.
+
 ## Map options
 
 ```python
@@ -199,7 +212,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `list_algorithms()` | Available processing algorithms (`id`, `parameters`, …). |
 | `run_algorithm(id, parameters=None, timeout=)` | Run an algorithm; returns `{logs, resultLayerIds}`. |
 | `to_image(path=None, timeout=)` | Capture the map as PNG bytes, or write to `path`. |
-| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project; returns the HTML or writes to `path`. |
+| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project (credentials redacted); returns the HTML or writes to `path`. |
 | `on(event, cb)` / `on_click` / `on_selection_change` / `on_layer_change` | Register event callbacks; returns an unsubscribe function. |
 | `request(method, params=None, timeout=)` | Low-level command primitive behind the methods above. |
 
@@ -241,9 +254,9 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
 | `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
-| `to_project()` | Return the current project as a dict. |
+| `to_project(keep_credentials=False)` | Return the current project as a dict, credentials redacted unless `keep_credentials=True`. |
 | `load_project(src)` | Replace the project from a dict, JSON string, or `.geolibre.json` path. |
-| `save_project(path)` | Write the current project to a `.geolibre.json` file. |
+| `save_project(path, keep_credentials=False)` | Write the current project to a `.geolibre.json` file, credentials redacted unless `keep_credentials=True`. |
 
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).

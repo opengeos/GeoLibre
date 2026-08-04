@@ -51,8 +51,8 @@ import {
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
-/** A pending "strip env vars before saving?" prompt. */
-export interface EnvStripPrompt {
+/** A pending "strip credentials before saving?" prompt. */
+export interface CredentialStripPrompt {
   count: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
 }
@@ -221,7 +221,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
-  const [envStripPrompt, setEnvStripPrompt] = useState<EnvStripPrompt | null>(null);
+  const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
+    null,
+  );
   const [embedVectorDataPrompt, setEmbedVectorDataPrompt] = useState<EmbedVectorDataPrompt | null>(
     null,
   );
@@ -660,17 +662,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     };
   };
 
-  // Ask whether to strip environment variables before writing the file. The
-  // promise resolves when the user picks an option in the dialog.
-  const askStripEnvVars = (count: number) =>
+  // Ask whether to strip credentials (environment variables, geocoder keys,
+  // layer tokens) before writing the file. The promise resolves when the user
+  // picks an option in the dialog.
+  const askStripCredentials = (count: number) =>
     new Promise<"strip" | "keep" | "cancel">((resolve) => {
-      setEnvStripPrompt({ count, resolve });
+      setCredentialStripPrompt({ count, resolve });
     });
 
-  const resolveEnvStripPrompt = (choice: "strip" | "keep" | "cancel") => {
+  const resolveCredentialStripPrompt = (choice: "strip" | "keep" | "cancel") => {
     // Resolve outside the state updater (updaters must be side-effect free).
-    envStripPrompt?.resolve(choice);
-    setEnvStripPrompt(null);
+    credentialStripPrompt?.resolve(choice);
+    setCredentialStripPrompt(null);
   };
 
   // Ask whether to embed local vector layers' data in the saved file. Resolves
@@ -842,7 +845,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     let contentToSave = content;
     const redacted = redactProjectCredentials(project);
     if (redacted.redactedPaths.length > 0) {
-      const choice = await askStripEnvVars(redacted.redactedCount);
+      const choice = await askStripCredentials(redacted.redactedCount);
       if (choice === "cancel") return false;
       if (choice === "strip") {
         contentToSave = serializeProject(redacted.project);
@@ -1017,8 +1020,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveTemplateDialogOpen,
     handleDuplicate,
     handleSaveAsTemplate: () => setSaveTemplateDialogOpen(true),
-    envStripPrompt,
-    resolveEnvStripPrompt,
+    credentialStripPrompt,
+    resolveCredentialStripPrompt,
     embedVectorDataPrompt,
     resolveEmbedVectorDataPrompt,
     saveNamePrompt,

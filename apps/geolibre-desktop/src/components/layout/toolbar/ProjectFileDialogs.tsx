@@ -196,9 +196,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
-        open={projectFiles.envStripPrompt !== null}
+        open={projectFiles.credentialStripPrompt !== null}
         onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.resolveEnvStripPrompt("cancel");
+          if (!open) projectFiles.resolveCredentialStripPrompt("cancel");
         }}
       >
         <DialogContent className="max-w-lg">
@@ -206,18 +206,24 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogTitle>{t("settings.env.stripPromptTitle")}</DialogTitle>
             <DialogDescription>
               {t("settings.env.stripPromptDesc", {
-                count: projectFiles.envStripPrompt?.count ?? 0,
+                count: projectFiles.credentialStripPrompt?.count ?? 0,
               })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("cancel")}>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveCredentialStripPrompt("cancel")}
+            >
               {t("common.cancel")}
             </Button>
-            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("keep")}>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveCredentialStripPrompt("keep")}
+            >
               {t("settings.env.keepButton")}
             </Button>
-            <Button onClick={() => projectFiles.resolveEnvStripPrompt("strip")}>
+            <Button onClick={() => projectFiles.resolveCredentialStripPrompt("strip")}>
               {t("settings.env.stripButton")}
             </Button>
           </div>

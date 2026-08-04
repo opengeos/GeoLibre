@@ -38,13 +38,23 @@ type InboundMessage = LoadProjectMessage | RequestStateMessage;
  * received from the app back into the iframe. Outside an embedding host the
  * hook is an inert no-op.
  *
- * Trust model: the embedding host is fully trusted and receives the entire
- * project state. Project snapshots are not broadcast until the host sends its
- * first message (which is also when the bridge learns its origin and scopes
- * subsequent posts to it); only the version-only `geolibre:ready` ping precedes
- * the handshake and is the single message sent to `"*"`. Any page that frames
- * the app (not just the Jupyter widget) therefore becomes that trusted host, so
- * `?embed=1` standalone exports should only be served from a trusted context.
+ * Trust model: snapshots are redacted by default, so a framing page sees project
+ * structure without credentials. The co-located anywidget host opts back into
+ * full fidelity with `trustedWidget` on its load message, because Python's
+ * `self.project` trait is the same object `to_project(keep_credentials=True)`
+ * returns and would otherwise lose credentials on the next pan.
+ *
+ * That flag is self-declared by the host, so it is a fidelity switch, not a
+ * security boundary: any page that frames the app can set it and get an
+ * unredacted snapshot back. It narrows accidental exposure to hosts that never
+ * ask, not deliberate exposure — the boundary remains the framing context
+ * itself, which is why `?embed=1` standalone exports should only be served from
+ * a trusted one.
+ *
+ * Project snapshots are not broadcast until the host sends its first message
+ * (which is also when the bridge learns its origin and scopes subsequent posts
+ * to it); only the version-only `geolibre:ready` ping precedes the handshake and
+ * is the single message sent to `"*"`.
  *
  * @param mapControllerRef - Ref to the live map controller, read so the emitted
  *   snapshot captures the current camera (pan/zoom) rather than only the store.
