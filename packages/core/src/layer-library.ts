@@ -24,6 +24,7 @@ import {
 } from "./types";
 import { sanitizeLayerStylePatch } from "./style-library";
 import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
+import { redactUrlCredentials } from "./credentials";
 
 /** `type` discriminator of an exported Layer Library bundle file. */
 export const LAYER_LIBRARY_BUNDLE_TYPE = "geolibre-layer-library";
@@ -666,106 +667,6 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
  * which is the correct outcome.
  */
 const EXPORT_REDACTED_SOURCE_KEYS = ["requestHeaders"] as const;
-
-/**
- * Query-parameter names removed from a source URL on export. Plenty of tile and
- * web services authenticate in the URL rather than a header — an XYZ template
- * with `?api_key=`, a Google `key=`, a Mapbox `access_token=`, an S3 presigned
- * link (`X-Amz-*`), an Azure SAS token (`sig`/`se`/`sp`/…) — so redacting only
- * `requestHeaders` would still ship a credential in a shared bundle.
- *
- * Matched case-insensitively, plus any `x-amz-*` parameter. Erring toward
- * redaction is deliberate for a share action: a stripped parameter leaves the
- * recipient re-entering their own key, while a missed one leaks yours. Every
- * other part of the URL is preserved, so the entry stays recognizable and
- * re-usable once the recipient supplies their credential.
- */
-const EXPORT_REDACTED_URL_PARAMS = new Set([
-  "access_token",
-  "accesstoken",
-  "api_key",
-  "apikey",
-  "key",
-  "token",
-  "subscription-key",
-  "subscriptionkey",
-  "password",
-  "pwd",
-  "client_secret",
-  "clientsecret",
-  "signature",
-  "sig",
-  "se",
-  "sp",
-  "sv",
-  "sr",
-  "st",
-  "skoid",
-]);
-
-/** True when a query-parameter name is treated as a credential on export. */
-function isRedactedUrlParam(name: string): boolean {
-  const lower = name.toLowerCase();
-  return EXPORT_REDACTED_URL_PARAMS.has(lower) || lower.startsWith("x-amz-");
-}
-
-/** Drop `user:pass@` userinfo from a URL's authority, keeping the rest. */
-function redactUrlUserInfo(base: string): string {
-  // Only look inside the authority (between `://` and the next `/`), so a `@`
-  // in a path segment is untouched.
-  const schemeEnd = base.indexOf("://");
-  if (schemeEnd === -1) return base;
-  const authorityStart = schemeEnd + 3;
-  const authorityEnd = base.indexOf("/", authorityStart);
-  const authority = base.slice(authorityStart, authorityEnd === -1 ? undefined : authorityEnd);
-  const at = authority.lastIndexOf("@");
-  if (at === -1) return base;
-  return (
-    base.slice(0, authorityStart) +
-    authority.slice(at + 1) +
-    (authorityEnd === -1 ? "" : base.slice(authorityEnd))
-  );
-}
-
-/** Remove credential parameters from an `&`-joined `name=value` string. */
-function redactParamString(params: string): string {
-  return params
-    .split("&")
-    .filter((pair) => pair !== "" && !isRedactedUrlParam(pair.split("=", 1)[0]))
-    .join("&");
-}
-
-/**
- * Strip credentials from a URL, leaving everything else intact: named query
- * parameters, the same names in a `#`-fragment (an OAuth implicit-flow token
- * arrives as `#access_token=…`, the same `name=value` shape), and any
- * `user:pass@` userinfo in the authority.
- *
- * Parsed by hand rather than through `URL`/`URLSearchParams`, which re-encode the
- * `{z}/{x}/{y}` placeholders a tile template depends on — and which would throw
- * on the relative or `pmtiles://`-style values a source can also hold. Anything
- * without a query, fragment, or userinfo is returned unchanged.
- */
-function redactUrlCredentials(value: string): string {
-  const hash = value.indexOf("#");
-  const beforeHash = hash === -1 ? value : value.slice(0, hash);
-  const fragment = hash === -1 ? undefined : value.slice(hash + 1);
-  const separator = beforeHash.indexOf("?");
-  const base = separator === -1 ? beforeHash : beforeHash.slice(0, separator);
-  const query = separator === -1 ? undefined : beforeHash.slice(separator + 1);
-
-  const keptQuery = query === undefined ? undefined : redactParamString(query);
-  // A fragment is only treated as parameters when it looks like them; a plain
-  // `#section` anchor is preserved as-is.
-  const keptFragment =
-    fragment === undefined || !fragment.includes("=") ? fragment : redactParamString(fragment);
-
-  return (
-    redactUrlUserInfo(base) +
-    (keptQuery ? `?${keptQuery}` : "") +
-    (keptFragment ? `#${keptFragment}` : "")
-  );
-}
 
 /** Copy of an entry with per-user credentials removed from its source. */
 function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {

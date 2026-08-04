@@ -225,9 +225,12 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
   const preferences = project.preferences
     ? { ...project.preferences, environmentVariables: [], geocoding }
     : project.preferences;
-  if (project.preferences?.environmentVariables?.length > 0) {
+  const populatedEnvironmentVariables =
+    project.preferences?.environmentVariables?.filter((variable) => variable.key.trim()).length ??
+    0;
+  if (populatedEnvironmentVariables > 0) {
     redactedPaths.push("preferences.environmentVariables");
-    redactedCount.value += project.preferences.environmentVariables.length;
+    redactedCount.value += populatedEnvironmentVariables;
   }
   if (Object.keys(project.preferences?.geocoding?.apiKeys ?? {}).length > 0) {
     redactedPaths.push("preferences.geocoding.apiKeys");
@@ -279,6 +282,9 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
 
   return {
     project: {
+      // Remaining project-level fields are structural/user content with no
+      // current credential-bearing schema. Add explicit handling above when a
+      // future field (for example a processing parameter) accepts credentials.
       ...project,
       basemapStyleUrl,
       ...(preferences ? { preferences } : {}),
