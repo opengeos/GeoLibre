@@ -2300,15 +2300,15 @@ export function SettingsDialog({
                             i18nKey="settings.env.tokenDescription"
                             values={{ shareHost }}
                             components={{
-                              tokenLink: shareSettingsUrl ? (
+                              // Non-null here: this branch requires shareBaseUrl,
+                              // which is what shareSettingsUrl is derived from.
+                              tokenLink: (
                                 <a
                                   className="underline"
-                                  href={shareSettingsUrl}
+                                  href={shareSettingsUrl ?? undefined}
                                   target="_blank"
                                   rel="noreferrer noopener"
                                 />
-                              ) : (
-                                <span />
                               ),
                             }}
                           />

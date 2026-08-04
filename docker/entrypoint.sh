@@ -248,10 +248,28 @@ fi
 # surprises).
 python -c '
 import os
+from urllib.parse import urlsplit
+
 token = os.environ["GEOLIBRE_SIDECAR_TOKEN"]
+
+# A self-hosted relay has to be allowed in connect-src or the browser blocks its
+# WebSocket: the directive has a bare "https:" (so any share host works) but no
+# bare "wss:". Only the origin is inserted -- CSP source expressions do not take a
+# path, and the value was already validated above.
+collab = os.environ.get("GEOLIBRE_COLLAB_URL", "").strip()
+# Carries its own leading space so the header is byte-identical to the template
+# when no relay is configured.
+collab_src = ""
+if collab:
+    parsed = urlsplit(collab)
+    if parsed.scheme and parsed.netloc:
+        collab_src = f" {parsed.scheme}://{parsed.netloc}"
+
 src = open("/etc/nginx/nginx.conf.template").read()
 open("/etc/nginx/conf.d/default.conf", "w").write(
-    src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token)
+    src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token).replace(
+        "__GEOLIBRE_COLLAB_CONNECT_SRC__", collab_src
+    )
 )
 '
 

@@ -295,6 +295,11 @@ restarting it with different values — no rebuild. (The equivalent build
 arguments, `VITE_GEOLIBRE_SHARE_URL` and `VITE_GEOLIBRE_COLLAB_URL`, exist for
 baking a default into your own image.)
 
+When `GEOLIBRE_COLLAB_URL` is set, the entrypoint also adds that relay's origin to
+the container's `Content-Security-Policy` `connect-src`, so the browser is allowed
+to open the WebSocket. (The directive has a bare `https:`, which covers any share
+server, but no bare `wss:`.) No manual edit of `docker/nginx.conf` is needed.
+
 Both must use TLS — `https://` for the share server, `wss://` for the relay —
 because the app sends your API token to the share server with every request.
 Plaintext is accepted only on `localhost` / `127.0.0.1` for local development, so
