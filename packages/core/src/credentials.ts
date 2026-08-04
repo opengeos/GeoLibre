@@ -82,10 +82,7 @@ export function redactUrlCredentials(value: string): string {
   if (schemeIndex !== -1) {
     const authorityStart = schemeIndex + 3;
     const authorityEnd = base.indexOf("/", authorityStart);
-    const authority = base.slice(
-      authorityStart,
-      authorityEnd === -1 ? undefined : authorityEnd,
-    );
+    const authority = base.slice(authorityStart, authorityEnd === -1 ? undefined : authorityEnd);
     const at = authority.lastIndexOf("@");
     if (at !== -1) {
       base =
@@ -97,14 +94,8 @@ export function redactUrlCredentials(value: string): string {
 
   const keptQuery = query === undefined ? undefined : redactParameterString(query);
   const keptFragment =
-    fragment === undefined || !fragment.includes("=")
-      ? fragment
-      : redactParameterString(fragment);
-  return (
-    base +
-    (keptQuery ? `?${keptQuery}` : "") +
-    (keptFragment ? `#${keptFragment}` : "")
-  );
+    fragment === undefined || !fragment.includes("=") ? fragment : redactParameterString(fragment);
+  return base + (keptQuery ? `?${keptQuery}` : "") + (keptFragment ? `#${keptFragment}` : "");
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -160,9 +151,7 @@ function redactConfigurationValue(
  * a no-secret guarantee. Manifest URLs, activation, and control positions stay
  * intact so recipients can still load and configure the plugin themselves.
  */
-export function redactProjectCredentials(
-  project: GeoLibreProject,
-): CredentialRedactionResult {
+export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
   const redactedPaths: string[] = [];
   const preferences = project.preferences
     ? {
