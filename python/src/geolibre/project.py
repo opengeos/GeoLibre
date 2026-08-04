@@ -23,45 +23,56 @@ from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
 
+
+def _normalize_credential_name(name: str) -> str:
+    """Fold the spellings of one credential name together.
+
+    Mirrors ``normalizeCredentialName`` in ``packages/core/src/credentials.ts``
+    so ``apiKey``, ``api_key``, ``api-key``, and ``APIKEY`` are one entry.
+
+    Args:
+        name: An object key or URL parameter name.
+
+    Returns:
+        The lowercased name with ``-`` and ``_`` removed.
+    """
+    return name.lower().replace("-", "").replace("_", "")
+
+
+# Mirrors PROJECT_CREDENTIAL_FIELDS.layerConfiguration in
+# packages/core/src/credentials.ts. Keep the two in sync: this module exists to
+# keep the Python and JS project builders faithful to each other, and an entry
+# missing here ships a credential the JS egress path would have stripped.
 _CREDENTIAL_FIELD_NAMES = {
-    "requestheaders",
-    "headers",
-    "authorization",
-    "apikey",
-    "apikeys",
-    "accesstoken",
-    "token",
-    "password",
-    "clientsecret",
-    "connectionstring",
+    _normalize_credential_name(name)
+    for name in (
+        "requestHeaders",
+        "headers",
+        "authorization",
+        "apiKey",
+        "apiKeys",
+        "accessToken",
+        "token",
+        "password",
+        "clientSecret",
+        "connectionString",
+        "secret",
+        "bearer",
+        "auth",
+        "authKey",
+        "sasToken",
+        "subscriptionKey",
+        "signature",
+        "pwd",
+    )
 }
-_CREDENTIAL_URL_PARAMS = {
-    "access_token",
-    "accesstoken",
-    "api_key",
-    "api-key",
-    "apikey",
-    "auth",
-    "authkey",
-    "bearer",
-    "key",
-    "token",
-    "subscription-key",
-    "subscriptionkey",
-    "password",
-    "pwd",
-    "client_secret",
-    "clientsecret",
-    "secret",
-    "sastoken",
-    "signature",
-    "sig",
-    "se",
-    "sp",
-    "sv",
-    "sr",
-    "st",
-    "skoid",
+# Wider than the field registry by design, and for the same reason as the JS
+# side: `key` and the Azure SAS positional parameters are credentials only
+# inside a query string. As configuration field names they collide with ordinary
+# state (`sr` is a spatial reference on an ArcGIS source).
+_CREDENTIAL_URL_PARAMS = _CREDENTIAL_FIELD_NAMES | {
+    _normalize_credential_name(name)
+    for name in ("key", "sig", "se", "sp", "sv", "sr", "st", "skoid")
 }
 _MAX_REDACT_DEPTH = 12
 
@@ -74,7 +85,8 @@ def _redact_url(value: str) -> str:
             pair
             for pair in params.split("&")
             if pair
-            and (name := unquote_plus(pair.split("=", 1)[0]).lower()) not in _CREDENTIAL_URL_PARAMS
+            and _normalize_credential_name(name := unquote_plus(pair.split("=", 1)[0]).lower())
+            not in _CREDENTIAL_URL_PARAMS
             and not name.startswith("x-amz-")
         )
 
@@ -113,7 +125,7 @@ def _redact_config(value: Any, depth: int = 0) -> Any:
     return {
         key: _redact_config(nested, depth + 1)
         for key, nested in value.items()
-        if key.lower() not in _CREDENTIAL_FIELD_NAMES
+        if _normalize_credential_name(key) not in _CREDENTIAL_FIELD_NAMES
     }
 
 

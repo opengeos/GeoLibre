@@ -362,6 +362,41 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
     assert m.to_project(keep_credentials=True)["plugins"]["settings"]
 
 
+def test_python_credential_field_registry_matches_js():
+    """Every object-key spelling the JS registry strips must be stripped here too."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {
+                        "sasToken": "py-sas-secret",
+                        "bearer": "py-bearer-secret",
+                        "auth": {"user": "u", "pass": "py-auth-secret"},
+                        "subscription-key": "py-subscription-secret",
+                        "api_key": "py-underscore-secret",
+                        "pwd": "py-pwd-secret",
+                        # Credentials only inside a query string; as field names
+                        # they are ordinary configuration.
+                        "sr": 4326,
+                        "key": "layer-identifier",
+                    }
+                }
+            ]
+        }
+    )
+    serialized = str(safe)
+    for secret in (
+        "py-sas-secret",
+        "py-bearer-secret",
+        "py-auth-secret",
+        "py-subscription-secret",
+        "py-underscore-secret",
+        "py-pwd-secret",
+    ):
+        assert secret not in serialized
+    assert safe["layers"][0]["source"] == {"sr": 4326, "key": "layer-identifier"}
+
+
 def test_python_redaction_fails_closed_at_depth_limit():
     nested = {"password": "too-deep-secret"}
     for _ in range(12):

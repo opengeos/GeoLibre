@@ -947,11 +947,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return false;
         defaultName = ensureHtmlFileName(chosen, slug);
       }
-      // Only now embed local vector data (self-contained, like Share) and strip
-      // env vars (secrets serve no purpose in a static viewer): this can be
-      // costly on a project with many local layers, so it runs after the user
+      // Only now embed local vector data (self-contained, like Share): this can
+      // be costly on a project with many local layers, so it runs after the user
       // has committed to the export rather than before the prompt. Reuse the
-      // name snapshot so the title matches the slug computed above.
+      // name snapshot so the title matches the slug computed above. Credentials
+      // serve no purpose in a static viewer and are removed inside
+      // buildProjectHtml, which runs the central redaction pass.
       const { project, defaultProjectName } = await buildEmbeddedProject(projectName);
       const html = buildProjectHtml({
         project,
