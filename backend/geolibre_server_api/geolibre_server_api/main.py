@@ -297,6 +297,22 @@ def create_app(
         allow_headers=["Authorization", "Content-Type"],
     )
 
+    # A declared Content-Length past the largest thing any route accepts is
+    # rejected before the body is read at all. Without this, the JSON `content`
+    # routes let Pydantic materialize the whole payload in memory *before*
+    # parse_content could answer 413 -- the same exposure the thumbnail route
+    # avoids by streaming. The per-route checks stay authoritative; this only
+    # sheds the obviously-too-big requests early. The slack covers JSON string
+    # escaping, which can inflate a document well past its decoded size.
+    body_ceiling = max(max_project_bytes * 2, max_thumbnail_bytes) + 1024
+
+    @app.middleware("http")
+    async def limit_body(request: Request, call_next):
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > body_ceiling:
+            return JSONResponse({"error": "request body too large"}, status_code=413)
+        return await call_next(request)
+
     @app.get("/health")
     def health():
         return {"ok": True, "service": "geolibre-server"}
@@ -407,19 +423,33 @@ def create_app(
         document = parse_content(content, max_project_bytes)
         title = title_from(document, filename)
         timestamp = now()
-        project = Project(
-            id=str(uuid.uuid4()),
-            owner_id=account.id,
-            slug=unique_slug(session, account.id, title or filename),
-            title=title,
-            description="",
-            visibility=visibility,
-            tags_json="[]",
-            created_at=timestamp,
-            updated_at=timestamp,
-        )
-        session.add(project)
-        session.flush()
+        # unique_slug SELECTs and this INSERTs, so two concurrent creates with
+        # the same title from one account can pick the same slug and the loser
+        # hits uq_project_owner_slug. Retry the allocation instead of surfacing
+        # that as a 500, matching how version numbers are allocated below.
+        for _ in range(5):
+            project = Project(
+                id=str(uuid.uuid4()),
+                owner_id=account.id,
+                slug=unique_slug(session, account.id, title or filename),
+                title=title,
+                description="",
+                visibility=visibility,
+                tags_json="[]",
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            session.add(project)
+            try:
+                session.flush()
+                break
+            except IntegrityError:
+                session.rollback()
+                account = session.get(Account, account.id)
+                if account is None:
+                    raise HTTPException(401, "authentication required") from None
+        else:
+            raise HTTPException(409, "could not allocate a project slug; retry")
         key = f"projects/{project.id}/versions/1.json"
         object_storage.put(key, content.encode(), "application/json")
         session.add(Version(project_id=project.id, number=1, object_key=key, created_at=timestamp))

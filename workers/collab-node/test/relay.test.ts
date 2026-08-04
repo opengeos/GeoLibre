@@ -152,6 +152,55 @@ describe("Node collaboration relay", () => {
     guest.close();
   });
 
+  it("validates comment mutations before permissions and bounds the stored project", async () => {
+    // Both behaviours are Worker parity requirements: a malformed frame must
+    // answer bad-message even from a view-only guest, and a comment must not be
+    // able to push the persisted project past the snapshot ceiling.
+    const { http } = await start({ maxSnapshotBytes: 400 });
+    const created = await createSession(http);
+    const host = await connect(http, created.sessionId);
+    const guest = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken);
+    await joinSession(guest);
+
+    host.send(JSON.stringify({ type: "set-mode", mode: "view-only" }));
+    await next(guest, "mode");
+
+    // Shape is checked first, so this is bad-message rather than forbidden.
+    guest.send(JSON.stringify({ type: "comment-mutation", action: { type: "nonsense" } }));
+    assert.equal((await next(guest, "error")).code, "bad-message");
+
+    // A well-formed frame from the same view-only guest is the forbidden case.
+    guest.send(
+      JSON.stringify({
+        type: "comment-mutation",
+        action: { type: "delete", commentId: "abc" },
+      }),
+    );
+    assert.equal((await next(guest, "error")).code, "forbidden");
+
+    // The host may comment, but not past the configured ceiling.
+    host.send(
+      JSON.stringify({
+        type: "comment-mutation",
+        action: {
+          type: "add",
+          comment: {
+            id: "c1",
+            body: "x".repeat(500),
+            author: "Host",
+            authorColor: "#123456",
+            createdAt: Date.now(),
+            anchor: { type: "point", lng: 1, lat: 2 },
+          },
+        },
+      }),
+    );
+    assert.equal((await next(host, "error")).code, "bad-message");
+    host.close();
+    guest.close();
+  });
+
   it("restores the latest snapshot and revision from SQLite after restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "geolibre-collab-"));
     const dbPath = join(directory, "relay.sqlite");

@@ -160,6 +160,19 @@ def test_username_length_is_enforced(client):
     )
 
 
+def test_oversized_body_is_rejected_before_parsing(client, monkeypatch):
+    """A declared Content-Length past the ceiling is refused up front, so the JSON
+    `content` routes cannot have the whole payload materialized before the check."""
+    owner = account(client)
+    huge = "x" * (101 * 1024 * 1024)
+    response = client.post(
+        "/api/projects",
+        headers=auth(owner),
+        json={"filename": "big.geolibre.json", "content": huge, "visibility": "public"},
+    )
+    assert response.status_code == 413
+
+
 def test_thumbnail_fork_and_slug_collision(client):
     owner = account(client)
     recipient = account(client, "grace")

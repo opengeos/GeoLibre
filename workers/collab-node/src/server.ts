@@ -346,14 +346,11 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "comment-mutation") {
-      if (!participantCanEdit(participant, persisted.mode)) {
-        send(peer, {
-          type: "error",
-          code: "forbidden",
-          message: "You are in view-only mode and cannot comment.",
-        });
-        return;
-      }
+      // Shape is validated before the permission check, matching the Worker
+      // (workers/collab/src/session.ts). Checking permission first made a
+      // malformed frame from a view-only guest answer `forbidden` here and
+      // `bad-message` there -- an observable difference between two relays this
+      // package exists to keep in lockstep.
       const action = message.action;
       if (!action || typeof action !== "object") {
         send(peer, {
@@ -396,6 +393,14 @@ export function createRelay(options: RelayOptions = {}): {
           type: "error",
           code: "bad-message",
           message: "Unsupported comment-mutation action type.",
+        });
+        return;
+      }
+      if (!participantCanEdit(participant, persisted.mode)) {
+        send(peer, {
+          type: "error",
+          code: "forbidden",
+          message: "You are in view-only mode and cannot comment.",
         });
         return;
       }
@@ -465,6 +470,19 @@ export function createRelay(options: RelayOptions = {}): {
         );
       } else {
         project.comments = comments.filter((comment) => comment.id !== sanitized.commentId);
+      }
+      // The Worker bounds the mutated project the same way before persisting it
+      // (workers/collab/src/session.ts). Without this the per-comment caps still
+      // permit a worst case orders of magnitude past the snapshot ceiling, so
+      // the Node relay would store and broadcast a project the Worker would have
+      // refused.
+      if (ENCODER.encode(JSON.stringify(project)).length > maxSnapshotBytes) {
+        send(peer, {
+          type: "error",
+          code: "bad-message",
+          message: "Project is too large to store this comment.",
+        });
+        return;
       }
       store.saveProjectState(id, project);
       broadcast(session, { type: "comment-mutation", action: sanitized }, peer);
