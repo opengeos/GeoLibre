@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import { connect as connectTcp } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -90,6 +91,49 @@ describe("Node collaboration relay", () => {
     assert.equal(created.mode, "view-only");
 
     await assert.rejects(connect(http, "NOTFOUND"), /Unexpected server response: 404/);
+  });
+
+  it("rejects an oversized session-create body by declared length and by count", async () => {
+    const { http } = await start();
+
+    // Declared length: answered before any body handler runs. Written over a raw
+    // socket on purpose -- fetch refuses to send fewer bytes than it declared,
+    // and sending only two of a claimed million is exactly the case that must
+    // not be allowed to hold the connection open.
+    const { port } = new URL(http);
+    const declared = await new Promise<string>((resolve, reject) => {
+      const socket = connectTcp({ port: Number(port), host: "127.0.0.1" }, () => {
+        socket.write(
+          "POST /sessions HTTP/1.1\r\nHost: localhost\r\n" +
+            "Content-Type: application/json\r\nContent-Length: 999999\r\n\r\n{}",
+        );
+      });
+      let received = "";
+      socket.on("data", (chunk) => {
+        received += chunk.toString();
+        if (received.includes("Request body too large")) {
+          socket.destroy();
+          resolve(received);
+        }
+      });
+      socket.on("error", reject);
+      socket.setTimeout(5000, () => {
+        socket.destroy();
+        reject(new Error(`no response before the declared body arrived: ${received}`));
+      });
+    });
+    assert.match(declared, /^HTTP\/1\.1 413 /);
+
+    // No declared length to trust: the running byte count still stops it.
+    const counted = await fetch(`${http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: `{"mode":"${"x".repeat(20_000)}"}`,
+    });
+    assert.equal(counted.status, 413);
+
+    // A normal body is unaffected.
+    assert.equal((await fetch(`${http}/sessions`, { method: "POST" })).status, 200);
   });
 
   it("enforces view-only mode and lets only the host change it", async () => {

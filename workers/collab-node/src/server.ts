@@ -37,6 +37,9 @@ import { SessionStore, type StoredSession } from "./store.js";
 
 const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const CODE_LENGTH = 8;
+/** Cap on the `POST /sessions` request body; the payload is a tiny JSON object. */
+const MAX_SESSION_BODY_BYTES = 16_384;
+
 const DEFAULT_IDLE_TTL_MS = 2 * 60 * 60 * 1000;
 const ENCODER = new TextEncoder();
 
@@ -495,6 +498,16 @@ export function createRelay(options: RelayOptions = {}): {
     if ((url.pathname === "/" || url.pathname === "/health") && request.method === "GET")
       return json(response, 200, { ok: true, service: "geolibre-collab" });
     if (url.pathname === "/sessions" && request.method === "POST") {
+      // Refuse on the declared length before any handler is registered, so an
+      // oversized upload cannot hold the connection open while it trickles in.
+      // The byte counter below still runs, for clients that omit or understate
+      // the header.
+      const declaredLength = Number(request.headers["content-length"]);
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_SESSION_BODY_BYTES) {
+        request.pause();
+        response.on("finish", () => request.destroy());
+        return json(response, 413, { error: "Request body too large." });
+      }
       let raw = "";
       let rawBytes = 0;
       let aborted = false;
@@ -510,7 +523,7 @@ export function createRelay(options: RelayOptions = {}): {
         // append: testing the running length first would accept one final chunk
         // of any size once the total was still under the cap.
         rawBytes += Buffer.byteLength(chunk);
-        if (rawBytes <= 16_384) {
+        if (rawBytes <= MAX_SESSION_BODY_BYTES) {
           raw += chunk;
           return;
         }
