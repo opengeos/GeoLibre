@@ -12,6 +12,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/geolibre-desktop/package.json apps/geolibre-desktop/package.json
 COPY packages/core/package.json packages/core/package.json
+COPY packages/collab-core/package.json packages/collab-core/package.json
 COPY packages/map/package.json packages/map/package.json
 COPY packages/plugins/package.json packages/plugins/package.json
 COPY packages/processing/package.json packages/processing/package.json
