@@ -8,7 +8,9 @@ apps/geolibre-desktop/dist
 apps/geolibre-desktop/src-tauri
 backend/geolibre_server/.venv
 backend/**/__pycache__
-workers
+workers/*
+!workers/collab-node
+!workers/collab-node/**
 docs
 sample-data
 coverage

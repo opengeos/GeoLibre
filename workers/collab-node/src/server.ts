@@ -1,0 +1,517 @@
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import { randomBytes, randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import {
+  CHAT_HISTORY_LIMIT,
+  MAX_CHAT_STORAGE_BYTES,
+  MAX_CHAT_TEXT_LENGTH,
+  MAX_COMMENTS_PER_SESSION,
+  MAX_REPLIES_PER_COMMENT,
+  MAX_SNAPSHOT_BYTES,
+  MIN_COMMENT_INTERVAL_MS,
+  MIN_CHAT_INTERVAL_MS,
+  authorizeHostAction,
+  authorizeSnapshot,
+  clearParticipantOverrides,
+  normalizeMode,
+  participantCanEdit,
+  preserveStoredComments,
+  sanitizeCursor,
+  sanitizeDisplayName,
+  sanitizeColor,
+  sanitizeView,
+  setParticipantOverride,
+  toWireParticipant,
+  validateComment,
+  validateReply,
+  isBoundedId,
+  type ClientMessage,
+  type CollabChatMessage,
+  type CollaborationMode,
+  type PresenceEntry,
+  type ServerMessage,
+  type SessionParticipant,
+} from "@geolibre/collab-core";
+import { WebSocket, WebSocketServer } from "ws";
+import { SessionStore, type StoredSession } from "./store.js";
+
+const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const CODE_LENGTH = 8;
+const DEFAULT_IDLE_TTL_MS = 2 * 60 * 60 * 1000;
+const ENCODER = new TextEncoder();
+
+interface Peer {
+  socket: WebSocket;
+  participant?: SessionParticipant;
+}
+
+interface LiveSession {
+  peers: Set<Peer>;
+  presence: Map<string, PresenceEntry>;
+  cleanup?: NodeJS.Timeout;
+}
+
+export interface RelayOptions {
+  port?: number;
+  host?: string;
+  dbPath?: string;
+  maxSnapshotBytes?: number;
+  idleTtlMs?: number;
+}
+
+function positive(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function randomCode(): string {
+  const bytes = randomBytes(CODE_LENGTH);
+  return Array.from(bytes, (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("");
+}
+
+function randomToken(): string {
+  return randomBytes(24).toString("hex");
+}
+
+function send(peer: Peer, message: ServerMessage): void {
+  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(JSON.stringify(message));
+}
+
+function json(response: import("node:http").ServerResponse, status: number, body: unknown): void {
+  response.writeHead(status, {
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "Content-Type",
+  });
+  response.end(JSON.stringify(body));
+}
+
+export function createRelay(options: RelayOptions = {}): {
+  server: Server;
+  store: SessionStore;
+  close: () => Promise<void>;
+} {
+  const dbPath = options.dbPath ?? process.env.COLLAB_DB_PATH ?? "./data/collab.sqlite";
+  const maxSnapshotBytes =
+    options.maxSnapshotBytes ?? positive(process.env.COLLAB_MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES);
+  const idleTtlMs =
+    options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
+  const store = new SessionStore(dbPath);
+  const sessions = new Map<string, LiveSession>();
+  const wss = new WebSocketServer({ noServer: true, maxPayload: maxSnapshotBytes + 64_000 });
+
+  function live(id: string): LiveSession {
+    let session = sessions.get(id);
+    if (!session) {
+      session = { peers: new Set(), presence: new Map() };
+      sessions.set(id, session);
+    }
+    if (session.cleanup) {
+      clearTimeout(session.cleanup);
+      session.cleanup = undefined;
+    }
+    return session;
+  }
+
+  function participants(session: LiveSession): SessionParticipant[] {
+    return [...session.peers].flatMap((peer) => (peer.participant ? [peer.participant] : []));
+  }
+
+  function broadcast(session: LiveSession, message: ServerMessage, except?: Peer): void {
+    for (const peer of session.peers) if (peer !== except) send(peer, message);
+  }
+
+  function broadcastParticipants(session: LiveSession, except?: Peer): void {
+    broadcast(
+      session,
+      {
+        type: "participants",
+        participants: participants(session).map(toWireParticipant),
+      },
+      except,
+    );
+  }
+
+  function closePeer(id: string, session: LiveSession, peer: Peer): void {
+    if (!session.peers.delete(peer)) return;
+    if (peer.participant) session.presence.delete(peer.participant.clientId);
+    broadcastParticipants(session);
+    if (session.peers.size === 0) {
+      session.cleanup = setTimeout(() => {
+        if (session.peers.size !== 0) return;
+        sessions.delete(id);
+        store.delete(id);
+      }, idleTtlMs);
+      session.cleanup.unref();
+    }
+  }
+
+  function handleMessage(
+    id: string,
+    session: LiveSession,
+    peer: Peer,
+    raw: WebSocket.RawData,
+  ): void {
+    if (!raw || Array.isArray(raw) || raw instanceof ArrayBuffer || ArrayBuffer.isView(raw)) {
+      // ws delivers text as Buffer too; isBinary is handled at the event site.
+    }
+    const text = raw.toString();
+    let message: ClientMessage;
+    try {
+      message = JSON.parse(text) as ClientMessage;
+    } catch {
+      send(peer, { type: "error", code: "bad-message", message: "Malformed JSON." });
+      return;
+    }
+    const persisted = store.get(id);
+    if (!persisted) {
+      peer.socket.close(1008, "Unknown session");
+      return;
+    }
+
+    if (message.type === "join") {
+      if (peer.participant) return;
+      const role =
+        message.hostToken && persisted.hostToken && message.hostToken === persisted.hostToken
+          ? "host"
+          : "guest";
+      peer.participant = {
+        clientId: randomUUID(),
+        displayName: sanitizeDisplayName(message.displayName),
+        color: sanitizeColor(message.color),
+        role,
+      };
+      send(peer, {
+        type: "welcome",
+        clientId: peer.participant.clientId,
+        role,
+        mode: persisted.mode,
+        participants: participants(session).map(toWireParticipant),
+        snapshot: persisted.snapshot,
+        presence: Object.fromEntries(session.presence),
+        chat: persisted.chat,
+        rev: persisted.rev,
+      });
+      broadcastParticipants(session, peer);
+      return;
+    }
+
+    const participant = peer.participant;
+    if (!participant) {
+      send(peer, {
+        type: "error",
+        code: "bad-message",
+        message: "Send a join message first.",
+      });
+      return;
+    }
+
+    if (message.type === "snapshot") {
+      const authorization = authorizeSnapshot(
+        participant,
+        persisted.mode,
+        ENCODER.encode(text).length,
+        maxSnapshotBytes,
+      );
+      if (!authorization.ok) {
+        send(peer, {
+          type: "error",
+          code: authorization.code,
+          message: authorization.message,
+        });
+        return;
+      }
+      const project = preserveStoredComments(message.project ?? null, persisted.snapshot);
+      const rev = store.saveSnapshot(id, project);
+      broadcast(session, { type: "snapshot", project, origin: participant.clientId, rev }, peer);
+      return;
+    }
+
+    if (message.type === "presence") {
+      const cursor = sanitizeCursor(message.cursor);
+      const view = sanitizeView(message.view);
+      session.presence.set(participant.clientId, { cursor, view });
+      broadcast(session, { type: "presence", clientId: participant.clientId, cursor, view }, peer);
+      return;
+    }
+
+    if (message.type === "set-mode") {
+      const authorization = authorizeHostAction(participant, "session mode");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      const mode = normalizeMode(message.mode);
+      store.saveMode(id, mode);
+      const list = participants(session);
+      if (clearParticipantOverrides(list)) broadcastParticipants(session);
+      broadcast(session, { type: "mode", mode });
+      return;
+    }
+
+    if (message.type === "set-participant-mode") {
+      const authorization = authorizeHostAction(participant, "participant permissions");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      if (
+        typeof message.clientId === "string" &&
+        setParticipantOverride(
+          participant,
+          participants(session),
+          message.clientId,
+          message.canEdit,
+        )
+      ) {
+        broadcastParticipants(session);
+      }
+      return;
+    }
+
+    if (message.type === "chat") {
+      const chatText =
+        typeof message.text === "string" ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH) : "";
+      if (!chatText) return;
+      const now = Date.now();
+      if (
+        participant.lastChatTs !== undefined &&
+        now - participant.lastChatTs < MIN_CHAT_INTERVAL_MS
+      )
+        return;
+      participant.lastChatTs = now;
+      const chatMessage: CollabChatMessage = {
+        id: randomUUID(),
+        clientId: participant.clientId,
+        displayName: participant.displayName,
+        color: participant.color,
+        text: chatText,
+        coordinate: sanitizeCursor(message.coordinate),
+        ts: now,
+      };
+      let chat = [...persisted.chat, chatMessage].slice(-CHAT_HISTORY_LIMIT);
+      while (
+        chat.length > 1 &&
+        ENCODER.encode(JSON.stringify(chat)).length > MAX_CHAT_STORAGE_BYTES
+      )
+        chat = chat.slice(1);
+      store.saveChat(id, chat);
+      broadcast(session, { type: "chat", message: chatMessage });
+      return;
+    }
+
+    if (message.type === "comment-mutation") {
+      if (!participantCanEdit(participant, persisted.mode)) {
+        send(peer, {
+          type: "error",
+          code: "forbidden",
+          message: "You are in view-only mode and cannot comment.",
+        });
+        return;
+      }
+      const action = message.action;
+      if (!action || typeof action !== "object") {
+        send(peer, {
+          type: "error",
+          code: "bad-message",
+          message: "Missing or invalid comment-mutation action.",
+        });
+        return;
+      }
+      let sanitized: typeof action;
+      if (action.type === "add") {
+        const comment = validateComment(action.comment);
+        if (!comment) {
+          send(peer, { type: "error", code: "bad-message", message: "Invalid comment payload." });
+          return;
+        }
+        sanitized = { type: "add", comment };
+      } else if (action.type === "reply") {
+        const reply = validateReply(action.reply);
+        if (!isBoundedId(action.commentId) || !reply) {
+          send(peer, { type: "error", code: "bad-message", message: "Invalid reply payload." });
+          return;
+        }
+        sanitized = { type: "reply", commentId: action.commentId, reply };
+      } else if (action.type === "toggle-resolve" || action.type === "delete") {
+        if (!isBoundedId(action.commentId)) {
+          send(peer, { type: "error", code: "bad-message", message: "Invalid comment target." });
+          return;
+        }
+        sanitized =
+          action.type === "delete"
+            ? { type: "delete", commentId: action.commentId }
+            : {
+                type: "toggle-resolve",
+                commentId: action.commentId,
+                ...(action.resolved !== undefined ? { resolved: action.resolved === true } : {}),
+              };
+      } else {
+        send(peer, {
+          type: "error",
+          code: "bad-message",
+          message: "Unsupported comment-mutation action type.",
+        });
+        return;
+      }
+      const now = Date.now();
+      if (
+        participant.lastCommentTs !== undefined &&
+        now - participant.lastCommentTs < MIN_COMMENT_INTERVAL_MS
+      )
+        return;
+      participant.lastCommentTs = now;
+      const project =
+        persisted.snapshot &&
+        typeof persisted.snapshot === "object" &&
+        !Array.isArray(persisted.snapshot)
+          ? { ...(persisted.snapshot as Record<string, unknown>) }
+          : {};
+      const comments = Array.isArray(project.comments)
+        ? (project.comments as Record<string, unknown>[])
+        : [];
+      if (sanitized.type === "add") {
+        const comment = sanitized.comment as Record<string, unknown>;
+        if (
+          !comments.some((existing) => existing.id === comment.id) &&
+          comments.length >= MAX_COMMENTS_PER_SESSION
+        ) {
+          send(peer, {
+            type: "error",
+            code: "bad-message",
+            message: "Comment limit reached for this session.",
+          });
+          return;
+        }
+        project.comments = comments.some((existing) => existing.id === comment.id)
+          ? comments
+          : [...comments, comment];
+      } else if (sanitized.type === "reply") {
+        const target = comments.find((comment) => comment.id === sanitized.commentId);
+        if (!target) {
+          send(peer, { type: "error", code: "bad-message", message: "Invalid reply target." });
+          return;
+        }
+        const replies = Array.isArray(target.replies)
+          ? (target.replies as Record<string, unknown>[])
+          : [];
+        if (replies.length >= MAX_REPLIES_PER_COMMENT) {
+          send(peer, {
+            type: "error",
+            code: "bad-message",
+            message: "Reply limit reached for this comment.",
+          });
+          return;
+        }
+        const reply = sanitized.reply as Record<string, unknown>;
+        project.comments = comments.map((comment) =>
+          comment.id !== sanitized.commentId || replies.some((existing) => existing.id === reply.id)
+            ? comment
+            : { ...comment, replies: [...replies, reply] },
+        );
+      } else if (sanitized.type === "toggle-resolve") {
+        project.comments = comments.map((comment) =>
+          comment.id === sanitized.commentId
+            ? {
+                ...comment,
+                resolved: sanitized.resolved !== undefined ? sanitized.resolved : !comment.resolved,
+              }
+            : comment,
+        );
+      } else {
+        project.comments = comments.filter((comment) => comment.id !== sanitized.commentId);
+      }
+      store.saveProjectState(id, project);
+      broadcast(session, { type: "comment-mutation", action: sanitized }, peer);
+    }
+  }
+
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    if (request.method === "OPTIONS") return json(response, 204, null);
+    if ((url.pathname === "/" || url.pathname === "/health") && request.method === "GET")
+      return json(response, 200, { ok: true, service: "geolibre-collab" });
+    if (url.pathname === "/sessions" && request.method === "POST") {
+      let raw = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        if (raw.length < 16_384) raw += chunk;
+      });
+      request.on("end", () => {
+        let requested: unknown = {};
+        try {
+          requested = raw ? JSON.parse(raw) : {};
+        } catch {
+          // Match the Worker: malformed/empty input uses defaults.
+        }
+        const mode = normalizeMode((requested as { mode?: CollaborationMode } | null)?.mode);
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const sessionId = randomCode();
+          const hostToken = randomToken();
+          if (store.create(sessionId, hostToken, mode))
+            return json(response, 200, { sessionId, hostToken, mode });
+        }
+        return json(response, 503, {
+          error: "Could not allocate a session code. Please try again.",
+        });
+      });
+      return;
+    }
+    json(response, 404, { error: "Not found" });
+  });
+
+  server.on("upgrade", (request: IncomingMessage, socket, head) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    const match = url.pathname.match(/^\/sessions\/([^/]+)\/ws$/);
+    if (request.method !== "GET" || !match || !store.get(match[1])) {
+      socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const id = match[1];
+    wss.handleUpgrade(request, socket, head, (websocket) => {
+      const session = live(id);
+      const peer: Peer = { socket: websocket };
+      session.peers.add(peer);
+      websocket.on("message", (raw, isBinary) => {
+        if (isBinary) {
+          send(peer, {
+            type: "error",
+            code: "bad-message",
+            message: "Binary frames are not supported.",
+          });
+          return;
+        }
+        handleMessage(id, session, peer, raw);
+      });
+      websocket.on("close", () => closePeer(id, session, peer));
+      websocket.on("error", () => closePeer(id, session, peer));
+    });
+  });
+
+  return {
+    server,
+    store,
+    close: async () => {
+      for (const session of sessions.values()) {
+        if (session.cleanup) clearTimeout(session.cleanup);
+        for (const peer of session.peers) peer.socket.close(1001, "Server shutting down");
+      }
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      wss.close();
+      store.close();
+    },
+  };
+}
+
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  const relay = createRelay();
+  const port = positive(process.env.PORT, 8787);
+  relay.server.listen(port, process.env.HOST ?? "0.0.0.0", () => {
+    console.log(`GeoLibre collaboration relay listening on port ${port}`);
+  });
+}

@@ -1,0 +1,175 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { afterEach, describe, it } from "node:test";
+import { WebSocket } from "ws";
+import { createRelay } from "../src/server.js";
+
+type Message = Record<string, unknown> & { type: string };
+
+const cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  while (cleanups.length) await cleanups.pop()?.();
+});
+
+async function start(options: Parameters<typeof createRelay>[0] = {}) {
+  const relay = createRelay({ dbPath: ":memory:", ...options });
+  await new Promise<void>((resolve) => relay.server.listen(0, "127.0.0.1", resolve));
+  cleanups.push(relay.close);
+  const address = relay.server.address();
+  assert(address && typeof address === "object");
+  return { relay, http: `http://127.0.0.1:${address.port}` };
+}
+
+async function createSession(http: string, mode = "co-edit") {
+  const response = await fetch(`${http}/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  assert.equal(response.status, 200);
+  return (await response.json()) as {
+    sessionId: string;
+    hostToken: string;
+    mode: string;
+  };
+}
+
+async function connect(http: string, sessionId: string): Promise<WebSocket> {
+  const socket = new WebSocket(`${http.replace("http", "ws")}/sessions/${sessionId}/ws`);
+  await new Promise<void>((resolve, reject) => {
+    socket.once("open", resolve);
+    socket.once("error", reject);
+  });
+  return socket;
+}
+
+function next(socket: WebSocket, type?: string): Promise<Message> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${type}`)), 2000);
+    const receive = (raw: WebSocket.RawData) => {
+      const message = JSON.parse(raw.toString()) as Message;
+      if (type && message.type !== type) {
+        socket.once("message", receive);
+        return;
+      }
+      clearTimeout(timer);
+      resolve(message);
+    };
+    socket.once("message", receive);
+  });
+}
+
+async function joinSession(
+  socket: WebSocket,
+  hostToken?: string,
+  displayName = "Participant",
+): Promise<Message> {
+  socket.send(
+    JSON.stringify({
+      type: "join",
+      clientId: "ignored-client-id",
+      displayName,
+      color: "#123456",
+      ...(hostToken ? { hostToken } : {}),
+    }),
+  );
+  return next(socket, "welcome");
+}
+
+describe("Node collaboration relay", () => {
+  it("serves health, creates sessions, and rejects unknown websocket routes", async () => {
+    const { http } = await start();
+    const health = await fetch(`${http}/health`);
+    assert.deepEqual(await health.json(), { ok: true, service: "geolibre-collab" });
+
+    const created = await createSession(http, "view-only");
+    assert.match(created.sessionId, /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
+    assert.match(created.hostToken, /^[0-9a-f]{48}$/);
+    assert.equal(created.mode, "view-only");
+
+    await assert.rejects(connect(http, "NOTFOUND"), /Unexpected server response: 404/);
+  });
+
+  it("enforces view-only mode and lets only the host change it", async () => {
+    const { http } = await start();
+    const created = await createSession(http, "view-only");
+    const host = await connect(http, created.sessionId);
+    const guest = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken, "Host");
+    await joinSession(guest, undefined, "Guest");
+
+    guest.send(JSON.stringify({ type: "snapshot", project: { name: "blocked" }, rev: 0 }));
+    const forbidden = await next(guest, "error");
+    assert.equal(forbidden.code, "forbidden");
+
+    guest.send(JSON.stringify({ type: "set-mode", mode: "co-edit" }));
+    assert.equal((await next(guest, "error")).code, "forbidden");
+
+    host.send(JSON.stringify({ type: "set-mode", mode: "co-edit" }));
+    assert.equal((await next(guest, "mode")).mode, "co-edit");
+
+    guest.send(JSON.stringify({ type: "snapshot", project: { name: "accepted" }, rev: 999 }));
+    const snapshot = await next(host, "snapshot");
+    assert.deepEqual(snapshot.project, { name: "accepted" });
+    assert.equal(snapshot.rev, 1);
+    host.close();
+    guest.close();
+  });
+
+  it("applies participant overrides and the configured snapshot cap", async () => {
+    const { http } = await start({ maxSnapshotBytes: 300 });
+    const created = await createSession(http);
+    const host = await connect(http, created.sessionId);
+    const guest = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken);
+    const welcome = await joinSession(guest);
+    const guestId = welcome.clientId as string;
+
+    host.send(
+      JSON.stringify({
+        type: "set-participant-mode",
+        clientId: guestId,
+        canEdit: false,
+      }),
+    );
+    await next(guest, "participants");
+    guest.send(JSON.stringify({ type: "snapshot", project: {}, rev: 0 }));
+    assert.equal((await next(guest, "error")).code, "forbidden");
+
+    host.send(
+      JSON.stringify({
+        type: "set-participant-mode",
+        clientId: guestId,
+        canEdit: true,
+      }),
+    );
+    await next(guest, "participants");
+    guest.send(JSON.stringify({ type: "snapshot", project: { data: "x".repeat(400) }, rev: 0 }));
+    assert.equal((await next(guest, "error")).code, "too-large");
+    host.close();
+    guest.close();
+  });
+
+  it("restores the latest snapshot and revision from SQLite after restart", async () => {
+    const directory = await mkdtemp("/tmp/geolibre-collab-");
+    const dbPath = join(directory, "relay.sqlite");
+    cleanups.push(() => rm(directory, { recursive: true, force: true }));
+
+    const first = await start({ dbPath, idleTtlMs: 60_000 });
+    const created = await createSession(first.http);
+    const host = await connect(first.http, created.sessionId);
+    await joinSession(host, created.hostToken);
+    host.send(JSON.stringify({ type: "snapshot", project: { persisted: true }, rev: 0 }));
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    host.close();
+    await cleanups.pop()?.();
+
+    const second = await start({ dbPath, idleTtlMs: 60_000 });
+    const rejoined = await connect(second.http, created.sessionId);
+    const welcome = await joinSession(rejoined, created.hostToken);
+    assert.deepEqual(welcome.snapshot, { persisted: true });
+    assert.equal(welcome.rev, 1);
+    rejoined.close();
+  });
+});

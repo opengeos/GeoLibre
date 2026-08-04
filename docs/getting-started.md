@@ -308,11 +308,39 @@ does not satisfy this **fails the container boot** with an error naming the
 variable, rather than starting up and quietly using the public hosted service
 with your users' projects.
 
-> There is no open-source implementation of the sharing server API yet
-> ([#1685](https://github.com/opengeos/GeoLibre/issues/1685)), so today
-> `GEOLIBRE_SHARE_URL` is for pointing at a compatible or staging deployment you
-> already run. `GEOLIBRE_COLLAB_URL` can point at your own deployment of
-> `workers/collab`.
+GeoLibre includes reference implementations of both services. From the
+repository root, start the web app, projects server, Node collaboration relay,
+and Postgres together:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8080`. The projects API is exposed at
+`http://localhost:8000` and the relay at `ws://localhost:8787`; the web
+container's runtime configuration is populated with those browser-reachable
+URLs. For a real deployment, set `GEOLIBRE_SHARE_URL`,
+`GEOLIBRE_COLLAB_URL`, `GEOLIBRE_VIEWER_URL`, and
+`GEOLIBRE_CORS_ORIGINS` to the public TLS origins before starting Compose.
+Change `POSTGRES_PASSWORD` from its development default.
+
+The projects API can also run as one small SQLite-backed container, without
+Postgres:
+
+```bash
+docker build -t geolibre-server backend/geolibre_server_api
+docker run --rm -p 8000:8000 \
+  -v geolibre-server-data:/data \
+  -e GEOLIBRE_PUBLIC_URL=http://localhost:8000 \
+  -e GEOLIBRE_VIEWER_URL=http://localhost:8080 \
+  geolibre-server
+```
+
+Its Docker image defaults to a SQLite database and filesystem objects under
+`/data`. See the complete [server API contract](server-api.md) and the
+service's
+[`README`](https://github.com/opengeos/GeoLibre/tree/main/backend/geolibre_server_api)
+for Postgres and S3-compatible storage configuration.
 
 ### Run the desktop app
 
