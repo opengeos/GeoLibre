@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import json
 import os
 import re
@@ -32,7 +33,7 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -50,6 +51,8 @@ Visibility = Literal["public", "unlisted", "private"]
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,37}[a-z0-9]$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -301,6 +304,11 @@ def create_app(
     # wire. A tighter bound would 413 valid uploads.
     body_ceiling = max(max_project_bytes * 6, max_thumbnail_bytes) + 1024
 
+    # Known limit: this reads the declared length only, so a chunked or HTTP/2
+    # request without Content-Length skips it and is still parsed in full. The
+    # per-route checks bound what gets *stored* either way; closing the parsing
+    # cost for those requests needs a streaming body reader, which is why the
+    # deployment notes put a request-size limit at the proxy.
     @app.middleware("http")
     async def limit_body(request: Request, call_next):
         declared = request.headers.get("content-length")
@@ -339,6 +347,15 @@ def create_app(
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError):
         return JSONResponse({"error": str(exc.errors()[0]["msg"])}, status_code=422)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request: Request, exc: Exception):
+        # Only HTTPException and RequestValidationError were handled, so anything
+        # else (a database error, say) escaped as a plain-text 500 and broke the
+        # documented "errors are JSON objects with an error string" contract. The
+        # detail is logged rather than returned, so internals are not disclosed.
+        logger.exception("unhandled error", exc_info=exc)
+        return JSONResponse({"error": "internal server error"}, status_code=500)
 
     def db():
         with sessions() as session:
@@ -457,7 +474,10 @@ def create_app(
             try:
                 session.flush()
                 break
-            except IntegrityError:
+            except (IntegrityError, OperationalError):
+                # OperationalError covers SQLite's "database is locked", which is how
+                # a concurrent writer usually surfaces on the default deployment;
+                # it is transient, so it belongs in the retry rather than in a 500.
                 session.rollback()
                 account = session.get(Account, account.id)
                 if account is None:
@@ -679,7 +699,8 @@ def create_app(
             try:
                 session.flush()
                 break
-            except IntegrityError:
+            except (IntegrityError, OperationalError):
+                # See create_project: a SQLite lock is transient and retryable.
                 session.rollback()
                 project = owned(session.get(Project, project_id), account)
         else:

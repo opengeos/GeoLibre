@@ -245,6 +245,44 @@ describe("Node collaboration relay", () => {
     guest.close();
   });
 
+  it("keeps commenting working after a snapshot plants a null into comments", async () => {
+    // Snapshot content is opaque and unvalidated, so a client can seed
+    // project.comments with a non-object. Every `.id` read in the mutation path
+    // would then throw, leaving commenting permanently broken for the session
+    // even though the process survives.
+    const { http } = await start();
+    const created = await createSession(http);
+    const host = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken);
+    // The mutation is broadcast to everyone except its sender, so observe from a
+    // second peer.
+    const observer = await connect(http, created.sessionId);
+    await joinSession(observer);
+
+    host.send(JSON.stringify({ type: "snapshot", project: { comments: [null, 7, "x"] } }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    host.send(
+      JSON.stringify({
+        type: "comment-mutation",
+        action: {
+          type: "add",
+          comment: {
+            id: "c1",
+            body: "still works",
+            author: { name: "Host", color: "#123456" },
+            createdAt: new Date().toISOString(),
+            anchor: { type: "point", lngLat: [1, 2] },
+          },
+        },
+      }),
+    );
+    const echoed = await next(observer, "comment-mutation");
+    assert.equal((echoed.action as { type: string }).type, "add");
+    observer.close();
+    host.close();
+  });
+
   it("restores the latest snapshot and revision from SQLite after restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "geolibre-collab-"));
     const dbPath = join(directory, "relay.sqlite");

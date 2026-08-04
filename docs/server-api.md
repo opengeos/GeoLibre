@@ -26,7 +26,7 @@ implementation or storage engine. The reference implementation lives in
 
 ## What the reference server leaves to the operator
 
-Two parts of the contract above are deliberately not implemented in
+Three parts of the contract above are deliberately not implemented in
 `backend/geolibre_server_api`, and an operator exposing it publicly has to
 supply them:
 
@@ -38,9 +38,14 @@ supply them:
   and by username.
 - **Token expiry.** `401` covers an expired token, but tokens issued here do not
   carry an expiry and stay valid until `DELETE /api/auth/token` revokes them.
+- **A request-size limit.** The server rejects an oversized *declared*
+  `Content-Length` before reading the body, but a chunked or HTTP/2 request
+  declares no length and is parsed in full before the per-route limit applies.
+  Cap request size at the proxy as well.
 
-Both are contract-level capabilities a compatible server may implement; the
-reference implementation is a correctness baseline, not a hardened deployment.
+All three are contract-level capabilities a compatible server may implement;
+the reference implementation is a correctness baseline, not a hardened
+deployment.
 
 ## Limits
 

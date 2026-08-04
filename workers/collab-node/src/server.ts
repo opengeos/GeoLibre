@@ -420,9 +420,15 @@ export function createRelay(options: RelayOptions = {}): {
         !Array.isArray(persisted.snapshot)
           ? { ...(persisted.snapshot as Record<string, unknown>) }
           : {};
-      const comments = Array.isArray(project.comments)
-        ? (project.comments as Record<string, unknown>[])
-        : [];
+      // Non-object entries are filtered out, not just checked for array-ness.
+      // Snapshot content is opaque and unvalidated, so a client can plant `null`
+      // into project.comments with an ordinary snapshot frame; every `.id` read
+      // below would then throw and leave commenting permanently broken for that
+      // session. The Worker tolerates the same corrupt data, so this is parity
+      // as well as robustness.
+      const comments = (Array.isArray(project.comments) ? project.comments : []).filter(
+        (entry): entry is Record<string, unknown> => !!entry && typeof entry === "object",
+      );
       if (sanitized.type === "add") {
         const comment = sanitized.comment as Record<string, unknown>;
         if (
@@ -445,9 +451,9 @@ export function createRelay(options: RelayOptions = {}): {
           send(peer, { type: "error", code: "bad-message", message: "Invalid reply target." });
           return;
         }
-        const replies = Array.isArray(target.replies)
-          ? (target.replies as Record<string, unknown>[])
-          : [];
+        const replies = (Array.isArray(target.replies) ? target.replies : []).filter(
+          (entry): entry is Record<string, unknown> => !!entry && typeof entry === "object",
+        );
         if (replies.length >= MAX_REPLIES_PER_COMMENT) {
           send(peer, {
             type: "error",
@@ -563,6 +569,11 @@ export function createRelay(options: RelayOptions = {}): {
   });
 
   server.on("upgrade", (request: IncomingMessage, socket, head) => {
+    // A raw net.Socket with no "error" listener throws on the next TCP error,
+    // which is an uncaught exception that stops the relay. This is the pre-auth
+    // path, so it takes whatever port scanners and stray health checks send,
+    // and the reject branch below writes to the socket and destroys it.
+    socket.on("error", () => socket.destroy());
     const url = new URL(request.url ?? "/", "http://localhost");
     const match = url.pathname.match(/^\/sessions\/([^/]+)\/ws$/);
     if (request.method !== "GET" || !match || !store.get(match[1])) {
