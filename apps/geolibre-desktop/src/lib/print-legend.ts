@@ -49,9 +49,10 @@ const MAX_RAMP_SWATCHES = 6;
  * every class is listed and only a runaway class count is elided from the tail.
  * Mirrors the on-map auto legend's `MAX_LEGEND_ROWS` so both legends elide at
  * the same point; kept as a local copy because `auto-legend.ts` imports from
- * this module and the reverse import would be circular.
+ * this module and the reverse import would be circular. Exported so
+ * `tests/print-legend.test.ts` can fail if the two drift apart.
  */
-const MAX_CATEGORY_SWATCHES = 100;
+export const MAX_CATEGORY_SWATCHES = 100;
 
 /**
  * Build legend entries from the visible layers. Vector layers contribute a

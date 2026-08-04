@@ -2064,6 +2064,12 @@ function drawLegend(
     const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
     if (chromeH + rows.length * rowH > maxHeight) {
       const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
+      // Not even one row plus its note fits. Drawing anyway would produce a box
+      // taller than the caller allotted whose only content is "+N more", so
+      // draw nothing and report no height. Defensive: every unit here scales
+      // with the page, so drawLayout's own maxHeight always clears ~24 rows
+      // whatever the paper size. Safe to return early — ctx.save() is below.
+      if (fitRows === 0) return 0;
       if (fitRows < rows.length) {
         // A layer heading only means something with class rows under it, so a
         // cut that lands right after one drops it too rather than printing a

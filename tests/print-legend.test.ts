@@ -10,10 +10,12 @@ import {
   applyLegendConfig,
   buildLegend,
   legendEditorRows,
+  MAX_CATEGORY_SWATCHES,
   reorderLegendEntry,
   setLegendItemLabel,
   toggleLegendItemHidden,
 } from "../apps/geolibre-desktop/src/lib/print-legend";
+import { MAX_LEGEND_ROWS } from "../apps/geolibre-desktop/src/lib/auto-legend";
 
 function config(overrides: Partial<LegendConfig> = {}): LegendConfig {
   return { ...DEFAULT_LEGEND_CONFIG, order: [], overrides: {}, ...overrides };
@@ -463,6 +465,13 @@ describe("buildLegend", () => {
       legend[0].swatches.map((s) => s.label),
       stops.map((s) => s.value),
     );
+  });
+
+  it("elides categorized classes at the same point as the on-map auto legend", () => {
+    // print-legend cannot import auto-legend (auto-legend imports print-legend),
+    // so the cap is a hand-kept copy. If the two drift, the printed legend and
+    // the on-map legend silently disagree about where a long class list stops.
+    assert.equal(MAX_CATEGORY_SWATCHES, MAX_LEGEND_ROWS);
   });
 
   it("elides the tail of a runaway categorized class list", () => {
