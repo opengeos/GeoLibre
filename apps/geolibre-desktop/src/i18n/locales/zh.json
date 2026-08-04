@@ -1137,7 +1137,8 @@
     "sharing": "正在共享…",
     "errorFallback": "无法共享该项目。",
     "usernameRequired": "共享前请在您的 {{shareHost}} 账户上设置用户名。请打开账户设置进行选择，然后重试。",
-    "openAccountSettings": "打开账户设置"
+    "openAccountSettings": "打开账户设置",
+    "credentialsRemoved": "未包含 {{count}} 个凭据字段。接收者需要提供自己的凭据或使用代理引用。"
   },
   "gallery": {
     "title": "项目图库",
@@ -1777,9 +1778,9 @@
       "removeAria": "移除 {{name}}",
       "errorNamePattern": "环境变量名称必须以字母或下划线开头，且只能包含字母、数字和下划线。",
       "errorDuplicate": "环境变量“{{name}}”重复。",
-      "stripPromptTitle": "是否从文件中移除环境变量？",
-      "stripPromptDesc": "此项目包含 {{count}} 个环境变量（其中可能包含 API 密钥）。它们以纯文本形式存储在项目文件中，共享时可能会被暴露。是否从已保存的文件中移除它们？无论如何，您的“设置”都会在本设备上保留它们。",
-      "stripButton": "从文件中移除",
+      "stripPromptTitle": "是否移除凭据？",
+      "stripPromptDesc": "此项目包含 {{count}} 个可能存有凭据的字段，例如 API 密钥、请求标头或插件设置。是否从保存的文件中移除？无论如何，当前工作区都会保留这些凭据。",
+      "stripButton": "移除凭据",
       "keepButton": "保留在文件中"
     },
     "geocoding": {

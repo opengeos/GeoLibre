@@ -2,6 +2,7 @@ import {
   DEFAULT_PROJECT_NAME,
   detachProjectCopy,
   projectFromStore,
+  redactProjectCredentials,
   serializeProject,
   useAppStore,
   type GeoLibreLayer,
@@ -835,20 +836,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       undefined,
       layersForSave.layers,
     );
-    // Env vars (possibly API keys) are serialized in plain text. If any are set,
-    // offer to strip them from the saved file before writing.
+    // Credentials are serialized in plain text for a local project that needs
+    // them. Make keeping them an explicit choice and use the same central
+    // redaction pass as every external egress.
     let contentToSave = content;
-    const envVarCount = (project.preferences.environmentVariables ?? []).filter((variable) =>
-      variable.key.trim(),
-    ).length;
-    if (envVarCount > 0) {
-      const choice = await askStripEnvVars(envVarCount);
+    const redacted = redactProjectCredentials(project);
+    if (redacted.redactedPaths.length > 0) {
+      const choice = await askStripEnvVars(redacted.redactedPaths.length);
       if (choice === "cancel") return false;
       if (choice === "strip") {
-        contentToSave = serializeProject({
-          ...project,
-          preferences: { ...project.preferences, environmentVariables: [] },
-        });
+        contentToSave = serializeProject(redacted.project);
       }
     }
     // Projects opened from a URL have no writable path, so both Save and
@@ -953,12 +950,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // has committed to the export rather than before the prompt. Reuse the
       // name snapshot so the title matches the slug computed above.
       const { project, defaultProjectName } = await buildEmbeddedProject(projectName);
-      const safeProject = {
-        ...project,
-        preferences: { ...project.preferences, environmentVariables: [] },
-      };
       const html = buildProjectHtml({
-        project: safeProject,
+        project,
         title: defaultProjectName,
       });
       // Returns null when the user cancels the save dialog; report that as a

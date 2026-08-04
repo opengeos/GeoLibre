@@ -1172,7 +1172,8 @@
     "sharing": "Bezig met delen…",
     "errorFallback": "Kan het project niet delen.",
     "usernameRequired": "Stel een gebruikersnaam in voor uw {{shareHost}}-account voordat u deelt. Open uw accountinstellingen om er een te kiezen en probeer het opnieuw.",
-    "openAccountSettings": "Accountinstellingen openen"
+    "openAccountSettings": "Accountinstellingen openen",
+    "credentialsRemoved": "{{count}} veld(en) met aanmeldgegevens zijn niet opgenomen. Ontvangers moeten hun eigen aanmeldgegevens opgeven of een bemiddelde verwijzing gebruiken."
   },
   "gallery": {
     "title": "Projectgalerij",
@@ -1819,9 +1820,9 @@
       "removeAria": "{{name}} verwijderen",
       "errorNamePattern": "Namen van omgevingsvariabelen moeten beginnen met een letter of underscore en mogen alleen letters, cijfers en underscores bevatten.",
       "errorDuplicate": "Omgevingsvariabele \"{{name}}\" komt dubbel voor.",
-      "stripPromptTitle": "Omgevingsvariabelen verwijderen?",
-      "stripPromptDesc": "Dit project heeft {{count}} omgevingsvariabele(n) (mogelijk inclusief API-sleutels). Deze worden als platte tekst opgeslagen in het projectbestand en kunnen zichtbaar worden wanneer u het deelt. Wilt u ze uit het opgeslagen bestand verwijderen? Uw Instellingen bewaren ze in beide gevallen op dit apparaat.",
-      "stripButton": "Uit bestand verwijderen",
+      "stripPromptTitle": "Aanmeldgegevens verwijderen?",
+      "stripPromptDesc": "Dit project bevat {{count}} veld(en) met aanmeldgegevens, zoals API-sleutels, aanvraagheaders of plugininstellingen. Verwijderen uit het opgeslagen bestand? De huidige werkruimte behoudt ze in beide gevallen.",
+      "stripButton": "Aanmeldgegevens verwijderen",
       "keepButton": "In bestand behouden"
     },
     "geocoding": {

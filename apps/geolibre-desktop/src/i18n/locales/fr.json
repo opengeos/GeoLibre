@@ -1172,7 +1172,8 @@
     "sharing": "Partage en cours…",
     "errorFallback": "Impossible de partager le projet.",
     "usernameRequired": "Définissez un nom d'utilisateur sur votre compte {{shareHost}} avant de partager. Ouvrez les paramètres de votre compte pour en choisir un, puis réessayez.",
-    "openAccountSettings": "Ouvrir les paramètres du compte"
+    "openAccountSettings": "Ouvrir les paramètres du compte",
+    "credentialsRemoved": "{{count}} champ(s) d’identifiants n’ont pas été inclus. Les destinataires doivent fournir leurs propres identifiants ou utiliser une référence gérée par un courtier."
   },
   "gallery": {
     "title": "Galerie de projets",
@@ -1819,9 +1820,9 @@
       "removeAria": "Supprimer {{name}}",
       "errorNamePattern": "Les noms de variables d'environnement doivent commencer par une lettre ou un tiret bas et ne contenir que des lettres, des chiffres et des tirets bas.",
       "errorDuplicate": "La variable d'environnement « {{name}} » est en double.",
-      "stripPromptTitle": "Retirer les variables d'environnement ?",
-      "stripPromptDesc": "Ce projet contient {{count}} variable(s) d'environnement (qui peuvent inclure des clés API). Elles sont stockées en texte brut dans le fichier de projet et pourraient être exposées si vous le partagez. Les retirer du fichier enregistré ? Vos Paramètres les conservent sur cet appareil dans tous les cas.",
-      "stripButton": "Retirer du fichier",
+      "stripPromptTitle": "Retirer les identifiants ?",
+      "stripPromptDesc": "Ce projet contient {{count}} champ(s) pouvant contenir des identifiants, comme des clés API, des en-têtes de requête ou des paramètres de plugins. Les retirer du fichier enregistré ? L’espace de travail actuel les conserve dans tous les cas.",
+      "stripButton": "Retirer les identifiants",
       "keepButton": "Conserver dans le fichier"
     },
     "geocoding": {

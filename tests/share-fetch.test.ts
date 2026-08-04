@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { createEmptyProject, serializeProject } from "@geolibre/core";
 import {
   getShareFetch,
   requestOrigin,
@@ -75,7 +76,7 @@ describe("share fetch override", () => {
     await uploadProjectToShare({
       token: "tok",
       filename: "p.geolibre.json",
-      content: "{}",
+      content: serializeProject(createEmptyProject("Share fetch")),
       visibility: "public",
     });
     assert.equal(seen, "https://share.geolibre.app/api/projects");

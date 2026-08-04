@@ -1172,7 +1172,8 @@
     "sharing": "Paylaşılıyor…",
     "errorFallback": "Proje paylaşılamadı.",
     "usernameRequired": "Paylaşmadan önce {{shareHost}} hesabınızda bir kullanıcı adı belirleyin. Bir tane seçmek için hesap ayarlarınızı açın, ardından tekrar deneyin.",
-    "openAccountSettings": "Hesap ayarlarını aç"
+    "openAccountSettings": "Hesap ayarlarını aç",
+    "credentialsRemoved": "{{count}} kimlik bilgisi alanı dahil edilmedi. Alıcılar kendi kimlik bilgilerini sağlamalı veya aracılı bir başvuru kullanmalıdır."
   },
   "gallery": {
     "title": "Proje galerisi",
@@ -1819,9 +1820,9 @@
       "removeAria": "{{name}} öğesini kaldır",
       "errorNamePattern": "Ortam değişkeni adları bir harf veya alt çizgi ile başlamalı; yalnızca harf, rakam ve alt çizgi içermelidir.",
       "errorDuplicate": "\"{{name}}\" ortam değişkeni yinelendi.",
-      "stripPromptTitle": "Ortam değişkenleri kaldırılsın mı?",
-      "stripPromptDesc": "Bu projede {{count}} ortam değişkeni var (API anahtarları içerebilir). Bunlar proje dosyasında düz metin olarak saklanır ve paylaşırsanız açığa çıkabilir. Kaydedilen dosyadan kaldırılsınlar mı? Ayarlarınız bunları her durumda bu cihazda tutar.",
-      "stripButton": "Dosyadan kaldır",
+      "stripPromptTitle": "Kimlik bilgileri kaldırılsın mı?",
+      "stripPromptDesc": "Bu projede API anahtarları, istek üstbilgileri veya eklenti ayarları gibi kimlik bilgisi taşıyan {{count}} alan var. Kaydedilen dosyadan kaldırılsın mı? Geçerli çalışma alanı her iki durumda da bunları korur.",
+      "stripButton": "Kimlik bilgilerini kaldır",
       "keepButton": "Dosyada tut"
     },
     "geocoding": {

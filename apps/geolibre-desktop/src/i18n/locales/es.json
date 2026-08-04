@@ -1172,7 +1172,8 @@
     "sharing": "Compartiendo…",
     "errorFallback": "No se pudo compartir el proyecto.",
     "usernameRequired": "Configure un nombre de usuario en su cuenta de {{shareHost}} antes de compartir. Abra la configuración de su cuenta para elegir uno y vuelva a intentarlo.",
-    "openAccountSettings": "Abrir configuración de la cuenta"
+    "openAccountSettings": "Abrir configuración de la cuenta",
+    "credentialsRemoved": "No se incluyeron {{count}} campo(s) de credenciales. Los destinatarios deben proporcionar sus propias credenciales o usar una referencia intermediada."
   },
   "gallery": {
     "title": "Galería de proyectos",
@@ -1819,9 +1820,9 @@
       "removeAria": "Quitar {{name}}",
       "errorNamePattern": "Los nombres de las variables de entorno deben comenzar con una letra o un guion bajo y contener solo letras, números y guiones bajos.",
       "errorDuplicate": "La variable de entorno «{{name}}» está duplicada.",
-      "stripPromptTitle": "¿Eliminar variables de entorno?",
-      "stripPromptDesc": "Este proyecto tiene {{count}} variable(s) de entorno (que pueden incluir claves de API). Se almacenan en texto sin formato en el archivo del proyecto y podrían quedar expuestas si lo comparte. ¿Eliminarlas del archivo guardado? Su configuración las conserva en este dispositivo de todos modos.",
-      "stripButton": "Eliminar del archivo",
+      "stripPromptTitle": "¿Eliminar credenciales?",
+      "stripPromptDesc": "Este proyecto tiene {{count}} campo(s) que contienen credenciales, como claves de API, encabezados de solicitud o ajustes de complementos. ¿Deseas eliminarlos del archivo guardado? El espacio de trabajo actual los conservará en cualquier caso.",
+      "stripButton": "Eliminar credenciales",
       "keepButton": "Mantener en el archivo"
     },
     "geocoding": {

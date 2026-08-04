@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import ipaddress
 import json
+import re
 import socket
 import uuid
 import warnings
@@ -21,6 +22,106 @@ from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
+
+_CREDENTIAL_FIELD_NAMES = {
+    "requestheaders",
+    "headers",
+    "authorization",
+    "apikey",
+    "apikeys",
+    "accesstoken",
+    "token",
+    "password",
+    "clientsecret",
+    "connectionstring",
+}
+_CREDENTIAL_URL_PARAMS = {
+    "access_token",
+    "accesstoken",
+    "api_key",
+    "apikey",
+    "key",
+    "token",
+    "password",
+    "pwd",
+    "client_secret",
+    "clientsecret",
+    "signature",
+    "sig",
+    "se",
+    "sp",
+    "sv",
+    "sr",
+    "st",
+    "skoid",
+}
+
+
+def _redact_url(value: str) -> str:
+    """Strip URL userinfo and credential parameters without re-encoding it."""
+
+    def keep_params(params: str) -> str:
+        return "&".join(
+            pair
+            for pair in params.split("&")
+            if pair
+            and (name := pair.split("=", 1)[0].lower()) not in _CREDENTIAL_URL_PARAMS
+            and not name.startswith("x-amz-")
+        )
+
+    before_hash, separator, fragment = value.partition("#")
+    base, query_separator, query = before_hash.partition("?")
+    base = re.sub(r"(?i)([a-z][a-z0-9+.-]*://)[^/@]*@", r"\1", base)
+    kept_query = keep_params(query) if query_separator else ""
+    kept_fragment = keep_params(fragment) if separator and "=" in fragment else fragment
+    return (
+        base
+        + (f"?{kept_query}" if kept_query else "")
+        + (f"#{kept_fragment}" if kept_fragment else "")
+    )
+
+
+def _redact_config(value: Any) -> Any:
+    """Return project configuration with credential-named fields removed."""
+    if isinstance(value, str):
+        return _redact_url(value)
+    if isinstance(value, list):
+        return [_redact_config(item) for item in value]
+    if not isinstance(value, dict):
+        return copy.deepcopy(value)
+    if value.get("type") in {"FeatureCollection", "Feature", "GeometryCollection"}:
+        return copy.deepcopy(value)
+    return {
+        key: _redact_config(nested)
+        for key, nested in value.items()
+        if key.lower() not in _CREDENTIAL_FIELD_NAMES
+    }
+
+
+def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
+    """Return a detached project safe to publish, export, or hand to others."""
+    safe = copy.deepcopy(project)
+    preferences = safe.get("preferences")
+    if isinstance(preferences, dict):
+        preferences["environmentVariables"] = []
+        geocoding = preferences.get("geocoding")
+        if isinstance(geocoding, dict):
+            geocoding["apiKeys"] = {}
+    layers = safe.get("layers")
+    if isinstance(layers, list):
+        for layer in layers:
+            if not isinstance(layer, dict):
+                continue
+            for field in ("source", "metadata"):
+                if field in layer:
+                    layer[field] = _redact_config(layer[field])
+    plugins = safe.get("plugins")
+    if isinstance(plugins, dict):
+        plugins["settings"] = {}
+    if "metadata" in safe:
+        safe["metadata"] = _redact_config(safe["metadata"])
+    return safe
+
 
 PROJECT_VERSION = "0.1.0"
 

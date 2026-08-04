@@ -1158,6 +1158,7 @@
     "step2Description": "Paste the token into Settings → Environment Variables on this device.",
     "configureToken": "Configure local token",
     "liveAt": "Your project is live at:",
+    "credentialsRemoved": "{{count}} credential field(s) were not included. Recipients must provide their own credentials or use a brokered reference.",
     "copyLink": "Copy link",
     "open": "Open",
     "done": "Done",
@@ -1819,9 +1820,9 @@
       "removeAria": "Remove {{name}}",
       "errorNamePattern": "Environment variable names must start with a letter or underscore and contain only letters, numbers, and underscores.",
       "errorDuplicate": "Environment variable \"{{name}}\" is duplicated.",
-      "stripPromptTitle": "Strip environment variables?",
-      "stripPromptDesc": "This project has {{count}} environment variable(s) (which may include API keys). They are stored in plain text in the project file and could be exposed if you share it. Remove them from the saved file? Your Settings keep them on this device either way.",
-      "stripButton": "Strip from file",
+      "stripPromptTitle": "Strip credentials?",
+      "stripPromptDesc": "This project has {{count}} credential-bearing field(s), such as API keys, request headers, or plugin settings. Remove them from the saved file? The current workspace keeps them either way.",
+      "stripButton": "Strip credentials",
       "keepButton": "Keep in file"
     },
     "geocoding": {

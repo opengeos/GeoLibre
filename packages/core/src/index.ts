@@ -123,3 +123,10 @@ export {
   resolveThreeDTilesRequestHeaders,
   stripGoogleMapsApiKeyHeader,
 } from "./three-d-tiles";
+export {
+  PROJECT_CREDENTIAL_FIELDS,
+  redactCredentials,
+  redactProjectCredentials,
+  redactUrlCredentials,
+  type CredentialRedactionResult,
+} from "./credentials";

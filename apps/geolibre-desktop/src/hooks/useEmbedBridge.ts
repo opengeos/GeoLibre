@@ -1,7 +1,7 @@
 import { parseProject, serializeProject, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
-import { buildProjectSnapshot } from "../lib/build-project-snapshot";
+import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 
 // How long to wait after the last store change before posting a fresh project
@@ -63,7 +63,7 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapController | null>
     let lastLoadedSeq = 0;
     let lastPostedContent: string | null = null;
 
-    const buildProject = (): GeoLibreProject => buildProjectSnapshot(mapControllerRef);
+    const buildProject = (): GeoLibreProject => buildProjectEgressSnapshot(mapControllerRef);
 
     const postState = () => {
       if (disposed) return;

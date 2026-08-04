@@ -1137,7 +1137,8 @@
     "sharing": "Membagikan…",
     "errorFallback": "Tidak dapat membagikan proyek.",
     "usernameRequired": "Atur nama pengguna pada akun {{shareHost}} Anda sebelum membagikan. Buka pengaturan akun Anda untuk memilihnya, lalu coba lagi.",
-    "openAccountSettings": "Buka pengaturan akun"
+    "openAccountSettings": "Buka pengaturan akun",
+    "credentialsRemoved": "{{count}} bidang kredensial tidak disertakan. Penerima harus memberikan kredensial sendiri atau menggunakan referensi yang diperantarai."
   },
   "gallery": {
     "title": "Galeri proyek",
@@ -1777,9 +1778,9 @@
       "removeAria": "Hapus {{name}}",
       "errorNamePattern": "Nama variabel lingkungan harus dimulai dengan huruf atau garis bawah dan hanya berisi huruf, angka, dan garis bawah.",
       "errorDuplicate": "Variabel lingkungan \"{{name}}\" duplikat.",
-      "stripPromptTitle": "Hapus variabel lingkungan?",
-      "stripPromptDesc": "Proyek ini memiliki {{count}} variabel lingkungan (yang mungkin termasuk kunci API). Nilai ini disimpan dalam teks biasa pada file proyek dan dapat terekspos jika Anda membagikannya. Hapus dari file yang disimpan? Pengaturan Anda tetap menyimpannya di perangkat ini dalam kedua kasus.",
-      "stripButton": "Hapus dari file",
+      "stripPromptTitle": "Hapus kredensial?",
+      "stripPromptDesc": "Proyek ini memiliki {{count}} bidang yang memuat kredensial, seperti kunci API, header permintaan, atau pengaturan plugin. Hapus dari file yang disimpan? Ruang kerja saat ini tetap menyimpannya.",
+      "stripButton": "Hapus kredensial",
       "keepButton": "Simpan dalam file"
     },
     "geocoding": {

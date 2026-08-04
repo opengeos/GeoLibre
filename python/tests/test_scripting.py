@@ -299,6 +299,57 @@ def test_to_html_returns_string_with_project(m):
     assert '"mapView"' in html
 
 
+def test_python_project_egress_redacts_credentials(m, tmp_path):
+    m.project["preferences"]["environmentVariables"] = [
+        {"key": "SERVICE_TOKEN", "value": "python-env-secret", "enabled": True}
+    ]
+    m.project["preferences"]["geocoding"] = {
+        "providerId": "mapbox",
+        "apiKeys": {"mapbox": "python-geocoder-secret"},
+    }
+    m.project["layers"] = [
+        {
+            "id": "auth",
+            "name": "Authenticated tiles",
+            "type": "3d-tiles",
+            "source": {
+                "url": "https://user:password@example.com/tiles?token=python-url-secret",
+                "requestHeaders": {"Authorization": "Bearer python-header-secret"},
+            },
+            "visible": True,
+            "opacity": 1,
+            "style": {},
+            "metadata": {},
+        }
+    ]
+    m.project["plugins"] = {
+        "manifestUrls": [],
+        "activePluginIds": ["external"],
+        "mapControlPositions": {},
+        "settings": {"external": {"arbitrary": "python-plugin-secret"}},
+    }
+
+    safe = m.to_project()
+    serialized = str(safe)
+    html = m.to_html()
+    out = tmp_path / "safe.geolibre.json"
+    m.save_project(str(out))
+    saved = out.read_text(encoding="utf-8")
+    for secret in (
+        "python-env-secret",
+        "python-geocoder-secret",
+        "password",
+        "python-url-secret",
+        "python-header-secret",
+        "python-plugin-secret",
+    ):
+        assert secret not in serialized
+        assert secret not in html
+        assert secret not in saved
+
+    assert m.to_project(keep_credentials=True)["plugins"]["settings"]
+
+
 def test_to_html_writes_path(m, tmp_path):
     out = tmp_path / "nested" / "map.html"
     assert m.to_html(str(out)) is None

@@ -1,4 +1,9 @@
-import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_PROJECT_NAME,
+  redactProjectCredentials,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
 import { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, type MapController } from "@geolibre/map";
 import {
   closeDuckDBLayerPanel,
@@ -1996,7 +2001,8 @@ export function TopToolbar({
         getProject={async (title) => {
           // Shared projects are opened on another machine where the local files
           // don't exist, so always embed the vector data (never file references).
-          const { content, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
+          const { project, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
+          const redacted = redactProjectCredentials(project);
           // Strip path separators, control chars, and other characters that are
           // illegal in filenames so the server gets a predictable name.
           const safeName = defaultProjectName.replace(
@@ -2006,7 +2012,11 @@ export function TopToolbar({
             /[\u0000-\u001f\u007f/\\:*?"<>|]/g,
             "_",
           );
-          return { content, filename: `${safeName}.geolibre.json` };
+          return {
+            content: serializeProject(redacted.project),
+            filename: `${safeName}.geolibre.json`,
+            redactedCount: redacted.redactedPaths.length,
+          };
         }}
       />
       <ProjectGalleryDialog

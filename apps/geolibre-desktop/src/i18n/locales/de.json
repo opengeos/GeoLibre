@@ -1172,7 +1172,8 @@
     "sharing": "Wird geteilt…",
     "errorFallback": "Das Projekt konnte nicht geteilt werden.",
     "usernameRequired": "Legen Sie einen Benutzernamen für Ihr {{shareHost}}-Konto fest, bevor Sie teilen. Öffnen Sie Ihre Kontoeinstellungen, um einen auszuwählen, und versuchen Sie es erneut.",
-    "openAccountSettings": "Kontoeinstellungen öffnen"
+    "openAccountSettings": "Kontoeinstellungen öffnen",
+    "credentialsRemoved": "{{count}} Anmeldedatenfeld(er) wurden nicht einbezogen. Empfänger müssen eigene Anmeldedaten angeben oder eine vermittelte Referenz verwenden."
   },
   "gallery": {
     "title": "Projektgalerie",
@@ -1819,9 +1820,9 @@
       "removeAria": "{{name}} entfernen",
       "errorNamePattern": "Namen von Umgebungsvariablen müssen mit einem Buchstaben oder Unterstrich beginnen und dürfen nur Buchstaben, Zahlen und Unterstriche enthalten.",
       "errorDuplicate": "Die Umgebungsvariable „{{name}}“ ist doppelt vorhanden.",
-      "stripPromptTitle": "Umgebungsvariablen entfernen?",
-      "stripPromptDesc": "Dieses Projekt enthält {{count}} Umgebungsvariable(n) (die API-Schlüssel enthalten können). Sie werden im Klartext in der Projektdatei gespeichert und könnten beim Teilen offengelegt werden. Aus der gespeicherten Datei entfernen? Ihre Einstellungen behalten sie in jedem Fall auf diesem Gerät.",
-      "stripButton": "Aus Datei entfernen",
+      "stripPromptTitle": "Anmeldedaten entfernen?",
+      "stripPromptDesc": "Dieses Projekt enthält {{count}} Feld(er) mit Anmeldedaten, etwa API-Schlüssel, Anfrage-Header oder Plugin-Einstellungen. Aus der gespeicherten Datei entfernen? Der aktuelle Arbeitsbereich behält sie in jedem Fall.",
+      "stripButton": "Anmeldedaten entfernen",
       "keepButton": "In Datei behalten"
     },
     "geocoding": {
