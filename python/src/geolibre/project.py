@@ -42,6 +42,8 @@ _CREDENTIAL_URL_PARAMS = {
     "apikey",
     "key",
     "token",
+    "subscription-key",
+    "subscriptionkey",
     "password",
     "pwd",
     "client_secret",

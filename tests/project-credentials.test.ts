@@ -78,4 +78,15 @@ describe("project credential redaction", () => {
     const once = redactCredentials(credentialProject());
     assert.deepEqual(redactCredentials(once), once);
   });
+
+  it("fails closed when configuration exceeds the traversal depth", () => {
+    let nested: Record<string, unknown> = { arbitrary: "too-deep-secret" };
+    for (let index = 0; index < 20; index += 1) nested = { child: nested };
+    const project = credentialProject();
+    project.layers[0].source = nested;
+
+    const result = redactProjectCredentials(project);
+    assert.ok(!serializeProject(result.project).includes("too-deep-secret"));
+    assert.ok(result.redactedPaths.some((path) => path.includes(".child")));
+  });
 });

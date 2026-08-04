@@ -313,7 +313,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
             "name": "Authenticated tiles",
             "type": "3d-tiles",
             "source": {
-                "url": "https://user:password@example.com/tiles?token=python-url-secret",
+                "url": "https://user:password@example.com/tiles?token=python-url-secret&subscription-key=python-subscription-secret",
                 "requestHeaders": {"Authorization": "Bearer python-header-secret"},
             },
             "visible": True,
@@ -340,6 +340,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
         "python-geocoder-secret",
         "password",
         "python-url-secret",
+        "python-subscription-secret",
         "python-header-secret",
         "python-plugin-secret",
     ):

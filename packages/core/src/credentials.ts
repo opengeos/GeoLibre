@@ -121,7 +121,13 @@ function redactConfigurationValue(
     if (redacted !== value) redactedPaths.push(path);
     return redacted;
   }
-  if (depth >= MAX_REDACT_DEPTH) return value;
+  if (depth >= MAX_REDACT_DEPTH) {
+    // Fail closed. A deeply nested configuration shape is not needed to render
+    // any built-in layer, and returning it unchanged would let a credential
+    // bypass the invariant merely by exceeding the traversal cap.
+    redactedPaths.push(path);
+    return undefined;
+  }
   if (Array.isArray(value)) {
     return value.map((item, index) =>
       redactConfigurationValue(item, `${path}[${index}]`, redactedPaths, depth + 1),
