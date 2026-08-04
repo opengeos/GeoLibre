@@ -478,6 +478,7 @@ export function createRelay(options: RelayOptions = {}): {
       return json(response, 200, { ok: true, service: "geolibre-collab" });
     if (url.pathname === "/sessions" && request.method === "POST") {
       let raw = "";
+      let rawBytes = 0;
       let aborted = false;
       request.setEncoding("utf8");
       // An unhandled "error" on the request stream (a client aborting mid-upload)
@@ -487,14 +488,23 @@ export function createRelay(options: RelayOptions = {}): {
       });
       request.on("data", (chunk) => {
         if (aborted) return;
-        if (raw.length < 16_384) {
+        // Counted in UTF-8 bytes *including* this chunk, and checked before the
+        // append: testing the running length first would accept one final chunk
+        // of any size once the total was still under the cap.
+        rawBytes += Buffer.byteLength(chunk);
+        if (rawBytes <= 16_384) {
           raw += chunk;
           return;
         }
         // Stopping at the cap but continuing to read let a client stream
         // unbounded data at us; destroy the request instead.
         aborted = true;
-        request.destroy();
+        // Pause rather than destroy immediately: destroying the request tears
+        // down the socket before the 413 can flush, and the client sees a
+        // connection reset instead of the status. Stop reading, answer, then
+        // drop the connection once the response is on the wire.
+        request.pause();
+        response.on("finish", () => request.destroy());
         json(response, 413, { error: "Request body too large." });
       });
       request.on("end", () => {

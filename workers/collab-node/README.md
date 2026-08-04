@@ -23,7 +23,7 @@ Endpoints are `POST /sessions`, `GET /sessions/:id/ws`, and `GET /health`.
 Persist the directory containing `COLLAB_DB_PATH`, and terminate TLS at the
 ingress so browsers can connect with `wss://`.
 
-### Volume ownership
+## Volume ownership
 
 The container runs as the unprivileged `node` user, and the image creates
 `/data` so a fresh named volume inherits that ownership. Docker only does this
