@@ -173,6 +173,26 @@ export function ShareProjectDialog({
       });
   };
 
+  // Defensive: the Share entry points (menu item and command palette) are gated on
+  // the same state, so this should be unreachable. Guarding here anyway keeps a
+  // future caller from rendering setup guidance that names the public hosted
+  // service on a deployment that configured no share host.
+  if (!settingsUrl) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-4 w-4" />
+              {t("share.title")}
+            </DialogTitle>
+            <DialogDescription>{t("gallery.errorNotConfigured")}</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">

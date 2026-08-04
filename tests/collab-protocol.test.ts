@@ -54,6 +54,11 @@ describe("resolveCollabBaseUrl", () => {
     );
   });
 
+  it("refuses credentials embedded in the URL, on any scheme", () => {
+    assert.equal(resolveCollabBaseUrl("wss://user:pass@collab.example.org"), null);
+    assert.equal(resolveCollabBaseUrl("ws://user:pass@127.0.0.1:8787"), null);
+  });
+
   it("still validates a deployment-provided value", () => {
     assert.equal(resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "ws://relay.corp" }), null);
     assert.equal(resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "  " }), null);

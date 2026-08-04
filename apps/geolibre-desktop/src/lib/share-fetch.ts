@@ -35,11 +35,20 @@ export function resetShareFetch(): void {
   shareFetch = (input, init) => fetch(input, init);
 }
 
-/** The request URL's host, or null when it cannot be parsed. */
-function requestHost(input: RequestInfo | URL): string | null {
+/**
+ * The request URL's origin, or null when it cannot be parsed.
+ *
+ * Origin, not host: the host of `http://maps.example.org` and
+ * `https://maps.example.org` is identical, so matching on host alone would route
+ * a plaintext request to a host configured over HTTPS through the CORS-exempt
+ * native client.
+ */
+export function requestOrigin(input: RequestInfo | URL): string | null {
   try {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    return new URL(href).host;
+    const origin = new URL(href).origin;
+    // `new URL("mailto:a@b").origin` is the string "null"; never match that.
+    return origin && origin !== "null" ? origin : null;
   } catch {
     return null;
   }
@@ -49,7 +58,7 @@ function requestHost(input: RequestInfo | URL): string | null {
  * Route requests to the share host through Tauri's native HTTP client instead of
  * the WebView's `fetch`, bypassing browser CORS enforcement. Requests to any
  * other host keep the browser `fetch` unchanged, so the native, CORS-exempt
- * client stays scoped to the single share host — which must also be listed in
+ * client stays scoped to the single share origin — which must also be listed in
  * the `http:default` capability scope (`src-tauri/capabilities/default.json`).
  *
  * The host is resolved from {@link resolveShareBaseUrl} (the configured or
@@ -68,18 +77,14 @@ function requestHost(input: RequestInfo | URL): string | null {
 export async function installNativeShareFetch(): Promise<void> {
   const baseUrl = resolveShareBaseUrl();
   if (!baseUrl) return;
-  let shareHost: string | null;
-  try {
-    shareHost = new URL(baseUrl).host;
-  } catch {
-    shareHost = null;
-  }
-  if (!shareHost) return;
+  const shareOrigin = requestOrigin(baseUrl);
+  if (!shareOrigin) return;
   const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
   setShareFetch((input, init) => {
-    if (requestHost(input) !== shareHost) {
-      // Not the share host (e.g. a third-party thumbnail or project URL): keep
-      // the browser fetch, unchanged and outside the native capability scope.
+    if (requestOrigin(input) !== shareOrigin) {
+      // Not the share origin (a third-party thumbnail, a project URL, or the same
+      // host over plaintext): keep the browser fetch, unchanged and outside the
+      // native capability scope.
       return fetch(input, init);
     }
     return tauriFetch(input, init);

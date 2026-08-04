@@ -518,11 +518,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
     try {
       let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;
+      // One decision drives both the fetch and whether the URL is remembered: a
+      // token is only actually sent when there is a share host to send it to, and
+      // an unauthenticated open of a public URL should still be remembered.
       const shareBaseUrl = resolveShareBaseUrl();
-      if (options.authToken && shareBaseUrl) {
+      const shareAuth =
+        options.authToken && shareBaseUrl
+          ? { token: options.authToken, baseUrl: shareBaseUrl }
+          : null;
+      if (shareAuth) {
         const fetched = await fetchProjectFromUrl(normalizedUrl, {
           signal: controller.signal,
-          fetchImpl: shareAuthorizedFetch(options.authToken, shareBaseUrl, getShareFetch()),
+          fetchImpl: shareAuthorizedFetch(shareAuth.token, shareAuth.baseUrl, getShareFetch()),
         });
         project = await resolveProjectXyzLayers(fetched, controller.signal);
       } else {
@@ -537,7 +544,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         loadProject(detached, null);
         useAppStore.setState({ isDirty: true });
       } else {
-        loadProject(project, options.authToken ? null : normalizedUrl);
+        loadProject(project, shareAuth ? null : normalizedUrl);
       }
     } finally {
       if (shareUrlAbortRef.current === controller) {

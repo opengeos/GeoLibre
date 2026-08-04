@@ -176,6 +176,11 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
     the boot instead puts the error where an operator will actually see it.
     """
     parsed = urlsplit(value)
+    # Checked before the loopback shortcut below, so the guarantee holds for every
+    # accepted value. Both of these are echoed to stdout further down, so a
+    # credentialed URL would also land in the container logs.
+    if parsed.username or parsed.password:
+        raise SystemExit(f"ERROR: {name} must not embed credentials.")
     if parsed.scheme in loopback_schemes and parsed.hostname in loopback_hosts:
         return value
     if parsed.scheme not in schemes or not parsed.netloc:
@@ -183,8 +188,6 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
             f"ERROR: {name} must be a {schemes[0]}:// URL "
             f"(or {loopback_schemes[0]}:// on {'/'.join(loopback_hosts)}), not {value!r}."
         )
-    if parsed.username or parsed.password:
-        raise SystemExit(f"ERROR: {name} must not embed credentials.")
     return value
 
 
@@ -213,8 +216,10 @@ with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
 '
 
 if [ -n "${GEOLIBRE_SHARE_URL:-}" ]; then
+  # Case-insensitive to match the Python validator above and the client's
+  # resolveShareHost, both of which lowercase before comparing to "off".
   case "$GEOLIBRE_SHARE_URL" in
-    off | OFF | Off) echo "Project sharing disabled (GEOLIBRE_SHARE_URL=off)." ;;
+    [oO][fF][fF]) echo "Project sharing disabled (GEOLIBRE_SHARE_URL=off)." ;;
     *) echo "Project sharing server: $GEOLIBRE_SHARE_URL" ;;
   esac
 fi

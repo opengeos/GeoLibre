@@ -39,6 +39,10 @@ import { isMenuItemVisible } from "../../../lib/ui-profile";
 import type { ShareHostStatus } from "../../../lib/share-geolibre";
 import { formatRecentProjectTime, type ToolbarChrome } from "./constants";
 
+// aria-describedby targets for the "sharing server unavailable" explanation.
+const SHARE_UNAVAILABLE_ID = "project-menu-share-unavailable";
+const GALLERY_UNAVAILABLE_ID = "project-menu-gallery-unavailable";
+
 interface ProjectMenuProps {
   chrome: ToolbarChrome;
   collaborationEnabled: boolean;
@@ -103,7 +107,17 @@ export function ProjectMenu({
   // a host we rejected should say so rather than leave the user wondering.
   const shareHidden = shareHostStatus === "disabled";
   const shareBroken = shareHostStatus === "invalid";
-  const shareBrokenReason = shareBroken ? t("toolbar.item.shareHostUnavailable") : undefined;
+  // A disabled DropdownMenuItem gets `pointer-events-none`, so a native `title`
+  // tooltip can never be hovered. Render the reason as its own line instead, and
+  // point the item at it with aria-describedby so it is announced too. The id is
+  // per-item: the Gallery entry (in the Open From submenu) and the Share entry can
+  // both be mounted at once, and a duplicate id would break the association.
+  const shareBrokenNote = (id: string) =>
+    shareBroken ? (
+      <DropdownMenuLabel id={id} className="pt-0 text-xs font-normal text-muted-foreground">
+        {t("toolbar.item.shareHostUnavailable")}
+      </DropdownMenuLabel>
+    ) : null;
   // Group-visibility flags so the separators between groups aren't left orphaned
   // when a whole group is hidden by the active profile.
   const showSaveGroup =
@@ -111,7 +125,7 @@ export function ProjectMenu({
     show("project.saveAs") ||
     show("project.duplicate") ||
     show("project.saveAsTemplate") ||
-    show("project.share") ||
+    (!shareHidden && show("project.share")) ||
     show("project.exportHtml") ||
     (collaborationEnabled && show("project.collaborate"));
   const showPrintGroup = show("project.printLayout") || show("project.offlineRegion");
@@ -154,14 +168,17 @@ export function ProjectMenu({
                 {t("toolbar.item.urlEllipsis")}
               </DropdownMenuItem>
               {!shareHidden && (
-                <DropdownMenuItem
-                  onSelect={onOpenGallery}
-                  disabled={shareBroken}
-                  title={shareBrokenReason}
-                >
-                  <LayoutGrid className="me-2 h-3.5 w-3.5" />
-                  {t("toolbar.item.galleryEllipsis")}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    onSelect={onOpenGallery}
+                    disabled={shareBroken}
+                    aria-describedby={shareBroken ? GALLERY_UNAVAILABLE_ID : undefined}
+                  >
+                    <LayoutGrid className="me-2 h-3.5 w-3.5" />
+                    {t("toolbar.item.galleryEllipsis")}
+                  </DropdownMenuItem>
+                  {shareBrokenNote(GALLERY_UNAVAILABLE_ID)}
+                </>
               )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
@@ -277,10 +294,17 @@ export function ProjectMenu({
           </DropdownMenuItem>
         )}
         {show("project.share") && !shareHidden && (
-          <DropdownMenuItem onSelect={onShare} disabled={shareBroken} title={shareBrokenReason}>
-            <Share2 className="me-2 h-3.5 w-3.5" />
-            {t("toolbar.item.shareEllipsis")}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem
+              onSelect={onShare}
+              disabled={shareBroken}
+              aria-describedby={shareBroken ? SHARE_UNAVAILABLE_ID : undefined}
+            >
+              <Share2 className="me-2 h-3.5 w-3.5" />
+              {t("toolbar.item.shareEllipsis")}
+            </DropdownMenuItem>
+            {shareBrokenNote(SHARE_UNAVAILABLE_ID)}
+          </>
         )}
         {show("project.exportHtml") && (
           <DropdownMenuItem onSelect={onExportHtml}>

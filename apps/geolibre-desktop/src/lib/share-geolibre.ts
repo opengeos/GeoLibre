@@ -125,14 +125,20 @@ export interface ShareHost {
 
 /**
  * Whether a URL is safe to send a Bearer token to: HTTPS anywhere, or HTTP on
- * loopback for local development.
+ * loopback for local development, and never with credentials in the URL.
  *
  * The hostname is matched exactly rather than by prefix — `startsWith(
  * "http://localhost")` would also accept `http://localhost.evil.com`. A
  * self-hosted server on a private network therefore needs TLS; see
  * `docs/getting-started.md`.
+ *
+ * Embedded credentials are rejected regardless of scheme, mirroring the
+ * `service_url()` validator in `docker/entrypoint.sh`: a `https://user:pass@host`
+ * base would send Basic Auth alongside the Bearer token on every request, and
+ * the value reaches log output and error messages.
  */
 function isSafeShareUrl(url: URL): boolean {
+  if (url.username || url.password) return false;
   if (url.protocol === "https:") return true;
   return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
 }
@@ -182,23 +188,28 @@ export function resolveShareBaseUrl(configured?: unknown): string | null {
   return resolveShareHost(configured).baseUrl;
 }
 
+/** A base URL's host, falling back to the hosted default's when unparseable. */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return new URL(DEFAULT_SHARE_BASE_URL).host;
+  }
+}
+
 /**
  * Hostname to name in UI copy — the `{{shareHost}}` interpolation in the message
  * catalogues ("Sign in to {{shareHost}}") — so a self-hosted deployment reads its
  * own host instead of share.geolibre.app.
  *
  * Falls back to the hosted default's hostname when no usable host is configured.
- * The copy that can still render in that state (the Settings token field)
- * describes what the token is *for*, and the hosted service is its documented
- * default.
+ * Callers must not render host-bearing copy in that state — see
+ * `shareHostStatus`; the fallback exists so this never returns an empty string,
+ * not as a licence to advertise the hosted service on a deployment that opted
+ * out.
  */
 export function shareHostLabel(): string {
-  const base = resolveShareBaseUrl() ?? DEFAULT_SHARE_BASE_URL;
-  try {
-    return new URL(base).host;
-  } catch {
-    return new URL(DEFAULT_SHARE_BASE_URL).host;
-  }
+  return hostOf(resolveShareBaseUrl() ?? DEFAULT_SHARE_BASE_URL);
 }
 
 interface ShareProjectResponse {
@@ -228,6 +239,9 @@ export async function uploadProjectToShare(
     throw new Error("No share server is configured for this deployment.");
   }
   const base = resolved.replace(/\/+$/, "");
+  // Named in the failure messages below so a self-hosted deployment does not
+  // report an outage at share.geolibre.app.
+  const hostLabel = hostOf(base);
   // Defaults to the share fetch, which the desktop build routes through Tauri's
   // native HTTP client to bypass WebView CORS (see share-fetch.ts).
   const fetchImpl = options.fetchImpl ?? getShareFetch();
@@ -260,7 +274,7 @@ export async function uploadProjectToShare(
         throw new Error("Upload timed out. Please try again.");
       }
     }
-    throw new Error("Could not reach share.geolibre.app. Check your internet connection.");
+    throw new Error(`Could not reach ${hostLabel}. Check your internet connection.`);
   }
 
   if (!response.ok) {
@@ -271,7 +285,7 @@ export async function uploadProjectToShare(
   const payload = (await response.json().catch(() => ({}))) as ShareProjectResponse;
   const project = payload.project;
   if (!project?.projectUrl || !project.rawJsonUrl) {
-    throw new Error("share.geolibre.app returned an unexpected response.");
+    throw new Error(`${hostLabel} returned an unexpected response.`);
   }
   return {
     username: project.username ?? "",

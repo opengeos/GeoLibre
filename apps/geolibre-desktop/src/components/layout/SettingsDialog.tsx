@@ -386,6 +386,11 @@ export function SettingsDialog({
   const shareBaseUrl = resolveShareBaseUrl();
   const shareHost = shareHostLabel();
   const shareSettingsUrl = shareBaseUrl ? `${shareBaseUrl}/settings` : null;
+  // No usable host (sharing turned off, or a configured address that was
+  // rejected) means the token field is dead: it would authenticate against a
+  // server this deployment never talks to. Say so instead of rendering guidance
+  // that names the public hosted service — the whole point of the opt-out.
+  const shareTokenUsable = shareBaseUrl != null;
   const { language, options: languageOptions, setLanguage } = useLanguage();
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
@@ -2281,36 +2286,44 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">{t("settings.env.tokenTitle")}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      <Trans
-                        i18nKey="settings.env.tokenDescription"
-                        values={{ shareHost }}
-                        components={{
-                          tokenLink: shareSettingsUrl ? (
-                            <a
-                              className="underline"
-                              href={shareSettingsUrl}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                            />
-                          ) : (
-                            <span />
-                          ),
-                        }}
-                      />
-                    </p>
-                    <Input
-                      ref={shareTokenInputRef}
-                      aria-label={t("settings.env.tokenTitle")}
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder={t("settings.env.tokenPlaceholder")}
-                      value={draftDesktopSettings.shareToken}
-                      onChange={(event) => updateShareToken(event.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.env.tokenStorageNote", { shareHost })}
-                    </p>
+                    {shareTokenUsable ? (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          <Trans
+                            i18nKey="settings.env.tokenDescription"
+                            values={{ shareHost }}
+                            components={{
+                              tokenLink: shareSettingsUrl ? (
+                                <a
+                                  className="underline"
+                                  href={shareSettingsUrl}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                />
+                              ) : (
+                                <span />
+                              ),
+                            }}
+                          />
+                        </p>
+                        <Input
+                          ref={shareTokenInputRef}
+                          aria-label={t("settings.env.tokenTitle")}
+                          type="password"
+                          autoComplete="new-password"
+                          placeholder={t("settings.env.tokenPlaceholder")}
+                          value={draftDesktopSettings.shareToken}
+                          onChange={(event) => updateShareToken(event.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t("settings.env.tokenStorageNote", { shareHost })}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.env.tokenUnavailable")}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 border-t pt-5">
                     <h3 className="text-sm font-semibold">{t("settings.env.cesiumTokenTitle")}</h3>

@@ -97,6 +97,14 @@ describe("resolveShareBaseUrl", () => {
     assert.equal(resolveShareBaseUrl("not a url"), null);
   });
 
+  // Mirrors service_url() in docker/entrypoint.sh: a credentialed base would send
+  // Basic Auth alongside the Bearer token and leak into logs and error messages.
+  it("refuses credentials embedded in the URL, on any scheme", () => {
+    assert.equal(resolveShareBaseUrl("https://user:pass@maps.example.org"), null);
+    assert.equal(resolveShareBaseUrl("https://user@maps.example.org"), null);
+    assert.equal(resolveShareBaseUrl("http://user:pass@localhost:8000"), null);
+  });
+
   it('treats "off" as sharing disabled', () => {
     assert.equal(resolveShareBaseUrl("off"), null);
     assert.equal(resolveShareBaseUrl("OFF"), null);

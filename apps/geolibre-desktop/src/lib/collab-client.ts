@@ -37,7 +37,9 @@ export const COLLAB_URL_ENV = "VITE_GEOLIBRE_COLLAB_URL";
  *
  * Only `wss://` (or `ws://` on loopback for a local relay) is accepted,
  * mirroring `resolveShareHost`: parse the URL and match the hostname exactly
- * so a value like `ws://localhost.evil.com` is rejected.
+ * so a value like `ws://localhost.evil.com` is rejected. Credentials in the URL
+ * are rejected regardless of scheme, as `service_url()` in
+ * `docker/entrypoint.sh` does for the same value.
  *
  * @param configured - The raw value; read from the env when omitted.
  * @param deploymentEnv - Runtime env override, for tests.
@@ -53,6 +55,7 @@ export function resolveCollabBaseUrl(
   const trimmed = value.trim().replace(/\/+$/, "");
   try {
     const url = new URL(trimmed);
+    if (url.username || url.password) return null;
     if (
       url.protocol === "wss:" ||
       (url.protocol === "ws:" &&
