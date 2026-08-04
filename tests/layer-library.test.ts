@@ -1042,6 +1042,26 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     ]);
   });
 
+  it("drops configuration nested past the export sweep's depth cap", () => {
+    // Fail closed like the project-egress sweep: a source nested deeper than the
+    // cap is not re-addable configuration, so returning it unswept would let a
+    // credential leave in the bundle just by sitting out of reach.
+    let nested: Record<string, unknown> = { apiKey: "SECRET_TOO_DEEP" };
+    for (let index = 0; index < 6; index += 1) nested = { child: nested };
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-deep",
+        name: "Deep config",
+        addedAt: "",
+        layerType: "zarr",
+        source: { url: "https://example.com/store.zarr", store: nested },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    assert.equal(serializeLayerLibrary([entry]).includes("SECRET_TOO_DEEP"), false);
+  });
+
   it("redacts password-style query parameters", () => {
     const [entry] = normalizeLayerLibraryEntries([
       {
