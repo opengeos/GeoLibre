@@ -80,3 +80,8 @@ python/examples/my-map.geolibre.json
 # source of truth is Entitlements.mas.plist.template)
 apps/geolibre-desktop/src-tauri/mas/Entitlements.mas.plist
 apps/geolibre-desktop/src-tauri/mas/embedded.provisionprofile
+
+# Local SQLite state for the reference projects/identity server. GEOLIBRE_DATABASE_URL
+# defaults to sqlite:///./geolibre-server-api.db, so running it from the repo root
+# (the obvious place) drops the file here.
+/geolibre-server-api.db

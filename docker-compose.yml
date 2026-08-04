@@ -1,0 +1,109 @@
+name: geolibre
+
+services:
+  geolibre-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: geolibre-web:local
+    ports:
+      - "${GEOLIBRE_WEB_PORT:-8080}:80"
+    environment:
+      # These are browser-reachable URLs, not Compose service names. Override
+      # them with the public TLS origins when deploying behind an ingress.
+      GEOLIBRE_SHARE_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
+      GEOLIBRE_COLLAB_URL: "${GEOLIBRE_COLLAB_URL:-ws://localhost:8787}"
+    depends_on:
+      geolibre-server:
+        condition: service_healthy
+      geolibre-collab:
+        condition: service_healthy
+    restart: unless-stopped
+
+  geolibre-server:
+    build:
+      context: backend/geolibre_server_api
+    image: geolibre-server:local
+    ports:
+      - "${GEOLIBRE_SERVER_PORT:-8000}:8000"
+    environment:
+      # POSTGRES_USER and POSTGRES_PASSWORD are substituted into this DSN
+      # verbatim, so two characters bite: "@" splits the URL early (p@ssw0rd
+      # parses as password "p" against host "ssw0rd@postgres") and "%" starts a
+      # percent-escape (we%20ird silently becomes "we ird"). Getting-started
+      # tells operators to choose a strong password, which is exactly when this
+      # happens. Avoid both, or percent-encode them here (%40, %25) while
+      # POSTGRES_PASSWORD keeps the literal value.
+      GEOLIBRE_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-geolibre}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see docs/getting-started.md)}@postgres:5432/${POSTGRES_DB:-geolibre}"
+      GEOLIBRE_STORAGE_PATH: /data/objects
+      GEOLIBRE_PUBLIC_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
+      GEOLIBRE_VIEWER_URL: "${GEOLIBRE_VIEWER_URL:-http://localhost:8080}"
+      GEOLIBRE_CORS_ORIGINS: "${GEOLIBRE_CORS_ORIGINS:-http://localhost:8080}"
+    volumes:
+      - geolibre-projects:/data/objects
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  geolibre-collab:
+    build:
+      context: .
+      dockerfile: workers/collab-node/Dockerfile
+    image: geolibre-collab:local
+    ports:
+      - "${GEOLIBRE_COLLAB_PORT:-8787}:8787"
+    environment:
+      PORT: "8787"
+      COLLAB_DB_PATH: /data/collab.sqlite
+      COLLAB_MAX_SNAPSHOT_BYTES: "${COLLAB_MAX_SNAPSHOT_BYTES:-1000000}"
+      COLLAB_IDLE_TTL_MS: "${COLLAB_IDLE_TTL_MS:-7200000}"
+    volumes:
+      - geolibre-collab:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-geolibre}"
+      # Required, not defaulted: this account owns all project metadata, and a
+      # password committed to the repository is the same on every deployment.
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see docs/getting-started.md)}"
+      POSTGRES_DB: "${POSTGRES_DB:-geolibre}"
+    volumes:
+      - geolibre-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  geolibre-projects:
+  geolibre-collab:
+  geolibre-postgres:
