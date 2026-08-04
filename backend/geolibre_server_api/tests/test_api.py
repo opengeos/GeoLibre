@@ -160,17 +160,55 @@ def test_username_length_is_enforced(client):
     )
 
 
-def test_oversized_body_is_rejected_before_parsing(client, monkeypatch):
+def test_oversized_body_is_rejected_before_parsing(client):
     """A declared Content-Length past the ceiling is refused up front, so the JSON
-    `content` routes cannot have the whole payload materialized before the check."""
+    `content` routes cannot have the whole payload materialized before the check.
+
+    The request carries a two-byte body and only *claims* to be huge: the
+    middleware decides from the header alone, so allocating the real payload here
+    would prove nothing and cost hundreds of MiB in the test process.
+    """
     owner = account(client)
-    huge = "x" * (101 * 1024 * 1024)
-    response = client.post(
-        "/api/projects",
-        headers=auth(owner),
-        json={"filename": "big.geolibre.json", "content": huge, "visibility": "public"},
+    declared = str(1024 * 1024 * 1024)
+    headers = {**auth(owner), "content-type": "application/json", "content-length": declared}
+    request = client.build_request("POST", "/api/projects", headers=headers, content=b"{}")
+    assert request.headers["content-length"] == declared
+    assert client.send(request).status_code == 413
+
+
+def test_fully_escaped_json_within_the_limit_is_accepted(tmp_path, monkeypatch):
+    """`parse_content` bounds the *decoded* string, but JSON may spend six wire
+    bytes on one ASCII byte. The header ceiling has to allow for that, or a valid
+    upload is refused before it is ever parsed.
+
+    Limits are shrunk here so the factor is what decides the outcome: the wire
+    body below lands above a 2x ceiling and under a 6x one, so this fails if the
+    multiplier regresses.
+    """
+    monkeypatch.setenv("GEOLIBRE_MAX_PROJECT_BYTES", "1000")
+    monkeypatch.setenv("GEOLIBRE_MAX_THUMBNAIL_BYTES", "1000")
+    app = create_app(
+        f"sqlite:///{tmp_path / 'esc.db'}",
+        public_url="https://share.example",
+        storage=FileStorage(str(tmp_path / "objects")),
     )
-    assert response.status_code == 413
+    with TestClient(app) as escaped_client:
+        token = account(escaped_client)
+        # Padding rides on an unvalidated field; `title` is separately capped at 100.
+        document = json.dumps(
+            {"version": "1.0", "title": "Escaped", "layers": [], "note": "p" * 600}
+        )
+        assert len(document.encode()) <= 1000
+        # Every character spelled as \u00XX, which is what the ceiling must absorb.
+        wire = "".join(f"\\u{ord(c):04x}" for c in document)
+        body = '{"filename":"escaped.geolibre.json","visibility":"public","content":"' + wire + '"}'
+        assert 1000 * 2 + 1024 < len(body.encode()) < 1000 * 6 + 1024
+        response = escaped_client.post(
+            "/api/projects",
+            headers={**auth(token), "content-type": "application/json"},
+            content=body.encode(),
+        )
+        assert response.status_code == 201, response.text
 
 
 def test_thumbnail_fork_and_slug_collision(client):

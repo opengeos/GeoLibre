@@ -302,9 +302,12 @@ def create_app(
     # routes let Pydantic materialize the whole payload in memory *before*
     # parse_content could answer 413 -- the same exposure the thumbnail route
     # avoids by streaming. The per-route checks stay authoritative; this only
-    # sheds the obviously-too-big requests early. The slack covers JSON string
-    # escaping, which can inflate a document well past its decoded size.
-    body_ceiling = max(max_project_bytes * 2, max_thumbnail_bytes) + 1024
+    # sheds the obviously-too-big requests early, so the factor has to be the
+    # worst case rather than a typical one: parse_content bounds the *decoded*
+    # string, and JSON may encode any ASCII byte as a six-byte \u00XX escape, so
+    # a legitimate document at max_project_bytes can be six times that on the
+    # wire. A tighter bound would 413 valid uploads.
+    body_ceiling = max(max_project_bytes * 6, max_thumbnail_bytes) + 1024
 
     @app.middleware("http")
     async def limit_body(request: Request, call_next):
