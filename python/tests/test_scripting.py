@@ -11,6 +11,7 @@ import pytest
 
 import geolibre.geolibre as gmod
 from geolibre.geolibre import Feature, Layer, Map
+from geolibre.project import redact_credentials
 
 
 @pytest.fixture
@@ -309,6 +310,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
     m.project["preferences"]["geocoding"] = {
         "providerId": "mapbox",
         "apiKeys": {"mapbox": "python-geocoder-secret"},
+        "forwardEndpoint": "https://geocode.example.com?key=python-endpoint-secret",
     }
     m.project["layers"] = [
         {
@@ -341,6 +343,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
     for secret in (
         "python-env-secret",
         "python-geocoder-secret",
+        "python-endpoint-secret",
         "password",
         "python-url-secret",
         "python-subscription-secret",
@@ -355,6 +358,14 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
         assert secret not in saved
 
     assert m.to_project(keep_credentials=True)["plugins"]["settings"]
+
+
+def test_python_redaction_fails_closed_at_depth_limit():
+    nested = {"password": "too-deep-secret"}
+    for _ in range(12):
+        nested = {"child": nested}
+    safe = redact_credentials({"layers": [{"source": nested}]})
+    assert "too-deep-secret" not in str(safe)
 
 
 def test_to_html_writes_path(m, tmp_path):

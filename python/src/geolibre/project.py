@@ -63,6 +63,7 @@ _CREDENTIAL_URL_PARAMS = {
     "st",
     "skoid",
 }
+_MAX_REDACT_DEPTH = 12
 
 
 def _redact_url(value: str) -> str:
@@ -97,18 +98,20 @@ def _redact_url(value: str) -> str:
     )
 
 
-def _redact_config(value: Any) -> Any:
+def _redact_config(value: Any, depth: int = 0) -> Any:
     """Return project configuration with credential-named fields removed."""
+    if depth >= _MAX_REDACT_DEPTH:
+        return None
     if isinstance(value, str):
         return _redact_url(value)
     if isinstance(value, list):
-        return [_redact_config(item) for item in value]
+        return [_redact_config(item, depth + 1) for item in value]
     if not isinstance(value, dict):
         return copy.deepcopy(value)
     if value.get("type") in {"FeatureCollection", "Feature", "GeometryCollection"}:
         return copy.deepcopy(value)
     return {
-        key: _redact_config(nested)
+        key: _redact_config(nested, depth + 1)
         for key, nested in value.items()
         if key.lower() not in _CREDENTIAL_FIELD_NAMES
     }
@@ -125,6 +128,9 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
         geocoding = preferences.get("geocoding")
         if isinstance(geocoding, dict):
             geocoding["apiKeys"] = {}
+            for field in ("forwardEndpoint", "reverseEndpoint"):
+                if isinstance(geocoding.get(field), str):
+                    geocoding[field] = _redact_url(geocoding[field])
     layers = safe.get("layers")
     if isinstance(layers, list):
         for layer in layers:

@@ -14,6 +14,8 @@ function credentialProject() {
     { key: "SERVICE_TOKEN", value: "environment-secret", enabled: true },
   ];
   project.preferences.geocoding.apiKeys = { mapbox: "geocoder-secret" };
+  project.preferences.geocoding.forwardEndpoint =
+    "https://geocode.example.com/search?key=endpoint-secret";
   project.basemapStyleUrl = "https://styles.example.com/map.json?access_token=basemap-secret";
   project.layers = [
     {
@@ -51,6 +53,7 @@ describe("project credential redaction", () => {
     for (const secret of [
       "environment-secret",
       "geocoder-secret",
+      "endpoint-secret",
       "basemap-secret",
       "password",
       "url-secret",
@@ -67,7 +70,7 @@ describe("project credential redaction", () => {
     assert.deepEqual(project.plugins?.settings, {});
     assert.ok(redactedPaths.includes("plugins.settings"));
     assert.equal(redactedPaths.includes("basemapStyleUrl"), true);
-    assert.equal(redactProjectCredentials(original).redactedCount, 8);
+    assert.equal(redactProjectCredentials(original).redactedCount, 9);
     assert.equal(original.plugins?.settings.external.arbitraryName, "plugin-secret");
   });
 
@@ -83,6 +86,27 @@ describe("project credential redaction", () => {
   it("is idempotent", () => {
     const once = redactCredentials(credentialProject());
     assert.deepEqual(redactCredentials(once), once);
+  });
+
+  it("returns detached inline GeoJSON", () => {
+    const original = credentialProject();
+    original.layers[0].source = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: null, properties: { name: "original" } }],
+    };
+    const safe = redactCredentials(original);
+    const safeSource = safe.layers[0].source as {
+      features: Array<{ properties: { name: string } }>;
+    };
+    safeSource.features[0].properties.name = "changed";
+    assert.equal(
+      (
+        original.layers[0].source as {
+          features: Array<{ properties: { name: string } }>;
+        }
+      ).features[0].properties.name,
+      "original",
+    );
   });
 
   it("fails closed when configuration exceeds the traversal depth", () => {

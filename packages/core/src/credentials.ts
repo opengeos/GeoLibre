@@ -132,14 +132,6 @@ function redactConfigurationValue(
   redactedCount: { value: number },
   depth = 0,
 ): unknown {
-  if (typeof value === "string") {
-    const redacted = redactUrlCredentials(value);
-    if (redacted !== value) {
-      redactedPaths.push(path);
-      redactedCount.value += 1;
-    }
-    return redacted;
-  }
   if (depth >= MAX_REDACT_DEPTH) {
     // Fail closed. A deeply nested configuration shape is not needed to render
     // any built-in layer, and returning it unchanged would let a credential
@@ -148,12 +140,21 @@ function redactConfigurationValue(
     redactedCount.value += 1;
     return undefined;
   }
+  if (typeof value === "string") {
+    const redacted = redactUrlCredentials(value);
+    if (redacted !== value) {
+      redactedPaths.push(path);
+      redactedCount.value += 1;
+    }
+    return redacted;
+  }
   if (Array.isArray(value)) {
     return value.map((item, index) =>
       redactConfigurationValue(item, `${path}[${index}]`, redactedPaths, redactedCount, depth + 1),
     );
   }
-  if (!isPlainObject(value) || isGeoJsonPayload(value)) return value;
+  if (!isPlainObject(value)) return value;
+  if (isGeoJsonPayload(value)) return structuredClone(value);
 
   const result: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value)) {
@@ -206,14 +207,23 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     redactedPaths.push("basemapStyleUrl");
     redactedCount.value += 1;
   }
-  const preferences = project.preferences
-    ? {
-        ...project.preferences,
-        environmentVariables: [],
-        geocoding: project.preferences.geocoding
-          ? { ...project.preferences.geocoding, apiKeys: {} }
-          : project.preferences.geocoding,
+  const geocoding = project.preferences?.geocoding
+    ? { ...project.preferences.geocoding, apiKeys: {} }
+    : project.preferences?.geocoding;
+  if (geocoding) {
+    for (const field of ["forwardEndpoint", "reverseEndpoint"] as const) {
+      const endpoint = geocoding[field];
+      if (typeof endpoint !== "string") continue;
+      const redacted = redactUrlCredentials(endpoint);
+      if (redacted !== endpoint) {
+        geocoding[field] = redacted;
+        redactedPaths.push(`preferences.geocoding.${field}`);
+        redactedCount.value += 1;
       }
+    }
+  }
+  const preferences = project.preferences
+    ? { ...project.preferences, environmentVariables: [], geocoding }
     : project.preferences;
   if (project.preferences?.environmentVariables?.length > 0) {
     redactedPaths.push("preferences.environmentVariables");
