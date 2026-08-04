@@ -8,6 +8,7 @@ import {
   resolveShareBaseUrl,
   resolveShareHost,
   SHARE_URL_ENV,
+  shareHostLabel,
   ShareUploadError,
   uploadProjectToShare,
 } from "../apps/geolibre-desktop/src/lib/share-geolibre";
@@ -153,6 +154,48 @@ describe("resolveShareHost", () => {
     const resolved = resolveShareHost(undefined, { [SHARE_URL_ENV]: "  " });
     assert.equal(resolved.status, "default");
     assert.equal(resolved.baseUrl, DEFAULT_SHARE_BASE_URL);
+  });
+});
+
+describe("shareHostLabel", () => {
+  function withShareUrl<T>(value: string, run: () => T): T {
+    (globalThis as { window?: unknown }).window = {
+      __GEOLIBRE_DEPLOYMENT_ENV__: { [SHARE_URL_ENV]: value },
+    };
+    try {
+      return run();
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  }
+
+  it("names the host of the configured server", () => {
+    // Nothing configured resolves to the hosted default.
+    assert.equal(shareHostLabel(), new URL(DEFAULT_SHARE_BASE_URL).host);
+    assert.equal(
+      withShareUrl("https://maps.example.org", () => shareHostLabel()),
+      "maps.example.org",
+    );
+  });
+
+  // A server under a subpath must be named the way links built from the same base
+  // resolve, so the copy and the account-settings link agree.
+  it("keeps a subpath so the label matches the links built from the base", () => {
+    assert.equal(
+      withShareUrl("https://example.test/geolibre", () => shareHostLabel()),
+      "example.test/geolibre",
+    );
+    assert.equal(
+      withShareUrl("https://example.test/geolibre/", () => shareHostLabel()),
+      "example.test/geolibre",
+    );
+  });
+
+  it("names an unusable host as the hosted default rather than an empty string", () => {
+    assert.equal(
+      withShareUrl("off", () => shareHostLabel()),
+      new URL(DEFAULT_SHARE_BASE_URL).host,
+    );
   });
 });
 

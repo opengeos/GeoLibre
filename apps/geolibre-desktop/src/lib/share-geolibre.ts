@@ -188,10 +188,20 @@ export function resolveShareBaseUrl(configured?: unknown): string | null {
   return resolveShareHost(configured).baseUrl;
 }
 
-/** A base URL's host, falling back to the hosted default's when unparseable. */
+/**
+ * A base URL's host, plus its path when it has one, falling back to the hosted
+ * default's host when unparseable.
+ *
+ * The path is kept so a server hosted under a subpath
+ * (`https://example.test/geolibre`) is named the way the links built from the
+ * same base URL resolve — dropping it would show `example.test` next to a link to
+ * `https://example.test/geolibre/settings`.
+ */
 function hostOf(baseUrl: string): string {
   try {
-    return new URL(baseUrl).host;
+    const url = new URL(baseUrl);
+    const path = url.pathname.replace(/\/+$/, "");
+    return path ? `${url.host}${path}` : url.host;
   } catch {
     return new URL(DEFAULT_SHARE_BASE_URL).host;
   }

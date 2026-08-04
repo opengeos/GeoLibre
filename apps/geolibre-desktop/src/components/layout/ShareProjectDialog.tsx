@@ -213,16 +213,14 @@ export function ShareProjectDialog({
                 <p className="text-muted-foreground">
                   {t("share.step1Description", { shareHost })}
                 </p>
-                {settingsUrl && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void openExternalLink(settingsUrl)}
-                  >
-                    <ExternalLink className="me-2 h-3.5 w-3.5" />
-                    {t("share.getToken")}
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void openExternalLink(settingsUrl)}
+                >
+                  <ExternalLink className="me-2 h-3.5 w-3.5" />
+                  {t("share.getToken")}
+                </Button>
               </li>
               <li className="space-y-2 rounded-md border p-3">
                 <p className="font-medium">{t("share.step2Title")}</p>
@@ -299,17 +297,15 @@ export function ShareProjectDialog({
                 className="space-y-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
               >
                 <p>{t("share.usernameRequired", { shareHost })}</p>
-                {settingsUrl && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void openExternalLink(settingsUrl)}
-                  >
-                    <ExternalLink className="me-2 h-3.5 w-3.5" />
-                    {t("share.openAccountSettings")}
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void openExternalLink(settingsUrl)}
+                >
+                  <ExternalLink className="me-2 h-3.5 w-3.5" />
+                  {t("share.openAccountSettings")}
+                </Button>
               </div>
             ) : error ? (
               <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">

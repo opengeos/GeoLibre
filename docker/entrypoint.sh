@@ -215,17 +215,25 @@ with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write(";\n")
 '
 
-if [ -n "${GEOLIBRE_SHARE_URL:-}" ]; then
+# Strip surrounding whitespace exactly as the Python block above does, so the boot
+# log reports the value that actually landed in the runtime config rather than the
+# raw variable (`" off "` is disabled there, and should read as disabled here too).
+trim() {
+  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+if [ -n "$(trim "${GEOLIBRE_SHARE_URL:-}")" ]; then
+  SHARE_URL_LOG=$(trim "$GEOLIBRE_SHARE_URL")
   # Case-insensitive to match the Python validator above and the client's
   # resolveShareHost, both of which lowercase before comparing to "off".
-  case "$GEOLIBRE_SHARE_URL" in
+  case "$SHARE_URL_LOG" in
     [oO][fF][fF]) echo "Project sharing disabled (GEOLIBRE_SHARE_URL=off)." ;;
-    *) echo "Project sharing server: $GEOLIBRE_SHARE_URL" ;;
+    *) echo "Project sharing server: $SHARE_URL_LOG" ;;
   esac
 fi
 
-if [ -n "${GEOLIBRE_COLLAB_URL:-}" ]; then
-  echo "Collaboration relay: $GEOLIBRE_COLLAB_URL"
+if [ -n "$(trim "${GEOLIBRE_COLLAB_URL:-}")" ]; then
+  echo "Collaboration relay: $(trim "$GEOLIBRE_COLLAB_URL")"
 fi
 
 if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
