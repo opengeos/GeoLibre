@@ -426,6 +426,12 @@ export interface LayoutOptions {
    */
   legendGroupByLayer: boolean;
   /**
+   * Translated formatter for the legend's "+N more" note, drawn when the class
+   * rows do not fit the map body; falls back to English when omitted (like the
+   * table's and chart's formatters).
+   */
+  legendFormatNote?: (count: number) => string;
+  /**
    * Preloaded custom-SVG marker icons for legend swatches, keyed by the
    * swatch marker's `svg` string ({@link LegendMarker.svg}). Loading SVGs is
    * async, but {@link drawLayout} is synchronous, so the caller resolves them
@@ -882,6 +888,8 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
       title: opts.legendTitle,
       groupByLayer: opts.legendGroupByLayer,
       markerIcons: opts.markerIcons,
+      maxHeight: bodyH - inset * 2,
+      formatNote: opts.legendFormatNote,
     });
     ctx.restore();
   }
@@ -1982,6 +1990,9 @@ function drawLegend(
     title: string;
     groupByLayer: boolean;
     markerIcons?: ReadonlyMap<string, CanvasImageSource>;
+    /** Vertical space the box may occupy before rows are elided. */
+    maxHeight?: number;
+    formatNote?: (count: number) => string;
   },
 ): number {
   const pad = unit * 1.4;
@@ -2040,6 +2051,26 @@ function drawLegend(
   const rowHasSwatch = (r: { color: string; marker?: LegendMarker }): boolean =>
     Boolean(r.color) || Boolean(r.marker);
 
+  // Fit the rows to the space the caller allows. A categorized layer can carry
+  // dozens of classes, and the legend is clipped to the map body, so without
+  // this the tail would vanish at the body edge with nothing to say it had
+  // (GH #1608). Reserve one row for the note the truncation produces, the same
+  // budget rule the attribute-table panel uses.
+  let hiddenRows = 0;
+  const maxHeight = opts.maxHeight;
+  if (maxHeight !== undefined) {
+    const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
+    if (chromeH + rows.length * rowH > maxHeight) {
+      const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
+      if (fitRows < rows.length) {
+        hiddenRows = rows.length - fitRows;
+        rows.length = fitRows;
+      }
+    }
+  }
+  const note = hiddenRows > 0 ? (opts.formatNote?.(hiddenRows) ?? `+${hiddenRows} more`) : "";
+  const hasNote = note.length > 0;
+
   // Cap proportional circles so a huge max radius still fits the legend box,
   // while keeping ratios within each entry (same idea as the on-map LegendSwatch).
   const MAX_CIRCLE_R = swatch * 0.55;
@@ -2065,10 +2096,11 @@ function drawLegend(
     const w = ctx.measureText(r.text).width + (rowHasSwatch(r) ? swatch + unit : 0);
     if (w > maxText) maxText = w;
   }
+  if (hasNote) maxText = Math.max(maxText, ctx.measureText(note).width);
 
   const boxW = maxText + pad * 2;
   const titleBlock = hasTitle ? titleSize + unit : 0;
-  const boxH = pad * 2 + titleBlock + rows.length * rowH;
+  const boxH = pad * 2 + titleBlock + (rows.length + (hasNote ? 1 : 0)) * rowH;
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -2122,6 +2154,12 @@ function drawLegend(
     ctx.fillStyle = hasSwatch ? INK : MUTED;
     ctx.font = `${hasSwatch ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(r.text, textX, cy);
+  }
+  if (hasNote) {
+    cy += rowH;
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+    ctx.fillText(note, x + pad, cy);
   }
   ctx.restore();
   return boxH;

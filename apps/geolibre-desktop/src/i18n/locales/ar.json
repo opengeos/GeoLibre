@@ -1546,7 +1546,13 @@
       "moveUp": "نقل المدخل لأعلى",
       "moveDown": "نقل المدخل لأسفل",
       "showEntry": "إظهار المدخل",
-      "hideEntry": "إخفاء المدخل"
+      "hideEntry": "إخفاء المدخل",
+      "moreItems_zero": "+{{count}} عنصر إضافي",
+      "moreItems_one": "+{{count}} عنصر إضافي",
+      "moreItems_two": "+{{count}} عنصران إضافيان",
+      "moreItems_few": "+{{count}} عناصر إضافية",
+      "moreItems_many": "+{{count}} عنصرًا إضافيًا",
+      "moreItems_other": "+{{count}} عنصر إضافي"
     },
     "atlas": {
       "section": "أطلس (سلسلة خرائط)",

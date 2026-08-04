@@ -1398,7 +1398,9 @@
       "moveUp": "Déplacer l'entrée vers le haut",
       "moveDown": "Déplacer l'entrée vers le bas",
       "showEntry": "Afficher l'entrée",
-      "hideEntry": "Masquer l'entrée"
+      "hideEntry": "Masquer l'entrée",
+      "moreItems_one": "+{{count}} de plus",
+      "moreItems_other": "+{{count}} de plus"
     },
     "atlas": {
       "section": "Atlas (série de cartes)",

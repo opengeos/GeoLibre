@@ -1361,7 +1361,8 @@
       "moveUp": "項目を上に移動",
       "moveDown": "項目を下に移動",
       "showEntry": "項目を表示",
-      "hideEntry": "項目を非表示"
+      "hideEntry": "項目を非表示",
+      "moreItems_other": "ほか{{count}}件"
     },
     "atlas": {
       "section": "アトラス（地図シリーズ）",

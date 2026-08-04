@@ -1472,7 +1472,11 @@
       "moveUp": "Переместить запись вверх",
       "moveDown": "Переместить запись вниз",
       "showEntry": "Показать запись",
-      "hideEntry": "Скрыть запись"
+      "hideEntry": "Скрыть запись",
+      "moreItems_one": "+ ещё {{count}}",
+      "moreItems_few": "+ ещё {{count}}",
+      "moreItems_many": "+ ещё {{count}}",
+      "moreItems_other": "+ ещё {{count}}"
     },
     "atlas": {
       "section": "Атлас (серия карт)",

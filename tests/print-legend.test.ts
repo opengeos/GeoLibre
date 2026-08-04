@@ -425,9 +425,28 @@ describe("buildLegend", () => {
     });
   });
 
-  it("caps ramp swatches at six samples", () => {
+  it("caps graduated ramp swatches at six samples", () => {
     const stops = Array.from({ length: 12 }, (_, i) => ({
       value: i,
+      color: `#0000${(i % 10).toString()}0`,
+    }));
+    const legend = buildLegend([
+      makeLayer({
+        name: "Many",
+        style: {
+          vectorStyleMode: "graduated",
+          vectorStyleStops: stops,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 6);
+  });
+
+  it("lists every categorized class rather than sampling six (GH #1608)", () => {
+    // Categories are nominal, so a sampled subset silently drops values the
+    // reader has no way to infer from the rows that survive.
+    const stops = Array.from({ length: 14 }, (_, i) => ({
+      value: `class-${i.toString()}`,
       color: `#0000${(i % 10).toString()}0`,
     }));
     const legend = buildLegend([
@@ -439,7 +458,30 @@ describe("buildLegend", () => {
         } as LayerStyle,
       }),
     ]);
-    assert.equal(legend[0].swatches.length, 6);
+    assert.equal(legend[0].swatches.length, 14);
+    assert.deepEqual(
+      legend[0].swatches.map((s) => s.label),
+      stops.map((s) => s.value),
+    );
+  });
+
+  it("elides the tail of a runaway categorized class list", () => {
+    const stops = Array.from({ length: 140 }, (_, i) => ({
+      value: `class-${i.toString()}`,
+      color: "#000000",
+    }));
+    const legend = buildLegend([
+      makeLayer({
+        name: "Runaway",
+        style: {
+          vectorStyleMode: "categorized",
+          vectorStyleStops: stops,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 100);
+    assert.equal(legend[0].swatches[0].label, "class-0");
+    assert.equal(legend[0].swatches[99].label, "class-99");
   });
 
   it("gives raster and service layers a single neutral swatch", () => {

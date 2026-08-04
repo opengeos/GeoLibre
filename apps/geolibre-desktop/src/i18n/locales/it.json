@@ -1398,7 +1398,9 @@
       "moveUp": "Sposta voce in alto",
       "moveDown": "Sposta voce in basso",
       "showEntry": "Mostra voce",
-      "hideEntry": "Nascondi voce"
+      "hideEntry": "Nascondi voce",
+      "moreItems_one": "+{{count}} altra",
+      "moreItems_other": "+{{count}} altre"
     },
     "atlas": {
       "section": "Atlante (serie di mappe)",

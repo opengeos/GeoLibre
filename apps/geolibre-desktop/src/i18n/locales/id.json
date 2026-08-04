@@ -1361,7 +1361,8 @@
       "moveUp": "Pindahkan entri ke atas",
       "moveDown": "Pindahkan entri ke bawah",
       "showEntry": "Tampilkan entri",
-      "hideEntry": "Sembunyikan entri"
+      "hideEntry": "Sembunyikan entri",
+      "moreItems_other": "+{{count}} lagi"
     },
     "atlas": {
       "section": "Atlas (seri peta)",

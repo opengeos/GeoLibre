@@ -1398,7 +1398,9 @@
       "moveUp": "Girişi yukarı taşı",
       "moveDown": "Girişi aşağı taşı",
       "showEntry": "Girişi göster",
-      "hideEntry": "Girişi gizle"
+      "hideEntry": "Girişi gizle",
+      "moreItems_one": "+{{count}} daha",
+      "moreItems_other": "+{{count}} daha"
     },
     "atlas": {
       "section": "Atlas (harita serisi)",

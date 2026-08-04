@@ -1361,7 +1361,8 @@
       "moveUp": "항목 위로 이동",
       "moveDown": "항목 아래로 이동",
       "showEntry": "항목 표시",
-      "hideEntry": "항목 숨기기"
+      "hideEntry": "항목 숨기기",
+      "moreItems_other": "+{{count}}개 더"
     },
     "atlas": {
       "section": "아틀라스 (지도 시리즈)",

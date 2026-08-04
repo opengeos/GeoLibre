@@ -164,6 +164,57 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("elides class rows that do not fit the map body and says how many (GH #1608)", () => {
+    // A categorized layer can carry more classes than the body is tall; the
+    // legend is clipped to the body, so the overflow must be reported rather
+    // than disappearing at the edge.
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "otex",
+            name: "Farms",
+            swatches: Array.from({ length: 60 }, (_, i) => ({
+              color: "#00aa00",
+              label: `class-${i.toString()}`,
+            })),
+          },
+        ],
+        legendFormatNote: (count) => `+${count.toString()} more`,
+      }),
+    );
+    const drawn = fills.filter((f) => f.text.startsWith("class-"));
+    assert.ok(drawn.length > 0, "expected some class rows to be drawn");
+    assert.ok(drawn.length < 60, "expected the overflowing rows to be elided");
+    const note = fills.find((f) => f.text.startsWith("+") && f.text.endsWith("more"));
+    assert.ok(note, "expected a truncation note");
+    assert.equal(note.text, `+${(60 - drawn.length).toString()} more`);
+  });
+
+  it("draws no truncation note when every class row fits", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "otex",
+            name: "Farms",
+            swatches: Array.from({ length: 4 }, (_, i) => ({
+              color: "#00aa00",
+              label: `class-${i.toString()}`,
+            })),
+          },
+        ],
+        legendFormatNote: (count) => `+${count.toString()} more`,
+      }),
+    );
+    assert.equal(fills.filter((f) => f.text.startsWith("class-")).length, 4);
+    assert.ok(!fills.some((f) => f.text.endsWith("more")));
+  });
+
   it("renders the layer name for a genuine single-symbol entry", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(

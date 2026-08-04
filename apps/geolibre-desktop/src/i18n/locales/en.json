@@ -1398,7 +1398,9 @@
       "moveUp": "Move entry up",
       "moveDown": "Move entry down",
       "showEntry": "Show entry",
-      "hideEntry": "Hide entry"
+      "hideEntry": "Hide entry",
+      "moreItems_one": "+{{count}} more",
+      "moreItems_other": "+{{count}} more"
     },
     "atlas": {
       "section": "Atlas (map series)",

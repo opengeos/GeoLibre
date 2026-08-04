@@ -1398,7 +1398,9 @@
       "moveUp": "ჩანაწერის აწევა",
       "moveDown": "ჩანაწერის ჩამოწევა",
       "showEntry": "ჩანაწერის ჩვენება",
-      "hideEntry": "ჩანაწერის დამალვა"
+      "hideEntry": "ჩანაწერის დამალვა",
+      "moreItems_one": "+{{count}} მეტი",
+      "moreItems_other": "+{{count}} მეტი"
     },
     "atlas": {
       "section": "ატლასი (რუკების სერია)",

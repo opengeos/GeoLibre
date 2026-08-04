@@ -1398,7 +1398,9 @@
       "moveUp": "प्रविष्टि ऊपर ले जाएं",
       "moveDown": "प्रविष्टि नीचे ले जाएं",
       "showEntry": "प्रविष्टि दिखाएं",
-      "hideEntry": "प्रविष्टि छिपाएं"
+      "hideEntry": "प्रविष्टि छिपाएं",
+      "moreItems_one": "+{{count}} और",
+      "moreItems_other": "+{{count}} और"
     },
     "atlas": {
       "section": "एटलस (मानचित्र शृंखला)",

@@ -1398,7 +1398,9 @@
       "moveUp": "Item omhoog verplaatsen",
       "moveDown": "Item omlaag verplaatsen",
       "showEntry": "Item weergeven",
-      "hideEntry": "Item verbergen"
+      "hideEntry": "Item verbergen",
+      "moreItems_one": "+{{count}} meer",
+      "moreItems_other": "+{{count}} meer"
     },
     "atlas": {
       "section": "Atlas (kaartenreeks)",
