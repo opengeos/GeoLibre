@@ -584,7 +584,10 @@ def create_app(
     @app.post("/api/projects/{project_id}/forks", status_code=201)
     def fork_project(
         project_id: str,
-        body: ForkRequest,
+        # Defaulted so the body may be omitted entirely: "fork this project" with
+        # no options is the common call, and every field already has a default.
+        # Without this FastAPI treats the body as required and answers 422.
+        body: ForkRequest = ForkRequest(),
         account: Account = Depends(required_account),
         session: Session = Depends(db),
     ):

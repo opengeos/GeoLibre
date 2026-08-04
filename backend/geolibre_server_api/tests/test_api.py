@@ -144,6 +144,13 @@ def test_thumbnail_fork_and_slug_collision(client):
     assert forked.status_code == 201
     assert forked.json()["project"]["username"] == "grace"
     assert client.get(f"/api/projects/{project['id']}").json()["project"]["forkCount"] == 1
+
+    # Forking with no body at all is the common "fork this project" call, and the
+    # documented default is private. Sending a body here would not exercise it.
+    bodyless = client.post(f"/api/projects/{project['id']}/forks", headers=auth(recipient))
+    assert bodyless.status_code == 201
+    assert bodyless.json()["project"]["visibility"] == "private"
+    assert client.get(f"/api/projects/{project['id']}").json()["project"]["forkCount"] == 2
     assert client.delete(path, headers=auth(owner)).status_code == 204
     assert client.get(path).status_code == 404
 
