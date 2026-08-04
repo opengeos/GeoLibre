@@ -313,8 +313,20 @@ repository root, start the web app, projects server, Node collaboration relay,
 and Postgres together:
 
 ```bash
-docker compose up --build
+POSTGRES_PASSWORD=choose-a-password docker compose up --build
 ```
+
+`POSTGRES_PASSWORD` is required, not defaulted: that account owns all project
+metadata, and a password committed to this repository would be identical on
+every deployment. Compose stops with an error naming the variable if it is
+unset. Set it in your shell, an `.env` file next to `docker-compose.yml`, or
+your orchestrator's secret store.
+
+Postgres only applies this password when it initializes its data directory, so
+changing it later does **not** change the password on an existing volume: the
+projects server then fails authentication against a database that still expects
+the old one. To rotate it, either `ALTER USER` inside the running database or
+recreate the volume.
 
 Open `http://localhost:8080`. The projects API is exposed at
 `http://localhost:8000` and the relay at `ws://localhost:8787`; the web
@@ -322,8 +334,25 @@ container's runtime configuration is populated with those browser-reachable
 URLs. For a real deployment, set `GEOLIBRE_SHARE_URL`,
 `GEOLIBRE_COLLAB_URL`, `GEOLIBRE_VIEWER_URL`, and
 `GEOLIBRE_CORS_ORIGINS` to the public TLS origins before starting Compose.
-Change `POSTGRES_PASSWORD` from its development default. It is substituted into
-a connection URL verbatim, so two characters need care:
+
+Behind a reverse proxy, only the web container should be reachable from outside
+the host. The Compose file publishes the projects server on `8000` and the relay
+on `8787` for local use, and pointing the browser URLs at your proxy does not
+stop anyone connecting to those listeners directly. Bind them to loopback (or
+drop the mappings entirely and let the proxy reach them over the Compose
+network) with an override file:
+
+```yaml
+# docker-compose.override.yml
+services:
+  geolibre-server:
+    ports: ["127.0.0.1:8000:8000"]
+  geolibre-collab:
+    ports: ["127.0.0.1:8787:8787"]
+```
+
+The password is substituted into a connection URL verbatim, so two characters
+need care:
 
 - `@` splits the URL early. `p@ssw0rd` is read as password `p` against host
   `ssw0rd@postgres`, and the projects server restarts in a loop on a psycopg

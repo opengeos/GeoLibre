@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { parseStoredChat } from "@geolibre/collab-core";
+import { normalizeMode, parseStoredChat } from "@geolibre/collab-core";
 import type { CollabChatMessage, CollaborationMode } from "@geolibre/collab-core";
 
 export interface StoredSession {
@@ -72,7 +72,10 @@ export class SessionStore {
     return {
       id: row.id,
       hostToken: row.host_token,
-      mode: row.mode === "view-only" ? "view-only" : "co-edit",
+      // normalizeMode rather than an inline ternary: if the shared contract
+      // gains a third mode, this would silently downgrade it to co-edit while
+      // the relay accepted it on the wire.
+      mode: normalizeMode(row.mode),
       rev: row.rev,
       snapshot: parseJson(row.snapshot, null),
       // Shape-checked per entry, not just JSON-parsed: a corrupt or tampered

@@ -289,21 +289,6 @@ def create_app(
     app = FastAPI(title="GeoLibre projects and identity API", version="1.0")
     app.state.engine = engine
     app.state.storage = object_storage
-    origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",") if x.strip()]
-    # CORSMiddleware treats a "*" anywhere in the list as allow-all, so a value
-    # like "*,https://app.example" would otherwise pair allow-all with
-    # allow_credentials=True (the list is not exactly ["*"]) and accept
-    # credentialed requests from any origin. Wildcard wins, and drops credentials
-    # with it.
-    wildcard = "*" in origins
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"] if wildcard else origins,
-        allow_credentials=not wildcard,
-        allow_methods=["*"],
-        allow_headers=["Authorization", "Content-Type"],
-    )
-
     # A declared Content-Length past the largest thing any route accepts is
     # rejected before the body is read at all. Without this, the JSON `content`
     # routes let Pydantic materialize the whole payload in memory *before*
@@ -322,6 +307,25 @@ def create_app(
         if declared and declared.isdigit() and int(declared) > body_ceiling:
             return JSONResponse({"error": "request body too large"}, status_code=413)
         return await call_next(request)
+
+    origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",") if x.strip()]
+    # CORSMiddleware treats a "*" anywhere in the list as allow-all, so a value
+    # like "*,https://app.example" would otherwise pair allow-all with
+    # allow_credentials=True (the list is not exactly ["*"]) and accept
+    # credentialed requests from any origin. Wildcard wins, and drops credentials
+    # with it.
+    wildcard = "*" in origins
+    # Registered last so it is the outermost layer: Starlette wraps in reverse
+    # order of registration, and with limit_body outermost its 413 returned
+    # without CORS headers, leaving a browser unable to read the documented
+    # error body.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if wildcard else origins,
+        allow_credentials=not wildcard,
+        allow_methods=["*"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
     @app.get("/health")
     def health():

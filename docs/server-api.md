@@ -235,8 +235,10 @@ Requires ownership. Deletes metadata and stored objects. Response: `204`.
 ### `POST /api/projects/{id}/forks`
 
 Requires auth. Creates a new project owned by the caller from the visible
-source's latest content. It accepts `{"visibility":"private"}` (default
-`private`) and returns `201` with `{"project": <project>}`. The source
+source's latest content. The request body is **optional**: `{"visibility": ...}`
+selects the fork's visibility, and omitting the body entirely (the common "fork
+this project" call) must behave as `{"visibility":"private"}` rather than
+returning `422`. Responds `201` with `{"project": <project>}`. The source
 `forkCount` increases atomically.
 
 ### Raw project and website-compatible routes

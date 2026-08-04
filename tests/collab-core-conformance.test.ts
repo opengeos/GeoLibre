@@ -48,7 +48,14 @@ describe("collaboration relay conformance", () => {
 
     guest.editOverride = false;
     assert.equal(participantCanEdit(guest, "co-edit"), false);
-    assert.equal(authorizeSnapshot(guest, "co-edit", 20).ok, false);
+    // The message differs from the session-level refusal and is shown to the
+    // user by both relays, so pin it: asserting only `ok === false` would let a
+    // regression swap in the generic "This session is view-only." text.
+    assert.deepEqual(authorizeSnapshot(guest, "co-edit", 20), {
+      ok: false,
+      code: "forbidden",
+      message: "The host has set you to view-only.",
+    });
   });
 
   it("gates set-mode and set-participant-mode to the host", () => {

@@ -416,8 +416,10 @@ export class CollabSession extends DurableObject<Env> {
       });
       return;
     }
-    // `message` is untrusted JSON, so guard the lookup key's type (mirrors the
-    // strict-boolean coercion below) before matching it against attachments.
+    // `message` is untrusted JSON; setParticipantOverride does the type guard on
+    // the lookup key and the strict-boolean coercion of `canEdit`, and returns
+    // false for an unknown or already-disconnected target. That case needs no
+    // error frame: the disconnect broadcast already reconciles the host's view.
     const socketsWithAttachments = this.attachedSockets();
     const changed = setParticipantOverride(
       attachment,
@@ -426,12 +428,11 @@ export class CollabSession extends DurableObject<Env> {
       message.canEdit,
     );
     if (!changed) return;
+    // `changed` implies the entry is in this same snapshot -- setParticipantOverride
+    // found and mutated it, with no await in between -- so this always resolves.
     const target = socketsWithAttachments.find(
       (entry) => entry.attachment.clientId === message.clientId,
     );
-    // Target disconnected between the host's click and this frame: the
-    // disconnect already broadcasts an updated roster, so the host's view (and
-    // the now-absent toggle) reconciles on its own; no error frame needed.
     if (!target) return;
     target.socket.serializeAttachment(target.attachment);
     // Everyone re-derives effective permission from the participants list (the

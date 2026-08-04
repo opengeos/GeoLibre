@@ -21,6 +21,9 @@ Configuration:
 - `GEOLIBRE_VIEWER_URL`: GeoLibre viewer origin.
 - `GEOLIBRE_CORS_ORIGINS`: comma-separated web origins, default `*`.
 - `GEOLIBRE_MAX_PROJECT_BYTES`, `GEOLIBRE_MAX_THUMBNAIL_BYTES`: upload limits.
+- `GEOLIBRE_HOST`, `GEOLIBRE_PORT`: bind address and port for the
+  `geolibre-server-api` entry point, default `0.0.0.0` and `8000`. Bind to
+  `127.0.0.1` when a reverse proxy fronts the service.
 
 ## Volume ownership
 

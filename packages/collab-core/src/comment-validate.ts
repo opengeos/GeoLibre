@@ -150,10 +150,17 @@ export function validateComment(raw: unknown): ValidatedComment | null {
       : new Date().toISOString();
 
   const replies: ValidatedReply[] = [];
+  // Ids deduplicated here as well as in the relay's `reply` action, which already
+  // skips a reply whose id exists. Inline replies on an incoming comment were the
+  // one path that could persist two replies sharing an id, which peers then
+  // render as duplicate keys.
+  const replyIds = new Set<string>();
   if (Array.isArray(o.replies)) {
     for (const r of o.replies.slice(0, MAX_REPLIES_PER_COMMENT)) {
       const validated = validateReply(r);
-      if (validated) replies.push(validated);
+      if (!validated || replyIds.has(validated.id)) continue;
+      replyIds.add(validated.id);
+      replies.push(validated);
     }
   }
 

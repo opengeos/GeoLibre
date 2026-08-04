@@ -34,7 +34,7 @@ services:
       # tells operators to choose a strong password, which is exactly when this
       # happens. Avoid both, or percent-encode them here (%40, %25) while
       # POSTGRES_PASSWORD keeps the literal value.
-      GEOLIBRE_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-geolibre}:${POSTGRES_PASSWORD:-geolibre}@postgres:5432/${POSTGRES_DB:-geolibre}"
+      GEOLIBRE_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-geolibre}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see docs/getting-started.md)}@postgres:5432/${POSTGRES_DB:-geolibre}"
       GEOLIBRE_STORAGE_PATH: /data/objects
       GEOLIBRE_PUBLIC_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
       GEOLIBRE_VIEWER_URL: "${GEOLIBRE_VIEWER_URL:-http://localhost:8080}"
@@ -90,7 +90,9 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-geolibre}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-geolibre}"
+      # Required, not defaulted: this account owns all project metadata, and a
+      # password committed to the repository is the same on every deployment.
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see docs/getting-started.md)}"
       POSTGRES_DB: "${POSTGRES_DB:-geolibre}"
     volumes:
       - geolibre-postgres:/var/lib/postgresql/data

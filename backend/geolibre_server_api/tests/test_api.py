@@ -170,10 +170,19 @@ def test_oversized_body_is_rejected_before_parsing(client):
     """
     owner = account(client)
     declared = str(1024 * 1024 * 1024)
-    headers = {**auth(owner), "content-type": "application/json", "content-length": declared}
+    headers = {
+        **auth(owner),
+        "content-type": "application/json",
+        "content-length": declared,
+        "origin": "https://app.example",
+    }
     request = client.build_request("POST", "/api/projects", headers=headers, content=b"{}")
     assert request.headers["content-length"] == declared
-    assert client.send(request).status_code == 413
+    response = client.send(request)
+    assert response.status_code == 413
+    # The rejection must still pass back out through CORSMiddleware, or a browser
+    # cannot read the error body it just received.
+    assert response.headers.get("access-control-allow-origin") is not None
 
 
 def test_fully_escaped_json_within_the_limit_is_accepted(tmp_path, monkeypatch):

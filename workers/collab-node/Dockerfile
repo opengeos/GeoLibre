@@ -11,13 +11,15 @@ RUN npm run build -w geolibre-collab-node
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production PORT=8787 COLLAB_DB_PATH=/data/collab.sqlite
 WORKDIR /app
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/workers/collab-node/package.json ./workers/collab-node/package.json
-COPY --from=build /app/workers/collab-node/dist ./workers/collab-node/dist
+# --chown on the COPY rather than a recursive chown afterwards: chowning /app
+# rewrites every file, node_modules included, into a second copy in a new layer.
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/workers/collab-node/package.json ./workers/collab-node/package.json
+COPY --from=build --chown=node:node /app/workers/collab-node/dist ./workers/collab-node/dist
 # /data is created and owned here so a named volume mounted over it inherits the
 # ownership; Docker only copies image ownership onto a volume when the path
 # already exists, otherwise the mountpoint lands root-owned.
-RUN mkdir -p /data && chown -R node:node /data /app
+RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
 EXPOSE 8787
 USER node
