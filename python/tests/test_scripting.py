@@ -326,9 +326,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
         }
     ]
     m.project["plugins"] = {
-        "manifestUrls": [
-            "https://example.com/plugin.json?sasToken=python-manifest-secret"
-        ],
+        "manifestUrls": ["https://example.com/plugin.json?sasToken=python-manifest-secret"],
         "activePluginIds": ["external"],
         "mapControlPositions": {},
         "settings": {"external": {"arbitrary": "python-plugin-secret"}},

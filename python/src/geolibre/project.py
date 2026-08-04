@@ -73,8 +73,7 @@ def _redact_url(value: str) -> str:
             pair
             for pair in params.split("&")
             if pair
-            and (name := unquote_plus(pair.split("=", 1)[0]).lower())
-            not in _CREDENTIAL_URL_PARAMS
+            and (name := unquote_plus(pair.split("=", 1)[0]).lower()) not in _CREDENTIAL_URL_PARAMS
             and not name.startswith("x-amz-")
         )
 
@@ -88,11 +87,7 @@ def _redact_url(value: str) -> str:
             authority_end = len(base)
         authority = base[authority_start:authority_end]
         if "@" in authority:
-            base = (
-                base[:authority_start]
-                + authority.rsplit("@", 1)[1]
-                + base[authority_end:]
-            )
+            base = base[:authority_start] + authority.rsplit("@", 1)[1] + base[authority_end:]
     kept_query = keep_params(query) if query_separator else ""
     kept_fragment = keep_params(fragment) if separator and "=" in fragment else fragment
     return (
@@ -143,8 +138,7 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
         manifest_urls = plugins.get("manifestUrls")
         if isinstance(manifest_urls, list):
             plugins["manifestUrls"] = [
-                _redact_url(url) if isinstance(url, str) else url
-                for url in manifest_urls
+                _redact_url(url) if isinstance(url, str) else url for url in manifest_urls
             ]
         plugins["settings"] = {}
     if "metadata" in safe:
