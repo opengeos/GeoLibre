@@ -2142,10 +2142,16 @@ export class MapController {
     if (!this.map) return undefined;
 
     for (const layer of layers.slice(layerIndex + 1)) {
-      const beforeLayer = this.getCandidateStyleLayers(layer).find(({ id }) =>
-        this.map?.getLayer(id),
-      );
-      if (beforeLayer) return beforeLayer.id;
+      const candidateIds = new Set(this.getCandidateStyleLayers(layer).map(({ id }) => id));
+      // A logical layer can render through several MapLibre style layers. KML
+      // icon points, for example, use a symbol companion plus a fallback
+      // circle for features without icons. Anchor beneath whichever companion
+      // is currently lowest in the real style order so the inserted layer
+      // cannot split that logical layer in two.
+      const bottommostId = (this.map.getStyle().layers ?? []).find(({ id }) =>
+        candidateIds.has(id),
+      )?.id;
+      if (bottommostId) return bottommostId;
     }
 
     if (layerIndex >= 0) {
