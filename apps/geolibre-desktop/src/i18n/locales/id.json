@@ -1755,6 +1755,7 @@
       "tokenDescription": "Project > Share menggunakan token ini untuk mengunggah peta Anda ke {{shareHost}}. Buka <tokenLink>{{shareHost}}/settings</tokenLink>, buat token di Settings > API tokens, lalu tempelkan ke bidang di bawah.",
       "tokenStorageNote": "Disimpan secara lokal di perangkat ini dan hanya dikirim ke {{shareHost}} untuk mengautentikasi unggahan. Pada build web, token ini berbagi penyimpanan browser yang sama dengan data situs lainnya, jadi cabut aksesnya di {{shareHost}} jika perangkat Anda disusupi.",
       "tokenUnavailable": "Penerapan ini tidak memiliki server pembagian proyek yang dikonfigurasi, sehingga token API tidak diperlukan.",
+      "tokenHostInvalid": "Alamat server pembagian proyek pada penerapan ini tidak valid, sehingga token ini tidak dapat digunakan.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Token Cesium Ion",
       "cesiumTokenDescription": "Bola dunia 3D (panel tampilan terpisah) menggunakan citra dan medan dunia Cesium Ion, yang memerlukan token akses. Buat akun gratis di <tokenLink>ion.cesium.com/tokens</tokenLink>, salin token akses default Anda, dan tempelkan di bawah. Tanpa token, tombol bola dunia 3D disembunyikan.",

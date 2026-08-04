@@ -1795,6 +1795,7 @@
       "tokenDescription": "Project > Delen gebruikt dit token om uw kaarten te uploaden naar {{shareHost}}. Open <tokenLink>{{shareHost}}/settings</tokenLink>, maak een token aan onder Instellingen > API-tokens en plak het vervolgens in het onderstaande veld.",
       "tokenStorageNote": "Lokaal opgeslagen op dit apparaat en alleen verzonden naar {{shareHost}} om uploads te verifiëren. In de webversie wordt dezelfde browseropslag gebruikt als voor andere sitegegevens; trek het token daarom in op {{shareHost}} als uw machine gecompromitteerd is.",
       "tokenUnavailable": "Deze implementatie heeft geen server voor het delen van projecten geconfigureerd, dus er is geen API-token nodig.",
+      "tokenHostInvalid": "Het adres van de server voor het delen van projecten in deze implementatie is ongeldig, dus dit token kan niet worden gebruikt.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion-token",
       "cesiumTokenDescription": "De 3D-globe (een gesplitst weergavepaneel) gebruikt wereldbeelden en terrein van Cesium Ion, waarvoor een toegangstoken nodig is. Maak een gratis account aan op <tokenLink>ion.cesium.com/tokens</tokenLink>, kopieer uw standaard toegangstoken en plak het hieronder. Zonder token is de schakelaar voor de 3D-globe verborgen.",

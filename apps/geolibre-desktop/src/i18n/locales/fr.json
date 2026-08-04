@@ -1795,6 +1795,7 @@
       "tokenDescription": "Projet > Partager utilise ce jeton pour téléverser vos cartes vers {{shareHost}}. Ouvrez <tokenLink>{{shareHost}}/settings</tokenLink>, créez un jeton sous Paramètres > Jetons API, puis collez-le dans le champ ci-dessous.",
       "tokenStorageNote": "Stocké localement sur cet appareil et envoyé uniquement à {{shareHost}} pour authentifier les téléversements. Dans la version web, il partage le même stockage de navigateur que les autres données du site, alors révoquez-le sur {{shareHost}} si votre machine est compromise.",
       "tokenUnavailable": "Aucun serveur de partage de projets n'est configuré pour ce déploiement, aucun jeton API n'est donc nécessaire.",
+      "tokenHostInvalid": "L'adresse du serveur de partage de projets de ce déploiement n'est pas valide, ce jeton ne peut donc pas être utilisé.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Jeton Cesium Ion",
       "cesiumTokenDescription": "Le globe 3D (un volet en vue partagée) utilise l'imagerie mondiale et le relief de Cesium Ion, qui nécessitent un jeton d'accès. Créez un compte gratuit sur <tokenLink>ion.cesium.com/tokens</tokenLink>, copiez votre jeton d'accès par défaut, puis collez-le ci-dessous. Sans jeton, le bouton du globe 3D est masqué.",

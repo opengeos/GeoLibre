@@ -1795,6 +1795,7 @@
       "tokenDescription": "Projekt > Teilen verwendet dieses Token, um Ihre Karten auf {{shareHost}} hochzuladen. Öffnen Sie <tokenLink>{{shareHost}}/settings</tokenLink>, erstellen Sie ein Token unter Einstellungen > API-Token und fügen Sie es dann in das Feld unten ein.",
       "tokenStorageNote": "Wird lokal auf diesem Gerät gespeichert und nur an {{shareHost}} gesendet, um Uploads zu authentifizieren. Im Web-Build nutzt es denselben Browser-Speicher wie andere Website-Daten. Widerrufen Sie es daher auf {{shareHost}}, falls Ihr Gerät kompromittiert wurde.",
       "tokenUnavailable": "In dieser Bereitstellung ist kein Server zum Teilen von Projekten konfiguriert, daher ist kein API-Token erforderlich.",
+      "tokenHostInvalid": "Die Adresse des Servers zum Teilen von Projekten in dieser Bereitstellung ist ungültig, daher kann dieses Token nicht verwendet werden.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium-Ion-Token",
       "cesiumTokenDescription": "Der 3D-Globus (ein geteiltes Ansichtsfenster) verwendet Cesium-Ion-Weltbilder und -Gelände, wofür ein Zugriffstoken erforderlich ist. Erstellen Sie ein kostenloses Konto unter <tokenLink>ion.cesium.com/tokens</tokenLink>, kopieren Sie Ihr Standard-Zugriffstoken und fügen Sie es unten ein. Ohne Token ist der 3D-Globus-Umschalter ausgeblendet.",

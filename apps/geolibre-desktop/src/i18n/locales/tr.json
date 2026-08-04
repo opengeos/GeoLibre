@@ -1795,6 +1795,7 @@
       "tokenDescription": "Proje > Paylaş, haritalarınızı {{shareHost}} adresine yüklemek için bu belirteci kullanır. <tokenLink>{{shareHost}}/settings</tokenLink> adresini açın, Ayarlar > API belirteçleri altında bir belirteç oluşturun, ardından aşağıdaki alana yapıştırın.",
       "tokenStorageNote": "Bu cihazda yerel olarak saklanır ve yalnızca yüklemeleri doğrulamak için {{shareHost}} adresine gönderilir. Web derlemesinde diğer site verileriyle aynı tarayıcı deposunu paylaşır; dolayısıyla makinenizin güvenliği ihlal edilirse {{shareHost}} üzerinden iptal edin.",
       "tokenUnavailable": "Bu dağıtımda yapılandırılmış bir proje paylaşım sunucusu yok, bu nedenle API belirtecine gerek yoktur.",
+      "tokenHostInvalid": "Bu dağıtımın proje paylaşım sunucusu adresi geçersiz, bu nedenle bu belirteç kullanılamaz.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion belirteci",
       "cesiumTokenDescription": "3B küre (bölünmüş görünümlü bir bölme) Cesium Ion dünya görüntüleri ve arazisini kullanır; bunlar bir erişim belirteci gerektirir. <tokenLink>ion.cesium.com/tokens</tokenLink> adresinde ücretsiz bir hesap oluşturun, varsayılan erişim belirtecinizi kopyalayın ve aşağıya yapıştırın. Belirteç olmadan 3B küre anahtarı gizlenir.",

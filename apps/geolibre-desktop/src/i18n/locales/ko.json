@@ -1755,6 +1755,7 @@
       "tokenDescription": "프로젝트 > 공유는 이 토큰을 사용하여 지도를 {{shareHost}}에 업로드합니다. <tokenLink>{{shareHost}}/settings</tokenLink>를 열고 설정 > API 토큰에서 토큰을 생성한 다음 아래 필드에 붙여넣으세요.",
       "tokenStorageNote": "이 기기에 로컬로 저장되며 업로드 인증을 위해 {{shareHost}}에만 전송됩니다. 웹 빌드에서는 다른 사이트 데이터와 동일한 브라우저 저장소를 공유하므로, 기기가 침해된 경우 {{shareHost}}에서 토큰을 폐기하세요.",
       "tokenUnavailable": "이 배포에는 프로젝트 공유 서버가 구성되어 있지 않으므로 API 토큰이 필요하지 않습니다.",
+      "tokenHostInvalid": "이 배포의 프로젝트 공유 서버 주소가 올바르지 않아 이 토큰을 사용할 수 없습니다.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Cesium Ion 토큰",
       "cesiumTokenDescription": "3D 지구본(분할 화면 패널)은 접근 토큰이 필요한 Cesium Ion 세계 영상과 지형을 사용합니다. <tokenLink>ion.cesium.com/tokens</tokenLink>에서 무료 계정을 만들고 기본 접근 토큰을 복사하여 아래에 붙여넣으세요. 토큰이 없으면 3D 지구본 전환 버튼이 숨겨집니다.",

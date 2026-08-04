@@ -1795,6 +1795,7 @@
       "tokenDescription": "Progetto > Condividi usa questo token per caricare le tue mappe su {{shareHost}}. Apri <tokenLink>{{shareHost}}/settings</tokenLink>, crea un token in Settings > API tokens, quindi incollalo nel campo sottostante.",
       "tokenStorageNote": "Memorizzato localmente su questo dispositivo e inviato solo a {{shareHost}} per autenticare i caricamenti. Nella build web condivide lo stesso archivio del browser degli altri dati del sito, quindi revocalo su {{shareHost}} se il tuo computer viene compromesso.",
       "tokenUnavailable": "Questo deployment non ha alcun server di condivisione dei progetti configurato, quindi non è necessario alcun token API.",
+      "tokenHostInvalid": "L'indirizzo del server di condivisione dei progetti di questo deployment non è valido, quindi questo token non può essere usato.",
       "tokenPlaceholder": "glb_…",
       "cesiumTokenTitle": "Token Cesium Ion",
       "cesiumTokenDescription": "Il globo 3D (un riquadro a schermo diviso) usa le immagini satellitari e il terreno di Cesium Ion, che richiedono un token di accesso. Crea un account gratuito su <tokenLink>ion.cesium.com/tokens</tokenLink>, copia il tuo token di accesso predefinito e incollalo di seguito. Senza un token, l'interruttore del globo 3D resta nascosto.",

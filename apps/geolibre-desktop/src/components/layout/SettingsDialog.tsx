@@ -91,7 +91,7 @@ import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
-import { resolveShareBaseUrl, shareHostLabel } from "../../lib/share-geolibre";
+import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
@@ -383,14 +383,21 @@ export function SettingsDialog({
   // Derived from the resolved host so a self-hosted deployment links to its own
   // page; null when the deployment configured no share host, in which case the
   // description renders without a link rather than pointing at a stranger's site.
-  const shareBaseUrl = resolveShareBaseUrl();
+  const shareHostState = resolveShareHost();
+  const shareBaseUrl = shareHostState.baseUrl;
   const shareHost = shareHostLabel();
   const shareSettingsUrl = shareBaseUrl ? `${shareBaseUrl}/settings` : null;
   // No usable host (sharing turned off, or a configured address that was
   // rejected) means the token field is dead: it would authenticate against a
   // server this deployment never talks to. Say so instead of rendering guidance
-  // that names the public hosted service — the whole point of the opt-out.
+  // that names the public hosted service — the whole point of the opt-out. The
+  // two unusable states get different copy: "not configured" would send an
+  // operator who typo'd the variable looking for one they never set.
   const shareTokenUsable = shareBaseUrl != null;
+  const shareTokenUnavailableMessage =
+    shareHostState.status === "invalid"
+      ? t("settings.env.tokenHostInvalid")
+      : t("settings.env.tokenUnavailable");
   const { language, options: languageOptions, setLanguage } = useLanguage();
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
@@ -2321,7 +2328,7 @@ export function SettingsDialog({
                       </>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        {t("settings.env.tokenUnavailable")}
+                        {shareTokenUnavailableMessage}
                       </p>
                     )}
                   </div>
