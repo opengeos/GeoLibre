@@ -16,7 +16,7 @@ index 648b277942..9fa86fd412 100644
 @@ -216,6 +219,28 @@ describe('render to texture', () => {
          expect(layersDrawn).toBe(3);
      });
- 
+
 +    test('skips symbols below a later opaque draped raster', () => {
 +        const symbolLayerAboveRaster = {
 +            ...symbolLayer,
@@ -63,7 +63,7 @@ index 018125552b..71dcf4f77b 100644
 +            const layer = style._layers[this._renderableLayerIds[i]];
 +            if (layer.type === 'raster' && layer.paint.get('raster-opacity') === 1) this._topOpaqueDrapedRasterIndex = i;
 +        }
- 
+
          this._coordsAscending = {};
          for (const id in style.tileManagers) {
 @@ -138,6 +144,7 @@ export class RenderToTexture {
@@ -71,13 +71,13 @@ index 018125552b..71dcf4f77b 100644
      renderLayer(layer: StyleLayer, renderOptions: RenderOptions): boolean {
          if (layer.isHidden(this.painter.transform.zoom)) return false;
 +        if (this._isSymbolBelowOpaqueDrapedRaster(layer)) return true;
- 
+
          const options: RenderOptions = {...renderOptions, isRenderingToTexture: true};
          const type = layer.type;
 @@ -185,4 +192,9 @@ export class RenderToTexture {
          return false;
      }
- 
+
 +    _isSymbolBelowOpaqueDrapedRaster(layer: StyleLayer): boolean {
 +        if (layer.type !== 'symbol' || this._topOpaqueDrapedRasterIndex < 0) return false;
 +        const layerIndex = this._renderableLayerIds.indexOf(layer.id);
@@ -103,7 +103,7 @@ index 71dcf4f77b..dd1045a19a 100644
  import type {StyleLayer} from '../style/style_layer.ts';
  import {ImageSource} from '../source/image_source.ts';
 +import {isRasterStyleLayer} from '../style/style_layer/raster_style_layer.ts';
- 
+
  /**
   * lookup table which layers should rendered to texture
 @@ -87,7 +88,7 @@ export class RenderToTexture {
@@ -113,5 +113,5 @@ index 71dcf4f77b..dd1045a19a 100644
 -            if (layer.type === 'raster' && layer.paint.get('raster-opacity') === 1) this._topOpaqueDrapedRasterIndex = i;
 +            if (isRasterStyleLayer(layer) && layer.paint.get('raster-opacity') === 1) this._topOpaqueDrapedRasterIndex = i;
          }
- 
+
          this._coordsAscending = {};
