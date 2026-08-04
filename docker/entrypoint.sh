@@ -131,6 +131,7 @@ fi
 python -c '
 import json
 import os
+import re
 from urllib.parse import urlsplit
 
 deployment = {}
@@ -176,11 +177,26 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
     the boot instead puts the error where an operator will actually see it.
     """
     parsed = urlsplit(value)
-    # Checked before the loopback shortcut below, so the guarantee holds for every
-    # accepted value. Both of these are echoed to stdout further down, so a
-    # credentialed URL would also land in the container logs.
+    # Both checks below run before the loopback shortcut, so their guarantees hold
+    # for every accepted value. That ordering is load-bearing: urlsplit() parses
+    # ws://localhost:8080"; ... with hostname "localhost", which would match the
+    # loopback allowlist while netloc still carried the rest.
+    #
+    # Credentials: both values are echoed to stdout further down, so a credentialed
+    # URL would also land in the container logs.
     if parsed.username or parsed.password:
         raise SystemExit(f"ERROR: {name} must not embed credentials.")
+    # Character set: netloc is substituted unescaped into the double-quoted CSP
+    # add_header value in nginx.conf.template, so anything outside a hostname,
+    # port, or IPv6 literal could break out of that string and inject nginx
+    # directives. urlsplit() puts everything up to the next /, ? or # into netloc,
+    # quotes and semicolons included. Same discipline as GEOLIBRE_TRUSTED_PROXIES
+    # (parsed through ipaddress) and GEOLIBRE_AI_PROXY_URL (no path/query/fragment).
+    if re.search(r"[^A-Za-z0-9.\-:\[\]]", parsed.netloc):
+        raise SystemExit(
+            f"ERROR: {name} host may contain only letters, digits, dots, hyphens, "
+            f"colons, and brackets, not {parsed.netloc!r}."
+        )
     if parsed.scheme in loopback_schemes and parsed.hostname in loopback_hosts:
         return value
     if parsed.scheme not in schemes or not parsed.netloc:
@@ -248,6 +264,7 @@ fi
 # surprises).
 python -c '
 import os
+import re
 from urllib.parse import urlsplit
 
 token = os.environ["GEOLIBRE_SIDECAR_TOKEN"]
@@ -262,8 +279,12 @@ collab = os.environ.get("GEOLIBRE_COLLAB_URL", "").strip()
 collab_src = ""
 if collab:
     parsed = urlsplit(collab)
-    if parsed.scheme and parsed.netloc:
-        collab_src = f" {parsed.scheme}://{parsed.netloc}"
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    # Re-checked here rather than trusting service_url(): this string goes into a
+    # quoted nginx directive, so it must be a plain origin or nothing at all.
+    if not re.fullmatch(r"[A-Za-z]+://[A-Za-z0-9.\-:\[\]]+", origin):
+        raise SystemExit(f"ERROR: GEOLIBRE_COLLAB_URL is not a plain origin: {collab!r}.")
+    collab_src = f" {origin}"
 
 src = open("/etc/nginx/nginx.conf.template").read()
 open("/etc/nginx/conf.d/default.conf", "w").write(
