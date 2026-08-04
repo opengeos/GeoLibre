@@ -109,6 +109,36 @@ describe("project credential redaction", () => {
     );
   });
 
+  it("removes credential-named configuration fields in every spelling", () => {
+    const project = credentialProject();
+    project.layers[0].source = {
+      sasToken: "sas-secret",
+      bearer: "bearer-secret",
+      auth: { user: "u", pass: "auth-secret" },
+      "subscription-key": "subscription-secret",
+      api_key: "underscore-secret",
+      pwd: "pwd-secret",
+      // Azure SAS positional parameters are credentials only inside a query
+      // string; as configuration field names they are ordinary state.
+      sr: 4326,
+      key: "layer-identifier",
+    };
+
+    const { project: safe } = redactProjectCredentials(project);
+    const serialized = serializeProject(safe);
+    for (const secret of [
+      "sas-secret",
+      "bearer-secret",
+      "auth-secret",
+      "subscription-secret",
+      "underscore-secret",
+      "pwd-secret",
+    ]) {
+      assert.ok(!serialized.includes(secret), `redacted ${secret}`);
+    }
+    assert.deepEqual(safe.layers[0].source, { sr: 4326, key: "layer-identifier" });
+  });
+
   it("fails closed when configuration exceeds the traversal depth", () => {
     let nested: Record<string, unknown> = { arbitrary: "too-deep-secret" };
     for (let index = 0; index < 12; index += 1) nested = { child: nested };

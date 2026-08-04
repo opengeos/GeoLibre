@@ -18,6 +18,14 @@ export const PROJECT_CREDENTIAL_FIELDS = {
     "password",
     "clientSecret",
     "connectionString",
+    "secret",
+    "bearer",
+    "auth",
+    "authKey",
+    "sasToken",
+    "subscriptionKey",
+    "signature",
+    "pwd",
   ],
   pluginState: ["plugins.settings"],
 } as const;
@@ -30,48 +38,58 @@ export interface CredentialRedactionResult {
   redactedCount: number;
 }
 
+/**
+ * Fold the spellings of one credential name together, so `apiKey`, `api_key`,
+ * `api-key`, and `APIKEY` are a single registry entry on both the object-key
+ * and the URL-parameter side.
+ */
+function normalizeCredentialName(name: string): string {
+  return name.toLowerCase().replace(/[-_]/g, "");
+}
+
 const SENSITIVE_KEYS = new Set(
-  PROJECT_CREDENTIAL_FIELDS.layerConfiguration.map((key) => key.toLowerCase()),
+  PROJECT_CREDENTIAL_FIELDS.layerConfiguration.map(normalizeCredentialName),
 );
-const URL_CREDENTIAL_PARAMS = new Set([
-  "access_token",
-  "accesstoken",
-  "api_key",
-  "api-key",
-  "apikey",
-  "auth",
-  "authkey",
-  "bearer",
-  "key",
-  "token",
-  "subscription-key",
-  "subscriptionkey",
-  "password",
-  "pwd",
-  "client_secret",
-  "clientsecret",
-  "secret",
-  "sastoken",
-  "signature",
-  "sig",
-  "se",
-  "sp",
-  "sv",
-  "sr",
-  "st",
-  "skoid",
-]);
+/**
+ * Credential names in query strings. This is the wider of the two registries by
+ * design: everything here is also an object-key credential *except* `key` and
+ * the Azure SAS positional parameters (`sv`/`sr`/`st`/`se`/`sp`/`sig`/`skoid`),
+ * which are only credentials because of where they appear. As configuration
+ * field names they collide with ordinary state — `sr` is a spatial reference on
+ * an ArcGIS source, `key` is a generic identifier — so matching them on object
+ * keys would silently drop layer configuration rather than a secret.
+ */
+const URL_CREDENTIAL_PARAMS = new Set(
+  [
+    ...PROJECT_CREDENTIAL_FIELDS.layerConfiguration,
+    "key",
+    "sig",
+    "se",
+    "sp",
+    "sv",
+    "sr",
+    "st",
+    "skoid",
+  ].map(normalizeCredentialName),
+);
 const MAX_REDACT_DEPTH = 12;
 
+/** Whether an object key in layer/plugin configuration holds a credential. */
+export function isCredentialFieldName(name: string): boolean {
+  return SENSITIVE_KEYS.has(normalizeCredentialName(name));
+}
+
 function isCredentialParam(name: string): boolean {
-  let normalized = name.replace(/\+/g, " ");
+  let decoded = name.replace(/\+/g, " ");
   try {
-    normalized = decodeURIComponent(normalized);
+    decoded = decodeURIComponent(decoded);
   } catch {
     // Malformed names cannot match the registry, but must not break export.
   }
-  normalized = normalized.toLowerCase();
-  return URL_CREDENTIAL_PARAMS.has(normalized) || normalized.startsWith("x-amz-");
+  const lowered = decoded.toLowerCase();
+  return (
+    URL_CREDENTIAL_PARAMS.has(normalizeCredentialName(lowered)) || lowered.startsWith("x-amz-")
+  );
 }
 
 function redactParameterString(value: string): string {
@@ -159,7 +177,7 @@ function redactConfigurationValue(
   const result: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value)) {
     const nestedPath = path ? `${path}.${key}` : key;
-    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+    if (isCredentialFieldName(key)) {
       redactedPaths.push(nestedPath);
       redactedCount.value += 1;
       continue;

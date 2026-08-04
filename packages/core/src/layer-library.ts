@@ -24,7 +24,7 @@ import {
 } from "./types";
 import { sanitizeLayerStylePatch } from "./style-library";
 import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
-import { PROJECT_CREDENTIAL_FIELDS, redactUrlCredentials } from "./credentials";
+import { isCredentialFieldName, redactUrlCredentials } from "./credentials";
 
 /** `type` discriminator of an exported Layer Library bundle file. */
 export const LAYER_LIBRARY_BUNDLE_TYPE = "geolibre-layer-library";
@@ -654,8 +654,10 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
 }
 
 /**
- * `source` fields that can hold a per-user credential and are therefore removed
- * on export. `requestHeaders` carries the bearer token / API key an
+ * Copy of an entry with per-user credentials removed from its source.
+ *
+ * `source` fields that can hold a per-user credential are removed on export.
+ * `requestHeaders`, for example, carries the bearer token / API key an
  * authenticated 3D Tiles layer was added with (see
  * `persistedThreeDTilesRequestHeaders`, which keeps non-Google auth headers when
  * persisting into a project file).
@@ -665,17 +667,15 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
  * your team" action, which makes it a far more direct exposure path than handing
  * someone a whole project file. A recipient re-enters their own credentials,
  * which is the correct outcome.
+ *
+ * The names come from `isCredentialFieldName`, so this path and project export
+ * share one registry instead of drifting apart.
  */
-const EXPORT_REDACTED_SOURCE_KEYS = new Set(
-  PROJECT_CREDENTIAL_FIELDS.layerConfiguration.map((key) => key.toLowerCase()),
-);
-
-/** Copy of an entry with per-user credentials removed from its source. */
 function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
   const source = { ...entry.source };
   let changed = false;
   for (const key of Object.keys(source)) {
-    if (EXPORT_REDACTED_SOURCE_KEYS.has(key.toLowerCase())) {
+    if (isCredentialFieldName(key)) {
       delete source[key];
       changed = true;
     }
@@ -749,7 +749,7 @@ function redactSourceValue(value: unknown, depth = 0): unknown {
   let changed = false;
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(object)) {
-    if (EXPORT_REDACTED_SOURCE_KEYS.has(key.toLowerCase())) {
+    if (isCredentialFieldName(key)) {
       changed = true;
       continue;
     }
