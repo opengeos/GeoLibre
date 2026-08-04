@@ -842,7 +842,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     let contentToSave = content;
     const redacted = redactProjectCredentials(project);
     if (redacted.redactedPaths.length > 0) {
-      const choice = await askStripEnvVars(redacted.redactedPaths.length);
+      const choice = await askStripEnvVars(redacted.redactedCount);
       if (choice === "cancel") return false;
       if (choice === "strip") {
         contentToSave = serializeProject(redacted.project);

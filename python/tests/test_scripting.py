@@ -300,6 +300,9 @@ def test_to_html_returns_string_with_project(m):
 
 
 def test_python_project_egress_redacts_credentials(m, tmp_path):
+    m.project["basemapStyleUrl"] = (
+        "https://styles.example.com/map.json?api-key=python-basemap-secret"
+    )
     m.project["preferences"]["environmentVariables"] = [
         {"key": "SERVICE_TOKEN", "value": "python-env-secret", "enabled": True}
     ]
@@ -313,7 +316,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
             "name": "Authenticated tiles",
             "type": "3d-tiles",
             "source": {
-                "url": "https://user:password@example.com/tiles?token=python-url-secret&subscription-key=python-subscription-secret",
+                "url": "https://user:p@ssword@example.com/tiles?token=python-url-secret&subscription%2Dkey=python-subscription-secret",
                 "requestHeaders": {"Authorization": "Bearer python-header-secret"},
             },
             "visible": True,
@@ -323,7 +326,9 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
         }
     ]
     m.project["plugins"] = {
-        "manifestUrls": [],
+        "manifestUrls": [
+            "https://example.com/plugin.json?sasToken=python-manifest-secret"
+        ],
         "activePluginIds": ["external"],
         "mapControlPositions": {},
         "settings": {"external": {"arbitrary": "python-plugin-secret"}},
@@ -343,6 +348,9 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
         "python-subscription-secret",
         "python-header-secret",
         "python-plugin-secret",
+        "python-basemap-secret",
+        "python-manifest-secret",
+        "ssword",
     ):
         assert secret not in serialized
         assert secret not in html

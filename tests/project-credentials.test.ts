@@ -21,7 +21,7 @@ function credentialProject() {
       name: "Authenticated layer",
       type: "3d-tiles",
       source: {
-        url: "https://user:password@example.com/tiles?token=url-secret&style=day",
+        url: "https://user:password@example.com/tiles?token=url-secret&subscription%2Dkey=encoded-secret&style=day",
         nested: { headers: { Authorization: "Bearer header-secret" } },
       },
       visible: true,
@@ -34,7 +34,7 @@ function credentialProject() {
     },
   ];
   project.plugins = {
-    manifestUrls: ["https://example.com/plugin.json"],
+    manifestUrls: ["https://example.com/plugin.json?api-key=manifest-secret"],
     activePluginIds: ["external"],
     mapControlPositions: {},
     settings: { external: { arbitraryName: "plugin-secret" } },
@@ -54,9 +54,11 @@ describe("project credential redaction", () => {
       "basemap-secret",
       "password",
       "url-secret",
+      "encoded-secret",
       "header-secret",
       "signed-secret",
       "plugin-secret",
+      "manifest-secret",
     ]) {
       assert.ok(!serialized.includes(secret), `redacted ${secret}`);
     }
@@ -65,7 +67,7 @@ describe("project credential redaction", () => {
     assert.deepEqual(project.plugins?.settings, {});
     assert.ok(redactedPaths.includes("plugins.settings"));
     assert.equal(redactedPaths.includes("basemapStyleUrl"), true);
-    assert.equal(redactProjectCredentials(original).redactedCount, 7);
+    assert.equal(redactProjectCredentials(original).redactedCount, 8);
     assert.equal(original.plugins?.settings.external.arbitraryName, "plugin-secret");
   });
 
@@ -85,12 +87,12 @@ describe("project credential redaction", () => {
 
   it("fails closed when configuration exceeds the traversal depth", () => {
     let nested: Record<string, unknown> = { arbitrary: "too-deep-secret" };
-    for (let index = 0; index < 20; index += 1) nested = { child: nested };
+    for (let index = 0; index < 12; index += 1) nested = { child: nested };
     const project = credentialProject();
     project.layers[0].source = nested;
 
     const result = redactProjectCredentials(project);
     assert.ok(!serializeProject(result.project).includes("too-deep-secret"));
-    assert.ok(result.redactedPaths.some((path) => path.includes(".child")));
+    assert.ok(result.redactedPaths.includes(`layers[0].source${".child".repeat(12)}`));
   });
 });

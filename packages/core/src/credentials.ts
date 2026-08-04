@@ -2,7 +2,8 @@ import type { GeoLibreProject } from "./types";
 
 /**
  * Project fields whose values are credentials. Keep this registry as the
- * schema-level decision point when a new credential-bearing field is added.
+ * schema-level inventory. Keep the explicit preference/plugin handling in
+ * redactProjectCredentials in sync when adding entries outside layer config.
  */
 export const PROJECT_CREDENTIAL_FIELDS = {
   preferences: ["environmentVariables", "geocoding.apiKeys"],
@@ -36,7 +37,11 @@ const URL_CREDENTIAL_PARAMS = new Set([
   "access_token",
   "accesstoken",
   "api_key",
+  "api-key",
   "apikey",
+  "auth",
+  "authkey",
+  "bearer",
   "key",
   "token",
   "subscription-key",
@@ -45,6 +50,8 @@ const URL_CREDENTIAL_PARAMS = new Set([
   "pwd",
   "client_secret",
   "clientsecret",
+  "secret",
+  "sastoken",
   "signature",
   "sig",
   "se",
@@ -57,7 +64,12 @@ const URL_CREDENTIAL_PARAMS = new Set([
 const MAX_REDACT_DEPTH = 12;
 
 function isCredentialParam(name: string): boolean {
-  const normalized = name.toLowerCase();
+  let normalized = name.toLowerCase();
+  try {
+    normalized = decodeURIComponent(normalized.replace(/\+/g, " "));
+  } catch {
+    // Malformed names cannot match the registry, but must not break export.
+  }
   return URL_CREDENTIAL_PARAMS.has(normalized) || normalized.startsWith("x-amz-");
 }
 
@@ -238,10 +250,20 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
   }));
 
   let plugins = project.plugins;
-  if (plugins && Object.keys(plugins.settings ?? {}).length > 0) {
-    redactedPaths.push("plugins.settings");
-    redactedCount.value += countLeafValues(plugins.settings);
-    plugins = { ...plugins, settings: {} };
+  if (plugins) {
+    const manifestUrls = plugins.manifestUrls.map((url, index) => {
+      const redacted = redactUrlCredentials(url);
+      if (redacted !== url) {
+        redactedPaths.push(`plugins.manifestUrls[${index}]`);
+        redactedCount.value += 1;
+      }
+      return redacted;
+    });
+    if (Object.keys(plugins.settings ?? {}).length > 0) {
+      redactedPaths.push("plugins.settings");
+      redactedCount.value += countLeafValues(plugins.settings);
+    }
+    plugins = { ...plugins, manifestUrls, settings: {} };
   }
 
   return {

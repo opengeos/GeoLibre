@@ -18,7 +18,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote_plus, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
@@ -39,7 +39,11 @@ _CREDENTIAL_URL_PARAMS = {
     "access_token",
     "accesstoken",
     "api_key",
+    "api-key",
     "apikey",
+    "auth",
+    "authkey",
+    "bearer",
     "key",
     "token",
     "subscription-key",
@@ -48,6 +52,8 @@ _CREDENTIAL_URL_PARAMS = {
     "pwd",
     "client_secret",
     "clientsecret",
+    "secret",
+    "sastoken",
     "signature",
     "sig",
     "se",
@@ -67,13 +73,26 @@ def _redact_url(value: str) -> str:
             pair
             for pair in params.split("&")
             if pair
-            and (name := pair.split("=", 1)[0].lower()) not in _CREDENTIAL_URL_PARAMS
+            and (name := unquote_plus(pair.split("=", 1)[0]).lower())
+            not in _CREDENTIAL_URL_PARAMS
             and not name.startswith("x-amz-")
         )
 
     before_hash, separator, fragment = value.partition("#")
     base, query_separator, query = before_hash.partition("?")
-    base = re.sub(r"(?i)([a-z][a-z0-9+.-]*://)[^/@]*@", r"\1", base)
+    scheme_match = re.match(r"(?i)([a-z][a-z0-9+.-]*://)", base)
+    if scheme_match:
+        authority_start = scheme_match.end()
+        authority_end = base.find("/", authority_start)
+        if authority_end == -1:
+            authority_end = len(base)
+        authority = base[authority_start:authority_end]
+        if "@" in authority:
+            base = (
+                base[:authority_start]
+                + authority.rsplit("@", 1)[1]
+                + base[authority_end:]
+            )
     kept_query = keep_params(query) if query_separator else ""
     kept_fragment = keep_params(fragment) if separator and "=" in fragment else fragment
     return (
@@ -103,6 +122,8 @@ def _redact_config(value: Any) -> Any:
 def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
     """Return a detached project safe to publish, export, or hand to others."""
     safe = copy.deepcopy(project)
+    if isinstance(safe.get("basemapStyleUrl"), str):
+        safe["basemapStyleUrl"] = _redact_url(safe["basemapStyleUrl"])
     preferences = safe.get("preferences")
     if isinstance(preferences, dict):
         preferences["environmentVariables"] = []
@@ -119,6 +140,12 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
                     layer[field] = _redact_config(layer[field])
     plugins = safe.get("plugins")
     if isinstance(plugins, dict):
+        manifest_urls = plugins.get("manifestUrls")
+        if isinstance(manifest_urls, list):
+            plugins["manifestUrls"] = [
+                _redact_url(url) if isinstance(url, str) else url
+                for url in manifest_urls
+            ]
         plugins["settings"] = {}
     if "metadata" in safe:
         safe["metadata"] = _redact_config(safe["metadata"])

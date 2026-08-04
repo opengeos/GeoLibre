@@ -13,7 +13,7 @@ import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import i18n from "../i18n";
-import { buildProjectEgressSnapshot, buildProjectSnapshot } from "../lib/build-project-snapshot";
+import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { projectChanged } from "../lib/project-broadcast-changed";
 import {
   CollabConnection,
@@ -105,7 +105,7 @@ export function useCollaboration(
       clearHistory();
       scheduleRestore();
     }
-    lastContentRef.current = serializeProject(buildProjectSnapshot(mapControllerRef));
+    lastContentRef.current = serializeProject(buildProjectEgressSnapshot(mapControllerRef));
   };
 
   const handleMessage = (message: ServerMessage): void => {
