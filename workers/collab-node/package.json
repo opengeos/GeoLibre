@@ -1,0 +1,23 @@
+{
+  "name": "geolibre-collab-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --external:ws --outfile=dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@geolibre/collab-core": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.27.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
