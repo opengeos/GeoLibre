@@ -30,7 +30,8 @@
     "tauri:build:native-duckdb": "node scripts/tauri-build.mjs --native-duckdb",
     "tauri:build:mas": "node scripts/tauri-build.mjs --mas",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
-    "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
+    "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1",
+    "postinstall": "patch-package"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
@@ -40,7 +41,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "linkedom": "^0.18.13",
     "tsx": "^4.23.1",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.65.0",
+    "patch-package": "^8.0.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.8",

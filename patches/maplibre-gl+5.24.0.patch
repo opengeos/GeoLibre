@@ -1,0 +1,117 @@
+patch-package
+diff --git a/node_modules/maplibre-gl/src/webgl/render_to_texture.test.ts b/node_modules/maplibre-gl/src/webgl/render_to_texture.test.ts
+index 648b277942..9fa86fd412 100644
+--- a/node_modules/maplibre-gl/src/webgl/render_to_texture.test.ts
++++ b/node_modules/maplibre-gl/src/webgl/render_to_texture.test.ts
+@@ -37,6 +37,9 @@ describe('render to texture', () => {
+         id: 'maine-raster',
+         type: 'raster',
+         source: 'maine',
++        paint: {
++            get: (property: string) => property === 'raster-opacity' ? 1 : undefined
++        },
+         isHidden: () => false
+     } as any as RasterStyleLayer;
+     const hillshadeLayer = {
+@@ -216,6 +219,28 @@ describe('render to texture', () => {
+         expect(layersDrawn).toBe(3);
+     });
+ 
++    test('skips symbols below a later opaque draped raster', () => {
++        const symbolLayerAboveRaster = {
++            ...symbolLayer,
++            id: 'maine-symbol-above-raster',
++        } as SymbolStyleLayer;
++        const fillExtrusionLayer = {
++            id: 'maine-building',
++            type: 'fill-extrusion',
++            source: 'maine',
++            isHidden: () => false
++        } as any;
++        style._layers['maine-symbol-above-raster'] = symbolLayerAboveRaster;
++        style._layers['maine-building'] = fillExtrusionLayer;
++        style._order = ['maine-background', 'maine-symbol', 'maine-building', 'maine-raster', 'maine-symbol-above-raster'];
++        rtt.prepareForRender(style, 0);
++
++        const renderOptions = {isRenderingToTexture: false, isRenderingGlobe: false};
++        expect(rtt.renderLayer(symbolLayer, renderOptions)).toBeTruthy();
++        expect(rtt.renderLayer(symbolLayerAboveRaster, renderOptions)).toBeFalsy();
++        expect(rtt.renderLayer(fillExtrusionLayer, renderOptions)).toBeFalsy();
++    });
++
+     test('should clear tile cache on source state update', () => {
+         const state = {revision: 0};
+         (style.tileManagers['maine'].getState as Mock).mockReturnValue(state);
+diff --git a/node_modules/maplibre-gl/src/webgl/render_to_texture.ts b/node_modules/maplibre-gl/src/webgl/render_to_texture.ts
+index 018125552b..71dcf4f77b 100644
+--- a/node_modules/maplibre-gl/src/webgl/render_to_texture.ts
++++ b/node_modules/maplibre-gl/src/webgl/render_to_texture.ts
+@@ -67,6 +67,7 @@ export class RenderToTexture {
+      * a list of all layer-ids which should be rendered
+      */
+     _renderableLayerIds: string[];
++    _topOpaqueDrapedRasterIndex: number;
+     constructor(painter: Painter, terrain: Terrain) {
+         this.painter = painter;
+         this.terrain = terrain;
+@@ -83,6 +84,11 @@ export class RenderToTexture {
+         this._rttTiles = [];
+         this._renderableTiles = this.terrain.tileManager.getRenderableTiles();
+         this._renderableLayerIds = style._order.filter(id => !style._layers[id].isHidden(zoom));
++        this._topOpaqueDrapedRasterIndex = -1;
++        for (let i = 0; i < this._renderableLayerIds.length; i++) {
++            const layer = style._layers[this._renderableLayerIds[i]];
++            if (layer.type === 'raster' && layer.paint.get('raster-opacity') === 1) this._topOpaqueDrapedRasterIndex = i;
++        }
+ 
+         this._coordsAscending = {};
+         for (const id in style.tileManagers) {
+@@ -138,6 +144,7 @@ export class RenderToTexture {
+      */
+     renderLayer(layer: StyleLayer, renderOptions: RenderOptions): boolean {
+         if (layer.isHidden(this.painter.transform.zoom)) return false;
++        if (this._isSymbolBelowOpaqueDrapedRaster(layer)) return true;
+ 
+         const options: RenderOptions = {...renderOptions, isRenderingToTexture: true};
+         const type = layer.type;
+@@ -185,4 +192,9 @@ export class RenderToTexture {
+         return false;
+     }
+ 
++    _isSymbolBelowOpaqueDrapedRaster(layer: StyleLayer): boolean {
++        if (layer.type !== 'symbol' || this._topOpaqueDrapedRasterIndex < 0) return false;
++        const layerIndex = this._renderableLayerIds.indexOf(layer.id);
++        return layerIndex >= 0 && layerIndex < this._topOpaqueDrapedRasterIndex;
++    }
+ }
+
+From fe557a86b8f5ca753973c5db44621ce0cd0d5ff8 Mon Sep 17 00:00:00 2001
+From: Fabien Del Olmo <fabien.delolmo@gmail.com>
+Date: Mon, 29 Jun 2026 23:45:59 +0200
+Subject: [PATCH 2/2] Use raster style layer guard for opacity check
+
+---
+ src/webgl/render_to_texture.ts | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/node_modules/maplibre-gl/src/webgl/render_to_texture.ts b/node_modules/maplibre-gl/src/webgl/render_to_texture.ts
+index 71dcf4f77b..dd1045a19a 100644
+--- a/node_modules/maplibre-gl/src/webgl/render_to_texture.ts
++++ b/node_modules/maplibre-gl/src/webgl/render_to_texture.ts
+@@ -8,6 +8,7 @@ import {type Terrain} from '../render/terrain.ts';
+ import {type Texture} from './texture.ts';
+ import type {StyleLayer} from '../style/style_layer.ts';
+ import {ImageSource} from '../source/image_source.ts';
++import {isRasterStyleLayer} from '../style/style_layer/raster_style_layer.ts';
+ 
+ /**
+  * lookup table which layers should rendered to texture
+@@ -87,7 +88,7 @@ export class RenderToTexture {
+         this._topOpaqueDrapedRasterIndex = -1;
+         for (let i = 0; i < this._renderableLayerIds.length; i++) {
+             const layer = style._layers[this._renderableLayerIds[i]];
+-            if (layer.type === 'raster' && layer.paint.get('raster-opacity') === 1) this._topOpaqueDrapedRasterIndex = i;
++            if (isRasterStyleLayer(layer) && layer.paint.get('raster-opacity') === 1) this._topOpaqueDrapedRasterIndex = i;
+         }
+ 
+         this._coordsAscending = {};
