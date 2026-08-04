@@ -1,7 +1,7 @@
 import { parseProject, serializeProject, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
-import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
+import { buildProjectEgressSnapshot, buildProjectSnapshot } from "../lib/build-project-snapshot";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 
 // How long to wait after the last store change before posting a fresh project
@@ -13,6 +13,8 @@ interface LoadProjectMessage {
   type: "geolibre:load-project";
   project: GeoLibreProject | string;
   seq?: number;
+  /** Set only by the co-located anywidget host, which retains local credentials. */
+  trustedWidget?: boolean;
 }
 
 interface RequestStateMessage {
@@ -62,8 +64,12 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapController | null>
     // correlate a snapshot with the load that triggered it.
     let lastLoadedSeq = 0;
     let lastPostedContent: string | null = null;
+    let trustedWidget = false;
 
-    const buildProject = (): GeoLibreProject => buildProjectEgressSnapshot(mapControllerRef);
+    const buildProject = (): GeoLibreProject =>
+      trustedWidget
+        ? buildProjectSnapshot(mapControllerRef)
+        : buildProjectEgressSnapshot(mapControllerRef);
 
     const postState = () => {
       if (disposed) return;
@@ -103,6 +109,7 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapController | null>
     };
 
     const applyLoad = (message: LoadProjectMessage) => {
+      trustedWidget = message.trustedWidget === true;
       // Advance the seq before parsing so a later snapshot carries the right
       // correlation id even when the load fails. Reset (not retain) when a load
       // omits seq, so a snapshot never echoes a stale, unrelated sequence number.
