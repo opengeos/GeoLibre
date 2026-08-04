@@ -1,4 +1,5 @@
 import type {
+  CollabChatMessage,
   CollabCursor,
   CollabParticipant,
   CollabView,
@@ -148,4 +149,43 @@ export function sanitizeView(v: unknown): CollabView | null {
     view.bbox = [bbox[0], bbox[1], bbox[2], bbox[3]];
   }
   return view;
+}
+
+/**
+ * Validate one stored chat entry's field types so a corrupt record cannot reach
+ * clients, where a bad `coordinate` would crash `coordinate.lat.toFixed`. A
+ * read-path guard against tampering or a partial write, deliberately not a full
+ * mirror of the write path.
+ */
+export function isValidChatMessage(m: unknown): m is CollabChatMessage {
+  if (!m || typeof m !== "object") return false;
+  const o = m as Record<string, unknown>;
+  const coord = o.coordinate as Record<string, unknown> | null | undefined;
+  const coordOk =
+    coord === null ||
+    coord === undefined ||
+    (typeof coord === "object" && finite(coord.lng) && finite(coord.lat));
+  return (
+    typeof o.id === "string" &&
+    typeof o.clientId === "string" &&
+    typeof o.displayName === "string" &&
+    typeof o.color === "string" &&
+    HEX_COLOR_RE.test(o.color) &&
+    typeof o.text === "string" &&
+    o.text !== "" &&
+    finite(o.ts) &&
+    coordOk
+  );
+}
+
+/** Parse a persisted chat log, dropping entries that fail {@link isValidChatMessage}. */
+export function parseStoredChat(raw: unknown): CollabChatMessage[] {
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(raw) ? raw.filter(isValidChatMessage) : [];
 }

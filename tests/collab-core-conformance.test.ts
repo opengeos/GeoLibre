@@ -6,6 +6,7 @@ import {
   clearParticipantOverrides,
   MAX_SNAPSHOT_BYTES,
   normalizeMode,
+  parseStoredChat,
   participantCanEdit,
   sanitizeColor,
   sanitizeCursor,
@@ -85,6 +86,36 @@ describe("collaboration relay conformance", () => {
     const custom = authorizeSnapshot(host, "co-edit", 65, 64);
     assert.equal(custom.ok, false);
     if (!custom.ok) assert.equal(custom.code, "too-large");
+  });
+
+  it("drops corrupt entries when reading a persisted chat log", () => {
+    // Both relays read chat back out of storage, so this guard belongs to the
+    // shared core: a tampered or partially written record must not reach a
+    // joiner, where a bad coordinate crashes `coordinate.lat.toFixed`.
+    const good = {
+      id: "1",
+      clientId: "c",
+      displayName: "Ada",
+      color: "#123456",
+      text: "hello",
+      ts: 1,
+      coordinate: null,
+    };
+    assert.deepEqual(parseStoredChat(JSON.stringify([good])), [good]);
+    assert.deepEqual(parseStoredChat("not json"), []);
+    assert.deepEqual(parseStoredChat(JSON.stringify({ not: "an array" })), []);
+    assert.deepEqual(parseStoredChat(undefined), []);
+    for (const bad of [
+      { ...good, color: "red" },
+      { ...good, text: "" },
+      { ...good, ts: Number.NaN },
+      { ...good, coordinate: { lng: "x", lat: 1 } },
+      { ...good, id: 7 },
+    ]) {
+      assert.deepEqual(parseStoredChat(JSON.stringify([bad])), [], JSON.stringify(bad));
+    }
+    // A corrupt neighbour does not take the valid entries with it.
+    assert.deepEqual(parseStoredChat(JSON.stringify([good, { ...good, text: "" }])), [good]);
   });
 
   it("sanitizes untrusted presence viewports", () => {

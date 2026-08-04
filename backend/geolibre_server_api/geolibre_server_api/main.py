@@ -39,6 +39,7 @@ from sqlalchemy.orm import (
     Session,
     mapped_column,
     relationship,
+    selectinload,
     sessionmaker,
 )
 
@@ -106,6 +107,12 @@ class Version(Base):
     object_key: Mapped[str] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(String(32))
     project: Mapped[Project] = relationship(back_populates="versions")
+
+
+# project_json reads project.owner.username and len(project.versions), both lazy.
+# Without these a single listing page (up to 100 rows) fires ~201 queries instead
+# of three.
+LISTING_EAGER_LOADS = (selectinload(Project.owner), selectinload(Project.versions))
 
 
 class Credentials(BaseModel):
@@ -477,13 +484,29 @@ def create_app(
             created_at=now(),
         )
         session.add(account)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            # The check above and this commit are not atomic, so two requests
+            # racing for one username can both pass it. Without this the loser
+            # escapes as a raw 500 (no IntegrityError exception handler is
+            # registered), contradicting the documented 409 for a uniqueness
+            # conflict.
+            session.rollback()
+            raise HTTPException(409, "username already exists") from None
         return {"account": account_json(account), "token": issue_token(session, account)}
 
     @app.post("/api/auth/token")
     def login(body: Credentials, session: Session = Depends(db)):
         account = session.scalar(select(Account).where(Account.username == body.username))
-        if account is None or not password_matches(body.password, account.password_hash):
+        if account is None:
+            # Hash anyway before failing. Short-circuiting here would skip the
+            # scrypt call that a real username always pays for, and the timing
+            # difference enumerates accounts one request at a time, which a
+            # request-count rate limiter does not address.
+            password_hash(body.password or "unused")
+            raise HTTPException(401, "invalid username or password")
+        if not password_matches(body.password, account.password_hash):
             raise HTTPException(401, "invalid username or password")
         return {"account": account_json(account), "token": issue_token(session, account)}
 
@@ -523,7 +546,10 @@ def create_app(
         if not own:
             query = query.where(Project.visibility == "public")
         projects = session.scalars(
-            query.order_by(Project.updated_at.desc()).offset(offset).limit(limit)
+            query.options(*LISTING_EAGER_LOADS)
+            .order_by(Project.updated_at.desc())
+            .offset(offset)
+            .limit(limit)
         ).all()
         return {"projects": [project_json(project) for project in projects]}
 
@@ -568,7 +594,10 @@ def create_app(
                 count.where(Project.featured.is_(True)),
             )
         projects = session.scalars(
-            query.order_by(Project.updated_at.desc()).offset(offset).limit(limit)
+            query.options(*LISTING_EAGER_LOADS)
+            .order_by(Project.updated_at.desc())
+            .offset(offset)
+            .limit(limit)
         ).all()
         return {
             "projects": [project_json(p) for p in projects],

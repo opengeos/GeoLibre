@@ -322,7 +322,19 @@ container's runtime configuration is populated with those browser-reachable
 URLs. For a real deployment, set `GEOLIBRE_SHARE_URL`,
 `GEOLIBRE_COLLAB_URL`, `GEOLIBRE_VIEWER_URL`, and
 `GEOLIBRE_CORS_ORIGINS` to the public TLS origins before starting Compose.
-Change `POSTGRES_PASSWORD` from its development default.
+Change `POSTGRES_PASSWORD` from its development default. It is substituted into
+a connection URL verbatim, so two characters need care:
+
+- `@` splits the URL early. `p@ssw0rd` is read as password `p` against host
+  `ssw0rd@postgres`, and the projects server restarts in a loop on a psycopg
+  error that never mentions the password.
+- `%` starts a percent-escape. `we%20ird` is silently decoded to `we ird`, so
+  the server authenticates with a password you never set and simply gets
+  rejected.
+
+Either avoid both characters or percent-encode the value in the URL (`%40` for
+`@`, `%25` for `%`) while leaving `POSTGRES_PASSWORD` itself as the literal
+password Postgres should expect.
 
 The projects API can also run as one small SQLite-backed container, without
 Postgres:

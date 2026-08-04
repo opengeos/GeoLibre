@@ -26,6 +26,7 @@ import {
   MAX_CHAT_STORAGE_BYTES,
   MAX_CHAT_TEXT_LENGTH,
   MAX_SNAPSHOT_BYTES,
+  parseStoredChat,
   MIN_CHAT_INTERVAL_MS,
   normalizeMode,
   participantCanEdit,
@@ -37,14 +38,6 @@ import {
   toWireParticipant,
   type SessionParticipant,
 } from "@geolibre/collab-core";
-
-function finite(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n);
-}
-
-// Accepted participant color: a 3- or 6-digit hex. Shared by the join path and
-// the stored-chat validator so both enforce the same shape.
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 /** Parse the stored snapshot defensively: a corrupt value yields null rather
  *  than throwing (which would lock joiners out of the session). */
@@ -80,45 +73,6 @@ const ENCODER = new TextEncoder();
  * `@geolibre/collab-core` exists to prevent.
  */
 type SocketAttachment = SessionParticipant;
-
-/** Validate a single stored chat entry's field types so a corrupt record can't
- *  reach clients (where it would, e.g., crash `coordinate.lat.toFixed`). */
-function isValidChatMessage(m: unknown): m is CollabChatMessage {
-  if (!m || typeof m !== "object") return false;
-  const o = m as Record<string, unknown>;
-  const coord = o.coordinate as Record<string, unknown> | null | undefined;
-  const coordOk =
-    coord === null ||
-    coord === undefined ||
-    (typeof coord === "object" && finite(coord.lng) && finite(coord.lat));
-  return (
-    typeof o.id === "string" &&
-    typeof o.clientId === "string" &&
-    typeof o.displayName === "string" &&
-    // Reject records whose field types/shapes would crash or mislead a client:
-    // a non-hex color, a blank body, a non-finite timestamp, or a bad coordinate
-    // (which would crash `coordinate.lat.toFixed`). Not a full write-path mirror.
-    typeof o.color === "string" &&
-    HEX_COLOR_RE.test(o.color) &&
-    typeof o.text === "string" &&
-    o.text !== "" &&
-    finite(o.ts) &&
-    coordOk
-  );
-}
-
-/** Parse the stored chat log defensively; a corrupt value yields an empty log
- *  (rather than throwing, which would lock joiners out of the welcome) and any
- *  malformed individual entries are dropped. */
-function parseStoredChat(raw: string | undefined): CollabChatMessage[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isValidChatMessage) : [];
-  } catch {
-    return [];
-  }
-}
 
 type PresenceState = PresenceEntry;
 

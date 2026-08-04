@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { parseStoredChat } from "@geolibre/collab-core";
 import type { CollabChatMessage, CollaborationMode } from "@geolibre/collab-core";
 
 export interface StoredSession {
@@ -74,7 +75,10 @@ export class SessionStore {
       mode: row.mode === "view-only" ? "view-only" : "co-edit",
       rev: row.rev,
       snapshot: parseJson(row.snapshot, null),
-      chat: parseJson(row.chat, []),
+      // Shape-checked per entry, not just JSON-parsed: a corrupt or tampered
+      // chat column would otherwise reach joiners in `welcome` and crash a
+      // client on `coordinate.lat.toFixed`. Same guard the Worker applies.
+      chat: parseStoredChat(row.chat),
       updatedAt: row.updated_at,
     };
   }

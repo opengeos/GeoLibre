@@ -27,6 +27,13 @@ services:
     ports:
       - "${GEOLIBRE_SERVER_PORT:-8000}:8000"
     environment:
+      # POSTGRES_USER and POSTGRES_PASSWORD are substituted into this DSN
+      # verbatim, so two characters bite: "@" splits the URL early (p@ssw0rd
+      # parses as password "p" against host "ssw0rd@postgres") and "%" starts a
+      # percent-escape (we%20ird silently becomes "we ird"). Getting-started
+      # tells operators to choose a strong password, which is exactly when this
+      # happens. Avoid both, or percent-encode them here (%40, %25) while
+      # POSTGRES_PASSWORD keeps the literal value.
       GEOLIBRE_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-geolibre}:${POSTGRES_PASSWORD:-geolibre}@postgres:5432/${POSTGRES_DB:-geolibre}"
       GEOLIBRE_STORAGE_PATH: /data/objects
       GEOLIBRE_PUBLIC_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"

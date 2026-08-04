@@ -638,4 +638,19 @@ if (isMain) {
   relay.server.listen(port, process.env.HOST ?? "0.0.0.0", () => {
     console.log(`GeoLibre collaboration relay listening on port ${port}`);
   });
+  // Without these, `docker stop` (and a Kubernetes pod eviction) terminates the
+  // process on the default SIGTERM action, so relay.close() never runs: peers
+  // get a raw socket drop instead of a 1001 close, and the SQLite handle is not
+  // closed cleanly. Nothing outside the tests called close() before this.
+  let closing = false;
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      if (closing) return;
+      closing = true;
+      relay.close().then(
+        () => process.exit(0),
+        () => process.exit(1),
+      );
+    });
+  }
 }
