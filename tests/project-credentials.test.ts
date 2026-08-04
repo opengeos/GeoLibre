@@ -28,7 +28,7 @@ function credentialProject() {
       opacity: 1,
       style: {},
       metadata: {
-        endpoint: "https://example.com/data?X-Amz-Signature=signed-secret&format=json",
+        endpoint: "https://example.com/data?%58-Amz-Signature=signed-secret&format=json",
         brokerRef: "credential-broker://tiles/auth",
       },
     },

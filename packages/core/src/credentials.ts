@@ -64,12 +64,13 @@ const URL_CREDENTIAL_PARAMS = new Set([
 const MAX_REDACT_DEPTH = 12;
 
 function isCredentialParam(name: string): boolean {
-  let normalized = name.toLowerCase();
+  let normalized = name.replace(/\+/g, " ");
   try {
-    normalized = decodeURIComponent(normalized.replace(/\+/g, " "));
+    normalized = decodeURIComponent(normalized);
   } catch {
     // Malformed names cannot match the registry, but must not break export.
   }
+  normalized = normalized.toLowerCase();
   return URL_CREDENTIAL_PARAMS.has(normalized) || normalized.startsWith("x-amz-");
 }
 
