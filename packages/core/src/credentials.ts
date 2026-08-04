@@ -185,7 +185,10 @@ function countLeafValues(value: unknown): number {
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
   const redactedPaths: string[] = [];
   const redactedCount = { value: 0 };
-  const basemapStyleUrl = redactUrlCredentials(project.basemapStyleUrl);
+  const basemapStyleUrl =
+    typeof project.basemapStyleUrl === "string"
+      ? redactUrlCredentials(project.basemapStyleUrl)
+      : project.basemapStyleUrl;
   if (basemapStyleUrl !== project.basemapStyleUrl) {
     redactedPaths.push("basemapStyleUrl");
     redactedCount.value += 1;
