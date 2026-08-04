@@ -1,4 +1,4 @@
-import type { GeoLibreProject } from "./types";
+import type { GeoLibreProject, LayerConnection } from "./types";
 
 /**
  * Project fields whose values are credentials. Keep this registry as the
@@ -277,6 +277,20 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
             redactedPaths,
             redactedCount,
           ) as string,
+        }
+      : {}),
+    // `connection.lastError` is free-form text taken from a caught error, and a
+    // refresh path that words it as `Failed to fetch ${url}` would carry the
+    // request's credential parameters. Sweeping it costs nothing and keeps the
+    // no-secret guarantee from depending on how an error message is phrased.
+    ...(layer.connection
+      ? {
+          connection: redactConfigurationValue(
+            layer.connection,
+            `layers[${index}].connection`,
+            redactedPaths,
+            redactedCount,
+          ) as LayerConnection,
         }
       : {}),
   }));

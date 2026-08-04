@@ -148,7 +148,11 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
         for layer in layers:
             if not isinstance(layer, dict):
                 continue
-            for field in ("source", "metadata", "sourcePath"):
+            # `connection.lastError` is free-form text taken from a caught
+            # error, which a future refresh path could easily build from the
+            # request URL. Sweeping it costs nothing and keeps the no-secret
+            # guarantee from depending on how an error message is worded.
+            for field in ("source", "metadata", "sourcePath", "connection"):
                 if field in layer:
                     layer[field] = _redact_config(layer[field])
     plugins = safe.get("plugins")

@@ -397,6 +397,30 @@ def test_python_credential_field_registry_matches_js():
     assert safe["layers"][0]["source"] == {"sr": 4326, "key": "layer-identifier"}
 
 
+def test_python_redaction_sweeps_layer_connection():
+    """`connection.lastError` is free-form error text and must be swept too."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {"url": "https://example.com/tiles"},
+                    "connection": {
+                        "layerId": "auth",
+                        "interval": 300,
+                        "lastSyncedAt": "2026-01-01T00:00:00.000Z",
+                        "lastError": "Failed to fetch https://example.com/tiles?token=py-connection-secret",
+                        "onFailure": "keep-last",
+                    },
+                }
+            ]
+        }
+    )
+    connection = safe["layers"][0]["connection"]
+    assert "py-connection-secret" not in str(safe)
+    assert connection["lastError"] == "Failed to fetch https://example.com/tiles"
+    assert connection["interval"] == 300
+
+
 def test_python_redaction_fails_closed_at_depth_limit():
     nested = {"password": "too-deep-secret"}
     for _ in range(12):

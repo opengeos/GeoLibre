@@ -139,6 +139,25 @@ describe("project credential redaction", () => {
     assert.deepEqual(safe.layers[0].source, { sr: 4326, key: "layer-identifier" });
   });
 
+  it("sweeps a layer's connection record, not only its source", () => {
+    // `lastError` is free-form text from a caught error, so a refresh path that
+    // words it with the request URL must not carry the credential out.
+    const project = credentialProject();
+    project.layers[0].connection = {
+      layerId: "auth",
+      interval: 300,
+      lastSyncedAt: "2026-01-01T00:00:00.000Z",
+      lastError: "Failed to fetch https://example.com/tiles?token=connection-secret",
+      onFailure: "keep-last",
+    };
+
+    const { project: safe, redactedPaths } = redactProjectCredentials(project);
+    assert.ok(!serializeProject(safe).includes("connection-secret"));
+    assert.equal(safe.layers[0].connection?.lastError, "Failed to fetch https://example.com/tiles");
+    assert.equal(safe.layers[0].connection?.interval, 300);
+    assert.ok(redactedPaths.includes("layers[0].connection.lastError"));
+  });
+
   it("fails closed when configuration exceeds the traversal depth", () => {
     let nested: Record<string, unknown> = { arbitrary: "too-deep-secret" };
     for (let index = 0; index < 12; index += 1) nested = { child: nested };
