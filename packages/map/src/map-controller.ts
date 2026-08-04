@@ -2141,7 +2141,8 @@ export class MapController {
   private getBeforeStyleLayerId(layers: GeoLibreLayer[], layerIndex: number): string | undefined {
     if (!this.map) return undefined;
 
-    const styleLayers = this.map.getStyle().layers ?? [];
+    const styleLayerIds =
+      this.map.getLayersOrder?.() ?? (this.map.getStyle().layers ?? []).map(({ id }) => id);
     for (const layer of layers.slice(layerIndex + 1)) {
       const candidateIds = new Set(this.getCandidateStyleLayers(layer).map(({ id }) => id));
       // A logical layer can render through several MapLibre style layers. KML
@@ -2149,7 +2150,7 @@ export class MapController {
       // circle for features without icons. Anchor beneath whichever companion
       // is currently lowest in the real style order so the inserted layer
       // cannot split that logical layer in two.
-      const bottommostId = styleLayers.find(({ id }) => candidateIds.has(id))?.id;
+      const bottommostId = styleLayerIds.find((id) => candidateIds.has(id));
       if (bottommostId) return bottommostId;
     }
 

@@ -69,6 +69,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       layers: order.map((id) => ({ id, ...layers.get(id) })),
       sources: Object.fromEntries(sources),
     }),
+    getLayersOrder: () => [...order],
     getSource: (id: string) => {
       if (!sources.has(id)) return undefined;
       if (!sourceHandles.has(id)) {
