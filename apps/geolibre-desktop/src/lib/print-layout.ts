@@ -2015,6 +2015,8 @@ function drawLegend(
     text: string;
     marker?: LegendMarker;
     size?: number;
+    /** True for a groupByLayer layer heading: scaffolding, not a legend item. */
+    heading?: boolean;
   }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
@@ -2032,7 +2034,7 @@ function drawLegend(
       });
     } else {
       if (opts.groupByLayer) {
-        rows.push({ entryId: entry.id, color: "", text: entry.name });
+        rows.push({ entryId: entry.id, color: "", text: entry.name, heading: true });
       }
       for (const sw of entry.swatches) {
         // Carry the marker so a marker + diagram layer (a multi-swatch entry
@@ -2063,8 +2065,15 @@ function drawLegend(
     if (chromeH + rows.length * rowH > maxHeight) {
       const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
       if (fitRows < rows.length) {
-        hiddenRows = rows.length - fitRows;
-        rows.length = fitRows;
+        // A layer heading only means something with class rows under it, so a
+        // cut that lands right after one drops it too rather than printing a
+        // section title that describes nothing.
+        let kept = fitRows;
+        while (kept > 0 && rows[kept - 1]!.heading) kept -= 1;
+        // Headings are scaffolding, so the note counts elided class rows only;
+        // counting the headings too would overstate what the reader is missing.
+        hiddenRows = rows.slice(kept).filter((r) => !r.heading).length;
+        rows.length = kept;
       }
     }
   }
