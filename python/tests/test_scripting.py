@@ -325,6 +325,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
             "opacity": 1,
             "style": {},
             "metadata": {},
+            "sourcePath": "https://files.example.com/data?token=python-path-secret",
         }
     ]
     m.project["plugins"] = {
@@ -348,6 +349,7 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
         "python-url-secret",
         "python-subscription-secret",
         "python-header-secret",
+        "python-path-secret",
         "python-plugin-secret",
         "python-basemap-secret",
         "python-manifest-secret",

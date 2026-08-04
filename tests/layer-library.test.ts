@@ -927,6 +927,7 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
         source: {
           url: "https://example.com/tileset.json",
           requestHeaders: { Authorization: "Bearer super-secret" },
+          apiKey: "direct-api-secret",
         },
         opacity: 1,
         metadata: {},
@@ -935,8 +936,10 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.deepEqual(withToken.source.requestHeaders, { Authorization: "Bearer super-secret" });
     const exported = serializeLayerLibrary([withToken]);
     assert.equal(exported.includes("super-secret"), false);
+    assert.equal(exported.includes("direct-api-secret"), false);
     const [reimported] = parseLayerLibrary(exported);
     assert.equal("requestHeaders" in reimported.source, false);
+    assert.equal("apiKey" in reimported.source, false);
     // The rest of the source survives, so the recipient only re-enters the token.
     assert.equal(reimported.source.url, "https://example.com/tileset.json");
   });

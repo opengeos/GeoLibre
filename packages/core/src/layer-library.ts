@@ -24,7 +24,7 @@ import {
 } from "./types";
 import { sanitizeLayerStylePatch } from "./style-library";
 import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
-import { redactUrlCredentials } from "./credentials";
+import { PROJECT_CREDENTIAL_FIELDS, redactUrlCredentials } from "./credentials";
 
 /** `type` discriminator of an exported Layer Library bundle file. */
 export const LAYER_LIBRARY_BUNDLE_TYPE = "geolibre-layer-library";
@@ -666,14 +666,16 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
  * someone a whole project file. A recipient re-enters their own credentials,
  * which is the correct outcome.
  */
-const EXPORT_REDACTED_SOURCE_KEYS = ["requestHeaders"] as const;
+const EXPORT_REDACTED_SOURCE_KEYS = new Set(
+  PROJECT_CREDENTIAL_FIELDS.layerConfiguration.map((key) => key.toLowerCase()),
+);
 
 /** Copy of an entry with per-user credentials removed from its source. */
 function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
   const source = { ...entry.source };
   let changed = false;
-  for (const key of EXPORT_REDACTED_SOURCE_KEYS) {
-    if (key in source) {
+  for (const key of Object.keys(source)) {
+    if (EXPORT_REDACTED_SOURCE_KEYS.has(key.toLowerCase())) {
       delete source[key];
       changed = true;
     }
@@ -747,7 +749,7 @@ function redactSourceValue(value: unknown, depth = 0): unknown {
   let changed = false;
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(object)) {
-    if (EXPORT_REDACTED_SOURCE_KEYS.includes(key as (typeof EXPORT_REDACTED_SOURCE_KEYS)[number])) {
+    if (EXPORT_REDACTED_SOURCE_KEYS.has(key.toLowerCase())) {
       changed = true;
       continue;
     }

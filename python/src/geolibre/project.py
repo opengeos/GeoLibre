@@ -136,7 +136,7 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
         for layer in layers:
             if not isinstance(layer, dict):
                 continue
-            for field in ("source", "metadata"):
+            for field in ("source", "metadata", "sourcePath"):
                 if field in layer:
                     layer[field] = _redact_config(layer[field])
     plugins = safe.get("plugins")

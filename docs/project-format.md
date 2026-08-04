@@ -309,6 +309,11 @@ standalone HTML export, embed snapshots, and collaboration snapshots. Local
 Save and Save As ask whether credentials should be stripped or deliberately
 kept.
 
+Saved model and processing-history parameter bags do not currently accept
+credentials and are treated as structural project content. If a future
+processing tool accepts credentials, those fields must be added to the central
+redaction registry and traversal.
+
 The redaction pass removes credential-bearing fields and authentication
 parameters in URLs while preserving non-secret broker references. External
 plugin settings are arbitrary, so they are omitted from egress snapshots by
