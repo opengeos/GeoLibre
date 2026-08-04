@@ -91,6 +91,7 @@ import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
@@ -378,6 +379,25 @@ export function SettingsDialog({
   onToggleThemeMode,
 }: SettingsDialogProps) {
   const { t } = useTranslation();
+  // The share host's settings page, where the API token below is created.
+  // Derived from the resolved host so a self-hosted deployment links to its own
+  // page; null when the deployment configured no share host, in which case the
+  // description renders without a link rather than pointing at a stranger's site.
+  const shareHostState = resolveShareHost();
+  const shareBaseUrl = shareHostState.baseUrl;
+  const shareHost = shareHostLabel();
+  const shareSettingsUrl = shareBaseUrl ? `${shareBaseUrl}/settings` : null;
+  // No usable host (sharing turned off, or a configured address that was
+  // rejected) means the token field is dead: it would authenticate against a
+  // server this deployment never talks to. Say so instead of rendering guidance
+  // that names the public hosted service — the whole point of the opt-out. The
+  // two unusable states get different copy: "not configured" would send an
+  // operator who typo'd the variable looking for one they never set.
+  const shareTokenUsable = shareBaseUrl != null;
+  const shareTokenUnavailableMessage =
+    shareHostState.status === "invalid"
+      ? t("settings.env.tokenHostInvalid")
+      : t("settings.env.tokenUnavailable");
   const { language, options: languageOptions, setLanguage } = useLanguage();
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
@@ -2273,33 +2293,44 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">{t("settings.env.tokenTitle")}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      <Trans
-                        i18nKey="settings.env.tokenDescription"
-                        components={{
-                          tokenLink: (
-                            <a
-                              className="underline"
-                              href="https://share.geolibre.app/settings"
-                              target="_blank"
-                              rel="noreferrer noopener"
-                            />
-                          ),
-                        }}
-                      />
-                    </p>
-                    <Input
-                      ref={shareTokenInputRef}
-                      aria-label={t("settings.env.tokenTitle")}
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder={t("settings.env.tokenPlaceholder")}
-                      value={draftDesktopSettings.shareToken}
-                      onChange={(event) => updateShareToken(event.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.env.tokenStorageNote")}
-                    </p>
+                    {shareTokenUsable ? (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          <Trans
+                            i18nKey="settings.env.tokenDescription"
+                            values={{ shareHost }}
+                            components={{
+                              // Non-null here: this branch requires shareBaseUrl,
+                              // which is what shareSettingsUrl is derived from.
+                              tokenLink: (
+                                <a
+                                  className="underline"
+                                  href={shareSettingsUrl ?? undefined}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                />
+                              ),
+                            }}
+                          />
+                        </p>
+                        <Input
+                          ref={shareTokenInputRef}
+                          aria-label={t("settings.env.tokenTitle")}
+                          type="password"
+                          autoComplete="new-password"
+                          placeholder={t("settings.env.tokenPlaceholder")}
+                          value={draftDesktopSettings.shareToken}
+                          onChange={(event) => updateShareToken(event.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t("settings.env.tokenStorageNote", { shareHost })}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {shareTokenUnavailableMessage}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 border-t pt-5">
                     <h3 className="text-sm font-semibold">{t("settings.env.cesiumTokenTitle")}</h3>

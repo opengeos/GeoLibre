@@ -273,6 +273,116 @@ by whoever frames it. See
 [Talking to the map at runtime](user-guide/embedding.md#talking-to-the-map-at-runtime)
 for the message reference and a host-page example.
 
+#### Self-hosted sharing and collaboration servers
+
+Project **Share** and the **Project Gallery** talk to `share.geolibre.app` by
+default. Point them at your own server instead, or turn the feature off:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_SHARE_URL=https://maps.example.org \
+  -e GEOLIBRE_COLLAB_URL=wss://collab.example.org \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+| Variable | Effect |
+| --- | --- |
+| `GEOLIBRE_SHARE_URL` | Base URL of the project sharing server. Unset uses `share.geolibre.app`. Set it to `off` to remove Share and the Project Gallery from the UI entirely. |
+| `GEOLIBRE_COLLAB_URL` | Base URL of the [collaboration](collaboration.md) relay. Unset leaves live collaboration disabled. |
+
+Both are read at container startup, so a prebuilt image can be repointed by
+restarting it with different values — no rebuild. (The equivalent build
+arguments, `VITE_GEOLIBRE_SHARE_URL` and `VITE_GEOLIBRE_COLLAB_URL`, exist for
+baking a default into your own image.)
+
+When `GEOLIBRE_COLLAB_URL` is set, the entrypoint also adds that relay's origin to
+the container's `Content-Security-Policy` `connect-src`, so the browser is allowed
+to open the WebSocket. (The directive has a bare `https:`, which covers any share
+server, but no bare `wss:`.) No manual edit of `docker/nginx.conf` is needed.
+
+Both must use TLS — `https://` for the share server, `wss://` for the relay —
+because the app sends your API token to the share server with every request.
+Plaintext is accepted only on `localhost` / `127.0.0.1` for local development, so
+put a self-hosted server behind a reverse proxy that terminates TLS. A value that
+does not satisfy this **fails the container boot** with an error naming the
+variable, rather than starting up and quietly using the public hosted service
+with your users' projects.
+
+GeoLibre includes reference implementations of both services. From the
+repository root, start the web app, projects server, Node collaboration relay,
+and Postgres together:
+
+```bash
+POSTGRES_PASSWORD=choose-a-password docker compose up --build
+```
+
+`POSTGRES_PASSWORD` is required, not defaulted: that account owns all project
+metadata, and a password committed to this repository would be identical on
+every deployment. Compose stops with an error naming the variable if it is
+unset. Set it in your shell, an `.env` file next to `docker-compose.yml`, or
+your orchestrator's secret store.
+
+Postgres only applies this password when it initializes its data directory, so
+changing it later does **not** change the password on an existing volume: the
+projects server then fails authentication against a database that still expects
+the old one. To rotate it, either `ALTER USER` inside the running database or
+recreate the volume.
+
+Open `http://localhost:8080`. The projects API is exposed at
+`http://localhost:8000` and the relay at `ws://localhost:8787`; the web
+container's runtime configuration is populated with those browser-reachable
+URLs. For a real deployment, set `GEOLIBRE_SHARE_URL`,
+`GEOLIBRE_COLLAB_URL`, `GEOLIBRE_VIEWER_URL`, and
+`GEOLIBRE_CORS_ORIGINS` to the public TLS origins before starting Compose.
+
+Behind a reverse proxy, only the web container should be reachable from outside
+the host. The Compose file publishes the projects server on `8000` and the relay
+on `8787` for local use, and pointing the browser URLs at your proxy does not
+stop anyone connecting to those listeners directly. Bind them to loopback (or
+drop the mappings entirely and let the proxy reach them over the Compose
+network) with an override file:
+
+```yaml
+# docker-compose.override.yml
+services:
+  geolibre-server:
+    ports: ["127.0.0.1:8000:8000"]
+  geolibre-collab:
+    ports: ["127.0.0.1:8787:8787"]
+```
+
+The password is substituted into a connection URL verbatim, so two characters
+need care:
+
+- `@` splits the URL early. `p@ssw0rd` is read as password `p` against host
+  `ssw0rd@postgres`, and the projects server restarts in a loop on a psycopg
+  error that never mentions the password.
+- `%` starts a percent-escape. `we%20ird` is silently decoded to `we ird`, so
+  the server authenticates with a password you never set and simply gets
+  rejected.
+
+Either avoid both characters or percent-encode the value in the URL (`%40` for
+`@`, `%25` for `%`) while leaving `POSTGRES_PASSWORD` itself as the literal
+password Postgres should expect.
+
+The projects API can also run as one small SQLite-backed container, without
+Postgres:
+
+```bash
+docker build -t geolibre-server backend/geolibre_server_api
+docker run --rm -p 8000:8000 \
+  -v geolibre-server-data:/data \
+  -e GEOLIBRE_PUBLIC_URL=http://localhost:8000 \
+  -e GEOLIBRE_VIEWER_URL=http://localhost:8080 \
+  geolibre-server
+```
+
+Its Docker image defaults to a SQLite database and filesystem objects under
+`/data`. See the complete [server API contract](server-api.md) and the
+service's
+[`README`](https://github.com/opengeos/GeoLibre/tree/main/backend/geolibre_server_api)
+for Postgres and S3-compatible storage configuration.
+
 ### Run the desktop app
 
 ```bash

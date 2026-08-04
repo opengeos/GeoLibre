@@ -17,9 +17,12 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import logging
 import math
 import re
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 WGS84 = "EPSG:4326"
 
@@ -140,6 +143,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     import geopandas as gpd  # noqa: PLC0415
 
     connection = sedona_db.connect()
+    future = None
     try:
         for layer in layers or []:
             name = str(layer.get("name") or "").strip()
@@ -171,12 +175,12 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             try:
                 frame = future.result(timeout=timeout_secs)
             except concurrent.futures.TimeoutError:
-                close = getattr(connection, "close", None)
-                if callable(close):
-                    try:
-                        close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                # No cancellation attempt: the pool has a single worker and a
+                # single task, so by the time this fires ``_execute`` is already
+                # running and ``future.cancel()`` would return False. The Rust
+                # engine exposes no way to interrupt an in-flight query, so the
+                # statement runs to completion and the ``finally`` block below
+                # defers closing the connection until it does.
                 raise SqlTimeout(
                     f"Spatial SQL timed out after {int(timeout_secs)} seconds"
                 ) from None
@@ -226,9 +230,17 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     finally:
         # SedonaDB connections are Rust-backed; release promptly rather than
         # waiting on GC. Tolerate bindings that expose no close().
-        close = getattr(connection, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:  # noqa: BLE001 - best-effort cleanup
-                pass
+        def _close_connection(*_args: object) -> None:
+            close = getattr(connection, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    # A failed close can strand Rust-backed resources, so give
+                    # operators a signal. The SQL text is deliberately omitted.
+                    logger.warning("Failed to close the SedonaDB connection", exc_info=True)
+
+        if future is not None and not future.done():
+            future.add_done_callback(_close_connection)
+        else:
+            _close_connection()

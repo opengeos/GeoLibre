@@ -6,6 +6,7 @@
 // the hook is an inert no-op. The session-create REST call and the WebSocket URL
 // are both derived from this one base.
 
+import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
 import type { ClientMessage, ServerMessage } from "./collab-protocol";
 import type { CollaborationMode } from "@geolibre/core";
 
@@ -21,23 +22,40 @@ const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 10_000;
 
 /**
- * Resolve the collaboration relay base from the Vite env, returning `null` when
- * unset or invalid so callers can keep the feature dark.
+ * Deployment variable naming the collaboration relay. Settable at build time or,
+ * on a prebuilt Docker image, with `-e GEOLIBRE_COLLAB_URL=…`.
+ */
+export const COLLAB_URL_ENV = "VITE_GEOLIBRE_COLLAB_URL";
+
+/**
+ * Resolve the collaboration relay base, returning `null` when unset or invalid
+ * so callers can keep the feature dark.
  *
- * Only `wss://` (or `ws://` on loopback for local `wrangler dev`) is accepted,
- * mirroring `resolveShareBaseUrl`: parse the URL and match the hostname exactly
- * so a value like `ws://localhost.evil.com` is rejected.
+ * Read from the deployment env (the Docker entrypoint's runtime config) before
+ * the build-time Vite env, so a prebuilt image can be pointed at a self-hosted
+ * relay without a rebuild.
  *
- * @param configured - The raw env value; defaults to `VITE_GEOLIBRE_COLLAB_URL`.
+ * Only `wss://` (or `ws://` on loopback for a local relay) is accepted,
+ * mirroring `resolveShareHost`: parse the URL and match the hostname exactly
+ * so a value like `ws://localhost.evil.com` is rejected. Credentials in the URL
+ * are rejected regardless of scheme, as `service_url()` in
+ * `docker/entrypoint.sh` does for the same value.
+ *
+ * @param configured - The raw value; read from the env when omitted.
+ * @param deploymentEnv - Runtime env override, for tests.
  * @returns The trimmed base URL without a trailing slash, or `null`.
  */
 export function resolveCollabBaseUrl(
-  configured: unknown = import.meta.env?.VITE_GEOLIBRE_COLLAB_URL,
+  configured?: unknown,
+  deploymentEnv?: EnvRecord,
 ): string | null {
-  if (typeof configured !== "string" || !configured.trim()) return null;
-  const trimmed = configured.trim().replace(/\/+$/, "");
+  const value =
+    configured !== undefined ? configured : readDeploymentEnvValue(COLLAB_URL_ENV, deploymentEnv);
+  if (typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim().replace(/\/+$/, "");
   try {
     const url = new URL(trimmed);
+    if (url.username || url.password) return null;
     if (
       url.protocol === "wss:" ||
       (url.protocol === "ws:" &&

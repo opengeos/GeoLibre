@@ -48,6 +48,13 @@ import {
   queryOvertureFeatures,
   maplibreGraticulePlugin,
   maplibreH3Plugin,
+  maplibreS2Plugin,
+  maplibreA5Plugin,
+  maplibreDggridPlugin,
+  maplibreDggalPlugin,
+  maplibreOlcPlugin,
+  maplibreGeohashPlugin,
+  maplibreTilecodePlugin,
   maplibreCloudsPlugin,
   maplibrePrecipitationPlugin,
   maplibreMapillaryPlugin,
@@ -195,7 +202,16 @@ manager.registerAll([
   maplibreElevationProfilePlugin,
   maplibreSwipePlugin,
   maplibreGraticulePlugin,
+  // The DGGS grid plugins (grouped into the Plugins menu's "DGGS" submenu,
+  // rendered where the first of them appears in this order).
   maplibreH3Plugin,
+  maplibreS2Plugin,
+  maplibreA5Plugin,
+  maplibreDggridPlugin,
+  maplibreDggalPlugin,
+  maplibreOlcPlugin,
+  maplibreGeohashPlugin,
+  maplibreTilecodePlugin,
   maplibreCloudsPlugin,
   maplibrePrecipitationPlugin,
   maplibreEffectsPlugin,
@@ -1327,6 +1343,11 @@ function githubRawVectorProxyUrl(value: string): string | null {
   if (
     url.protocol !== "https:" ||
     url.hostname !== "github.com" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    (url.port !== "" && url.port !== "443") ||
+    url.search !== "" ||
+    url.hash !== "" ||
     !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/raw\/.+$/.test(url.pathname)
   ) {
     return null;

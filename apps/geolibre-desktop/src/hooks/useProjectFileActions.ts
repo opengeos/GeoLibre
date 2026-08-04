@@ -493,13 +493,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // rethrows on failure so the caller (the gallery dialog) can show the error
   // inline next to the card it came from.
   //
-  // When `authToken` is set (the user has a share.geolibre.app API token), the
-  // request to the share host carries it as a Bearer token so the owner's
-  // unlisted and private projects load too. The token is attached only for the
-  // share host (see shareAuthorizedFetch), never to third-party hosts a project
-  // might reference. Token-authenticated opens are not remembered as recent
-  // (path = null), since reopening a private URL on restart would 403 without
-  // the header.
+  // When `authToken` is set (the user has a share API token), the request to the
+  // share host carries it as a Bearer token so the owner's unlisted and private
+  // projects load too. The token is attached only for the share host (see
+  // shareAuthorizedFetch), never to third-party hosts a project might reference —
+  // so when no share host is configured, the plain fetch is used and the token is
+  // simply not sent anywhere. Token-authenticated opens are not remembered as
+  // recent (path = null), since reopening a private URL on restart would 403
+  // without the header.
   const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
 
   const openProjectFromShareUrl = async (
@@ -517,14 +518,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
     try {
       let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;
-      if (options.authToken) {
+      // One decision drives both the fetch and whether the URL is remembered: a
+      // token is only actually sent when there is a share host to send it to, and
+      // an unauthenticated open of a public URL should still be remembered.
+      const shareBaseUrl = resolveShareBaseUrl();
+      const shareAuth =
+        options.authToken && shareBaseUrl
+          ? { token: options.authToken, baseUrl: shareBaseUrl }
+          : null;
+      if (shareAuth) {
         const fetched = await fetchProjectFromUrl(normalizedUrl, {
           signal: controller.signal,
-          fetchImpl: shareAuthorizedFetch(
-            options.authToken,
-            resolveShareBaseUrl(),
-            getShareFetch(),
-          ),
+          fetchImpl: shareAuthorizedFetch(shareAuth.token, shareAuth.baseUrl, getShareFetch()),
         });
         project = await resolveProjectXyzLayers(fetched, controller.signal);
       } else {
@@ -539,7 +544,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         loadProject(detached, null);
         useAppStore.setState({ isDirty: true });
       } else {
-        loadProject(project, options.authToken ? null : normalizedUrl);
+        loadProject(project, shareAuth ? null : normalizedUrl);
       }
     } finally {
       if (shareUrlAbortRef.current === controller) {

@@ -1,8 +1,13 @@
-// Uploads a serialized GeoLibre project to share.geolibre.app via its
+// Uploads a serialized GeoLibre project to a share server via its
 // `POST /api/projects` endpoint, authenticated with a personal API token the
-// user created on the website. Used by the Project > Share action.
+// user created on that server. Used by the Project > Share action.
+//
+// The host is share.geolibre.app unless the deployment names another one; see
+// `resolveShareHost` for the precedence and for why a rejected value disables
+// sharing instead of falling back to the hosted service.
 
 import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
+import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
 import { getShareFetch } from "./share-fetch";
 
 export type ShareVisibility = "public" | "unlisted" | "private";
@@ -90,33 +95,131 @@ export function isShareableTitle(title: string): boolean {
 }
 
 /**
- * Resolve the share host from the Vite env, falling back to production. The
- * `configured` value is read from the env by default but can be passed directly
- * in tests.
+ * Deployment variable naming the share host. Settable at build time or, on a
+ * prebuilt Docker image, with `-e GEOLIBRE_SHARE_URL=…` (the entrypoint copies it
+ * into the runtime config under this name).
  */
-export function resolveShareBaseUrl(
-  configured: unknown = import.meta.env?.VITE_GEOLIBRE_SHARE_URL,
-): string {
-  if (typeof configured === "string" && configured.trim()) {
-    const trimmed = configured.trim().replace(/\/+$/, "");
-    // Only accept HTTPS (or HTTP on loopback for local dev) so a misconfigured
-    // env var can't send the Bearer token over a plaintext connection. Parse the
-    // URL and match the hostname exactly: a prefix check like
-    // `startsWith("http://localhost")` would also accept hosts such as
-    // `http://localhost.evil.com`.
-    try {
-      const url = new URL(trimmed);
-      if (
-        url.protocol === "https:" ||
-        (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1"))
-      ) {
-        return trimmed;
-      }
-    } catch {
-      // Invalid URL; fall through to the production default.
-    }
+export const SHARE_URL_ENV = "VITE_GEOLIBRE_SHARE_URL";
+
+/** Value of {@link SHARE_URL_ENV} that turns project sharing off entirely. */
+export const SHARE_DISABLED_VALUE = "off";
+
+/**
+ * Why the share host is (or is not) what it is.
+ *
+ * - `default` — nothing configured, so the hosted service applies.
+ * - `configured` — a deployment named a host and it was accepted.
+ * - `disabled` — the deployment set {@link SHARE_DISABLED_VALUE}.
+ * - `invalid` — a deployment named a host and it was **rejected**. Sharing is
+ *   unavailable; it deliberately does not degrade to the hosted service.
+ */
+export type ShareHostStatus = "default" | "configured" | "disabled" | "invalid";
+
+export interface ShareHost {
+  status: ShareHostStatus;
+  /** Host to talk to, or null when sharing is unavailable. */
+  baseUrl: string | null;
+  /** The configured value, kept for the `invalid` message. Null when unset. */
+  configured: string | null;
+}
+
+/**
+ * Whether a URL is safe to send a Bearer token to: HTTPS anywhere, or HTTP on
+ * loopback for local development, and never with credentials in the URL.
+ *
+ * The hostname is matched exactly rather than by prefix — `startsWith(
+ * "http://localhost")` would also accept `http://localhost.evil.com`. A
+ * self-hosted server on a private network therefore needs TLS; see
+ * `docs/getting-started.md`.
+ *
+ * Embedded credentials are rejected regardless of scheme, mirroring the
+ * `service_url()` validator in `docker/entrypoint.sh`: a `https://user:pass@host`
+ * base would send Basic Auth alongside the Bearer token on every request, and
+ * the value reaches log output and error messages.
+ */
+function isSafeShareUrl(url: URL): boolean {
+  if (url.username || url.password) return false;
+  if (url.protocol === "https:") return true;
+  return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+}
+
+/**
+ * Resolve the share host, preferring the deployment env over the build env.
+ *
+ * A configured-but-rejected value resolves to `invalid` with a null `baseUrl`
+ * rather than falling back to {@link DEFAULT_SHARE_BASE_URL}. That fallback used
+ * to mean a self-hosted deployment with a typo'd or plaintext host silently
+ * uploaded its users' projects to the public hosted service — the one outcome a
+ * private deployment must never produce. The hosted default now applies only
+ * when nothing is configured at all.
+ *
+ * @param configured - The raw value; read from the env when omitted.
+ * @param deploymentEnv - Runtime env override, for tests.
+ * @returns The resolved host and why.
+ */
+export function resolveShareHost(configured?: unknown, deploymentEnv?: EnvRecord): ShareHost {
+  const raw =
+    configured !== undefined ? configured : readDeploymentEnvValue(SHARE_URL_ENV, deploymentEnv);
+  if (typeof raw !== "string" || !raw.trim()) {
+    return { status: "default", baseUrl: DEFAULT_SHARE_BASE_URL, configured: null };
   }
-  return DEFAULT_SHARE_BASE_URL;
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (trimmed.toLowerCase() === SHARE_DISABLED_VALUE) {
+    return { status: "disabled", baseUrl: null, configured: trimmed };
+  }
+  try {
+    const url = new URL(trimmed);
+    if (isSafeShareUrl(url)) {
+      return { status: "configured", baseUrl: trimmed, configured: trimmed };
+    }
+  } catch {
+    // Unparseable; falls through to `invalid` below.
+  }
+  return { status: "invalid", baseUrl: null, configured: trimmed };
+}
+
+/**
+ * The share host to talk to, or null when sharing is unavailable.
+ *
+ * Callers that need to explain *why* it is unavailable should use
+ * {@link resolveShareHost} instead.
+ */
+export function resolveShareBaseUrl(configured?: unknown): string | null {
+  return resolveShareHost(configured).baseUrl;
+}
+
+/**
+ * A base URL's host, plus its path when it has one, falling back to the hosted
+ * default's host when unparseable.
+ *
+ * The path is kept so a server hosted under a subpath
+ * (`https://example.test/geolibre`) is named the way the links built from the
+ * same base URL resolve — dropping it would show `example.test` next to a link to
+ * `https://example.test/geolibre/settings`.
+ */
+function hostOf(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl);
+    const path = url.pathname.replace(/\/+$/, "");
+    return path ? `${url.host}${path}` : url.host;
+  } catch {
+    return new URL(DEFAULT_SHARE_BASE_URL).host;
+  }
+}
+
+/**
+ * Hostname to name in UI copy — the `{{shareHost}}` interpolation in the message
+ * catalogues ("Sign in to {{shareHost}}") — so a self-hosted deployment reads its
+ * own host instead of share.geolibre.app.
+ *
+ * Falls back to the hosted default's hostname when no usable host is configured.
+ * Callers must not render host-bearing copy in that state — see
+ * `shareHostStatus`; the fallback exists so this never returns an empty string,
+ * not as a licence to advertise the hosted service on a deployment that opted
+ * out.
+ */
+export function shareHostLabel(): string {
+  return hostOf(resolveShareBaseUrl() ?? DEFAULT_SHARE_BASE_URL);
 }
 
 interface ShareProjectResponse {
@@ -134,10 +237,21 @@ export async function uploadProjectToShare(
 ): Promise<ShareUploadResult> {
   const token = options.token.trim();
   if (!token) {
-    throw new Error("Add a share.geolibre.app API token in Settings before sharing.");
+    throw new Error("Add a share API token in Settings before sharing.");
   }
 
-  const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
+  // Null means the deployment disabled sharing or named a host that was
+  // rejected. The dialog gates on the same state, so reaching here is a bug
+  // rather than something a user can do — fail loudly instead of falling back to
+  // the hosted service with the user's project.
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) {
+    throw new Error("No share server is configured for this deployment.");
+  }
+  const base = resolved.replace(/\/+$/, "");
+  // Named in the failure messages below so a self-hosted deployment does not
+  // report an outage at share.geolibre.app.
+  const hostLabel = hostOf(base);
   // Defaults to the share fetch, which the desktop build routes through Tauri's
   // native HTTP client to bypass WebView CORS (see share-fetch.ts).
   const fetchImpl = options.fetchImpl ?? getShareFetch();
@@ -170,7 +284,7 @@ export async function uploadProjectToShare(
         throw new Error("Upload timed out. Please try again.");
       }
     }
-    throw new Error("Could not reach share.geolibre.app. Check your internet connection.");
+    throw new Error(`Could not reach ${hostLabel}. Check your internet connection.`);
   }
 
   if (!response.ok) {
@@ -181,7 +295,7 @@ export async function uploadProjectToShare(
   const payload = (await response.json().catch(() => ({}))) as ShareProjectResponse;
   const project = payload.project;
   if (!project?.projectUrl || !project.rawJsonUrl) {
-    throw new Error("share.geolibre.app returned an unexpected response.");
+    throw new Error(`${hostLabel} returned an unexpected response.`);
   }
   return {
     username: project.username ?? "",

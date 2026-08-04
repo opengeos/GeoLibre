@@ -270,6 +270,61 @@ describe("fetchMyProjects", () => {
   });
 });
 
+// A deployment that disabled sharing (or named a host that was rejected) must
+// make the gallery say so rather than silently listing the public hosted
+// service's projects instead. See GeoLibre#1684.
+describe("gallery with no configured share host", () => {
+  function withDeploymentEnv(value: string, run: () => Promise<void>): Promise<void> {
+    (globalThis as { window?: unknown }).window = {
+      __GEOLIBRE_DEPLOYMENT_ENV__: { VITE_GEOLIBRE_SHARE_URL: value },
+    };
+    return run().finally(() => {
+      delete (globalThis as { window?: unknown }).window;
+    });
+  }
+
+  it("throws not-configured from the public listing when sharing is off", async () => {
+    await withDeploymentEnv("off", async () => {
+      const error = await fetchSharedProjects({
+        fetchImpl: () => assert.fail("must not reach the network"),
+      }).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+      assert.ok(error instanceof GalleryError);
+      assert.equal(error.code, "not-configured");
+    });
+  });
+
+  it("throws not-configured when the configured host was rejected", async () => {
+    await withDeploymentEnv("http://internal.corp", async () => {
+      const error = await fetchMyProjects({
+        token: "tok",
+        fetchImpl: () => assert.fail("must not reach the network"),
+      }).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+      assert.ok(error instanceof GalleryError);
+      assert.equal(error.code, "not-configured");
+    });
+  });
+
+  it("still honors an explicit baseUrl override", async () => {
+    await withDeploymentEnv("off", async () => {
+      const calls: string[] = [];
+      await fetchSharedProjects({
+        baseUrl: BASE,
+        fetchImpl: (input) => {
+          calls.push(String(input));
+          return Promise.resolve(new Response(JSON.stringify({ projects: [] })));
+        },
+      });
+      assert.equal(calls.length, 1);
+    });
+  });
+});
+
 describe("shareAuthorizedFetch", () => {
   it("attaches the token only for the share host, never third parties", async () => {
     const seen: { url: string; auth: string | null }[] = [];

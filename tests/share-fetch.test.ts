@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   getShareFetch,
+  requestOrigin,
   resetShareFetch,
   setShareFetch,
 } from "../apps/geolibre-desktop/src/lib/share-fetch";
@@ -111,5 +112,43 @@ describe("share fetch override", () => {
     ]);
     // The share-host request carries the bearer token via shareAuthorizedFetch.
     assert.equal(auth, "Bearer tok");
+  });
+});
+
+// installNativeShareFetch scopes the CORS-exempt native client by comparing
+// these origins. Matching on host alone would let a plaintext request to a host
+// configured over HTTPS through, so the scheme has to be part of the comparison.
+describe("requestOrigin", () => {
+  it("distinguishes schemes on the same host", () => {
+    assert.equal(
+      requestOrigin("https://maps.example.org/api/projects"),
+      "https://maps.example.org",
+    );
+    assert.equal(requestOrigin("http://maps.example.org/api/projects"), "http://maps.example.org");
+    assert.notEqual(
+      requestOrigin("http://maps.example.org/api/projects"),
+      requestOrigin("https://maps.example.org"),
+    );
+  });
+
+  it("keeps a non-default port distinct", () => {
+    assert.equal(requestOrigin("https://maps.example.org:8443/x"), "https://maps.example.org:8443");
+    assert.notEqual(
+      requestOrigin("https://maps.example.org:8443/x"),
+      requestOrigin("https://maps.example.org/x"),
+    );
+  });
+
+  it("accepts the Request and URL input shapes", () => {
+    assert.equal(requestOrigin(new URL("https://maps.example.org/a")), "https://maps.example.org");
+    assert.equal(
+      requestOrigin(new Request("https://maps.example.org/a")),
+      "https://maps.example.org",
+    );
+  });
+
+  it("returns null for values that have no real origin", () => {
+    assert.equal(requestOrigin("not a url"), null);
+    assert.equal(requestOrigin("mailto:someone@example.org"), null);
   });
 });
