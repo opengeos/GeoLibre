@@ -3,19 +3,20 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from geolibre_server_api.main import create_app
+from geolibre_server_api.main import FileStorage, create_app
 
 
 @pytest.fixture
 def client(tmp_path):
+    # Storage is constructed explicitly rather than left to make_storage(), which
+    # reads GEOLIBRE_STORAGE/GEOLIBRE_STORAGE_PATH from the ambient environment:
+    # that both created a ./data directory in the pytest working directory and
+    # would hand back an S3Storage if GEOLIBRE_STORAGE=s3 happened to be set.
     app = create_app(
         f"sqlite:///{tmp_path / 'test.db'}",
         public_url="https://share.example",
-        storage=None,
+        storage=FileStorage(str(tmp_path / "objects")),
     )
-    # create_app reads the storage path only if no implementation is passed.
-    app.state.storage.root = tmp_path / "objects"
-    app.state.storage.root.mkdir()
     with TestClient(app) as test_client:
         yield test_client
 
@@ -52,7 +53,11 @@ def test_accounts_login_current_user_and_hashed_secrets(client):
 
     token = account(client)
     assert client.get("/api/account", headers=auth(token)).json()["account"]["username"] == "ada"
-    assert client.get("/api/users/me", headers=auth(token)).json() == {"user": {"username": "ada"}}
+    me = client.get("/api/users/me", headers=auth(token)).json()["user"]
+    # Asserted field-wise, not by exact equality: pinning the whole dict froze the
+    # response to a single key and hid the drift from the published contract.
+    assert me["username"] == "ada"
+    assert me["id"] and me["createdAt"]
     login = client.post("/api/auth/token", json={"username": "ada", "password": "correct horse"})
     assert login.status_code == 200
     assert login.json()["token"] != token
@@ -110,6 +115,49 @@ def test_project_crud_visibility_listing_and_raw_views(client):
     assert historical.json() == json.loads(content)
     assert client.delete(f"/api/projects/{project_id}", headers=auth(owner)).status_code == 204
     assert client.get(f"/api/projects/{project_id}").status_code == 404
+
+
+def test_unlisted_is_hidden_from_listings_but_readable_by_url(client):
+    """`unlisted` sits between public and private and had no coverage: it is kept
+    out of every listing a non-owner sees, yet anyone holding the URL can read it."""
+    owner = account(client)
+    other = account(client, "grace")
+    project, content = create_project(client, owner, "unlisted", title="Hidden")
+
+    assert client.get("/api/projects").json()["projects"] == []
+    assert client.get("/api/users/ada/projects", headers=auth(other)).json()["projects"] == []
+    assert len(client.get("/api/users/ada/projects", headers=auth(owner)).json()["projects"]) == 1
+    assert len(client.get("/api/projects?mine=true", headers=auth(owner)).json()["projects"]) == 1
+
+    anonymous = client.get(project["rawJsonUrl"].removeprefix("https://share.example"))
+    assert anonymous.status_code == 200 and anonymous.json() == json.loads(content)
+
+
+def test_patch_rejects_explicit_nulls(client):
+    """An explicit JSON null survives `exclude_unset`, so these must be 422s rather
+    than a non-nullable column error or a len(None) crash at 500."""
+    owner = account(client)
+    project, _ = create_project(client, owner)
+    path = f"/api/projects/{project['id']}"
+    assert client.patch(path, headers=auth(owner), json={"visibility": None}).status_code == 422
+    assert client.patch(path, headers=auth(owner), json={"tags": None}).status_code == 200
+    assert client.get(path).json()["project"]["tags"] == []
+
+
+def test_username_length_is_enforced(client):
+    """The optional middle group in the old pattern let a 1-character username
+    through, contradicting both the error text and the documented limits."""
+    for name in ("a", "ab"):
+        response = client.post(
+            "/api/accounts", json={"username": name, "password": "correct horse"}
+        )
+        assert response.status_code == 422, name
+    assert (
+        client.post(
+            "/api/accounts", json={"username": "abc", "password": "correct horse"}
+        ).status_code
+        == 201
+    )
 
 
 def test_thumbnail_fork_and_slug_collision(client):

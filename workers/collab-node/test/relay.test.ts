@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { WebSocket } from "ws";
@@ -152,7 +153,7 @@ describe("Node collaboration relay", () => {
   });
 
   it("restores the latest snapshot and revision from SQLite after restart", async () => {
-    const directory = await mkdtemp("/tmp/geolibre-collab-");
+    const directory = await mkdtemp(join(tmpdir(), "geolibre-collab-"));
     const dbPath = join(directory, "relay.sqlite");
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
 
@@ -160,8 +161,14 @@ describe("Node collaboration relay", () => {
     const created = await createSession(first.http);
     const host = await connect(first.http, created.sessionId);
     await joinSession(host, created.hostToken);
+    // A second peer observes the broadcast, which the relay only emits after the
+    // snapshot is written. Waiting on that beats a fixed sleep, which turns into
+    // a flake the moment CI is slower than the guess.
+    const observer = await connect(first.http, created.sessionId);
+    await joinSession(observer);
     host.send(JSON.stringify({ type: "snapshot", project: { persisted: true }, rev: 0 }));
-    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    await next(observer, "snapshot");
+    observer.close();
     host.close();
     await cleanups.pop()?.();
 

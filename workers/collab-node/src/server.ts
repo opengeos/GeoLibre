@@ -101,6 +101,32 @@ export function createRelay(options: RelayOptions = {}): {
   const sessions = new Map<string, LiveSession>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxSnapshotBytes + 64_000 });
 
+  // `POST /sessions` is unauthenticated and inserts a row per call, while the
+  // only delete path runs after a peer has connected *and* disconnected. A code
+  // nobody ever joins would otherwise sit in SQLite forever.
+  const sweep = (): void => store.deleteStaleBefore(Date.now() - idleTtlMs, sessions.keys());
+  sweep();
+  const sweepTimer = setInterval(sweep, Math.min(idleTtlMs, 15 * 60 * 1000));
+  sweepTimer.unref();
+
+  // A TCP connection dropped without a close frame (NAT or proxy idle timeout)
+  // fires neither "close" nor "error", so the peer would linger in the roster
+  // forever and keep peers.size above zero, which blocks the idle cleanup above.
+  const alive = new WeakSet<WebSocket>();
+  const heartbeat = setInterval(() => {
+    for (const session of sessions.values()) {
+      for (const peer of session.peers) {
+        if (!alive.has(peer.socket)) {
+          peer.socket.terminate();
+          continue;
+        }
+        alive.delete(peer.socket);
+        peer.socket.ping();
+      }
+    }
+  }, 30_000);
+  heartbeat.unref();
+
   function live(id: string): LiveSession {
     let session = sessions.get(id);
     if (!session) {
@@ -153,17 +179,39 @@ export function createRelay(options: RelayOptions = {}): {
     peer: Peer,
     raw: WebSocket.RawData,
   ): void {
-    if (!raw || Array.isArray(raw) || raw instanceof ArrayBuffer || ArrayBuffer.isView(raw)) {
-      // ws delivers text as Buffer too; isBinary is handled at the event site.
-    }
+    // ws delivers text as Buffer too; isBinary is handled at the event site.
     const text = raw.toString();
     let message: ClientMessage;
     try {
-      message = JSON.parse(text) as ClientMessage;
+      // `null`, `1` and `"x"` are all valid JSON, so parsing alone does not
+      // guarantee an object. Reading `.type` off a non-object throws inside the
+      // ws "message" listener, which is an uncaught exception that takes the
+      // whole relay -- and every other session it hosts -- down with it.
+      const parsed: unknown = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("not an object");
+      }
+      message = parsed as ClientMessage;
     } catch {
       send(peer, { type: "error", code: "bad-message", message: "Malformed JSON." });
       return;
     }
+    // Presence is by far the highest-frequency frame (one per cursor move, per
+    // participant) and needs no persisted state, so it is answered before the
+    // store read below. store.get is a synchronous SQLite SELECT * that pulls
+    // the snapshot and chat blobs and blocks the event loop; because this relay
+    // hosts every session in one process, doing that per presence frame would
+    // add latency to every *other* session too. The Cloudflare DO can afford the
+    // per-message read because each session is its own isolated actor.
+    if (message.type === "presence" && peer.participant) {
+      const cursor = sanitizeCursor(message.cursor);
+      const view = sanitizeView(message.view);
+      const clientId = peer.participant.clientId;
+      session.presence.set(clientId, { cursor, view });
+      broadcast(session, { type: "presence", clientId, cursor, view }, peer);
+      return;
+    }
+
     const persisted = store.get(id);
     if (!persisted) {
       peer.socket.close(1008, "Unknown session");
@@ -228,13 +276,9 @@ export function createRelay(options: RelayOptions = {}): {
       return;
     }
 
-    if (message.type === "presence") {
-      const cursor = sanitizeCursor(message.cursor);
-      const view = sanitizeView(message.view);
-      session.presence.set(participant.clientId, { cursor, view });
-      broadcast(session, { type: "presence", clientId: participant.clientId, cursor, view }, peer);
-      return;
-    }
+    // A presence frame from a peer that has not joined yet falls through to
+    // here, where the join guard above has already rejected it.
+    if (message.type === "presence") return;
 
     if (message.type === "set-mode") {
       const authorization = authorizeHostAction(participant, "session mode");
@@ -434,11 +478,27 @@ export function createRelay(options: RelayOptions = {}): {
       return json(response, 200, { ok: true, service: "geolibre-collab" });
     if (url.pathname === "/sessions" && request.method === "POST") {
       let raw = "";
+      let aborted = false;
       request.setEncoding("utf8");
+      // An unhandled "error" on the request stream (a client aborting mid-upload)
+      // throws and would terminate the process.
+      request.on("error", () => {
+        aborted = true;
+      });
       request.on("data", (chunk) => {
-        if (raw.length < 16_384) raw += chunk;
+        if (aborted) return;
+        if (raw.length < 16_384) {
+          raw += chunk;
+          return;
+        }
+        // Stopping at the cap but continuing to read let a client stream
+        // unbounded data at us; destroy the request instead.
+        aborted = true;
+        request.destroy();
+        json(response, 413, { error: "Request body too large." });
       });
       request.on("end", () => {
+        if (aborted) return;
         let requested: unknown = {};
         try {
           requested = raw ? JSON.parse(raw) : {};
@@ -474,6 +534,8 @@ export function createRelay(options: RelayOptions = {}): {
       const session = live(id);
       const peer: Peer = { socket: websocket };
       session.peers.add(peer);
+      alive.add(websocket);
+      websocket.on("pong", () => alive.add(websocket));
       websocket.on("message", (raw, isBinary) => {
         if (isBinary) {
           send(peer, {
@@ -483,7 +545,14 @@ export function createRelay(options: RelayOptions = {}): {
           });
           return;
         }
-        handleMessage(id, session, peer, raw);
+        // Defence in depth: this listener runs outside any promise chain, so an
+        // throw here is an uncaught exception that stops the whole relay. No
+        // single session's frame should be able to do that to the others.
+        try {
+          handleMessage(id, session, peer, raw);
+        } catch {
+          send(peer, { type: "error", code: "bad-message", message: "Could not handle message." });
+        }
       });
       websocket.on("close", () => closePeer(id, session, peer));
       websocket.on("error", () => closePeer(id, session, peer));
@@ -494,13 +563,27 @@ export function createRelay(options: RelayOptions = {}): {
     server,
     store,
     close: async () => {
+      clearInterval(sweepTimer);
+      clearInterval(heartbeat);
+      const open: WebSocket[] = [];
       for (const session of sessions.values()) {
         if (session.cleanup) clearTimeout(session.cleanup);
-        for (const peer of session.peers) peer.socket.close(1001, "Server shutting down");
+        for (const peer of session.peers) {
+          peer.socket.close(1001, "Server shutting down");
+          open.push(peer.socket);
+        }
       }
+      // close() only *starts* the closing handshake. server.close() waits for
+      // every connection to end, so a client that never answers would hang
+      // shutdown indefinitely.
+      const grace = setTimeout(() => {
+        for (const socket of open) socket.terminate();
+      }, 1000);
+      grace.unref();
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
+      clearTimeout(grace);
       wss.close();
       store.close();
     },

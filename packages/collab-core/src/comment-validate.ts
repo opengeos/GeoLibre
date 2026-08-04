@@ -2,6 +2,8 @@
 // `ProjectComment` / `CommentReply` shapes from `@geolibre/core` but operate on
 // untrusted `unknown` input, returning a sanitized object or `null`.
 
+import { finite, HEX_COLOR_RE } from "./internal/validate";
+
 /** Body length cap — matches the chat limit so comments can't store unbounded text. */
 export const MAX_COMMENT_BODY_LENGTH = 2000;
 
@@ -46,12 +48,6 @@ export function preserveStoredComments(project: unknown, stored: unknown): unkno
   const comments = (stored as Record<string, unknown>).comments;
   if (!Array.isArray(comments) || comments.length === 0) return project;
   return { ...(project as Record<string, unknown>), comments };
-}
-
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-function finite(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n);
 }
 
 // -- anchor -------------------------------------------------------------------

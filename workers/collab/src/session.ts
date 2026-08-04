@@ -61,42 +61,25 @@ export interface Env {
   COLLAB_SESSION: DurableObjectNamespace<CollabSession>;
 }
 
-// Cloudflare caps a single WebSocket message at ~1 MiB. Reject project
-// snapshots above this so one oversized embedded FeatureCollection can't blow
-// the actor; the client surfaces a "share via URL instead" hint.
-// Reclaim an empty session's storage this long after the last socket closes, so
-// abandoned codes don't accumulate. A rejoin before the alarm fires cancels it.
-// Cap a single chat message so one frame can't store an unbounded string.
-// How many recent chat messages to retain so a late joiner sees recent history.
-// Persisted (not in-memory) so it survives a hibernation between messages.
-// Hard byte budget for the persisted chat log, comfortably under Cloudflare's
-// ~128 KiB per-value storage cap (multi-byte text can blow the count limit).
-// Minimum gap between a socket's chat frames. Each chat costs a storage
-// read+write and a fan-out, so silently drop bursts faster than this floor to
-// keep one client from exhausting the session's storage-op budget. Generous
-// enough that normal typing/sending is never affected.
+// The snapshot cap, empty-session TTL, and chat limits now live in
+// `@geolibre/collab-core` (imported above) so both relays enforce one set of
+// numbers; see that module for why each value is what it is.
 
 // Stateless and reused across frames (snapshots can arrive several times a
 // second), so we don't allocate a new encoder per message.
 const ENCODER = new TextEncoder();
 
-interface SocketAttachment extends SessionParticipant {
-  clientId: string;
-  displayName: string;
-  color: string;
-  role: CollaborationRole;
-  /**
-   * Host-set per-participant edit override (#754, Part 3). `undefined` means
-   * "follow the session mode"; `true`/`false` pins this socket to can-edit /
-   * view-only. Stored on the attachment so it survives a hibernation wake and is
-   * never persisted to storage (it is keyed to a clientId, which is per-socket).
-   */
-  editOverride?: boolean;
-  /** Epoch-ms of this socket's last accepted chat frame, for rate-limiting. */
-  lastChatTs?: number;
-  /** Epoch-ms of this socket's last accepted comment-mutation frame. */
-  lastCommentTs?: number;
-}
+/**
+ * The shared `SessionParticipant` state, serialized onto a hibernatable socket.
+ * `editOverride`, `lastChatTs`, and `lastCommentTs` ride on the attachment so
+ * they survive a hibernation wake; none is persisted to storage, because each is
+ * keyed to a per-socket clientId (#754, Part 3).
+ *
+ * Deliberately an alias rather than an interface restating the fields: a copy
+ * would compile fine while silently reintroducing the drift the extraction into
+ * `@geolibre/collab-core` exists to prevent.
+ */
+type SocketAttachment = SessionParticipant;
 
 /** Validate a single stored chat entry's field types so a corrupt record can't
  *  reach clients (where it would, e.g., crash `coordinate.lat.toFixed`). */
@@ -449,16 +432,7 @@ export class CollabSession extends DurableObject<Env> {
     // host previously pinned to can-edit would keep editing through a later
     // switch to view-only (a "sticky override" footgun), and there is otherwise
     // no path to reset an override back to "follow the session mode".
-    const socketsWithAttachments = this.ctx
-      .getWebSockets()
-      .map((socket) => ({
-        socket,
-        attachment: socket.deserializeAttachment() as SocketAttachment | null,
-      }))
-      .filter(
-        (entry): entry is { socket: WebSocket; attachment: SocketAttachment } =>
-          entry.attachment !== null,
-      );
+    const socketsWithAttachments = this.attachedSockets();
     const clearedAny = clearParticipantOverrides(
       socketsWithAttachments.map((entry) => entry.attachment),
     );
@@ -490,16 +464,7 @@ export class CollabSession extends DurableObject<Env> {
     }
     // `message` is untrusted JSON, so guard the lookup key's type (mirrors the
     // strict-boolean coercion below) before matching it against attachments.
-    const socketsWithAttachments = this.ctx
-      .getWebSockets()
-      .map((socket) => ({
-        socket,
-        attachment: socket.deserializeAttachment() as SocketAttachment | null,
-      }))
-      .filter(
-        (entry): entry is { socket: WebSocket; attachment: SocketAttachment } =>
-          entry.attachment !== null,
-      );
+    const socketsWithAttachments = this.attachedSockets();
     const changed = setParticipantOverride(
       attachment,
       socketsWithAttachments.map((entry) => entry.attachment),
@@ -583,12 +548,18 @@ export class CollabSession extends DurableObject<Env> {
 
   // -- helpers ----------------------------------------------------------------
 
-  private socketByClientId(clientId: string): WebSocket | null {
+  /**
+   * Live sockets paired with their deserialized attachment. Callers mutate the
+   * returned attachment objects in place and must re-serialize that same
+   * instance for the change to survive a hibernation wake.
+   */
+  private attachedSockets(): { socket: WebSocket; attachment: SocketAttachment }[] {
+    const result: { socket: WebSocket; attachment: SocketAttachment }[] = [];
     for (const socket of this.ctx.getWebSockets()) {
-      const a = socket.deserializeAttachment() as SocketAttachment | null;
-      if (a?.clientId === clientId) return socket;
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment) result.push({ socket, attachment });
     }
-    return null;
+    return result;
   }
 
   private participants(except?: WebSocket): CollabParticipant[] {

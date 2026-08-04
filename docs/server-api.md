@@ -24,6 +24,24 @@ implementation or storage engine. The reference implementation lives in
 - CORS deployments must allow `Authorization` and `Content-Type` from the
   GeoLibre web origin. Native desktop requests do not depend on CORS.
 
+## What the reference server leaves to the operator
+
+Two parts of the contract above are deliberately not implemented in
+`backend/geolibre_server_api`, and an operator exposing it publicly has to
+supply them:
+
+- **Rate limiting.** `429` is in the error vocabulary, but no route returns it.
+  `POST /api/auth/token` and `POST /api/accounts` are unauthenticated and run
+  scrypt on every call, so without a limiter in front they allow password
+  brute-forcing, username enumeration through the `409`/`401` distinction, and
+  a cheap CPU-burn. Put a reverse proxy or WAF limit on both, keyed by client IP
+  and by username.
+- **Token expiry.** `401` covers an expired token, but tokens issued here do not
+  carry an expiry and stay valid until `DELETE /api/auth/token` revokes them.
+
+Both are contract-level capabilities a compatible server may implement; the
+reference implementation is a correctness baseline, not a hardened deployment.
+
 ## Limits
 
 | Field | Limit |
@@ -172,18 +190,24 @@ Query parameters:
 - `limit`: integer page size.
 - `offset`: non-negative number of matching records to skip.
 - `featured=true`: return featured projects only.
+- `mine=true`: return the caller's own projects, including unlisted and private
+  ones. Requires auth; without a valid token this is `401`.
 
-Only public projects are returned. An Authorization header does not broaden a
-public listing by itself. Invalid pagination is `422`.
+Only public projects are returned unless `mine=true` is set. An Authorization
+header does not broaden a public listing by itself. Invalid pagination is `422`.
 
 ### `GET /api/users/{username}/projects`
 
-Requires auth. When `{username}` is the caller's username, returns
-`{"projects": [...]}` containing all projects owned by the caller, including
-unlisted and private projects, in newest-updated-first order. The current client
-first resolves its username through `GET /api/users/me`, then calls this route.
-Requesting another user's non-public listing returns `403` (an implementation
-may instead return that user's public projects if it documents that extension).
+Returns `{"projects": [...]}` owned by `{username}`, in newest-updated-first
+order. Auth is optional and decides the breadth of the result: when the token
+identifies `{username}`, the listing includes their unlisted and private
+projects; every other caller, authenticated or not, sees only that user's public
+projects. The current client first resolves its username through
+`GET /api/users/me`, then calls this route.
+
+A non-owner therefore gets a filtered `200`, not a `403` — the listing narrows
+rather than refusing, which keeps a user's existence from being probed through
+the status code.
 
 ### `GET /api/projects/{id}`
 

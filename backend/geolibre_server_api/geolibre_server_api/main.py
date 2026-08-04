@@ -27,9 +27,12 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     delete,
+    event,
     func,
     select,
+    update,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -40,7 +43,10 @@ from sqlalchemy.orm import (
 )
 
 Visibility = Literal["public", "unlisted", "private"]
-USERNAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,37}[a-z0-9])?$")
+# 3-39 chars, starting and ending alphanumeric. The middle group is *not*
+# optional: making it so would let a single character through, which contradicts
+# both the error text and the limits table in docs/server-api.md.
+USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,37}[a-z0-9]$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
@@ -103,8 +109,11 @@ class Version(Base):
 
 
 class Credentials(BaseModel):
-    username: str
-    password: str
+    # Both endpoints taking this model are unauthenticated, and password_hash
+    # feeds the value straight to scrypt (n=2**14, ~16 MiB per call). Without an
+    # upper bound a caller can drive that cost with an arbitrarily large body.
+    username: str = Field(max_length=39)
+    password: str = Field(max_length=1024)
 
 
 class ProjectCreate(BaseModel):
@@ -253,6 +262,15 @@ def create_app(
     )
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     engine = create_engine(database_url, connect_args=connect_args)
+    if database_url.startswith("sqlite"):
+        # SQLite disables foreign keys per connection, which makes every
+        # ondelete="CASCADE" inert. The ORM cascade covers projects and versions,
+        # but tokens have no relationship, so deleting an account would otherwise
+        # strand its tokens.
+        @event.listens_for(engine, "connect")
+        def _enable_foreign_keys(dbapi_connection, _record):  # pragma: no cover - driver hook
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
     Base.metadata.create_all(engine)
     sessions = sessionmaker(engine, expire_on_commit=False)
     object_storage = storage or make_storage()
@@ -264,11 +282,17 @@ def create_app(
     app = FastAPI(title="GeoLibre projects and identity API", version="1.0")
     app.state.engine = engine
     app.state.storage = object_storage
-    origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",")]
+    origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",") if x.strip()]
+    # CORSMiddleware treats a "*" anywhere in the list as allow-all, so a value
+    # like "*,https://app.example" would otherwise pair allow-all with
+    # allow_credentials=True (the list is not exactly ["*"]) and accept
+    # credentialed requests from any origin. Wildcard wins, and drops credentials
+    # with it.
+    wildcard = "*" in origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=origins != ["*"],
+        allow_origins=["*"] if wildcard else origins,
+        allow_credentials=not wildcard,
         allow_methods=["*"],
         allow_headers=["Authorization", "Content-Type"],
     )
@@ -446,7 +470,9 @@ def create_app(
 
     @app.get("/api/users/me")
     def get_current_user(account: Account = Depends(required_account)):
-        return {"user": {"username": account.username}}
+        # The full account shape, matching what docs/server-api.md publishes and
+        # what /api/account returns. The gallery client reads only `username`.
+        return {"user": account_json(account)}
 
     @app.get("/api/users/{username}/projects")
     def get_user_projects(
@@ -542,9 +568,15 @@ def create_app(
         if "description" in updates:
             project.description = updates["description"] or ""
         if "visibility" in updates:
+            # exclude_unset keeps a field the client sent as an explicit null, so
+            # these two need their own guards: null visibility would hit a
+            # non-nullable column at commit, and null tags would reach len().
+            # Both surfaced as an unhandled 500 rather than a 422.
+            if updates["visibility"] is None:
+                raise HTTPException(422, "visibility must not be null")
             project.visibility = updates["visibility"]
         if "tags" in updates:
-            tags = updates["tags"]
+            tags = updates["tags"] or []
             if len(tags) > 20 or any(not tag or len(tag) > 40 for tag in tags):
                 raise HTTPException(422, "tags must contain at most 20 non-empty 40-character tags")
             project.tags_json = json.dumps(tags)
@@ -561,11 +593,33 @@ def create_app(
     ):
         project = owned(session.get(Project, project_id), account)
         parse_content(body.content, max_project_bytes)
-        number = len(project.versions) + 1
-        key = f"projects/{project.id}/versions/{number}.json"
+        # Allocated from max(number) and committed *before* the object is
+        # written. Deriving it from len(project.versions) let two concurrent
+        # updates pick the same number: both wrote the same storage key, the
+        # second lost the primary-key race with a 500, and the winner's content
+        # had already been overwritten. Reserving the row first means a loser
+        # fails before touching storage, and can retry on the next free number.
+        for _ in range(5):
+            number = (
+                session.scalar(
+                    select(func.max(Version.number)).where(Version.project_id == project.id)
+                )
+                or 0
+            ) + 1
+            key = f"projects/{project.id}/versions/{number}.json"
+            session.add(
+                Version(project_id=project.id, number=number, object_key=key, created_at=now())
+            )
+            try:
+                session.flush()
+                break
+            except IntegrityError:
+                session.rollback()
+                project = owned(session.get(Project, project_id), account)
+        else:
+            raise HTTPException(409, "could not allocate a version number; retry")
         object_storage.put(key, body.content.encode(), "application/json")
         project.updated_at = now()
-        session.add(Version(project_id=project.id, number=number, object_key=key, created_at=now()))
         session.commit()
         session.refresh(project)
         return {"project": project_json(project), "version": number}
@@ -584,10 +638,12 @@ def create_app(
     @app.post("/api/projects/{project_id}/forks", status_code=201)
     def fork_project(
         project_id: str,
-        # Defaulted so the body may be omitted entirely: "fork this project" with
+        # Optional so the body may be omitted entirely: "fork this project" with
         # no options is the common call, and every field already has a default.
-        # Without this FastAPI treats the body as required and answers 422.
-        body: ForkRequest = ForkRequest(),
+        # Without this FastAPI treats the body as required and answers 422. The
+        # default is None rather than ForkRequest() so the model is not
+        # constructed at import time (ruff B008).
+        body: ForkRequest | None = None,
         account: Account = Depends(required_account),
         session: Session = Depends(db),
     ):
@@ -598,10 +654,15 @@ def create_app(
             account,
             content,
             source.title + ".geolibre.json",
-            body.visibility,
+            (body or ForkRequest()).visibility,
             commit=False,
         )
-        source.fork_count += 1
+        # Incremented in SQL rather than read-modify-write in Python, so
+        # concurrent forks cannot lose each other's increments. The contract in
+        # docs/server-api.md promises this counter rises atomically.
+        session.execute(
+            update(Project).where(Project.id == source.id).values(fork_count=Project.fork_count + 1)
+        )
         session.commit()
         session.refresh(fork)
         return {"project": project_json(fork)}
@@ -644,9 +705,18 @@ def create_app(
         content_type = request.headers.get("content-type", "").split(";")[0]
         if content_type not in IMAGE_TYPES:
             raise HTTPException(422, "thumbnail must be PNG, JPEG, or WebP")
-        data = await request.body()
-        if len(data) > max_thumbnail_bytes:
-            raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
+        # Streamed rather than `await request.body()`, which materializes the
+        # whole upload before the size is ever checked: an authenticated caller
+        # could otherwise push a multi-gigabyte body and exhaust worker memory to
+        # earn a 413. Aborting mid-stream caps what is ever held.
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > max_thumbnail_bytes:
+                raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
+            chunks.append(chunk)
+        data = b"".join(chunks)
         object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
         project.thumbnail_type = content_type
         project.updated_at = now()
@@ -691,9 +761,14 @@ def create_app(
             select(Project).join(Account).where(Account.username == username, Project.slug == slug)
         )
         project = visible(project, account)
-        project.views += 1
+        # Read the object first: a missing object is a 404 that should not count
+        # as a view. Incremented in SQL so concurrent reads do not lose counts.
+        body = raw_response(project, project.versions[-1], False)
+        session.execute(
+            update(Project).where(Project.id == project.id).values(views=Project.views + 1)
+        )
         session.commit()
-        return raw_response(project, project.versions[-1], False)
+        return body
 
     @app.get("/{username}/{slug}")
     def project_page(
@@ -712,10 +787,17 @@ def create_app(
     return app
 
 
-app = create_app()
-
-
 def run() -> None:
     import uvicorn
 
-    uvicorn.run("geolibre_server_api.main:app", host="0.0.0.0", port=8000)
+    # A factory, not a module-level `app = create_app()`. Building the app at
+    # import time opens the database and creates the storage root as a side
+    # effect of importing this module -- which the test suite does, leaving a
+    # stray ./geolibre-server-api.db and ./data in whatever directory pytest ran
+    # from.
+    uvicorn.run(
+        "geolibre_server_api.main:create_app",
+        factory=True,
+        host=os.getenv("GEOLIBRE_HOST", "0.0.0.0"),  # noqa: S104 - containers bind all interfaces
+        port=int(os.getenv("GEOLIBRE_PORT", "8000")),
+    )

@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@geolibre/collab-core": "0.0.0"
+    "@geolibre/collab-core": "*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260728.1",

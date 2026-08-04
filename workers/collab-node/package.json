@@ -10,7 +10,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@geolibre/collab-core": "0.0.0",
+    "@geolibre/collab-core": "*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

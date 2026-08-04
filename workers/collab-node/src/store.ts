@@ -80,18 +80,17 @@ export class SessionStore {
   }
 
   saveSnapshot(id: string, project: unknown): number {
-    this.db
+    // RETURNING keeps the write and the revision read in one statement, so the
+    // number handed back is always the one this update produced.
+    const row = this.db
       .prepare(
         `UPDATE collab_sessions
          SET snapshot = ?, rev = rev + 1, updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ?
+         RETURNING rev`,
       )
-      .run(JSON.stringify(project), Date.now(), id);
-    return (
-      this.db.prepare("SELECT rev FROM collab_sessions WHERE id = ?").get(id) as {
-        rev: number;
-      }
-    ).rev;
+      .get(JSON.stringify(project), Date.now(), id) as { rev: number } | undefined;
+    return row?.rev ?? 0;
   }
 
   saveProjectState(id: string, project: unknown): void {
@@ -114,6 +113,20 @@ export class SessionStore {
 
   delete(id: string): void {
     this.db.prepare("DELETE FROM collab_sessions WHERE id = ?").run(id);
+  }
+
+  /**
+   * Drop sessions untouched since `cutoff`, skipping any that are currently live
+   * in memory. Reclaims codes that were allocated by `POST /sessions` but never
+   * joined, which no socket-close path ever reaches.
+   */
+  deleteStaleBefore(cutoff: number, keep: Iterable<string>): void {
+    const keepSet = new Set(keep);
+    const rows = this.db
+      .prepare("SELECT id FROM collab_sessions WHERE updated_at < ?")
+      .all(cutoff) as { id: string }[];
+    const remove = this.db.prepare("DELETE FROM collab_sessions WHERE id = ?");
+    for (const row of rows) if (!keepSet.has(row.id)) remove.run(row.id);
   }
 
   close(): void {

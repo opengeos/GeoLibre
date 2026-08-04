@@ -10,6 +10,7 @@ import {
   sanitizeColor,
   sanitizeCursor,
   sanitizeDisplayName,
+  sanitizeView,
   setParticipantOverride,
   toWireParticipant,
   type SessionParticipant,
@@ -76,6 +77,30 @@ describe("collaboration relay conformance", () => {
     const decision = authorizeSnapshot(host, "co-edit", MAX_SNAPSHOT_BYTES + 1);
     assert.equal(decision.ok, false);
     if (!decision.ok) assert.equal(decision.code, "too-large");
+
+    // The Node relay passes its own configured ceiling while the Worker takes
+    // the default, so a regression that ignored `maxBytes` would still satisfy
+    // the assertions above. Pin the explicit argument too.
+    assert.deepEqual(authorizeSnapshot(host, "co-edit", 64, 64), { ok: true });
+    const custom = authorizeSnapshot(host, "co-edit", 65, 64);
+    assert.equal(custom.ok, false);
+    if (!custom.ok) assert.equal(custom.code, "too-large");
+  });
+
+  it("sanitizes untrusted presence viewports", () => {
+    // Both relays run sanitizeView over presence frames, so its contract belongs
+    // in the shared suite alongside the permission rules.
+    assert.equal(sanitizeView(null), null);
+    assert.equal(sanitizeView({ center: "nope" }), null);
+    assert.equal(sanitizeView({ center: [Number.NaN, 1] }), null);
+    assert.deepEqual(sanitizeView({ center: [1, 2] }), {
+      center: [1, 2],
+      zoom: 0,
+      bearing: 0,
+      pitch: 0,
+    });
+    assert.deepEqual(sanitizeView({ center: [1, 2], bbox: [1, 2, 3, 4] })?.bbox, [1, 2, 3, 4]);
+    assert.equal(sanitizeView({ center: [1, 2], bbox: [1, 2, 3] })?.bbox, undefined);
   });
 
   it("clears sticky overrides when the host changes the session mode", () => {
@@ -93,6 +118,10 @@ describe("collaboration relay conformance", () => {
     const guest = participant("guest");
     assert.equal(toWireParticipant(guest).editOverride, null);
     assert.equal(sanitizeDisplayName(42), "Guest");
+    // A whitespace-only name is truthy, so it used to slip past the fallback and
+    // reach the roster, every participants broadcast, and every chat author.
+    assert.equal(sanitizeDisplayName("   "), "Guest");
+    assert.equal(sanitizeDisplayName("  Ada  "), "Ada");
     assert.equal(sanitizeColor("red"), "#888888");
     assert.deepEqual(sanitizeCursor({ lng: -71, lat: 42, extra: "drop" }), {
       lng: -71,

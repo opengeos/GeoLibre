@@ -22,3 +22,17 @@ Configuration:
 Endpoints are `POST /sessions`, `GET /sessions/:id/ws`, and `GET /health`.
 Persist the directory containing `COLLAB_DB_PATH`, and terminate TLS at the
 ingress so browsers can connect with `wss://`.
+
+### Volume ownership
+
+The container runs as the unprivileged `node` user, and the image creates
+`/data` so a fresh named volume inherits that ownership. Docker only does this
+for a volume it creates: a volume that already has content from an image that
+ran as root keeps its root ownership, and the relay then exits at boot with
+`SQLITE_READONLY: attempt to write a readonly database`. Repair it once with
+
+```bash
+docker run --rm -v geolibre_geolibre-collab:/data busybox chown -R 1000:1000 /data
+```
+
+The same applies to the projects server's volume, using its `geolibre` user.

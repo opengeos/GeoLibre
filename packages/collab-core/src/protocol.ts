@@ -1,6 +1,8 @@
 // Wire protocol for the live-collaboration relay.
 //
-// This is the worker-side copy. The frontend keeps a parallel copy in
+// This is the single relay-side definition: both the Cloudflare Worker
+// (`workers/collab/src/protocol.ts` re-exports it) and the Node relay build on
+// it, as does the conformance suite. The frontend keeps a parallel copy in
 // `apps/geolibre-desktop/src/lib/collab-protocol.ts` with the `project` field
 // typed as the concrete `GeoLibreProject`. The relay never inspects a project's
 // contents — it only stores and forwards the opaque JSON — so here `project` is

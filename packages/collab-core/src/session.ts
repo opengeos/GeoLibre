@@ -5,6 +5,7 @@ import type {
   CollaborationMode,
   CollaborationRole,
 } from "./protocol";
+import { finite, HEX_COLOR_RE } from "./internal/validate";
 
 export const MAX_SNAPSHOT_BYTES = 1_000_000;
 export const EMPTY_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
@@ -12,12 +13,6 @@ export const MAX_CHAT_TEXT_LENGTH = 2000;
 export const CHAT_HISTORY_LIMIT = 50;
 export const MAX_CHAT_STORAGE_BYTES = 100_000;
 export const MIN_CHAT_INTERVAL_MS = 250;
-
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-function finite(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n);
-}
 
 /**
  * Transport-neutral state attached to one connection. Adapters may keep this
@@ -119,7 +114,10 @@ export function toWireParticipant(participant: SessionParticipant): CollabPartic
 }
 
 export function sanitizeDisplayName(value: unknown): string {
-  return (typeof value === "string" ? value : "").slice(0, 60) || "Guest";
+  // Trimmed before the fallback: a whitespace-only string is truthy, so "   "
+  // would otherwise pass through as the name in the roster, every participants
+  // broadcast, and every chat author field. `validateAuthor` already trims.
+  return (typeof value === "string" ? value.trim() : "").slice(0, 60) || "Guest";
 }
 
 export function sanitizeColor(value: unknown): string {

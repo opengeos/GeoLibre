@@ -14,6 +14,13 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/workers/collab-node/package.json ./workers/collab-node/package.json
 COPY --from=build /app/workers/collab-node/dist ./workers/collab-node/dist
+# /data is created and owned here so a named volume mounted over it inherits the
+# ownership; Docker only copies image ownership onto a volume when the path
+# already exists, otherwise the mountpoint lands root-owned.
+RUN mkdir -p /data && chown -R node:node /data /app
 VOLUME ["/data"]
 EXPOSE 8787
+USER node
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "workers/collab-node/dist/server.js"]
