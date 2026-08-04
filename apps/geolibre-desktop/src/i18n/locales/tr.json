@@ -1173,7 +1173,7 @@
     "errorFallback": "Proje paylaşılamadı.",
     "usernameRequired": "Paylaşmadan önce {{shareHost}} hesabınızda bir kullanıcı adı belirleyin. Bir tane seçmek için hesap ayarlarınızı açın, ardından tekrar deneyin.",
     "openAccountSettings": "Hesap ayarlarını aç",
-    "credentialsRemoved": "{{count}} kimlik bilgisi alanı dahil edilmedi. Alıcılar kendi kimlik bilgilerini sağlamalı veya aracılı bir başvuru kullanmalıdır."
+    "credentialsRemoved": "{{count}} kimlik bilgisi alanı dahil edilmedi. Alıcılar kendi kimlik bilgilerini sağlamalı veya aracılı bir referans kullanmalıdır."
   },
   "gallery": {
     "title": "Proje galerisi",

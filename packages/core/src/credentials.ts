@@ -25,6 +25,8 @@ export interface CredentialRedactionResult {
   project: GeoLibreProject;
   /** Stable project paths removed or rewritten by the redaction pass. */
   redactedPaths: string[];
+  /** Number of individual credential-bearing fields removed or rewritten. */
+  redactedCount: number;
 }
 
 const SENSITIVE_KEYS = new Set(
@@ -114,11 +116,15 @@ function redactConfigurationValue(
   value: unknown,
   path: string,
   redactedPaths: string[],
+  redactedCount: { value: number },
   depth = 0,
 ): unknown {
   if (typeof value === "string") {
     const redacted = redactUrlCredentials(value);
-    if (redacted !== value) redactedPaths.push(path);
+    if (redacted !== value) {
+      redactedPaths.push(path);
+      redactedCount.value += 1;
+    }
     return redacted;
   }
   if (depth >= MAX_REDACT_DEPTH) {
@@ -126,11 +132,12 @@ function redactConfigurationValue(
     // any built-in layer, and returning it unchanged would let a credential
     // bypass the invariant merely by exceeding the traversal cap.
     redactedPaths.push(path);
+    redactedCount.value += 1;
     return undefined;
   }
   if (Array.isArray(value)) {
     return value.map((item, index) =>
-      redactConfigurationValue(item, `${path}[${index}]`, redactedPaths, depth + 1),
+      redactConfigurationValue(item, `${path}[${index}]`, redactedPaths, redactedCount, depth + 1),
     );
   }
   if (!isPlainObject(value) || isGeoJsonPayload(value)) return value;
@@ -140,11 +147,29 @@ function redactConfigurationValue(
     const nestedPath = path ? `${path}.${key}` : key;
     if (SENSITIVE_KEYS.has(key.toLowerCase())) {
       redactedPaths.push(nestedPath);
+      redactedCount.value += 1;
       continue;
     }
-    result[key] = redactConfigurationValue(nested, nestedPath, redactedPaths, depth + 1);
+    result[key] = redactConfigurationValue(
+      nested,
+      nestedPath,
+      redactedPaths,
+      redactedCount,
+      depth + 1,
+    );
   }
   return result;
+}
+
+function countLeafValues(value: unknown): number {
+  if (Array.isArray(value)) return value.reduce((count, item) => count + countLeafValues(item), 0);
+  if (isPlainObject(value)) {
+    return Object.values(value).reduce(
+      (count: number, nested) => count + countLeafValues(nested),
+      0,
+    );
+  }
+  return 1;
 }
 
 /**
@@ -159,6 +184,12 @@ function redactConfigurationValue(
  */
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
   const redactedPaths: string[] = [];
+  const redactedCount = { value: 0 };
+  const basemapStyleUrl = redactUrlCredentials(project.basemapStyleUrl);
+  if (basemapStyleUrl !== project.basemapStyleUrl) {
+    redactedPaths.push("basemapStyleUrl");
+    redactedCount.value += 1;
+  }
   const preferences = project.preferences
     ? {
         ...project.preferences,
@@ -170,9 +201,11 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     : project.preferences;
   if (project.preferences?.environmentVariables?.length > 0) {
     redactedPaths.push("preferences.environmentVariables");
+    redactedCount.value += project.preferences.environmentVariables.length;
   }
   if (Object.keys(project.preferences?.geocoding?.apiKeys ?? {}).length > 0) {
     redactedPaths.push("preferences.geocoding.apiKeys");
+    redactedCount.value += Object.keys(project.preferences?.geocoding?.apiKeys ?? {}).length;
   }
 
   const layers = (project.layers ?? []).map((layer, index) => ({
@@ -181,11 +214,13 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       layer.source,
       `layers[${index}].source`,
       redactedPaths,
+      redactedCount,
     ) as Record<string, unknown>,
     metadata: redactConfigurationValue(
       layer.metadata,
       `layers[${index}].metadata`,
       redactedPaths,
+      redactedCount,
     ) as Record<string, unknown>,
     ...(typeof layer.sourcePath === "string"
       ? {
@@ -193,6 +228,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
             layer.sourcePath,
             `layers[${index}].sourcePath`,
             redactedPaths,
+            redactedCount,
           ) as string,
         }
       : {}),
@@ -201,12 +237,14 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
   let plugins = project.plugins;
   if (plugins && Object.keys(plugins.settings ?? {}).length > 0) {
     redactedPaths.push("plugins.settings");
+    redactedCount.value += countLeafValues(plugins.settings);
     plugins = { ...plugins, settings: {} };
   }
 
   return {
     project: {
       ...project,
+      basemapStyleUrl,
       ...(preferences ? { preferences } : {}),
       layers,
       ...(plugins ? { plugins } : {}),
@@ -216,11 +254,13 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
               project.metadata,
               "metadata",
               redactedPaths,
+              redactedCount,
             ) as Record<string, unknown>,
           }
         : {}),
     },
     redactedPaths: [...new Set(redactedPaths)],
+    redactedCount: redactedCount.value,
   };
 }
 

@@ -2015,7 +2015,7 @@ export function TopToolbar({
           return {
             content: serializeProject(redacted.project),
             filename: `${safeName}.geolibre.json`,
-            redactedCount: redacted.redactedPaths.length,
+            redactedCount: redacted.redactedCount,
           };
         }}
       />

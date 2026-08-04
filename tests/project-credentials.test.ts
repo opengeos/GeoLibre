@@ -14,6 +14,7 @@ function credentialProject() {
     { key: "SERVICE_TOKEN", value: "environment-secret", enabled: true },
   ];
   project.preferences.geocoding.apiKeys = { mapbox: "geocoder-secret" };
+  project.basemapStyleUrl = "https://styles.example.com/map.json?access_token=basemap-secret";
   project.layers = [
     {
       id: "auth",
@@ -50,6 +51,7 @@ describe("project credential redaction", () => {
     for (const secret of [
       "environment-secret",
       "geocoder-secret",
+      "basemap-secret",
       "password",
       "url-secret",
       "header-secret",
@@ -62,6 +64,8 @@ describe("project credential redaction", () => {
     assert.match(serialized, /style=day/);
     assert.deepEqual(project.plugins?.settings, {});
     assert.ok(redactedPaths.includes("plugins.settings"));
+    assert.equal(redactedPaths.includes("basemapStyleUrl"), true);
+    assert.equal(redactProjectCredentials(original).redactedCount, 7);
     assert.equal(original.plugins?.settings.external.arbitraryName, "plugin-secret");
   });
 
