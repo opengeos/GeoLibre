@@ -22,6 +22,10 @@ import {
 
 describe("parseDriveTarget", () => {
   it("reads the id from every link shape Drive hands out", () => {
+    // The ids below are made up and intentionally not resolvable: this is pure
+    // string parsing, so nothing here is ever fetched. Pinning the cases to a
+    // real Drive file would make the suite depend on someone's sharing settings
+    // staying put, for no extra coverage.
     const cases: [string, string, "file" | "folder"][] = [
       [
         "https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW/view?usp=sharing",
@@ -168,6 +172,40 @@ describe("driveErrorCode", () => {
     assert.equal(driveErrorCode(404), "notFound");
     assert.equal(driveErrorCode(500), "requestFailed");
   });
+});
+
+describe("DriveErrorCode i18n keys", () => {
+  // The dialog resolves these with a runtime-interpolated key,
+  // `t(`addData.googleDrive.error.${err.code}`)`, which neither TypeScript nor
+  // i18next's typed `t` can check. A code added without a catalog entry would
+  // render the raw key at runtime, so read the union out of the source and
+  // require en.json to cover all of it.
+  const source = readFileSync(
+    fileURLToPath(new URL("../apps/geolibre-desktop/src/lib/google-drive.ts", import.meta.url)),
+    "utf8",
+  );
+  const union = /export type DriveErrorCode =([\s\S]*?);/.exec(source);
+  assert.ok(union, "could not find the DriveErrorCode union in google-drive.ts");
+  const codes = [...union[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+
+  const en = JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../apps/geolibre-desktop/src/i18n/locales/en.json", import.meta.url)),
+      "utf8",
+    ),
+  ) as { addData: { googleDrive: { error: Record<string, string> } } };
+
+  it("found the codes to check", () => {
+    assert.ok(codes.length >= 7, `only parsed ${codes.length} codes out of the union`);
+  });
+
+  for (const code of codes) {
+    it(`addData.googleDrive.error.${code} is in en.json`, () => {
+      const message = en.addData.googleDrive.error[code];
+      assert.equal(typeof message, "string", `no en.json entry for ${code}`);
+      assert.ok(message.trim().length > 0, `the en.json entry for ${code} is empty`);
+    });
+  }
 });
 
 describe("groupFolderVectorFiles", () => {

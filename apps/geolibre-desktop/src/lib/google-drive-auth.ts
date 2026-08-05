@@ -29,7 +29,7 @@ import {
   isGoogleOAuthLoopbackAvailable,
   isTauriProductionOrigin,
 } from "@geolibre/plugins";
-import { pickerOutcome, type DriveFile } from "./google-drive";
+import { DriveError, pickerOutcome, type DriveFile } from "./google-drive";
 
 /** What the Picker returns: the token to download with, and what was chosen. */
 export interface DrivePickerResult {
@@ -165,7 +165,8 @@ export function isDrivePickerAvailable(): boolean {
  *
  * @param apiKey - The Google developer key the Picker widget requires
  * @returns The token and chosen files; `files` is empty when the user cancelled
- * @throws Error when sign-in fails or the Picker cannot be loaded
+ * @throws DriveError with a code the dialog translates, or a plain Error
+ *   carrying a message Google itself supplied
  */
 export async function openDrivePicker(apiKey: string): Promise<DrivePickerResult> {
   const clientId = googleOAuthClientId();
@@ -213,13 +214,15 @@ async function openDrivePickerViaLoopback(
       stateId: session.state,
     });
     if (result) {
+      // Google's own message, which it localizes to the signed-in account's
+      // language — passed through rather than replaced with a code.
       if (result.error) throw new Error(result.error);
-      if (!result.accessToken) throw new Error("Google sign-in did not return an access token.");
+      if (!result.accessToken) throw new DriveError("noAccessToken");
       return { accessToken: result.accessToken, files: result.files ?? [] };
     }
     await delay(1000);
   }
-  throw new Error("The Google Drive picker timed out.");
+  throw new DriveError("pickerTimedOut");
 }
 
 function delay(ms: number): Promise<void> {
@@ -321,9 +324,13 @@ function loadScript(url: string): Promise<void> {
 }
 
 async function requestAccessTokenInPage(clientId: string): Promise<string> {
-  await loadScript(GIS_SCRIPT_URL);
+  // The URL in the load failure is for the console, not the user, so it is
+  // traded here for a code the dialog can translate.
+  await loadScript(GIS_SCRIPT_URL).catch(() => {
+    throw new DriveError("signInUnavailable");
+  });
   const oauth2 = (window as ScriptHostWindow).google?.accounts?.oauth2;
-  if (!oauth2) throw new Error("Google sign-in could not be initialized.");
+  if (!oauth2) throw new DriveError("signInUnavailable");
 
   return new Promise<string>((resolve, reject) => {
     const client = oauth2.initTokenClient({
@@ -331,9 +338,10 @@ async function requestAccessTokenInPage(clientId: string): Promise<string> {
       scope: DRIVE_SCOPE,
       callback: (response) => {
         if (response.error || !response.access_token) {
-          reject(
-            new Error(response.error_description || response.error || "Google sign-in failed."),
-          );
+          // Google's text is already in the account's language; the code is
+          // only for the case where it gave none.
+          const detail = response.error_description || response.error;
+          reject(detail ? new Error(detail) : new DriveError("signInFailed"));
           return;
         }
         resolve(response.access_token);
@@ -346,18 +354,20 @@ async function requestAccessTokenInPage(clientId: string): Promise<string> {
 async function openDrivePickerInPage(clientId: string, apiKey: string): Promise<DrivePickerResult> {
   const accessToken = await requestAccessTokenInPage(clientId);
 
-  await loadScript(GAPI_SCRIPT_URL);
+  await loadScript(GAPI_SCRIPT_URL).catch(() => {
+    throw new DriveError("pickerLoadFailed");
+  });
   const gapi = (window as ScriptHostWindow).gapi;
-  if (!gapi) throw new Error("Could not load the Google Picker library.");
+  if (!gapi) throw new DriveError("pickerLoadFailed");
   await new Promise<void>((resolve, reject) => {
     gapi.load("picker", {
       callback: resolve,
-      onerror: () => reject(new Error("Could not load the Google Picker library.")),
+      onerror: () => reject(new DriveError("pickerLoadFailed")),
     });
   });
 
   const picker = (window as ScriptHostWindow).google?.picker;
-  if (!picker) throw new Error("Could not load the Google Picker library.");
+  if (!picker) throw new DriveError("pickerLoadFailed");
 
   return new Promise<DrivePickerResult>((resolve) => {
     const view = new picker.DocsView(picker.ViewId.DOCS)

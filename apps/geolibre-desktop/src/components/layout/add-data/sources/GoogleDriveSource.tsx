@@ -45,7 +45,7 @@ import {
   listDriveFolder,
 } from "../../../../lib/google-drive-client";
 import { isRestorableVectorPath } from "../../../../lib/tauri-io";
-import { importVectorFiles } from "../../../../lib/vector-file-import";
+import { canImportVectorFiles, importVectorFiles } from "../../../../lib/vector-file-import";
 import { useAddDataShell } from "../context";
 import { errorMessage } from "../helpers";
 import { AddDataFooter } from "../shared";
@@ -213,6 +213,9 @@ export function GoogleDriveSource() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void run(async () => {
+      // Checked here rather than relying on the pipeline's own guard, whose
+      // message is a developer-facing invariant with no translation.
+      if (!canImportVectorFiles()) throw new DriveError("mapNotReady");
       const files = await downloadAll(await collectFiles());
       const added = await importVectorFiles(files);
       if (added === 0) throw new Error(t("addData.googleDrive.error.noLayers"));

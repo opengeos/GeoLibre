@@ -66,7 +66,19 @@ export type DriveErrorCode =
   /** A Docs/Sheets/Slides document, which has no geospatial bytes to download. */
   | "workspaceDocument"
   /** The folder held nothing GeoLibre knows how to read. */
-  | "emptyFolder";
+  | "emptyFolder"
+  /** Google's sign-in SDK could not be loaded or initialized. */
+  | "signInUnavailable"
+  /** Sign-in ended without a token and Google supplied no reason of its own. */
+  | "signInFailed"
+  /** Sign-in reported success but handed back no access token. */
+  | "noAccessToken"
+  /** Google's Picker SDK could not be loaded. */
+  | "pickerLoadFailed"
+  /** Nothing came back from the Picker within the polling window. */
+  | "pickerTimedOut"
+  /** The map's import pipeline is not registered yet, so files have nowhere to go. */
+  | "mapNotReady";
 
 /** Thrown by the client for a failure the dialog should phrase itself. */
 export class DriveError extends Error {

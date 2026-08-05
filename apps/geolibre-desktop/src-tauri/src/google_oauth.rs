@@ -51,6 +51,24 @@ pub struct GoogleOAuthState {
     /// Serializes startup so two concurrent callers cannot both try to bind.
     startup: Mutex<()>,
     results: Arc<Mutex<HashMap<String, GoogleOAuthResult>>>,
+    /// Pending picker sessions, keyed by the same state id the result comes
+    /// back under. See {@link PickerSession}.
+    picker_sessions: Arc<Mutex<HashMap<String, PickerSession>>>,
+}
+
+/// What the picker page needs to render, held server-side rather than put in
+/// the URL the system browser is asked to open.
+///
+/// The developer key is the reason: a URL opened with `openUrl` lands in the
+/// browser's address bar and history, and in a signed-in browser that history
+/// syncs to the user's Google account. The access token in this flow never
+/// travels that way — it only ever moves in an `Authorization` header — and the
+/// key should not either. The browser is handed an opaque state id instead, and
+/// the loopback handler looks the values back up when it serves the page.
+#[derive(Clone)]
+struct PickerSession {
+    client_id: String,
+    api_key: String,
 }
 
 #[derive(Serialize)]
@@ -119,6 +137,10 @@ pub fn start_earth_engine_oauth(
 /// Starts a Drive picker session and returns the page URL to open in the system
 /// browser. The API key is Google's "developer key", which the picker widget
 /// requires in addition to the OAuth token.
+///
+/// Neither the key nor the client ID goes in that URL — they are stashed under
+/// the state id and read back when the page is served, so nothing sensitive
+/// reaches the browser's address bar or history. See {@link PickerSession}.
 #[tauri::command]
 pub fn start_google_drive_picker(
     client_id: String,
@@ -136,10 +158,19 @@ pub fn start_google_drive_picker(
 
     ensure_oauth_server(&state)?;
     let state_id = next_state_id(&state)?;
+    state
+        .picker_sessions
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(
+            state_id.clone(),
+            PickerSession {
+                client_id: client_id.to_string(),
+                api_key: api_key.to_string(),
+            },
+        );
     let url = format!(
-        "http://localhost:{OAUTH_PORT}{PICKER_PATH}?client_id={}&api_key={}&state={}",
-        url_encode(client_id),
-        url_encode(api_key),
+        "http://localhost:{OAUTH_PORT}{PICKER_PATH}?state={}",
         url_encode(&state_id),
     );
 
@@ -173,7 +204,16 @@ fn take_result(
     state_id: &str,
 ) -> Result<Option<GoogleOAuthResult>, String> {
     let mut results = state.results.lock().map_err(|error| error.to_string())?;
-    Ok(results.remove(state_id))
+    let result = results.remove(state_id);
+    // The session exists only to serve the picker page for this state id, so it
+    // dies with the result. A no-op for the Earth Engine flow, which never
+    // registers one.
+    if result.is_some() {
+        if let Ok(mut sessions) = state.picker_sessions.lock() {
+            sessions.remove(state_id);
+        }
+    }
+    Ok(result)
 }
 
 fn next_state_id(state: &tauri::State<'_, GoogleOAuthState>) -> Result<String, String> {
@@ -219,11 +259,13 @@ fn ensure_oauth_server(state: &GoogleOAuthState) -> Result<(), String> {
         }
     };
     let results = Arc::clone(&state.results);
+    let sessions = Arc::clone(&state.picker_sessions);
 
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let results = Arc::clone(&results);
-            thread::spawn(move || handle_connection(stream, results));
+            let sessions = Arc::clone(&sessions);
+            thread::spawn(move || handle_connection(stream, results, sessions));
         }
     });
 
@@ -236,6 +278,7 @@ fn ensure_oauth_server(state: &GoogleOAuthState) -> Result<(), String> {
 fn handle_connection(
     mut stream: TcpStream,
     results: Arc<Mutex<HashMap<String, GoogleOAuthResult>>>,
+    sessions: Arc<Mutex<HashMap<String, PickerSession>>>,
 ) {
     let Ok((method, target, body)) = read_request(&stream) else {
         let _ = write_response(&mut stream, 400, "text/plain", "Bad request");
@@ -257,15 +300,28 @@ fn handle_connection(
         }
         ("GET", PICKER_PATH) => {
             let params = query_params(query);
-            let client_id = params.get("client_id").cloned().unwrap_or_default();
-            let api_key = params.get("api_key").cloned().unwrap_or_default();
             let state = params.get("state").cloned().unwrap_or_default();
-            let _ = write_response(
-                &mut stream,
-                200,
-                "text/html",
-                &picker_page(&client_id, &api_key, &state),
-            );
+            // The page is rendered from the stored session, never from the
+            // query string: the only thing the browser was given is this id.
+            let session = sessions
+                .lock()
+                .ok()
+                .and_then(|sessions| sessions.get(&state).cloned());
+            match session {
+                Some(session) => {
+                    let _ = write_response(
+                        &mut stream,
+                        200,
+                        "text/html",
+                        &picker_page(&session.client_id, &session.api_key, &state),
+                    );
+                }
+                // No session means a stale link (the flow already finished, or
+                // the app restarted), not a page worth rendering.
+                None => {
+                    let _ = write_response(&mut stream, 404, "text/plain", "Not found");
+                }
+            }
         }
         ("POST", TOKEN_PATH) => {
             if let Ok(result) = serde_json::from_slice::<GoogleOAuthResult>(&body) {
