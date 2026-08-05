@@ -2,7 +2,6 @@ import { interpolateColors, useAppStore, type GeoLibreLayer } from "@geolibre/co
 import {
   colormapColors,
   composeColormappedImage,
-  type LocalNetcdfFile,
   type LocalNetcdfGrid,
   type LocalNetcdfImage,
   type LocalNetcdfProfile,
@@ -38,13 +37,16 @@ export interface NetcdfLayerState {
    * Present only for a layer built from a cube. Reading a spectral signature
    * needs the whole band axis at one pixel, which only the source file has, so
    * the file stays open for as long as the layer does.
+   *
+   * A function rather than the file itself, because the two sources answer
+   * differently: a local file reads synchronously in place, a remote one round
+   * trips to the worker that owns its range-request mount.
    */
   profile?: {
-    file: LocalNetcdfFile;
-    /** The leading axis to walk, e.g. `bands`. */
-    axis: string;
-    /** Fixed index for every other leading dimension. */
-    selector: Record<string, number>;
+    /** Read one pixel's values along the layer's profile axis. */
+    read: (row: number, column: number) => Promise<LocalNetcdfProfile>;
+    /** Release the underlying file or worker. */
+    close: () => void;
   };
 }
 
@@ -70,7 +72,7 @@ export function registerNetcdfLayer(layerId: string, state: NetcdfLayerState): v
   if (state.profile) {
     for (const [id, existing] of states) {
       if (id !== layerId && existing.profile) {
-        existing.profile.file.close();
+        existing.profile.close();
         states.set(id, { ...existing, profile: undefined });
       }
     }
@@ -118,7 +120,7 @@ export function getNetcdfImageSource(layerId: string): NetcdfImageSource | null 
 
 /** Drop a layer's retained grid and close its file, if it had one. */
 export function releaseNetcdfLayer(layerId: string): void {
-  states.get(layerId)?.profile?.file.close();
+  states.get(layerId)?.profile?.close();
   states.delete(layerId);
 }
 
@@ -128,26 +130,22 @@ export function releaseNetcdfLayer(layerId: string): void {
  * @param layerId - The layer's id.
  * @param row - Row into the grid's y extent.
  * @param column - Column into the grid's x extent.
- * @returns The profile, or null when this layer has no retained file.
+ * @returns The profile, or null when this layer has no retained file or the
+ *   read failed.
  */
-export function readNetcdfProfile(
+export async function readNetcdfProfile(
   layerId: string,
   row: number,
   column: number,
-): LocalNetcdfProfile | null {
+): Promise<LocalNetcdfProfile | null> {
   const state = states.get(layerId);
   if (!state?.profile) return null;
   try {
-    return state.profile.file.readProfile(state.variable, {
-      axis: state.profile.axis,
-      row,
-      column,
-      selector: state.profile.selector,
-    });
+    return await state.profile.read(row, column);
   } catch {
     // A profile is an extra on top of the pixel readout, and the caller reads it
-    // from a timer; a failed read must degrade to "no chart", not surface as an
-    // uncaught error on every click.
+    // outside the click handler; a failed read must degrade to "no chart", not
+    // surface as an unhandled rejection on every click.
     return null;
   }
 }

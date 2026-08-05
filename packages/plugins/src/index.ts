@@ -147,6 +147,7 @@ export {
 } from "./plugins/zarr-directory-store";
 export {
   openLocalNetcdf,
+  openRemoteNetcdf,
   buildInlineZarrRefs,
   buildInlineZarrStore,
   composeColormappedImage,

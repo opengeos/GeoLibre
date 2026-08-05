@@ -372,6 +372,51 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     }
   }
 
+  /**
+   * Mount a remote file lazily and open it. See {@link openRemoteNetcdf} for the
+   * constraints; this assumes they have already been checked.
+   */
+  static async openLazy(url: string, fsPath: string): Promise<Hdf5NetcdfFile> {
+    const mod = await loadH5wasm();
+    const fs = mod.FS as H5FS & {
+      createLazyFile?: (
+        parent: string,
+        name: string,
+        url: string,
+        canRead: boolean,
+        canWrite: boolean,
+      ) => unknown;
+    };
+    if (typeof fs.createLazyFile !== "function") {
+      throw new Error("This h5wasm build cannot read a file over HTTP without downloading it.");
+    }
+    let file: H5File | null = null;
+    try {
+      fs.createLazyFile("/", fsPath, url, true, false);
+      file = new mod.File(fsPath, "r");
+      // Force a read so an unreadable or non-HDF5 response surfaces here rather
+      // than deep in a later listing, exactly as the local path does.
+      file.keys();
+      return new Hdf5NetcdfFile(mod, file, fsPath);
+    } catch (err) {
+      try {
+        file?.close();
+      } catch {
+        /* best effort */
+      }
+      try {
+        mod.FS.unlink(fsPath);
+      } catch {
+        /* best effort */
+      }
+      throw new Error(
+        `Could not read ${url} as HDF5/NetCDF-4 over HTTP. The server must allow cross-origin range requests. (${
+          err instanceof Error ? err.message : String(err)
+        })`,
+      );
+    }
+  }
+
   close(): void {
     try {
       this.file.close();
@@ -1081,6 +1126,42 @@ export async function openLocalNetcdf(buffer: ArrayBuffer): Promise<LocalNetcdfF
   } catch {
     return Netcdf3File.open(buffer);
   }
+}
+
+/**
+ * Open a **remote** HDF5/NetCDF-4 file over HTTP without downloading it, reading
+ * only the byte ranges the caller actually touches.
+ *
+ * Backed by emscripten's lazy filesystem, which faults in 1 MiB ranges on
+ * demand. Two consequences the caller has to live with:
+ *
+ * - It uses **synchronous** `XMLHttpRequest`, which browsers forbid on the main
+ *   thread, so this only runs inside a Web Worker. It throws a clear error
+ *   rather than emscripten's `abort()` when called anywhere else.
+ * - Those requests are issued one at a time with no readahead, so a read that
+ *   touches many ranges is latency-bound. Reading one 285-band EMIT scene's
+ *   band plane pulls ~135 MB of a 1.1 GB file (an 8x saving) but takes ~20 s,
+ *   and a whole-band-axis profile at one pixel takes ~35 s. It is the right
+ *   trade for a cube far larger than the slice wanted, and the wrong one for a
+ *   file small enough to just fetch (see {@link openLocalNetcdf}).
+ *
+ * The server must send `Accept-Ranges: bytes` and permit the origin via CORS;
+ * without byte serving emscripten silently falls back to fetching everything.
+ *
+ * @param url The file's URL.
+ * @param name A filesystem name for the mount, unique per open.
+ * @returns An open {@link LocalNetcdfFile}, identical in behaviour to a local one.
+ * @throws If called outside a worker, or the file is not readable as HDF5.
+ */
+export async function openRemoteNetcdf(url: string, name?: string): Promise<LocalNetcdfFile> {
+  // `WorkerGlobalScope` is absent on the main thread, where the sync XHR below
+  // would abort the whole WASM module rather than throw something catchable.
+  if (typeof WorkerGlobalScope === "undefined") {
+    throw new Error(
+      "Reading a NetCDF/HDF file over HTTP without downloading it needs a Web Worker (it uses synchronous range requests).",
+    );
+  }
+  return Hdf5NetcdfFile.openLazy(url, name ?? `geolibre-remote-${fileCounter++}.h5`);
 }
 
 /** Whether the bytes start with the HDF5 signature. */

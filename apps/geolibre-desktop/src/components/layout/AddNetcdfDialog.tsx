@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   addCloudNetcdfLayer,
+  composeRgbImage,
   listKerchunkVariables,
   loadKerchunkReference,
   openLocalNetcdf,
@@ -10,6 +11,9 @@ import {
   type KerchunkVariable,
   type LocalNetcdfAxis,
   type LocalNetcdfFile,
+  type LocalNetcdfGrid,
+  type LocalNetcdfImage,
+  type LocalNetcdfProfile,
 } from "@geolibre/plugins";
 import { useAppStore } from "@geolibre/core";
 import {
@@ -26,6 +30,11 @@ import {
 } from "@geolibre/ui";
 import { Boxes, FileUp } from "lucide-react";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
+import {
+  isNetcdfFileUrl,
+  openRemoteNetcdfFile,
+  type RemoteNetcdfFile,
+} from "../../lib/netcdf-remote-client";
 import {
   bakeNetcdfImage,
   encodeImageOverlay,
@@ -63,9 +72,6 @@ const NATURAL_COLOR_NM: [number, number, number] = [640, 550, 470];
 // to build. A band axis (EMIT has 285) stays well under it.
 const MAX_AXIS_OPTIONS = 2000;
 
-// Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
-// `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
-// the Time Slider can drive it; see `useImagePath`.
 // Wavelength units a spectral axis may declare, in the spellings CF files use.
 // Micrometres are the other common one; anything else (an index, a time, a
 // pressure level) is not a wavelength and gets evenly spread band defaults.
@@ -81,6 +87,9 @@ const MICROMETRE_UNITS = new Set([
   "micrometres",
 ]);
 
+// Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
+// `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
+// the Time Slider can drive it; see `useImagePath`.
 const TIME_DIMENSION_NAMES = new Set([
   "time",
   "valid_time",
@@ -101,6 +110,59 @@ type RenderableVariable = KerchunkVariable & { longName?: string; units?: string
 /** How a local variable is turned into a layer. */
 type RenderMode = "single" | "rgb";
 
+/**
+ * The dataset the dialog is working with, whichever way it was opened. Both
+ * answer the same questions; a remote one answers them over range requests, so
+ * every accessor is async and callers must not assume they return promptly.
+ */
+type OpenDataset =
+  | { kind: "local"; file: LocalNetcdfFile }
+  | { kind: "remote"; file: RemoteNetcdfFile; url: string };
+
+/** The dataset's leading axes for a variable, or [] when they cannot be read. */
+async function datasetAxes(dataset: OpenDataset, variable: string): Promise<LocalNetcdfAxis[]> {
+  try {
+    return dataset.kind === "local"
+      ? dataset.file.listAxes(variable)
+      : await dataset.file.listAxes(variable);
+  } catch {
+    // A variable whose axes cannot be described still renders; the dialog falls
+    // back to the plain numeric index boxes.
+    return [];
+  }
+}
+
+/**
+ * A profile reader bound to one dataset, variable, and axis, for the layer
+ * registry. Local reads resolve immediately; remote ones round trip to the
+ * worker, which is why the registry stores a function rather than the file.
+ */
+function profileReader(
+  dataset: OpenDataset,
+  variable: string,
+  axis: string,
+  selector: Record<string, number>,
+): { read: (row: number, column: number) => Promise<LocalNetcdfProfile>; close: () => void } {
+  return {
+    read: (row, column) =>
+      dataset.kind === "local"
+        ? Promise.resolve(dataset.file.readProfile(variable, { axis, row, column, selector }))
+        : dataset.file.readProfile(variable, { axis, row, column, selector }),
+    close: () => dataset.file.close(),
+  };
+}
+
+/** One 2-D slice of a variable, with its coordinates and packing. */
+function datasetGrid(
+  dataset: OpenDataset,
+  variable: string,
+  selector: Record<string, number>,
+): Promise<LocalNetcdfGrid> {
+  return dataset.kind === "local"
+    ? Promise.resolve(dataset.file.readGrid(variable, selector))
+    : dataset.file.readGrid(variable, selector);
+}
+
 interface AddNetcdfDialogProps {
   open: boolean;
   appApi: GeoLibreAppAPI;
@@ -108,11 +170,16 @@ interface AddNetcdfDialogProps {
 }
 
 /**
- * Dialog for adding a NetCDF/HDF5 layer. Two sources are supported: a remote
- * Cloud-Optimized NetCDF via a kerchunk reference URL (read over HTTP range
- * requests), or a local HDF5/NetCDF-4 file decoded in-browser with h5wasm. In
- * both cases the user picks a renderable variable (and any leading dimension
- * index), and the layer renders through the shared Zarr control.
+ * Dialog for adding a NetCDF/HDF5 layer, from any of three sources:
+ *
+ * - a local HDF5/NetCDF-4 or NetCDF-3 file, decoded in-browser;
+ * - a direct NetCDF/HDF **URL**, read in place by HTTP range request in a
+ *   worker, so a cube far larger than the slice wanted is not downloaded whole;
+ * - a kerchunk reference URL, streamed by the shared Zarr control.
+ *
+ * The first two share one code path once opened (see {@link OpenDataset}): the
+ * user picks a variable and any leading-dimension index, and the grid is
+ * colormapped here rather than by a shader.
  */
 export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogProps) {
   const { t } = useTranslation();
@@ -124,9 +191,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // pixels itself (see `useImagePath`) rather than through the Zarr control.
   const [source, setSource] = useState<"url" | "file">(DEFAULT_SOURCE);
   const [url, setUrl] = useState("");
-  // The local file opened in the WASM filesystem, kept between "Load variables"
-  // and submit so the (potentially large) decode happens once. Closed on reset.
-  const [localFile, setLocalFile] = useState<LocalNetcdfFile | null>(null);
+  // The opened dataset, local or remote, kept between loading its variables and
+  // submitting so the (potentially expensive) open happens once. Closed on
+  // reset, unless a layer took ownership of it for spectral profiles.
+  const [dataset, setDataset] = useState<OpenDataset | null>(null);
   const [fileName, setFileName] = useState("");
   const [variables, setVariables] = useState<RenderableVariable[]>([]);
   const [variable, setVariable] = useState("");
@@ -151,10 +219,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const opGen = useRef(0);
   // Holds the currently-open local file so it can be closed synchronously on
   // reset even if the latest setLocalFile has not flushed to state yet.
-  const openFileRef = useRef<LocalNetcdfFile | null>(null);
+  const openFileRef = useRef<OpenDataset | null>(null);
   // A file handed to a layer for spectral profiles outlives this dialog, so
   // reset must not close it; the layer registry owns it from then on.
-  const retainedFileRef = useRef<LocalNetcdfFile | null>(null);
+  const retainedFileRef = useRef<LocalNetcdfFile | RemoteNetcdfFile | null>(null);
 
   const selectedVar = variables.find((v) => v.name === variable);
   // Dimensions other than the trailing two (lat/lon) need a fixed index.
@@ -166,9 +234,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // is meaningless, and (time, lat, lon) is the commonest cube shape there is,
   // so without this nearly every one would offer a bogus RGB option.
   const rgbAxis = pickBandAxis(axes);
-  // Composing an RGB image needs the pixels in hand, which only the local
-  // reader has — the cloud path streams chunks through the renderer.
-  const canComposeRgb = source === "file" && rgbAxis !== null;
+  // Composing an RGB image needs the pixels in hand, which means an opened
+  // dataset (local file or remote URL). A kerchunk manifest has none: it streams
+  // chunks through the renderer instead.
+  const canComposeRgb = dataset !== null && rgbAxis !== null;
   const rgbMode = mode === "rgb" && canComposeRgb;
   // A cube the Time Slider can drive stays on the Zarr renderer, which can
   // re-select a slice without rebuilding the layer; a baked image cannot.
@@ -177,16 +246,16 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // lose the Time Slider by taking the baked-image path.
   const hasTimeAxis =
     axes.some((axis) => isTimeAxisName(axis.name)) || leadingDims.some(isTimeAxisName);
-  // Single-band local grids are colormapped on the CPU and added as an image
-  // overlay rather than drawn by @carbonplan/zarr-layer, whose `shift_x` uniform
-  // lookup throws on drivers that eliminate it (Mesa — most Linux Intel/AMD
-  // machines), leaving the layer permanently blank. See composeColormappedImage.
-  const useImagePath = source === "file" && !rgbMode && !hasTimeAxis;
+  // Single-band grids from an opened dataset are colormapped on the CPU and
+  // added as an image overlay rather than drawn by @carbonplan/zarr-layer, whose
+  // `shift_x` uniform lookup throws on drivers that eliminate it (Mesa, so most
+  // Linux Intel/AMD machines), leaving the layer permanently blank. See
+  // composeColormappedImage.
+  const useImagePath = dataset !== null && !rgbMode && !hasTimeAxis;
 
   const closeOpenFile = () => {
-    if (openFileRef.current && openFileRef.current !== retainedFileRef.current) {
-      openFileRef.current.close();
-    }
+    const open = openFileRef.current;
+    if (open && open.file !== retainedFileRef.current) open.file.close();
     openFileRef.current = null;
   };
 
@@ -195,7 +264,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     closeOpenFile();
     setSource(DEFAULT_SOURCE);
     setUrl("");
-    setLocalFile(null);
+    setDataset(null);
     setFileName("");
     setVariables([]);
     setVariable("");
@@ -221,7 +290,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const invalidateLoadedSource = () => {
     opGen.current += 1;
     closeOpenFile();
-    setLocalFile(null);
+    setDataset(null);
     setFileName("");
     setVariables([]);
     setVariable("");
@@ -238,10 +307,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     setAdding(false);
   };
 
-  const applyLoadedVariables = (vars: RenderableVariable[], file?: LocalNetcdfFile) => {
+  const applyLoadedVariables = (vars: RenderableVariable[], opened?: OpenDataset) => {
     setVariables(vars);
     setVariable(vars[0].name);
-    selectVariable(vars[0].name, file ?? openFileRef.current);
+    void selectVariable(vars[0].name, opened ?? openFileRef.current);
     setStatus(`Found ${vars.length} variable${vars.length > 1 ? "s" : ""}.`);
   };
 
@@ -251,18 +320,11 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
    * from the axis' own wavelengths, so the composite opens on a sensible
    * natural-colour guess rather than three copies of band 0.
    */
-  const selectVariable = (name: string, file: LocalNetcdfFile | null) => {
+  const selectVariable = async (name: string, opened: OpenDataset | null) => {
     setDimIndex({});
-    let nextAxes: LocalNetcdfAxis[] = [];
-    if (file) {
-      try {
-        nextAxes = file.listAxes(name);
-      } catch {
-        // A variable whose axes cannot be described still renders; the dialog
-        // just falls back to the plain numeric index boxes.
-        nextAxes = [];
-      }
-    }
+    const gen = opGen.current;
+    const nextAxes = opened ? await datasetAxes(opened, name) : [];
+    if (gen !== opGen.current) return; // dialog moved on while reading
     setAxes(nextAxes);
     const bandAxis = pickBandAxis(nextAxes);
     setRgbBands(bandAxis ? defaultRgbBands(bandAxis) : [0, 0, 0]);
@@ -280,7 +342,33 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     setLoadedRefs(null);
     setLoadingVars(true);
     try {
-      const refs = await loadKerchunkReference(url.trim());
+      const target = url.trim();
+      // A raw NetCDF/HDF URL is read in place by range request; only a kerchunk
+      // manifest goes through the reference loader.
+      if (isNetcdfFileUrl(target)) {
+        // Close a dataset from a previous load, but deliberately do NOT call
+        // invalidateLoadedSource: it bumps opGen, which would make this
+        // function's own `finally` skip clearing the loading flag and strand the
+        // button on "Loading...".
+        closeOpenFile();
+        setDataset(null);
+        setStatus(t("addData.netcdf.readingRemote"));
+        const remote = await openRemoteNetcdfFile(target);
+        if (gen !== opGen.current) {
+          remote.close();
+          return;
+        }
+        if (remote.variables.length === 0) {
+          remote.close();
+          throw new Error(t("addData.netcdf.errorNoVariables"));
+        }
+        const opened: OpenDataset = { kind: "remote", file: remote, url: target };
+        openFileRef.current = opened;
+        setDataset(opened);
+        applyLoadedVariables(remote.variables, opened);
+        return;
+      }
+      const refs = await loadKerchunkReference(target);
       const vars = listKerchunkVariables(refs);
       if (gen !== opGen.current) return; // dialog was closed/reopened
       if (vars.length === 0) {
@@ -332,12 +420,13 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
       if (vars.length === 0) {
         throw new Error(t("addData.netcdf.errorNoVariables"));
       }
-      openFileRef.current = file;
-      setLocalFile(file);
-      applyLoadedVariables(vars, file);
+      const opened: OpenDataset = { kind: "local", file };
+      openFileRef.current = opened;
+      setDataset(opened);
+      applyLoadedVariables(vars, opened);
     } catch (err) {
       // Close the just-opened handle unless it was stored for later use.
-      if (file && openFileRef.current !== file) file.close();
+      if (file && openFileRef.current?.file !== file) file.close();
       if (gen !== opGen.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -369,21 +458,34 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
           ? ([min, max] as [number, number])
           : undefined;
 
-      if (source === "file") {
-        const file = localFile;
-        if (!file) throw new Error(t("addData.netcdf.errorNoFile"));
-        // Yield once so the "Adding..." state paints before the synchronous,
-        // CPU-heavy decode/base64-encode of a potentially large local grid.
+      if (dataset) {
+        // Yield once so the "Adding..." state paints before the CPU-heavy
+        // decode/encode of a potentially large grid.
         await new Promise((resolve) => setTimeout(resolve, 0));
-        // Use just the file's base name (fileName is a full path on desktop) so
-        // the derived layer name is clean on every platform.
-        const baseName = fileName.split(/[\\/]/).pop() || "netcdf";
+        // A local path is a full path on desktop; a URL's last segment is its
+        // file name. Either way the layer takes the bare name.
+        const baseName =
+          (dataset.kind === "local" ? fileName : new URL(dataset.url).pathname)
+            .split(/[\\/]/)
+            .pop() || "netcdf";
 
         if (rgbMode && rgbAxis) {
-          const image = file.buildRgbImage(variable, {
-            axis: rgbAxis.name,
-            indices: rgbBands,
-            selector,
+          // Compose from three plane reads rather than the reader's own helper,
+          // so the remote path (which has no synchronous reader) works too.
+          const channels = await Promise.all(
+            rgbBands.map((index) =>
+              datasetGrid(dataset, variable, { ...selector, [rgbAxis.name]: index }),
+            ),
+          );
+          const image = composeRgbImage({
+            ny: channels[0].ny,
+            nx: channels[0].nx,
+            channels: channels.map((channel: LocalNetcdfGrid) => channel.values),
+            lat: channels[0].lat,
+            lon: channels[0].lon,
+            fillValue: channels[0].fillValue,
+            scaleFactor: channels[0].scaleFactor,
+            addOffset: channels[0].addOffset,
           });
           addImageOverlayLayer(
             `${baseName} - ${variable} (RGB)`,
@@ -403,7 +505,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
         } else if (useImagePath) {
           // The grid itself, not just its pixels, so the Style panel can
           // re-colormap the layer without re-reading the file.
-          const grid = file.readGrid(variable, selector);
+          const grid = await datasetGrid(dataset, variable, selector);
           const symbology = {
             colormap,
             reversed: false,
@@ -432,16 +534,18 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
           // The file stays open only for a cube, whose band axis is what a
           // spectral signature walks; a plain 2-D grid needs nothing beyond the
           // slice already read.
-          if (rgbAxis) retainedFileRef.current = file;
+          if (rgbAxis) retainedFileRef.current = dataset.file;
           registerNetcdfLayer(layerId, {
             grid,
             variable,
             ...(selectedVar?.units ? { units: selectedVar.units } : {}),
-            ...(rgbAxis ? { profile: { file, axis: rgbAxis.name, selector } } : {}),
+            ...(rgbAxis
+              ? { profile: profileReader(dataset, variable, rgbAxis.name, selector) }
+              : {}),
           });
           appApi.fitBounds?.(image.bounds);
-        } else {
-          const built = file.buildLayerRefs(variable, selector);
+        } else if (dataset.kind === "local") {
+          const built = dataset.file.buildLayerRefs(variable, selector);
           await addCloudNetcdfLayer(appApi, {
             // Encoded so a name with URL-special chars (#, ?, %) survives
             // layerNameFromUrl's new URL(...) parse; that helper decodes it
@@ -459,6 +563,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
           appApi.fitBounds?.(built.bounds);
         }
       } else {
+        // No opened dataset: a kerchunk manifest, streamed by the Zarr renderer.
         await addCloudNetcdfLayer(appApi, {
           url: url.trim(),
           refs: loadedRefs ?? undefined,
@@ -583,7 +688,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
                 value={variable}
                 onChange={(event) => {
                   setVariable(event.target.value);
-                  selectVariable(event.target.value, openFileRef.current);
+                  void selectVariable(event.target.value, openFileRef.current);
                 }}
               >
                 {variables.map((item) => (

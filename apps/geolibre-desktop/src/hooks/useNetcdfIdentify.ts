@@ -64,6 +64,8 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
     // a pending one must be dropped when the identify target changes or another
     // click lands — otherwise a stale read overwrites the newer reading.
     let profileTimeout: number | null = null;
+    /** Drops the in-flight profile read's result, if one is outstanding. */
+    let cancelProfile: (() => void) | null = null;
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const state = getNetcdfLayerState(activeLayerId);
@@ -73,6 +75,8 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
       popup = null;
       if (profileTimeout !== null) window.clearTimeout(profileTimeout);
       profileTimeout = null;
+      cancelProfile?.();
+      cancelProfile = null;
       // A click outside the grid clears the readout rather than reporting the
       // nearest edge cell, which would be misleading far from the data.
       if (!pixel) {
@@ -115,17 +119,25 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
       }
       profileTimeout = window.setTimeout(() => {
         profileTimeout = null;
-        const profile = readNetcdfProfile(activeLayerId, pixel.row, pixel.column);
-        if (profile) {
-          setNetcdfProfileReading({
-            layerId: activeLayerId,
-            variable: state.variable,
-            units: state.units,
-            lng: pixel.lng,
-            lat: pixel.lat,
-            profile,
-          });
-        }
+        // A remote read is a worker round trip over range requests, so this can
+        // take tens of seconds; `cancelled` drops a result the user has moved on
+        // from rather than charting a stale pixel.
+        let cancelled = false;
+        cancelProfile = () => {
+          cancelled = true;
+        };
+        void readNetcdfProfile(activeLayerId, pixel.row, pixel.column).then((profile) => {
+          if (profile && !cancelled) {
+            setNetcdfProfileReading({
+              layerId: activeLayerId,
+              variable: state.variable,
+              units: state.units,
+              lng: pixel.lng,
+              lat: pixel.lat,
+              profile,
+            });
+          }
+        });
       }, 0);
     };
 
@@ -133,6 +145,7 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
     return () => {
       map.off("click", handleClick);
       if (profileTimeout !== null) window.clearTimeout(profileTimeout);
+      cancelProfile?.();
       popup?.remove();
       canvas.style.cursor = previousCursor;
     };
