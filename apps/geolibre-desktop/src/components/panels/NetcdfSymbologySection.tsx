@@ -70,9 +70,18 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       // and nothing re-bakes when the sample lands, so wait for it first.
       await warmNetcdfColormap(next.colormap);
       const image = bakeNetcdfImage(source, next);
+      // Spread the layer as it stands *now*, not as it was at render: this runs a
+      // tick later (longer, when a colormap had to be sampled first), and reusing
+      // the captured record would silently revert any other edit to the same layer
+      // landing in that window. Nothing to update if the layer is gone.
+      const current = useAppStore.getState().layers.find((item) => item.id === layer.id);
+      if (!current) {
+        setPendingSymbology(null);
+        return;
+      }
       updateLayer(layer.id, {
-        source: { ...layer.source, url: encodeImageOverlay(image) },
-        metadata: { ...layer.metadata, netcdfSymbology: next },
+        source: { ...current.source, url: encodeImageOverlay(image) },
+        metadata: { ...current.metadata, netcdfSymbology: next },
       });
       setPendingSymbology(null);
     }, 0);

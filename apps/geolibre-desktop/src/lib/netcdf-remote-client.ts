@@ -127,6 +127,11 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
     settleReady(error);
     for (const entry of pending.values()) entry.reject(error);
     pending.clear();
+    // Nothing can be read through it again — every later `send` would hang on a
+    // reply that cannot come — and it owns a lazy-filesystem mount, so let it go
+    // rather than leaking it for the rest of the session. A `close()` after this
+    // is harmless: `terminate()` is idempotent.
+    worker.terminate();
   };
 
   const send = <T>(message: Record<string, unknown>): Promise<T> => {

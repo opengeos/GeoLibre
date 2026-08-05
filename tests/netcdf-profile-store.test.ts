@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
   clearNetcdfProfileReadings,
+  clearNetcdfProfileReadingsForLayer,
   getNetcdfProfileReadings,
   MAX_PROFILE_READINGS,
   setNetcdfProfileReading,
@@ -54,6 +55,28 @@ describe("netcdf profile store", () => {
     setNetcdfProfileReading(reading("a", 1));
     setNetcdfProfileReading(null);
     assert.deepEqual(getNetcdfProfileReadings(), []);
+  });
+
+  it("clears one layer's readings without touching another's", () => {
+    // An off-grid click on the identify target must not wipe a chart another
+    // layer's Style panel is still showing.
+    setNetcdfProfileReading(reading("b", 9));
+    clearNetcdfProfileReadingsForLayer("a");
+    assert.deepEqual(
+      getNetcdfProfileReadings().map((item) => [item.layerId, item.lng]),
+      [["b", 9]],
+    );
+    clearNetcdfProfileReadingsForLayer("b");
+    assert.deepEqual(getNetcdfProfileReadings(), []);
+  });
+
+  it("does not notify when a per-layer clear matches nothing", () => {
+    setNetcdfProfileReading(reading("b", 9));
+    let calls = 0;
+    const unsubscribe = subscribeNetcdfProfileReadings(() => calls++);
+    clearNetcdfProfileReadingsForLayer("a");
+    assert.equal(calls, 0);
+    unsubscribe();
   });
 
   it("notifies subscribers, and stops after unsubscribe", () => {

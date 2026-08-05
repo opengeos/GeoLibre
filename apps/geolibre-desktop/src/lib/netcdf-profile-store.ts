@@ -54,6 +54,23 @@ export function clearNetcdfProfileReadings(): void {
   setNetcdfProfileReading(null);
 }
 
+/**
+ * Drop only the profiles sampled from one layer.
+ *
+ * What an off-grid click should clear: the identify target's own readout, not a
+ * chart another layer's panel is still showing. The list holds one layer at a
+ * time, so clearing it wholesale would take that other layer's readings with it
+ * whenever the user switched identify targets before landing a hit on the new one.
+ *
+ * @param layerId - The layer whose readings to drop.
+ */
+export function clearNetcdfProfileReadingsForLayer(layerId: string): void {
+  const kept = readings.filter((item) => item.layerId !== layerId);
+  if (kept.length === readings.length) return;
+  readings = kept;
+  emit();
+}
+
 /** The current readings, for `useSyncExternalStore`. */
 export function getNetcdfProfileReadings(): NetcdfProfileReading[] {
   return readings;

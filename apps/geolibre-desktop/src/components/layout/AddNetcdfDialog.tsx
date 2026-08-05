@@ -12,7 +12,6 @@ import {
   type LocalNetcdfAxis,
   type LocalNetcdfFile,
   type LocalNetcdfGrid,
-  type LocalNetcdfImage,
   type LocalNetcdfProfile,
 } from "@geolibre/plugins";
 import { useAppStore } from "@geolibre/core";
@@ -218,6 +217,9 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // Incremented on every reset; lets in-flight async handlers detect that the
   // dialog was closed/reopened and bail out before stomping fresh state.
   const opGen = useRef(0);
+  // Per-call ordering for `selectVariable`, which `opGen` cannot provide: it
+  // reads within one unchanged dataset, so two overlapping reads share a gen.
+  const selectSeq = useRef(0);
   // Holds the currently-open local file so it can be closed synchronously on
   // reset even if the latest setLocalFile has not flushed to state yet.
   const openFileRef = useRef<OpenDataset | null>(null);
@@ -324,8 +326,14 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const selectVariable = async (name: string, opened: OpenDataset | null) => {
     setDimIndex({});
     const gen = opGen.current;
+    // `opGen` only moves when the dialog resets or its source changes, so it
+    // cannot order two reads of the *same* dataset. Switching variables while a
+    // read is outstanding — seconds, for a remote cube — would otherwise let
+    // whichever finishes last win, seeding the axes and RGB defaults from a
+    // variable the user has already moved off.
+    const seq = ++selectSeq.current;
     const nextAxes = opened ? await datasetAxes(opened, name) : [];
-    if (gen !== opGen.current) return; // dialog moved on while reading
+    if (gen !== opGen.current || seq !== selectSeq.current) return; // moved on while reading
     setAxes(nextAxes);
     const bandAxis = pickBandAxis(nextAxes);
     setRgbBands(bandAxis ? defaultRgbBands(bandAxis) : [0, 0, 0]);

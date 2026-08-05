@@ -10,7 +10,10 @@ import {
   NETCDF_IMAGE_SOURCE_KIND,
   readNetcdfProfile,
 } from "../lib/netcdf-image-symbology";
-import { setNetcdfProfileReading } from "../lib/netcdf-profile-store";
+import {
+  clearNetcdfProfileReadingsForLayer,
+  setNetcdfProfileReading,
+} from "../lib/netcdf-profile-store";
 
 /**
  * How many significant digits a readout shows before falling back to exponent form.
@@ -93,7 +96,7 @@ export function useNetcdfIdentify(
       // A click outside the grid clears the readout rather than reporting the
       // nearest edge cell, which would be misleading far from the data.
       if (!pixel) {
-        setNetcdfProfileReading(null);
+        clearNetcdfProfileReadingsForLayer(activeLayerId);
         return;
       }
 
@@ -135,7 +138,7 @@ export function useNetcdfIdentify(
       // axis in the source file (~200 ms for an EMIT scene), so it runs after
       // the popup is already on screen.
       if (!state.profile) {
-        setNetcdfProfileReading(null);
+        clearNetcdfProfileReadingsForLayer(activeLayerId);
         return;
       }
       profileTimeout = window.setTimeout(() => {
