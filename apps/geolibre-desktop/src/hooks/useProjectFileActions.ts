@@ -2,6 +2,8 @@ import {
   DEFAULT_PROJECT_NAME,
   detachProjectCopy,
   projectFromStore,
+  redactProjectCredentials,
+  excludeHiddenFieldsFromProject,
   serializeProject,
   useAppStore,
   type GeoLibreLayer,
@@ -50,8 +52,8 @@ import {
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
-/** A pending "strip env vars before saving?" prompt. */
-export interface EnvStripPrompt {
+/** A pending "strip credentials before saving?" prompt. */
+export interface CredentialStripPrompt {
   count: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
 }
@@ -220,7 +222,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
-  const [envStripPrompt, setEnvStripPrompt] = useState<EnvStripPrompt | null>(null);
+  const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
+    null,
+  );
   const [embedVectorDataPrompt, setEmbedVectorDataPrompt] = useState<EmbedVectorDataPrompt | null>(
     null,
   );
@@ -659,17 +663,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     };
   };
 
-  // Ask whether to strip environment variables before writing the file. The
-  // promise resolves when the user picks an option in the dialog.
-  const askStripEnvVars = (count: number) =>
+  // Ask whether to strip credentials (environment variables, geocoder keys,
+  // layer tokens) before writing the file. The promise resolves when the user
+  // picks an option in the dialog.
+  const askStripCredentials = (count: number) =>
     new Promise<"strip" | "keep" | "cancel">((resolve) => {
-      setEnvStripPrompt({ count, resolve });
+      setCredentialStripPrompt({ count, resolve });
     });
 
-  const resolveEnvStripPrompt = (choice: "strip" | "keep" | "cancel") => {
+  const resolveCredentialStripPrompt = (choice: "strip" | "keep" | "cancel") => {
     // Resolve outside the state updater (updaters must be side-effect free).
-    envStripPrompt?.resolve(choice);
-    setEnvStripPrompt(null);
+    credentialStripPrompt?.resolve(choice);
+    setCredentialStripPrompt(null);
   };
 
   // Ask whether to embed local vector layers' data in the saved file. Resolves
@@ -835,21 +840,22 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       undefined,
       layersForSave.layers,
     );
-    // Env vars (possibly API keys) are serialized in plain text. If any are set,
-    // offer to strip them from the saved file before writing.
+    // Credentials are serialized in plain text for a local project that needs
+    // them. Make keeping them an explicit choice and use the same central
+    // redaction pass as every external egress.
     let contentToSave = content;
-    const envVarCount = (project.preferences.environmentVariables ?? []).filter((variable) =>
-      variable.key.trim(),
-    ).length;
-    if (envVarCount > 0) {
-      const choice = await askStripEnvVars(envVarCount);
+    const projectToEgress = excludeHiddenFieldsFromProject(project);
+    const redacted = redactProjectCredentials(projectToEgress);
+    if (redacted.redactedPaths.length > 0) {
+      const choice = await askStripCredentials(redacted.redactedCount);
       if (choice === "cancel") return false;
       if (choice === "strip") {
-        contentToSave = serializeProject({
-          ...project,
-          preferences: { ...project.preferences, environmentVariables: [] },
-        });
+        contentToSave = serializeProject(redacted.project);
+      } else {
+        contentToSave = serializeProject(projectToEgress);
       }
+    } else {
+      contentToSave = serializeProject(projectToEgress);
     }
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
@@ -947,18 +953,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return false;
         defaultName = ensureHtmlFileName(chosen, slug);
       }
-      // Only now embed local vector data (self-contained, like Share) and strip
-      // env vars (secrets serve no purpose in a static viewer): this can be
-      // costly on a project with many local layers, so it runs after the user
+      // Only now embed local vector data (self-contained, like Share): this can
+      // be costly on a project with many local layers, so it runs after the user
       // has committed to the export rather than before the prompt. Reuse the
-      // name snapshot so the title matches the slug computed above.
+      // name snapshot so the title matches the slug computed above. Credentials
+      // serve no purpose in a static viewer and are removed inside
+      // buildProjectHtml, which runs the central redaction pass.
       const { project, defaultProjectName } = await buildEmbeddedProject(projectName);
-      const safeProject = {
-        ...project,
-        preferences: { ...project.preferences, environmentVariables: [] },
-      };
       const html = buildProjectHtml({
-        project: safeProject,
+        project,
         title: defaultProjectName,
       });
       // Returns null when the user cancels the save dialog; report that as a
@@ -1024,8 +1027,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveTemplateDialogOpen,
     handleDuplicate,
     handleSaveAsTemplate: () => setSaveTemplateDialogOpen(true),
-    envStripPrompt,
-    resolveEnvStripPrompt,
+    credentialStripPrompt,
+    resolveCredentialStripPrompt,
     embedVectorDataPrompt,
     resolveEmbedVectorDataPrompt,
     saveNamePrompt,

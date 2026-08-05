@@ -223,7 +223,16 @@ no manual CSP edit. See
 
 ## Deploying the relay (`collab.geolibre.app`)
 
-The relay deploys to Cloudflare Workers the same way as `workers/viewer`:
+Two hosts implement the same protocol and import the same permission/validation
+core:
+
+- `workers/collab` is the Cloudflare Durable Object used by the hosted service.
+- `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
+  as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
+  is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
+  (default 1,000,000) and `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+
+The hosted relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 
 - **CI:** `.github/workflows/deploy-collab.yml` deploys on any push to `main`
   that touches `workers/collab/**` (or via manual `workflow_dispatch`). It reuses
@@ -258,11 +267,13 @@ environment. Until that env var is set, the feature stays dark.
 
 Automated:
 
-- `npm run test:worker` typechecks `workers/collab`.
+- `npm run test:worker` typechecks both relays and runs the Node relay's socket
+  integration suite.
 - `npm run test:frontend` runs `tests/collab-protocol.test.ts` (protocol
   round-trip including the `set-participant-mode` / `chat` frames,
   `resolveCollabBaseUrl` validation, echo-suppression logic, and the
-  `participantCanEdit` effective-permission helper).
+  `participantCanEdit` effective-permission helper), plus the shared relay
+  conformance suite.
 
 ### Testing the full feature locally
 
@@ -270,11 +281,18 @@ Collaboration is dark until `VITE_GEOLIBRE_COLLAB_URL` points at a running
 relay, so local testing has two parts: run the relay, then run the app against
 it.
 
-1. **Start the relay** (the Durable Object) in one terminal:
+1. **Start a relay** in one terminal. For the Cloudflare implementation:
 
    ```bash
    cd workers/collab && npx wrangler dev --port 8787 --local
    # → Ready on http://localhost:8787
+   ```
+
+   Or run the self-hostable Node implementation:
+
+   ```bash
+   npm run build -w geolibre-collab-node
+   npm start -w geolibre-collab-node
    ```
 
 2. **Start the app pointing at that relay** in another terminal:

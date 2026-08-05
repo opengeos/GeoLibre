@@ -200,9 +200,15 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
     if parsed.scheme in loopback_schemes and parsed.hostname in loopback_hosts:
         return value
     if parsed.scheme not in schemes or not parsed.netloc:
+        # Joined outside the f-string, and with double quotes. This whole program
+        # is one single-quoted `python -c` argument, so a literal apostrophe here
+        # would close that argument in the shell; Python would then receive
+        # `{/.join(...)}` and die of a SyntaxError. Note -c compiles as a unit, so
+        # that failure hits every deployment at boot, not just an invalid URL.
+        allowed_hosts = "/".join(loopback_hosts)
         raise SystemExit(
             f"ERROR: {name} must be a {schemes[0]}:// URL "
-            f"(or {loopback_schemes[0]}:// on {'/'.join(loopback_hosts)}), not {value!r}."
+            f"(or {loopback_schemes[0]}:// on {allowed_hosts}), not {value!r}."
         )
     return value
 

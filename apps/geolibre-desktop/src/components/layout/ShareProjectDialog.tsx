@@ -36,7 +36,9 @@ interface ShareProjectDialogProps {
    * Lazily serialize the current project (under the given title) when the user
    * confirms the upload.
    */
-  getProject: (title: string) => Promise<{ content: string; filename: string }>;
+  getProject: (
+    title: string,
+  ) => Promise<{ content: string; filename: string; redactedCount?: number }>;
 }
 
 /**
@@ -72,6 +74,7 @@ export function ShareProjectDialog({
   const [errorCode, setErrorCode] = useState<ShareUploadErrorCode | null>(null);
   const [result, setResult] = useState<ShareUploadResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [redactedCount, setRedactedCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const copyTimeoutRef = useRef<number | null>(null);
 
@@ -88,6 +91,7 @@ export function ShareProjectDialog({
       setErrorCode(null);
       setResult(null);
       setCopied(false);
+      setRedactedCount(0);
     } else {
       abortRef.current?.abort();
       abortRef.current = null;
@@ -117,7 +121,7 @@ export function ShareProjectDialog({
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const { content, filename } = await getProject(title.trim());
+      const { content, filename, redactedCount: removed = 0 } = await getProject(title.trim());
       const uploaded = await uploadProjectToShare({
         token: shareToken,
         filename,
@@ -125,6 +129,7 @@ export function ShareProjectDialog({
         visibility,
         signal: controller.signal,
       });
+      setRedactedCount(removed);
       setResult(uploaded);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -234,6 +239,11 @@ export function ShareProjectDialog({
           </div>
         ) : result ? (
           <div className="space-y-3">
+            {redactedCount > 0 ? (
+              <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                {t("share.credentialsRemoved", { count: redactedCount })}
+              </p>
+            ) : null}
             <p className="text-sm text-muted-foreground">{t("share.liveAt")}</p>
             <div className="flex gap-2">
               <Input readOnly value={result.projectUrl} className="text-xs" />

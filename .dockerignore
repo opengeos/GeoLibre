@@ -8,7 +8,15 @@ apps/geolibre-desktop/dist
 apps/geolibre-desktop/src-tauri
 backend/geolibre_server/.venv
 backend/**/__pycache__
-workers
+workers/*
+!workers/collab-node
+!workers/collab-node/**
+# Re-narrowed after the negations above: .dockerignore is last-match-wins, so
+# without these the re-include would pull a host-built node_modules/dist back
+# into the build context that the earlier **/node_modules rule had excluded.
+workers/collab-node/node_modules
+workers/collab-node/dist
+workers/collab-node/data
 docs
 sample-data
 coverage

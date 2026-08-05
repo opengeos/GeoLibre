@@ -1,7 +1,7 @@
 // Standalone "Export as interactive HTML" builder; the in-app counterpart of the
 // Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
-import type { GeoLibreProject } from "@geolibre/core";
+import { redactCredentials, type GeoLibreProject } from "@geolibre/core";
 
 // Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
@@ -100,7 +100,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   }
   const iframeSrc = withViewerFlags(appUrl);
   // Escape "<" so a property value can't break out of the JSON <script> block.
-  const projectJson = JSON.stringify(project).replace(/</g, "\\u003c");
+  const projectJson = JSON.stringify(redactCredentials(project)).replace(/</g, "\\u003c");
 
   return `<!doctype html>
 <html lang="en">

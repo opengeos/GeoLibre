@@ -858,7 +858,7 @@ class Map(anywidget.AnyWidget):
         # Inline the project inside a JSON <script> block and escape "<" so a
         # property value can never break out of the script element; "<" is
         # valid JSON that JSON.parse restores to "<".
-        project_json = json.dumps(self.project).replace("<", "\\u003c")
+        project_json = json.dumps(_project.redact_credentials(self.project)).replace("<", "\\u003c")
         html = _HTML_EXPORT_TEMPLATE.format(
             title=_html_escape(title),
             width=_html_escape(width),
@@ -2250,9 +2250,16 @@ class Map(anywidget.AnyWidget):
 
     # -- project I/O -----------------------------------------------------
 
-    def to_project(self) -> dict[str, Any]:
-        """Return a deep copy of the current project dict."""
-        return copy.deepcopy(self.project)
+    def to_project(self, *, keep_credentials: bool = False) -> dict[str, Any]:
+        """Return a detached project dict.
+
+        Credentials are removed by default so a returned project is safe to
+        serialize or commit. Pass ``keep_credentials=True`` only for a trusted
+        local workflow that must preserve authenticated layer configuration.
+        """
+        if keep_credentials:
+            return copy.deepcopy(self.project)
+        return _project.redact_credentials(self.project)
 
     def load_project(self, source: Any) -> None:
         """Replace the current project.
@@ -2314,16 +2321,23 @@ class Map(anywidget.AnyWidget):
         self._seq += 1
         self.project = project
 
-    def save_project(self, path: str) -> None:
+    def save_project(self, path: str, *, keep_credentials: bool = False) -> None:
         """Write the current project to a ``.geolibre.json`` file.
 
         Args:
             path: Destination file path. Parent directories are created if
                 they do not already exist.
+            keep_credentials: Preserve credentials for a trusted local file.
+                Defaults to ``False`` so saved projects are safe to share.
         """
         out = pathlib.Path(path).expanduser()
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(self.project, indent=2), encoding="utf-8")
+        project = (
+            copy.deepcopy(self.project)
+            if keep_credentials
+            else _project.redact_credentials(self.project)
+        )
+        out.write_text(json.dumps(project, indent=2), encoding="utf-8")
 
 
 class Feature(dict):

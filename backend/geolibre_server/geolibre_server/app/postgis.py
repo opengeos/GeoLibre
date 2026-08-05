@@ -256,6 +256,7 @@ class PostgisReadRequest(BaseModel):
     connection: str
     schema_name: str = "public"
     table: str
+    excluded_fields: list[str] = []
 
 
 class PostgisWriteRequest(BaseModel):
@@ -538,8 +539,12 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
                 if info["srid"] not in (0, 4326)
                 else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
             )
+            pk = info["primary_key"]
+            read_columns = [
+                col for col in info["columns"] if col not in request.excluded_fields or col == pk
+            ]
             column_list = sql.SQL(", ").join(
-                [geom_expr] + [sql.Identifier(column) for column in info["columns"]]
+                [geom_expr] + [sql.Identifier(col) for col in read_columns]
             )
             query = sql.SQL("SELECT {columns} FROM {schema}.{table} LIMIT %s").format(
                 columns=column_list,
@@ -576,14 +581,18 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     pk = info["primary_key"]
     features = []
     for row in rows:
-        properties = {column: _json_safe(value) for column, value in zip(info["columns"], row[1:])}
+        properties_raw = {
+            column: _json_safe(value) for column, value in zip(read_columns, row[1:], strict=True)
+        }
         feature: dict[str, Any] = {
             "type": "Feature",
             "geometry": json.loads(row[0]) if row[0] else None,
-            "properties": properties,
+            "properties": {
+                k: v for k, v in properties_raw.items() if k not in request.excluded_fields
+            },
         }
-        if pk is not None and properties.get(pk) is not None:
-            feature["id"] = properties[pk]
+        if pk is not None and properties_raw.get(pk) is not None:
+            feature["id"] = properties_raw[pk]
         features.append(feature)
 
     return {
