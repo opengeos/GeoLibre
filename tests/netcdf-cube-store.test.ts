@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  bandChoicesFor,
   closeNetcdfCube,
   closeNetcdfCubeForLayer,
   getNetcdfCubeState,
+  normalizeCubeSettings,
   openNetcdfCubeSetup,
   reopenNetcdfCubeSetup,
   resumeNetcdfCube,
@@ -146,6 +148,14 @@ describe("netcdf cube store", () => {
     assert.equal(calls, 5);
   });
 
+  it("carries the bbox only while the layer stays the same", () => {
+    openNetcdfCubeSetup("layer-1");
+    startNetcdfCube(settings({ extent: "draw", bbox: [10, 10, 11, 11] }));
+    openNetcdfCubeSetup("layer-1");
+    // Same layer: the rectangle still means what it did, so keep it.
+    assert.deepEqual(getNetcdfCubeState().settings.bbox, [10, 10, 11, 11]);
+  });
+
   it("ignores a start with nothing open", () => {
     // Establish the phase here rather than relying on whatever the previous
     // test left behind: `closeNetcdfCube` returns early when nothing is open,
@@ -157,5 +167,76 @@ describe("netcdf cube store", () => {
     startNetcdfCube(settings());
     assert.equal(getNetcdfCubeState().layerId, null);
     assert.equal(getNetcdfCubeState().phase, "setup");
+  });
+});
+
+describe("normalizeCubeSettings", () => {
+  const carried = (overrides: Partial<NetcdfCubeSettings> = {}): NetcdfCubeSettings => ({
+    extent: "draw",
+    bbox: [10, 10, 11, 11],
+    maxSize: 192,
+    maxBands: 64,
+    rgbBands: [200, 150, 100],
+    ...overrides,
+  });
+
+  it("drops a drawn extent that belongs to another layer", () => {
+    const next = normalizeCubeSettings(carried(), 285, false, [3, 2, 1]);
+    // A bbox is geography. Pointed at a different scene it clamps into a corner
+    // of the new grid, which reads as a slow, near-empty cube and nothing else.
+    assert.equal(next.extent, "view");
+    assert.equal(next.bbox, null);
+  });
+
+  it("keeps a drawn extent on the same layer", () => {
+    const next = normalizeCubeSettings(carried(), 285, true, [3, 2, 1]);
+    assert.equal(next.extent, "draw");
+    assert.deepEqual(next.bbox, [10, 10, 11, 11]);
+  });
+
+  it("leaves a non-drawn extent alone either way", () => {
+    for (const keep of [true, false]) {
+      const next = normalizeCubeSettings(carried({ extent: "full" }), 285, keep, [0, 0, 0]);
+      assert.equal(next.extent, "full");
+    }
+  });
+
+  it("replaces band indices that do not exist on the new axis", () => {
+    // Clamping them instead (which the reader would do) makes all three
+    // channels the last band, so the "color" image comes out grey.
+    const next = normalizeCubeSettings(carried(), 40, false, [30, 20, 10]);
+    assert.deepEqual(next.rgbBands, [30, 20, 10]);
+  });
+
+  it("keeps band indices that still fit", () => {
+    const next = normalizeCubeSettings(carried({ rgbBands: [5, 4, 3] }), 40, false, [30, 20, 10]);
+    assert.deepEqual(next.rgbBands, [5, 4, 3]);
+  });
+
+  it("leaves the overlay off when it was off", () => {
+    const next = normalizeCubeSettings(carried({ rgbBands: null }), 40, false, [1, 2, 3]);
+    assert.equal(next.rgbBands, null);
+  });
+
+  it("snaps the band count onto an offered choice", () => {
+    // 64 is not offered for a 40-band axis, and a value with no matching option
+    // leaves the dropdown blank while the read uses something else.
+    assert.deepEqual(bandChoicesFor(40), [16, 32, 40]);
+    assert.equal(
+      normalizeCubeSettings(carried({ maxBands: 64 }), 40, false, [1, 2, 3]).maxBands,
+      40,
+    );
+    // 40 carried onto a 100-band axis is likewise not an option; 32 is nearest.
+    assert.equal(
+      normalizeCubeSettings(carried({ maxBands: 40 }), 100, false, [1, 2, 3]).maxBands,
+      32,
+    );
+  });
+
+  it("leaves a band count that is already offered", () => {
+    assert.equal(
+      normalizeCubeSettings(carried({ maxBands: 64 }), 285, false, [1, 2, 3]).maxBands,
+      64,
+    );
   });
 });

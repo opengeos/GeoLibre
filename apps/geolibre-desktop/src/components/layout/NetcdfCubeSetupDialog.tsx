@@ -15,11 +15,13 @@ import { Boxes, SquareDashed } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { bandLabel, defaultRgbBands, MAX_AXIS_OPTIONS } from "../../lib/netcdf-band-axis";
-import { DEFAULT_CUBE_BANDS, DEFAULT_CUBE_SIZE } from "../../lib/netcdf-cube";
 import {
+  bandChoicesFor,
   closeNetcdfCube,
   getNetcdfCubeState,
+  normalizeCubeSettings,
   resumeNetcdfCube,
+  SIZE_CHOICES,
   startNetcdfCube,
   subscribeNetcdfCube,
   type CubeExtentMode,
@@ -27,16 +29,6 @@ import {
 } from "../../lib/netcdf-cube-store";
 import { getNetcdfLayerState } from "../../lib/netcdf-image-symbology";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
-
-/** Cube sizes offered, as the longest spatial edge in cells. */
-const SIZE_CHOICES = [96, DEFAULT_CUBE_SIZE, 288, 384] as const;
-
-/**
- * Band counts offered, on top of "every band". Read time is close to linear in
- * this, so it is the control that decides whether a cube takes seconds or
- * minutes; the axis is strided evenly, so a subset still spans the spectrum.
- */
-const BAND_CHOICES = [16, 32, DEFAULT_CUBE_BANDS, 128, 256] as const;
 
 interface NetcdfCubeSetupDialogProps {
   /** The live map, for "use the current view" and for drawing an extent. */
@@ -71,9 +63,19 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
   const layerState = state.layerId ? getNetcdfLayerState(state.layerId) : null;
   const axis: LocalNetcdfAxis | null = layerState?.cube?.axis ?? null;
 
-  if (open && draftLayerId !== state.layerId) {
+  if (open && draftLayerId !== state.layerId && axis) {
     setDraftLayerId(state.layerId);
-    setDraft(state.settings);
+    // Through the normaliser, because the carried settings were chosen against
+    // some other layer: its drawn bbox is somewhere else entirely, and its band
+    // indices may not exist on this axis.
+    setDraft(
+      normalizeCubeSettings(
+        state.settings,
+        axis.size,
+        draftLayerId === state.layerId,
+        defaultRgbBands(axis),
+      ),
+    );
   }
 
   // Abandon an armed draw if the dialog closes under it; the map would
@@ -87,11 +89,11 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
 
   if (!open || !axis) return null;
 
-  const bandChoices = [...BAND_CHOICES.filter((choice) => choice < axis.size), axis.size];
-  // A carried-over count larger than this axis has no option of its own, which
-  // would leave the field showing nothing while the state said 64. The read
-  // clamps the same way, so this shows what will actually happen.
-  const selectedBands = Math.min(draft.maxBands, axis.size);
+  const bandChoices = bandChoicesFor(axis.size);
+  // The draft is normalised against this axis when it is seeded, so the value is
+  // always one of the offered options — which is what keeps the field, the plane
+  // estimate, and what gets submitted describing the same read.
+  const selectedBands = draft.maxBands;
   const rgbBands = draft.rgbBands ?? defaultRgbBands(axis);
 
   // While a draw is armed the dialog steps aside entirely: it is modal, and its

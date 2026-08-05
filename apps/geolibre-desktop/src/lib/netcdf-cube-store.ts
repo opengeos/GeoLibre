@@ -175,6 +175,71 @@ export function closeNetcdfCubeForLayer(id: string): void {
   if (state.layerId === id) closeNetcdfCube();
 }
 
+/** Cube sizes offered, as the longest spatial edge in cells. */
+export const SIZE_CHOICES = [96, 192, 288, 384] as const;
+
+/**
+ * Band counts offered, on top of "every band". Read time is close to linear in
+ * this, so it is the control that decides whether a cube takes seconds or
+ * minutes; the axis is strided evenly, so a subset still spans the spectrum.
+ */
+export const BAND_CHOICES = [16, 32, 64, 128, 256] as const;
+
+/** The band counts offered for one axis: the presets it can reach, then "all". */
+export function bandChoicesFor(axisSize: number): number[] {
+  return [...BAND_CHOICES.filter((choice) => choice < axisSize), axisSize];
+}
+
+/**
+ * Bring settings carried over from another layer back into range for this one.
+ *
+ * Carrying settings forward is what makes the read-move-read loop bearable, but
+ * three of them only mean anything relative to a particular layer:
+ *
+ * - a drawn `bbox` is geography, and pointing it at a scene somewhere else
+ *   clamps to a corner of the new grid — a slow, near-empty cube with nothing
+ *   to say it went wrong;
+ * - `rgbBands` are indices into a band axis, and indices past the end of a
+ *   shorter one are clamped to its last band, quietly making all three channels
+ *   the same and the "colour" image grey;
+ * - `maxBands` has to name one of the counts actually offered, or the dropdown
+ *   shows an empty field while the read uses something else.
+ *
+ * @param settings - What the previous layer left behind.
+ * @param axisSize - The new layer's band-axis length.
+ * @param keepExtent - True when this is the same layer, so its bbox still means
+ *   what it did; false drops back to the map view.
+ * @param fallbackRgb - The band triple to use when the carried one does not fit
+ *   this axis; the caller supplies it because choosing well needs the axis'
+ *   wavelengths, which this module does not see.
+ * @returns Settings safe to seed the dialog with.
+ */
+export function normalizeCubeSettings(
+  settings: NetcdfCubeSettings,
+  axisSize: number,
+  keepExtent: boolean,
+  fallbackRgb: [number, number, number],
+): NetcdfCubeSettings {
+  const choices = bandChoicesFor(axisSize);
+  // The nearest offered count, so a carried-over value always names a real
+  // option rather than leaving the field blank.
+  const maxBands = choices.reduce((best, choice) =>
+    Math.abs(choice - settings.maxBands) < Math.abs(best - settings.maxBands) ? choice : best,
+  );
+  const rgbInRange =
+    settings.rgbBands !== null && settings.rgbBands.every((index) => index < axisSize);
+  return {
+    ...settings,
+    extent: keepExtent || settings.extent !== "draw" ? settings.extent : "view",
+    bbox: keepExtent ? settings.bbox : null,
+    maxBands,
+    // Null (the overlay is off) stays null; an out-of-range triple is replaced
+    // with this axis' own default rather than dropped, so a checked box still
+    // produces a real colour image.
+    rgbBands: settings.rgbBands === null ? null : rgbInRange ? settings.rgbBands : fallbackRgb,
+  };
+}
+
 /** The current state, for `useSyncExternalStore`. */
 export function getNetcdfCubeState(): NetcdfCubeState {
   return state;

@@ -320,6 +320,14 @@ export function composeCubeRgb(channels: LocalNetcdfGrid[]): CubeFaceImage {
           break;
         }
         const value = raw * (channel.scaleFactor ?? 1) + (channel.addOffset ?? 0);
+        // After scaling, not before: an extreme `scale_factor`/`add_offset` can
+        // take a perfectly good raw reading to Infinity, and `Math.round(NaN)`
+        // coerces into the byte array as 0 — an opaque black pixel where every
+        // other absent reading here is transparent.
+        if (!Number.isFinite(value)) {
+          visible = false;
+          break;
+        }
         const [min, max] = ranges[c];
         const span = max - min;
         const scaled = span > 0 ? ((value - min) / span) * 255 : 0;

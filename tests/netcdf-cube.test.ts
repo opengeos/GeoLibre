@@ -320,6 +320,19 @@ describe("composeCubeRgb", () => {
     assert.equal(image.pixels[(1 * 2 + 0) * 4 + 3], 255);
   });
 
+  it("drops a cell whose scaled value is not finite", () => {
+    // A raw reading can be perfectly good and still overflow once an extreme
+    // scale_factor is applied. Rounding the resulting NaN into a byte array
+    // yields 0, so without the post-scale check the cell would paint opaque
+    // black rather than dropping out like every other absent reading here.
+    const overflowing = grid([1e300, 2, 3, 4], 2, 2);
+    overflowing.scaleFactor = 1e300;
+    const plain = grid([1, 2, 3, 4], 2, 2);
+    const image = composeCubeRgb([overflowing, plain, plain]);
+    // Grid row 0, column 0 is the overflow; texel row 1 (north), column 0.
+    assert.equal(image.pixels[(1 * 2 + 0) * 4 + 3], 0);
+  });
+
   it("rejects anything but three same-shaped bands", () => {
     const plane = grid([1, 2, 3, 4], 2, 2);
     assert.throws(() => composeCubeRgb([plane, plane]), /exactly three/);
