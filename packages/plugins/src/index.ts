@@ -87,6 +87,7 @@ export {
   isViewStatePanelVisible,
   COMPONENTS_PLUGIN_ID,
   maplibreComponentsPlugin,
+  applyStacSearchLayerOrder,
   openBookmarkPanel,
   openFlatGeobufAddVectorLayerPanel,
   openColorbarPanel,

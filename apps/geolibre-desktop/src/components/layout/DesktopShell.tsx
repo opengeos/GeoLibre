@@ -8,6 +8,7 @@ import {
   addRasterToMap,
   prepareRasterControl,
   applyRasterLayerOrder,
+  applyStacSearchLayerOrder,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
@@ -1158,10 +1159,15 @@ export function DesktopShell({
     // Re-read drag-dropped / Add Data local-file GeoJSON layers from disk
     // (their data was saved as a path, not embedded).
     void restoreLocalFileLayers();
-    // Let layer-sync push the store-derived beforeId into the raster control so
-    // deck.gl COG rasters interleave with vector layers instead of always
-    // drawing on top.
-    setExternalDeckLayerOrderHandler(applyRasterLayerOrder);
+    // Let layer-sync push the store-derived beforeId into the control that owns
+    // each deck.gl COG raster so it interleaves with vector layers instead of
+    // always drawing on top. Two controls render such layers: the raster
+    // control and the STAC Search control (#1718). The STAC one claims only its
+    // own layer ids, so ask it first and fall through for everything else.
+    setExternalDeckLayerOrderHandler((layerId, beforeId) => {
+      if (applyStacSearchLayerOrder(layerId, beforeId)) return;
+      applyRasterLayerOrder(layerId, beforeId);
+    });
     // activeByDefault plugins are marked active without activate() being
     // called, so the effects engine must be kicked explicitly to match the
     // restored active state (idempotent).

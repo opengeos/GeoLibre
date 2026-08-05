@@ -62,6 +62,28 @@ describe("external deck-layer order handler", () => {
     assert.deepEqual(calls, [["raster-1", undefined]]);
   });
 
+  it("forwards the beforeId for a STAC Search COG layer", () => {
+    const calls: Array<[string, string | undefined]> = [];
+    setExternalDeckLayerOrderHandler((id, beforeId) => calls.push([id, beforeId]));
+
+    // The STAC Search control renders its COGs as deck layers too, so its store
+    // layers must carry the same flag or their imagery would keep drawing above
+    // every vector layer whatever the panel order says (#1718).
+    const layer = rasterDeckLayer();
+    layer.id = "stac-search-item-visual-0";
+    layer.metadata = {
+      customLayerType: "raster",
+      externalDeckLayer: true,
+      externalNativeLayer: true,
+      nativeLayerIds: ["stac-search-item-visual-0"],
+      sourceIds: [],
+      sourceKind: "stac-search-cog",
+    };
+    syncLayer(makeMapStub() as never, layer, "vector-line");
+
+    assert.deepEqual(calls, [["stac-search-item-visual-0", "vector-line"]]);
+  });
+
   it("does not fire for a non-deck external custom layer", () => {
     const calls: unknown[] = [];
     setExternalDeckLayerOrderHandler((id, beforeId) => calls.push([id, beforeId]));
