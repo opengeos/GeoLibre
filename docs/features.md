@@ -16,7 +16,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - Google Earth-style camera resets: `N` north up, `U` top-down, `R` reset view
     - A `?` shortcuts cheat sheet
 - Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users. See [UI Profiles](ui-profiles.md)
-- Internationalization framework with react-i18next and 15 complete per-build translation catalogs — including right-to-left Arabic with a fully mirrored interface — plus a `?locale`/`?lang` query parameter to set the embed language
+- Internationalization framework with react-i18next and 16 complete per-build translation catalogs — including right-to-left Arabic with a fully mirrored interface — plus a `?locale`/`?lang` query parameter to set the embed language
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
 - App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
 - Undo/redo for layer and style operations
@@ -45,7 +45,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - **Feature services and feeds**: GeoJSON URLs; GeoRSS feeds from a URL or file; and OGC API - Features collections added as vector layers from whatever URL you have in hand — a landing page, `/collections`, a collection, or a full items URL
     - **Raster**: COG and GeoTIFF; Cloud-Optimized NetCDF/HDF via kerchunk references, plus local HDF5 and NetCDF-4 files; and MBTiles
     - **Cloud-native archives**: PMTiles, and Zarr from a remote store or a folder on disk, with variable and dimension pickers that offer the store's real coordinate values rather than raw indices
-    - **Files with pickers**: multi-layer GeoPackages, with a layer picker so only the chosen feature tables load; delimited text with a source CRS field so projected easting/northing columns reproject correctly; CAD drawings (DXF/DWG) with a drawing-layer picker and CRS selector; and Esri File Geodatabases (`.gdb` folders, desktop) with a feature-class picker and automatic reprojection
+    - **Files with pickers**: multi-layer GeoPackages, with a layer picker so only the chosen feature tables load; delimited text with a source CRS field so projected easting/northing columns reproject correctly, or an Addresses mode that concatenates the columns you pick and geocodes each row through the project's provider (unmatched rows are kept as null-geometry features so they stay visible and fixable in the attribute table); CAD drawings (DXF/DWG) with a drawing-layer picker and CRS selector; and Esri File Geodatabases (`.gdb` folders, desktop) with a feature-class picker and automatic reprojection
     - **3D and media**: LiDAR; 3D Tiles, including authenticated tilesets via custom request headers; ArcGIS I3S scene layers (Integrated Mesh and 3D Object, rendered on deck.gl); Gaussian splats; glTF/GLB 3D models placed at coordinates; georeferenced video overlays; and geotagged photos imported as a point layer from their EXIF GPS, with manual placement and drag for photos lacking coordinates and a true native-resolution photo viewer
     - **Throughout**: a fully internationalized dialog, comma decimal support, drag-and-dropped CSV coordinate files, sample-data dropdowns on every upstream-backed panel for loading ready-made example datasets, and a saved service library for storing and re-adding frequently used web-service endpoints
 - QGIS-style Browser panel (Data Source Manager) for exploring and adding data from one place: browse map Services and Recent items, connect to PostGIS databases and browse their schemas and tables, drill into local files, save and reopen Favorites, and add a New connection per service kind, with full keyboard navigation of the tree
@@ -76,7 +76,10 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - Per-class rows for graduated, categorized, rule-based, and expression styling; gradient bars for heatmaps and continuous raster colormaps; proportional-symbol size ramps; diagram fields; and land-cover labels from a Raster Attribute Table
     - An edit mode for renaming, hiding, and reordering entries, adding a section from a color dictionary, choosing a corner, collapsing sections, resizing the panel, and exporting the rendered legend as JSON
     - Saved with the project and shared with the Print Layout legend
+- Smart styling on add: each new vector layer takes the next unused color from a qualitative palette, with its outline derived from that fill and its sizing following the layer's dominant geometry, so a freshly loaded stack is legible before the Style panel is opened (deleting a layer frees its color rather than offsetting the cycle)
 - Live style panel
+    - **Style suggestions**: a dismissible strip offering up to three one-click renderers derived from the layer's own attributes — categorize by a low-cardinality label, graduate by the numeric column with the most spread, or a heatmap for a dense point layer — shown while the layer still carries its as-added symbology
+    - **Vector-tile classification**: PMTiles, MBTiles, and remote vector-tile layers carry no local features, so the panel samples the features the viewport has already loaded to fill in the field list and the values graduated and categorized styling need, and 3D extrusion defaults to a real height property
     - **Renderers**: single, categorized, graduated, expression, and rule-based (filter-driven) symbology over fill, stroke, opacity, and circle radius, plus proportional symbols, fill patterns, a built-in marker library, and point heatmap and clustering renderers — all including for Add Vector Layer point layers
     - **Color**: an inline color ramp picker that previews each colormap's gradient on the trigger and beside every option, plus a transparent (no fill / no outline) option in the color picker
     - **Rule-based renderer**: per-rule symbol properties, scale-dependent visibility, nested rules, and per-rule toggles, and it can hide features matching no rule
@@ -88,6 +91,11 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - Expression-driven label properties and placement priority
     - A Duplicate labels option, plus unique and concatenate modes that collapse points stacked at the same coordinate into a single deduplicated label
 - Single-band pseudocolor with classification, reversed and custom color ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
+- NetCDF and HDF grids are first-class raster layers rather than a single grey band
+    - Local grids are colormapped in the browser from the same colormap catalog the Style panel uses, added as image overlays, and fitted to the camera on add, so Zoom to layer has a real extent to fly to
+    - A hyperspectral cube gains an RGB band combination picked by wavelength
+    - Identify reads a pixel's value off the map and, for a cube, walks the band axis to chart a spectral signature against wavelength — up to six sampled points, each drawn as a numbered dot in its chart color, compared in a draggable and resizable window over the map and exported as PNG or CSV
+    - A **3D image cube** view renders the scene as its six exterior faces with draggable slice cuts, reading windowed and strided so a full EMIT reflectance variable stays within what the browser can hold
 
 ## Attribute data and expressions
 
@@ -97,7 +105,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - **Forms**: an attribute form designer with edit widgets, validation constraints, and conditional field visibility
     - **Analysis**: a Charts panel (histogram, scatter, bar, line, box) and a field statistics summary panel
     - **Columns**: rename, delete, hide/show, and reorder, plus a column explorer for finding and toggling fields in wide tables
-    - **Export** to GeoJSON, GeoParquet, Shapefile, GeoPackage, or CSV
+    - **Export** to GeoJSON, GeoParquet, Shapefile, GeoPackage, CSV, KML, or KMZ, honoring the fields hidden in the table so a hidden column stays out of the exported file
     - A **Raster Attribute Table** for single-band categorical rasters
 - Shared Expression Builder with a function reference, searchable field list, live preview, and reusable variables, wired into filters, labels, styling, field calculation, and selection, plus Select by Expression and Select by Location for building feature selections
 
@@ -117,7 +125,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - Persistent mode banners for the Directions and Reverse Geocode tools
     - A Camera Tour recorder that captures an animated keyframe tour to video, with per-keyframe recapture, per-keyframe hold and transition duration controls, and saving or loading a named tour setup as JSON
     - A Dashboard panel of configurable chart widgets that summarize the loaded layers: histogram, scatter, bar, line, box, and pie charts, plus big-number indicator tiles with count, sum, mean, min, max, or median aggregation and a custom prefix and suffix
-- Print Layout composer (**Project → Print Layout...**) that exports the map to PNG or PDF: a user-editable legend, an explicit map-scale input, a title block with editable title and footer, page-size controls, a custom print extent, attribute-table and chart blocks, Atlas / map series generation that produces one page per feature or a uniform series of pages along a line, and Copy to Clipboard
+- Print Layout composer (**Project → Print Layout...**) that exports the map to PNG or PDF: a user-editable legend, an explicit map-scale input, a title block with editable title and footer, page-size controls, a custom print extent drawn with the mouse or by touch, attribute-table and chart blocks, Atlas / map series generation that produces one page per feature or a uniform series of pages along a line, and Copy to Clipboard
 - Record the map canvas, or a drawn bounding box, to a video file straight from the browser (with an optional title/source caption and on-map panel capture for HTML, legend, and colorbar overlays), and animate a marker along any line layer with 3D track-follow camera controls and MP4 export
 - Bookmarks that capture the active layers alongside the camera, organized into folders, with selectable export, a resizable and reorderable panel, and a save-as name prompt
 - Elements panel that lists the map's annotations — text, arrows, rectangle, ellipse and freehand highlights, pin markers, sticky notes, and placed images — so each one can be found and managed from a list instead of hunted for on the canvas. Most elements are anchored to a point and move with the map; a placed image can instead be pinned to an extent so it scales with the view. See [Annotations and the Elements panel](user-guide/map-controls.md#annotations-and-the-elements-panel)
@@ -132,7 +140,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
 ## Storytelling and collaboration
 
 - Story map builder that composes its chapters directly on the live map, with a presenter view, dedicated start and closing slides, an optional hide-itinerary toggle, a printable PDF handout generator (with subtitle and byline fields), and standalone HTML export
-- Real-time multi-user collaboration (MVP; requires the `VITE_GEOLIBRE_COLLAB_URL` build variable — see [Collaboration](collaboration.md)) so several people can edit the same project together
+- Real-time multi-user collaboration (MVP; see [Collaboration](collaboration.md)) so several people can edit the same project together
     - Per-participant permissions and an in-app chat panel
     - An on-canvas session-status badge and roster — a live dot, a connected-participant count, and an expandable client list — while a session is active
 - Anchored review comments: drop a pin on the map, write a note, and reply, resolve, reopen, or delete the thread, filtered by open, resolved, or all. Comments are saved in the project file so they travel with a shared project, and every mutation syncs live to the other participants during a collaboration session. See [Review comments](user-guide/map-controls.md#review-comments)
@@ -163,6 +171,9 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - A **Run locally (WASM)** toggle switches any tool between the in-browser runtime and the Python sidecar, which reads native file paths for batch runs over a directory
     - Deep-linkable through a `?tool=` URL parameter that preselects a tool and pre-fills its form, with a Copy link button that builds the shareable link
     - Batch tools run against a selected input directory
+    - Distance parameters on WGS84 vector layers carry a metric unit picker (degrees, meters, kilometers, feet, miles) that converts to the degrees the tool actually reads, anchored at the input layer's center latitude
+    - EPSG parameters sit beside a searchable CRS catalog grouped into Geographic and Projected, with the typed code's official EPSG name confirmed under the field
+    - Download OSM Vector's four boundary numbers render as one Area of interest control with Use map extent and Draw on map shortcuts
 - Vector menu
     - **Geometry and analysis**: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by expression, select by location, random extract, movement, space-time, and cell coverage
     - **Data quality**: check validity, fix geometries, and check topology rules
@@ -180,6 +191,8 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
 - AI Segmentation (SamGeo) that turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) and Meta's SAM 3 — text prompts ("trees", "buildings") or automatic segmentation, proxied to a separate `samgeo-api` model server (GPU recommended). See [AI Segmentation](user-guide/segmentation.md)
 - In-browser object detection that runs ONNX/YOLO models directly in the webview, with no server or Python required, over map imagery or an imported geotagged photo layer
 - H3 tools to create hexagonal grids over an extent and bin point layers into H3 cells
+- DGGS tools for discrete global grid systems: a DGGS Generator that fills an extent with cells, DGGS Binning that aggregates a point layer into them, and DGGS Compact that collapses a complete set of children into their parent
+- Quick analysis straight from the map's right-click menu and a layer's actions menu, with defaults already filled in: buffer the clicked point at three distances or run drive- and walk-time isochrones from it, and buffer, centroid, convex-hull, or bounding-box a whole layer. Buffer distances follow the scale bar's unit system, and every run lands in Processing History, re-runnable and copyable as Python
 
 ## Projects and sharing
 
@@ -208,7 +221,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
 - Configurable control positions and external plugin manifests, and external plugins can:
     - Render on the host's shared deck.gl instance via `app.getDeckGL()`
     - Use the maplibre-gl-raster stack and the map projection control, and register native raster and tile layers
-    - Render Zarr through the renderer the app already ships via `addZarrLayer`, with plugin-owned paint properties honored on custom layers so the Style panel's sliders apply
+    - Render Zarr through the renderer the app already ships via `addZarrLayer`, with plugin-owned paint properties honored on custom layers so the Style panel's sliders apply, and read a pixel or region back off that native layer with `queryZarrLayer` — a point for click-to-value, a polygon for region statistics — instead of reimplementing the reprojection and chunk indexing the renderer already did
     - Expose layer groups of their own
     - Register first-class right-sidebar panels, toolbar menus, and floating panels through the plugin UI host API, including a shared-rail replace-style dock mode, and place their toolbar menus after the Help menu
 - Time Slider plugin for animating time series raster and vector data
@@ -218,6 +231,7 @@ the [Tutorials](tutorials/index.md); for what is planned next, see the
     - Plots a pixel time series, charting a sampled pixel's value across a raster stack
 - Flight Simulator plugin with a continuous, interactive free-flight camera you steer over terrain and 3D layers from the keyboard, rather than declaring a destination and watching a scripted camera animation
 - H3 hexagonal grid plugin that renders the H3 grid over the current view at a chosen resolution, identifies a cell to inspect its index, parent, children, neighbors, and center, and exports the grid or the selection as GeoJSON or CSV
+- DGGS plugins under Plugins → DGGS for three more discrete global grid systems — **A5**, **DGGRID**, and **DGGAL** — each rendering its grid over the current view at a chosen or automatic resolution with a cell-count guard, identifying a cell to read its id, parents, children, neighbors, and center, and adding the grid or the selection to the map as a layer or exporting it as GeoJSON
 - Atmosphere Effects plugin that renders a deep-space backdrop, parallax starfield, comets, and an atmospheric halo around the globe at low zoom (technique adapted from [Leonel Dias](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/)), with a Spinning Globe panel and customizable atmosphere halo and deep-space colors
 - Directions plugin for interactive routing via [maplibre-gl-directions](https://github.com/maplibre/maplibre-gl-directions): click the map to add waypoints, drag to reposition, and click a waypoint to remove it (uses the public OSRM demo server, driving only)
 - Install external plugins from an uploaded zip on both desktop and web, plus external plugin zip loading from the app data plugins directory and local development plugin directories, with the Manage Plugins list sorted alphabetically
@@ -231,6 +245,10 @@ See the [Plugin API](plugin-api.md) to build your own.
     - Embed-friendly URL parameters, including `?url=` project deep links that skip the welcome wizard and a `?welcome=0` param to opt out of onboarding
     - A `maponly` chrome-free mode
     - A `layout=viewer` read-only preset that keeps Layers, View, Controls, basemaps, and search/identify while hiding every authoring path — menus, shortcuts, drag-and-drop import, and the plugins whose on-map control writes to the project — so an embed cannot be steered into editing
+- Self-hostable sharing, accounts, and live collaboration, so a deployment keeps its projects on its own infrastructure
+    - A documented version 1 projects and identity HTTP contract that any server may implement, with a FastAPI reference implementation in `backend/geolibre_server_api`. See [Server API](server-api.md)
+    - A plain Node collaboration relay alongside the Cloudflare Durable Object one, both driven by a shared session core and both held to a single conformance suite so their permission behavior cannot drift
+    - `GEOLIBRE_SHARE_URL` and `GEOLIBRE_COLLAB_URL` repoint a published web image at those servers at container runtime instead of requiring a rebuilt fork; `off` removes Share and the Project Gallery from the UI entirely, and a malformed value stops the container at boot rather than falling back to the public hosted service
 - Versioned `postMessage` API for a host page that frames the app. See [Talking to the map at runtime](user-guide/embedding.md#talking-to-the-map-at-runtime)
     - **Commands**: load a project, move the camera, highlight features, open a processing tool, toggle and list layers, apply filters, read the viewport, add a layer, and export the map as a PNG at runtime
     - **Events back out**: `ready`, `ack`, `projectLoaded`, `selectionChanged`, `viewChanged`, `toolCompleted`, and `serverFileWritten`
