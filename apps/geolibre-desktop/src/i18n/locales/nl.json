@@ -743,7 +743,8 @@
       "errorMaxFeatures": "Voer voor het maximale aantal features een waarde van 1 of hoger in.",
       "errorBbox": "Voer het begrenzingskader in als ‘west,zuid,oost,noord’.",
       "errorNoFeatures": "Deze collectie leverde geen features op."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} is geladen, maar de coördinaten zijn geen lengte-/breedtegraad, dus de laag verschijnt niet op de kaart. Het CRS van het bestand klopt niet — herprojecteer het (of corrigeer de .prj) en laad het opnieuw."
   },
   "offline": {
     "title": "Offline gebied downloaden",

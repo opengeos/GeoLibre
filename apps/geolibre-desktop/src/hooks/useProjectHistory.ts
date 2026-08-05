@@ -76,7 +76,20 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        const content = serializeProject(buildProjectSnapshot(mapControllerRef));
+        // `serializeProject` runs synchronously, so its failure cannot be caught
+        // by the promise chain below. A project embedding a large vector layer
+        // serializes to more than V8's 536,870,888-byte string cap and throws
+        // `RangeError: Invalid string length`, which previously escaped as an
+        // unhandled error on every autosave tick. Autosave is best-effort — a
+        // project too large to snapshot must degrade to "no crash recovery",
+        // never to a crash.
+        let content: string;
+        try {
+          content = serializeProject(buildProjectSnapshot(mapControllerRef));
+        } catch (error) {
+          console.warn("Project autosave skipped: the project is too large to serialize.", error);
+          return;
+        }
         void addProjectSnapshot(content, currentProjectKey()).catch((error) =>
           console.error("Could not autosave the project.", error),
         );

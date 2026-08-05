@@ -743,7 +743,8 @@
       "errorMaxFeatures": "Saisissez un nombre maximal d'entités égal ou supérieur à 1.",
       "errorBbox": "Saisissez la boîte englobante sous la forme « ouest,sud,est,nord ».",
       "errorNoFeatures": "Cette collection n'a renvoyé aucune entité."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} a été chargé, mais ses coordonnées ne sont pas des longitudes/latitudes : la couche n'apparaîtra pas sur la carte. Le SCR du fichier est mal déclaré — reprojetez-le (ou corrigez son .prj) puis rechargez-le."
   },
   "offline": {
     "title": "Télécharger une zone hors ligne",

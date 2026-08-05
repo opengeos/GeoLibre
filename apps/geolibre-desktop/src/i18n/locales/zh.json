@@ -723,7 +723,8 @@
       "errorMaxFeatures": "请输入不小于 1 的最大要素数。",
       "errorBbox": "请按“西,南,东,北”的格式输入边界框。",
       "errorNoFeatures": "此集合未返回任何要素。"
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} 已加载，但其坐标不是经纬度，因此不会显示在地图上。该文件的坐标参考系标注有误 — 请重新投影（或修正 .prj）后再次加载。"
   },
   "offline": {
     "title": "下载离线区域",

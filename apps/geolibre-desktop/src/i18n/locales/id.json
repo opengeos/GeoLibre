@@ -723,7 +723,8 @@
       "errorMaxFeatures": "Masukkan nilai jumlah fitur maksimum 1 atau lebih.",
       "errorBbox": "Masukkan kotak pembatas sebagai \"barat,selatan,timur,utara\".",
       "errorNoFeatures": "Koleksi ini tidak mengembalikan fitur apa pun."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} dimuat, tetapi koordinatnya bukan bujur/lintang sehingga tidak akan tampil di peta. CRS berkas salah — proyeksikan ulang (atau perbaiki .prj-nya) lalu muat kembali."
   },
   "offline": {
     "title": "Unduh Area Offline",

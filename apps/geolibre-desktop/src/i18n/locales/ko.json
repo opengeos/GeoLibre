@@ -723,7 +723,8 @@
       "errorMaxFeatures": "최대 피처 수를 1 이상으로 입력하세요.",
       "errorBbox": "경계 상자를 “서,남,동,북” 형식으로 입력하세요.",
       "errorNoFeatures": "이 컬렉션은 피처를 반환하지 않았습니다."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}}을(를) 불러왔지만 좌표가 경위도가 아니어서 지도에 표시되지 않습니다. 파일의 CRS가 잘못 지정되어 있습니다 — 재투영하거나 .prj를 수정한 뒤 다시 불러오세요."
   },
   "offline": {
     "title": "오프라인 지역 다운로드",

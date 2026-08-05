@@ -743,7 +743,8 @@
       "errorMaxFeatures": "Geben Sie für die maximale Objektanzahl einen Wert von 1 oder mehr ein.",
       "errorBbox": "Geben Sie den Begrenzungsrahmen als „West,Süd,Ost,Nord“ an.",
       "errorNoFeatures": "Diese Collection hat keine Objekte zurückgegeben."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} wurde geladen, aber die Koordinaten sind keine geografische Länge/Breite, daher erscheint die Ebene nicht auf der Karte. Das CRS der Datei ist falsch angegeben — projizieren Sie sie um (oder korrigieren Sie die .prj) und laden Sie sie erneut."
   },
   "offline": {
     "title": "Offline-Bereich herunterladen",

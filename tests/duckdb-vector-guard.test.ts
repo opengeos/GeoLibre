@@ -7,6 +7,7 @@ import {
   shouldRouteToDuckDb,
   VectorLoadCancelledError,
 } from "../apps/geolibre-desktop/src/lib/duckdb-vector-guard";
+import { detectNonGeographicCoordinates } from "../packages/core/src/types";
 
 describe("confirmLargeDataset", () => {
   it("does nothing when no callback is supplied", async () => {
@@ -89,5 +90,70 @@ describe("configured defaults", () => {
   it("routes at 100 MB and warns at 100k features", () => {
     assert.equal(DUCKDB_VECTOR_ROUTE_BYTES, 100 * 1024 * 1024);
     assert.equal(DUCKDB_VECTOR_FEATURE_WARN_COUNT, 100_000);
+  });
+});
+
+describe("detectNonGeographicCoordinates", () => {
+  const fc = (coordinates: unknown, type = "Point") => ({
+    type: "FeatureCollection" as const,
+    features: [{ type: "Feature" as const, properties: {}, geometry: { type, coordinates } }],
+  });
+
+  it("passes ordinary WGS84 coordinates", () => {
+    assert.equal(detectNonGeographicCoordinates(fc([-72.6, 41.9]) as never), null);
+  });
+
+  it("accepts the exact WGS84 corners", () => {
+    assert.equal(detectNonGeographicCoordinates(fc([180, 90]) as never), null);
+    assert.equal(detectNonGeographicCoordinates(fc([-180, -90]) as never), null);
+  });
+
+  it("flags projected coordinates hiding behind a geographic CRS", () => {
+    // The CT_Wetlands case: EPSG:5070 Albers metres declared as CRS84.
+    const found = detectNonGeographicCoordinates(fc([1905935.66, 2337159.4]) as never);
+    assert.ok(found);
+    assert.equal(found.sampled, 1);
+    assert.equal(Math.round(found.maxAbsX), 1905936);
+  });
+
+  it("walks nested MultiPolygon rings", () => {
+    const nested = fc(
+      [
+        [
+          [
+            [1820601, 2201748],
+            [1993899, 2377614],
+          ],
+        ],
+      ],
+      "MultiPolygon",
+    );
+    assert.ok(detectNonGeographicCoordinates(nested as never));
+  });
+
+  it("ignores a latitude just inside range but a longitude just outside", () => {
+    assert.equal(detectNonGeographicCoordinates(fc([180.5, 12]) as never)?.sampled, 1);
+    assert.equal(detectNonGeographicCoordinates(fc([12, 90.5]) as never)?.sampled, 1);
+  });
+
+  it("treats non-finite coordinates as a different defect, not a CRS mismatch", () => {
+    assert.equal(detectNonGeographicCoordinates(fc([Number.NaN, Number.NaN]) as never), null);
+  });
+
+  it("returns null for an empty or missing collection", () => {
+    assert.equal(detectNonGeographicCoordinates(undefined), null);
+    assert.equal(detectNonGeographicCoordinates({ type: "FeatureCollection", features: [] }), null);
+  });
+
+  it("stops at the sample limit instead of walking the whole collection", () => {
+    const many = {
+      type: "FeatureCollection" as const,
+      features: Array.from({ length: 5000 }, () => ({
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "Point", coordinates: [-72, 41] },
+      })),
+    };
+    assert.equal(detectNonGeographicCoordinates(many as never, 25), null);
   });
 });

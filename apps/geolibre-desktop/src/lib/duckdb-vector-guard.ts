@@ -7,50 +7,12 @@
  * `node --test` without pulling the WASM engine into the bundle/test.
  */
 
-/**
- * Sources whose feature (row) count reaches this threshold prompt a
- * confirmation before {@link loadDuckDbVectorFile} materializes every row as a
- * GeoJSON Feature in memory — each row is JSON-parsed and turned into its own
- * object, so a multi-million-row file can exhaust browser memory or wedge the
- * tab. This is the DuckDB ingestion counterpart to `OSM_PBF_SIZE_WARN_BYTES`
- * (`osm-pbf-loader.ts`); unlike a raw byte size it is accurate for compressed
- * formats like GeoParquet, where a small file can hold millions of rows.
- */
-export const DUCKDB_VECTOR_FEATURE_WARN_COUNT = 100_000;
+import { DUCKDB_VECTOR_FEATURE_WARN_COUNT, DUCKDB_VECTOR_ROUTE_BYTES } from "@geolibre/core";
 
-/**
- * Local vector files at or above this size skip the in-memory JavaScript
- * readers and stream through DuckDB instead.
- *
- * The JS readers all materialize the whole file on the main thread before
- * yielding anything: `JSON.parse` over one giant string for GeoJSON, and shpjs's
- * `parseShp`, which is fully synchronous and applies the `.prj` proj4 transform
- * **per coordinate**. Past this size that is a visible freeze with no progress
- * and no way to cancel. DuckDB reads off the main thread (native on desktop, the
- * DuckDB-WASM worker in the browser) and reports a feature count first, so
- * {@link DUCKDB_VECTOR_FEATURE_WARN_COUNT} gets a chance to fire.
- *
- * One threshold covers every format. For a zipped shapefile it is measured on
- * the **uncompressed** `.shp`, which is what governs the parse cost — shapefiles
- * compress heavily, so the archive's own size says little about it.
- *
- * Routing trades total time for responsiveness rather than being a pure win.
- * Measured on a 197 MB / 170k-polygon `.shp` in the browser: with a projected
- * `.prj` the worst main-thread stall drops from 8.9s to 1.6s while the whole
- * load goes from 10.3s to 13.3s; with an already-WGS84 `.prj` (where proj4 is
- * nearly free) it is 4.7s → 1.9s of stall for 6.1s → 10.3s overall. A UI that
- * keeps responding is worth the extra seconds; a nine-second freeze reads as a
- * crash. Below the threshold the JS readers stay the default: they are faster
- * end to end and preserve field-name fidelity without a DuckDB round-trip.
- *
- * This also subsumes a hard engine limit. V8 caps a single string at
- * `2**29 - 24` bytes (~537 MB), so a text file at or above *that* size could
- * never be read by the text path at all — `readTextFile` / `File.text()` throw
- * `RangeError: Invalid string length` before `JSON.parse` runs. Since 100 MB is
- * far below the cap, such files are already routed away and the RangeError is
- * now unreachable.
- */
-export const DUCKDB_VECTOR_ROUTE_BYTES = 100 * 1024 * 1024; // 100 MB
+// Both thresholds live in `@geolibre/core` so the desktop loaders here and the
+// Add Vector Layer panel (`@geolibre/plugins`) switch strategy at the same
+// numbers; re-exported so callers keep importing them from the guard module.
+export { DUCKDB_VECTOR_FEATURE_WARN_COUNT, DUCKDB_VECTOR_ROUTE_BYTES };
 
 /** Details passed to {@link DuckDbVectorLoadOptions.onLargeDataset}. */
 export interface LargeVectorDataset {

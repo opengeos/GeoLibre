@@ -743,7 +743,8 @@
       "errorMaxFeatures": "Maksimum öğe değeri olarak 1 veya daha büyük bir sayı girin.",
       "errorBbox": "Sınırlayıcı kutuyu «batı,güney,doğu,kuzey» biçiminde girin.",
       "errorNoFeatures": "Bu koleksiyon hiç öğe döndürmedi."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} yüklendi, ancak koordinatları boylam/enlem değil, bu yüzden haritada görünmeyecek. Dosyanın CRS bilgisi yanlış — yeniden projelendirin (veya .prj dosyasını düzeltin) ve tekrar yükleyin."
   },
   "offline": {
     "title": "Çevrimdışı Alan İndir",

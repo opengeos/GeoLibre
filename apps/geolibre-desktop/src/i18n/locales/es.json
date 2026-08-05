@@ -743,7 +743,8 @@
       "errorMaxFeatures": "Introduzca un máximo de entidades de 1 o más.",
       "errorBbox": "Introduzca el cuadro delimitador como «oeste,sur,este,norte».",
       "errorNoFeatures": "Esta colección no devolvió ninguna entidad."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} se cargó, pero sus coordenadas no son de longitud/latitud, por lo que no aparecerá en el mapa. El CRS del archivo está mal declarado: reproyéctelo (o corrija su .prj) y vuelva a cargarlo."
   },
   "offline": {
     "title": "Descargar área sin conexión",

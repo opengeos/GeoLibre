@@ -743,7 +743,8 @@
       "errorMaxFeatures": "Inserisci un numero massimo di elementi pari a 1 o superiore.",
       "errorBbox": "Inserisci il rettangolo di delimitazione come «ovest,sud,est,nord».",
       "errorNoFeatures": "Questa collection non ha restituito alcun elemento."
-    }
+    },
+    "nonGeographicCoordinates": "{{names}} è stato caricato, ma le sue coordinate non sono longitudine/latitudine, quindi non comparirà sulla mappa. Il CRS del file è errato: riproiettalo (o correggi il .prj) e ricaricalo."
   },
   "offline": {
     "title": "Scarica area offline",
