@@ -5067,7 +5067,7 @@
     "bands": "Bands",
     "allBands": "All ({{count}})",
     "rgbOverlay": "RGB image on top",
-    "rgbHint": "Composes three bands into a colour image laid over the top face, so the cube is recognisable as a place.",
+    "rgbHint": "Composes three bands into a color image laid over the top face, so the cube is recognizable as a place.",
     "red": "Red",
     "green": "Green",
     "blue": "Blue",

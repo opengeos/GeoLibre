@@ -2291,7 +2291,13 @@ export function DesktopShell({
                 mapReadyGeneration={mapReadyGeneration}
               />
               <NetcdfProfileWindow />
-              <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+              {/* Its own boundary: the cube window builds a `WebGLRenderer`,
+                  whose constructor throws outright when the browser or driver
+                  gives it no context. Sharing the map's boundary would turn a
+                  failure to draw one panel into the loss of the whole map. */}
+              <SilentErrorBoundary label="NetCDF 3D cube">
+                <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+              </SilentErrorBoundary>
               <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}

@@ -102,8 +102,12 @@ export function openNetcdfCubeSetup(
     // From the *current* settings, not the defaults, unless the caller says
     // otherwise: reopening the dialog should show what was read last.
     settings: { ...state.settings, ...settings },
-    // A different layer has no cube of its own yet, so cancelling has nowhere
-    // to go back to.
+    // A different layer has had no read of its own, so it starts at zero. This
+    // is what stops the window inheriting the previous layer's token and firing
+    // an expensive read on the new layer the moment the dialog opens, using
+    // settings (an extent, a drawn bbox) chosen for a different scene.
+    readToken: sameLayer ? state.readToken : 0,
+    // And with no read there is no cube, so cancelling has nowhere to go back to.
     started: sameLayer && state.started,
   };
   emit();
@@ -153,8 +157,9 @@ export function resumeNetcdfCube(): void {
 export function closeNetcdfCube(): void {
   if (state.layerId === null) return;
   // The settings survive the close, so the next cube on any layer starts from
-  // what this one used.
-  state = { ...CLOSED, settings: state.settings, readToken: state.readToken };
+  // what this one used. The read token does not: the window unmounts and drops
+  // its cube, so the next open has to read again.
+  state = { ...CLOSED, settings: state.settings };
   emit();
 }
 

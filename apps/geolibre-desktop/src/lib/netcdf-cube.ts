@@ -81,6 +81,42 @@ export interface NetcdfCube {
   rgb?: CubeFaceImage;
   /** The band indices {@link rgb} was composed from, red first. */
   rgbBands?: [number, number, number];
+  /**
+   * Where the cube holds any reading at all, for skipping hopeless rays (see
+   * {@link CubeFootprint}). Optional: a cube without one still paints
+   * correctly, just more slowly.
+   */
+  footprint?: CubeFootprint;
+}
+
+/**
+ * Which parts of a cube hold data, collapsed across the band axis.
+ *
+ * {@link faceSampleIndex} walks inward from each face until it finds a reading,
+ * and the rays that cost the most are the ones that find nothing: a nodata
+ * corner walks the cube's full depth before giving up, once per texel. Because
+ * a satellite scene's nodata is the same shape at every band, one collapsed mask
+ * answers "could this ray hit anything?" in O(1) and skips exactly those.
+ *
+ * Built during the read, which already touches every cell, so it costs nothing
+ * extra. Conservative by construction: a cell marked empty is empty at every
+ * band, so skipping it can never hide a reading. A slice inherits its parent's
+ * mask, which stays valid because a superset only ever costs a walk that would
+ * have failed anyway.
+ */
+export interface CubeFootprint {
+  /** `ny * nx` flags: 1 where some band at this cell has a reading. */
+  cell: Uint8Array;
+  /** `ny` flags: 1 where some cell in this row has a reading. */
+  row: Uint8Array;
+  /** `nx` flags: 1 where some cell in this column has a reading. */
+  column: Uint8Array;
+  /** Per row, the first and last column holding a reading; -1 for an empty row. */
+  rowFirst: Int32Array;
+  rowLast: Int32Array;
+  /** Per column, the first and last row holding a reading; -1 for an empty one. */
+  columnFirst: Int32Array;
+  columnLast: Int32Array;
 }
 
 /** How to read a cube: the source, the extent, and how coarsely. */
@@ -128,6 +164,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
   const rgbIndices = options.rgbBands ?? null;
   const total = indices.length + (rgbIndices ? rgbIndices.length : 0);
   let values: Float32Array | null = null;
+  let cells: Uint8Array | null = null;
   let nx = 0;
   let ny = 0;
   let bounds: [number, number, number, number] = [0, 0, 0, 0];
@@ -140,6 +177,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
       nx = grid.nx;
       ny = grid.ny;
       values = new Float32Array(indices.length * ny * nx);
+      cells = new Uint8Array(ny * nx);
       bounds = gridExtent(grid);
     } else if (grid.nx !== nx || grid.ny !== ny) {
       // Every plane is read with the same window, so a mismatch means the file
@@ -147,7 +185,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
       // faces rather than fail.
       throw new Error("The cube's band planes do not share one shape.");
     }
-    unpackInto(values, z * ny * nx, grid);
+    unpackInto(values, z * ny * nx, grid, cells);
     bands.push({
       index: indices[z],
       ...(options.axis.values?.[indices[z]] !== undefined
@@ -167,7 +205,15 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
     const channels: LocalNetcdfGrid[] = [];
     for (const index of rgbIndices) {
       if (options.signal?.aborted) throw new CubeReadAbortedError();
-      channels.push(await options.readBand(index));
+      const plane = await options.readBand(index);
+      // Against the *cube*, not just against each other: the overlay is laid
+      // over the top face at the cube's own size, so a caller reading the
+      // channels through a different window would silently stretch the image
+      // across the cube rather than fail.
+      if (plane.nx !== nx || plane.ny !== ny) {
+        throw new Error("The RGB bands do not share the cube's shape.");
+      }
+      channels.push(plane);
       options.onProgress?.(indices.length + channels.length, total);
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
@@ -192,6 +238,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
     // face, and a per-plane range would make the same reflectance read as a
     // different color on the top face than on the sides.
     dataClim: percentileClim(values) ?? [0, 1],
+    ...(cells ? { footprint: buildFootprint(cells, ny, nx) } : {}),
     ...(rgb ? { rgb } : {}),
     ...(rgbIndices ? { rgbBands: rgbIndices } : {}),
   };
@@ -384,8 +431,20 @@ function gridExtent(grid: LocalNetcdfGrid): [number, number, number, number] {
   return [west, south, east, north];
 }
 
-/** Copy one plane into the cube, unpacked to physical units with NaN fill. */
-function unpackInto(target: Float32Array, offset: number, grid: LocalNetcdfGrid): void {
+/**
+ * Copy one plane into the cube, unpacked to physical units with NaN fill, and
+ * mark every cell it had a reading for.
+ *
+ * The marking rides along here because this loop already visits every cell, so
+ * the footprint (see {@link CubeFootprint}) costs one array write per reading
+ * rather than a second pass over the whole cube.
+ */
+function unpackInto(
+  target: Float32Array,
+  offset: number,
+  grid: LocalNetcdfGrid,
+  cells: Uint8Array | null,
+): void {
   const scale = grid.scaleFactor ?? 1;
   const add = grid.addOffset ?? 0;
   const fill = typeof grid.fillValue === "number" ? grid.fillValue : null;
@@ -397,8 +456,39 @@ function unpackInto(target: Float32Array, offset: number, grid: LocalNetcdfGrid)
       continue;
     }
     const value = raw * scale + add;
-    target[offset + i] = Number.isFinite(value) ? value : Number.NaN;
+    const finite = Number.isFinite(value);
+    target[offset + i] = finite ? value : Number.NaN;
+    if (finite && cells) cells[i] = 1;
   }
+}
+
+/**
+ * Collapse a cell mask into the row and column summaries the faces use.
+ *
+ * The first/last edges are what turn a side face's inward walk into a jump: a
+ * ray entering from the east already knows the outermost column in its row that
+ * could hold anything, so it starts there instead of stepping across the nodata
+ * margin one cell at a time.
+ */
+function buildFootprint(cell: Uint8Array, ny: number, nx: number): CubeFootprint {
+  const row = new Uint8Array(ny);
+  const column = new Uint8Array(nx);
+  const rowFirst = new Int32Array(ny).fill(-1);
+  const rowLast = new Int32Array(ny).fill(-1);
+  const columnFirst = new Int32Array(nx).fill(-1);
+  const columnLast = new Int32Array(nx).fill(-1);
+  for (let y = 0; y < ny; y++) {
+    for (let x = 0; x < nx; x++) {
+      if (!cell[y * nx + x]) continue;
+      row[y] = 1;
+      column[x] = 1;
+      if (rowFirst[y] < 0) rowFirst[y] = x;
+      rowLast[y] = x;
+      if (columnFirst[x] < 0) columnFirst[x] = y;
+      columnLast[x] = y;
+    }
+  }
+  return { cell, row, column, rowFirst, rowLast, columnFirst, columnLast };
 }
 
 /**
@@ -508,10 +598,87 @@ function faceRay(
  */
 export function faceSampleIndex(cube: NetcdfCube, face: CubeFace, u: number, v: number): number {
   const { base, step, depth } = faceRay(cube, face, u, v);
-  for (let i = 0, index = base; i < depth; i++, index += step) {
+  // Two costs the footprint removes. A ray that can hit nothing walks the
+  // cube's whole extent to prove it — most of the corners, on a rotated
+  // footprint. And a ray that *will* hit still crosses the nodata margin one
+  // cell at a time, which is the bulk of the remaining work on the side faces.
+  let skip = 0;
+  if (cube.footprint) {
+    if (!rayCanHit(cube, cube.footprint, face, u, v)) return base;
+    skip = raySkip(cube, cube.footprint, face, u, v);
+  }
+  const start = base + skip * step;
+  for (let i = skip, index = start; i < depth; i++, index += step) {
     if (Number.isFinite(cube.values[index])) return index;
   }
   return base;
+}
+
+/**
+ * How many cells a ray can jump before the first one that could hold anything.
+ *
+ * Zero for the top and bottom faces: they look along the band axis, which the
+ * footprint deliberately collapses, and their first cell is a hit whenever the
+ * column has data at all.
+ *
+ * @returns A non-negative number of steps, never past the ray's own extent.
+ */
+function raySkip(
+  cube: NetcdfCube,
+  footprint: CubeFootprint,
+  face: CubeFace,
+  u: number,
+  v: number,
+): number {
+  const { nx, ny } = cube;
+  switch (face) {
+    case "top":
+    case "bottom":
+      return 0;
+    // Sweeping south from row 0 down column u.
+    case "north":
+      return Math.max(0, footprint.columnFirst[u]);
+    // Sweeping north from row ny-1.
+    case "south":
+      return Math.max(0, ny - 1 - footprint.columnLast[u]);
+    // Sweeping west from column nx-1 along row ny-1-v.
+    case "east":
+      return Math.max(0, nx - 1 - footprint.rowLast[ny - 1 - v]);
+    // Sweeping east from column 0.
+    case "west":
+      return Math.max(0, footprint.rowFirst[ny - 1 - v]);
+  }
+}
+
+/**
+ * Whether a face's ray passes through any cell that holds a reading.
+ *
+ * Collapsed along the ray's own direction: the top and bottom faces look down a
+ * single cell's column of bands, the north and south faces sweep a grid column,
+ * and the east and west faces sweep a grid row.
+ *
+ * @returns False only when every cell the ray could reach is nodata.
+ */
+function rayCanHit(
+  cube: NetcdfCube,
+  footprint: CubeFootprint,
+  face: CubeFace,
+  u: number,
+  v: number,
+): boolean {
+  const { nx, ny } = cube;
+  switch (face) {
+    case "top":
+      return footprint.cell[(ny - 1 - v) * nx + u] === 1;
+    case "bottom":
+      return footprint.cell[v * nx + u] === 1;
+    case "north":
+    case "south":
+      return footprint.column[u] === 1;
+    case "east":
+    case "west":
+      return footprint.row[ny - 1 - v] === 1;
+  }
 }
 
 /**

@@ -88,6 +88,10 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
   if (!open || !axis) return null;
 
   const bandChoices = [...BAND_CHOICES.filter((choice) => choice < axis.size), axis.size];
+  // A carried-over count larger than this axis has no option of its own, which
+  // would leave the field showing nothing while the state said 64. The read
+  // clamps the same way, so this shows what will actually happen.
+  const selectedBands = Math.min(draft.maxBands, axis.size);
   const rgbBands = draft.rgbBands ?? defaultRgbBands(axis);
 
   // While a draw is armed the dialog steps aside entirely: it is modal, and its
@@ -152,7 +156,7 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
   // Every band plane is a separate read, so this is what the wait is
   // proportional to. Showing it here is the only chance the user gets to trade
   // it against detail before committing.
-  const planeCount = Math.min(draft.maxBands, axis.size) + (draft.rgbBands ? 3 : 0);
+  const planeCount = selectedBands + (draft.rgbBands ? 3 : 0);
 
   return (
     <Dialog
@@ -233,7 +237,7 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
               <Label htmlFor="netcdfCubeBands">{t("netcdfCube.bands")}</Label>
               <Select
                 id="netcdfCubeBands"
-                value={String(draft.maxBands)}
+                value={String(selectedBands)}
                 onChange={(event) => setDraft({ ...draft, maxBands: Number(event.target.value) })}
               >
                 {bandChoices.map((choice) => (

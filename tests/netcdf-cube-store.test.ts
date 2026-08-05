@@ -90,6 +90,30 @@ describe("netcdf cube store", () => {
     assert.equal(getNetcdfCubeState().layerId, null);
   });
 
+  it("clears the read token when the dialog opens on a different layer", () => {
+    openNetcdfCubeSetup("layer-1");
+    startNetcdfCube(settings({ extent: "draw", bbox: [10, 10, 11, 11] }));
+    assert.ok(getNetcdfCubeState().readToken > 0);
+
+    openNetcdfCubeSetup("layer-2");
+    // The window reads whenever the token changes. Carrying layer 1's token
+    // over would start an expensive read on layer 2 the moment the dialog
+    // opened, using an extent chosen for a different scene, before the user had
+    // seen the dialog at all.
+    assert.equal(getNetcdfCubeState().readToken, 0);
+    assert.equal(getNetcdfCubeState().phase, "setup");
+  });
+
+  it("keeps the read token when the dialog reopens on the same layer", () => {
+    openNetcdfCubeSetup("layer-1");
+    startNetcdfCube(settings());
+    const token = getNetcdfCubeState().readToken;
+    // Reaching the dialog again from the Style panel rather than the window's
+    // own Settings button must still not throw the cube away.
+    openNetcdfCubeSetup("layer-1");
+    assert.equal(getNetcdfCubeState().readToken, token);
+  });
+
   it("keeps `started` when the dialog is reopened on the same layer", () => {
     openNetcdfCubeSetup("layer-1");
     startNetcdfCube(settings());
@@ -123,6 +147,13 @@ describe("netcdf cube store", () => {
   });
 
   it("ignores a start with nothing open", () => {
+    // Establish the phase here rather than relying on whatever the previous
+    // test left behind: `closeNetcdfCube` returns early when nothing is open,
+    // so `beforeEach` alone does not reset it.
+    openNetcdfCubeSetup("layer-1");
+    startNetcdfCube(settings());
+    closeNetcdfCube();
+
     startNetcdfCube(settings());
     assert.equal(getNetcdfCubeState().layerId, null);
     assert.equal(getNetcdfCubeState().phase, "setup");

@@ -12,6 +12,7 @@ import {
   strideBands,
   validDataRect,
   type CubeFace,
+  type CubeFootprint,
   type NetcdfCube,
 } from "../apps/geolibre-desktop/src/lib/netcdf-cube";
 import type {
@@ -54,6 +55,38 @@ function z(nz: number, ny: number, nx: number): number {
 /** The value a face's texel shows, via the index the painter uses. */
 function sample(cube: NetcdfCube, face: CubeFace, u: number, v: number): number {
   return cube.values[faceSampleIndex(cube, face, u, v)];
+}
+
+/** The footprint the reader would build for a cube, for the tests that need one. */
+function footprintOf(cube: NetcdfCube): CubeFootprint {
+  const { nx, ny, nz } = cube;
+  const cell = new Uint8Array(ny * nx);
+  const row = new Uint8Array(ny);
+  const column = new Uint8Array(nx);
+  const rowFirst = new Int32Array(ny).fill(-1);
+  const rowLast = new Int32Array(ny).fill(-1);
+  const columnFirst = new Int32Array(nx).fill(-1);
+  const columnLast = new Int32Array(nx).fill(-1);
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        if (!Number.isFinite(cube.values[z * ny * nx + y * nx + x])) continue;
+        cell[y * nx + x] = 1;
+      }
+    }
+  }
+  for (let y = 0; y < ny; y++) {
+    for (let x = 0; x < nx; x++) {
+      if (!cell[y * nx + x]) continue;
+      row[y] = 1;
+      column[x] = 1;
+      if (rowFirst[y] < 0) rowFirst[y] = x;
+      rowLast[y] = x;
+      if (columnFirst[x] < 0) columnFirst[x] = y;
+      columnLast[x] = y;
+    }
+  }
+  return { cell, row, column, rowFirst, rowLast, columnFirst, columnLast };
 }
 
 /** A one-plane grid, as a windowed band read would return it. */
@@ -147,6 +180,25 @@ describe("readNetcdfCube", () => {
     // second span 100-100, and the two faces would then paint identically.
     assert.equal(cube.dataClim[0], 0);
     assert.equal(cube.dataClim[1], 100);
+  });
+
+  it("records where the cube holds data, collapsed across the bands", async () => {
+    // Column 1 is fill in band 0 but has a reading in band 1, so a per-plane
+    // mask would wrongly mark it empty and the faces would skip a real cell.
+    const planes = [grid([1, -9999, 3, -9999], 2, 2, -9999), grid([5, 6, 7, -9999], 2, 2, -9999)];
+    const cube = await readNetcdfCube({
+      readBand: (index) => Promise.resolve(planes[index]),
+      variable: "reflectance",
+      axis: { name: "bands", size: 2 },
+    });
+    assert.ok(cube.footprint);
+    assert.deepEqual(Array.from(cube.footprint.cell), [1, 1, 1, 0]);
+    assert.deepEqual(Array.from(cube.footprint.row), [1, 1]);
+    assert.deepEqual(Array.from(cube.footprint.column), [1, 1]);
+    // Row 1 holds data only at column 0, so a ray entering from the east can
+    // jump straight there instead of stepping across the gap.
+    assert.deepEqual(Array.from(cube.footprint.rowLast), [1, 0]);
+    assert.deepEqual(Array.from(cube.footprint.rowFirst), [0, 0]);
   });
 
   it("reports progress once per band", async () => {
@@ -486,6 +538,38 @@ describe("cube faces", () => {
     // Nothing to show along that ray, so the texel must stay transparent
     // rather than latching onto some arbitrary cell.
     assert.ok(Array.from(painted.pixels).every((byte) => byte === 0));
+  });
+
+  it("paints identically with and without a footprint", () => {
+    // The footprint only ever skips rays that were going to find nothing, or
+    // jumps a ray over cells that are nodata at every band. Either way the
+    // painted result has to be byte-for-byte what the plain walk produces, so
+    // this pins the optimisation to the behaviour it is optimising.
+    const plain = positionCube(7, 5, 4);
+    // A rotated-footprint shape: a diamond of data inside a nodata margin.
+    const cx = (plain.nx - 1) / 2;
+    const cy = (plain.ny - 1) / 2;
+    for (let z = 0; z < plain.nz; z++) {
+      for (let y = 0; y < plain.ny; y++) {
+        for (let x = 0; x < plain.nx; x++) {
+          if (Math.abs(x - cx) / cx + Math.abs(y - cy) / cy > 1) {
+            plain.values[z * plain.ny * plain.nx + y * plain.nx + x] = Number.NaN;
+          }
+        }
+      }
+    }
+    const withFootprint: NetcdfCube = { ...plain, footprint: footprintOf(plain) };
+    const colors: Array<[number, number, number]> = Array.from(
+      { length: 64 },
+      (_, i) => [i, 255 - i, i * 2] as [number, number, number],
+    );
+    for (const face of CUBE_FACES) {
+      assert.deepEqual(
+        Array.from(paintCubeFace(withFootprint, face, colors, [0, 400]).pixels),
+        Array.from(paintCubeFace(plain, face, colors, [0, 400]).pixels),
+        `${face} differs once the footprint is used`,
+      );
+    }
   });
 
   it("paints values through the ramp and leaves NaN cells transparent", () => {

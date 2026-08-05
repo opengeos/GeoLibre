@@ -736,6 +736,135 @@ describe("readGrid (NetCDF-3)", () => {
   });
 });
 
+/**
+ * The same windowing contract against the *other* backend.
+ *
+ * These matter more than the NetCDF-3 cases above, not less: NetCDF-3 crops an
+ * already-decoded array in JS, while HDF5 turns the window into a hyperslab and
+ * hands it to h5wasm — a separate implementation, and the one every real
+ * hyperspectral file (EMIT and friends, all NetCDF-4) actually takes. An
+ * off-by-one in those ranges would never be caught by a NetCDF-3 test.
+ *
+ * `sample-hdf5.h5` is a miniature cube: `reflectance(bands=2, lat=3, lon=4)`
+ * packed as int16 with `scale_factor` 0.5 and `add_offset` 1, band 0 holding
+ * 0..11 (with a fill at row 1, column 1) and band 1 holding 100..111.
+ */
+describe("readGrid windows (HDF5/NetCDF-4)", () => {
+  it("reads a whole plane, with its coordinates and packing", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const grid = file.readGrid("reflectance");
+      assert.equal(grid.ny, 3);
+      assert.equal(grid.nx, 4);
+      assert.deepEqual(Array.from(grid.values), [0, 1, 2, 3, 4, -9999, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(Array.from(grid.lat), [30, 20, 10]);
+      assert.deepEqual(Array.from(grid.lon), [0, 1, 2, 3]);
+      assert.equal(grid.fillValue, -9999);
+      assert.equal(grid.scaleFactor, 0.5);
+      assert.equal(grid.addOffset, 1);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("selects a band from the leading axis", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const grid = file.readGrid("reflectance", { bands: 1 });
+      assert.deepEqual(Array.from(grid.values.slice(0, 4)), [100, 101, 102, 103]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("crops to a window, and moves its coordinates with it", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      // Rows 1-2, columns 2-3 of band 1: the hyperslab has to be offset on both
+      // spatial axes at once, which a full-plane read never exercises.
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 1 },
+        { row: 1, column: 2, rows: 2, columns: 2 },
+      );
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 2);
+      assert.deepEqual(Array.from(grid.values), [106, 107, 110, 111]);
+      assert.deepEqual(Array.from(grid.lat), [20, 10]);
+      assert.deepEqual(Array.from(grid.lon), [2, 3]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("decimates a window past maxSize by a whole-number stride", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      // 4 columns capped to 2 gives a stride of 2: columns 0 and 2, rows 0 and 2.
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 0 },
+        { row: 0, column: 0, rows: 3, columns: 4, maxSize: 2 },
+      );
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 2);
+      assert.deepEqual(Array.from(grid.values), [0, 2, 8, 10]);
+      assert.deepEqual(Array.from(grid.lat), [30, 10]);
+      assert.deepEqual(Array.from(grid.lon), [0, 2]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("clamps a window that runs past the grid", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      // An oversized window is the normal case: a map view usually overhangs
+      // the scene. A hyperslab past the end would throw in h5wasm rather than
+      // clamp, so this is the case that most needs pinning down.
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 0 },
+        { row: 2, column: 3, rows: 99, columns: 99 },
+      );
+      assert.equal(grid.ny, 1);
+      assert.equal(grid.nx, 1);
+      assert.deepEqual(Array.from(grid.values), [11]);
+      assert.deepEqual(Array.from(grid.lat), [10]);
+      assert.deepEqual(Array.from(grid.lon), [3]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("keeps the fill value inside a window, rather than reading past it", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 0 },
+        { row: 1, column: 1, rows: 1, columns: 2 },
+      );
+      assert.deepEqual(Array.from(grid.values), [-9999, 6]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("reports the band axis with its wavelengths", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const [axis] = file.listAxes("reflectance");
+      assert.equal(axis.name, "bands");
+      assert.equal(axis.size, 2);
+      assert.deepEqual(axis.values, [450, 550]);
+      assert.equal(axis.units, "nm");
+    } finally {
+      file.close();
+    }
+  });
+});
+
 describe("gridPixelAt", () => {
   /** A 2x3 grid on a descending latitude axis, values tagging their cell. */
   function grid() {

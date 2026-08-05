@@ -1,3 +1,4 @@
+import { TIME_DIMENSION_NAMES } from "@geolibre/plugins/zarr-time-axis";
 import type { LocalNetcdfAxis } from "@geolibre/plugins/local-netcdf";
 
 /**
@@ -39,21 +40,6 @@ const MICROMETRE_UNITS = new Set([
   "micrometres",
 ]);
 
-/**
- * Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
- * `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
- * the Time Slider can drive it; see `useImagePath` in the Add NetCDF dialog.
- */
-const TIME_DIMENSION_NAMES = new Set([
-  "time",
-  "valid_time",
-  "datetime",
-  "date",
-  "t",
-  "forecast_time",
-  "period",
-]);
-
 /** `"650.41 nm (bands 47)"` — the coordinate value first, then where it sits. */
 export function axisOptionLabel(axis: LocalNetcdfAxis, coordinate: number, index: number): string {
   const rounded = Number.isInteger(coordinate) ? String(coordinate) : coordinate.toFixed(2);
@@ -69,9 +55,16 @@ export function bandLabel(axis: LocalNetcdfAxis, index: number): string {
     : axisOptionLabel(axis, coordinate, index);
 }
 
-/** Whether a dimension name reads as a time axis. */
+/**
+ * Whether a dimension name reads as a time axis.
+ *
+ * Shares one list with the Zarr time-axis reader (see `TIME_DIMENSION_NAMES`),
+ * so a `(time, lat, lon)` cube is recognised the same way whichever reader
+ * opened it.
+ */
 export function isTimeAxisName(name: string): boolean {
-  return TIME_DIMENSION_NAMES.has(name.toLowerCase());
+  const lower = name.toLowerCase();
+  return TIME_DIMENSION_NAMES.some((candidate) => candidate === lower);
 }
 
 /** The axis' values as nanometres, or null when it is not a wavelength axis. */

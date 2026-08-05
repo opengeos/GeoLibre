@@ -119,9 +119,12 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
       setError(null);
       setProgress({ done: 0, total: 0 });
       try {
-        const window = cubeWindow(mapControllerRef.current, layerState.grid, settings);
+        // Not named `window`: that would shadow the browser global for the
+        // whole function body, so a later edit reaching for `window.setTimeout`
+        // above this line would throw rather than resolve the global.
+        const readWindow = cubeWindow(mapControllerRef.current, layerState.grid, settings);
         const next = await readNetcdfCube({
-          readBand: (bandIndex) => source.readBand(bandIndex, window),
+          readBand: (bandIndex) => source.readBand(bandIndex, readWindow),
           variable: layerState.variable,
           ...(layerState.units ? { units: layerState.units } : {}),
           axis: source.axis,
@@ -151,7 +154,9 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
   // Read when the setup dialog hands over, and seed the colormap from what the
   // layer is already drawn with so the cube and the map agree on sight. Keyed on
   // `readToken`, not the phase: reopening and cancelling the dialog must not
-  // spend another half-minute rebuilding a cube that is already in memory.
+  // spend another half-minute rebuilding a cube that is already in memory. The
+  // store resets the token when the layer changes, so a switch cannot inherit
+  // the previous layer's token and start a read nobody asked for.
   useEffect(() => {
     if (!layerId || readToken === 0) {
       setCube(null);

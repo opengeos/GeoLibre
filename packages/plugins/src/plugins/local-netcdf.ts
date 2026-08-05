@@ -254,9 +254,9 @@ export interface LocalNetcdfWindow {
   /** Columns in the window. */
   columns: number;
   /**
-   * Longest edge of the returned grid. A larger window is decimated by a whole
-   * -number stride, so the result is a subset of the source cells and never an
-   * interpolation of them.
+   * Longest edge of the returned grid. A larger window is decimated by a
+   * whole-number stride, so the result is a subset of the source cells and
+   * never an interpolation of them.
    */
   maxSize?: number;
 }
