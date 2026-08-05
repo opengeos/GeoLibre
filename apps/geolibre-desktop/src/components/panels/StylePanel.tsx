@@ -56,6 +56,8 @@ import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
+import { NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
+import { NetcdfSymbologySection } from "./NetcdfSymbologySection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { TimeSliderSymbologySection } from "./TimeSliderSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
@@ -4646,8 +4648,18 @@ export function StylePanel({
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-        <div className="space-y-4 p-3">{beforeIdControl}</div>
-        <p className="p-4 text-xs text-muted-foreground">{t("style.noControls")}</p>
+        <div className="space-y-4 p-3">
+          {beforeIdControl}
+          {/* A NetCDF grid baked to pixels has no MapLibre paint properties, so
+              it lands in this branch; its colormap/limits are re-applied by
+              re-baking the image rather than by a style property. */}
+          {layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND && (
+            <NetcdfSymbologySection layer={layer} />
+          )}
+        </div>
+        {layer.metadata.sourceKind !== NETCDF_IMAGE_SOURCE_KIND && (
+          <p className="p-4 text-xs text-muted-foreground">{t("style.noControls")}</p>
+        )}
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
           {t("style.selectedLayerType", { type: layer.type })}

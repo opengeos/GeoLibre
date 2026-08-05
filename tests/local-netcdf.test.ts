@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   buildInlineZarrRefs,
+  buildInlineZarrStore,
+  composeColormappedImage,
+  composeRgbImage,
+  gridBounds,
   openLocalNetcdf,
+  percentileClim,
   type InlineZarrGrid,
 } from "../packages/plugins/src/plugins/local-netcdf";
 import { KerchunkReferenceStore } from "../packages/plugins/src/plugins/kerchunk-reference-store";
@@ -271,6 +276,375 @@ describe("openLocalNetcdf (NetCDF-3)", () => {
     const file = await openLocalNetcdf(fixture("sample-nc3-xy.nc"));
     try {
       assert.throws(() => file.buildLayerRefs("data"), /latitude\/longitude coordinate/i);
+    } finally {
+      file.close();
+    }
+  });
+});
+
+describe("gridBounds", () => {
+  it("expands cell centres by half a cell on every side", () => {
+    // 3 columns spaced 1 degree apart -> half a cell is 0.5 degrees.
+    assert.deepEqual(gridBounds([10, 20], [0, 1, 2]), [-0.5, 5, 2.5, 25]);
+  });
+
+  it("reads a descending axis the same as an ascending one", () => {
+    assert.deepEqual(gridBounds([20, 10], [2, 1, 0]), [-0.5, 5, 2.5, 25]);
+  });
+
+  it("leaves a single-cell axis as a point rather than inventing a width", () => {
+    assert.deepEqual(gridBounds([10], [0]), [0, 10, 0, 10]);
+  });
+
+  it("clamps to the valid WGS84 ranges", () => {
+    const [west, south, east, north] = gridBounds([-89.5, 89.5], [-179.5, 179.5]);
+    assert.equal(west, -180);
+    assert.equal(south, -90);
+    assert.equal(east, 180);
+    assert.equal(north, 90);
+  });
+});
+
+describe("buildInlineZarrStore", () => {
+  it("reports the grid's extent alongside the references", () => {
+    const { bounds } = buildInlineZarrStore(sampleGrid());
+    assert.deepEqual(bounds, [-0.5, 5, 2.5, 25]);
+  });
+
+  it("reports the *rolled* extent for a 0-360 longitude grid", () => {
+    // Rolling moves the data into -180..180, so the pre-roll 45..315 extent
+    // would fly the camera to the wrong place.
+    const { bounds } = buildInlineZarrStore({
+      ...sampleGrid(),
+      nx: 4,
+      data: new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]),
+      lon: new Float64Array([45, 135, 225, 315]),
+    });
+    assert.deepEqual(bounds, [-180, 5, 180, 25]);
+  });
+});
+
+describe("percentileClim", () => {
+  it("trims outliers off both ends", () => {
+    // 0..100 with a single wild outlier: the 2/98 percentiles stay near the bulk.
+    const values = new Float32Array([...Array.from({ length: 101 }, (_, i) => i), 1e6]);
+    const clim = percentileClim(values);
+    assert.ok(clim);
+    assert.ok(clim[1] < 1000, `expected the outlier to be trimmed, got ${clim[1]}`);
+  });
+
+  it("skips the fill value and applies scale_factor/add_offset", () => {
+    const clim = percentileClim(new Float32Array([-9999, 0, 10, -9999]), {
+      fillValue: -9999,
+      scale: 2,
+      offset: 1,
+    });
+    // Only 0 and 10 survive the fill filter; scaled they span 1..21, and the
+    // 2/98 trim pulls each end 2% of the way in.
+    assert.deepEqual(clim, [1.4, 20.6]);
+  });
+
+  it("returns null for a grid with no spread", () => {
+    assert.equal(percentileClim(new Float32Array([7, 7, 7, 7])), null);
+    assert.equal(percentileClim(new Float32Array([-9999, -9999]), { fillValue: -9999 }), null);
+  });
+});
+
+describe("composeRgbImage", () => {
+  /** A 2x2 grid whose three channels each run 0..3, on an ascending lat axis. */
+  function composition() {
+    return {
+      ny: 2,
+      nx: 2,
+      channels: [
+        new Float32Array([0, 1, 2, 3]),
+        new Float32Array([0, 1, 2, 3]),
+        new Float32Array([0, 1, 2, 3]),
+      ],
+      lat: new Float64Array([10, 20]),
+      lon: new Float64Array([0, 1]),
+      stretchPercent: 0,
+    };
+  }
+
+  it("flips an ascending latitude axis so the image is north-up", () => {
+    const image = composeRgbImage(composition());
+    assert.equal(image.width, 2);
+    assert.equal(image.height, 2);
+    // Source row 1 (lat 20, the northern one) must be output row 0, so the
+    // top-left pixel is the value 2 -> full scale over a 0..3 range is 170.
+    assert.equal(image.pixels[0], Math.round((2 / 3) * 255));
+    // Output row 1 is source row 0 (lat 10), starting at value 0.
+    assert.equal(image.pixels[2 * 4], 0);
+  });
+
+  it("leaves a descending latitude axis in place", () => {
+    const image = composeRgbImage({
+      ...composition(),
+      lat: new Float64Array([20, 10]),
+    });
+    assert.equal(image.pixels[0], 0);
+  });
+
+  it("emits image-source corners in NW, NE, SE, SW order", () => {
+    const image = composeRgbImage(composition());
+    assert.deepEqual(image.bounds, [-0.5, 5, 1.5, 25]);
+    assert.deepEqual(image.coordinates, [
+      [-0.5, 25],
+      [1.5, 25],
+      [1.5, 5],
+      [-0.5, 5],
+    ]);
+  });
+
+  it("makes fill and non-finite cells fully transparent", () => {
+    const image = composeRgbImage({
+      ...composition(),
+      channels: [
+        new Float32Array([-9999, 1, 2, Number.NaN]),
+        new Float32Array([0, 1, 2, 3]),
+        new Float32Array([0, 1, 2, 3]),
+      ],
+      fillValue: -9999,
+      // Descending so output rows match source rows and the assertions read
+      // straight off the input.
+      lat: new Float64Array([20, 10]),
+    });
+    const alpha = [0, 1, 2, 3].map((i) => image.pixels[i * 4 + 3]);
+    assert.deepEqual(alpha, [0, 255, 255, 0]);
+  });
+
+  it("stretches each channel over its own range", () => {
+    const image = composeRgbImage({
+      ...composition(),
+      channels: [
+        new Float32Array([0, 0, 0, 10]), // red spans 0..10
+        new Float32Array([0, 0, 0, 1]), // green spans 0..1
+        new Float32Array([5, 5, 5, 5]), // blue is constant
+      ],
+      lat: new Float64Array([20, 10]),
+    });
+    assert.deepEqual(image.channelRanges[0], [0, 10]);
+    assert.deepEqual(image.channelRanges[1], [0, 1]);
+    // The last pixel is each channel's own maximum, so both stretched channels
+    // saturate despite their very different native ranges.
+    assert.equal(image.pixels[3 * 4], 255);
+    assert.equal(image.pixels[3 * 4 + 1], 255);
+  });
+
+  it("decimates a grid past maxSize", () => {
+    const big = new Float32Array(8 * 8).map((_, i) => i);
+    const image = composeRgbImage({
+      ny: 8,
+      nx: 8,
+      channels: [big, big, big],
+      lat: new Float64Array(Array.from({ length: 8 }, (_, i) => 20 - i)),
+      lon: new Float64Array(Array.from({ length: 8 }, (_, i) => i)),
+      maxSize: 4,
+    });
+    assert.equal(image.width, 4);
+    assert.equal(image.height, 4);
+  });
+
+  it("rejects anything other than three channels", () => {
+    assert.throws(
+      () =>
+        composeRgbImage({
+          ...composition(),
+          channels: [new Float32Array([0, 1, 2, 3])],
+        }),
+      /exactly three channels/i,
+    );
+  });
+});
+
+describe("openLocalNetcdf axes, bounds, and RGB (NetCDF-3)", () => {
+  it("reports the leading axes of a cube", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // The fixture has no `time` coordinate variable, so the axis is reported
+      // without values and the picker falls back to a plain index box.
+      assert.deepEqual(file.listAxes("temp"), [{ name: "time", size: 2 }]);
+      // lat/lon are the spatial pair, never a leading axis.
+      assert.deepEqual(
+        file.listAxes("temp").map((axis) => axis.name),
+        ["time"],
+      );
+    } finally {
+      file.close();
+    }
+  });
+
+  it("returns the slice's extent and robust color limits", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const { bounds, clim } = file.buildLayerRefs("temp", { time: 1 });
+      assert.deepEqual(bounds, [-0.5, 5, 2.5, 25]);
+      // The +10 plane runs 11..16; a 2% trim off 6 samples stays inside it.
+      assert.ok(clim);
+      assert.ok(clim[0] >= 11 && clim[1] <= 16, `unexpected clim ${clim}`);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("composes an RGB image from three indices of a leading axis", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const image = file.buildRgbImage("temp", {
+        axis: "time",
+        indices: [1, 0, 0],
+        stretchPercent: 0,
+      });
+      assert.equal(image.width, 3);
+      assert.equal(image.height, 2);
+      assert.deepEqual(image.bounds, [-0.5, 5, 2.5, 25]);
+      // Red reads the +10 plane (11..16), green and blue the base plane (1..6).
+      assert.deepEqual(image.channelRanges[0], [11, 16]);
+      assert.deepEqual(image.channelRanges[1], [1, 6]);
+      // Every cell is valid data, so nothing is masked out.
+      assert.ok(
+        Array.from({ length: 6 }, (_, i) => image.pixels[i * 4 + 3]).every((a) => a === 255),
+      );
+    } finally {
+      file.close();
+    }
+  });
+
+  it("rejects an axis that is not one of the variable's leading dimensions", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      assert.throws(
+        () => file.buildRgbImage("temp", { axis: "lat", indices: [0, 1, 0] }),
+        /not one of this variable's non-spatial dimensions/i,
+      );
+    } finally {
+      file.close();
+    }
+  });
+});
+
+describe("composeColormappedImage", () => {
+  /** A 2x2 grid running 0..3 on a descending (north-first) latitude axis. */
+  function composition() {
+    return {
+      ny: 2,
+      nx: 2,
+      values: new Float32Array([0, 1, 2, 3]),
+      lat: new Float64Array([20, 10]),
+      lon: new Float64Array([0, 1]),
+      colors: ["#000000", "#ff0000"],
+      clim: [0, 3] as [number, number],
+    };
+  }
+
+  it("maps values across the ramp", () => {
+    const image = composeColormappedImage(composition());
+    // Two stops with no interpolation: the bottom half picks black, the top red.
+    assert.deepEqual([image.pixels[0], image.pixels[1], image.pixels[2]], [0, 0, 0]);
+    assert.deepEqual(
+      [image.pixels[3 * 4], image.pixels[3 * 4 + 1], image.pixels[3 * 4 + 2]],
+      [255, 0, 0],
+    );
+    assert.deepEqual(image.clim, [0, 3]);
+  });
+
+  it("makes fill and non-finite cells transparent, others opaque", () => {
+    const image = composeColormappedImage({
+      ...composition(),
+      values: new Float32Array([-9999, 1, 2, Number.NaN]),
+      fillValue: -9999,
+    });
+    assert.deepEqual(
+      [0, 1, 2, 3].map((i) => image.pixels[i * 4 + 3]),
+      [0, 255, 255, 0],
+    );
+  });
+
+  it("derives color limits from the data when none are given", () => {
+    const image = composeColormappedImage({
+      ...composition(),
+      clim: undefined,
+      stretchPercent: 0,
+      values: new Float32Array([-9999, 4, 8, -9999]),
+      fillValue: -9999,
+    });
+    assert.deepEqual(image.clim, [4, 8]);
+  });
+
+  it("applies scale_factor/add_offset before mapping", () => {
+    const image = composeColormappedImage({
+      ...composition(),
+      values: new Float32Array([0, 0, 0, 10]),
+      scaleFactor: 2,
+      addOffset: 1,
+      clim: [1, 21],
+    });
+    // 0 -> 1 (ramp bottom), 10 -> 21 (ramp top).
+    assert.equal(image.pixels[0], 0);
+    assert.equal(image.pixels[3 * 4], 255);
+  });
+
+  it("flips an ascending latitude axis so the image is north-up", () => {
+    const image = composeColormappedImage({
+      ...composition(),
+      lat: new Float64Array([10, 20]),
+    });
+    // Source row 1 (lat 20) becomes output row 0, so the top-left value is 2.
+    assert.equal(image.pixels[0], 255);
+    assert.equal(image.pixels[2 * 4], 0);
+  });
+
+  it("emits the same extent and corners as the RGB composer", () => {
+    const image = composeColormappedImage(composition());
+    assert.deepEqual(image.bounds, [-0.5, 5, 1.5, 25]);
+    assert.deepEqual(image.coordinates, [
+      [-0.5, 25],
+      [1.5, 25],
+      [1.5, 5],
+      [-0.5, 5],
+    ]);
+  });
+
+  it("rejects an empty ramp", () => {
+    assert.throws(
+      () => composeColormappedImage({ ...composition(), colors: [] }),
+      /at least one color/i,
+    );
+  });
+});
+
+describe("readGrid (NetCDF-3)", () => {
+  it("returns a slice ready to hand straight to composeColormappedImage", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const grid = file.readGrid("temp", { time: 1 });
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 3);
+      assert.deepEqual(Array.from(grid.values), [11, 12, 13, 14, 15, 16]);
+      assert.deepEqual(Array.from(grid.lat), [10, 20]);
+      assert.deepEqual(Array.from(grid.lon), [0, 1, 2]);
+      assert.equal(grid.fillValue, -9999);
+      // The +10 plane runs 11..16, so a 2% trim stays inside it.
+      assert.ok(grid.dataClim[0] >= 11 && grid.dataClim[1] <= 16);
+
+      const image = composeColormappedImage({ ...grid, colors: ["#000000", "#ffffff"] });
+      assert.equal(image.width, 3);
+      assert.equal(image.height, 2);
+      assert.deepEqual(image.bounds, [-0.5, 5, 2.5, 25]);
+      // Every cell is valid data, so nothing is masked out.
+      assert.ok(
+        Array.from({ length: 6 }, (_, i) => image.pixels[i * 4 + 3]).every((a) => a === 255),
+      );
+    } finally {
+      file.close();
+    }
+  });
+
+  it("defaults the leading dimension to index 0", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      assert.deepEqual(Array.from(file.readGrid("temp").values), [1, 2, 3, 4, 5, 6]);
     } finally {
       file.close();
     }

@@ -703,6 +703,16 @@
       "loadVariables": "Load variables",
       "variableLabel": "Variable",
       "dimIndexLabel": "{{dim}} index",
+      "colormapLabel": "Colormap",
+      "bandCombinationLabel": "Band combination",
+      "bandCombinationHelp": "A single band is color-mapped; an RGB composite draws three bands of this variable as the red, green, and blue channels, each stretched to its own 2-98% range.",
+      "modeSingleBand": "Single band (color-mapped)",
+      "modeRgb": "RGB composite (three bands)",
+      "channel": {
+        "red": "Red band",
+        "green": "Green band",
+        "blue": "Blue band"
+      },
       "colorMin": "Color min (optional)",
       "colorMax": "Color max (optional)",
       "adding": "Adding...",
@@ -5022,6 +5032,14 @@
     "nodataAuto": "Auto (from file)",
     "nodataOff": "Render all pixels",
     "nodataCustom": "Custom value"
+  },
+  "netcdfSymbology": {
+    "heading": "NetCDF symbology",
+    "colorRampLabel": "Colormap",
+    "reverse": "Reverse colormap",
+    "colorMin": "Color min",
+    "colorMax": "Color max",
+    "resetRange": "Reset to data range"
   },
   "rasterAttributeTable": {
     "title": "Raster attribute table",

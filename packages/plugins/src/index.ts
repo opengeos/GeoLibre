@@ -148,9 +148,22 @@ export {
 export {
   openLocalNetcdf,
   buildInlineZarrRefs,
+  buildInlineZarrStore,
+  composeColormappedImage,
+  composeRgbImage,
+  gridBounds,
+  percentileClim,
+  type ColormapComposition,
+  type RgbComposition,
+  type LocalNetcdfAxis,
+  type LocalNetcdfGrid,
+  type LocalNetcdfColormappedImage,
   type LocalNetcdfFile,
+  type LocalNetcdfImage,
   type LocalNetcdfVariable,
   type LocalNetcdfLayerRefs,
+  type LocalNetcdfRgbImage,
+  type LocalNetcdfRgbOptions,
   type InlineZarrGrid,
 } from "./plugins/local-netcdf";
 export {
@@ -230,7 +243,7 @@ export {
   getPaletteLegend,
   type PaletteLegendEntry,
 } from "./plugins/raster-palette";
-export { colormapColors, warmColormapColors } from "./plugins/colormap-colors";
+export { colormapColors, normalizeRampColor, warmColormapColors } from "./plugins/colormap-colors";
 export { setTerrainMeasureLabels } from "./plugins/terrain-measure";
 export {
   closeVectorLayerPanel,
