@@ -2962,6 +2962,11 @@ export function LayerPanel({
             // row does not rebuild that map once per layer.
             const groupHidden =
               layer.visible && !effectiveLayerRenderState(layer, groupById).visible;
+            const visibilityToggleLabel = groupHidden
+              ? `${t("layers.hiddenByGroup")} — ${t("layers.hideLayer")}`
+              : layer.visible
+                ? t("layers.hideLayer")
+                : t("layers.showLayer");
             const canIdentify =
               layer.type === "geojson" ||
               isDuckDBQueryLayer(layer) ||
@@ -3183,14 +3188,11 @@ export function LayerPanel({
                         // "Show layer" that turns the layer's own toggle off,
                         // so revealing it later would take two clicks. The
                         // muted icon plus the tooltip say why it is not drawn.
-                        title={
-                          groupHidden
-                            ? `${t("layers.hiddenByGroup")} — ${t("layers.hideLayer")}`
-                            : layer.visible
-                              ? t("layers.hideLayer")
-                              : t("layers.showLayer")
-                        }
-                        aria-label={layer.visible ? t("layers.hideLayer") : t("layers.showLayer")}
+                        // Same string for the tooltip and the accessible name,
+                        // so the group-hidden context reaches a screen reader
+                        // and not only a sighted hover.
+                        title={visibilityToggleLabel}
+                        aria-label={visibilityToggleLabel}
                         onClick={(e) => {
                           e.stopPropagation();
                           setLayerVisibility(layer.id, !layer.visible);

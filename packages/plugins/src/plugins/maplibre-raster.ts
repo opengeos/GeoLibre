@@ -566,7 +566,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         if (!storeLayerIds.has(info.id)) control.removeRaster(info.id);
       }
 
-      const restoredGroups = useAppStore.getState().layerGroups;
+      // Built once here rather than handed to effectiveLayerRenderState as an
+      // array, which would rebuild it for every grouped raster in the loop.
+      const restoredGroups = new Map(
+        useAppStore.getState().layerGroups.map((group) => [group.id, group] as const),
+      );
       for (const layer of useAppStore.getState().layers) {
         if (!isRasterControlStoreLayer(layer)) continue;
         if (control.getRaster(layer.id)) continue;
