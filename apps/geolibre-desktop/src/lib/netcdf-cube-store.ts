@@ -1,3 +1,5 @@
+import { DEFAULT_CUBE_BANDS, DEFAULT_CUBE_SIZE, MAX_CUBE_BANDS } from "./netcdf-cube";
+
 /**
  * Which NetCDF layer has its 3-D cube open, how it should be read, and whether
  * the user is still choosing.
@@ -64,8 +66,8 @@ const CLOSED: NetcdfCubeState = Object.freeze({
   settings: Object.freeze({
     extent: "view" as const,
     bbox: null,
-    maxSize: 192,
-    maxBands: 64,
+    maxSize: DEFAULT_CUBE_SIZE,
+    maxBands: DEFAULT_CUBE_BANDS,
     rgbBands: null,
   }),
   readToken: 0,
@@ -176,18 +178,25 @@ export function closeNetcdfCubeForLayer(id: string): void {
 }
 
 /** Cube sizes offered, as the longest spatial edge in cells. */
-export const SIZE_CHOICES = [96, 192, 288, 384] as const;
+export const SIZE_CHOICES = [96, DEFAULT_CUBE_SIZE, 288, 384] as const;
 
 /**
  * Band counts offered, on top of "every band". Read time is close to linear in
  * this, so it is the control that decides whether a cube takes seconds or
  * minutes; the axis is strided evenly, so a subset still spans the spectrum.
  */
-export const BAND_CHOICES = [16, 32, 64, 128, 256] as const;
+export const BAND_CHOICES = [16, 32, DEFAULT_CUBE_BANDS, 128, 256] as const;
 
-/** The band counts offered for one axis: the presets it can reach, then "all". */
+/**
+ * The band counts offered for one axis: the presets it can reach, then "all".
+ *
+ * "All" is capped at {@link MAX_CUBE_BANDS}, so a variable with a few thousand
+ * entries on its band axis cannot offer a read the reader would refuse to make
+ * anyway — the dropdown would otherwise promise something it does not deliver.
+ */
 export function bandChoicesFor(axisSize: number): number[] {
-  return [...BAND_CHOICES.filter((choice) => choice < axisSize), axisSize];
+  const all = Math.min(axisSize, MAX_CUBE_BANDS);
+  return [...BAND_CHOICES.filter((choice) => choice < all), all];
 }
 
 /**

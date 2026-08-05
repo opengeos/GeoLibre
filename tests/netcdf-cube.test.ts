@@ -6,8 +6,10 @@ import {
   cubeFaceSize,
   faceSampleIndex,
   intersectRect,
+  MAX_CUBE_BANDS,
   paintCubeFace,
   readNetcdfCube,
+  recomposeCubeRgb,
   sliceCube,
   strideBands,
   validDataRect,
@@ -118,6 +120,24 @@ describe("strideBands", () => {
       [...picked].sort((a, b) => a - b),
       picked,
     );
+  });
+
+  it("caps a long axis at the reader's ceiling", async () => {
+    // Nothing about this feature is EMIT-specific, and a variable with a few
+    // thousand entries on its band axis would otherwise be read whole into one
+    // unbounded array.
+    let reads = 0;
+    const cube = await readNetcdfCube({
+      readBand: () => {
+        reads += 1;
+        return Promise.resolve(grid([1], 1, 1));
+      },
+      variable: "reflectance",
+      axis: { name: "bands", size: 5000 },
+      maxBands: 5000,
+    });
+    assert.equal(cube.nz, MAX_CUBE_BANDS);
+    assert.equal(reads, MAX_CUBE_BANDS);
   });
 
   it("never reads past the end of the axis", () => {
@@ -618,5 +638,109 @@ describe("cube faces", () => {
         assert.equal(painted.pixels[i], 255, `${face} texel ${(i - 3) / 4} was not painted`);
       }
     }
+  });
+});
+
+describe("recomposeCubeRgb", () => {
+  /** A cube built through the reader, so it carries a recorded read window. */
+  async function builtCube(readWindow?: {
+    row: number;
+    column: number;
+    rows: number;
+    columns: number;
+  }) {
+    return readNetcdfCube({
+      readBand: (index) => Promise.resolve(grid([index, index + 1, index + 2, index + 3], 2, 2)),
+      variable: "reflectance",
+      axis: { name: "bands", size: 10 },
+      maxBands: 2,
+      rgbBands: [0, 1, 2],
+      ...(readWindow ? { readWindow } : {}),
+    });
+  }
+
+  const window = { row: 4, column: 6, rows: 2, columns: 2, maxSize: 192 };
+
+  it("reads only the three overlay planes, not the cube again", async () => {
+    const cube = await builtCube(window);
+    const read: number[] = [];
+    const next = await recomposeCubeRgb(
+      cube,
+      (index) => {
+        read.push(index);
+        return Promise.resolve(grid([index, index, index, index], 2, 2));
+      },
+      [7, 8, 9],
+    );
+    // Three reads instead of the tens a rebuild costs: this is what makes the
+    // band pickers live controls rather than settings behind another read.
+    assert.deepEqual(read, [7, 8, 9]);
+    assert.deepEqual(next.rgbBands, [7, 8, 9]);
+    // Same cube underneath, so nothing about the faces has to be repainted from
+    // new values.
+    assert.equal(next.values, cube.values);
+    assert.equal(next.nz, cube.nz);
+  });
+
+  it("re-reads through the cube's own window, so the planes line up", async () => {
+    const cube = await builtCube(window);
+    const windows: unknown[] = [];
+    await recomposeCubeRgb(
+      cube,
+      (_index, passed) => {
+        windows.push(passed);
+        return Promise.resolve(grid([1, 2, 3, 4], 2, 2));
+      },
+      [1, 2, 3],
+    );
+    // Deriving a window afresh from the map would land on different cells
+    // whenever the view had moved since the cube was built.
+    assert.deepEqual(windows, [window, window, window]);
+  });
+
+  it("hands back a new object, so the view repaints", async () => {
+    const cube = await builtCube(window);
+    const next = await recomposeCubeRgb(
+      cube,
+      () => Promise.resolve(grid([1, 2, 3, 4], 2, 2)),
+      [1, 2, 3],
+    );
+    // The texture effect keys on `cube.rgb`; mutating in place would leave the
+    // overlay showing the old bands.
+    assert.notEqual(next, cube);
+    assert.notEqual(next.rgb, cube.rgb);
+  });
+
+  it("refuses a cube that never recorded its window", async () => {
+    const cube = await builtCube();
+    await assert.rejects(
+      recomposeCubeRgb(cube, () => Promise.resolve(grid([1], 1, 1)), [1, 2, 3]),
+      /must be rebuilt/,
+    );
+  });
+
+  it("stops when the read is aborted", async () => {
+    const cube = await builtCube(window);
+    const controller = new AbortController();
+    await assert.rejects(
+      recomposeCubeRgb(
+        cube,
+        () => {
+          controller.abort();
+          return Promise.resolve(grid([1, 2, 3, 4], 2, 2));
+        },
+        [1, 2, 3],
+        controller.signal,
+      ),
+      /cancelled/,
+    );
+  });
+
+  it("refuses planes that do not match the cube's shape", async () => {
+    const cube = await builtCube(window);
+    await assert.rejects(
+      recomposeCubeRgb(cube, () => Promise.resolve(grid([1, 2], 2, 1)), [1, 2, 3]),
+      /do not share the cube's shape/,
+    );
   });
 });

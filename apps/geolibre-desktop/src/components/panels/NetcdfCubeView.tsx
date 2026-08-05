@@ -360,40 +360,59 @@ function placeFace(
   depth: number,
   zCenter: number,
 ): void {
-  mesh.geometry.dispose();
   mesh.rotation.set(0, 0, 0);
   const half = { x: width / 2, y: height / 2, z: depth / 2 };
   switch (face) {
     case "top":
-      mesh.geometry = new PlaneGeometry(width, height);
+      resizePlane(mesh, width, height);
       mesh.position.set(0, 0, zCenter + half.z);
       break;
     case "bottom":
-      mesh.geometry = new PlaneGeometry(width, height);
+      resizePlane(mesh, width, height);
       mesh.position.set(0, 0, zCenter - half.z);
       mesh.rotation.x = Math.PI;
       break;
     case "north":
-      mesh.geometry = new PlaneGeometry(width, depth);
+      resizePlane(mesh, width, depth);
       mesh.position.set(0, half.y, zCenter);
       mesh.rotation.x = -Math.PI / 2;
       break;
     case "south":
-      mesh.geometry = new PlaneGeometry(width, depth);
+      resizePlane(mesh, width, depth);
       mesh.position.set(0, -half.y, zCenter);
       mesh.rotation.x = Math.PI / 2;
       break;
     case "east":
-      mesh.geometry = new PlaneGeometry(depth, height);
+      resizePlane(mesh, depth, height);
       mesh.position.set(half.x, 0, zCenter);
       mesh.rotation.y = Math.PI / 2;
       break;
     case "west":
-      mesh.geometry = new PlaneGeometry(depth, height);
+      resizePlane(mesh, depth, height);
       mesh.position.set(-half.x, 0, zCenter);
       mesh.rotation.y = -Math.PI / 2;
       break;
   }
+}
+
+/**
+ * Give a mesh a plane of these dimensions, reusing the one it has when they
+ * already match.
+ *
+ * Dragging the slice slider re-places all seven planes on every tick, but only
+ * the four sides actually change size — the top and bottom keep the cube's
+ * footprint and merely move along z. Rebuilding those two anyway would dispose
+ * and reallocate buffer geometry every frame of a drag for no visible change.
+ */
+function resizePlane(mesh: Mesh, width: number, height: number): void {
+  const current = mesh.geometry.userData as { width?: number; height?: number };
+  if (current.width === width && current.height === height) return;
+  mesh.geometry.dispose();
+  mesh.geometry = new PlaneGeometry(width, height);
+  // `PlaneGeometry` keeps its dimensions on `parameters`, but reading them back
+  // is not part of its documented surface; stashing them is explicit and
+  // survives the geometry being swapped for another kind later.
+  mesh.geometry.userData = { width, height };
 }
 
 /**

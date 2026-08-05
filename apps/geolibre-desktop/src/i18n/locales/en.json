@@ -5076,6 +5076,8 @@
     "colorRampLabel": "Colormap",
     "reverse": "Reverse",
     "showRgb": "RGB top",
+    "rgbBands": "RGB bands",
+    "recomposing": "reading...",
     "zScale": "Height",
     "slice": "Slice",
     "sliceAt": "cut at {{band}} {{units}}",

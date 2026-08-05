@@ -164,7 +164,19 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
           column: options.column,
           selector: options.selector ?? {},
         }),
-      close: () => worker.terminate(),
+      close: () => {
+        // Fail the in-flight reads before terminating, the way `onerror` does.
+        // `terminate()` silently drops replies, so a caller awaiting one would
+        // otherwise wait forever: a cube read issues dozens of sequential
+        // `readGrid` calls, and closing the layer (or opening a second cube,
+        // which releases the first file) lands in the middle of one. The read
+        // loop would hang with its progress bar frozen and its abort checks
+        // never reached.
+        const error = new Error("The NetCDF reader worker was closed.");
+        for (const entry of pending.values()) entry.reject(error);
+        pending.clear();
+        worker.terminate();
+      },
     };
   } catch (error) {
     worker.terminate();

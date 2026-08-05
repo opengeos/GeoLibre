@@ -13,6 +13,7 @@ import {
   subscribeNetcdfCube,
   type NetcdfCubeSettings,
 } from "../apps/geolibre-desktop/src/lib/netcdf-cube-store";
+import { MAX_CUBE_BANDS } from "../apps/geolibre-desktop/src/lib/netcdf-cube";
 
 /** Settings differing from the defaults, so a carry-over is visible. */
 function settings(overrides: Partial<NetcdfCubeSettings> = {}): NetcdfCubeSettings {
@@ -222,6 +223,8 @@ describe("normalizeCubeSettings", () => {
     // 64 is not offered for a 40-band axis, and a value with no matching option
     // leaves the dropdown blank while the read uses something else.
     assert.deepEqual(bandChoicesFor(40), [16, 32, 40]);
+    // "All" never offers more than the reader will actually read.
+    assert.deepEqual(bandChoicesFor(5000).at(-1), MAX_CUBE_BANDS);
     assert.equal(
       normalizeCubeSettings(carried({ maxBands: 64 }), 40, false, [1, 2, 3]).maxBands,
       40,

@@ -6,11 +6,13 @@ import { Boxes, GripVertical, Settings2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
+import { bandLabel, defaultRgbBands, MAX_AXIS_OPTIONS } from "../../lib/netcdf-band-axis";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";
 import {
   CubeReadAbortedError,
   intersectRect,
   readNetcdfCube,
+  recomposeCubeRgb,
   validDataRect,
   type CellRect,
   type NetcdfCube,
@@ -97,6 +99,42 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
   // The read in flight, so a re-read or a close abandons it rather than letting
   // two reads race to set the cube.
   const abortRef = useRef<AbortController | null>(null);
+  // Set while the overlay's own three planes are being re-read, which is far
+  // cheaper than a cube and so gets a quiet inline note rather than the
+  // full-panel progress bar.
+  const [recomposing, setRecomposing] = useState(false);
+  const rgbAbortRef = useRef<AbortController | null>(null);
+
+  /**
+   * Re-read just the overlay's three planes.
+   *
+   * The cube itself does not change, so this costs three reads instead of the
+   * tens a rebuild would — which is why the band pickers live out here with the
+   * drawing controls rather than back in the setup dialog.
+   */
+  const changeRgb = useCallback(
+    async (bands: [number, number, number]) => {
+      const source = layerId ? getNetcdfLayerState(layerId)?.cube : null;
+      if (!source || !cube?.readWindow) return;
+      rgbAbortRef.current?.abort();
+      const controller = new AbortController();
+      rgbAbortRef.current = controller;
+      setRecomposing(true);
+      try {
+        const next = await recomposeCubeRgb(cube, source.readBand, bands, controller.signal);
+        if (!controller.signal.aborted) setCube(next);
+      } catch (err) {
+        if (err instanceof CubeReadAbortedError || controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (rgbAbortRef.current === controller) {
+          rgbAbortRef.current = null;
+          setRecomposing(false);
+        }
+      }
+    },
+    [cube, layerId],
+  );
 
   // The layer's own limits, so the cube and the map agree; falling back to the
   // cube's robust range means a layer that records none still gets a stretch
@@ -125,6 +163,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
         const readWindow = cubeWindow(mapControllerRef.current, layerState.grid, settings);
         const next = await readNetcdfCube({
           readBand: (bandIndex) => source.readBand(bandIndex, readWindow),
+          readWindow,
           variable: layerState.variable,
           ...(layerState.units ? { units: layerState.units } : {}),
           axis: source.axis,
@@ -170,7 +209,10 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
     }
     setCube(null);
     void read(layerId, settings);
-    return () => abortRef.current?.abort();
+    return () => {
+      abortRef.current?.abort();
+      rgbAbortRef.current?.abort();
+    };
     // `settings` is read at the moment a token lands, so it is deliberately not
     // a dependency: editing it without pressing Create must not start a read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,6 +245,10 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
   const reading = progress !== null;
   const percent = progress && progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
   const sliceBands = cube ? Math.max(1, Math.round(cube.nz * sliceFraction)) : 1;
+  // The band axis behind the layer, for labelling the overlay pickers with
+  // wavelengths rather than indices.
+  const rgbAxis = getNetcdfLayerState(layerId)?.cube?.axis ?? null;
+  const activeRgb = cube?.rgbBands ?? (rgbAxis ? defaultRgbBands(rgbAxis) : [0, 0, 0]);
   const topBand = cube?.bands[sliceBands - 1];
 
   return (
@@ -320,6 +366,41 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
             </label>
           ) : null}
         </div>
+
+        {/* The overlay's bands, live: three plane reads rather than a rebuild,
+            so this belongs with the drawing controls and not behind Settings. */}
+        {cube?.readWindow && rgbAxis ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground">{t("netcdfCube.rgbBands")}</span>
+            {([0, 1, 2] as const).map((channel) => (
+              <select
+                key={channel}
+                className="max-w-40 rounded-md border bg-background px-1.5 py-1"
+                value={String(activeRgb[channel])}
+                disabled={recomposing}
+                aria-label={t(`netcdfCube.${(["red", "green", "blue"] as const)[channel]}`)}
+                onChange={(event) => {
+                  const next: [number, number, number] = [...activeRgb];
+                  next[channel] = Number(event.target.value);
+                  void changeRgb(next);
+                }}
+              >
+                {rgbAxis.values && rgbAxis.size <= MAX_AXIS_OPTIONS ? (
+                  rgbAxis.values.map((_, index) => (
+                    <option key={index} value={String(index)}>
+                      {bandLabel(rgbAxis, index)}
+                    </option>
+                  ))
+                ) : (
+                  <option value={String(activeRgb[channel])}>{activeRgb[channel]}</option>
+                )}
+              </select>
+            ))}
+            {recomposing ? (
+              <span className="text-muted-foreground">{t("netcdfCube.recomposing")}</span>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-1.5">

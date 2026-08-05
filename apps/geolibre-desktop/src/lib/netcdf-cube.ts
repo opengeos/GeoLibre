@@ -6,6 +6,7 @@ import {
   percentileClim,
   type LocalNetcdfAxis,
   type LocalNetcdfGrid,
+  type LocalNetcdfWindow,
 } from "@geolibre/plugins/local-netcdf";
 
 /**
@@ -33,7 +34,16 @@ export const DEFAULT_CUBE_SIZE = 192;
  */
 export const DEFAULT_CUBE_BANDS = 64;
 
-/** Band planes above this are dropped by striding, whatever the axis holds. */
+/**
+ * Hard ceiling on band planes, whatever the axis holds and whatever the caller
+ * asks for.
+ *
+ * Not just a default. Nothing about this feature is EMIT-specific — it runs off
+ * any band axis a NetCDF or HDF file declares — and a variable with a few
+ * thousand entries on that axis would otherwise read every one of them
+ * sequentially into a single unbounded `Float32Array`, which is the exact
+ * failure the windowing and striding exist to prevent.
+ */
 export const MAX_CUBE_BANDS = 512;
 
 /** One band plane in a cube, and where it came from. */
@@ -82,6 +92,15 @@ export interface NetcdfCube {
   /** The band indices {@link rgb} was composed from, red first. */
   rgbBands?: [number, number, number];
   /**
+   * The window every plane was read with.
+   *
+   * Kept so the overlay can be recomposed from different bands without
+   * rebuilding the cube: three more plane reads through this same window land
+   * exactly on the cube's own cells, where a window derived afresh from the map
+   * would not.
+   */
+  readWindow?: LocalNetcdfWindow;
+  /**
    * Where the cube holds any reading at all, for skipping hopeless rays (see
    * {@link CubeFootprint}). Optional: a cube without one still paints
    * correctly, just more slowly.
@@ -123,6 +142,8 @@ export interface CubeFootprint {
 export interface ReadNetcdfCubeOptions {
   /** Reads one band plane, already windowed and decimated by the reader. */
   readBand: (bandIndex: number) => Promise<LocalNetcdfGrid>;
+  /** The window {@link readBand} applies, recorded on the cube for later reads. */
+  readWindow?: LocalNetcdfWindow;
   /** The variable being read, for labelling. */
   variable: string;
   /** The variable's CF `units`. */
@@ -157,7 +178,10 @@ export interface ReadNetcdfCubeOptions {
  * @throws If the read is aborted, or no plane could be read.
  */
 export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<NetcdfCube> {
-  const indices = strideBands(options.axis.size, options.maxBands ?? MAX_CUBE_BANDS);
+  const indices = strideBands(
+    options.axis.size,
+    Math.min(options.maxBands ?? MAX_CUBE_BANDS, MAX_CUBE_BANDS),
+  );
   // The overlay's planes are read in the same pass, so one progress bar covers
   // the whole wait rather than the window sitting apparently finished while
   // three more reads run.
@@ -241,6 +265,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
     ...(cells ? { footprint: buildFootprint(cells, ny, nx) } : {}),
     ...(rgb ? { rgb } : {}),
     ...(rgbIndices ? { rgbBands: rgbIndices } : {}),
+    ...(options.readWindow ? { readWindow: options.readWindow } : {}),
   };
 }
 
@@ -337,6 +362,47 @@ export function composeCubeRgb(channels: LocalNetcdfGrid[]): CubeFaceImage {
     }
   }
   return { width, height, pixels };
+}
+
+/**
+ * Recompose a cube's top-face overlay from different bands.
+ *
+ * Three plane reads rather than the tens a cube costs, so changing which bands
+ * make the image is a couple of seconds instead of another full rebuild. The
+ * planes are read through the cube's own {@link NetcdfCube.readWindow}, so they
+ * land on its cells exactly; a cube read before that was recorded cannot be
+ * updated this way and the caller has to rebuild.
+ *
+ * @param cube - The cube whose overlay to replace.
+ * @param readBand - Reads one plane through a given window.
+ * @param bands - The red, green, and blue band indices.
+ * @param signal - Abandons the read between planes.
+ * @returns A cube sharing this one's values, with the new overlay.
+ * @throws If the cube has no recorded window, or the read is aborted.
+ */
+export async function recomposeCubeRgb(
+  cube: NetcdfCube,
+  readBand: (bandIndex: number, window?: LocalNetcdfWindow) => Promise<LocalNetcdfGrid>,
+  bands: [number, number, number],
+  signal?: AbortSignal,
+): Promise<NetcdfCube> {
+  if (!cube.readWindow) {
+    throw new Error("This cube did not record how it was read, so it must be rebuilt.");
+  }
+  const channels: LocalNetcdfGrid[] = [];
+  for (const index of bands) {
+    if (signal?.aborted) throw new CubeReadAbortedError();
+    const plane = await readBand(index, cube.readWindow);
+    if (plane.nx !== cube.nx || plane.ny !== cube.ny) {
+      throw new Error("The RGB bands do not share the cube's shape.");
+    }
+    channels.push(plane);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (signal?.aborted) throw new CubeReadAbortedError();
+  // A new object, not a mutation: the view keys its texture effect on
+  // `cube.rgb`, so replacing the reference is what makes it repaint.
+  return { ...cube, rgb: composeCubeRgb(channels), rgbBands: bands };
 }
 
 /** Thrown when a cube read is abandoned; callers treat it as "no result". */
