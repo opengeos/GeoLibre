@@ -2840,7 +2840,16 @@ export async function loadDroppedVectorFiles(
       if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
 
       if (extension === "gpx") {
-        layers.push(...parseGpxTextLayers(await readVectorFileText(file), file.name));
+        // Past the route threshold the in-house splitter would still have to
+        // hold the whole document as one string, so hand it to the guarded
+        // loader instead. The DuckDB reader returns a single merged layer
+        // rather than the waypoint/track/route split, which is the accepted
+        // trade for a GPX this size.
+        if (shouldRouteToDuckDb(file.size)) {
+          layers.push(await loadBrowserVectorFile(file, [], options));
+          continue;
+        }
+        layers.push(...parseGpxTextLayers(await file.text(), file.name));
         continue;
       }
 
@@ -3115,6 +3124,12 @@ export async function loadDroppedVectorPaths(
       const extension = fileExtension(path);
       if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
       if (extension === "gpx") {
+        // See the browser counterpart: an oversized GPX goes to the guarded
+        // loader rather than through one giant string.
+        if (shouldRouteToDuckDb(await localFileSizeBytes(path))) {
+          layers.push(await loadTauriVectorFile(path, options));
+          continue;
+        }
         try {
           layers.push(...parseGpxTextLayers(await readLocalFileText(path), path));
         } catch (error) {

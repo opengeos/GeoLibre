@@ -83,9 +83,19 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
         // unhandled error on every autosave tick. Autosave is best-effort — a
         // project too large to snapshot must degrade to "no crash recovery",
         // never to a crash.
+        // Built and serialized in separate steps so the two failures are not
+        // conflated: a snapshot that cannot be constructed is a genuine error,
+        // while one too large to stringify is an expected limit.
+        let snapshot: ReturnType<typeof buildProjectSnapshot>;
+        try {
+          snapshot = buildProjectSnapshot(mapControllerRef);
+        } catch (error) {
+          console.error("Could not autosave the project.", error);
+          return;
+        }
         let content: string;
         try {
-          content = serializeProject(buildProjectSnapshot(mapControllerRef));
+          content = serializeProject(snapshot);
         } catch (error) {
           console.warn("Project autosave skipped: the project is too large to serialize.", error);
           return;

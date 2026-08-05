@@ -755,7 +755,7 @@
       "extrusion": "3D extrusion",
       "modelUrlPlaceholder": "https://example.com/model.glb"
     },
-    "nonGeographicCoordinates": "{{names}} loaded, but its coordinates are not longitude/latitude, so it will not appear on the map. The file's CRS is mislabelled — reproject it (or fix its .prj) and load it again."
+    "nonGeographicCoordinates": "Coordinates in {{names}} are not longitude/latitude, so nothing will be drawn on the map. The CRS is mislabelled — reproject the data (or fix its .prj) and load it again."
   },
   "offline": {
     "title": "Download Offline Area",

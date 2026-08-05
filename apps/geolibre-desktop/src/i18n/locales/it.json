@@ -744,7 +744,7 @@
       "errorBbox": "Inserisci il rettangolo di delimitazione come «ovest,sud,est,nord».",
       "errorNoFeatures": "Questa collection non ha restituito alcun elemento."
     },
-    "nonGeographicCoordinates": "{{names}} è stato caricato, ma le sue coordinate non sono longitudine/latitudine, quindi non comparirà sulla mappa. Il CRS del file è errato: riproiettalo (o correggi il .prj) e ricaricalo."
+    "nonGeographicCoordinates": "Le coordinate in {{names}} non sono longitudine/latitudine, quindi non verrà disegnato nulla sulla mappa. Il CRS è errato: riproietta i dati (o correggi il .prj) e ricaricali."
   },
   "offline": {
     "title": "Scarica area offline",

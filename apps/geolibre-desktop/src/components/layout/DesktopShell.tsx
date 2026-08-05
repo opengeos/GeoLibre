@@ -903,9 +903,6 @@ export function DesktopShell({
       dropMessageTimeoutRef.current = null;
       setDropMessage(null);
       setDropError(null);
-      // Cleared with the other drop status so a warning about a previous file
-      // cannot linger over an unrelated drop.
-      setCrsWarning(null);
     }, 4000);
   }, []);
 
@@ -1740,6 +1737,10 @@ export function DesktopShell({
       dragDepthRef.current = 0;
       setIsDraggingFiles(false);
       setDropError(null);
+      // Not auto-dismissed on the status timeout (it has its own Close button),
+      // so it is cleared here instead: a warning about a previous file must not
+      // linger over an unrelated drop.
+      setCrsWarning(null);
       setDropMessage("Importing data...");
 
       try {

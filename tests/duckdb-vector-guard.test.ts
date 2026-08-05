@@ -146,15 +146,23 @@ describe("detectNonGeographicCoordinates", () => {
   });
 
   it("stops at the sample limit instead of walking the whole collection", () => {
+    // The out-of-range feature sits past the limit, so a null result proves the
+    // walk actually stopped — an all-valid collection would pass even if
+    // `sampleLimit` were ignored entirely.
     const many = {
       type: "FeatureCollection" as const,
-      features: Array.from({ length: 5000 }, () => ({
+      features: Array.from({ length: 5000 }, (_unused, index) => ({
         type: "Feature" as const,
         properties: {},
-        geometry: { type: "Point", coordinates: [-72, 41] },
+        geometry: {
+          type: "Point",
+          coordinates: index === 40 ? [1905935.66, 2337159.4] : [-72, 41],
+        },
       })),
     };
     assert.equal(detectNonGeographicCoordinates(many as never, 25), null);
+    // ...and it is still found when the limit reaches it.
+    assert.ok(detectNonGeographicCoordinates(many as never, 100));
   });
 });
 

@@ -744,7 +744,7 @@
       "errorBbox": "Geben Sie den Begrenzungsrahmen als „West,Süd,Ost,Nord“ an.",
       "errorNoFeatures": "Diese Collection hat keine Objekte zurückgegeben."
     },
-    "nonGeographicCoordinates": "{{names}} wurde geladen, aber die Koordinaten sind keine geografische Länge/Breite, daher erscheint die Ebene nicht auf der Karte. Das CRS der Datei ist falsch angegeben — projizieren Sie sie um (oder korrigieren Sie die .prj) und laden Sie sie erneut."
+    "nonGeographicCoordinates": "Die Koordinaten in {{names}} sind keine geografische Länge/Breite, daher wird nichts auf der Karte gezeichnet. Das CRS ist falsch angegeben — projizieren Sie die Daten um (oder korrigieren Sie die .prj) und laden Sie sie erneut."
   },
   "offline": {
     "title": "Offline-Bereich herunterladen",

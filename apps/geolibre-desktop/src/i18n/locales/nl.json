@@ -744,7 +744,7 @@
       "errorBbox": "Voer het begrenzingskader in als ‘west,zuid,oost,noord’.",
       "errorNoFeatures": "Deze collectie leverde geen features op."
     },
-    "nonGeographicCoordinates": "{{names}} is geladen, maar de coördinaten zijn geen lengte-/breedtegraad, dus de laag verschijnt niet op de kaart. Het CRS van het bestand klopt niet — herprojecteer het (of corrigeer de .prj) en laad het opnieuw."
+    "nonGeographicCoordinates": "De coördinaten in {{names}} zijn geen lengte-/breedtegraad, dus er wordt niets op de kaart getekend. Het CRS klopt niet — herprojecteer de gegevens (of corrigeer de .prj) en laad ze opnieuw."
   },
   "offline": {
     "title": "Offline gebied downloaden",
