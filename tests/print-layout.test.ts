@@ -380,6 +380,37 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("falls back to sized circles, not framed squares, for an unloaded ramp icon", () => {
+    const svg = "<svg/>";
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "ruchers",
+            name: "Ruchers",
+            swatches: [
+              { color: "#3b82f6", label: "1", size: 4, marker },
+              { color: "#3b82f6", label: "43.5", size: 14, marker },
+              { color: "#3b82f6", label: "86", size: 24, marker },
+            ],
+          },
+        ],
+        // No markerIcons: a remote icon still fetching, or one that failed.
+      }),
+    );
+    assert.equal(rec.drawImages, 0);
+    // Three filled circles, so the ramp still reads as one growing symbol
+    // during the load window rather than a column of identical framed boxes.
+    assert.ok(rec.arcs >= 3, `expected fallback circles, got ${rec.arcs} arcs`);
+    assert.ok(
+      !rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
+      "expected no square fallback swatch for a proportional row",
+    );
+  });
+
   it("draws the marker of a multi-swatch entry's primary swatch as a shape", () => {
     const { canvas, polylines, fillRects } = recordingCanvas();
     drawLayout(

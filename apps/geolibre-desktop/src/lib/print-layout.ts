@@ -1963,10 +1963,21 @@ function drawLegendMarker(
       }
       return;
     }
-    // SVG not available: fall back to a neutral color square.
+    // SVG not available (still loading, or the load failed): fall back to a
+    // neutral shape. A proportional row falls back to the same circle the
+    // markerless ramp draws, so an entry mid-load still reads as one growing
+    // symbol; the outline stays either way, since a pale fallback color would
+    // otherwise vanish against the legend box.
     ctx.fillStyle = fallbackColor || "#999999";
-    ctx.fillRect(sx, sy, size, size);
     ctx.strokeStyle = BORDER;
+    if (!boxed) {
+      ctx.beginPath();
+      ctx.arc(sx + size / 2, sy + size / 2, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    ctx.fillRect(sx, sy, size, size);
     ctx.strokeRect(sx, sy, size, size);
     return;
   }

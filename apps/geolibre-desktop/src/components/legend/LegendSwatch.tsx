@@ -150,19 +150,12 @@ export function MarkerSwatch({
   const style = opacity < 1 ? { opacity } : undefined;
   // The map draws a marker at the diameter its proportional radius spans, so
   // the chip box is 2×radius after the entry's shared fit-to-legend scale.
-  const box =
-    size !== undefined
-      ? Math.max(4, Math.round(size * swatchScale(maxSize, size, MAX_SWATCH_RADIUS) * 2))
-      : MARKER_CHIP_SIZE;
+  const scale = size !== undefined ? swatchScale(maxSize, size, MAX_SWATCH_RADIUS) : 1;
+  const box = size !== undefined ? Math.max(4, Math.round(size * scale * 2)) : MARKER_CHIP_SIZE;
   // One column width per entry, so labels stay aligned when rows differ in size.
   const boxWidth =
     size !== undefined
-      ? Math.max(
-          box,
-          Math.round(
-            Math.max(maxSize ?? size, size) * swatchScale(maxSize, size, MAX_SWATCH_RADIUS) * 2,
-          ),
-        )
+      ? Math.max(box, Math.round(Math.max(maxSize ?? size, size) * scale * 2))
       : MARKER_CHIP_SIZE;
 
   const svgSource = marker.shape === "custom" ? resolveSvgSource(marker.svg ?? "") : null;
