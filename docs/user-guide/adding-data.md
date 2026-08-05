@@ -17,16 +17,21 @@ The **Add Data** menu is the main way to bring layers into GeoLibre. It groups s
 Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives.
 
 !!! warning "Large vector files"
-    There is no fixed size limit, but formats that hold every feature in memory
-    have practical ceilings. A file over about 200 MB prompts for confirmation
-    before it is read. Above ~537 MB, a text format (GeoJSON, KML, GPX, CSV)
-    cannot be read as text at all — the browser caps a single string at that
-    size — so GeoLibre reads it with DuckDB instead. Large zipped Shapefiles are
-    read the same way, since the pure-JavaScript reader would otherwise block
-    the interface while it reprojects every coordinate.
+    There is no fixed size limit. Files **under 100 MB** are read by the
+    in-memory JavaScript readers, which are fastest for everyday data. At
+    **100 MB or larger**, GeoLibre streams the file through DuckDB instead —
+    off the main thread, so the interface keeps responding. For a zipped
+    Shapefile the threshold applies to the *uncompressed* `.shp`, since
+    shapefiles compress heavily and the archive's size says little about the
+    parse cost. This happens automatically; nothing is asked of you.
 
-    For anything in this range, convert first: **Processing → Conversion →
-    Vector to PMTiles** (or GeoParquet) writes a format the map streams a tile
+    A separate check counts features once the source is open. Past
+    **100,000 features**, GeoLibre asks before converting every one to GeoJSON
+    in memory, because that is where memory rather than file size becomes the
+    limit — a small GeoParquet can hold millions of rows.
+
+    For very large data, converting first still pays: **Processing → Conversion
+    → Vector to PMTiles** (or GeoParquet) writes a format the map streams a tile
     at a time instead of loading whole. GeoJSON is the most expensive option at
     any size — it expands several-fold in memory — so prefer a Shapefile,
     GeoParquet, or FlatGeobuf source when you have the choice.

@@ -83,11 +83,7 @@ import {
 } from "../../lib/tauri-io";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
-import type {
-  DuckDbVectorLoadOptions,
-  LargeVectorDataset,
-  LargeVectorFile,
-} from "../../lib/duckdb-vector-guard";
+import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 import i18n from "../../i18n";
 import {
@@ -199,26 +195,6 @@ function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
     }),
   );
 }
-
-function confirmLargeVectorFileSize({ name, sizeBytes }: LargeVectorFile) {
-  return window.confirm(
-    i18n.t("toolbar.item.largeVectorFileDesc", {
-      name,
-      sizeMb: Math.round(sizeBytes / (1024 * 1024)).toLocaleString(),
-    }),
-  );
-}
-
-/**
- * The pair of large-input guards handed to every interactive vector load, so
- * the size prompt (which runs before the file is read) and the feature-count
- * prompt (which runs once the source is open) stay wired together — attaching
- * only one silently loses half the protection.
- */
-const largeVectorGuards: DuckDbVectorLoadOptions = {
-  onLargeDataset: confirmLargeVectorDataset,
-  onLargeFile: confirmLargeVectorFileSize,
-};
 
 const ProcessingDialog = lazy(() =>
   import("../processing/ProcessingDialog")
@@ -1396,10 +1372,12 @@ export function DesktopShell({
         // pyramid, which a path-less browser File cannot support.
         const layers =
           paths.length === imports.length
-            ? await loadDroppedVectorPaths(paths, largeVectorGuards)
+            ? await loadDroppedVectorPaths(paths, { onLargeDataset: confirmLargeVectorDataset })
             : await loadDroppedVectorFiles(
                 imports.map(({ file }) => file),
-                largeVectorGuards,
+                {
+                  onLargeDataset: confirmLargeVectorDataset,
+                },
               );
         addImportedVectorLayers(layers);
       } catch (error) {
@@ -1645,7 +1623,9 @@ export function DesktopShell({
 
             if (restPaths.length > 0) {
               const rasterCount = await addDroppedRasters(await loadDroppedRasterPaths(restPaths));
-              const importedLayers = await loadDroppedVectorPaths(restPaths, largeVectorGuards);
+              const importedLayers = await loadDroppedVectorPaths(restPaths, {
+                onLargeDataset: confirmLargeVectorDataset,
+              });
               // See the browser handler: skip finishDrop's empty-input error
               // when PBF or photo files were present (even if rejected/failed).
               // See the browser handler: suppress the empty-input error when
@@ -1799,7 +1779,9 @@ export function DesktopShell({
 
         if (restFiles.length > 0) {
           const rasterCount = await addDroppedRasters(loadDroppedRasterFiles(restFiles));
-          const importedLayers = await loadDroppedVectorFiles(restFiles, largeVectorGuards);
+          const importedLayers = await loadDroppedVectorFiles(restFiles, {
+            onLargeDataset: confirmLargeVectorDataset,
+          });
           // Call finishDrop (which reports success or throws the empty-input
           // error) only when the other files produced something, or when the
           // drop contained no PBF/photo files at all. If those were present —

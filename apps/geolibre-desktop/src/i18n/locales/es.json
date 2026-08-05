@@ -2528,7 +2528,6 @@
       "largeOsmPbfTitle": "Archivo OSM PBF grande",
       "largeOsmPbfDesc": "Este archivo tiene aproximadamente {{sizeMb}} MB. Analizarlo convierte cada entidad a GeoJSON en memoria, lo que puede ser lento y usar mucha memoria en el navegador. ¿Continuar?",
       "largeVectorDesc": "{{name}} tiene aproximadamente {{count}} entidades. Cargarlo convierte cada entidad a GeoJSON en memoria y puede ralentizar o bloquear la aplicación. ¿Continuar?",
-      "largeVectorFileDesc": "{{name}} ocupa unos {{sizeMb}} MB. Leer un archivo tan grande consume mucha memoria y puede ralentizar o bloquear la aplicación. Convertirlo antes a PMTiles o GeoParquet (Procesamiento → Conversión) se carga mucho más rápido. ¿Continuar?",
       "addOsmPbfLayerTitle": "Añadir capa OSM PBF",
       "addOsmPbfLayerDesc": "Carga un archivo .osm.pbf de OpenStreetMap. Se analiza en su navegador y se divide en capas separadas de puntos, líneas y polígonos.",
       "urlLabel": "URL",

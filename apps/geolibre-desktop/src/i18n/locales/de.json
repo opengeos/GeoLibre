@@ -2528,7 +2528,6 @@
       "largeOsmPbfTitle": "Große OSM-PBF-Datei",
       "largeOsmPbfDesc": "Diese Datei ist etwa {{sizeMb}} MB groß. Das Parsen wandelt jedes Objekt im Arbeitsspeicher in GeoJSON um, was langsam sein kann und im Browser viel Speicher verbrauchen kann. Fortfahren?",
       "largeVectorDesc": "{{name}} hat etwa {{count}} Objekte. Das Laden wandelt jedes Objekt im Arbeitsspeicher in GeoJSON um und kann die App verlangsamen oder einfrieren lassen. Fortfahren?",
-      "largeVectorFileDesc": "{{name}} ist etwa {{sizeMb}} MB groß. Das Lesen einer so großen Datei benötigt viel Arbeitsspeicher und kann die App verlangsamen oder einfrieren lassen. Eine vorherige Umwandlung in PMTiles oder GeoParquet (Verarbeitung → Konvertierung) lädt deutlich schneller. Fortfahren?",
       "addOsmPbfLayerTitle": "OSM-PBF-Ebene hinzufügen",
       "addOsmPbfLayerDesc": "Lädt eine OpenStreetMap-.osm.pbf-Datei. Sie wird in Ihrem Browser geparst und in separate Punkt-, Linien- und Polygonebenen aufgeteilt.",
       "urlLabel": "URL",
